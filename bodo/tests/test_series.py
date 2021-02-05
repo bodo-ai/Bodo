@@ -3868,6 +3868,21 @@ def test_series_unsupported_error_checking(memory_leak_check):
         bodo.jit(test_method)(pd.Series([1, 2]))
 
 
+def test_series_loc_rm_dead(memory_leak_check):
+    """make sure dead code elimination before our SeriesPass doesn't remove loc setitem.
+    Related to #2501.
+    """
+
+    def impl(df):
+        S = pd.Series(index=df.index, data=np.nan, dtype="str")
+        S.loc[df.B] = "AA"
+        return S
+
+    df = pd.DataFrame({"A": [1, 3, 4], "B": [True, True, True]})
+
+    check_func(impl, (df,))
+
+
 @pytest.mark.slow
 class TestSeries(unittest.TestCase):
     def test_create1(self):
@@ -4098,7 +4113,6 @@ class TestSeries(unittest.TestCase):
         test_impl(A2, 0)
         np.testing.assert_array_equal(A1.values, A2.values)
 
-    @unittest.skip("enable after remove dead in hiframes is removed")
     def test_setitem_series3(self):
         def test_impl(A, i):
             S = pd.Series(A)

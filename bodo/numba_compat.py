@@ -321,6 +321,25 @@ if (
 ir_utils.find_potential_aliases = find_potential_aliases
 
 
+# make sure dead_code_elimination hasn't changed before replacing it
+lines = inspect.getsource(ir_utils.dead_code_elimination)
+if (
+    hashlib.sha256(lines.encode()).hexdigest()
+    != "40a8626300a1a17523944ec7842b093c91258bbc60844bbd72191a35a4c366bf"
+):  # pragma: no cover
+    warnings.warn("ir_utils.dead_code_elimination has changed")
+
+# replace dead_code_elimination function with dummy since it is not safe for Numba
+# passes before our SeriesPass (currently InlineOverloads/InlineClosureCallPass) to run
+# dead code elimination. Alias analysis does not know about DataFrame/Series aliases
+# like Series.loc yet.
+# TODO(ehsan): add DataFrame/Series aliases to alias analysis
+dummy_dce = lambda func_ir, typemap=None, alias_map=None, arg_aliases=None: None
+ir_utils.dead_code_elimination = dummy_dce
+numba.core.typed_passes.dead_code_elimination = dummy_dce
+numba.core.inline_closurecall.dead_code_elimination = dummy_dce
+
+
 # replace Numba's overload/overload_method handling functions to support a new option
 # called 'no_unliteral', which avoids a second run of overload with literal types
 # converted to non-literal versions. This solves hiding errors such as #889
