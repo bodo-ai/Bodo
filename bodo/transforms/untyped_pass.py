@@ -1806,7 +1806,7 @@ class UntypedPass:
                 else "threaded"
             )
             # save in metadata that the return value is distributed
-            # TODO: refactor the tuple case below, which may need to be just deleted
+            # TODO(ehsan): support other flags like distributed_block?
             if flag == "distributed":
                 self.metadata["is_return_distributed"] = True
             nodes = self._gen_replace_dist_return(cast.value, flag)
@@ -1844,9 +1844,10 @@ class UntypedPass:
                     new_var_list.append(nodes[-1].target)
                 else:
                     new_var_list.append(v)
-            # the return tuple is distributed if all its items are distributed
-            if all(v in self.metadata["distributed"] for v in tup_varnames):
-                self.metadata["is_return_distributed"] = True
+            # store a list of distributions for tuple return case
+            self.metadata["is_return_distributed"] = [
+                v in self.metadata["distributed"] for v in tup_varnames
+            ]
             new_tuple_node = ir.Expr.build_tuple(new_var_list, loc)
             new_tuple_var = ir.Var(scope, mk_unique_var("dist_return_tp"), loc)
             nodes.append(ir.Assign(new_tuple_node, new_tuple_var, loc))

@@ -352,6 +352,49 @@ def test_bodo_func_dist_call_tup(memory_leak_check):
     assert count_array_REPs() == 0
 
 
+def test_bodo_func_dist_call_tup2(memory_leak_check):
+    """make sure calling other bodo functions with their distributed flags set works
+    when they return tuples with only one distributed data structure.
+    """
+
+    # two return values are distributable, but one is distributed
+    @bodo.jit(distributed=["B"])
+    def f1(n):
+        A = np.arange(3)
+        B = np.ones(n)
+        S = A, B, 3
+        return S
+
+    @bodo.jit(distributed=["C"])
+    def impl1(n):
+        A, B, a = f1(n)
+        C = B + A[0] + a
+        return C
+
+    impl1(11)
+    assert count_array_OneD_Vars() > 0
+
+    # error checking case, caller's value can't be distributed
+    @bodo.jit(distributed=["B", "A"])
+    def f2(n):
+        A = np.arange(n)
+        B = np.ones(n)
+        S = A, B, 3
+        return S
+
+    @bodo.jit
+    def impl2(n):
+        A, B, a = f2(n)
+        C = B + a
+        return C
+
+    with pytest.raises(
+        BodoError,
+        match="is marked as distributed by f2 but not possible to distribute in caller function impl2",
+    ):
+        impl2(11)
+
+
 def test_dist_flag_warn1(memory_leak_check):
     """raise a warning when distributed flag is used for variables other than arguments
     and return values.
