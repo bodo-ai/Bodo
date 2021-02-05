@@ -390,7 +390,7 @@ def test_bodo_func_dist_call_tup2(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match="is marked as distribtued by f2 but not possible to distribute in caller function impl2",
+        match="is marked as distributed by f2 but not possible to distribute in caller function impl2",
     ):
         impl2(11)
 
