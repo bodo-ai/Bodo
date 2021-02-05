@@ -189,8 +189,8 @@ def test_getitem_slice(cat_arr_value, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_eq(memory_leak_check):
-    """test eq comparison of Categorical array and value"""
+def test_cmp(memory_leak_check):
+    """test eq/ne comparison of Categorical array and value"""
     # literal value
     def impl1(A):
         return A == 1
@@ -199,9 +199,14 @@ def test_eq(memory_leak_check):
     def impl2(A, a):
         return A == a
 
+    # non-literal value
+    def impl3(A, a):
+        return A != a
+
     A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, None, 7, 8, 12] * 10)
     check_func(impl1, (A,))
     check_func(impl2, (A, 2))
+    check_func(impl3, (A, 2))
 
 
 def test_pd_categorical(memory_leak_check):

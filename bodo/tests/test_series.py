@@ -2413,6 +2413,24 @@ def test_series_max(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
+def test_series_min_max_cat(memory_leak_check):
+    """test min/max of Categorical data"""
+
+    def impl1(S):
+        return S.min()
+
+    def impl2(S):
+        return S.max()
+
+    # includes NAs since value 11 is not in categories
+    S = pd.Series(
+        [3, 2, 1, 3, 11, 2, -3, 11, 2],
+        dtype=pd.CategoricalDtype([4, 3, 1, 2, -3, 15], ordered=True),
+    )
+    check_func(impl1, (S,))
+    check_func(impl2, (S,))
+
+
 def test_min_max_sum_series(memory_leak_check):
     """Another syntax for computing the maximum"""
 

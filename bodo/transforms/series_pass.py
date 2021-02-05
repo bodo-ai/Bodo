@@ -824,8 +824,11 @@ class SeriesPass:
         arg1, arg2 = rhs.lhs, rhs.rhs
         typ1, typ2 = self.typemap[arg1.name], self.typemap[arg2.name]
 
-        if rhs.fn == operator.eq and isinstance(typ1, CategoricalArray):
-            impl = bodo.hiframes.pd_categorical_ext.overload_cat_arr_eq(typ1, typ2)
+        # categorical array comparison
+        if rhs.fn in (operator.eq, operator.ne) and isinstance(typ1, CategoricalArray):
+            impl = bodo.hiframes.pd_categorical_ext.create_cmp_op_overload(rhs.fn)(
+                typ1, typ2
+            )
             return replace_func(self, impl, [arg1, arg2])
 
         # inline string array comparison ops
