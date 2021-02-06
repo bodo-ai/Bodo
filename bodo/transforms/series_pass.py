@@ -633,21 +633,25 @@ class SeriesPass:
                     impl = bodo.hiframes.series_dt_impl.series_dt_date_overload(
                         rhs_type
                     )
-                else:
+                    return replace_func(self, impl, [rhs.value])
+                elif rhs.attr in bodo.hiframes.pd_timestamp_ext.date_fields:
                     impl = bodo.hiframes.series_dt_impl.create_date_field_overload(
                         rhs.attr
                     )(rhs_type)
-                return replace_func(self, impl, [rhs.value])
+                    return replace_func(self, impl, [rhs.value])
             else:
-                assert rhs_type.stype.dtype == types.NPTimedelta("ns")
-                impl = bodo.hiframes.series_dt_impl.create_timedelta_field_overload(
-                    rhs.attr
-                )(rhs_type)
-                return replace_func(self, impl, [rhs.value])
+                if rhs.attr in ("nanoseconds", "microseconds", "seconds", "days"):
+                    impl = bodo.hiframes.series_dt_impl.create_timedelta_field_overload(
+                        rhs.attr
+                    )(rhs_type)
+                    return replace_func(self, impl, [rhs.value])
 
         # inline rolling.attr access
-        if isinstance(rhs_type, bodo.hiframes.pd_rolling_ext.RollingType) and (
-            not rhs_type.selection or rhs.attr not in rhs_type.selection
+        attr_ind = {"obj": 0, "window": 1, "min_periods": 2, "center": 3}
+        if (
+            isinstance(rhs_type, bodo.hiframes.pd_rolling_ext.RollingType)
+            and (not rhs_type.selection or rhs.attr not in rhs_type.selection)
+            and rhs.attr in attr_ind
         ):
             # get init_rolling() call
             rhs_def = guard(get_definition, self.func_ir, rhs.value)
@@ -656,8 +660,6 @@ class SeriesPass:
                 rhs_def = guard(get_definition, self.func_ir, rhs_def.value)
             if rhs_def is not None:
                 assert is_call(rhs_def), "invalid rolling object creation"
-                attr_ind = {"obj": 0, "window": 1, "min_periods": 2, "center": 3}
-                assert rhs.attr in attr_ind, "invalid rolling attr"
                 arg_ind = attr_ind[rhs.attr]
                 assign.value = rhs_def.args[arg_ind]
                 return [assign]
