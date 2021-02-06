@@ -329,15 +329,80 @@ if (
 ):  # pragma: no cover
     warnings.warn("ir_utils.dead_code_elimination has changed")
 
-# replace dead_code_elimination function with dummy since it is not safe for Numba
-# passes before our SeriesPass (currently InlineOverloads/InlineClosureCallPass) to run
-# dead code elimination. Alias analysis does not know about DataFrame/Series aliases
-# like Series.loc yet.
+# replace dead_code_elimination function with a mini version since it is not safe for
+# Numba passes before our SeriesPass (currently InlineOverloads/InlineClosureCallPass)
+# to run dead code elimination. Alias analysis does not know about DataFrame/Series
+# aliases like Series.loc yet.
 # TODO(ehsan): add DataFrame/Series aliases to alias analysis
-dummy_dce = lambda func_ir, typemap=None, alias_map=None, arg_aliases=None: None
-ir_utils.dead_code_elimination = dummy_dce
-numba.core.typed_passes.dead_code_elimination = dummy_dce
-numba.core.inline_closurecall.dead_code_elimination = dummy_dce
+def mini_dce(func_ir, typemap=None, alias_map=None, arg_aliases=None):
+    """A mini dead code elimination function that is similar to ir_utils.remove_dead()
+    but is much more conservative. Only removes nodes if node aliasing or side effect
+    is not possible.
+    Required for InlineClosureCallPass since some of the leftover make_function nodes
+    cannot be handled later (see test_join_string for example).
+    """
+    from numba.core.analysis import (
+        compute_cfg_from_blocks,
+        compute_live_map,
+        compute_use_defs,
+    )
+
+    cfg = compute_cfg_from_blocks(func_ir.blocks)
+    usedefs = compute_use_defs(func_ir.blocks)
+    live_map = compute_live_map(cfg, func_ir.blocks, usedefs.usemap, usedefs.defmap)
+
+    for label, block in func_ir.blocks.items():
+        # find live variables at each statement to delete dead assignment
+        lives = {v.name for v in block.terminator.list_vars()}
+        # find live variables at the end of block
+        for out_blk, _data in cfg.successors(label):
+            lives |= live_map[out_blk]
+
+        new_body = [block.terminator]
+        # for each statement in reverse order, excluding terminator
+        for stmt in reversed(block.body[:-1]):
+
+            # ignore assignments that their lhs is not live or lhs==rhs
+            if isinstance(stmt, ir.Assign):
+                lhs = stmt.target
+                rhs = stmt.value
+                if lhs.name not in lives:
+                    # make_function nodes are always safe to remove since they don't
+                    # introduce any aliases and have no side effects
+                    if isinstance(rhs, ir.Expr) and rhs.op == "make_function":
+                        continue
+                    # Const values are safe to remove since alias is not possible
+                    if isinstance(rhs, ir.Const):
+                        continue
+                    # Function values are safe to remove since aliasing not possible
+                    if typemap and isinstance(typemap.get(lhs, None), types.Function):
+                        continue
+                if isinstance(rhs, ir.Var) and lhs.name == rhs.name:
+                    continue
+
+            # Del nodes are safe to remove since there is no side effect
+            if isinstance(stmt, ir.Del):
+                if stmt.value not in lives:
+                    continue
+
+            if type(stmt) in analysis.ir_extension_usedefs:
+                def_func = analysis.ir_extension_usedefs[type(stmt)]
+                uses, defs = def_func(stmt)
+                lives -= defs
+                lives |= uses
+            else:
+                lives |= {v.name for v in stmt.list_vars()}
+                if isinstance(stmt, ir.Assign):
+                    lives.remove(lhs.name)
+
+            new_body.append(stmt)
+        new_body.reverse()
+        block.body = new_body
+
+
+ir_utils.dead_code_elimination = mini_dce
+numba.core.typed_passes.dead_code_elimination = mini_dce
+numba.core.inline_closurecall.dead_code_elimination = mini_dce
 
 
 # replace Numba's overload/overload_method handling functions to support a new option
