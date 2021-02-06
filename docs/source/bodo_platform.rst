@@ -607,7 +607,7 @@ sections on the `AWS Management Console <https://aws.amazon.com/console/>`_ sinc
 1. Navigate to the `AWS Management Console <https://aws.amazon.com/console/>`_. Sign in if you are not already signed in. Make sure you have selected
    the region from which you want to remove the shared resources.
 
-2. Click on `Services` in the top-right corner. Navigate to the `EC2` section (under `Compute`) and then to `Network Interfaces` in the sidebar 
+#. Click on `Services` in the top-right corner. Navigate to the `EC2` section (under `Compute`) and then to `Network Interfaces` in the sidebar 
    (under `Network & Security`). You will see two Network Interfaces. One of them is required for an EFS Mount (shared storage),
    and the other is required by a NAT Gateway. These dependent resources need to be removed first.
     
@@ -620,12 +620,24 @@ sections on the `AWS Management Console <https://aws.amazon.com/console/>`_ sinc
    Navigate back to `Network Interfaces` in the `EC2` section and ensure that the two ENIs are deleted (or have the status `available`). 
    This may take a few minutes in some cases.
 
-3. Click on `Services` and navigate to the `VPC` section (under `Networking & Content Delivery`). Select `Your VPCs` in the 
+#. Click on `Services` and navigate to the `VPC` section (under `Networking & Content Delivery`). Select `Your VPCs` in the 
    sidebar (under `Virtual Private Cloud`). Select the VPC prefixed with `bodo` and delete it. If there is a dependency warning,
    wait for a few minutes and try again. You can also try to delete the linked dependent resources manually if it does not resolve on its own.
 
-4. Finally, click on `Services` in the top-right corner. Navigate to the `EC2` section (under `Compute`) and select `Elastic IPs` in the sidebar
+#. Click on `Services` in the top-right corner. Navigate to the `EC2` section (under `Compute`) and select `Elastic IPs` in the sidebar
    (under `Network & Security`). Select the EIP prefixed with `bodo` and select `Release Elastic IP addresses` under `Actions`.
+
+#. Click on `Services` in the top-right corner. Navigate to the `Key Management Service (KMS)` section (under `Security, Identity, & Compliance`)
+   and select `Customer managed keys` in the sidebar. Click on the key prefixed with `bodoai-kms`. Go to the `Aliases` tab. There should be a single
+   alias defined. Select this alias and delete it. Next, click on `Key actions` (top-right) and select `Schedule key deletion`. 
+   
+   **Optional:** Reduce the `Waiting period` from 30 days to 7 days.
+   
+   Next, check `Confirm that you want to delete this key in XX days` and click on `Schedule deletion`.
+
+#. Finally, click on `Services` in the top-right corner and navigate to `Systems Manager` (under `Management & Governance`). Select `Parameter Store` from
+   sidebar. Look for parameters prefixed with ``/<EXTERNAL_ID>``, where ``EXTERNAL_ID`` is the same as the External ID visible on the Settings page on the
+   Bodo Platform (see :ref:`create_iam_role_manually`). Select all these parameter entries and delete them.
 
 The steps above should remove the organization level resources provisioned by Bodo in your AWS environment.
 
