@@ -2511,6 +2511,70 @@ def overload_heter_index_getitem(I, ind):  # pragma: no cover
         )  # pragma: no cover
 
 
+@lower_constant(DatetimeIndexType)
+@lower_constant(TimedeltaIndexType)
+def lower_constant_time_index(context, builder, ty, pyval):
+    """ Constant lowering for DatetimeIndexType and TimedeltaIndexType. """
+    data = context.get_constant_generic(
+        builder, types.Array(types.int64, 1, "C"), pyval.values.view(np.int64)
+    )
+    name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
+
+    dt_val = cgutils.create_struct_proxy(ty)(context, builder)
+    dt_val.data = data
+    dt_val.name = name
+
+    return dt_val._getvalue()
+
+
+@lower_constant(PeriodIndexType)
+def lower_constant_period_index(context, builder, ty, pyval):
+    """ Constant lowering for PeriodIndexType. """
+    data = context.get_constant_generic(
+        builder, types.Array(types.int64, 1, "C"), pyval.asi8
+    )
+    name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
+
+    dt_val = cgutils.create_struct_proxy(ty)(context, builder)
+    dt_val.data = data
+    dt_val.name = name
+
+    return dt_val._getvalue()
+
+
+@lower_constant(NumericIndexType)
+def lower_constant_numeric_index(context, builder, ty, pyval):
+    """ Constant lowering for NumericIndexType. """
+
+    # make sure the type is one of the numeric ones
+    assert ty.dtype in (types.int64, types.uint64, types.float64)
+
+    # get the data
+    data = context.get_constant_generic(
+        builder, types.Array(ty.dtype, 1, "C"), pyval.values
+    )
+    name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
+
+    dt_val = cgutils.create_struct_proxy(ty)(context, builder)
+    dt_val.data = data
+    dt_val.name = name
+
+    return dt_val._getvalue()
+
+
+@lower_constant(StringIndexType)
+def lower_constant_string_index(context, builder, ty, pyval):
+    """ Constant lowering for StringIndexType. """
+    _data = context.get_constant_generic(builder, string_array_type, pyval.values)
+    name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
+
+    dt_val = cgutils.create_struct_proxy(ty)(context, builder)
+    dt_val.data = _data
+    dt_val.name = name
+
+    return dt_val._getvalue()
+
+
 index_unsupported = [
     "all",
     "any",

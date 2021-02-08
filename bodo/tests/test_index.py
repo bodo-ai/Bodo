@@ -408,6 +408,58 @@ def test_datetime_sub(dti_val, memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(dti_val, t), impl2(dti_val, t))
 
 
+def test_datetimeindex_constant_lowering(memory_leak_check):
+    dti = pd.to_datetime(
+        ["1/1/2018", np.datetime64("2018-01-01"), datetime.datetime(2018, 1, 1)]
+    )
+
+    def impl():
+        return dti
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(), impl())
+
+
+def test_string_index_constant_lowering():
+    si = pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"])
+
+    def impl():
+        return si
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(), impl())
+
+
+def test_int64_index_constant_lowering():
+    idx = pd.Int64Index([-1, 43, 54, 65, 123])
+
+    def impl():
+        return idx
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(), impl())
+
+
+def test_uint64_index_constant_lowering():
+    idx = pd.UInt64Index([1, 43, 54, 65, 123])
+
+    def impl():
+        return idx
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(), impl())
+
+
+def test_float64_index_constant_lowering():
+    idx = pd.Float64Index([1.2, 43.4, 54.7, 65, 123])
+
+    def impl():
+        return idx
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(), impl())
+
+
 @pytest.mark.smoke
 def test_datetime_getitem(dti_val, memory_leak_check):
     # constant integer index
@@ -570,6 +622,16 @@ def test_timedelta_index_constructor(data, memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
 
 
+def test_timedelta_index_constant_lowering(memory_leak_check):
+    tdi = pd.TimedeltaIndex(np.arange(10))
+
+    def impl():
+        return tdi
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(), impl())
+
+
 def test_init_timedelta_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_timedelta_index() is applied correctly"""
     import numba.tests.test_array_analysis
@@ -617,6 +679,16 @@ def test_period_index_box(period_index, memory_leak_check):
         return A
 
     pd.testing.assert_index_equal(bodo.jit(impl)(period_index), impl(period_index))
+
+
+def test_periodindex_constant_lowering(memory_leak_check):
+    pi = pd.PeriodIndex(year=[2015, 2016, 2018], quarter=[1, 2, 3])
+
+    def impl():
+        return pi
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(), impl())
 
 
 @pytest.mark.slow
