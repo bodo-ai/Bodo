@@ -224,6 +224,7 @@ Data manipulations:
 
 * :func:`pandas.concat`
   Input list or tuple of dataframes or series is supported. `axis` and `ignore_index` are also supported.
+  Bodo currently concatenates local data chunks for distributed datasets, which does not preserve global order of concatenated objects in output.
 
 * :func:`pandas.get_dummies` 
   Input must be a categorical array with categories that are known at compile time (for type stability).
