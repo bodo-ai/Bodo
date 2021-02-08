@@ -1079,6 +1079,9 @@ class TypingTransforms:
 
         impl = bodosql.context_ext._gen_pd_func_for_query(sql_context_type, sql_str)
         self.changed = True
+        # BodoSQL generates df.columns setattr, which needs another transform to work
+        # (See BodoSQL #189)
+        self.needs_transform = True
         return compile_func_single_block(
             impl,
             [sql_context_var],
