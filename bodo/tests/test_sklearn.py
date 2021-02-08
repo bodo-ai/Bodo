@@ -806,12 +806,16 @@ def test_sgdc_svm():
     bodo_coef_ = bodo.jit(distributed=["X_train", "y_train"])(impl_coef)(
         X_train, y_train
     )
+    bodo_coef_serial = bodo.jit(distributed=False)(impl_coef)(X_train, y_train)
     if bodo.get_rank() == 0:
         bodo_R = np.dot(X_train, bodo_coef_[0]) > 0.0
         bodo_accuracy = np.sum(bodo_R == y_train) / len(X_train)
         sk_R = np.dot(X_train, sklearn_coef_[0]) > 0.0
         sk_accuracy = np.sum(sk_R == y_train) / len(X_train)
         assert np.allclose(bodo_accuracy, sk_accuracy, atol=0.1)
+        serial_bodo_R = np.dot(X_train, bodo_coef_serial[0]) > 0.0
+        serial_bodo_accuracy = np.sum(serial_bodo_R == y_train) / len(X_train)
+        assert np.allclose(serial_bodo_accuracy, sk_accuracy, atol=0.1)
 
 
 def test_sgdc_lr():

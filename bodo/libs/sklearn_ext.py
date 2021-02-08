@@ -1808,23 +1808,38 @@ def overload_sgdc_model_fit(
     y,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    def _model_sgdc_fit_impl(m, X, y, _is_data_distributed=False):  # pragma: no cover
+    """
+    Provide implementations for the fit function.
+    In case input is replicated, we simply call sklearn,
+    else we use partial_fit on each rank then use we re-compute the attributes using MPI operations.
+    """
+    if is_overload_true(_is_data_distributed):
 
-        # TODO: Rebalance the data X and y to be the same size on every rank
-        # y has to be an array
-        y_classes = bodo.libs.array_kernels.unique(y)
+        def _model_sgdc_fit_impl(
+            m, X, y, _is_data_distributed=False
+        ):  # pragma: no cover
 
-        if _is_data_distributed:
+            # TODO: Rebalance the data X and y to be the same size on every rank
+            # y has to be an array
+            y_classes = bodo.libs.array_kernels.unique(y)
             y_classes = bodo.allgatherv(y_classes, False)
 
-        with numba.objmode(m="sgd_classifier_type"):
-            m = fit_sgd(m, X, y, y_classes, _is_data_distributed)
+            with numba.objmode(m="sgd_classifier_type"):
+                m = fit_sgd(m, X, y, y_classes, _is_data_distributed)
 
-        bodo.barrier()
+            return m
 
-        return m
+        return _model_sgdc_fit_impl
+    else:
+        # If replicated, then just call sklearn
+        def _model_sgdc_fit_impl(
+            m, X, y, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode(m="sgd_classifier_type"):
+                m = m.fit(X, y)
+            return m
 
-    return _model_sgdc_fit_impl
+        return _model_sgdc_fit_impl
 
 
 @overload_method(BodoSGDClassifierType, "predict", no_unliteral=True)
