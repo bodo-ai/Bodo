@@ -460,6 +460,18 @@ def test_np_dot_empty_vm(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_dist_false_cache(memory_leak_check):
+    """test (distributed=False, cache=True) jit combination (issue #2534)"""
+
+    @bodo.jit(distributed=False, cache=True)
+    def test(data):
+        data = data.values
+
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [3, 4, 5]})
+    test(df)
+
+
+@pytest.mark.slow
 def test_np_full(memory_leak_check):
     """Test np.full() support (currently in Series pass)"""
 
