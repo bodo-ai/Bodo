@@ -168,17 +168,17 @@ void get_partition_info(DatasetReader *ds_reader, PyObject *piece) {
         std::vector<int64_t> &vals = ds_reader->part_vals.back();
 
         PyObject *part_keys_iter = PyObject_GetIter(partition_keys_py);
-        Py_DECREF(partition_keys_py);
         PyObject *key_val_tuple;
         while ((key_val_tuple = PyIter_Next(part_keys_iter))) {
+            // PyTuple_GetItem returns borrowed reference, no need to decref
             PyObject* part_val_py = PyTuple_GetItem(key_val_tuple, 1);
             int64_t part_val = PyLong_AsLongLong(part_val_py);
             vals.emplace_back(part_val);
-            Py_DECREF(part_val_py);
             Py_DECREF(key_val_tuple);
         }
         Py_DECREF(part_keys_iter);
     }
+    Py_DECREF(partition_keys_py);
 }
 
 DatasetReader *get_dataset_reader(char *file_name, bool parallel,
