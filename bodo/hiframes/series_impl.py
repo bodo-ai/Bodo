@@ -1457,7 +1457,7 @@ def overload_series_value_counts(
         )
         count_df = in_df.groupby("A").count().sort_values("B", ascending=ascending)
         # create the output Series and remove "A"/"B" labels from index/column
-        ind_arr = bodo.hiframes.pd_index_ext.get_index_data(
+        ind_arr = bodo.utils.conversion.coerce_to_array(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_index(count_df)
         )
         index = bodo.utils.conversion.index_from_array(ind_arr)
