@@ -938,9 +938,10 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
             argtypes.append(types.Omitted(a.value))
         else:
             argtypes.append(self.typeof_pyval(a))
+    return_val = None
     try:
         error = None
-        return self.compile(tuple(argtypes))
+        return_val = self.compile(tuple(argtypes))
     except errors.ForceLiteralArg as e:
         # Received request for compiler re-entry with the list of arguments
         # indicated by e.requested_args.
@@ -979,7 +980,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
                 new_args.append(args[i])
         args = new_args
         # Re-enter compilation with the Literal-ized arguments
-        return self._compile_for_args(*args)
+        return_val = self._compile_for_args(*args)
 
     except errors.TypingError as e:
         # Intercept typing error that may be due to an argument
@@ -1036,11 +1037,13 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         raise e
     # Bodo change: avoid arg leak
     finally:
+        self._types_active_call = []
         # avoid issue of reference leak of arguments to jitted function:
         # https://github.com/numba/numba/issues/5419
         del args
         if error:
             raise error
+    return return_val
 
 
 # workaround for Numba #5419 issue (https://github.com/numba/numba/issues/5419)
@@ -1050,7 +1053,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
 lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "c85205bff102c4447e81110ee82291a2e3ff78bc73535be18e76e6f4539debb1"
+    != "79466480839c6e16cf437dc054937deb639c85664df1fef673e8f34dfe9d41b6"
 ):  # pragma: no cover
     warnings.warn("numba.core.dispatcher._DispatcherBase._compile_for_args has changed")
 # now replace the function with our own
