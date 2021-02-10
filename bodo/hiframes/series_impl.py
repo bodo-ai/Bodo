@@ -40,6 +40,7 @@ from bodo.utils.typing import (
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_false,
+    is_overload_int,
     is_overload_none,
     is_overload_true,
     is_overload_zero,
@@ -517,7 +518,7 @@ def overload_series_mean(S, axis=None, skipna=None, level=None, numeric_only=Non
 
     unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
     arg_defaults = dict(skipna=None, level=None, numeric_only=None)
-    check_unsupported_args("series.mean", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.mean", unsupported_args, arg_defaults)
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.mean(): axis argument not supported")
@@ -888,7 +889,7 @@ def overload_series_corr(S, other, method="pearson", min_periods=None):
 
     unsupported_args = dict(method=method, min_periods=min_periods)
     arg_defaults = dict(method="pearson", min_periods=None)
-    check_unsupported_args("series.corr", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.corr", unsupported_args, arg_defaults)
 
     def impl(S, other, method="pearson", min_periods=None):  # pragma: no cover
         n = S.count()
@@ -955,7 +956,7 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
 
     unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
     arg_defaults = dict(skipna=None, level=None, numeric_only=None)
-    check_unsupported_args("series.min", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.min", unsupported_args, arg_defaults)
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):
         raise BodoError("Series.min(): axis argument not supported")
@@ -1075,7 +1076,7 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
 
     unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
     arg_defaults = dict(skipna=None, level=None, numeric_only=None)
-    check_unsupported_args("series.max", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.max", unsupported_args, arg_defaults)
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.max(): axis argument not supported")
@@ -1150,7 +1151,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
 
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=0, skipna=True)
-    check_unsupported_args("series.idxmin", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.idxmin", unsupported_args, arg_defaults)
 
     # TODO: other types like strings
     if S.dtype == types.none:
@@ -1174,7 +1175,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
 
     unsupported_args = dict(skipna=skipna)
     arg_defaults = dict(skipna=True)
-    check_unsupported_args("series.idxmax", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.idxmax", unsupported_args, arg_defaults)
 
     if not is_overload_zero(axis):
         raise BodoError("Series.idxmax(): axis argument not supported")
@@ -1222,7 +1223,7 @@ def overload_series_autocorr(S, lag=1):
 def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=None):
     unsupported_args = dict(level=level, numeric_only=numeric_only)
     arg_defaults = dict(level=None, numeric_only=None)
-    check_unsupported_args("series.median", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.median", unsupported_args, arg_defaults)
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.median(): axis argument not supported")
@@ -1265,7 +1266,7 @@ def overload_series_nlargest(S, n=5, keep="first"):
     # TODO: support and test keep semantics
     unsupported_args = dict(keep=keep)
     arg_defaults = dict(keep="first")
-    check_unsupported_args("series.nlargest", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.nlargest", unsupported_args, arg_defaults)
 
     def impl(S, n=5, keep="first"):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -1287,7 +1288,7 @@ def overload_series_nsmallest(S, n=5, keep="first"):
 
     unsupported_args = dict(keep=keep)
     arg_defaults = dict(keep="first")
-    check_unsupported_args("series.nsmallest", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.nsmallest", unsupported_args, arg_defaults)
 
     def impl(S, n=5, keep="first"):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -1315,7 +1316,7 @@ def overload_series_astype(S, dtype, copy=True, errors="raise"):
 
     unsupported_args = dict(errors=errors)
     arg_defaults = dict(errors="raise")
-    check_unsupported_args("series.astype", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.astype", unsupported_args, arg_defaults)
 
     # TODO: other data types like datetime, records/tuples
     def impl(S, dtype, copy=True, errors="raise"):  # pragma: no cover
@@ -1334,7 +1335,7 @@ def overload_series_take(S, indices, axis=0, convert=None, is_copy=True):
 
     unsupported_args = dict(axis=axis, convert=convert, is_copy=is_copy)
     arg_defaults = dict(axis=0, convert=None, is_copy=True)
-    check_unsupported_args("series.take", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.take", unsupported_args, arg_defaults)
 
     def impl(S, indices, axis=0, convert=None, is_copy=True):  # pragma: no cover
         indices_t = bodo.utils.conversion.coerce_to_ndarray(indices)
@@ -1355,7 +1356,7 @@ def overload_series_argsort(S, axis=0, kind="quicksort", order=None):
 
     unsupported_args = dict(axis=axis, kind=kind, order=order)
     arg_defaults = dict(axis=0, kind="quicksort", order=None)
-    check_unsupported_args("series.argsort", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.argsort", unsupported_args, arg_defaults)
 
     def impl(S, axis=0, kind="quicksort", order=None):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -1400,7 +1401,7 @@ def overload_series_sort_values(
         ignore_index=False,
         key=None,
     )
-    check_unsupported_args("series.sort_values", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.sort_values", unsupported_args, arg_defaults)
 
     def impl(
         S,
@@ -1571,7 +1572,7 @@ def overload_series_groupby(
 def overload_series_append(S, to_append, ignore_index=False, verify_integrity=False):
     unsupported_args = dict(verify_integrity=verify_integrity)
     arg_defaults = dict(verify_integrity=False)
-    check_unsupported_args("series.append", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.append", unsupported_args, arg_defaults)
 
     # call pd.concat()
     # single Series case
@@ -1864,7 +1865,7 @@ def overload_series_fillna(
 ):
     unsupported_args = dict(method=method, limit=limit, downcast=downcast)
     arg_defaults = dict(method=None, limit=None, downcast=None)
-    check_unsupported_args("series.series_fillna", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.series_fillna", unsupported_args, arg_defaults)
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):
         raise BodoError("Series.min(): axis argument not supported")
@@ -1966,7 +1967,7 @@ def overload_series_replace(
 
     unsupported_args = dict(inplace=inplace, limit=limit, regex=regex, method=method)
     merge_defaults = dict(inplace=False, limit=None, regex=False, method="pad")
-    check_unsupported_args("series.replace", unsupported_args, merge_defaults)
+    check_unsupported_args("Series.replace", unsupported_args, merge_defaults)
 
     ret_dtype = S.data
     if isinstance(ret_dtype, CategoricalArray):
@@ -2093,7 +2094,7 @@ def overload_series_explode(S, ignore_index=False):
 
     unsupported_args = dict(ignore_index=ignore_index)
     merge_defaults = dict(ignore_index=False)
-    check_unsupported_args("series.explode", unsupported_args, merge_defaults)
+    check_unsupported_args("Series.explode", unsupported_args, merge_defaults)
 
     if not isinstance(S.data, ArrayItemArrayType):
         # pandas copies input if not iterable
@@ -2193,7 +2194,7 @@ def overload_series_dropna(S, axis=0, inplace=False):
 
     unsupported_args = dict(axis=axis, inplace=inplace)
     merge_defaults = dict(axis=0, inplace=False)
-    check_unsupported_args("series.dropna", unsupported_args, merge_defaults)
+    check_unsupported_args("Series.dropna", unsupported_args, merge_defaults)
 
     if S.dtype == bodo.string_type:
 
@@ -2225,11 +2226,29 @@ def overload_series_dropna(S, axis=0, inplace=False):
 
 @overload_method(SeriesType, "shift", inline="always", no_unliteral=True)
 def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
-    # TODO: handle dt64, strings
+    # TODO: handle strings
 
     unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
     arg_defaults = dict(freq=None, axis=0, fill_value=None)
-    check_unsupported_args("series.shift", unsupported_args, arg_defaults)
+    check_unsupported_args("Series.shift", unsupported_args, arg_defaults)
+
+    # Bodo specific limitations for supported types
+    # Currently only float (not nullable), int (not nullable), and dt64 are supported
+    if not (
+        isinstance(S.data, types.Array)
+        and (
+            isinstance(S.data.dtype, (types.Number))
+            or S.data.dtype == bodo.datetime64ns
+        )
+    ):
+        # TODO: Link to supported Series input types.
+        raise BodoError(
+            f"Series.shift() Series input type {S.data.dtype} not supported."
+        )
+
+    # Ensure period is int
+    if not is_overload_int(periods):
+        raise BodoError("Series.shift(): 'periods' input must be an integer.")
 
     def impl(S, periods=1, freq=None, axis=0, fill_value=None):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)

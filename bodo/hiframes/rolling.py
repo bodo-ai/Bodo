@@ -1316,6 +1316,9 @@ def shift():  # pragma: no cover
 # using overload since njit bakes in Literal[bool](False) for parallel
 @overload(shift, jit_options={"cache": True})
 def shift_overload(in_arr, shift, parallel):
+    # TODO: Removing this check passes our internal shift tests.
+    # We should remove this check if possible so this implementation
+    # always returns a function.
     if not isinstance(parallel, types.Literal):
         return shift_impl
 

@@ -55,6 +55,7 @@ from bodo.utils.typing import (
     is_overload_constant_list,
     is_overload_constant_str,
     is_overload_false,
+    is_overload_int,
     is_overload_none,
     is_overload_true,
     parse_dtype,
@@ -990,9 +991,29 @@ def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
 @overload_method(DataFrameType, "shift", inline="always", no_unliteral=True)
 def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
     # TODO: handle fill_value, freq, int NA
+    # TODO: Support nullable integer/float types
     unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
     arg_defaults = dict(freq=None, axis=0, fill_value=None)
     check_unsupported_args("DataFrame.shift", unsupported_args, arg_defaults)
+
+    # Bodo specific limitations for supported types
+    # Currently only float (not nullable), int (not nullable), and dt64 are supported
+    for column_type in df.data:
+        if not (
+            isinstance(column_type, types.Array)
+            and (
+                isinstance(column_type.dtype, (types.Number))
+                or column_type.dtype == bodo.datetime64ns
+            )
+        ):
+            # TODO: Link to supported Column input types.
+            raise BodoError(
+                f"Dataframe.shift() column input type {column_type.dtype} not supported."
+            )
+
+    # Ensure period is int
+    if not is_overload_int(periods):
+        raise BodoError("DataFrame.shift(): 'periods' input must be an integer.")
 
     data_args = ", ".join(
         "bodo.hiframes.rolling.shift(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), periods, False)".format(

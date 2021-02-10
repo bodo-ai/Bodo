@@ -3205,15 +3205,44 @@ def test_series_replace_dict_float(memory_leak_check):
     [2, -2],
 )
 def test_series_shift(numeric_series_val, periods, memory_leak_check):
-
-    # TODO: support nullable int
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        return
-
     def test_impl(A, periods):
         return A.shift(periods)
 
-    check_func(test_impl, (numeric_series_val, periods))
+    # TODO: support nullable int
+    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        with pytest.raises(BodoError, match="Series.shift\(\) Series input type"):
+            bodo.jit(test_impl)(numeric_series_val, periods)
+    else:
+        check_func(test_impl, (numeric_series_val, periods))
+
+
+@pytest.mark.slow
+def test_series_shift_unsupported(series_val, memory_leak_check):
+    """
+    Test for the Series.shift inputs that are expected to be unsupported.
+    """
+    # Series.shift supports non-nullable ints, floats, and dt64
+    if pd.api.types.is_numeric_dtype(series_val) or series_val.dtype == np.dtype(
+        "datetime64[ns]"
+    ):
+        return
+
+    def test_impl(A):
+        return A.shift(1)
+
+    with pytest.raises(BodoError, match="Series.shift\(\) Series input type"):
+        bodo.jit(test_impl)(series_val)
+
+
+@pytest.mark.slow
+def test_series_shift_error_periods(memory_leak_check):
+    S = pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name="A")
+
+    def test_impl(S, periods):
+        return S.shift(periods)
+
+    with pytest.raises(BodoError, match="periods input must be an integer"):
+        bodo.jit(test_impl)(S, 1.0)
 
 
 @pytest.mark.parametrize(

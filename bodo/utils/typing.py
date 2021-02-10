@@ -281,6 +281,20 @@ def is_overload_constant_dict(val):
     )
 
 
+def is_overload_constant_number(val):
+    return is_overload_constant_int(val) or is_overload_constant_float(val)
+
+
+def is_overload_constant_float(val):
+    return isinstance(val, float) or (
+        (isinstance(val, types.Omitted) and isinstance(val.value, float))
+    )
+
+
+def is_overload_int(val):
+    return is_overload_constant_int(val) or isinstance(val, types.Integer)
+
+
 def is_overload_constant_int(val):
     return (
         isinstance(val, int)
@@ -506,6 +520,19 @@ def get_overload_const_int(val):
         assert isinstance(val.literal_value, int)
         return val.literal_value
     raise BodoError("{} not constant integer".format(val))
+
+
+def get_overload_const_bool(val):
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, types.Omitted):
+        assert isinstance(val.value, bool)
+        return val.value
+    # literal case
+    if isinstance(val, types.BooleanLiteral):
+        assert isinstance(val.literal_value, bool)
+        return val.literal_value
+    raise BodoError("{} not constant boolean".format(val))
 
 
 def is_const_func_type(t):

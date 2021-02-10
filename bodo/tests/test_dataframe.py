@@ -1540,14 +1540,44 @@ def test_df_sort_index(df_value):
 
 
 def test_df_shift(numeric_df_value, memory_leak_check):
-    # not supported for dt64
-    if any(d == np.dtype("datetime64[ns]") for d in numeric_df_value.dtypes):
+    def impl(df):
+        return df.shift(2)
+
+    check_func(impl, (numeric_df_value,))
+
+
+@pytest.mark.slow
+def test_df_shift_unsupported(df_value, memory_leak_check):
+    """
+    Test for the Dataframe.shift inputs that are expected to be unsupported.
+    """
+    # Dataframe.shift supports non-nullable ints, floats, and dt64
+    skip = True
+    for dtype in df_value.dtypes:
+        if not pd.api.types.is_numeric_dtype(dtype) and dtype != np.dtype(
+            "datetime64[ns]"
+        ):
+            skip = False
+
+    if skip:
         return
 
     def impl(df):
         return df.shift(2)
 
-    check_func(impl, (numeric_df_value,))
+    with pytest.raises(BodoError, match="Dataframe.shift\(\) column input type"):
+        bodo.jit(impl)(df_value)
+
+
+@pytest.mark.slow
+def test_df_shift_error_periods(memory_leak_check):
+    df = pd.DataFrame({"A": [1, 2], "B": [3, 4]})
+
+    def test_impl(df, periods):
+        return df.shift(periods)
+
+    with pytest.raises(BodoError, match="periods input must be an integer"):
+        bodo.jit(test_impl)(df, 1.0)
 
 
 def test_df_set_index(df_value, memory_leak_check):

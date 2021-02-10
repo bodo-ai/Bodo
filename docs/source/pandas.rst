@@ -61,7 +61,7 @@ are supported.
 
 In addition, it may be desirable to specify type annotations in some cases (e.g. :ref:`file I/O array input types <input-array-types>`).
 Typically these types are array types and they all can be accessed directly from the `bodo` module.
-The following table can be used to select the necessary Bodo Type based upon the desired Python, Numpy, or Pandas type. 
+The following table can be used to select the necessary Bodo Type based upon the desired Python, Numpy, or Pandas type.
 
 .. list-table::
   :header-rows: 1
@@ -96,7 +96,7 @@ The following table can be used to select the necessary Bodo Type based upon the
     - | Array of a user defined tuple with the given tuple of data types
       | e.g. ``bodo.TupleArrayType((bodo.int32[:], bodo.datetime64ns[:]))``
   * - ``bodo.MapArrayType(key_arr_type, value_arr_type)``
-    - | Array of Python dictionaries with the given key and value array types. 
+    - | Array of Python dictionaries with the given key and value array types.
       | e.g. ``bodo.MapArrayType(bodo.uint16[:], bodo.string_array_type)``
   * - ``bodo.DatetimeIndexType(name_type)``
     - | Index of datetime64 values with a given name type.
@@ -107,10 +107,10 @@ The following table can be used to select the necessary Bodo Type based upon the
       | e.g. ``bodo.NumericIndexType(bodo.float64, bodo.string_type)``
   * - ``bodo.PeriodIndexType(freq, name_type)``
     - | pd.PeriodIndex with a given frequency and name type.
-      | e.g. ``bodo.PeriodIndexType('A', bodo.string_type)`` 
+      | e.g. ``bodo.PeriodIndexType('A', bodo.string_type)``
   * - ``bodo.RangeIndexType(name_type)``
     - | RangeIndex with a given name type.
-      | e.g. ``bodo.RangeIndexType(bodo.string_type)``  
+      | e.g. ``bodo.RangeIndexType(bodo.string_type)``
   * - ``bodo.StringIndexType(name_type)``
     - | Index of strings with a given name type.
       | e.g. ``bodo.StringIndexType(bodo.string_type)``
@@ -124,7 +124,7 @@ The following table can be used to select the necessary Bodo Type based upon the
     - | DataFrame with a tuple of data types, an index type, and the names of the columns.
       | e.g. ``bodo.DataFrameType((bodo.int64[::1], bodo.float64[::1]), bodo.RangeIndexType(bodo.none), ("A", "B"))``
 
-  
+
 
 
 
@@ -139,7 +139,7 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
 * :func:`pandas.read_csv`
 
   * :ref:`example usage and more system specific instructions <csv-section>`
-  * ``filepath_or_buffer`` should be a string and is required. It could be pointing to a single CSV file, or a directory containing multiple partitioned CSV files (must have ``csv`` file extension inside directory).  
+  * ``filepath_or_buffer`` should be a string and is required. It could be pointing to a single CSV file, or a directory containing multiple partitioned CSV files (must have ``csv`` file extension inside directory).
   * Arguments ``sep``, ``delimiter``, ``header``, ``names``,
     ``index_col``, ``usecols``, ``dtype``, ``skiprows``, and ``parse_dates`` are supported.
   * Either ``names`` and ``dtype`` arguments should be provided to enable type inference,
@@ -217,7 +217,7 @@ Data manipulations:
   * Arguments ``left``, ``right`` should be dataframes.
   * ``how``, ``on``, ``left_on``, ``right_on``, ``left_index``,
     and ``right_index`` are supported but should be constant values.
-  * The output dataframe is not sorted by default for better parallel performance (Pandas may preserve key order depending on `how`). 
+  * The output dataframe is not sorted by default for better parallel performance (Pandas may preserve key order depending on `how`).
     One can use explicit sort if needed.
 
 * :func:`pandas.merge_asof` (similar arguments to `merge`)
@@ -226,7 +226,7 @@ Data manipulations:
   Input list or tuple of dataframes or series is supported. `axis` and `ignore_index` are also supported.
   Bodo currently concatenates local data chunks for distributed datasets, which does not preserve global order of concatenated objects in output.
 
-* :func:`pandas.get_dummies` 
+* :func:`pandas.get_dummies`
   Input must be a categorical array with categories that are known at compile time (for type stability).
 
 
@@ -432,7 +432,7 @@ Reshaping, sorting:
 
 Time series-related:
 
-* :meth:`pandas.Series.shift` (supports numeric types and
+* :meth:`pandas.Series.shift` (supports non-nullable numeric types and
   only the `periods` argument supported)
 
 Datetime properties:
@@ -645,7 +645,7 @@ Combining / joining / merging:
 
 Time series-related:
 
-* :meth:`pandas.DataFrame.shift` (supports numeric types and
+* :meth:`pandas.DataFrame.shift` (supports non-nullable numeric types and
   only the `periods` argument supported)
 
 .. _pandas-f-out:
@@ -667,9 +667,9 @@ Index
 
 Properties
 
-* :attr:`pandas.Index.name` 
-* :attr:`pandas.Index.shape` 
-* :attr:`pandas.Index.values` 
+* :attr:`pandas.Index.name`
+* :attr:`pandas.Index.shape`
+* :attr:`pandas.Index.values`
   Returns the underlying data array
 
 Modifying and computations:
@@ -834,7 +834,7 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
 
 * :class:`pandas.Timedelta`
 
-  * The unit argument is not supported and all Timedeltas 
+  * The unit argument is not supported and all Timedeltas
     are represented in nanosecond precision.
 
 Datetime related fields are supported:
@@ -914,9 +914,9 @@ Bodo supports a subset of the offset types in ``pandas.tseries.offsets``:
 * :func:`pandas.tseries.offsets.MonthEnd`
 * :func:`pandas.tseries.offsets.Week`
 
-The currently supported operations are the constructor 
-and addition and subtraction with a scalar `datetime.date`, `datetime.datetime` 
-or `pandas.Timestamp`. These can also be mapped across Series or DataFrame of 
+The currently supported operations are the constructor
+and addition and subtraction with a scalar `datetime.date`, `datetime.datetime`
+or `pandas.Timestamp`. These can also be mapped across Series or DataFrame of
 dates using UDFs.
 
 
@@ -948,17 +948,17 @@ For example, this code reads column `A` into a nullable integer array
         dtype=dtype,
     )
     ...
-    
+
 User-Defined Functions (UDFs)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 User-defined functions (UDFs) can be applied to dataframes with ``DataFrame.apply()`` and to
-series with ``Series.apply()`` or ``Series.map()``. Bodo offers support for UDFs without the 
-significant runtime penalty generally incurred in Pandas. 
+series with ``Series.apply()`` or ``Series.map()``. Bodo offers support for UDFs without the
+significant runtime penalty generally incurred in Pandas.
 
-It is recommended to pass additional variables to UDFs explicitly, instead of directly using 
-values in the main function. The latter results in the "captured" variables case, which is 
-often error-prone and may result in compilation errors. Therefore, arguments should be passed 
+It is recommended to pass additional variables to UDFs explicitly, instead of directly using
+values in the main function. The latter results in the "captured" variables case, which is
+often error-prone and may result in compilation errors. Therefore, arguments should be passed
 directly to either ``Series.apply()`` or ``DataFrame.apply()``.
 
 For example, consider a UDF that appends a variable suffix to each string
