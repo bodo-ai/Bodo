@@ -1817,7 +1817,14 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
                 # Bodo change: avoid raising error for concat reduction case
                 # opened issue to handle Bodo cases and raise proper errors: #1414
                 # see test_concat_reduction
-                # if not (isinstance(next_node, ir.Assign) and target_name == unversioned_name):
+
+                # reductions like sum have an assignment afterwards
+                # e.g. $2 = a + $1; a = $2
+                # reductions that are functions calls like max() don't have an
+                # extra assignment afterwards
+                # if (not (i+1 < len(nodes) and isinstance(nodes[i+1], ir.Assign)
+                #         and nodes[i+1].target.unversioned_name == unversioned_name)
+                #         and lhs.unversioned_name != unversioned_name):
                 #     raise ValueError(
                 #         f"Use of reduction variable {unversioned_name!r} other "
                 #         "than in a supported reduction function is not "
@@ -1847,7 +1854,7 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
 lines = inspect.getsource(numba.parfors.parfor.get_reduce_nodes)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "5e99297a2346e2c01d60ad39e814da5c7308a3c0e6f342530d2e49f976327079"
+    != "a05b52aff9cb02e595a510cd34e973857303a71097fc5530567cb70ca183ef3b"
 ):  # pragma: no cover
     warnings.warn("numba.parfors.parfor.get_reduce_nodes has changed")
 
