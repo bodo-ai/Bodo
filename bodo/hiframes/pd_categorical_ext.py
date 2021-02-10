@@ -158,6 +158,7 @@ def box_cat_dtype(typ, val, c):
     )
     # box categories data
     arr_type = _get_cat_arr_type(typ.elem_type)
+    c.context.nrt.incref(c.builder, arr_type, cat_dtype.categories)
     categories_obj = c.pyapi.from_native_value(
         arr_type, cat_dtype.categories, c.env_manager
     )
@@ -171,6 +172,7 @@ def box_cat_dtype(typ, val, c):
     c.pyapi.decref(ordered_obj)
     c.pyapi.decref(categories_obj)
     c.pyapi.decref(pd_class_obj)
+    c.context.nrt.decref(c.builder, typ, val)
     return dtype_obj
 
 
@@ -252,9 +254,10 @@ def box_categorical_array(typ, val, c):
     # get codes and dtype objects
     int_dtype = get_categories_int_type(dtype)
     cat_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    arr_obj = c.pyapi.from_native_value(
-        types.Array(int_dtype, 1, "C"), cat_arr.codes, c.env_manager
-    )
+    arr_type = types.Array(int_dtype, 1, "C")
+    c.context.nrt.incref(c.builder, arr_type, cat_arr.codes)
+    arr_obj = c.pyapi.from_native_value(arr_type, cat_arr.codes, c.env_manager)
+    c.context.nrt.incref(c.builder, dtype, cat_arr.dtype)
     dtype_obj = c.pyapi.from_native_value(dtype, cat_arr.dtype, c.env_manager)
     none_obj = c.pyapi.borrow_none()  # no need to decref
 
@@ -268,6 +271,7 @@ def box_categorical_array(typ, val, c):
     c.pyapi.decref(arr_obj)
     c.pyapi.decref(dtype_obj)
     c.pyapi.decref(pd_class_obj)
+    c.context.nrt.decref(c.builder, typ, val)
     return cat_arr_obj
 
 
