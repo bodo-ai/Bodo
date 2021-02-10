@@ -371,6 +371,9 @@ def mini_dce(func_ir, typemap=None, alias_map=None, arg_aliases=None):
                     # introduce any aliases and have no side effects
                     if isinstance(rhs, ir.Expr) and rhs.op == "make_function":
                         continue
+                    # getattr doesn't have any side effects
+                    if isinstance(rhs, ir.Expr) and rhs.op == "getattr":
+                        continue
                     # Const values are safe to remove since alias is not possible
                     if isinstance(rhs, ir.Const):
                         continue
