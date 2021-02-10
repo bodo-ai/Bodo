@@ -16,12 +16,14 @@ import types as pytypes
 import warnings
 from collections import OrderedDict
 from collections.abc import Sequence
+from contextlib import ExitStack
 
 import numba
 import numba.np.linalg
 from numba.core import analysis, cgutils, errors, ir, ir_utils, types
 from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
 from numba.core.ir_utils import (
+    GuardException,
     _create_function_from_code_obj,
     analysis,
     build_definitions,
@@ -33,7 +35,6 @@ from numba.core.ir_utils import (
     require,
     visit_vars_extensions,
     visit_vars_inner,
-    GuardException,
 )
 from numba.core.types import literal
 from numba.core.types.functions import (
@@ -1082,51 +1083,74 @@ def resolve_gb_agg_funcs(cres):
 
 
 def compile(self, sig):
-    if not self._can_compile:
-        raise RuntimeError("compilation disabled")
-    # Use counter to track recursion compilation depth
-    with self._compiling_counter:
-        args, return_type = numba.core.sigutils.normalize_signature(sig)
-        # Don't recompile if signature already exists
-        existing = self.overloads.get(tuple(args))
-        if existing is not None:
-            return existing.entry_point
-        # Try to load from disk cache
-        cres = self._cache.load_overload(sig, self.targetctx)
-        if cres is not None:
-            resolve_gb_agg_funcs(cres)  # Bodo change
-            self._cache_hits[sig] += 1
-            # XXX fold this in add_overload()? (also see compiler.py)
-            if not cres.objectmode:
-                self.targetctx.insert_user_function(
-                    cres.entry_point, cres.fndesc, [cres.library]
-                )
-            self.add_overload(cres)
+    import numba.core.event as ev
+    from numba.core import sigutils
+    from numba.core.compiler_lock import global_compiler_lock
+
+    with ExitStack() as scope:
+        cres = None
+
+        def cb_compiler(dur):
+            if cres is not None:
+                self._callback_add_compiler_timer(dur, cres)
+
+        def cb_llvm(dur):
+            if cres is not None:
+                self._callback_add_llvm_timer(dur, cres)
+
+        scope.enter_context(ev.install_timer("numba:compiler_lock", cb_compiler))
+        scope.enter_context(ev.install_timer("numba:llvm_lock", cb_llvm))
+        scope.enter_context(global_compiler_lock)
+
+        if not self._can_compile:
+            raise RuntimeError("compilation disabled")
+        # Use counter to track recursion compilation depth
+        with self._compiling_counter:
+            args, return_type = sigutils.normalize_signature(sig)
+            # Don't recompile if signature already exists
+            existing = self.overloads.get(tuple(args))
+            if existing is not None:
+                return existing.entry_point
+            # Try to load from disk cache
+            cres = self._cache.load_overload(sig, self.targetctx)
+            if cres is not None:
+                resolve_gb_agg_funcs(cres)  # Bodo change
+                self._cache_hits[sig] += 1
+                # XXX fold this in add_overload()? (also see compiler.py)
+                if not cres.objectmode:
+                    self.targetctx.insert_user_function(
+                        cres.entry_point, cres.fndesc, [cres.library]
+                    )
+                self.add_overload(cres)
+                return cres.entry_point
+
+            self._cache_misses[sig] += 1
+            ev_details = dict(
+                dispatcher=self,
+                args=args,
+                return_type=return_type,
+            )
+            with ev.trigger_event("numba:compile", data=ev_details):
+                try:
+                    cres = self._compiler.compile(args, return_type)
+                except errors.ForceLiteralArg as e:
+
+                    def folded(args, kws):
+                        return self._compiler.fold_argument_types(args, kws)[1]
+
+                    raise e.bind_fold_arguments(folded)
+                self.add_overload(cres)
+            self._cache.save_overload(sig, cres)
             return cres.entry_point
-
-        self._cache_misses[sig] += 1
-        try:
-            cres = self._compiler.compile(args, return_type)
-        except errors.ForceLiteralArg as e:
-
-            def folded(args, kws):
-                return self._compiler.fold_argument_types(args, kws)[1]
-
-            raise e.bind_fold_arguments(folded)
-        self.add_overload(cres)
-        self._cache.save_overload(sig, cres)
-        return cres.entry_point
 
 
 lines = inspect.getsource(numba.core.dispatcher.Dispatcher.compile)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "d4e9278b09bd4c71855e2930c1b409b62461602a35d5da0fde81f913a9627546"
+    != "bab1d95438fe39d3e26e0ac0989ae3a3b54439ee0eda8507a693ea6ca4a4917b"
 ):  # pragma: no cover
     warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
-numba.core.dispatcher.Dispatcher.compile = (
-    numba.core.compiler_lock.global_compiler_lock(compile)
-)
+numba.core.dispatcher.Dispatcher.compile = compile
 
 
 def _get_module_for_linking(self):
@@ -1581,22 +1605,16 @@ def _analyze_broadcast(self, scope, equiv_set, loc, args, fn):
         tup0typ = self.typemap[tups[0].name]
         tup1typ = self.typemap[tups[1].name]
         if tup0typ.count == 0:
-            return ArrayAnalysis.AnalyzeResult(
-                shape=equiv_set.get_shape(tups[1])
-            )
+            return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(tups[1]))
         if tup1typ.count == 0:
-            return ArrayAnalysis.AnalyzeResult(
-                shape=equiv_set.get_shape(tups[0])
-            )
+            return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(tups[0]))
 
         try:
             shapes = [equiv_set.get_shape(x) for x in tups]
             if None in shapes:
                 return None
             concat_shapes = sum(shapes, ())
-            return ArrayAnalysis.AnalyzeResult(
-                    shape=concat_shapes
-                )
+            return ArrayAnalysis.AnalyzeResult(shape=concat_shapes)
         except GuardException:
             return None
 
@@ -1626,7 +1644,9 @@ def _analyze_broadcast(self, scope, equiv_set, loc, args, fn):
 
     shapes = [equiv_set.get_shape(x) for x in arrs]
     if any(a is None for a in shapes):
-        return ArrayAnalysis.AnalyzeResult(shape=arrs[0], pre=self._call_assert_equiv(scope, loc, equiv_set, arrs))
+        return ArrayAnalysis.AnalyzeResult(
+            shape=arrs[0], pre=self._call_assert_equiv(scope, loc, equiv_set, arrs)
+        )
     return self._broadcast_assert_shapes(scope, equiv_set, loc, shapes, names)
 
 
