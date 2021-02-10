@@ -602,24 +602,46 @@ def test_timedelta_index_unbox(timedelta_index_val, memory_leak_check):
     )
 
 
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "data",
-    [
-        [100, 110],
-        np.arange(10),
-        np.arange(10).view(np.dtype("timedelta64[ns]")),
-        pd.Series(np.arange(10)),
-        pd.Series(np.arange(10).view(np.dtype("timedelta64[ns]"))),
-        pd.TimedeltaIndex(np.arange(10)),
+@pytest.fixture(
+    params=[
+        pytest.param([100, 110]),
+        pytest.param(np.arange(10), marks=pytest.mark.slow),
+        pytest.param(
+            np.arange(10).view(np.dtype("timedelta64[ns]")),
+        ),
+        pytest.param(pd.Series(np.arange(10)), marks=pytest.mark.slow),
+        pytest.param(
+            pd.Series(np.arange(10).view(np.dtype("timedelta64[ns]"))),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(pd.TimedeltaIndex(np.arange(10)), marks=pytest.mark.slow),
     ],
 )
-def test_timedelta_index_constructor(data, memory_leak_check):
+def tdi_data(request):
+    return request.param
+
+
+def test_timedelta_index_constructor(tdi_data, memory_leak_check):
     def test_impl(d):
         return pd.TimedeltaIndex(d)
 
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_index_equal(bodo_func(data), test_impl(data))
+    pd.testing.assert_index_equal(bodo_func(tdi_data), test_impl(tdi_data))
+
+
+def test_timedelta_index_min(tdi_data, memory_leak_check):
+    def test_impl(d):
+        return pd.TimedeltaIndex(d).min()
+
+    check_func(test_impl, (tdi_data,))
+
+
+def test_timedelta_index_max(tdi_data, memory_leak_check):
+    def test_impl(d):
+        return pd.TimedeltaIndex(d).max()
+
+    bodo_func = bodo.jit(test_impl)
+    assert bodo_func(tdi_data) == test_impl(tdi_data)
 
 
 def test_timedelta_index_constant_lowering(memory_leak_check):

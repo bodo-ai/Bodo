@@ -324,6 +324,11 @@ def _dti_val_finalize(s, count):  # pragma: no cover
     return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
 
 
+@numba.njit
+def _tdi_val_finalize(s, count):  # pragma: no cover
+    return pd.Timedelta("nan") if not count else pd.Timedelta(s)
+
+
 @overload_method(DatetimeIndexType, "min", no_unliteral=True)
 def overload_datetime_index_min(dti, axis=None, skipna=True):
     # TODO skipna = False
@@ -1018,6 +1023,62 @@ def overload_timedelta_index_copy(A):
     return lambda A: bodo.hiframes.pd_index_ext.init_timedelta_index(
         A._data.copy(), A._name
     )  # pragma: no cover
+
+
+@overload_method(TimedeltaIndexType, "min", inline="always", no_unliteral=True)
+def overload_timedelta_index_min(tdi, axis=None, skipna=True):
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=None, skipna=True)
+    check_unsupported_args("TimedeltaIndex.min", unsupported_args, arg_defaults)
+
+    def impl(tdi, axis=None, skipna=True):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        data = bodo.hiframes.pd_index_ext.get_index_data(tdi)
+        n = len(data)
+        min_val = numba.cpython.builtins.get_type_max_value(numba.core.types.int64)
+        count = 0
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(data, i):
+                continue
+            val = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(
+                data[i]
+            )
+            count += 1
+            min_val = min(min_val, val)
+        ret_val = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(min_val)
+
+        return bodo.hiframes.pd_index_ext._tdi_val_finalize(ret_val, count)
+
+    return impl
+
+
+@overload_method(TimedeltaIndexType, "max", inline="always", no_unliteral=True)
+def overload_timedelta_index_max(tdi, axis=None, skipna=True):
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=None, skipna=True)
+    check_unsupported_args("TimedeltaIndex.max", unsupported_args, arg_defaults)
+
+    if not is_overload_none(axis) or not is_overload_true(skipna):
+        raise BodoError("Index.min(): axis and skipna arguments not supported yet")
+
+    def impl(tdi, axis=None, skipna=True):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        data = bodo.hiframes.pd_index_ext.get_index_data(tdi)
+        n = len(data)
+        max_val = numba.cpython.builtins.get_type_min_value(numba.core.types.int64)
+        count = 0
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(data, i):
+                continue
+            val = bodo.hiframes.datetime_timedelta_ext.cast_numpy_timedelta_to_int(
+                data[i]
+            )
+            count += 1
+            max_val = max(max_val, val)
+        ret_val = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(max_val)
+        return bodo.hiframes.pd_index_ext._tdi_val_finalize(ret_val, count)
+
+    return impl
 
 
 @overload_attribute(TimedeltaIndexType, "name")

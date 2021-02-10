@@ -776,6 +776,10 @@ Time fields of TimedeltaIndex are supported:
 * :meth:`pandas.TimedeltaIndex.microseconds`
 * :meth:`pandas.TimedeltaIndex.nanoseconds`
 
+Min and Max operators are supported:
+
+* :meth:`pandas.TimedeltaIndex.min`
+* :meth:`pandas.TimedeltaIndex.max`
 
 PeriodIndex
 ***********
