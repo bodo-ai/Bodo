@@ -2100,7 +2100,7 @@ def iternext_itertuples(context, builder, sig, args, result):
 # numba.parfors.array_analysis.ArrayAnalysis._analyze_op_static_getitem = _analyze_op_static_getitem
 
 # FIXME: fix array analysis for tuples in general
-def _analyze_op_pair_first(self, scope, equiv_set, expr):
+def _analyze_op_pair_first(self, scope, equiv_set, expr, lhs):
     # make dummy lhs since we don't have access to lhs
     typ = self.typemap[expr.value.name].first_type
     if not isinstance(typ, types.NamedTuple):
@@ -2125,7 +2125,10 @@ def _analyze_op_pair_first(self, scope, equiv_set, expr):
         self._define(equiv_set, size_var, types.intp, getitem)
         size_vars.append(size_var)
     shape = tuple(size_vars)
-    return shape, [lhs_assign] + out
+    return numba.parfors.array_analysis.ArrayAnalysis.AnalyzeResult(
+        shape=shape,
+        pre=[lhs_assign] + out
+    )
 
 
 numba.parfors.array_analysis.ArrayAnalysis._analyze_op_pair_first = (
