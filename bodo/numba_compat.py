@@ -33,6 +33,7 @@ from numba.core.ir_utils import (
     require,
     visit_vars_extensions,
     visit_vars_inner,
+    GuardException,
 )
 from numba.core.types import literal
 from numba.core.types.functions import (
@@ -1567,6 +1568,8 @@ def _analyze_broadcast(self, scope, equiv_set, loc, args, fn):
     and return shape of output
     https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
     """
+    from numba.parfors.array_analysis import ArrayAnalysis
+
     tups = list(filter(lambda a: self._istuple(a.name), args))
     # Here we have a tuple concatenation.
     if len(tups) == 2 and fn.__name__ == "add":
@@ -1575,16 +1578,22 @@ def _analyze_broadcast(self, scope, equiv_set, loc, args, fn):
         tup0typ = self.typemap[tups[0].name]
         tup1typ = self.typemap[tups[1].name]
         if tup0typ.count == 0:
-            return (equiv_set.get_shape(tups[1]), [])
+            return ArrayAnalysis.AnalyzeResult(
+                shape=equiv_set.get_shape(tups[1])
+            )
         if tup1typ.count == 0:
-            return (equiv_set.get_shape(tups[0]), [])
+            return ArrayAnalysis.AnalyzeResult(
+                shape=equiv_set.get_shape(tups[0])
+            )
 
         try:
             shapes = [equiv_set.get_shape(x) for x in tups]
             if None in shapes:
                 return None
             concat_shapes = sum(shapes, ())
-            return (concat_shapes, [])
+            return ArrayAnalysis.AnalyzeResult(
+                    shape=concat_shapes
+                )
         except GuardException:
             return None
 
@@ -1599,17 +1608,29 @@ def _analyze_broadcast(self, scope, equiv_set, loc, args, fn):
     # try:
     #     shapes = [equiv_set.get_shape(x) for x in arrs]
     # except GuardException:
-    #     return arrs[0], self._call_assert_equiv(scope, loc, equiv_set, arrs)
+    #     return ArrayAnalysis.AnalyzeResult(
+    #         shape=arrs[0],
+    #         pre=self._call_assert_equiv(scope, loc, equiv_set, arrs)
+    #     )
+    # if None not in shapes:
+    #     return self._broadcast_assert_shapes(
+    #         scope, equiv_set, loc, shapes, names
+    #     )
+    # else:
+    #     return self._insert_runtime_broadcast_call(
+    #         scope, loc, arrs, max_dim
+    #     )
+
     shapes = [equiv_set.get_shape(x) for x in arrs]
     if any(a is None for a in shapes):
-        return arrs[0], self._call_assert_equiv(scope, loc, equiv_set, arrs)
+        return ArrayAnalysis.AnalyzeResult(shape=arrs[0], pre=self._call_assert_equiv(scope, loc, equiv_set, arrs))
     return self._broadcast_assert_shapes(scope, equiv_set, loc, shapes, names)
 
 
 lines = inspect.getsource(numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "98f8942836d8430b4496dbc284f6919300485d11fa6600c4c92627cca998bbb7"
+    != "6c91fec038f56111338ea2b08f5f0e7f61ebdab1c81fb811fe26658cc354e40f"
 ):  # pragma: no cover
     warnings.warn(
         "numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast has changed"
@@ -1812,8 +1833,6 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
         if isinstance(rhs, ir.Expr):
             in_vars = set(lookup(v, True).name for v in rhs.list_vars())
             if name in in_vars:
-                next_node = nodes[i + 1]
-                target_name = next_node.target.unversioned_name
                 # Bodo change: avoid raising error for concat reduction case
                 # opened issue to handle Bodo cases and raise proper errors: #1414
                 # see test_concat_reduction
