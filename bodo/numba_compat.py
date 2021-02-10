@@ -1467,12 +1467,14 @@ def ParforPassStates__init__(
     ir_utils._max_label = max(ir_utils._max_label, max(func_ir.blocks.keys()))
     self.flags = flags
     self.metadata = metadata
+    if "parfors" not in metadata:
+        metadata["parfors"] = {}
 
 
 lines = inspect.getsource(numba.parfors.parfor.ParforPassStates.__init__)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "0b939cec777ef428a224056d8ab92db860a2b1457fd228127b695d02df933c26"
+    != "86614f7cf5b0ce442ac51d1ade9bc42fd5c238cae723c3b0ed3d8e4d9a33d7fb"
 ):  # pragma: no cover
     warnings.warn("numba.parfors.parfor.ParforPassStates.__init__ has changed")
 
