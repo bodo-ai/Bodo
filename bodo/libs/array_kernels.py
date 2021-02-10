@@ -1531,7 +1531,7 @@ def gen_na_array_equiv(self, scope, equiv_set, loc, args, kws):  # pragma: no co
     variable.
     """
     assert not kws
-    return args[0], []
+    return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
 ArrayAnalysis._analyze_op_call_bodo_libs_array_kernels_gen_na_array = gen_na_array_equiv

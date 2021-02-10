@@ -669,7 +669,9 @@ def init_dataframe_equiv(self, scope, equiv_set, loc, args, kws):
         if len(data_shapes) > 1:
             equiv_set.insert_equiv(*data_shapes)
         if len(data_shapes) > 0:
-            return (data_shapes[0], len(data_shapes)), []
+            return ArrayAnalysis.AnalyzeResult(
+                shape=(data_shapes[0], len(data_shapes)), pre=[]
+            )
     return None
 
 
@@ -685,7 +687,7 @@ def get_dataframe_data_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 2 and not kws
     var = args[0]
     if equiv_set.has_shape(var):
-        return equiv_set.get_shape(var)[0], []
+        return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(var)[0], pre=[])
     return None
 
 

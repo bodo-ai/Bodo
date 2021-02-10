@@ -399,7 +399,7 @@ def init_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 2 and not kws
     var = args[0]
     if equiv_set.has_shape(var):
-        return var, []
+        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
     return None
 
 
@@ -431,7 +431,7 @@ def alloc_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
     extension. Assigns output array's size as equivalent to the input size variable.
     """
     assert len(args) == 2 and not kws
-    return args[0], []
+    return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_alloc_categorical_array = (

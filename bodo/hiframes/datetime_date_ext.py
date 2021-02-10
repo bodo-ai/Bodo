@@ -806,7 +806,7 @@ def alloc_datetime_date_array_equiv(self, scope, equiv_set, loc, args, kws):
     variable.
     """
     assert len(args) == 1 and not kws
-    return args[0], []
+    return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_date_ext_alloc_datetime_date_array = (

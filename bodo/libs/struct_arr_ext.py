@@ -698,7 +698,7 @@ def pre_alloc_struct_array_equiv(
     variable.
     """
     assert len(args) == 4 and not kws
-    return args[0], []
+    return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
 ArrayAnalysis._analyze_op_call_bodo_libs_struct_arr_ext_pre_alloc_struct_array = (

@@ -419,7 +419,7 @@ def init_series_equiv(self, scope, equiv_set, loc, args, kws):
     if is_heterogeneous_tuple_type(data_type) or isinstance(data_type, types.BaseTuple):
         return None
     if equiv_set.has_shape(var):
-        return var, []
+        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
     return None
 
 
@@ -509,7 +509,7 @@ def get_series_data_equiv(self, scope, equiv_set, loc, args, kws):
     if is_heterogeneous_tuple_type(data_type) or isinstance(data_type, types.BaseTuple):
         return None
     if equiv_set.has_shape(var):
-        return var, []
+        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
     return None
 
 
