@@ -2289,12 +2289,7 @@ def overload_multinomial_nb_model_fit(
         loc_vars = {}
         exec(
             func_text,
-            {
-                "bodo": bodo,
-                "np": np,
-                "numba": numba,
-                "fit_multinomial_nb": fit_multinomial_nb,
-            },
+            globals(),
             loc_vars,
         )
         # print(func_text)
@@ -3574,7 +3569,7 @@ def overload_train_test_split(
         func_text += "        )\n"
         func_text += "    return data_train, data_test, labels_train, labels_test\n"
         loc_vars = {}
-        exec(func_text, {"numba": numba, "sklearn": sklearn}, loc_vars)
+        exec(func_text, globals(), loc_vars)
         _train_test_split_impl = loc_vars["_train_test_split_impl"]
         return _train_test_split_impl
     else:
