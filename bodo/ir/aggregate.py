@@ -825,11 +825,8 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap, array_analysis)
 
     for col_var in out_vars:
         typ = typemap[col_var.name]
-        (shape, c_post) = array_analysis._gen_shape_call(
-            equiv_set, col_var, typ.ndim, None
-        )
+        shape = array_analysis._gen_shape_call(equiv_set, col_var, typ.ndim, None, post)
         equiv_set.insert_equiv(col_var, shape)
-        post.extend(c_post)
         all_shapes.append(shape[0])
         equiv_set.define(col_var, set())
 

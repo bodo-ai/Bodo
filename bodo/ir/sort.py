@@ -1,6 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """IR node for the data sorting"""
-import math
 from collections import defaultdict
 
 import numba
@@ -16,7 +15,6 @@ from numba.core.ir_utils import (
 
 import bodo
 import bodo.libs.timsort
-from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
@@ -26,22 +24,10 @@ from bodo.libs.array import (
     info_to_array,
     sort_values_table,
 )
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.libs.distributed_api import Reduce_Type
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import (
-    cp_str_list_to_array,
-    get_data_ptr,
-    get_offset_ptr,
-    num_total_chars,
-    str_list_to_array,
-    string_array_type,
-    to_string_list,
-)
+from bodo.libs.str_arr_ext import cp_str_list_to_array, to_string_list
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.utils import debug_prints, empty_like_type, gen_getitem
+from bodo.utils.utils import debug_prints, gen_getitem
 
 MIN_SAMPLES = 1000000
 # MIN_SAMPLES = 100
@@ -119,11 +105,8 @@ def sort_array_analysis(sort_node, equiv_set, typemap, array_analysis):
 
     for col_var in out_vars:
         typ = typemap[col_var.name]
-        (shape, c_post) = array_analysis._gen_shape_call(
-            equiv_set, col_var, typ.ndim, None
-        )
+        shape = array_analysis._gen_shape_call(equiv_set, col_var, typ.ndim, None, post)
         equiv_set.insert_equiv(col_var, shape)
-        post.extend(c_post)
         all_shapes.append(shape[0])
         equiv_set.define(col_var, set())
 
