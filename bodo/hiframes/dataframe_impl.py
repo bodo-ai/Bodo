@@ -1584,7 +1584,7 @@ def impl(
         t_name, list(df_type.columns), pd_dtype_strs, parse_dates_const
     )
     loc_vars = {}
-    exec(func_text, {"numba": numba, "pd": pd, "bodo": bodo, "np": np}, loc_vars)
+    exec(func_text, globals(), loc_vars)
     impl = loc_vars["impl"]
     return impl
 

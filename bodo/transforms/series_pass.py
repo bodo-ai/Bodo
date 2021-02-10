@@ -2302,7 +2302,7 @@ class SeriesPass:
             exec(func_text, {}, loc_vars)
             f = loc_vars["f"]
             loc_vars = {}
-            exec(format_func_text, {"numba": numba}, loc_vars)
+            exec(format_func_text, globals(), loc_vars)
             format_func = numba.njit(loc_vars["format_func"])
             glbs = {
                 "format_func": format_func,

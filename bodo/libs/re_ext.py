@@ -257,7 +257,7 @@ def _pat_findall_const_impl(
             typ_name
         )
         loc_vars = {}
-        exec(func_text, {"numba": numba}, loc_vars)
+        exec(func_text, globals(), loc_vars)
         impl = loc_vars["_pat_findall_const_impl"]
         return impl
 
@@ -388,7 +388,7 @@ def overload_match_group(m, *args):
     func_text += "  return out\n"
 
     loc_vars = {}
-    exec(func_text, {"numba": numba}, loc_vars)
+    exec(func_text, globals(), loc_vars)
     impl = loc_vars["_match_group_impl"]
     return impl
 
