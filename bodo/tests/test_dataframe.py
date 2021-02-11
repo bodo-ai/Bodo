@@ -1386,6 +1386,11 @@ def test_df_quantile(df_value, memory_leak_check):
     if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer._IntegerDtype):
         return
 
+    # boolean input fails in Pandas with Numpy 1.20
+    # TODO(ehsan): remove check when fixed
+    if np.dtype("bool") in df_value.dtypes.values:
+        return
+
     def impl(df):
         return df.quantile(0.3)
 
