@@ -2118,6 +2118,7 @@ class DistributedPass:
             dtype,
             scope,
             loc,
+            self.typemap[lhs.name],
         )
 
         # shuffle the data to fill output arrays on different ranks properly
