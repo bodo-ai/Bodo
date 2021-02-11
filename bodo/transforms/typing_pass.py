@@ -1894,5 +1894,8 @@ def _find_updated_containers(blocks, topo_order):
 def _set_updated_container(varname, update_func, updated_containers, equiv_vars):
     """helper to set 'varname' and its aliases as updated containers"""
     updated_containers[varname] = update_func
+    # make sure an updated container variable is always equivalent to itself since
+    # assumed in _remove_container_updates()
+    equiv_vars[varname].add(varname)
     for w in equiv_vars[varname]:
         updated_containers[w] = update_func
