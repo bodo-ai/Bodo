@@ -2747,12 +2747,18 @@ def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):
     if guard(_is_concat_reduce, reduce_varname, reduce_nodes, func_ir, typemap):
         return Reduce_Type.Concat
 
-    require(len(reduce_nodes) == 2)
-    require(isinstance(reduce_nodes[0], ir.Assign))
-    require(isinstance(reduce_nodes[1], ir.Assign))
-    require(isinstance(reduce_nodes[0].value, ir.Expr))
-    require(isinstance(reduce_nodes[1].value, ir.Var))
-    rhs = reduce_nodes[0].value
+    require(len(reduce_nodes) >= 1)
+    require(isinstance(reduce_nodes[-1], ir.Assign))
+    # there could be an extra assignment after the reduce node
+    # See: test_reduction_var_reuse in Numba
+    if isinstance(reduce_nodes[-1].value, ir.Var):
+        require(len(reduce_nodes) >= 2)
+        require(isinstance(reduce_nodes[-2], ir.Assign))
+        require(reduce_nodes[-2].target.name == reduce_nodes[-1].value.name)
+        rhs = reduce_nodes[-2].value
+    else:
+        rhs = reduce_nodes[-1].value
+    require(isinstance(rhs, ir.Expr))
 
     if rhs.op == "inplace_binop":
         if rhs.fn in ("+=", operator.iadd):
