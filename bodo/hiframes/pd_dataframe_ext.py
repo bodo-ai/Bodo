@@ -3663,7 +3663,6 @@ dataframe_unsupported = {
     "asof",
     "pow",
     "reorder_levels",
-    "to_string",
     "mul",
     "last",
     "agg",

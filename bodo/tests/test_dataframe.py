@@ -189,6 +189,21 @@ def column_name_df_value(request):
     return request.param
 
 
+def test_df_to_string():
+    def test_impl(df):
+        return df.to_string()
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4],
+            "B": [3.44, 4.5, 4.4, 6.77],
+            "C": ["AABBCC", "DDEE FF", "EE", "EFG"],
+            "D": ["AABBCC", "DDEE FF", "EE", "EFG"],
+        }
+    )
+    check_func(test_impl, (df,), only_seq=True)
+
+
 @pytest.fixture(
     params=[
         pd.DataFrame({"a": [1, 2] * 20, "b": [True, False] * 20, "c": [1.0, 2.0] * 20}),

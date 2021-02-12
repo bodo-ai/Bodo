@@ -420,6 +420,78 @@ def overload_dataframe_tail(df, n=5):
     return _gen_init_df(header, df.columns, data_args, index)
 
 
+@overload_method(DataFrameType, "to_string", no_unliteral=True)
+def to_string_overload(
+    df,
+    buf=None,
+    columns=None,
+    col_space=None,
+    header=True,
+    index=True,
+    na_rep="NaN",
+    formatters=None,
+    float_format=None,
+    sparsify=None,
+    index_names=True,
+    justify=None,
+    max_rows=None,
+    min_rows=None,
+    max_cols=None,
+    show_dimensions=False,
+    decimal=".",
+    line_width=None,
+    max_colwidth=None,
+    encoding=None,
+):
+    def impl(
+        df,
+        buf=None,
+        columns=None,
+        col_space=None,
+        header=True,
+        index=True,
+        na_rep="NaN",
+        formatters=None,
+        float_format=None,
+        sparsify=None,
+        index_names=True,
+        justify=None,
+        max_rows=None,
+        min_rows=None,
+        max_cols=None,
+        show_dimensions=False,
+        decimal=".",
+        line_width=None,
+        max_colwidth=None,
+        encoding=None,
+    ): # pragma: no cover
+        with numba.objmode(res="string"):
+            res = df.to_string(
+                buf=buf,
+                columns=columns,
+                col_space=col_space,
+                header=header,
+                index=index,
+                na_rep=na_rep,
+                formatters=formatters,
+                float_format=float_format,
+                sparsify=sparsify,
+                index_names=index_names,
+                justify=justify,
+                max_rows=max_rows,
+                min_rows=min_rows,
+                max_cols=max_cols,
+                show_dimensions=show_dimensions,
+                decimal=decimal,
+                line_width=line_width,
+                max_colwidth=max_colwidth,
+                encoding=encoding,
+            )
+        return res
+
+    return impl
+
+
 @overload_method(DataFrameType, "isin", inline="always", no_unliteral=True)
 def overload_dataframe_isin(df, values):
     # TODO: call isin on Series
