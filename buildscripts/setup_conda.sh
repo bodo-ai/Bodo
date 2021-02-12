@@ -28,7 +28,7 @@ conda config --set remote_backoff_factor 60
 
 if [ "$RUN_NIGHTLY" != "yes" ];
 then
-    conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 numpy scipy boost-cpp=1.74.0 cmake h5py=2.10 mpich mpi
+    conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 numpy"<1.20" scipy boost-cpp=1.74.0 cmake h5py=2.10 mpich mpi
 else
     conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 cmake make
 fi
@@ -51,6 +51,7 @@ then
    $CONDA_INSTALL -c conda-forge pyarrow=2.0.0
    $CONDA_INSTALL pandas='1.2.*' -c conda-forge
    $CONDA_INSTALL numba=0.52.0 -c conda-forge
+   $CONDA_INSTALL cython -c conda-forge
    $CONDA_INSTALL mpi4py -c conda-forge
    $CONDA_INSTALL scikit-learn -c conda-forge
    $CONDA_INSTALL hdf5=*=*mpich* -c conda-forge

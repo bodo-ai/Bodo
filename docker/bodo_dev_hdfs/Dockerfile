@@ -18,7 +18,7 @@ ENV PATH /root/miniconda3/bin/:${PATH}
 #
 # Creation of the BODODEV environment
 #
-RUN conda create -n BODODEV numpy scipy pandas='1.2.*' boost-cpp=1.74.0 cmake h5py mpich mpi gcc_linux-64 gxx_linux-64 -c conda-forge
+RUN conda create -n BODODEV numpy"<1.20" scipy pandas='1.2.*' boost-cpp=1.74.0 cmake h5py mpich mpi gcc_linux-64 gxx_linux-64 -c conda-forge
 RUN conda install -n BODODEV python numba=0.52.0 -c conda-forge
 RUN conda install -n BODODEV hdf5=*=*mpich* -c conda-forge
 RUN conda install -n BODODEV python pyarrow=2.0.0 -c conda-forge
@@ -43,7 +43,7 @@ COPY hdfs-site.xml $HADOOP_HOME/etc/hadoop/
 RUN apt-get update
 RUN apt-get install -y openssh-server
 
-# configure ssh 
+# configure ssh
 RUN ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa
 RUN cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
 RUN chmod 0600 ~/.ssh/authorized_keys

@@ -15,50 +15,50 @@ Most likely your only interaction with Codebuild will be through attempts to deb
 This section will attempt to explain each step of the process, starting from the github interface.
 
 1. When you submit a pull request it will automatically run the tests across a series of different
-   instances. From the github interface you will see two different check associated with AWS Codebuild. 
+   instances. From the github interface you will see two different checks associated with AWS Codebuild.
    You want to select the check with ``BuildBatch`` in the name, as this leads to all of the tests that run
    (the other is used to spawn the batch).
 
    .. figure:: ../figs/Codebuild_Github.png
     :alt: Codebuild Github Appearance
 
-2. Select the details tab to head to AWS Codebuild. You may be prompted to login. Be sure and use the 
+2. Select the details tab to head to AWS Codebuild. You may be prompted to login. Be sure and use the
    account starting with ``427`` and to select ``us-east-2 (Ohio)``.
 
-3. You should now see a list of builds that have executed. Select any of the tests that have 
-   failed by clicking on the link in build run. 
+3. You should now see a list of builds that have executed. Select any of the tests that have
+   failed by clicking on the link in build run.
 
 4. From inside a particular build you can debug your tests in a couple ways:
 
-    a. If you are making modifications to dependencies, you should consider checking ``phase details``. 
+    a. If you are making modifications to dependencies, you should consider checking ``phase details``.
        Here you will find a list of all the stages, including which failed. Failing in ``post-build`` suggests
-       an issue with the unit tests, whereas an issue with installations or compilation will appear in either 
-       ``install`` or ``build``. 
+       an issue with the unit tests, whereas an issue with installations or compilation will appear in either
+       ``install`` or ``build``.
 
-    b. If your issue is with failed tests, you should check the information in the logs. You can see the most recent commands 
-       or any in progress commands in the build logs. Alteratively you can view the full set of logs on either CloudWatch or 
-       download the entire set of logs from an S3 bucket. 
-       
-       To navigate to CloudWatch select the ``View entire log`` option on the top of the build logs. 
-       Here you can look scan the logs using a query language. Unfortunately CloudWatch limits operations to 10,000 lines 
-       at a time, so you will not be able to download the entire log file directly. 
-       
-       To properly download the logs from the S3 bucket, first look at the Build ARN. You should see a name that looks 
-       something like 
+    b. If your issue is with failed tests, you should check the information in the logs. You can see the most recent commands
+       or any in progress commands in the build logs. Alteratively you can view the full set of logs on either CloudWatch or
+       download the entire set of logs from an S3 bucket.
+
+       To navigate to CloudWatch select the ``View entire log`` option on the top of the build logs.
+       Here you can look scan the logs using a query language. Unfortunately CloudWatch limits operations to 10,000 lines
+       at a time, so you will not be able to download the entire log file directly.
+
+       To properly download the logs from the S3 bucket, first look at the Build ARN. You should see a name that looks
+       something like
        ``arn:aws:codebuild:us-east-2:427443013497:build/Bodo-PR-Testing:65ea719c-6893-4318-af6c-cc5431b0dd1f``.
 
        .. figure:: ../figs/Codebuild_ARN.png
         :alt: Display of where to find the Build Name
 
-       Copy the value after the last ``:`` and place it somewhere you can copy it. In this example, the value is 
-       ``65ea719c-6893-4318-af6c-cc5431b0dd1f``. Next, go to ``Build details`` and scroll down to the Logs and click 
-       on the link under ``S3 location``. 
-       
+       Copy the value after the last ``:`` and place it somewhere you can copy it. In this example, the value is
+       ``65ea719c-6893-4318-af6c-cc5431b0dd1f``. Next, go to ``Build details`` and scroll down to the Logs and click
+       on the link under ``S3 location``.
+
        .. figure:: ../figs/Codebuild_Logs_Link.png
         :alt: Display of where to find the Logs Link
-       
-       This takes you to the bucket that contains all the logs. Type in the copied 
-       value into the prefix search to find the log associated with your build, and then you can download the log file. 
+
+       This takes you to the bucket that contains all the logs. Type in the copied
+       value into the prefix search to find the log associated with your build, and then you can download the log file.
        You will need to repeat this for all failed builds whose logs you need to check.
 
        .. figure:: ../figs/Codebuild_Logs_Search.png
@@ -81,10 +81,10 @@ tests across a set of builds with 1 and 2 processes and then once all those buil
 on the result of those builds. In addition to the relationship between builds, each build in the batch also explains
 the buildspec file that will be executed (all of these are found in ``buildscripts/aws/buildspecs``),
 the docker image providing the environment (for example Ubuntu), the compute type upon which to execute the build,
-and the environment variables at runtime. To assist with rescaling the number of builds as tests increase, 
+and the environment variables at runtime. To assist with rescaling the number of builds as tests increase,
 ``buildspec.yml`` is a generated by ``buildscripts/aws/update_buildspec_batch.py``.
 
- 
+
 Partitioning Tests
 ~~~~~~~~~~~~~~~~~~
 In addition to simply specifying separate builds, we reduce the time of our CI process by distributing our tests
@@ -129,7 +129,7 @@ collection process.
    performed dynamically because an absolute path on the instance running the coverage merge must be given and this cannot
    be determined until runtime.
 
-5. Coverages are merged and a report is generated, which is uploaded to the server. 
+5. Coverages are merged and a report is generated, which is uploaded to the server.
 
 
 Generating a New Log File
@@ -150,14 +150,14 @@ the tests. To create a new logfile you should:
 
          a. In ``Build Configuration`` select ``Single Build`` for the build type.
          b. In ``Source`` give the name of the branch that you created inside the box for ``Source version``.
-         c. Within ``Environment`` navigate to ``Additional configuration.`` 
-               i. Modify the timeout value so it is large enough to run all tests 
+         c. Within ``Environment`` navigate to ``Additional configuration.``
+               i. Modify the timeout value so it is large enough to run all tests
                   (4 hours should work).
                ii. | Add three environment variables:
                    | Name: ``NP``, Value: ``1``
                    | Name: ``NUMBER_GROUPS_SPLIT``, Value: ``1``
                    | Name: ``PYTEST_MARKER``, Value: ``not slow``
-         d. Navigate to ``Buildspec`` and enter ``buildscripts/aws/buildspecs/CI_buildspec.yml`` 
+         d. Navigate to ``Buildspec`` and enter ``buildscripts/aws/buildspecs/CI_buildspec.yml``
             in the box for ``Buildspec name``.
          e. Select ``Start Build`` at the bottom. Save this URL so you can find the log easily.
 
@@ -171,7 +171,7 @@ the tests. To create a new logfile you should:
    old log file until your code is merged.
 
 
-.. _Updating the Batch:
+.. _updating_the_batch:
 
 Updating the Batch
 ~~~~~~~~~~~~~~~~~~
@@ -186,10 +186,10 @@ Once you make your changes, run ``python buildscripts/aws/update_buildspec_batch
 where ``<num_parallel_builds>`` is the number of builds you want to partition tests across in parallel. If you
 do not want to change the numebr of builds, then set ``<num_parallel_builds>`` to the current value of ``NUMBER_GROUPS_SPLIT``
 in ``buildspec.yaml``. Executing this script updates the ``buildspec.yml``file locally, which you then need to
-merge to master through a PR. 
+merge to master through a PR.
 
 **Important Note:** In codebuild, your PR is not automatically merged to master, until after the ``buildspec.yml``
-file is used. As a result, if you update ``buildspec.yml`` and these changes are needed in others PRs, 
+file is used. As a result, if you update ``buildspec.yml`` and these changes are needed in others PRs,
 you will need people to manually rebase with master.
 
 
@@ -198,12 +198,12 @@ Updating Dependencies
 
 CI runs on custom docker images to avoid undergoing installation time on every build. As a result,
 if you every need to upgrade a dependencies to a newer version, you also need to update the docker
-image on ECR. 
+image on ECR.
 
 There are currently 4 different docker images that are used for various codebuild projects.
 Two of these run in a batch and have their images specified within the ``buildspec.yml`` file.
 The other two have their images specified through the Codebuild UI. The table below indicates
-which files build the appropriate docker images, where to upload them, and whether or not they 
+which files build the appropriate docker images, where to upload them, and whether or not they
 need to be updated through the Codebuild UI.
 
 .. list-table::
@@ -235,24 +235,24 @@ are the same for all images. The one notable difference is that for images that 
 with the Codebuild UI, you do not need to update a buildspec file and instead should manually swap
 the image on Codebuild. However, unlike changes that arise to the buildspec, these will propagate
 to all other builds attempting to use this project **immediately** (even before the PR merges into master).
-As a result, if any of your new dependencies require additional changes to incorporate, 
+As a result, if any of your new dependencies require additional changes to incorporate,
 you should notify everyone that they will need to approve your PR quickly and then
 rebase all other branches off it.
 
-To demonstrate the steps needed to update the docker image, here are the steps to update the 
+To demonstrate the steps needed to update the docker image, here are the steps to update the
 ``Bodo-PR-Testing (CI)`` image.
 
 #. Update the installation in the necessary buildscripts. This should either modify ``buildscripts/setup_conda.sh``
    or ``buildscripts/aws/test_installs.sh``.
 
-#. Rebuild the docker image. This can be done by executing the command 
+#. Rebuild the docker image. This can be done by executing the command
    ``docker build -f buildscripts/aws/docker/CI.Dockerfile . -t bodo-codebuild:latest``
 
 #. Upload the container to ECR `here <https://us-east-2.console.aws.amazon.com/ecr/repositories/bodo-codebuild?region=us-east-2>`_.
-   Click ``View Push Commands`` for steps to upload. 
-   
+   Click ``View Push Commands`` for steps to upload.
+
    Skip step 2 in ``View Push Commands`` because you have already built the image.
-   
+
    In steps 3 and 4, replace the `latest` tag with a version tag that is a different than any existing image.
    For example if there is a ``1.0`` in the repo, make your tag ``1.1``. The exact tag is
    not important and we don't intend to keep images around long-term.
@@ -271,12 +271,12 @@ Updating the Image without Codebuild UI
 #. Update the image name in ``buildscripts/aws/update_buildspec_batch.py`` in the ``generate_CI_buildspec``
    function to use your current tag.
 
-#. Generate a new buildspec file by following the steps in :ref:`Updating the Batch`.
+#. Generate a new buildspec file by following the steps in :ref:`updating_the_batch`.
 
 #. Test your changes by submitting a Pull Request. This should automatically update your image and all tests
    that run are demonstrative of your update.
 
-#. Once your PR is merged you may need people to rebase their in progress PRs with master as updates to the 
+#. Once your PR is merged you may need people to rebase their in progress PRs with master as updates to the
    outermost ``buildspec.yml`` will not merge with master.
 
 #. Delete the previous ECR image as all builds now need the newest build. This will allow for quicker failure
@@ -310,12 +310,12 @@ Updating the Image with Codebuild UI
 
    .. figure:: ../figs/codebuild_override_image_details.png
       :alt: Codebuild Override Image Details
-   
+
    #. Under ``New environment image`` select ``Custom image``.
 
    #. Under ``Environment type`` select ``Linux``.
 
-   #. Under ``Image registry`` select ``Amazon ECR``. 
+   #. Under ``Image registry`` select ``Amazon ECR``.
 
    #. Under ``ECR account`` select ``MY ECR account``.
 

@@ -1,7 +1,7 @@
 """
-    Script used for automatically updating the batch portion of the 
+    Script used for automatically updating the batch portion of the
     buildspec.yml file. This can be used either when the file need
-    to be updated (e.g. to increase the number of builds running 
+    to be updated (e.g. to increase the number of builds running
     concurrently), or a new buildspec file needs to be constructed
     (e.g. creating a new project for nightly tests).
 """
@@ -118,7 +118,7 @@ def get_compute_type(env_var_dict, image_path, buildspec):
 # Function to generate the batch portion for the CI build
 def generate_CI_buildspec(num_groups):
     images = {
-        "linux": "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.3"
+        "linux": "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:1.4"
     }
     pytest_starting_marker = "not slow"
     pytest_options = [
