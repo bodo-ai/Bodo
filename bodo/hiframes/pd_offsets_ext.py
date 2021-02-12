@@ -35,7 +35,6 @@ from bodo.hiframes.pd_timestamp_ext import (
     pandas_timestamp_type,
 )
 from bodo.libs import hdatetime_ext
-from bodo.utils.indexing import unoptional
 from bodo.utils.typing import is_overload_none
 
 ll.add_symbol("box_date_offset", hdatetime_ext.box_date_offset)
@@ -151,28 +150,8 @@ def init_month_end(typingctx, n, normalize):
 
 
 # 2nd arg is used in LLVM level, 3rd arg is used in python level
-make_attribute_wrapper(MonthEndType, "n", "_n")
-make_attribute_wrapper(MonthEndType, "normalize", "_normalize")
-
-
-# Implement the getters
-@overload_attribute(MonthEndType, "n")
-def month_end_get_n(me):
-    def impl(me):  # pragma: no cover
-        return me._n
-
-    return impl
-
-
-@overload_attribute(MonthEndType, "normalize")
-def month_end_get_normalize(me):
-    def impl(me):  # pragma: no cover
-        return me._normalize
-
-    return impl
-
-
-# TODO: Implement the rest of the getters
+make_attribute_wrapper(MonthEndType, "n", "n")
+make_attribute_wrapper(MonthEndType, "normalize", "normalize")
 
 # Implement the necessary operators
 
@@ -583,24 +562,24 @@ def DateOffset(
         return init_date_offset(
             n,
             normalize,
-            unoptional(years),
-            unoptional(months),
-            unoptional(weeks),
-            unoptional(days),
-            unoptional(hours),
-            unoptional(minutes),
-            unoptional(seconds),
-            unoptional(microseconds),
-            unoptional(nanoseconds),
-            unoptional(year),
-            unoptional(month),
-            unoptional(day),
-            unoptional(weekday),
-            unoptional(hour),
-            unoptional(minute),
-            unoptional(second),
-            unoptional(microsecond),
-            unoptional(nanosecond),
+            years,
+            months,
+            weeks,
+            days,
+            hours,
+            minutes,
+            seconds,
+            microseconds,
+            nanoseconds,
+            year,
+            month,
+            day,
+            weekday,
+            hour,
+            minute,
+            second,
+            microsecond,
+            nanosecond,
             has_kws,
         )
 
@@ -686,8 +665,8 @@ def init_date_offset(
     )
 
 
-make_attribute_wrapper(DateOffsetType, "n", "_n")
-make_attribute_wrapper(DateOffsetType, "normalize", "_normalize")
+make_attribute_wrapper(DateOffsetType, "n", "n")
+make_attribute_wrapper(DateOffsetType, "normalize", "normalize")
 make_attribute_wrapper(DateOffsetType, "years", "_years")
 make_attribute_wrapper(DateOffsetType, "months", "_months")
 make_attribute_wrapper(DateOffsetType, "weeks", "_weeks")
@@ -716,8 +695,8 @@ def relative_delta_addition(dateoffset, ts):  # pragma: no cover
     passed in DateOffset
     """
     if dateoffset._has_kws:
-        sign = -1 if dateoffset._n < 0 else 1
-        for _ in range(np.abs(dateoffset._n)):
+        sign = -1 if dateoffset.n < 0 else 1
+        for _ in range(np.abs(dateoffset.n)):
             year = ts.year
             month = ts.month
             day = ts.day
@@ -784,7 +763,7 @@ def relative_delta_addition(dateoffset, ts):  # pragma: no cover
                 ts = ts + pd.Timedelta(days=days_forward)
         return ts
     else:
-        return pd.Timedelta(days=dateoffset._n) + ts
+        return pd.Timedelta(days=dateoffset.n) + ts
 
 
 @overload(operator.add, no_unliteral=True)
@@ -797,7 +776,7 @@ def date_offset_add_scalar(lhs, rhs):
 
         def impl(lhs, rhs):  # pragma: no cover
             ts = relative_delta_addition(lhs, rhs)
-            if lhs._normalize:
+            if lhs.normalize:
                 return ts.normalize()
             return ts
 
@@ -808,7 +787,7 @@ def date_offset_add_scalar(lhs, rhs):
 
         def impl(lhs, rhs):  # pragma: no cover
             ts = relative_delta_addition(lhs, pd.Timestamp(rhs))
-            if lhs._normalize:
+            if lhs.normalize:
                 return ts.normalize()
             return ts
 
@@ -858,8 +837,8 @@ def overload_neg(lhs):
 
         def impl(lhs):  # pragma: no cover
             # Negate only n
-            n = -lhs._n
-            normalize = lhs._normalize
+            n = -lhs.n
+            normalize = lhs.normalize
             nanoseconds = lhs._nanoseconds
             nanosecond = lhs._nanosecond
             # Make sure has_kws behavior doesn't change
@@ -984,7 +963,7 @@ def init_week(typingctx, n, normalize, weekday):
 
 # Implement the constant creation for Numba 'typespec'
 @lower_constant(WeekType)
-def lower_constant_week(context, builder, ty, pyval): # pragma: no cover
+def lower_constant_week(context, builder, ty, pyval):  # pragma: no cover
     week = cgutils.create_struct_proxy(ty)(context, builder)
     week.n = context.get_constant(types.int64, pyval.n)
     week.normalize = context.get_constant(types.boolean, pyval.normalize)
@@ -998,7 +977,7 @@ def lower_constant_week(context, builder, ty, pyval): # pragma: no cover
 
 # Boxing and Unboxing
 @box(WeekType)
-def box_week(typ, val, c): # pragma: no cover
+def box_week(typ, val, c):  # pragma: no cover
     week = cgutils.create_struct_proxy(typ)(c.context, c.builder, value=val)
     n_obj = c.pyapi.long_from_longlong(week.n)
     normalize_obj = c.pyapi.from_native_value(
