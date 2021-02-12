@@ -1734,7 +1734,7 @@ def np_sort(A, axis=-1, kind=None, order=None):
         "kind": None,
         "order": None,
     }
-    check_unsupported_args("np.sort", args_dict, args_default_dict)
+    check_unsupported_args("np.sort", args_dict, args_default_dict, "numpy")
 
     def impl(A, axis=-1, kind=None, order=None):  # pragma: no cover
 
@@ -1835,7 +1835,7 @@ def overload_intersect1d(A1, A2, assume_unique=False, return_indices=False):
         "assume_unique": False,
         "return_indices": False,
     }
-    check_unsupported_args("np.intersect1d", args_dict, args_default_dict)
+    check_unsupported_args("np.intersect1d", args_dict, args_default_dict, "numpy")
 
     # TODO(Nick): Fix this to be proper typechecking.
     # For example Intersect(IntArray(32) and IntArray(64)) should be ok
@@ -1878,7 +1878,7 @@ def overload_setdiff1d(A1, A2, assume_unique=False):
     args_default_dict = {
         "assume_unique": False,
     }
-    check_unsupported_args("np.setdiff1d", args_dict, args_default_dict)
+    check_unsupported_args("np.setdiff1d", args_dict, args_default_dict, "numpy")
 
     # TODO(Nick): Fix this to be proper typechecking.
     # For example Intersect(IntArray(32) and IntArray(64)) should be ok
@@ -1914,7 +1914,7 @@ def np_linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, a
 
     args_dict = {"retstep": retstep, "axis": axis}
     args_default_dict = {"retstep": False, "axis": 0}
-    check_unsupported_args("np.linspace", args_dict, args_default_dict)
+    check_unsupported_args("np.linspace", args_dict, args_default_dict, "numpy")
     # Numpy infers the dtype if one isn't provided. We perform the same check here.
     # https://github.com/numpy/numpy/blob/92ebe1e9a6aeb47a881a1226b08218175776f9ea/numpy/core/function_base.py#L123
     if is_overload_none(dtype):
@@ -1990,7 +1990,7 @@ def np_any(A, axis=None, out=None, keepdims=None):
 
     args_dict = {"axis": axis, "out": out, "keepdims": keepdims}
     args_default_dict = {"axis": None, "out": None, "keepdims": None}
-    check_unsupported_args("np.any", args_dict, args_default_dict)
+    check_unsupported_args("np.any", args_dict, args_default_dict, "numpy")
 
     def impl(A, axis=None, out=None, keepdims=None):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -2013,7 +2013,7 @@ def np_all(A, axis=None, out=None, keepdims=None):
 
     args_dict = {"axis": axis, "out": out, "keepdims": keepdims}
     args_default_dict = {"axis": None, "out": None, "keepdims": None}
-    check_unsupported_args("np.any", args_dict, args_default_dict)
+    check_unsupported_args("np.any", args_dict, args_default_dict, "numpy")
 
     def impl(A, axis=None, out=None, keepdims=None):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -2061,7 +2061,7 @@ def np_cbrt(
         "dtype": None,
         "subok": True,
     }
-    check_unsupported_args("np.cbrt", args_dict, args_default_dict)
+    check_unsupported_args("np.cbrt", args_dict, args_default_dict, "numpy")
 
     if bodo.utils.utils.is_array_typ(A, False):
         # Reuse scalar implementation on each element
@@ -2172,7 +2172,7 @@ def np_random_multivariate_normal(mean, cov, size=None, check_valid="warn", tol=
     args_dict = {"check_valid": check_valid, "tol": tol}
     args_default_dict = {"check_valid": "warn", "tol": 1e-8}
     check_unsupported_args(
-        "np.random.multivariate_normal", args_dict, args_default_dict
+        "np.random.multivariate_normal", args_dict, args_default_dict, "numpy"
     )
 
     # TODO: Numpy seems to support tuple as well

@@ -3533,7 +3533,7 @@ def overload_train_test_split(
     args_default_dict = {
         "stratify": None,
     }
-    check_unsupported_args("train_test_split", args_dict, args_default_dict)
+    check_unsupported_args("train_test_split", args_dict, args_default_dict, "ml")
     # If data is replicated, run scikit-learn directly
 
     if is_overload_false(_is_data_distributed):

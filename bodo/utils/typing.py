@@ -407,13 +407,15 @@ def ensure_constant_values(fname, arg_name, val, const_values):
         )
 
 
-def check_unsupported_args(fname, args_dict, arg_defaults_dict):
+def check_unsupported_args(fname, args_dict, arg_defaults_dict, package_name="pandas"):
     """Check for unsupported arguments for function 'fname', and raise an error if any
     value other than the default is provided.
     'args_dict' is a dictionary of provided arguments in overload.
     'arg_defaults_dict' is a dictionary of default values for unsupported arguments.
     """
     assert len(args_dict) == len(arg_defaults_dict)
+    error_message = ""
+    unsupported = False
     for a in args_dict:
         v1 = get_overload_const(args_dict[a])
         v2 = arg_defaults_dict[a]
@@ -423,9 +425,18 @@ def check_unsupported_args(fname, args_dict, arg_defaults_dict):
             or (v1 is None and v2 is not None)
             or v1 != v2
         ):
-            raise BodoError(
-                f"{fname}(): {a} parameter only supports default value {v2}"
-            )
+            error_message = f"{fname}(): {a} parameter only supports default value {v2}"
+            unsupported = True
+            break
+
+    if unsupported and package_name == "pandas":
+        error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/pandas.html).\n"
+    elif unsupported and package_name == "ml":
+        error_message += "\nPlease check supported ML operations here (https://docs.bodo.ai/latest/source/ml.html).\n"
+    elif unsupported and package_name == "numpy":
+        error_message += "\nPlease check supported Numpy operations here (https://docs.bodo.ai/latest/source/numpy.html).\n"
+    if unsupported:
+        raise BodoError(error_message)
 
 
 def get_overload_const_tuple(val):
