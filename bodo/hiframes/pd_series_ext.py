@@ -248,6 +248,13 @@ def _get_series_array_type(dtype):
             _get_series_array_type(dtype.value_type),
         )
 
+    # PandasTimestamp becomes dt64 array
+    if dtype == bodo.pandas_timestamp_type:
+        return types.Array(bodo.datetime64ns, 1, "C")
+
+    if dtype == bodo.pd_timedelta_type:
+        return types.Array(bodo.timedelta64ns, 1, "C")
+
     # TODO: other types?
     # regular numpy array
     return types.Array(dtype, 1, "C")

@@ -90,6 +90,10 @@ from bodo.hiframes.pd_offsets_ext import (
     week_type,
     date_offset_type,
 )
+from bodo.hiframes.pd_categorical_ext import (
+    PDCategoricalDtype,
+    CategoricalArray,
+)
 
 
 import bodo.compiler  # isort:skip

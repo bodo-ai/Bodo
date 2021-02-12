@@ -98,6 +98,12 @@ The following table can be used to select the necessary Bodo Type based upon the
   * - ``bodo.MapArrayType(key_arr_type, value_arr_type)``
     - | Array of Python dictionaries with the given key and value array types.
       | e.g. ``bodo.MapArrayType(bodo.uint16[:], bodo.string_array_type)``
+  * - ``bodo.PDCategoricalDtype(cat_tuple, cat_elem_type, is_ordered_cat)``
+    - | Pandas categorical type with the possible categories, each category's type, and if the categories are ordered.
+      | e.g. ``bodo.PDCategoricalDtype(("A", "B", "AA"), bodo.string_type, True)``
+  * - ``bodo.CategoricalArray(categorical_type)``
+    - | Array of Pandas categorical values.
+      | e.g. ``bodo.CategoricalArray(bodo.PDCategoricalDtype(("A", "B", "AA"), bodo.string_type, True))``
   * - ``bodo.DatetimeIndexType(name_type)``
     - | Index of datetime64 values with a given name type.
       | e.g. ``bodo.DatetimeIndexType(bodo.string_type)``

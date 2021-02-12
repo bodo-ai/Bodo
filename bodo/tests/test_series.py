@@ -229,6 +229,13 @@ def test_series_cov_ddof(memory_leak_check):
         pd.Series([["a", "bc"], ["a"], ["aaa", "b", "cc"], None, ["xx", "yy"]]),
         pd.Series([[1, 2], [3], [5, 4, 6], None, [-1, 3, 4]]),
         pd.Series(["AA", "BB", "", "AA", None, "AA"], dtype="category"),
+        pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=True)),
+        pd.Series(pd.date_range(start="1/1/2018", end="1/4/2018", periods=4))
+        .append(pd.Series([None]))
+        .astype("category"),
+        pd.Series(pd.timedelta_range(start="1 day", periods=4))
+        .append(pd.Series([None]))
+        .astype(pd.CategoricalDtype(ordered=True)),
     ]
 )
 def series_val(request):
@@ -326,8 +333,17 @@ def test_dataframe_concat(series_val):
     df2 = pd.DataFrame({"B": S2.values})
     # Categorical data seems to revert to object arrays when concat in Python
     # As a result we will compute the output directly and do the comparison
+    # We use the actual series_val dtype to capture ordered info.
     if isinstance(series_val.dtype, pd.CategoricalDtype):
-        py_output = f(df1, df2).astype("category")
+        # Pandas 1.2.2 causes the conversion to obj to alter the representation
+        # on dt64 and td64
+        py_output = f(df1, df2)
+        if series_val.dtype.categories.dtype in [
+            np.dtype("datetime64[ns]"),
+            np.dtype("timedelta64[ns]"),
+        ]:
+            py_output = py_output.astype(series_val.dtype.categories.dtype)
+        py_output = py_output.astype(series_val.dtype)
     else:
         py_output = None
     if isinstance(series_val.values[0], list):
@@ -377,7 +393,9 @@ def test_dataframe_concat_cat_dynamic():
     )
 
 
-def test_series_concat_convert_to_nullable(memory_leak_check):
+# TODO (Nick): Readd the memory leak check when constant lower leak is fixed.
+# Categorical input has a constant lowering step so it leaks memory.
+def test_series_concat_convert_to_nullable():
     """make sure numpy integer/bool arrays are converted to nullable integer arrays in
     concatenation properly
     """
@@ -781,6 +799,15 @@ def test_series_iat_setitem(series_val, memory_leak_check):
 
     val = series_val.iat[0]
 
+    if isinstance(
+        series_val.dtype, pd.CategoricalDtype
+    ) and series_val.values.categories.dtype in [
+        np.dtype("datetime64[ns]"),
+        np.dtype("timedelta64[ns]"),
+    ]:
+        # TODO: [BE-78] support array setitem with Categorical Arrays of dt64/td64
+        return
+
     def test_impl(S, val):
         S.iat[2] = val
         return S
@@ -856,6 +883,15 @@ def test_series_iloc_setitem_int(series_val, memory_leak_check):
     if isinstance(series_val.iat[0], str):
         return
 
+    if isinstance(
+        series_val.dtype, pd.CategoricalDtype
+    ) and series_val.values.categories.dtype in [
+        np.dtype("datetime64[ns]"),
+        np.dtype("timedelta64[ns]"),
+    ]:
+        # TODO: [BE-78] support array setitem with Categorical Arrays of dt64/td64
+        return
+
     val = series_val.iat[0]
 
     def test_impl(S, val):
@@ -878,6 +914,15 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
 
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
+        return
+
+    if isinstance(
+        series_val.dtype, pd.CategoricalDtype
+    ) and series_val.values.categories.dtype in [
+        np.dtype("datetime64[ns]"),
+        np.dtype("timedelta64[ns]"),
+    ]:
+        # TODO: [BE-78] support array setitem with Categorical Arrays of dt64/td64
         return
 
     def test_impl(S, idx, val):
@@ -932,6 +977,15 @@ def test_series_iloc_setitem_slice(series_val, memory_leak_check):
     if isinstance(series_val.iat[0], str):
         return
 
+    if isinstance(
+        series_val.dtype, pd.CategoricalDtype
+    ) and series_val.values.categories.dtype in [
+        np.dtype("datetime64[ns]"),
+        np.dtype("timedelta64[ns]"),
+    ]:
+        # TODO: [BE-78] support array setitem with Categorical Arrays of dt64/td64
+        return
+
     def test_impl(S, val):
         S.iloc[1:4] = val
         return S
@@ -982,6 +1036,15 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
 
     # string setitem not supported yet
     if isinstance(series_val.iat[0], str):
+        return
+
+    if isinstance(
+        series_val.dtype, pd.CategoricalDtype
+    ) and series_val.values.categories.dtype in [
+        np.dtype("datetime64[ns]"),
+        np.dtype("timedelta64[ns]"),
+    ]:
+        # TODO: [BE-78] support array setitem with Categorical Arrays of dt64/td64
         return
 
     def test_impl(S, val, idx):
@@ -2492,6 +2555,13 @@ def test_series_idxmin(series_val, memory_leak_check):
     if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
         return
 
+    if isinstance(series_val.dtype, pd.CategoricalDtype) and (
+        series_val.values.categories.dtype == np.dtype("timedelta64[ns]")
+        or pd.api.types.is_numeric_dtype(series_val.values.categories.dtype)
+    ):
+        # TODO: [BE-79] support argmin/argmax for all Categorical Array values
+        return
+
     def test_impl(A):
         return A.idxmin()
 
@@ -2527,6 +2597,13 @@ def test_series_idxmax(series_val, memory_leak_check):
 
     # argmax() not supported for bools in Pandas
     if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
+        return
+
+    if isinstance(series_val.dtype, pd.CategoricalDtype) and (
+        series_val.values.categories.dtype == np.dtype("timedelta64[ns]")
+        or pd.api.types.is_numeric_dtype(series_val.values.categories.dtype)
+    ):
+        # TODO: [BE-79] support argmin/argmax for all Categorical Array values
         return
 
     def test_impl(A):
@@ -3241,7 +3318,7 @@ def test_series_shift_error_periods(memory_leak_check):
     def test_impl(S, periods):
         return S.shift(periods)
 
-    with pytest.raises(BodoError, match="periods input must be an integer"):
+    with pytest.raises(BodoError, match="'periods' input must be an integer"):
         bodo.jit(test_impl)(S, 1.0)
 
 

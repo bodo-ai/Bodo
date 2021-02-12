@@ -72,10 +72,17 @@ def _get_cat_arr_type(elem_type):
 
 @lower_constant(PDCategoricalDtype)
 def lower_constant_categorical_type(context, builder, typ, pyval):
-
     categorical_dtype = context.make_helper(builder, typ)
+    py_cat_vals = pyval.categories.values
+    # Handle dt64 and td64 specially for lowering errors
+    if pyval.categories.dtype in (
+        np.dtype("datetime64[ns]"),
+        np.dtype("timedelta64[ns]"),
+    ):
+        py_cat_vals = py_cat_vals.view(np.int64)
+
     categorical_dtype.categories = context.get_constant_generic(
-        builder, bodo.typeof(pyval.categories.values), pyval.categories.values
+        builder, bodo.typeof(pyval.categories.values), py_cat_vals
     )
     categorical_dtype.ordered = context.get_constant(types.bool_, pyval.ordered)
 

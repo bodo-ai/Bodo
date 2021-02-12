@@ -33,7 +33,7 @@ from bodo.tests.utils import (
 from bodo.utils.typing import BodoError, BodoWarning
 
 
-# TODO: other possible df types like Categorical, dt64, td64, ...
+# TODO: other possible df types like dt64, td64, ...
 @pytest.fixture(
     params=[
         # int and float columns
@@ -43,6 +43,24 @@ from bodo.utils.typing import BodoError, BodoWarning
                     "A": [1, 8, 4, 11, -3],
                     "B": [1.1, np.nan, 4.2, 3.1, -1.3],
                     "C": [True, False, False, True, True],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # Categorical columns
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(["AA", "BB", "", "AA", None], dtype="category"),
+                    "B": pd.Series([1, 2, 5, None, 5], dtype="category"),
+                    "C": pd.Series(
+                        pd.date_range(start="2/1/2015", end="2/24/2021", periods=4)
+                    )
+                    .append(pd.Series(data=[None], index=[4]))
+                    .astype("category"),
+                    "D": pd.Series(pd.timedelta_range(start="1 day", periods=4))
+                    .append(pd.Series(data=[None], index=[4]))
+                    .astype("category"),
                 }
             ),
             marks=pytest.mark.slow,
@@ -1581,7 +1599,7 @@ def test_df_shift_error_periods(memory_leak_check):
     def test_impl(df, periods):
         return df.shift(periods)
 
-    with pytest.raises(BodoError, match="periods input must be an integer"):
+    with pytest.raises(BodoError, match="'periods' input must be an integer"):
         bodo.jit(test_impl)(df, 1.0)
 
 
@@ -1592,6 +1610,10 @@ def test_df_set_index(df_value, memory_leak_check):
 
     # TODO: fix nullable int
     if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
+    # TODO: [BE-77] support Categorical Index types
+    if isinstance(df_value.iloc[:, 0].dtype, pd.CategoricalDtype):
         return
 
     # TODO(ehsan): test non-str columns using 'df_value.columns[0]' instead of 'A" when
