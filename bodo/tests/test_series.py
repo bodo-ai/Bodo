@@ -3984,9 +3984,17 @@ def test_series_loc_rm_dead(memory_leak_check):
         S.loc[df.B] = "AA"
         return S
 
-    df = pd.DataFrame({"A": [1, 3, 4], "B": [True, True, True]})
+    # test for [BE-93]
+    def impl2(A, B):
+        s = pd.Series(A).astype("str")
+        s.loc[B] = "AAA"
+        return s
 
+    df = pd.DataFrame({"A": [1, 3, 4], "B": [True, True, True]})
     check_func(impl, (df,))
+    A = np.array([1, 2, 3])
+    B = np.array([True, False, True])
+    check_func(impl2, (A, B))
 
 
 @pytest.mark.slow

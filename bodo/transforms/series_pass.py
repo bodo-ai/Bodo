@@ -322,6 +322,7 @@ class SeriesPass:
             if not replaced:
                 blocks[label].body = new_body
 
+        # simplify CFG and run dead code elimination
         self._simplify_IR()
         dprint_func_ir(self.func_ir, "after series pass")
         return
@@ -561,11 +562,10 @@ class SeriesPass:
             impl = bodo.hiframes.series_indexing.overload_series_loc_setitem(
                 target_typ, index_typ, value_type
             )
-            return nodes + compile_func_single_block(
-                impl,
-                [inst.target, index_var, inst.value],
-                None,
-                self,
+            # NOTE: using 'replace_func' instead of 'compile_func_single_block' to make
+            # sure the newly added IR is transformed ("I._obj" is optimized away)
+            return replace_func(
+                self, impl, [inst.target, index_var, inst.value], pre_nodes=nodes
             )
 
         if target_typ == h5dataset_type:
