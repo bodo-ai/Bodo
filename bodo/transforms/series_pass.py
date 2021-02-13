@@ -484,7 +484,9 @@ class SeriesPass:
                 isinstance(a, int) for a in indices
             ):
                 return compile_func_single_block(
-                    lambda S, idx: bodo.hiframes.pd_series_ext.get_series_data(S)[idx],
+                    eval(
+                        "lambda S, idx: bodo.hiframes.pd_series_ext.get_series_data(S)[idx]"
+                    ),
                     [rhs.value, idx],
                     assign.target,
                     self,
@@ -495,9 +497,9 @@ class SeriesPass:
                 if idx_val in indices:
                     arr_ind = indices.index(idx_val)
                     return compile_func_single_block(
-                        lambda S: bodo.hiframes.pd_series_ext.get_series_data(S)[
-                            _arr_ind
-                        ],
+                        eval(
+                            "lambda S: bodo.hiframes.pd_series_ext.get_series_data(S)[_arr_ind]"
+                        ),
                         [rhs.value],
                         assign.target,
                         self,
@@ -533,8 +535,8 @@ class SeriesPass:
                 return (
                     [val_tup_assign, key_tup_assign]
                     + compile_func_single_block(
-                        lambda vals, keys: bodo.utils.conversion.struct_if_heter_dict(
-                            vals, keys
+                        eval(
+                            "lambda vals, keys: bodo.utils.conversion.struct_if_heter_dict(vals, keys)"
                         ),
                         (val_tup, key_tup),
                         inst.value,
@@ -550,7 +552,7 @@ class SeriesPass:
             and self.typemap[inst.value.name] == types.none
         ):
             return nodes + compile_func_single_block(
-                lambda A, idx: bodo.libs.array_kernels.setna(A, idx),
+                eval("lambda A, idx: bodo.libs.array_kernels.setna(A, idx)"),
                 [inst.target, index_var],
                 None,
                 self,
@@ -720,7 +722,9 @@ class SeriesPass:
 
         if isinstance(rhs_type, RangeIndexType) and rhs.attr == "values":
             return replace_func(
-                self, lambda A: bodo.utils.conversion.coerce_to_ndarray(A), [rhs.value]
+                self,
+                eval("lambda A: bodo.utils.conversion.coerce_to_ndarray(A)"),
+                [rhs.value],
             )
 
         if isinstance(rhs_type, DatetimeIndexType):
@@ -795,7 +799,9 @@ class SeriesPass:
             if rhs.attr in indices:
                 arr_ind = indices.index(rhs.attr)
                 nodes = compile_func_single_block(
-                    lambda S: bodo.hiframes.pd_series_ext.get_series_data(S)[_arr_ind],
+                    eval(
+                        "lambda S: bodo.hiframes.pd_series_ext.get_series_data(S)[_arr_ind]"
+                    ),
                     [rhs.value],
                     assign.target,
                     self,
@@ -857,7 +863,9 @@ class SeriesPass:
                 and self.typemap[arg1_def.value.name] == string_array_type
             ):
                 return compile_func_single_block(
-                    lambda A, i, val: bodo.libs.str_arr_ext.inplace_eq(A, i, val),
+                    eval(
+                        "lambda A, i, val: bodo.libs.str_arr_ext.inplace_eq(A, i, val)"
+                    ),
                     (arg1_def.value, arg1_def.index, arg2),
                     assign.target,
                     self,
@@ -1098,7 +1106,7 @@ class SeriesPass:
             if isinstance(typ2, SeriesType):
                 arg2 = self._get_series_data(arg2, nodes)
             return nodes + compile_func_single_block(
-                lambda A, B: np.dot(A, B),
+                eval("lambda A, B: np.dot(A, B)"),
                 [arg1, arg2],
                 assign.target,
                 self,
@@ -1451,15 +1459,19 @@ class SeriesPass:
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 return replace_func(
                     self,
-                    lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                        numba.cpython.builtins.get_type_max_value(
-                            numba.core.types.uint64
-                        )
+                    eval(
+                        ""
+                        "lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64("
+                        "    numba.cpython.builtins.get_type_max_value("
+                        "        numba.core.types.uint64"
+                        "    )"
                     ),
                     [],
                 )
             return replace_func(
-                self, lambda d: numba.cpython.builtins.get_type_max_value(d), rhs.args
+                self,
+                eval("lambda d: numba.cpython.builtins.get_type_max_value(d)"),
+                rhs.args,
             )
 
         if fdef in (
@@ -1469,15 +1481,19 @@ class SeriesPass:
             if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
                 return replace_func(
                     self,
-                    lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
-                        numba.cpython.builtins.get_type_min_value(
-                            numba.core.types.uint64
-                        )
+                    eval(
+                        ""
+                        "lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64("
+                        "    numba.cpython.builtins.get_type_min_value("
+                        "        numba.core.types.uint64"
+                        "    )"
                     ),
                     [],
                 )
             return replace_func(
-                self, lambda d: numba.cpython.builtins.get_type_min_value(d), rhs.args
+                self,
+                eval("lambda d: numba.cpython.builtins.get_type_min_value(d)"),
+                rhs.args,
             )
 
         if fdef == ("h5_read_dummy", "bodo.io.h5_api"):
@@ -1653,7 +1669,7 @@ class SeriesPass:
                 self.typemap[obj_def.value.name], False
             ):
                 return compile_func_single_block(
-                    lambda A, i: bodo.libs.array_kernels.isna(A, i),
+                    eval("lambda A, i: bodo.libs.array_kernels.isna(A, i)"),
                     (obj_def.value, obj_def.index),
                     assign.target,
                     self,
@@ -1676,11 +1692,18 @@ class SeriesPass:
             data = rhs.args[0]
             nodes = []
 
-            def _get_indices(S):  # pragma: no cover
-                n = len(S)
-                return np.arange(n)
+            func_text = (
+                ""
+                "def _get_indices(S):\n"
+                "    n = len(S)\n"
+                "    return np.arange(n)\n"
+            )
 
-            nodes += compile_func_single_block(_get_indices, (data,), None, self)
+            loc_vars = {}
+            exec(func_text, globals(), loc_vars)
+            nodes += compile_func_single_block(
+                loc_vars["_get_indices"], (data,), None, self
+            )
             index_var = nodes[-1].target
 
             # dummy output data arrays for results
@@ -1752,7 +1775,7 @@ class SeriesPass:
             )
 
             return nodes + compile_func_single_block(
-                lambda A, B: (A, B), (out_data, out_index), lhs, self
+                eval("lambda A, B: (A, B)"), (out_data, out_index), lhs, self
             )
 
         if (
@@ -1893,30 +1916,30 @@ class SeriesPass:
             # nullable int array
             if isinstance(typ, IntegerArrayType):
                 dtype = typ.dtype
-                impl = lambda n, t, s=None: bodo.libs.int_arr_ext.alloc_int_array(
-                    n, _dtype
-                )  # pragma: no cover
+                impl = eval(
+                    "lambda n, t, s=None: bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)"
+                )
             elif isinstance(typ, types.Array):
                 dtype = typ.dtype
                 # avoid dt64 errors in np.empty, TODO: fix Numba
                 if dtype == types.NPDatetime("ns"):
                     dtype = np.dtype("datetime64[ns]")
-                impl = lambda n, t, s=None: np.empty(n, _dtype)  # pragma: no cover
+                impl = eval("lambda n, t, s=None: np.empty(n, _dtype)")
             elif isinstance(typ, ArrayItemArrayType):
                 dtype = typ.dtype
-                impl = lambda n, t, s=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
-                    n, s, _dtype
-                )  # pragma: no cover
+                impl = eval(
+                    "lambda n, t, s=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(n, s, _dtype)"
+                )
             elif isinstance(typ, CategoricalArray):
-                impl = lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
-                    n, t.dtype
-                )  # pragma: no cover
+                impl = eval(
+                    "lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, t.dtype)"
+                )
             elif isinstance(typ, StructArrayType):
                 dtypes = typ.data
                 names = typ.names
                 return compile_func_single_block(
-                    lambda n, t, s=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(
-                        n, s, _dtypes, _names
+                    eval(
+                        "lambda n, t, s=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(n, s, _dtypes, _names)"
                     ),
                     rhs.args,
                     assign.target,
@@ -1926,8 +1949,8 @@ class SeriesPass:
             elif isinstance(typ, TupleArrayType):
                 dtypes = typ.data
                 return compile_func_single_block(
-                    lambda n, t, s=None: bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(
-                        n, s, _dtypes
+                    eval(
+                        "lambda n, t, s=None: bodo.libs.tuple_arr_ext.pre_alloc_tuple_array(n, s, _dtypes)"
                     ),
                     rhs.args,
                     assign.target,
@@ -1938,8 +1961,8 @@ class SeriesPass:
                 precision = typ.dtype.precision
                 scale = typ.dtype.scale
                 return compile_func_single_block(
-                    lambda n, t, s=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(
-                        n, _precision, _scale
+                    eval(
+                        "lambda n, t, s=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(n, _precision, _scale)"
                     ),
                     rhs.args,
                     assign.target,
@@ -1972,7 +1995,7 @@ class SeriesPass:
                 impl = bodo.hiframes.pd_index_ext.overload_datetime_index_max(
                     *arg_typs, **kw_typs
                 )
-            stub = lambda dti, axis=None, skipna=True: None  # pragma: no cover
+            stub = eval("lambda dti, axis=None, skipna=True: None")
             return replace_func(
                 self,
                 impl,
@@ -1994,7 +2017,7 @@ class SeriesPass:
         ):
             return replace_func(
                 self,
-                lambda S: len(bodo.hiframes.pd_series_ext.get_series_data(S)),
+                eval("lambda S: len(bodo.hiframes.pd_series_ext.get_series_data(S))"),
                 rhs.args,
             )
 
@@ -2037,35 +2060,45 @@ class SeriesPass:
 
         if fdef == ("val_isin_dummy", "bodo.hiframes.pd_dataframe_ext"):
 
-            def impl(S, vals):  # pragma: no cover
-                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                numba.parfors.parfor.init_prange()
-                n = len(arr)
-                out = np.empty(n, np.bool_)
-                for i in numba.parfors.parfor.internal_prange(n):
-                    out[i] = arr[i] in vals
-                return bodo.hiframes.pd_series_ext.init_series(out, index)
+            func_text = (
+                ""
+                "def impl(S, vals):\n"
+                "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+                "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+                "    numba.parfors.parfor.init_prange()\n"
+                "    n = len(arr)\n"
+                "    out = np.empty(n, np.bool_)\n"
+                "    for i in numba.parfors.parfor.internal_prange(n):\n"
+                "        out[i] = arr[i] in vals\n"
+                "    return bodo.hiframes.pd_series_ext.init_series(out, index)\n"
+            )
 
-            return replace_func(self, impl, rhs.args)
+            loc_vars = {}
+            exec(func_text, globals(), loc_vars)
+            return replace_func(self, loc_vars["impl"], rhs.args)
 
         if fdef == ("val_notin_dummy", "bodo.hiframes.pd_dataframe_ext"):
 
-            def impl(S, vals):  # pragma: no cover
-                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                numba.parfors.parfor.init_prange()
-                n = len(arr)
-                out = np.empty(n, np.bool_)
-                for i in numba.parfors.parfor.internal_prange(n):
-                    # TODO: why don't these work?
-                    # out[i] = (arr[i] not in vals)
-                    # out[i] = not (arr[i] in vals)
-                    _in = arr[i] in vals
-                    out[i] = not _in
-                return bodo.hiframes.pd_series_ext.init_series(out, index)
+            func_text = (
+                ""
+                "def impl(S, vals):\n"
+                "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+                "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+                "    numba.parfors.parfor.init_prange()\n"
+                "    n = len(arr)\n"
+                "    out = np.empty(n, np.bool_)\n"
+                "    for i in numba.parfors.parfor.internal_prange(n):\n"
+                "        # TODO: why don't these work?\n"
+                "        # out[i] = (arr[i] not in vals)\n"
+                "        # out[i] = not (arr[i] in vals)\n"
+                "        _in = arr[i] in vals\n"
+                "        out[i] = not _in\n"
+                "    return bodo.hiframes.pd_series_ext.init_series(out, index)\n"
+            )
 
-            return replace_func(self, impl, rhs.args)
+            loc_vars = {}
+            exec(func_text, globals(), loc_vars)
+            return replace_func(self, loc_vars["impl"], rhs.args)
 
         # inline np.where() for 3 arg case with 1D input
         if (
@@ -2082,15 +2115,20 @@ class SeriesPass:
         # dummy count loop to support len of group in agg UDFs
         if fdef == ("dummy_agg_count", "bodo.ir.aggregate"):
 
-            def impl_agg_c(A):  # pragma: no cover
-                c = 0
-                for _ in numba.parfors.parfor.internal_prange(len(A)):
-                    c += 1
-                return c
+            func_text = (
+                ""
+                "def impl_agg_c(A):\n"
+                "    c = 0\n"
+                "    for _ in numba.parfors.parfor.internal_prange(len(A)):\n"
+                "        c += 1\n"
+                "    return c\n"
+            )
 
+            loc_vars = {}
+            exec(func_text, globals(), loc_vars)
             return replace_func(
                 self,
-                impl_agg_c,
+                loc_vars["impl_agg_c"],
                 rhs.args,
                 pysig=self.calltypes[rhs].pysig,
                 kws=dict(rhs.kws),
@@ -2126,8 +2164,10 @@ class SeriesPass:
 
                 return replace_func(
                     self,
-                    lambda arr, pat, n, index_arr: bodo.libs.array_kernels.explode_str_split(
-                        arr, pat, n, index_arr
+                    eval(
+                        "lambda arr, pat, n, index_arr: bodo.libs.array_kernels.explode_str_split("
+                        "    arr, pat, n, index_arr"
+                        ")"
                     ),
                     args,
                 )
@@ -2166,8 +2206,8 @@ class SeriesPass:
             name = self._get_series_name(series_arg, nodes)
             return replace_func(
                 self,
-                lambda A, index, name: bodo.hiframes.pd_series_ext.init_series(
-                    A, index, name
+                eval(
+                    "lambda A, index, name: bodo.hiframes.pd_series_ext.init_series(A, index, name)"
                 ),
                 (new_lhs, index, name),
                 pre_nodes=nodes,
@@ -2217,42 +2257,59 @@ class SeriesPass:
         np_ufunc = getattr(np, ufunc_name)
         if np_ufunc.nin == 1:
 
-            def impl(S):  # pragma: no cover
-                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                name = bodo.hiframes.pd_series_ext.get_series_name(S)
-                out_arr = _ufunc(arr)
-                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+            func_text = (
+                ""
+                "def impl(S):\n"
+                "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+                "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+                "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+                "    out_arr = _ufunc(arr)\n"
+                "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+            )
 
             # impl.__globals__['_ufunc'] = np_ufunc
-            return replace_func(self, impl, args, extra_globals={"_ufunc": np_ufunc})
+            loc_vars = {}
+            exec(func_text, globals(), loc_vars)
+            return replace_func(
+                self, loc_vars["impl"], args, extra_globals={"_ufunc": np_ufunc}
+            )
         elif np_ufunc.nin == 2:
             if isinstance(self.typemap[args[0].name], SeriesType):
 
-                def impl(S1, S2):  # pragma: no cover
-                    arr = bodo.hiframes.pd_series_ext.get_series_data(S1)
-                    index = bodo.hiframes.pd_series_ext.get_series_index(S1)
-                    name = bodo.hiframes.pd_series_ext.get_series_name(S1)
-                    other_arr = bodo.utils.conversion.get_array_if_series_or_index(S2)
-                    out_arr = _ufunc(arr, other_arr)
-                    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+                func_text = (
+                    ""
+                    "def impl(S1, S2):\n"
+                    "    arr = bodo.hiframes.pd_series_ext.get_series_data(S1)\n"
+                    "    index = bodo.hiframes.pd_series_ext.get_series_index(S1)\n"
+                    "    name = bodo.hiframes.pd_series_ext.get_series_name(S1)\n"
+                    "    other_arr = bodo.utils.conversion.get_array_if_series_or_index(S2)\n"
+                    "    out_arr = _ufunc(arr, other_arr)\n"
+                    "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+                )
 
+                loc_vars = {}
+                exec(func_text, globals(), loc_vars)
                 return replace_func(
-                    self, impl, args, extra_globals={"_ufunc": np_ufunc}
+                    self, loc_vars["impl"], args, extra_globals={"_ufunc": np_ufunc}
                 )
             else:
                 assert isinstance(self.typemap[args[1].name], SeriesType)
 
-                def impl(S1, S2):  # pragma: no cover
-                    arr = bodo.utils.conversion.get_array_if_series_or_index(S1)
-                    other_arr = bodo.hiframes.pd_series_ext.get_series_data(S2)
-                    index = bodo.hiframes.pd_series_ext.get_series_index(S2)
-                    name = bodo.hiframes.pd_series_ext.get_series_name(S2)
-                    out_arr = _ufunc(arr, other_arr)
-                    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+                func_text = (
+                    ""
+                    "def impl(S1, S2):\n"
+                    "    arr = bodo.utils.conversion.get_array_if_series_or_index(S1)\n"
+                    "    other_arr = bodo.hiframes.pd_series_ext.get_series_data(S2)\n"
+                    "    index = bodo.hiframes.pd_series_ext.get_series_index(S2)\n"
+                    "    name = bodo.hiframes.pd_series_ext.get_series_name(S2)\n"
+                    "    out_arr = _ufunc(arr, other_arr)\n"
+                    "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+                )
 
+                loc_vars = {}
+                exec(func_text, globals(), loc_vars)
                 return replace_func(
-                    self, impl, args, extra_globals={"_ufunc": np_ufunc}
+                    self, loc_vars["impl"], args, extra_globals={"_ufunc": np_ufunc}
                 )
         else:
             raise BodoError("Unsupported numpy ufunc {}".format(ufunc_name))
@@ -2412,7 +2469,7 @@ class SeriesPass:
             if is_str_series_typ(self.typemap[lhs.name]) and is_str_series_typ(
                 self.typemap[series_var.name]
             ):
-                return replace_func(self, lambda a: a, [series_var])
+                return replace_func(self, eval("lambda a: a"), [series_var])
 
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -2421,7 +2478,7 @@ class SeriesPass:
                 bodo.hiframes.series_impl, "overload_series_" + func_name
             )
             impl = overload_func(*arg_typs, **kw_typs)
-            stub = lambda S, dtype, copy=True, errors="raise": None
+            stub = eval("lambda S, dtype, copy=True, errors='raise': None")
             return replace_func(
                 self,
                 impl,
@@ -2446,19 +2503,22 @@ class SeriesPass:
         # dictionary input case
         if isinstance(func_type, types.DictType):
 
-            def impl(A, index, name, d):  # pragma: no cover
-                numba.parfors.parfor.init_prange()
-                n = len(A)
-                S0 = bodo.utils.utils.alloc_type(n, _arr_typ0, (-1,))
-                for i in numba.parfors.parfor.internal_prange(n):
-                    if bodo.libs.array_kernels.isna(A, i):
-                        bodo.libs.array_kernels.setna(S0, i)
-                    v = bodo.utils.conversion.box_if_dt64(A[i])
-                    if v in d:
-                        S0[i] = bodo.utils.conversion.unbox_if_timestamp(d[v])
-                    else:
-                        bodo.libs.array_kernels.setna(S0, i)
-                return bodo.hiframes.pd_series_ext.init_series(S0, index, name)
+            func_text = (
+                ""
+                "def impl(A, index, name, d):\n"
+                "    numba.parfors.parfor.init_prange()\n"
+                "    n = len(A)\n"
+                "    S0 = bodo.utils.utils.alloc_type(n, _arr_typ0, (-1,))\n"
+                "    for i in numba.parfors.parfor.internal_prange(n):\n"
+                "        if bodo.libs.array_kernels.isna(A, i):\n"
+                "            bodo.libs.array_kernels.setna(S0, i)\n"
+                "        v = bodo.utils.conversion.box_if_dt64(A[i])\n"
+                "        if v in d:\n"
+                "            S0[i] = bodo.utils.conversion.unbox_if_timestamp(d[v])\n"
+                "        else:\n"
+                "            bodo.libs.array_kernels.setna(S0, i)\n"
+                "    return bodo.hiframes.pd_series_ext.init_series(S0, index, name)\n"
+            )
 
             glbs = {
                 "numba": numba,
@@ -2466,10 +2526,13 @@ class SeriesPass:
                 "_arr_typ0": self.typemap[lhs.name].data,
             }
 
+            loc_vars = {}
+            exec(func_text, globals(), loc_vars)
+
             args = [data, index, name, func_var]
             return replace_func(
                 self,
-                impl,
+                loc_vars["impl"],
                 args,
                 extra_globals=glbs,
                 pre_nodes=nodes,
@@ -2574,42 +2637,52 @@ class SeriesPass:
 
         if func_name == "rolling_corr":
 
-            def rolling_corr_impl(arr, other, win, minp, center):  # pragma: no cover
-                cov = bodo.hiframes.rolling.rolling_cov(arr, other, win, minp, center)
-                a_std = bodo.hiframes.rolling.rolling_fixed(
-                    arr, None, win, minp, center, "std"
-                )
-                b_std = bodo.hiframes.rolling.rolling_fixed(
-                    other, None, win, minp, center, "std"
-                )
-                return cov / (a_std * b_std)
+            func_text = (
+                ""
+                "def rolling_corr_impl(arr, other, win, minp, center):\n"
+                "    cov = bodo.hiframes.rolling.rolling_cov(arr, other, win, minp, center)\n"
+                "    a_std = bodo.hiframes.rolling.rolling_fixed(\n"
+                "        arr, None, win, minp, center, 'std'\n"
+                "    )\n"
+                "    b_std = bodo.hiframes.rolling.rolling_fixed(\n"
+                "        other, None, win, minp, center, 'std'\n"
+                "    )\n"
+                "    return cov / (a_std * b_std)\n"
+            )
 
-            return replace_func(self, rolling_corr_impl, rhs.args)
+            loc_vars = {}
+            exec(func_text, globals(), loc_vars)
+            return replace_func(self, loc_vars["rolling_corr_impl"], rhs.args)
 
         if func_name == "rolling_cov":
 
-            def rolling_cov_impl(arr, other, w, minp, center):  # pragma: no cover
-                ddof = 1
-                X = arr.astype(np.float64)
-                Y = other.astype(np.float64)
-                XpY = X + Y
-                XtY = X * Y
-                count = bodo.hiframes.rolling.rolling_fixed(
-                    XpY, None, w, minp, center, "count"
-                )
-                mean_XtY = bodo.hiframes.rolling.rolling_fixed(
-                    XtY, None, w, minp, center, "mean"
-                )
-                mean_X = bodo.hiframes.rolling.rolling_fixed(
-                    X, None, w, minp, center, "mean"
-                )
-                mean_Y = bodo.hiframes.rolling.rolling_fixed(
-                    Y, None, w, minp, center, "mean"
-                )
-                bias_adj = count / (count - ddof)
-                return (mean_XtY - mean_X * mean_Y) * bias_adj
+            func_text = (
+                ""
+                "def rolling_cov_impl(arr, other, w, minp, center):\n"
+                "    ddof = 1\n"
+                "    X = arr.astype(np.float64)\n"
+                "    Y = other.astype(np.float64)\n"
+                "    XpY = X + Y\n"
+                "    XtY = X * Y\n"
+                "    count = bodo.hiframes.rolling.rolling_fixed(\n"
+                "        XpY, None, w, minp, center, 'count'\n"
+                "    )\n"
+                "    mean_XtY = bodo.hiframes.rolling.rolling_fixed(\n"
+                "        XtY, None, w, minp, center, 'mean'\n"
+                "    )\n"
+                "    mean_X = bodo.hiframes.rolling.rolling_fixed(\n"
+                "        X, None, w, minp, center, 'mean'\n"
+                "    )\n"
+                "    mean_Y = bodo.hiframes.rolling.rolling_fixed(\n"
+                "        Y, None, w, minp, center, 'mean'\n"
+                "    )\n"
+                "    bias_adj = count / (count - ddof)\n"
+                "    return (mean_XtY - mean_X * mean_Y) * bias_adj\n"
+            )
 
-            return replace_func(self, rolling_cov_impl, rhs.args)
+            loc_vars = {}
+            exec(func_text, globals(), loc_vars)
+            return replace_func(self, loc_vars["rolling_cov_impl"], rhs.args)
 
         return [assign]
 
@@ -2716,18 +2789,25 @@ class SeriesPass:
 
         if self.typemap[in_arr.name].ndim == 1:
             # generate simpler len() for 1D case
-            def f(_in_arr):  # pragma: no cover
-                _alloc_size = len(_in_arr)
-                _out_arr = np.empty(_alloc_size, _in_arr.dtype)
+            func_text = (
+                ""
+                "def f(_in_arr):\n"
+                "    _alloc_size = len(_in_arr)\n"
+                "    _out_arr = np.empty(_alloc_size, _in_arr.dtype)\n"
+            )
 
         else:
+            func_text = (
+                ""
+                "def f(_in_arr):\n"
+                "    _alloc_size = _in_arr.shape\n"
+                "    _out_arr = np.empty(_alloc_size, _in_arr.dtype)\n"
+            )
 
-            def f(_in_arr):  # pragma: no cover
-                _alloc_size = _in_arr.shape
-                _out_arr = np.empty(_alloc_size, _in_arr.dtype)
-
+        loc_vars = {}
+        exec(func_text, globals(), loc_vars)
         f_block = compile_to_numba_ir(
-            f,
+            loc_vars["f"],
             {"np": np},
             self.typingctx,
             (if_series_to_array_type(self.typemap[in_arr.name]),),
@@ -2755,24 +2835,35 @@ class SeriesPass:
                 gen_getitem(new_shape_var, shape_var, 0, self.calltypes, nodes)
                 shape_var = new_shape_var
 
-            def full_impl(shape, fill_value):
-                numba.parfors.parfor.init_prange()
-                arr = np.empty(shape, dtype)
-                for i in numba.parfors.parfor.internal_prange(shape):
-                    arr[i] = fill_value
-                return arr
+            func_text = (
+                ""
+                "def full_impl(shape, fill_value):\n"
+                "    numba.parfors.parfor.init_prange()\n"
+                "    arr = np.empty(shape, dtype)\n"
+                "    for i in numba.parfors.parfor.internal_prange(shape):\n"
+                "        arr[i] = fill_value\n"
+                "    return arr\n"
+            )
 
         else:
+            func_text = (
+                ""
+                "def full_impl(shape, fill_value):\n"
+                "    numba.parfors.parfor.init_prange()\n"
+                "    arr = np.empty(shape, dtype)\n"
+                "    for i in numba.pndindex(shape):\n"
+                "        arr[i] = fill_value\n"
+                "    return arr\n"
+            )
 
-            def full_impl(shape, fill_value):
-                numba.parfors.parfor.init_prange()
-                arr = np.empty(shape, dtype)
-                for i in numba.pndindex(shape):
-                    arr[i] = fill_value
-                return arr
-
+        loc_vars = {}
+        exec(func_text, globals(), loc_vars)
         return replace_func(
-            self, full_impl, [shape_var, fill_value_var], pre_nodes=nodes
+            self,
+            loc_vars["full_impl"],
+            [shape_var, fill_value_var],
+            pre_nodes=nodes,
+            extra_globals={"dtype": dtype},
         )
 
     def _handle_h5_write(self, dset, index, arr):
@@ -2830,7 +2921,7 @@ class SeriesPass:
             return var_def.args[0]
 
         nodes += compile_func_single_block(
-            lambda S: bodo.hiframes.pd_index_ext.get_index_data(S),
+            eval("lambda S: bodo.hiframes.pd_index_ext.get_index_data(S)"),
             (dt_var,),
             None,
             self,
@@ -2851,7 +2942,7 @@ class SeriesPass:
         # XXX use get_series_data() for getting data instead of S._data
         # to enable alias analysis
         nodes += compile_func_single_block(
-            lambda S: bodo.hiframes.pd_series_ext.get_series_data(S),
+            eval("lambda S: bodo.hiframes.pd_series_ext.get_series_data(S)"),
             (series_var,),
             None,
             self,
@@ -2871,7 +2962,7 @@ class SeriesPass:
         # XXX use get_series_index() for getting data instead of S._index
         # to enable alias analysis
         nodes += compile_func_single_block(
-            lambda S: bodo.hiframes.pd_series_ext.get_series_index(S),
+            eval("lambda S: bodo.hiframes.pd_series_ext.get_series_index(S)"),
             (series_var,),
             None,
             self,
@@ -2888,7 +2979,7 @@ class SeriesPass:
             return var_def.args[2]
 
         nodes += compile_func_single_block(
-            lambda S: bodo.hiframes.pd_series_ext.get_series_name(S),
+            eval("lambda S: bodo.hiframes.pd_series_ext.get_series_name(S)"),
             (series_var,),
             None,
             self,

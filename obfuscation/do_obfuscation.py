@@ -4,7 +4,7 @@ import subprocess
 import sys
 import os
 
-"""obfuscation of the ir, hiframes and transforms directories using the obfuscate script
+"""obfuscation of the ir, hiframes, etc. directories using the obfuscate script
 
 Use:
 
@@ -12,7 +12,7 @@ Use:
 
 The output shows the result of the operations."""
 
-list_dir = ["", "ir", "io", "utils", "hiframes", "transforms", "libs"]
+list_dir = ["", "dl", "ir", "io", "utils", "hiframes", "libs"]
 
 list_files = []
 for e_dir in list_dir:

@@ -30,7 +30,7 @@ such as Numba on Ubuntu Linux::
     python setup.py develop
     cd ..
     # END OF BUILD NUMBA FROM SOURCE
-    conda install mpi4py pytest -c conda-forge
+    conda install mpi4py pytest cython -c conda-forge
     conda install -c conda-forge hdf5='*=*mpich*' pyarrow=2.0.0 pymysql sqlalchemy
     # The following is required for s3 related development and tests
     # conda install -c conda-forge boto3 botocore "s3fs=0.4.2"

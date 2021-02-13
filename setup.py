@@ -1,7 +1,10 @@
 # isort: skip_file
+import sys
 import os
+import glob
 import platform
 from setuptools import Extension, find_packages, setup
+from Cython.Build import cythonize
 
 # Note we don't import Numpy at the toplevel, since setup.py
 # should be able to run without Numpy for pip to discover the
@@ -15,6 +18,7 @@ import versioneer
 np_compile_args = np_misc.get_info("npymath")
 
 is_win = platform.system() == "Windows"
+development_mode = "develop" in sys.argv
 
 
 def readme():
@@ -397,6 +401,18 @@ _ext_mods = [
     ext_hdfs,
 ]
 
+if development_mode:
+    _cython_ext_mods = []
+    # make sure there are no .pyx files in development mode
+    assert len(glob.glob("bodo/**/*.pyx", recursive=True)) == 0
+else:
+    import subprocess
+
+    # rename select files to .pyx for cythonizing
+    subprocess.run([sys.executable, "rename_to_pyx.py"])
+    _cython_ext_mods = glob.glob("bodo/**/*.pyx", recursive=True)
+
+
 if _has_h5py:
     _ext_mods.append(ext_hdf5)
 if _has_pyarrow:
@@ -433,5 +449,6 @@ setup(
     install_requires=["numba"],
     extras_require={"HDF5": ["h5py"], "Parquet": ["pyarrow"]},
     cmdclass=versioneer.get_cmdclass(),
-    ext_modules=_ext_mods,
+    ext_modules=_ext_mods
+    + cythonize(_cython_ext_mods, compiler_directives={"language_level": "3"}),
 )

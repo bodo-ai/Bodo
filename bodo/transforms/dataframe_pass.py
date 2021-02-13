@@ -197,8 +197,8 @@ class DataFramePass:
             nodes.append(ir.Assign(ir.Const(col_name, arr.loc), name, arr.loc))
             return replace_func(
                 self,
-                lambda arr, index, name: bodo.hiframes.pd_series_ext.init_series(
-                    arr, index, name
+                eval(
+                    "lambda arr, index, name: bodo.hiframes.pd_series_ext.init_series(arr, index, name)"
                 ),
                 [arr, index, name],
                 pre_nodes=nodes,
@@ -428,8 +428,8 @@ class DataFramePass:
             impl = bodo.hiframes.pd_dataframe_ext.pivot_table_overload(
                 *arg_typs, **kw_typs
             )
-            stub = (
-                lambda df, values=None, index=None, columns=None, aggfunc="mean", fill_value=None, margins=False, dropna=True, margins_name="All", observed=False, _pivot_values=None: None
+            stub = eval(
+                "lambda df, values=None, index=None, columns=None, aggfunc='mean', fill_value=None, margins=False, dropna=True, margins_name='All', observed=False, _pivot_values=None: None"
             )
             return replace_func(
                 self,
@@ -699,19 +699,33 @@ class DataFramePass:
         return self._run_binop(assign, rhs)
 
     def _gen_array_from_index(self, df_var, nodes):
-        def _get_index(df):  # pragma: no cover
-            return bodo.utils.conversion.index_to_array(
-                bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
-            )
+        func_text = (
+            ""
+            "def _get_index(df):\n"
+            "    return bodo.utils.conversion.index_to_array(\n"
+            "        bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
+            "    )\n"
+        )
 
-        nodes += compile_func_single_block(_get_index, (df_var,), None, self)
+        loc_vars = {}
+        exec(func_text, globals(), loc_vars)
+        nodes += compile_func_single_block(
+            loc_vars["_get_index"], (df_var,), None, self
+        )
         return nodes[-1].target
 
     def _gen_index_from_array(self, arr_var, name_var, nodes):
-        def _get_index(arr, name):  # pragma: no cover
-            return bodo.utils.conversion.index_from_array(arr, name)
+        func_text = (
+            ""
+            "def _get_index(arr, name):\n"
+            "    return bodo.utils.conversion.index_from_array(arr, name)\n"
+        )
 
-        nodes += compile_func_single_block(_get_index, (arr_var, name_var), None, self)
+        loc_vars = {}
+        exec(func_text, globals(), loc_vars)
+        nodes += compile_func_single_block(
+            loc_vars["_get_index"], (arr_var, name_var), None, self
+        )
         return nodes[-1].target
 
     def _run_call_df_itertuples(self, assign, lhs, rhs):
@@ -833,6 +847,7 @@ class DataFramePass:
         # use dummy function to catch data type error
         func_text += "  return _check_query_series_bool({})".format(parsed_expr_str)
         loc_vars = {}
+        global _check_query_series_bool
         exec(
             func_text, {"_check_query_series_bool": _check_query_series_bool}, loc_vars
         )
@@ -1122,9 +1137,9 @@ class DataFramePass:
             orig_arr = arr_def.value
             bool_arr = arr_def.index
             nodes += compile_func_single_block(
-                lambda arr, bool_arr: bodo.hiframes.series_impl.series_filter_bool(
-                    arr, bool_arr
-                ),  # pragma: no cover
+                eval(
+                    "lambda arr, bool_arr: bodo.hiframes.series_impl.series_filter_bool(arr, bool_arr)"
+                ),
                 (orig_arr, bool_arr),
                 None,
                 self,
@@ -1138,13 +1153,15 @@ class DataFramePass:
         if isinstance(df_def, ir.Arg):
             return replace_func(
                 self,
-                lambda df, cname, arr, inplace: bodo.hiframes.pd_dataframe_ext.set_df_column_with_reflect(
-                    df,
-                    cname,
-                    bodo.utils.conversion.coerce_to_array(
-                        arr, scalar_to_arr_len=len(df)
-                    ),
-                    inplace,
+                eval(
+                    "lambda df, cname, arr, inplace: bodo.hiframes.pd_dataframe_ext.set_df_column_with_reflect("
+                    "    df,"
+                    "    cname,"
+                    "    bodo.utils.conversion.coerce_to_array("
+                    "        arr, scalar_to_arr_len=len(df)"
+                    "    ),"
+                    "    inplace,"
+                    ")"
                 ),
                 [df_var, rhs.args[1], new_arr, rhs.args[3]],
                 pre_nodes=nodes,
@@ -1153,12 +1170,14 @@ class DataFramePass:
         if inplace:
             return replace_func(
                 self,
-                lambda df, arr: bodo.hiframes.pd_dataframe_ext.set_dataframe_data(
-                    df,
-                    c_ind,
-                    bodo.utils.conversion.coerce_to_array(
-                        arr, scalar_to_arr_len=len(df)
-                    ),
+                eval(
+                    "lambda df, arr: bodo.hiframes.pd_dataframe_ext.set_dataframe_data("
+                    "    df,"
+                    "    c_ind,"
+                    "    bodo.utils.conversion.coerce_to_array("
+                    "        arr, scalar_to_arr_len=len(df)"
+                    "    ),"
+                    ")"
                 ),
                 [df_var, new_arr],
                 pre_nodes=nodes,
@@ -1218,10 +1237,11 @@ class DataFramePass:
         nodes = []
         arr = self._get_dataframe_data(df_var, df_typ.columns[0], nodes)
 
-        def f(df_arr):  # pragma: no cover
-            return len(df_arr)
+        func_text = "" "def f(df_arr):\n" "    return len(df_arr)\n"
 
-        return replace_func(self, f, [arr], pre_nodes=nodes)
+        loc_vars = {}
+        exec(func_text, globals(), loc_vars)
+        return replace_func(self, loc_vars["f"], [arr], pre_nodes=nodes)
 
     def _run_call_join(self, assign, lhs, rhs):
         (
@@ -1477,8 +1497,8 @@ class DataFramePass:
         elif isinstance(out_typ.index, RangeIndexType):
             # as_index=False case generates trivial RangeIndex
             nodes += compile_func_single_block(
-                lambda A: bodo.hiframes.pd_index_ext.init_range_index(
-                    0, len(A), 1, None
+                eval(
+                    "lambda A: bodo.hiframes.pd_index_ext.init_range_index(0, len(A), 1, None)"
                 ),
                 (list(df_out_vars.values())[0],),
                 None,
@@ -1504,7 +1524,9 @@ class DataFramePass:
             index_arr = out_key_vars[0]
             index_name = grp_typ.keys[0]
             nodes += compile_func_single_block(
-                lambda A: bodo.utils.conversion.index_from_array(A, _index_name),
+                eval(
+                    "lambda A: bodo.utils.conversion.index_from_array(A, _index_name)"
+                ),
                 (index_arr,),
                 None,
                 self,
@@ -1527,7 +1549,9 @@ class DataFramePass:
             nodes.append(ir.Assign(ir.Const(name_val, lhs.loc), name_var, lhs.loc))
             return replace_func(
                 self,
-                lambda A, I, name: bodo.hiframes.pd_series_ext.init_series(A, I, name),
+                eval(
+                    "lambda A, I, name: bodo.hiframes.pd_series_ext.init_series(A, I, name)"
+                ),
                 list(df_out_vars.values()) + [index_var, name_var],
                 pre_nodes=nodes,
             )
@@ -1842,7 +1866,7 @@ class DataFramePass:
         nodes.append(agg_node)
 
         nodes += compile_func_single_block(
-            lambda A: bodo.utils.conversion.index_from_array(A, _index_name),
+            eval("lambda A: bodo.utils.conversion.index_from_array(A, _index_name)"),
             (out_index_var,),
             None,
             self,
@@ -1870,7 +1894,7 @@ class DataFramePass:
         nodes = []
         if isinstance(self.typemap[index.name], SeriesType):
             nodes += compile_func_single_block(
-                lambda S: bodo.hiframes.pd_series_ext.get_series_data(S),
+                eval("lambda S: bodo.hiframes.pd_series_ext.get_series_data(S)"),
                 (index,),
                 None,
                 self,
@@ -1879,7 +1903,7 @@ class DataFramePass:
 
         if isinstance(self.typemap[columns.name], SeriesType):
             nodes += compile_func_single_block(
-                lambda S: bodo.hiframes.pd_series_ext.get_series_data(S),
+                eval("lambda S: bodo.hiframes.pd_series_ext.get_series_data(S)"),
                 (columns,),
                 None,
                 self,
@@ -1903,10 +1927,6 @@ class DataFramePass:
             self.typemap[v.name] = out_typ.data[i]
 
         pivot_arr = columns
-
-        def _agg_len_impl(in_arr):  # pragma: no cover
-            return len(in_arr)
-
         agg_func = get_agg_func(self.func_ir, "count", rhs, typemap=self.typemap)
 
         # TODO: make out_key_var an index column
@@ -1938,7 +1958,7 @@ class DataFramePass:
         out_vars = [df_out_vars[c] for c in out_typ.columns]
 
         nodes += compile_func_single_block(
-            lambda A: bodo.utils.conversion.index_from_array(A, _index_name),
+            eval("lambda A: bodo.utils.conversion.index_from_array(A, _index_name)"),
             (out_index_var,),
             None,
             self,
@@ -2008,8 +2028,8 @@ class DataFramePass:
         # XXX use get_series_data() for getting data instead of S._data
         # to enable alias analysis
         nodes += compile_func_single_block(
-            lambda df, c_ind: bodo.hiframes.pd_dataframe_ext.get_dataframe_data(
-                df, c_ind
+            eval(
+                "lambda df, c_ind: bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, c_ind)"
             ),
             (df_var, ind_var),
             None,
@@ -2027,7 +2047,7 @@ class DataFramePass:
         # XXX use get_series_data() for getting data instead of S._data
         # to enable alias analysis
         nodes += compile_func_single_block(
-            lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df),
+            eval("lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"),
             (df_var,),
             None,
             self,
@@ -2050,9 +2070,9 @@ class DataFramePass:
         ):
             return var_def.args[1]
 
-        f = lambda S: bodo.hiframes.pd_index_ext.get_index_name(S)
+        f = eval("lambda S: bodo.hiframes.pd_index_ext.get_index_name(S)")
         if self.typemap[dt_var.name] == types.none:
-            f = lambda S: None
+            f = eval("lambda S: None")
 
         nodes += compile_func_single_block(f, (dt_var,), None, self)
         return nodes[-1].target
@@ -2124,12 +2144,14 @@ class DataFramePass:
         return key_colnames
 
 
-@numba.extending.register_jitable
+func_text = """
 def _check_query_series_bool(S):
-    """a dummy function used in _run_call_query to catch data type error later in the
-    pipeline (S should be a Series(bool)).
-    """
+    # a dummy function used in _run_call_query to catch data type error later in the
+    # pipeline (S should be a Series(bool)).
     return S
+"""
+exec(func_text)
+numba.extending.register_jitable(globals()["_check_query_series_bool"])
 
 
 def _gen_init_df(columns, index=None):

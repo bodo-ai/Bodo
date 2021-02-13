@@ -651,9 +651,9 @@ class TypingTransforms:
         if isinstance(val_type, DataFrameType):
             # get dataframe data arrays to set
             for i in range(len(col_inds)):
-                func = lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_data(
-                    df, _i
-                )  # pragma: no cover
+                func = eval(
+                    "lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, _i)"
+                )
                 nodes += compile_func_single_block(
                     func, [val], None, extra_globals={"_i": i}
                 )
@@ -1240,9 +1240,9 @@ class TypingTransforms:
             # TODO: check data type and throw clear error
             out_var = df_var
 
-        func = lambda df, cname, arr: bodo.hiframes.dataframe_impl.set_df_col(
-            df, cname, arr, _inplace
-        )  # pragma: no cover
+        func = eval(
+            "lambda df, cname, arr: bodo.hiframes.dataframe_impl.set_df_col(df, cname, arr, _inplace)"
+        )
         args = [df_var, cname_var, inst.value]
 
         # assign output df type if possible to reduce typing iterations

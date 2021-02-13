@@ -232,7 +232,7 @@ class UntypedPass:
                     mod_def = guard(get_definition, self.func_ir, val_def.value)
                     if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
                         return compile_func_single_block(
-                            lambda: bodo.hiframes.datetime_date_ext.today_impl,
+                            eval("lambda: bodo.hiframes.datetime_date_ext.today_impl"),
                             (),
                             assign.target,
                         )
@@ -245,7 +245,9 @@ class UntypedPass:
                     mod_def = guard(get_definition, self.func_ir, val_def.value)
                     if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
                         return compile_func_single_block(
-                            lambda: bodo.hiframes.datetime_date_ext.fromordinal_impl,
+                            eval(
+                                "lambda: bodo.hiframes.datetime_date_ext.fromordinal_impl"
+                            ),
                             (),
                             assign.target,
                         )
@@ -258,7 +260,9 @@ class UntypedPass:
                     mod_def = guard(get_definition, self.func_ir, val_def.value)
                     if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
                         return compile_func_single_block(
-                            lambda: bodo.hiframes.datetime_datetime_ext.now_impl,
+                            eval(
+                                "lambda: bodo.hiframes.datetime_datetime_ext.now_impl"
+                            ),
                             (),
                             assign.target,
                         )
@@ -271,7 +275,9 @@ class UntypedPass:
                     mod_def = guard(get_definition, self.func_ir, val_def.value)
                     if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
                         return compile_func_single_block(
-                            lambda: bodo.hiframes.datetime_datetime_ext.strptime_impl,
+                            eval(
+                                "lambda: bodo.hiframes.datetime_datetime_ext.strptime_impl"
+                            ),
                             (),
                             assign.target,
                         )
@@ -284,7 +290,7 @@ class UntypedPass:
                     mod_def = guard(get_definition, self.func_ir, val_def.value)
                     if isinstance(mod_def, ir.Global) and mod_def.value == itertools:
                         return compile_func_single_block(
-                            lambda: bodo.utils.typing.from_iterable_impl,
+                            eval("lambda: bodo.utils.typing.from_iterable_impl"),
                             (),
                             assign.target,
                         )
@@ -695,7 +701,9 @@ class UntypedPass:
         non-Array types like Series are scalars and produces wrong output type.
         """
         return compile_func_single_block(
-            lambda c, x, y: bodo.hiframes.series_impl.where_impl(c, x, y), rhs.args, lhs
+            eval("lambda c, x, y: bodo.hiframes.series_impl.where_impl(c, x, y)"),
+            rhs.args,
+            lhs,
         )
 
     def _handle_np_where_one_arg(self, assign, lhs, rhs):
@@ -703,7 +711,9 @@ class UntypedPass:
         Numba's typer cannot handle our array types.
         """
         return compile_func_single_block(
-            lambda c: bodo.hiframes.series_impl.where_impl_one_arg(c), rhs.args, lhs
+            eval("lambda c: bodo.hiframes.series_impl.where_impl_one_arg(c)"),
+            rhs.args,
+            lhs,
         )
 
     def _get_reverse_copies(self, body):
@@ -749,11 +759,12 @@ class UntypedPass:
             "builtins",
         ):
             # gen pd.RangeIndex() call
-            def _call_range_index():
-                return pd.RangeIndex()
+            func_text = "" "def _call_range_index():\n" "    return pd.RangeIndex()\n"
 
+            loc_vars = {}
+            exec(func_text, globals(), loc_vars)
             f_block = compile_to_numba_ir(
-                _call_range_index, {"pd": pd}
+                loc_vars["_call_range_index"], {"pd": pd}
             ).blocks.popitem()[1]
             new_nodes = f_block.body[:-2]
             new_nodes[-1].value.args = arg_def.args
@@ -1497,8 +1508,8 @@ class UntypedPass:
                 in_data = data_def.args[0]
             new_arr = ir.Var(in_data.scope, mk_unique_var("flat_arr"), in_data.loc)
             nodes = compile_func_single_block(
-                lambda A: bodo.utils.conversion.flatten_array(
-                    bodo.utils.conversion.coerce_to_array(A)
+                eval(
+                    "lambda A: bodo.utils.conversion.flatten_array(bodo.utils.conversion.coerce_to_array(A))"
                 ),
                 (in_data,),
                 new_arr,
@@ -1660,15 +1671,20 @@ class UntypedPass:
             np_fromfile, rhs.args, kws, 4, "offset", default=ir.Const(0, lhs.loc)
         )
 
-        def fromfile_impl(fname, dtype, count, offset):  # pragma: no cover
-            dtype_size = get_dtype_size(dtype)
-            size = get_file_size(fname, count, offset, dtype_size)
-            A = np.empty(size // dtype_size, dtype=dtype)
-            file_read(fname, A, size, offset)
-            read_arr = A
+        func_text = (
+            ""
+            "def fromfile_impl(fname, dtype, count, offset):\n"
+            "    dtype_size = get_dtype_size(dtype)\n"
+            "    size = get_file_size(fname, count, offset, dtype_size)\n"
+            "    A = np.empty(size // dtype_size, dtype=dtype)\n"
+            "    file_read(fname, A, size, offset)\n"
+            "    read_arr = A\n"
+        )
 
+        loc_vars = {}
+        exec(func_text, globals(), loc_vars)
         f_block = compile_to_numba_ir(
-            fromfile_impl,
+            loc_vars["fromfile_impl"],
             {
                 "np": np,
                 "get_file_size": bodo.io.np_io.get_file_size,
@@ -1862,17 +1878,25 @@ class UntypedPass:
     def _gen_replace_dist_return(self, var, flag):
         if flag == "distributed":
 
-            def f(_dist_arr):  # pragma: no cover
-                dist_return = bodo.libs.distributed_api.dist_return(_dist_arr)
+            func_text = (
+                ""
+                "def f(_dist_arr):\n"
+                "    dist_return = bodo.libs.distributed_api.dist_return(_dist_arr)\n"
+            )
 
         elif flag == "threaded":
 
-            def f(_threaded_arr):  # pragma: no cover
-                _th_arr = bodo.libs.distributed_api.threaded_return(_threaded_arr)
+            func_text = (
+                ""
+                "def f(_threaded_arr):\n"
+                "    _th_arr = bodo.libs.distributed_api.threaded_return(_threaded_arr)\n"
+            )
 
         else:
             raise BodoError("Invalid return flag {}".format(flag))
-        f_block = compile_to_numba_ir(f, {"bodo": bodo}).blocks.popitem()[1]
+        loc_vars = {}
+        exec(func_text, globals(), loc_vars)
+        f_block = compile_to_numba_ir(loc_vars["f"], {"bodo": bodo}).blocks.popitem()[1]
         replace_arg_nodes(f_block, [var])
         return f_block.body[:-3]  # remove none return
 
