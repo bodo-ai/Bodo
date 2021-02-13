@@ -51,6 +51,27 @@ from bodo.utils.typing import BodoError
             ),
             marks=pytest.mark.slow,
         ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Categorical(["AA", "BB", "", "AA", None], ordered=True),
+                    "B": pd.Categorical([1, 2, 5, None, 5], ordered=True),
+                    "C": pd.Categorical(
+                        pd.Series(
+                            pd.date_range(start="2/1/2015", end="2/24/2021", periods=4)
+                        ).append(pd.Series(data=[None], index=[4])),
+                        ordered=True,
+                    ),
+                    "D": pd.Categorical(
+                        pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                            pd.Series(data=[None], index=[4])
+                        ),
+                        ordered=True,
+                    ),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
     ]
 )
 def test_df(request):
@@ -1858,6 +1879,15 @@ def test_single_col_reset_index(test_df, memory_leak_check):
         A = df.groupby("A")["B"].sum().reset_index()
         return A
 
+    # Categorical doesn't implement sum in Pandas, but it should
+    # have a reasonable error.
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
+        test_df["B"].dtype, pd.CategoricalDtype
+    ):
+        # TODO: [BE-53] Add a check that Bodo gracefully errors
+        # with a clear error message
+        return
+
     check_func(impl1, (test_df,), sort_output=True, reset_index=True)
 
 
@@ -2156,6 +2186,10 @@ def test_max(test_df, memory_leak_check):
     Test Groupby.max()
     """
 
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
+        # TODO: [BE-92] Fix the failure in typing pass
+        return
+
     def impl1(df):
         A = df.groupby("A").max()
         return A
@@ -2183,6 +2217,12 @@ def test_max_one_col(test_df, memory_leak_check):
     """
     Test Groupby.max() with one column selected
     """
+
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
+        test_df["B"].dtype, pd.CategoricalDtype
+    ):
+        # TODO: [BE-92] Fix the failure in typing pass
+        return
 
     def impl1(df):
         A = df.groupby("A")["B"].max()
@@ -2285,6 +2325,12 @@ def test_mean(test_df, memory_leak_check):
         A = df.groupby("A").mean()
         return A
 
+    # Categorical isn't numeric so this should fail in Pandas.
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
+        # TODO: [BE-53] Add a check that Bodo gracefully errors
+        # with a clear error message
+        return
+
     check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
@@ -2303,6 +2349,12 @@ def test_mean_one_col(test_df, memory_leak_check):
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
         A = df.groupby("A")["B"].mean()
         return A
+
+    # Categorical isn't numeric so this should fail in Pandas.
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
+        # TODO: [BE-53] Add a check that Bodo gracefully errors
+        # with a clear error message
+        return
 
     check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
@@ -2334,6 +2386,10 @@ def test_min(test_df, memory_leak_check):
     Test Groupby.min()
     """
 
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
+        # TODO: [BE-92] Fix the failure in typing pass
+        return
+
     def impl1(df):
         A = df.groupby("A").min()
         return A
@@ -2361,6 +2417,10 @@ def test_min_one_col(test_df, memory_leak_check):
     """
     Test Groupby.min() with one column selected
     """
+
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
+        # TODO: [BE-92] Fix the failure in typing pass
+        return
 
     def impl1(df):
         A = df.groupby("A")["B"].min()
@@ -2435,6 +2495,10 @@ def test_prod(test_df, memory_leak_check):
     Test Groupby.prod()
     """
 
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
+        # TODO: [BE-92] Fix the failure in typing pass
+        return
+
     def impl1(df):
         A = df.groupby("A").prod()
         return A
@@ -2467,6 +2531,13 @@ def test_prod_one_col(test_df, memory_leak_check):
     """
     Test Groupby.prod() with one column selected
     """
+
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
+        test_df["B"].dtype, pd.CategoricalDtype
+    ):
+        # TODO: [BE-53] Add a check that Bodo gracefully errors
+        # with a clear error message
+        return
 
     def impl1(df):
         A = df.groupby("A")["B"].prod()
@@ -2522,6 +2593,10 @@ def test_first_last(test_df, memory_leak_check):
     Test Groupby.first() and Groupby.last()
     """
 
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
+        # TODO: [BE-92] Fix the failure in typing pass
+        return
+
     def impl1(df):
         A = df.groupby("A").first()
         return A
@@ -2574,6 +2649,10 @@ def test_first_last_one_col(test_df, memory_leak_check):
     """
     Test Groupby.first() and Groupby.last() with one column selected
     """
+
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
+        # TODO: [BE-92] Fix the failure in typing pass
+        return
 
     def impl1(df):
         A = df.groupby("A")["B"].first()
@@ -2709,6 +2788,13 @@ def test_std_one_col(test_df, memory_leak_check):
         A = df.groupby("A")["B"].std()
         return A
 
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
+        test_df["B"].dtype, pd.CategoricalDtype
+    ):
+        # TODO: [BE-53] Add a check that Bodo gracefully errors
+        # with a clear error message
+        return
+
     check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
@@ -2748,6 +2834,12 @@ def test_sum(test_df, memory_leak_check):
         A = df.groupby("A").sum()
         return A
 
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
+        test_df["B"].dtype, pd.CategoricalDtype
+    ):
+        # TODO: [BE-92] Make sure this doesn't fail in typing pass
+        return
+
     check_func(impl1, (test_df,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
@@ -2766,6 +2858,14 @@ def test_sum_one_col(test_df, memory_leak_check):
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
         A = df.groupby("A")["B"].sum()
         return A
+
+    # Pandas doesn't support sum on Categorical
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
+        test_df["B"].dtype, pd.CategoricalDtype
+    ):
+        # TODO: [BE-53] Add a check that Bodo gracefully errors
+        # with a clear error message
+        return
 
     check_func(impl1, (test_df,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
@@ -2962,6 +3062,14 @@ def test_var(test_df, memory_leak_check):
         A = df.groupby("A").var()
         return A
 
+    # Pandas: no numeric type
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
+        test_df["B"].dtype, pd.CategoricalDtype
+    ):
+        # TODO: [BE-53] Add a check that Bodo gracefully errors
+        # with a clear error message
+        return
+
     check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
@@ -2980,6 +3088,14 @@ def test_var_one_col(test_df, memory_leak_check):
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
         A = df.groupby("A")["B"].var()
         return A
+
+    # Pandas: no numeric type
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
+        test_df["B"].dtype, pd.CategoricalDtype
+    ):
+        # TODO: [BE-53] Add a check that Bodo gracefully errors
+        # with a clear error message
+        return
 
     check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
