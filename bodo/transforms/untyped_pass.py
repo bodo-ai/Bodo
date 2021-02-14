@@ -165,6 +165,22 @@ class UntypedPass:
         lhs = assign.target.name
         rhs = assign.value
 
+        # pass pivot values to df.pivot_table() calls using a meta
+        # variable passed as argument. The meta variable's type
+        # is set to MetaType with pivot values baked in.
+        if lhs in self.flags.pivots:
+            pivot_values = self.flags.pivots[lhs]
+            # put back the definition removed earlier
+            self.func_ir._definitions[lhs].append(rhs)
+            pivot_call = guard(get_definition, self.func_ir, lhs)
+            assert pivot_call is not None
+            meta_var = ir.Var(assign.target.scope, mk_unique_var("pivot_meta"), rhs.loc)
+            meta_assign = ir.Assign(ir.Const(0, rhs.loc), meta_var, rhs.loc)
+            self._working_body.insert(0, meta_assign)
+            pivot_call.kws = list(pivot_call.kws)
+            pivot_call.kws.append(("_pivot_values", meta_var))
+            self.locals[meta_var.name] = bodo.utils.typing.MetaType(pivot_values)
+
         # save arg name to catch invalid dist annotations
         if isinstance(rhs, ir.Arg):
             self._arg_names.add(rhs.name)
@@ -296,22 +312,6 @@ class UntypedPass:
             if rhs.op == "make_function":
                 # HACK make globals availabe for typing in series.map()
                 rhs.globals = self.func_ir.func_id.func.__globals__
-
-        # pass pivot values to df.pivot_table() calls using a meta
-        # variable passed as argument. The meta variable's type
-        # is set to MetaType with pivot values baked in.
-        if lhs in self.flags.pivots:
-            pivot_values = self.flags.pivots[lhs]
-            # put back the definition removed earlier
-            self.func_ir._definitions[lhs].append(rhs)
-            pivot_call = guard(get_definition, self.func_ir, lhs)
-            assert pivot_call is not None
-            meta_var = ir.Var(assign.target.scope, mk_unique_var("pivot_meta"), rhs.loc)
-            meta_assign = ir.Assign(ir.Const(0, rhs.loc), meta_var, rhs.loc)
-            self._working_body.insert(0, meta_assign)
-            pivot_call.kws = list(pivot_call.kws)
-            pivot_call.kws.append(("_pivot_values", meta_var))
-            self.locals[meta_var.name] = bodo.utils.typing.MetaType(pivot_values)
 
         # handle copies lhs = f
         if isinstance(rhs, ir.Var) and rhs.name in self.arrow_tables:
