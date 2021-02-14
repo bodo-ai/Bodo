@@ -145,6 +145,7 @@ class BodoTypeInference(PartialTypeInference):
 
         # make sure transformation has run at least once to handle cases that may not
         # throw typing errors like "df.B = v". See test_set_column_setattr
+        rerun_typing = False
         if not ran_transform:
             typing_transforms_pass = TypingTransforms(
                 state.func_ir,
@@ -157,7 +158,7 @@ class BodoTypeInference(PartialTypeInference):
                 False,
                 ran_transform,
             )
-            _changed, needs_transform = typing_transforms_pass.run()
+            changed, needs_transform = typing_transforms_pass.run()
             # some cases need a second transform pass to raise the proper error
             # see test_df_rename::impl4
             if needs_transform:
@@ -172,10 +173,13 @@ class BodoTypeInference(PartialTypeInference):
                     False,
                     True,
                 )
-                typing_transforms_pass.run()
+                changed, needs_transform = typing_transforms_pass.run()
+            # need to rerun type inference if the IR changed
+            # see test_set_column_setattr
+            rerun_typing = changed or needs_transform
 
         dprint_func_ir(state.func_ir, "after typing pass")
-        self._check_for_errors(state, curr_typing_pass_required)
+        self._check_for_errors(state, curr_typing_pass_required or rerun_typing)
         return True
 
     def _check_for_errors(self, state, curr_typing_pass_required):
