@@ -93,9 +93,7 @@ class UntypedPass:
 
         self.arrow_tables = {}
         self.reverse_copies = {}
-        self.pq_handler = ParquetHandler(
-            func_ir, typingctx, args, _locals, self.reverse_copies
-        )
+        self.pq_handler = ParquetHandler(func_ir, typingctx, args, _locals)
         self.h5_handler = h5.H5_IO(
             self.func_ir, _locals, flags, args, self.reverse_copies
         )
