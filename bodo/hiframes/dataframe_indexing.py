@@ -479,7 +479,7 @@ def df_loc_setitem_overload(df, idx, val):
 ##################################  df.iat  ##################################
 
 
-# df.ia[] type
+# df.iat[] type
 class DataFrameIatType(types.Type):
     def __init__(self, df_type):
         self.df_type = df_type

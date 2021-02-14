@@ -271,6 +271,15 @@ def find_potential_aliases(
                     and expr.value.name in arg_aliases
                 ):
                     _add_alias(lhs, expr.value.name, alias_map, arg_aliases)
+                # Bodo change: handle potential Series, DataFrame, ... aliases.
+                # Types may not be available yet but type check is not necessary since
+                # extra aliases are ok.
+                if (
+                    isinstance(expr, ir.Expr)
+                    and expr.op == "getattr"
+                    and expr.attr in ("loc", "iloc", "iat", "_obj", "obj", "codes")
+                ):
+                    _add_alias(lhs, expr.value.name, alias_map, arg_aliases)
                 # new code added to handle tuple/list/set of mutable data
                 if (
                     isinstance(expr, ir.Expr)
