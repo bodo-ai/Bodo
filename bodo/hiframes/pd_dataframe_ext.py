@@ -3550,6 +3550,7 @@ def get_dummies(
     n_cols = len(categories)
 
     # Pandas implementation:
+    func_text += "  codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(data_values)\n"
     func_text += "  numba.parfors.parfor.init_prange()\n"
     func_text += "  n = len(data_values)\n"
     for i in range(n_cols):
@@ -3560,9 +3561,7 @@ def get_dummies(
         func_text += "          data_arr_{}[i] = 0\n".format(j)
     func_text += "      else:\n"
     for k in range(n_cols):
-        func_text += "          data_arr_{0}[i] = data_values.codes[i] == {0}\n".format(
-            k
-        )
+        func_text += "          data_arr_{0}[i] = codes[i] == {0}\n".format(k)
     data_args = ", ".join(f"data_arr_{i}" for i in range(n_cols))
     index = "bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)"
 

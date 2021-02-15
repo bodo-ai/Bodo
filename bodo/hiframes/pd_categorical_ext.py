@@ -298,14 +298,19 @@ def create_cmp_op_overload(op):
             )
 
             def impl_lit(A, other):  # pragma: no cover
-                out_arr = op(A.codes, other_idx)
+                out_arr = op(
+                    bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A),
+                    other_idx,
+                )
                 return out_arr
 
             return impl_lit
 
         def impl(A, other):  # pragma: no cover
             other_idx = get_code_for_value(A.dtype, other)
-            out_arr = op(A.codes, other_idx)
+            out_arr = op(
+                bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A), other_idx
+            )
             return out_arr
 
         return impl
