@@ -19,6 +19,7 @@ from numba.core.typing import signature
 from numba.core.typing.builtins import IndexValueType
 from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import intrinsic, models, overload, register_model
+from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
@@ -2417,6 +2418,19 @@ def allgather(arr, val):  # pragma: no cover
 
 def dist_return(A):  # pragma: no cover
     return A
+
+
+# array analysis extension for dist_return
+def dist_return_equiv(self, scope, equiv_set, loc, args, kws):
+    """dist_return output has the same shape as input"""
+    assert len(args) == 1 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_distributed_api_dist_return = dist_return_equiv
 
 
 def threaded_return(A):  # pragma: no cover
