@@ -7,6 +7,8 @@
 #include <fstream>
 #include <vector>
 
+#define FREE_MAX_CORES 4
+
 #if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT) || \
     defined(CHECK_LICENSE_PLATFORM_AWS)
 
@@ -324,50 +326,59 @@ PyMODINIT_FUNC PyInit_hdist(void) {
 #endif
 
 #if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT)
-    // get max cores and expiration date from license, and verify license
-    // using digital signature with asymmetric cryptography
+    int num_pes;
+    int max_cores = FREE_MAX_CORES;
+    int year;
+    int month;
+    int day;
+    MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
+    if (num_pes > FREE_MAX_CORES) {
+        // get max cores and expiration date from license, and verify license
+        // using digital signature with asymmetric cryptography
 
-    bool b64_encoded = true;  // license encoded in Base64
-    std::vector<char> data;   // store license
-    int read_license = read_license_common(data, b64_encoded);
-    if (!read_license) {
-        PyErr_SetString(PyExc_RuntimeError, "Error reading license");
-        return NULL;
-    }
-    const int *_data = (int *)data.data();
-    int license_type = _data[0] >> 16;
-    if (license_type != 0) {
-        fprintf(stderr, "Invalid license type\n");
-        return NULL;
-    }
-    int max_cores = _data[1];
-    int year = _data[2];
-    int month = _data[3];
-    int day = _data[4];
-    std::vector<char> signature;  // to store signature contained in license
-    signature.assign(data.begin() + sizeof(int) * 5, data.end());
-    std::vector<int> msg = {max_cores, year, month, day};
+        bool b64_encoded = true;  // license encoded in Base64
+        std::vector<char> data;   // store license
+        int read_license = read_license_common(data, b64_encoded);
+        if (!read_license) {
+            PyErr_SetString(PyExc_RuntimeError, "Error reading license");
+            return NULL;
+        }
+        const int *_data = (int *)data.data();
+        int license_type = _data[0] >> 16;
+        if (license_type != 0) {
+            fprintf(stderr, "Invalid license type\n");
+            return NULL;
+        }
+        max_cores = _data[1];
+        year = _data[2];
+        month = _data[3];
+        day = _data[4];
+        std::vector<char> signature;  // to store signature contained in license
+        signature.assign(data.begin() + sizeof(int) * 5, data.end());
+        std::vector<int> msg = {max_cores, year, month, day};
 
-    EVP_PKEY *key = get_public_key();
-    if (!key) {
-        // ERR_print_errors_fp(stderr);  // print ssl errors
-        PyErr_SetString(PyExc_RuntimeError, "Error obtaining public key");
-        return NULL;
-    }
+        EVP_PKEY *key = get_public_key();
+        if (!key) {
+            // ERR_print_errors_fp(stderr);  // print ssl errors
+            PyErr_SetString(PyExc_RuntimeError, "Error obtaining public key");
+            return NULL;
+        }
 
-    if (!verify_license(key, msg.data(), msg.size() * sizeof(int),
-                        (unsigned char *)signature.data(), signature.size())) {
-        // ERR_print_errors_fp(stderr);  // print ssl errors
-        PyErr_SetString(PyExc_RuntimeError, "Invalid license\n");
-        return NULL;
+        if (!verify_license(key, msg.data(), msg.size() * sizeof(int),
+                            (unsigned char *)signature.data(), signature.size())) {
+            // ERR_print_errors_fp(stderr);  // print ssl errors
+            PyErr_SetString(PyExc_RuntimeError, "Invalid license\n");
+            return NULL;
+        }
+        EVP_PKEY_free(key);
     }
-    EVP_PKEY_free(key);
 #endif
 
 #ifdef CHECK_LICENSE_EXPIRED
     // check expiration date
-    if (is_expired(year, month, day)) {
-        PyErr_SetString(PyExc_RuntimeError, "Bodo trial period has expired!");
+    MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
+    if ((num_pes > FREE_MAX_CORES) && is_expired(year, month, day)) {
+        PyErr_SetString(PyExc_RuntimeError, "Bodo license has expired");
         return NULL;
     }
 #endif
@@ -379,7 +390,6 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     if (!is_initialized) MPI_Init(NULL, NULL);
 
 #ifdef CHECK_LICENSE_CORE_COUNT
-    int num_pes;
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
     if (num_pes > max_cores) {
         char error_msg[100];
