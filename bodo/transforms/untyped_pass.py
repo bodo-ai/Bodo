@@ -92,11 +92,8 @@ class UntypedPass:
         ir_utils._max_label = max(ir_utils._max_label, max(func_ir.blocks.keys()))
 
         self.arrow_tables = {}
-        self.reverse_copies = {}
         self.pq_handler = ParquetHandler(func_ir, typingctx, args, _locals)
-        self.h5_handler = h5.H5_IO(
-            self.func_ir, _locals, flags, args, self.reverse_copies
-        )
+        self.h5_handler = h5.H5_IO(self.func_ir, _locals, flags, args)
         # save names of arguments and return values to catch invalid dist annotation
         self._arg_names = set()
         self._return_varnames = set()
@@ -116,7 +113,6 @@ class UntypedPass:
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         while work_list:
             label, block = work_list.pop()
-            self._get_reverse_copies(blocks[label].body)
             self._working_body = []
             for inst in block.body:
                 out_nodes = [inst]
@@ -713,12 +709,6 @@ class UntypedPass:
             rhs.args,
             lhs,
         )
-
-    def _get_reverse_copies(self, body):
-        for inst in body:
-            if isinstance(inst, ir.Assign) and isinstance(inst.value, ir.Var):
-                self.reverse_copies[inst.value.name] = inst.target.name
-        return
 
     def _handle_pd_DataFrame(self, assign, lhs, rhs, label):
         """
