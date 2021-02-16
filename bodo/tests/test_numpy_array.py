@@ -482,7 +482,7 @@ def test_np_linspace(memory_leak_check):
     check_func(test_impl, (-5, 4.5252, 1000))
 
 
-@pytest.mark.slow
+# TODO(Nick): Readd slow when np.linspace is confirmed to work on CI
 def test_np_linspace_int(memory_leak_check):
     def test_impl(start, stop, num, dtype):
         return np.linspace(start, stop, num=num, dtype=dtype)
@@ -492,7 +492,7 @@ def test_np_linspace_int(memory_leak_check):
     check_func(test_impl, (-5, 4.5252, 1000, np.int32))
 
 
-@pytest.mark.slow
+# TODO(Nick): Readd slow when np.linspace is confirmed to work on CI
 def test_np_linspace_float(memory_leak_check):
     def test_impl(start, stop, num, dtype):
         return np.linspace(start, stop, num=num, dtype=dtype)
@@ -502,7 +502,7 @@ def test_np_linspace_float(memory_leak_check):
     check_func(test_impl, (-5, 4.5252, 1000, np.float32))
 
 
-@pytest.mark.slow
+# TODO(Nick): Readd slow when np.linspace is confirmed to work on CI
 def test_np_linspace_kwargs(memory_leak_check):
     def test_impl(start, stop, num, dtype, endpoint):
         return np.linspace(

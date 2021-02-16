@@ -15,7 +15,7 @@ such as Numba on Ubuntu Linux::
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n DEV python=3.8 numpy"<1.20" scipy pandas='1.2.*' boost-cpp=1.74.0 cmake h5py mpich mpi -c conda-forge
+    conda create -n DEV python=3.8 numpy scipy pandas='1.2.*' boost-cpp=1.74.0 cmake h5py mpich mpi -c conda-forge
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 -c conda-forge
