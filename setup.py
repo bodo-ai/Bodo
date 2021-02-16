@@ -69,6 +69,8 @@ else:
 ela = ["-std=c++11"]
 
 MPI_LIBS = ["mpi"]
+if "setup_centos7" in os.environ:
+    MPI_LIBS = ["mpich"]
 H5_CPP_FLAGS = []
 
 use_impi = False
@@ -117,11 +119,14 @@ ext_io = Extension(
 )
 
 
+s3_reader_libraries = MPI_LIBS + ["arrow"]
+if "setup_centos7" in os.environ:
+    s3_reader_libraries += ["boost_system"]
 ext_s3 = Extension(
     name="bodo.io.s3_reader",
     sources=["bodo/io/_s3_reader.cpp"],
     depends=["bodo/io/_bodo_file_reader.h"],
-    libraries=MPI_LIBS + ["arrow"],
+    libraries=s3_reader_libraries,
     include_dirs=ind + np_compile_args["include_dirs"],
     library_dirs=lid,
     define_macros=[],
@@ -130,11 +135,14 @@ ext_s3 = Extension(
     language="c++",
 )
 
+hdfs_reader_libraries = MPI_LIBS + ["arrow"]
+if "setup_centos7" in os.environ:
+    hdfs_reader_libraries += ["boost_system"]
 ext_hdfs = Extension(
     name="bodo.io.hdfs_reader",
     sources=["bodo/io/_hdfs_reader.cpp"],
     depends=["bodo/io/_bodo_file_reader.h"],
-    libraries=MPI_LIBS + ["arrow"],
+    libraries=hdfs_reader_libraries,
     include_dirs=ind + np_compile_args["include_dirs"],
     library_dirs=lid,
     define_macros=[],
