@@ -55,34 +55,6 @@ def test_np_unique(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_setitem_optional_int(bool_arr_value, memory_leak_check):
-    def test_impl(A, i, flag):
-        if flag:
-            x = None
-        else:
-            x = False
-        A[i] = x
-        return A
-
-    check_func(
-        test_impl, (bool_arr_value.copy(), 1, False), copy_input=True, dist_test=False
-    )
-    check_func(
-        test_impl, (bool_arr_value.copy(), 0, True), copy_input=True, dist_test=False
-    )
-
-
-@pytest.mark.slow
-def test_setitem_none_int(bool_arr_value, memory_leak_check):
-    def test_impl(A, i):
-        A[i] = None
-        return A
-
-    i = 1
-    check_func(test_impl, (bool_arr_value.copy(), i), copy_input=True, dist_test=False)
-
-
-@pytest.mark.slow
 def test_unbox(bool_arr_value, memory_leak_check):
     # just unbox
     def impl(arr_arg):
@@ -220,3 +192,59 @@ def test_constant_lowering(bool_arr_value):
     pd.testing.assert_series_equal(
         pd.Series(bodo.jit(impl)()), pd.Series(bool_arr_value), check_dtype=False
     )
+
+
+@pytest.mark.smoke
+def test_setitem_int(bool_arr_value, memory_leak_check):
+    def test_impl(A, val):
+        A[2] = val
+        return A
+
+    # get a non-null value
+    bool_arr_value._mask[0] = False
+    val = bool_arr_value[0]
+    check_func(test_impl, (bool_arr_value, val))
+
+
+@pytest.mark.smoke
+def test_setitem_arr(bool_arr_value, memory_leak_check):
+    def test_impl(A, idx, val):
+        A[idx] = val
+        return A
+
+    np.random.seed(0)
+    idx = np.random.randint(0, len(bool_arr_value), 11)
+    val = np.random.randint(0, 2, 11, np.bool_)
+    check_func(test_impl, (bool_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # BooleanArray as value, reuses the same idx
+    val = pd.arrays.BooleanArray(val, np.random.ranf(len(val)) < 0.2)
+    check_func(test_impl, (bool_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # Single boolean as a value, reuses the same idx
+    val = True
+    check_func(test_impl, (bool_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    idx = np.random.ranf(len(bool_arr_value)) < 0.2
+    val = np.random.randint(0, 2, idx.sum(), np.bool_)
+    check_func(test_impl, (bool_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # BooleanArray as value, reuses the same idx
+    val = pd.arrays.BooleanArray(val, np.random.ranf(len(val)) < 0.2)
+    check_func(test_impl, (bool_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # Single boolean as a value, reuses the same idx
+    val = True
+    check_func(test_impl, (bool_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    idx = slice(1, 4)
+    val = np.random.randint(0, 2, 3, np.bool_)
+    check_func(test_impl, (bool_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # BooleanArray as value, reuses the same idx
+    val = pd.arrays.BooleanArray(val, np.random.ranf(len(val)) < 0.2)
+    check_func(test_impl, (bool_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # Single boolean as a value, reuses the same idx
+    val = True
+    check_func(test_impl, (bool_arr_value, idx, val), dist_test=False, copy_input=True)

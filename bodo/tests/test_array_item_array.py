@@ -2,10 +2,7 @@
 """Tests for array of list of fixed size items.
 """
 import datetime
-import operator
-from decimal import Decimal
 
-import numba
 import numpy as np
 import pandas as pd
 import pytest
@@ -130,6 +127,27 @@ from bodo.tests.utils import check_func
 )
 def array_item_arr_value(request):
     return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            np.array([[1, 3, None], [2.2], None, ["bodo"], [1, 1], None] * 2),
+            marks=pytest.mark.skip("[BE-57]"),
+        )
+    ]
+)
+def bad_array_item_arr_value(request):
+    return request.param
+
+
+def test_bad_unbox(bad_array_item_arr_value, memory_leak_check):
+    # just unbox
+    def impl(arr_arg):
+        return True
+
+    # TODO(Nick): Capture this as an error when the segfault is avoided.
+    check_func(impl, (bad_array_item_arr_value,))
 
 
 @pytest.mark.slow

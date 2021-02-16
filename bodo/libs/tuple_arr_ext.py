@@ -5,59 +5,25 @@ import operator
 
 import numba
 from numba.core import types
-from numba.core.imputils import (
-    RefType,
-    impl_ret_borrowed,
-    impl_ret_new_ref,
-    iternext_impl,
-    lower_constant,
-)
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    infer_global,
-    signature,
-)
 from numba.extending import (
     NativeValue,
     box,
     intrinsic,
-    lower_builtin,
     make_attribute_wrapper,
     models,
     overload,
     overload_attribute,
     overload_method,
-    register_jitable,
     register_model,
-    type_callable,
-    typeof_impl,
     unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
-from bodo.hiframes.datetime_date_ext import (
-    datetime_date_array_type,
-    datetime_date_type,
-)
-from bodo.libs.array_item_arr_ext import (
-    ArrayItemArrayPayloadType,
-    ArrayItemArrayType,
-    _get_array_item_arr_payload,
-)
 from bodo.libs.struct_arr_ext import (
     StructArrayType,
     box_struct_arr,
     unbox_struct_array,
-)
-from bodo.utils.typing import (
-    BodoError,
-    BodoWarning,
-    is_list_like_index_type,
-    is_overload_constant_int,
-    is_overload_none,
-    is_overload_true,
-    parse_dtype,
 )
 
 
@@ -196,10 +162,11 @@ def tuple_arr_setitem(arr, ind, val):
     if not isinstance(arr, TupleArrayType):
         return
 
-    if isinstance(ind, types.Integer):
+    if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+        # None/Optional goes through a separate step.
+        return
 
-        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
-            return
+    if isinstance(ind, types.Integer):
 
         n_fields = len(arr.data)
         func_text = "def impl(arr, ind, val):\n"

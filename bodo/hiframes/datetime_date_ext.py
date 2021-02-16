@@ -11,23 +11,13 @@ import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_builtin, lower_constant
-from numba.core.typing import signature
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    AttributeTemplate,
-    ConcreteTemplate,
-    bound_function,
-    infer_getattr,
-    infer_global,
-    signature,
-)
+from numba.core.typing.templates import AttributeTemplate, infer_getattr
 from numba.extending import (
     NativeValue,
     box,
     infer_getattr,
     intrinsic,
     lower_builtin,
-    lower_cast,
     lower_getattr,
     make_attribute_wrapper,
     models,
@@ -54,7 +44,11 @@ from bodo.utils.indexing import (
     array_setitem_int_index,
     array_setitem_slice_index,
 )
-from bodo.utils.typing import is_list_like_index_type
+from bodo.utils.typing import (
+    BodoError,
+    is_iterable_type,
+    is_list_like_index_type,
+)
 
 ll.add_symbol("box_datetime_date_array", hdatetime_ext.box_datetime_date_array)
 ll.add_symbol("unbox_datetime_date_array", hdatetime_ext.unbox_datetime_date_array)
@@ -230,7 +224,7 @@ def cast_datetime_date_to_int(typingctx, val=None):
 
 ###############################################################################
 """
-Following codes are copied from 
+Following codes are copied from
 https://github.com/python/cpython/blob/39a5c889d30d03a88102e56f03ee0c95db198fb3/Lib/datetime.py
 """
 
@@ -839,20 +833,40 @@ def dt_date_arr_setitem(A, idx, val):
     if A != datetime_date_array_type:
         return
 
+    if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+        # None/Optional goes through a separate step.
+        return
+
+    typ_err_msg = f"setitem for DatetimeDateArray with indexing type {idx} received an incorrect 'value' type {val}."
+
     # scalar case
     if isinstance(idx, types.Integer):
-        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
-            return
 
-        def impl(A, idx, val):  # pragma: no cover
-            A._data[idx] = cast_datetime_date_to_int(val)
-            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
+        if types.unliteral(val) == datetime_date_type:
 
-        # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
-        return impl
+            def impl(A, idx, val):  # pragma: no cover
+                A._data[idx] = cast_datetime_date_to_int(val)
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
+
+            # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
+            return impl
+
+        else:
+            raise BodoError(typ_err_msg)
+
+    if not (
+        (is_iterable_type(val) and val.dtype == bodo.datetime_date_type)
+        or types.unliteral(val) == datetime_date_type
+    ):
+        raise BodoError(typ_err_msg)
 
     # array of integers
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
+
+        if types.unliteral(val) == datetime_date_type:
+            return lambda A, idx, val: array_setitem_int_index(
+                A, idx, cast_datetime_date_to_int(val)
+            )  # pragma: no cover
 
         def impl_arr_ind(A, idx, val):  # pragma: no cover
             array_setitem_int_index(A, idx, val)
@@ -863,6 +877,11 @@ def dt_date_arr_setitem(A, idx, val):
     # bool array
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
 
+        if types.unliteral(val) == datetime_date_type:
+            return lambda A, idx, val: array_setitem_bool_index(
+                A, idx, cast_datetime_date_to_int(val)
+            )  # pragma: no cover
+
         def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
             array_setitem_bool_index(A, idx, val)
 
@@ -871,11 +890,22 @@ def dt_date_arr_setitem(A, idx, val):
     # slice case
     if isinstance(idx, types.SliceType):
 
+        if types.unliteral(val) == datetime_date_type:
+            return lambda A, idx, val: array_setitem_slice_index(
+                A, idx, cast_datetime_date_to_int(val)
+            )  # pragma: no cover
+
         def impl_slice_mask(A, idx, val):  # pragma: no cover
             array_setitem_slice_index(A, idx, val)
 
         # covered by test_series_setitem_slice
         return impl_slice_mask
+
+    # This should be the only DatetimeDateArray implementation.
+    # We only expect to reach this case if more idx options are added.
+    raise BodoError(
+        f"setitem for DatetimeDateArray with indexing type {idx} not supported."
+    )  # pragma: no cover
 
 
 @overload(len, no_unliteral=True)

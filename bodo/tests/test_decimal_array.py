@@ -225,42 +225,6 @@ def test_constructor(memory_leak_check):
     check_func(test_impl3, ())
 
 
-@pytest.mark.slow
-def test_setitem_none_int(decimal_arr_value, memory_leak_check):
-    def test_impl(A, i):
-        A[i] = None
-        return A
-
-    i = 0
-    check_func(
-        test_impl, (decimal_arr_value.copy(), i), copy_input=True, dist_test=False
-    )
-
-
-@pytest.mark.slow
-def test_setitem_optional_int(decimal_arr_value, memory_leak_check):
-    def test_impl(A, i, flag, val):
-        if flag:
-            x = None
-        else:
-            x = val
-        A[i] = x
-        return A
-
-    check_func(
-        test_impl,
-        (decimal_arr_value.copy(), 1, False, Decimal("5.9")),
-        copy_input=True,
-        dist_test=False,
-    )
-    check_func(
-        test_impl,
-        (decimal_arr_value.copy(), 0, True, Decimal("5.9")),
-        copy_input=True,
-        dist_test=False,
-    )
-
-
 # TODO: fix memory leak and add memory_leak_check
 @pytest.mark.slow
 def test_constant_lowering(decimal_arr_value):
@@ -318,3 +282,57 @@ def test_decimal_ops(memory_leak_check):
         check_func(func, (d1, d1))
         check_func(func, (d1, d2))
         check_func(func, (d2, d1))
+
+
+@pytest.mark.smoke
+def test_setitem_int(decimal_arr_value, memory_leak_check):
+    def test_impl(A, val):
+        A[2] = val
+        return A
+
+    val = decimal_arr_value[0]
+    check_func(test_impl, (decimal_arr_value, val))
+
+
+@pytest.mark.smoke
+def test_setitem_arr(decimal_arr_value, memory_leak_check):
+    def test_impl(A, idx, val):
+        A[idx] = val
+        return A
+
+    np.random.seed(0)
+    idx = np.random.randint(0, len(decimal_arr_value), 11)
+    val = np.array([round(Decimal(val), 10) for val in np.random.rand(11)])
+    check_func(
+        test_impl, (decimal_arr_value, idx, val), dist_test=False, copy_input=True
+    )
+
+    # Single Decimal as a value, reuses the same idx
+    val = Decimal("1.31131")
+    check_func(
+        test_impl, (decimal_arr_value, idx, val), dist_test=False, copy_input=True
+    )
+
+    idx = np.random.ranf(len(decimal_arr_value)) < 0.2
+    val = np.array([round(Decimal(val), 10) for val in np.random.rand(idx.sum())])
+    check_func(
+        test_impl, (decimal_arr_value, idx, val), dist_test=False, copy_input=True
+    )
+
+    # Single Decimal as a value, reuses the same idx
+    val = Decimal("1.31131")
+    check_func(
+        test_impl, (decimal_arr_value, idx, val), dist_test=False, copy_input=True
+    )
+
+    idx = slice(1, 4)
+    val = np.array([round(Decimal(val), 10) for val in np.random.rand(3)])
+    check_func(
+        test_impl, (decimal_arr_value, idx, val), dist_test=False, copy_input=True
+    )
+
+    # Single Decimal as a value, reuses the same idx
+    val = Decimal("1.31131")
+    check_func(
+        test_impl, (decimal_arr_value, idx, val), dist_test=False, copy_input=True
+    )

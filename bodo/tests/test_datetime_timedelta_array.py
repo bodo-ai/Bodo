@@ -1,5 +1,5 @@
 # Copyright (C) 2020 Bodo Inc. All rights reserved.
-""" 
+"""
     Test File for timedelta array types. Covers basic functionality of get_item
     operations, but it is not comprehensive. It does not cover exception cases
     or test extensively against None.
@@ -61,19 +61,6 @@ def test_getitem_slice(timedelta_arr_value, memory_leak_check):
     )
 
 
-def test_setitem_slice(timedelta_arr_value, memory_leak_check):
-    def test_impl(A, ind, vals):
-        A[ind] = vals
-        return A
-
-    ind = slice(3, 8)
-    vals = [datetime.timedelta(days=x, seconds=4, weeks=4) for x in range(5)]
-    # TODO: parallel test
-    check_func(
-        test_impl, (timedelta_arr_value, ind, vals), dist_test=False, copy_input=True
-    )
-
-
 def test_getitem_int_arr(timedelta_arr_value, memory_leak_check):
     def test_impl(A, ind):
         return A[ind]
@@ -83,42 +70,6 @@ def test_getitem_int_arr(timedelta_arr_value, memory_leak_check):
     # TODO: parallel test
     np.testing.assert_array_equal(
         bodo_func(timedelta_arr_value, ind), test_impl(timedelta_arr_value, ind)
-    )
-
-
-@pytest.mark.slow
-def test_setitem_optional_int(timedelta_arr_value, memory_leak_check):
-    def test_impl(A, i, flag):
-        if flag:
-            x = None
-        else:
-            x = datetime.timedelta(microseconds=100000001213181, hours=5)
-        A[i] = x
-        return A
-
-    check_func(
-        test_impl,
-        (timedelta_arr_value.copy(), 1, False),
-        copy_input=True,
-        dist_test=False,
-    )
-    check_func(
-        test_impl,
-        (timedelta_arr_value.copy(), 0, True),
-        copy_input=True,
-        dist_test=False,
-    )
-
-
-@pytest.mark.slow
-def test_setitem_none_int(timedelta_arr_value, memory_leak_check):
-    def test_impl(A, i):
-        A[i] = None
-        return A
-
-    i = 0
-    check_func(
-        test_impl, (timedelta_arr_value.copy(), i), copy_input=True, dist_test=False
     )
 
 
@@ -164,3 +115,57 @@ def test_np_sort(memory_leak_check):
     )
 
     check_func(impl, (A,))
+
+
+@pytest.mark.smoke
+def test_setitem_int(timedelta_arr_value, memory_leak_check):
+    def test_impl(A, val):
+        A[2] = val
+        return A
+
+    val = timedelta_arr_value[0]
+    check_func(test_impl, (timedelta_arr_value, val))
+
+
+@pytest.mark.smoke
+def test_setitem_arr(timedelta_arr_value, memory_leak_check):
+    def test_impl(A, idx, val):
+        A[idx] = val
+        return A
+
+    np.random.seed(0)
+    idx = np.random.randint(0, len(timedelta_arr_value), 11)
+    val = pd.timedelta_range(start="7 hours", periods=len(idx)).to_pytimedelta()
+    check_func(
+        test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
+    )
+
+    # Single datetime.timedelta as a value, reuses the same idx
+    val = datetime.timedelta(seconds=10)
+    check_func(
+        test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
+    )
+
+    idx = np.random.ranf(len(timedelta_arr_value)) < 0.2
+    val = pd.timedelta_range(start="7 hours", periods=idx.sum()).to_pytimedelta()
+    check_func(
+        test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
+    )
+
+    # Single datetime.timedelta as a value, reuses the same idx
+    val = datetime.timedelta(seconds=10)
+    check_func(
+        test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
+    )
+
+    idx = slice(1, 4)
+    val = pd.timedelta_range(start="7 hours", periods=3).to_pytimedelta()
+    check_func(
+        test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
+    )
+
+    # Single datetime.timedelta as a value, reuses the same idx
+    val = datetime.timedelta(seconds=10)
+    check_func(
+        test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
+    )

@@ -7,6 +7,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError
 
 
 @pytest.fixture(
@@ -698,3 +699,201 @@ def test_np_random_multivariate_normal(memory_leak_check):
     # Seeding doesn't seem to work properly so we can't check
     # equality. Instead, test the shape by setting the tolerance very high
     check_func(test_impl, (nvars, nrows), atol=1000.0, rtol=1000.0)
+
+
+@pytest.fixture(
+    params=[
+        pd.arrays.IntegerArray(
+            np.array([1, -3, 2, 3, 10], np.int8),
+            np.array([False, True, True, False, False]),
+        ),
+        pd.array([True, False, True, pd.NA, False]),
+        np.array(
+            [
+                Decimal("1.6"),
+                None,
+                Decimal("-0.222"),
+                Decimal("1111.316"),
+                Decimal("1234.00046"),
+                Decimal("5.1"),
+            ]
+        ),
+        np.append(pd.date_range("2020-01-14", "2020-01-17").date, [None]),
+        np.append(
+            datetime.timedelta(days=5, seconds=4, weeks=4),
+            [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 2,
+        ),
+        # TODO: Fix Categorical in another PR
+        pytest.param(pd.Categorical([1, 2, 5, None, 2]), marks=pytest.mark.skip),
+        pytest.param(
+            pd.Categorical(["AA", "BB", "", "AA", None]), marks=pytest.mark.skip
+        ),
+        pytest.param(
+            pd.Categorical(
+                np.append(pd.date_range("2020-01-14", "2020-01-17").date, [None])
+            ),
+            marks=pytest.mark.skip,
+        ),
+        pytest.param(
+            pd.Categorical(
+                np.append(pd.timedelta_range(start="1 day", periods=4), [None])
+            ),
+            marks=pytest.mark.skip,
+        ),
+    ]
+)
+def mutable_bodo_arrs(request):
+    return request.param
+
+
+# TODO: Add immutable bodo arrays
+
+
+@pytest.mark.slow
+def test_setitem_none(mutable_bodo_arrs, memory_leak_check):
+    def test_impl(A, idx):
+        A[idx] = None
+        return A
+
+    np.random.seed(0)
+
+    # scalar idx
+    idx = np.random.randint(0, len(mutable_bodo_arrs), 1)[0]
+    check_func(
+        test_impl, (mutable_bodo_arrs.copy(), idx), copy_input=True, dist_test=False
+    )
+
+    # int arr idx
+    idx = np.random.randint(0, len(mutable_bodo_arrs), 11)
+    check_func(
+        test_impl, (mutable_bodo_arrs.copy(), idx), copy_input=True, dist_test=False
+    )
+
+    # bool arr idx
+    idx = np.random.ranf(len(mutable_bodo_arrs)) < 0.2
+    check_func(
+        test_impl, (mutable_bodo_arrs.copy(), idx), copy_input=True, dist_test=False
+    )
+
+    # slice idx
+    idx = slice(1, 4)
+    check_func(
+        test_impl, (mutable_bodo_arrs.copy(), idx), copy_input=True, dist_test=False
+    )
+
+
+@pytest.mark.slow
+def test_setitem_optional(mutable_bodo_arrs, memory_leak_check):
+    def test_impl(A, i, flag, val):
+        if flag:
+            x = None
+        else:
+            x = val
+        A[i] = x
+        return A
+
+    np.random.seed(0)
+
+    # scalar idx
+    idx = np.random.randint(0, len(mutable_bodo_arrs), 1)[0]
+    val = mutable_bodo_arrs[0]
+    check_func(
+        test_impl,
+        (mutable_bodo_arrs.copy(), idx, False, val),
+        copy_input=True,
+        dist_test=False,
+    )
+    check_func(
+        test_impl,
+        (mutable_bodo_arrs.copy(), idx, True, val),
+        copy_input=True,
+        dist_test=False,
+    )
+
+    # int arr idx
+    idx = np.random.randint(0, len(mutable_bodo_arrs), 11)
+    check_func(
+        test_impl,
+        (mutable_bodo_arrs.copy(), idx, False, val),
+        copy_input=True,
+        dist_test=False,
+    )
+    check_func(
+        test_impl,
+        (mutable_bodo_arrs.copy(), idx, True, val),
+        copy_input=True,
+        dist_test=False,
+    )
+
+    # bool arr idx
+    idx = np.random.ranf(len(mutable_bodo_arrs)) < 0.2
+    check_func(
+        test_impl,
+        (mutable_bodo_arrs.copy(), idx, False, val),
+        copy_input=True,
+        dist_test=False,
+    )
+    check_func(
+        test_impl,
+        (mutable_bodo_arrs.copy(), idx, True, val),
+        copy_input=True,
+        dist_test=False,
+    )
+
+    # slice idx
+    idx = slice(1, 4)
+    check_func(
+        test_impl,
+        (mutable_bodo_arrs.copy(), idx, False, val),
+        copy_input=True,
+        dist_test=False,
+    )
+    check_func(
+        test_impl,
+        (mutable_bodo_arrs.copy(), idx, True, val),
+        copy_input=True,
+        dist_test=False,
+    )
+
+
+@pytest.mark.slow
+def test_bad_setitem(mutable_bodo_arrs, memory_leak_check):
+    """
+    Tests that a type mismatch gives a reasonable error message and doesn't just fail
+    randomly in Numba.
+
+    These tests check that non-integer values (i.e. floats) aren't accepted.
+    """
+
+    def test_impl_scalar(A):
+        A[2] = 9.8
+        return A
+
+    def test_impl_arr_like(A, ind):
+        A[ind] = np.random.rand(2)
+        return A
+
+    def test_impl_series_like(A, ind):
+        A[ind] = pd.Series(np.random.rand(2))
+        return A
+
+    def test_impl_list_like(A, ind):
+        A[ind] = [1.1, 1.4]
+        return A
+
+    error_msg = "received an incorrect 'value' type"
+    with pytest.raises(BodoError, match=error_msg):
+        bodo.jit(test_impl_scalar)(mutable_bodo_arrs)
+    indices = [
+        np.array([False, True, True, False, False]),
+        np.random.randint(0, len(mutable_bodo_arrs), 2),
+        [1, 2],
+        slice(0, 2),
+    ]
+    for ind in indices:
+        with pytest.raises(BodoError, match=error_msg):
+            bodo.jit(test_impl_arr_like)(mutable_bodo_arrs, ind)
+        with pytest.raises(BodoError, match=error_msg):
+            bodo.jit(test_impl_series_like)(mutable_bodo_arrs, ind)
+        with pytest.raises(BodoError, match=error_msg):
+            bodo.jit(test_impl_list_like)(mutable_bodo_arrs, ind)

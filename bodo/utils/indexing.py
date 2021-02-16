@@ -11,6 +11,7 @@ from numba.core.imputils import impl_ret_borrowed
 from numba.extending import intrinsic, overload, register_jitable
 
 import bodo
+from bodo.utils.typing import BodoError
 
 
 @register_jitable
@@ -102,19 +103,42 @@ def array_getitem_slice_index(A, ind):  # pragma: no cover
     return new_data, new_mask
 
 
-@register_jitable
 def array_setitem_int_index(A, idx, val):  # pragma: no cover
+    return
+
+
+@overload(array_setitem_int_index, no_unliteral=True)
+def array_setitem_int_index_overload(A, idx, val):  # pragma: no cover
     """implements setitem with int index for arrays that have a '_data' attribute and
     '_null_bitmap' attribute (e.g. int/bool/decimal/date). The value is assumed to be
     another array of same type.
     Covered by test_series_iloc_setitem_list_int.
     """
-    val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
-    n = len(val._data)
-    for i in range(n):
-        A._data[idx[i]] = val._data[i]
-        bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
-        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], bit)
+    if bodo.utils.utils.is_array_typ(val) or bodo.utils.typing.is_iterable_type(val):
+
+        def impl_arr(A, idx, val):  # pragma: no cover
+            val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
+            n = len(val._data)
+            for i in range(n):
+                A._data[idx[i]] = val._data[i]
+                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx[i], bit)
+
+        return impl_arr
+
+    if bodo.utils.typing.is_scalar_type(val):
+
+        def impl_scalar(A, idx, val):  # pragma: no cover
+            for i in idx:
+                A._data[i] = val
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+        return impl_scalar
+
+    # Safeguard against gaps in Array setitem to avoid failing in compilation.
+    raise BodoError(
+        f"setitem not supported for {A} with value {val}"
+    )  # pragma: no cover
 
 
 def array_setitem_bool_index(A, idx, val):  # pragma: no cover
@@ -145,16 +169,23 @@ def array_setitem_bool_index_overload(A, idx, val):
 
         return impl_arr
 
-    def impl_scalar(A, idx, val):  # pragma: no cover
-        n = len(idx)
-        val_ind = 0
-        for i in range(n):
-            if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
-                A._data[i] = val
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
-                val_ind += 1
+    if bodo.utils.typing.is_scalar_type(val):
 
-    return impl_scalar
+        def impl_scalar(A, idx, val):  # pragma: no cover
+            n = len(idx)
+            val_ind = 0
+            for i in range(n):
+                if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
+                    A._data[i] = val
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+                    val_ind += 1
+
+        return impl_scalar
+
+    # Safeguard against gaps in Array setitem to avoid failing in compilation.
+    raise BodoError(
+        f"setitem not supported for {A} with value {val}"
+    )  # pragma: no cover
 
 
 @register_jitable
@@ -179,7 +210,6 @@ def array_setitem_slice_index_overload(A, idx, val):  # pragma: no cover
     another array of same type or a scalar.
     Covered by test_series_iloc_setitem_slice.
     """
-
     if bodo.utils.utils.is_array_typ(val) or bodo.utils.typing.is_iterable_type(val):
 
         def impl_arr(A, idx, val):  # pragma: no cover
@@ -197,14 +227,21 @@ def array_setitem_slice_index_overload(A, idx, val):  # pragma: no cover
             setitem_slice_index_null_bits(A._null_bitmap, src_bitmap, idx, n)
 
         return impl_arr
-    else:
+
+    if bodo.utils.typing.is_scalar_type(val):
 
         def impl_scalar(A, idx, val):  # pragma: no cover
             slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
             for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                A[i] = val
+                A._data[i] = val
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
 
         return impl_scalar
+
+    # Safeguard against gaps in Array setitem to avoid failing in compilation.
+    raise BodoError(
+        f"setitem not supported for {A} with value {val}"
+    )  # pragma: no cover
 
 
 def untuple_if_one_tuple(v):
@@ -299,20 +336,105 @@ def overload_add_nested_counts(nested_counts, arr_item):
 def none_optional_setitem_overload(A, idx, val):
     if not bodo.utils.utils.is_array_typ(A, False):
         return  # pragma: no cover
+
     elif val == types.none:
-        return lambda A, idx, val: bodo.libs.array_kernels.setna(
-            A, idx
+        if isinstance(idx, types.Integer):
+            return lambda A, idx, val: bodo.libs.array_kernels.setna(
+                A, idx
+            )  # pragma: no cover
+
+        elif bodo.utils.typing.is_list_like_index_type(idx) and isinstance(
+            idx.dtype, types.Integer
+        ):
+
+            def setitem_none_int_arr(A, idx, val):  # pragma: no cover
+                for i in idx:
+                    bodo.libs.array_kernels.setna(A, i)
+
+            return setitem_none_int_arr
+
+        elif (
+            bodo.utils.typing.is_list_like_index_type(idx) and idx.dtype == types.bool_
+        ):
+
+            def setitem_none_bool_arr(A, idx, val):  # pragma: no cover
+                n = len(idx)
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
+                        bodo.libs.array_kernels.setna(A, i)
+
+            return setitem_none_bool_arr
+
+        elif isinstance(idx, types.SliceType):
+
+            def setitem_none_slice(A, idx, val):  # pragma: no cover
+                n = len(A)
+                slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    bodo.libs.array_kernels.setna(A, i)
+
+            return setitem_none_slice
+
+        raise BodoError(
+            f"setitem for {A} with indexing type {idx} and None value not supported."
         )  # pragma: no cover
+
     elif isinstance(val, types.optional):
 
-        def impl_optional(A, idx, val):  # pragma: no cover
+        if isinstance(idx, types.Integer):
 
-            if val is None:
-                bodo.libs.array_kernels.setna(A, idx)
-            else:
-                A[idx] = bodo.utils.indexing.unoptional(val)
+            def impl_optional(A, idx, val):  # pragma: no cover
+                if val is None:
+                    bodo.libs.array_kernels.setna(A, idx)
+                else:
+                    A[idx] = bodo.utils.indexing.unoptional(val)
 
-        return impl_optional
+            return impl_optional
+
+        elif bodo.utils.typing.is_list_like_index_type(idx) and isinstance(
+            idx.dtype, types.Integer
+        ):
+
+            def setitem_optional_int_arr(A, idx, val):  # pragma: no cover
+                for i in idx:
+                    if val is None:
+                        bodo.libs.array_kernels.setna(A, i)
+                        continue
+                    A[i] = bodo.utils.indexing.unoptional(val)
+
+            return setitem_optional_int_arr
+
+        elif (
+            bodo.utils.typing.is_list_like_index_type(idx) and idx.dtype == types.bool_
+        ):
+
+            def setitem_optional_bool_arr(A, idx, val):  # pragma: no cover
+                n = len(idx)
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
+                        if val is None:
+                            bodo.libs.array_kernels.setna(A, i)
+                            continue
+                        A[i] = bodo.utils.indexing.unoptional(val)
+
+            return setitem_optional_bool_arr
+
+        elif isinstance(idx, types.SliceType):
+
+            def setitem_optional_slice(A, idx, val):  # pragma: no cover
+                n = len(A)
+                slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    if val is None:
+                        bodo.libs.array_kernels.setna(A, i)
+                        continue
+                    A[i] = bodo.utils.indexing.unoptional(val)
+
+            return setitem_optional_slice
+
+        raise BodoError(
+            f"setitem for {A} with indexing type {idx} and optional value not supported."
+        )  # pragma: no cover
 
 
 @intrinsic

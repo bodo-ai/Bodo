@@ -951,8 +951,26 @@ def is_iterable_type(t):
             t,
             (SeriesType, DataFrameType, types.List, types.BaseTuple, types.LiteralList),
         )
-        or bodo.hiframes.pd_index_ext.is_index_type(t)
-        or isinstance(t, bodo.hiframes.pd_index_ext.HeterogeneousIndexType)
+        or bodo.hiframes.pd_index_ext.is_pd_index_type(t)
+    )
+
+
+def is_scalar_type(t):
+    """
+    returns True if 't' is a scalar type like integer, boolean, string, ...
+    """
+    return isinstance(t, (types.Boolean, types.Number, types.StringLiteral,)) or t in (
+        bodo.datetime64ns,
+        bodo.timedelta64ns,
+        bodo.string_type,
+        bodo.datetime_date_type,
+        bodo.datetime_timedelta_type,
+        bodo.pandas_timestamp_type,
+        bodo.pd_timedelta_type,
+        bodo.month_end_type,
+        bodo.week_type,
+        bodo.date_offset_type,
+        types.none,
     )
 
 

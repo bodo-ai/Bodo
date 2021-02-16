@@ -16,7 +16,6 @@ from numba.extending import (
     box,
     intrinsic,
     lower_builtin,
-    lower_getattr,
     make_attribute_wrapper,
     models,
     overload,
@@ -31,9 +30,8 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import array_ext, hdist, hstr_ext
+from bodo.libs import array_ext, hstr_ext
 from bodo.libs.str_arr_ext import kBitmask
-from bodo.utils.typing import is_list_like_index_type
 
 ll.add_symbol("mask_arr_to_bitmap", hstr_ext.mask_arr_to_bitmap)
 ll.add_symbol("is_pd_int_array", array_ext.is_pd_int_array)
@@ -48,6 +46,9 @@ from bodo.utils.indexing import (
     array_setitem_slice_index,
 )
 from bodo.utils.typing import (
+    BodoError,
+    is_iterable_type,
+    is_list_like_index_type,
     is_overload_false,
     is_overload_none,
     is_overload_true,
@@ -514,16 +515,40 @@ def int_arr_setitem(A, idx, val):
     if not isinstance(A, IntegerArrayType):
         return
 
+    if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+        # None/Optional goes through a separate step.
+        return
+
+    typ_err_msg = f"setitem for IntegerArray with indexing type {idx} received an incorrect 'value' type {val}."
+
+    # Pandas allows booleans and integers
+    # TODO(Nick): Verify inputs can be safely case to an integer
+    is_scalar = isinstance(val, (types.Integer, types.Boolean))
+
     # scalar case
     if isinstance(idx, types.Integer):
-        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
-            return
 
-        def impl_scalar(A, idx, val):  # pragma: no cover
-            A._data[idx] = val
-            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
+        if is_scalar:
 
-        return impl_scalar
+            def impl_scalar(A, idx, val):  # pragma: no cover
+                A._data[idx] = val
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
+
+            return impl_scalar
+
+        else:
+            raise BodoError(typ_err_msg)
+
+    # Pandas allows booleans and integers
+    # TODO(Nick): Verify inputs can be safely case to an integer
+    if not (
+        (
+            is_iterable_type(val)
+            and isinstance(val.dtype, (types.Integer, types.Boolean))
+        )
+        or is_scalar
+    ):
+        raise BodoError(typ_err_msg)
 
     # array of int indices
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
@@ -548,6 +573,12 @@ def int_arr_setitem(A, idx, val):
             array_setitem_slice_index(A, idx, val)
 
         return impl_slice_mask
+
+    # This should be the only IntegerArray implementation.
+    # We only expect to reach this case if more idx options are added.
+    raise BodoError(
+        f"setitem for IntegerArray with indexing type {idx} not supported."
+    )  # pragma: no cover
 
 
 @overload(len, no_unliteral=True)

@@ -283,34 +283,6 @@ def test_setitem_int(int_arr_value, memory_leak_check):
     )
 
 
-@pytest.mark.slow
-def test_setitem_none_int(int_arr_value, memory_leak_check):
-    def test_impl(A, i):
-        A[i] = None
-        return A
-
-    i = 1
-    check_func(test_impl, (int_arr_value.copy(), i), copy_input=True, dist_test=False)
-
-
-@pytest.mark.slow
-def test_setitem_optional_int(int_arr_value, memory_leak_check):
-    def test_impl(A, i, flag):
-        if flag:
-            x = None
-        else:
-            x = 42
-        A[i] = x
-        return A
-
-    check_func(
-        test_impl, (int_arr_value.copy(), 1, False), copy_input=True, dist_test=False
-    )
-    check_func(
-        test_impl, (int_arr_value.copy(), 0, True), copy_input=True, dist_test=False
-    )
-
-
 def test_setitem_arr(int_arr_value, memory_leak_check):
     def test_impl(A, idx, val):
         A[idx] = val
@@ -319,37 +291,39 @@ def test_setitem_arr(int_arr_value, memory_leak_check):
     np.random.seed(0)
     idx = np.random.randint(0, len(int_arr_value), 11)
     val = np.random.randint(0, 50, 11, int_arr_value._data.dtype)
-    bodo_func = bodo.jit(test_impl)
-    pd.util.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value, idx, val), test_impl(int_arr_value, idx, val)
-    )
-    # IntegerArray as value
-    val = pd.arrays.IntegerArray(val, np.random.ranf(len(val)) < 0.2)
-    pd.util.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value, idx, val), test_impl(int_arr_value, idx, val)
-    )
+    check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
-    idx_bool = np.random.ranf(len(int_arr_value)) < 0.2
-    val = np.random.randint(0, 50, idx_bool.sum(), int_arr_value._data.dtype)
-    pd.util.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value, idx_bool, val), test_impl(int_arr_value, idx_bool, val)
-    )
-    # IntegerArray as value
+    # IntegerArray as value, reuses the same idx
     val = pd.arrays.IntegerArray(val, np.random.ranf(len(val)) < 0.2)
-    pd.util.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value, idx_bool, val), test_impl(int_arr_value, idx_bool, val)
-    )
+    check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # Single integer as a value, reuses the same idx
+    val = 4
+    check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    idx = np.random.ranf(len(int_arr_value)) < 0.2
+    val = np.random.randint(0, 50, idx.sum(), int_arr_value._data.dtype)
+    check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # IntegerArray as value, reuses the same idx
+    val = pd.arrays.IntegerArray(val, np.random.ranf(len(val)) < 0.2)
+    check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # Single integer as a value, reuses the same idx
+    val = 4
+    check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
     idx = slice(1, 4)
     val = np.random.randint(0, 50, 3, int_arr_value._data.dtype)
-    pd.util.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value, idx, val), test_impl(int_arr_value, idx, val)
-    )
-    # IntegerArray as value
+    check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # IntegerArray as value, reuses the same idx
     val = pd.arrays.IntegerArray(val, np.random.ranf(len(val)) < 0.2)
-    pd.util.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value, idx, val), test_impl(int_arr_value, idx, val)
-    )
+    check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # Single integer as a value, reuses the same idx
+    val = 4
+    check_func(test_impl, (int_arr_value, idx, val), dist_test=False, copy_input=True)
 
 
 @pytest.mark.slow

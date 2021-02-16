@@ -310,27 +310,33 @@ def is_array_typ(var_typ, include_index_series=True):
             bodo.hiframes.split_impl.string_array_split_view_type,
             bodo.hiframes.datetime_date_ext.datetime_date_array_type,
             bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
+            boolean_array,
+            bodo.libs.str_ext.random_access_string_array,
         )
-        or isinstance(var_typ, IntegerArrayType)
-        or isinstance(var_typ, bodo.libs.decimal_arr_ext.DecimalArrayType)
-        or var_typ == boolean_array
-        or isinstance(var_typ, bodo.hiframes.pd_categorical_ext.CategoricalArray)
-        or var_typ == bodo.libs.str_ext.random_access_string_array
-        or isinstance(var_typ, bodo.libs.array_item_arr_ext.ArrayItemArrayType)
-        or isinstance(var_typ, bodo.libs.struct_arr_ext.StructArrayType)
-        or isinstance(var_typ, bodo.libs.tuple_arr_ext.TupleArrayType)
-        or isinstance(var_typ, bodo.libs.map_arr_ext.MapArrayType)
-        or (
-            include_index_series
-            and isinstance(var_typ, bodo.hiframes.pd_series_ext.SeriesType)
-        )
-        or (
-            include_index_series
-            and bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
+        or isinstance(
+            var_typ,
+            (
+                IntegerArrayType,
+                bodo.libs.decimal_arr_ext.DecimalArrayType,
+                bodo.hiframes.pd_categorical_ext.CategoricalArray,
+                bodo.libs.array_item_arr_ext.ArrayItemArrayType,
+                bodo.libs.struct_arr_ext.StructArrayType,
+                bodo.libs.tuple_arr_ext.TupleArrayType,
+                bodo.libs.map_arr_ext.MapArrayType,
+            ),
         )
         or (
             include_index_series
-            and isinstance(var_typ, bodo.hiframes.pd_multi_index_ext.MultiIndexType)
+            and (
+                isinstance(
+                    var_typ,
+                    (
+                        bodo.hiframes.pd_series_ext.SeriesType,
+                        bodo.hiframes.pd_multi_index_ext.MultiIndexType,
+                    ),
+                )
+                or bodo.hiframes.pd_index_ext.is_pd_index_type(var_typ)
+            )
         )
     )
 

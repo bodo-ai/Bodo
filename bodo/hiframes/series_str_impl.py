@@ -8,15 +8,7 @@ import re
 import numba
 import numpy as np
 from numba.core import cgutils, types
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    AttributeTemplate,
-    bound_function,
-    infer_global,
-    signature,
-)
 from numba.extending import (
-    infer_getattr,
     intrinsic,
     make_attribute_wrapper,
     models,
@@ -29,16 +21,9 @@ from numba.extending import (
 import bodo
 from bodo.hiframes.pd_index_ext import StringIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.pd_timestamp_ext import (
-    convert_datetime64_to_timestamp,
-    integer_to_dt64,
-    pandas_timestamp_type,
-)
 from bodo.hiframes.split_impl import (
-    get_array_ctypes_ptr,
     get_split_view_data_ptr,
     get_split_view_index,
-    getitem_c_arr,
     string_array_split_view_type,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
@@ -55,7 +40,6 @@ from bodo.utils.typing import (
     get_overload_const_list,
     get_overload_const_str,
     get_overload_const_str_len,
-    is_iterable_type,
     is_list_like_index_type,
     is_overload_constant_bool,
     is_overload_constant_int,
@@ -64,7 +48,6 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_none,
     is_overload_true,
-    is_overload_zero,
     raise_bodo_error,
 )
 
@@ -1109,7 +1092,9 @@ def create_str2bool_methods_overload(func_name):
         func_text += "        if bodo.libs.array_kernels.isna(str_arr, i):\n"
         func_text += "            bodo.libs.array_kernels.setna(out_arr, i)\n"
         func_text += "        else:\n"
-        func_text += "            out_arr[i] = str_arr[i].{}()\n".format(func_name)
+        func_text += "            out_arr[i] = np.bool_(str_arr[i].{}())\n".format(
+            func_name
+        )
         func_text += "    return bodo.hiframes.pd_series_ext.init_series(\n"
         func_text += "      out_arr,index, name)\n"
         loc_vars = {}

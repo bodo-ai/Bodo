@@ -7,17 +7,8 @@ import operator
 
 import numba
 import numpy as np
-import pandas as pd
 from numba.core import cgutils, types
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    AttributeTemplate,
-    bound_function,
-    infer_global,
-    signature,
-)
 from numba.extending import (
-    infer_getattr,
     intrinsic,
     make_attribute_wrapper,
     models,
@@ -29,18 +20,9 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.pd_timestamp_ext import (
-    convert_datetime64_to_timestamp,
-    integer_to_dt64,
-    pandas_timestamp_type,
-)
 from bodo.utils.typing import (
-    BodoError,
     check_unsupported_args,
     create_unsupported_overload,
-    is_list_like_index_type,
-    is_overload_false,
-    is_overload_true,
     raise_bodo_error,
 )
 
@@ -111,12 +93,20 @@ def create_date_field_overload(field):
         func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
         func_text += "    numba.parfors.parfor.init_prange()\n"
         func_text += "    n = len(arr)\n"
-        if field not in ("is_leap_year",):
+        if field in (
+            "is_leap_year",
+            "is_month_start",
+            "is_month_end",
+            "is_quarter_start",
+            "is_quarter_end",
+            "is_year_start",
+            "is_year_end",
+        ):
+            func_text += "    out_arr = np.empty(n, np.bool_)\n"
+        else:
             func_text += (
                 "    out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)\n"
             )
-        else:
-            func_text += "    out_arr = np.empty(n, np.bool_)\n"
 
         func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "        if bodo.libs.array_kernels.isna(arr, i):\n"

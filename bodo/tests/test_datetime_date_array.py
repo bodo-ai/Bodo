@@ -68,34 +68,6 @@ def test_getitem_int_arr(date_arr_value, memory_leak_check):
     )
 
 
-@pytest.mark.slow
-def test_setitem_optional_int(date_arr_value, memory_leak_check):
-    def test_impl(A, i, flag):
-        if flag:
-            x = None
-        else:
-            x = datetime.date(2020, 9, 8)
-        A[i] = x
-        return A
-
-    check_func(
-        test_impl, (date_arr_value.copy(), 1, False), copy_input=True, dist_test=False
-    )
-    check_func(
-        test_impl, (date_arr_value.copy(), 0, True), copy_input=True, dist_test=False
-    )
-
-
-@pytest.mark.slow
-def test_setitem_none_int(date_arr_value, memory_leak_check):
-    def test_impl(A, i):
-        A[i] = None
-        return A
-
-    i = 1
-    check_func(test_impl, (date_arr_value.copy(), i), copy_input=True, dist_test=False)
-
-
 def test_np_repeat(date_arr_value, memory_leak_check):
     def impl(arr):
         return np.repeat(arr, 2)
@@ -136,3 +108,46 @@ def test_np_sort(memory_leak_check):
     )
 
     check_func(impl, (A,))
+
+
+@pytest.mark.smoke
+def test_setitem_int(date_arr_value, memory_leak_check):
+    def test_impl(A, val):
+        A[2] = val
+        return A
+
+    # get a non-null value
+    val = date_arr_value[0]
+    check_func(test_impl, (date_arr_value, val))
+
+
+@pytest.mark.smoke
+def test_setitem_arr(date_arr_value, memory_leak_check):
+    def test_impl(A, idx, val):
+        A[idx] = val
+        return A
+
+    np.random.seed(0)
+    idx = np.random.randint(0, len(date_arr_value), 11)
+    val = pd.date_range("2021-02-21", periods=len(idx)).date
+    check_func(test_impl, (date_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # Single datetime.date as a value, reuses the same idx
+    val = datetime.date(2021, 2, 11)
+    check_func(test_impl, (date_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    idx = np.random.ranf(len(date_arr_value)) < 0.2
+    val = pd.date_range("2021-02-21", periods=idx.sum()).date
+    check_func(test_impl, (date_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # Single datetime.date as a value, reuses the same idx
+    val = datetime.date(2021, 2, 11)
+    check_func(test_impl, (date_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    idx = slice(1, 4)
+    val = pd.date_range("2021-02-21", periods=3).date
+    check_func(test_impl, (date_arr_value, idx, val), dist_test=False, copy_input=True)
+
+    # Single datetime.date as a value, reuses the same idx
+    val = datetime.date(2021, 2, 11)
+    check_func(test_impl, (date_arr_value, idx, val), dist_test=False, copy_input=True)

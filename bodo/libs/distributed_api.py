@@ -2016,7 +2016,7 @@ def slice_getitem_from_start_overload(arr, slice_index):
             bodo.libs.distributed_api.bcast(A)
             return A
 
-        return getitem_datetime_date_impl
+        return getitem_datetime_timedelta_impl
 
     if isinstance(arr.dtype, Decimal128Type):
         precision = arr.dtype.precision

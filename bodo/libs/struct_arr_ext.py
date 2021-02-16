@@ -8,10 +8,8 @@ A:             ["AA", "B", "C"]
 B:             [1, 2, 4]
 """
 import operator
-from collections import namedtuple
 
 import llvmlite.binding as ll
-import numba
 import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
@@ -20,16 +18,11 @@ from numba.extending import (
     NativeValue,
     box,
     intrinsic,
-    lower_builtin,
-    lower_getattr,
-    make_attribute_wrapper,
     models,
     overload,
     overload_attribute,
     overload_method,
     register_model,
-    type_callable,
-    typeof_impl,
     unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
@@ -43,8 +36,6 @@ from bodo.utils.cg_helpers import (
     get_array_elem_counts,
     get_bitmap_bit,
     is_na_value,
-    list_check,
-    pyarray_getitem,
     pyarray_setitem,
     seq_getitem,
     set_bitmap_bit,
@@ -1298,10 +1289,11 @@ def struct_arr_setitem(arr, ind, val):
     if not isinstance(arr, StructArrayType):
         return
 
-    if isinstance(ind, types.Integer):
+    if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+        # None/Optional goes through a separate step.
+        return
 
-        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
-            return
+    if isinstance(ind, types.Integer):
 
         n_fields = len(arr.data)
         func_text = "def impl(arr, ind, val):\n"

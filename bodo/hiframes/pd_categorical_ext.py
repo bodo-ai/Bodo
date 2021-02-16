@@ -818,10 +818,12 @@ def categorical_array_setitem(arr, ind, val):
     if not isinstance(arr, CategoricalArray):
         return
 
+    if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+        # None/Optional goes through a separate step.
+        return
+
     # scalar case
     if isinstance(ind, types.Integer):
-        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
-            return
 
         def impl_scalar(arr, ind, val):  # pragma: no cover
             for i in range(len(arr.dtype.categories)):

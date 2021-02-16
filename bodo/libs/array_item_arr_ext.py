@@ -21,30 +21,23 @@ from numba.extending import (
     NativeValue,
     box,
     intrinsic,
-    lower_builtin,
-    lower_getattr,
-    make_attribute_wrapper,
     models,
     overload,
     overload_attribute,
     overload_method,
     register_model,
-    type_callable,
-    typeof_impl,
     unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
-from bodo.libs import array_ext, hdist
+from bodo.libs import array_ext
 from bodo.utils.cg_helpers import (
     gen_allocate_array,
     get_array_elem_counts,
     get_bitmap_bit,
     is_na_value,
-    list_check,
-    pyarray_getitem,
     pyarray_setitem,
     seq_getitem,
     set_bitmap_bit,

@@ -16,7 +16,6 @@ from numba.extending import (
     NativeValue,
     box,
     intrinsic,
-    lower_getattr,
     make_attribute_wrapper,
     models,
     overload,
@@ -38,7 +37,12 @@ from bodo.utils.indexing import (
     get_new_null_mask_slice_index,
     setitem_slice_index_null_bits,
 )
-from bodo.utils.typing import is_list_like_index_type, is_overload_constant_str
+from bodo.utils.typing import (
+    BodoError,
+    is_iterable_type,
+    is_list_like_index_type,
+    is_overload_constant_str,
+)
 
 ll.add_symbol(
     "box_datetime_timedelta_array", hdatetime_ext.box_datetime_timedelta_array
@@ -1503,65 +1507,126 @@ def dt_timedelta_arr_setitem(A, ind, val):
     if A != datetime_timedelta_array_type:
         return
 
+    if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+        # None/Optional goes through a separate step.
+        return
+
+    typ_err_msg = f"setitem for DatetimeTimedeltaArray with indexing type {ind} received an incorrect 'value' type {val}."
+
     # scalar case
     if isinstance(ind, types.Integer):
-        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
-            return
 
-        def impl(A, ind, val):  # pragma: no cover
-            A._days_data[ind] = val._days
-            A._seconds_data[ind] = val._seconds
-            A._microseconds_data[ind] = val._microseconds
-            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind, 1)
+        if types.unliteral(val) == datetime_timedelta_type:
 
-        # TODO: Confirm the coverage and if its missing add it to the test cases
-        return impl
+            def impl(A, ind, val):  # pragma: no cover
+                A._days_data[ind] = val._days
+                A._seconds_data[ind] = val._seconds
+                A._microseconds_data[ind] = val._microseconds
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind, 1)
+
+            # TODO: Confirm the coverage and if its missing add it to the test cases
+            return impl
+
+        else:
+            raise BodoError(typ_err_msg)
+
+    if not (
+        (is_iterable_type(val) and val.dtype == bodo.datetime_timedelta_type)
+        or types.unliteral(val) == datetime_timedelta_type
+    ):
+        raise BodoError(typ_err_msg)
 
     # array of integers
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
-        def impl_arr_ind(A, ind, val):  # pragma: no cover
-            # Heavily influenced by array_setitem_int_index.
-            # Just replaces calls for new data with all 3 arrays
-            val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
-            n = len(val._days_data)
-            for i in range(n):
-                A._days_data[ind[i]] = val._days_data[i]
-                A._seconds_data[ind[i]] = val._seconds_data[i]
-                A._microseconds_data[ind[i]] = val._microseconds_data[i]
-                bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
-                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], bit)
+        if types.unliteral(val) == datetime_timedelta_type:
 
-        # TODO: Confirm the coverage and if its missing add it to the test cases
-        return impl_arr_ind
+            def impl_arr_ind_scalar(A, ind, val):  # pragma: no cover
+                n = len(A)
+                for i in range(n):
+                    A._days_data[ind[i]] = val._days
+                    A._seconds_data[ind[i]] = val._seconds
+                    A._microseconds_data[ind[i]] = val._microseconds
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], 1)
+
+            # TODO: Confirm the coverage and if its missing add it to the test cases
+            return impl_arr_ind_scalar
+
+        else:
+
+            def impl_arr_ind(A, ind, val):  # pragma: no cover
+                # Heavily influenced by array_setitem_int_index.
+                # Just replaces calls for new data with all 3 arrays
+                val = bodo.utils.conversion.coerce_to_array(
+                    val, use_nullable_array=True
+                )
+                n = len(val._days_data)
+                for i in range(n):
+                    A._days_data[ind[i]] = val._days_data[i]
+                    A._seconds_data[ind[i]] = val._seconds_data[i]
+                    A._microseconds_data[ind[i]] = val._microseconds_data[i]
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(val._null_bitmap, i)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, ind[i], bit)
+
+            # TODO: Confirm the coverage and if its missing add it to the test cases
+            return impl_arr_ind
 
     # bool array
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
-        def impl_bool_ind_mask(A, ind, val):  # pragma: no cover
-            # Heavily influenced by array_setitem_bool_index.
-            # Just replaces calls for new data with all 3 arrays
-            val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
-            n = len(ind)
-            val_ind = 0
-            for i in range(n):
-                if ind[i]:
-                    A._days_data[i] = val._days_data[val_ind]
-                    A._seconds_data[i] = val._seconds_data[val_ind]
-                    A._microseconds_data[i] = val._microseconds_data[val_ind]
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
-                        val._null_bitmap, val_ind
-                    )
-                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
-                    val_ind += 1
+        if types.unliteral(val) == datetime_timedelta_type:
 
-        return impl_bool_ind_mask
+            def impl_bool_ind_mask_scalar(A, ind, val):  # pragma: no cover
+                # Heavily influenced by array_setitem_bool_index.
+                # Just replaces calls for new data with all 3 arrays
+                n = len(ind)
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
+                        A._days_data[i] = val._days
+                        A._seconds_data[i] = val._seconds
+                        A._microseconds_data[i] = val._microseconds
+                        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+            return impl_bool_ind_mask_scalar
+
+        else:
+
+            def impl_bool_ind_mask(A, ind, val):  # pragma: no cover
+                # Heavily influenced by array_setitem_bool_index.
+                # Just replaces calls for new data with all 3 arrays
+                val = bodo.utils.conversion.coerce_to_array(
+                    val, use_nullable_array=True
+                )
+                n = len(ind)
+                val_ind = 0
+                for i in range(n):
+                    if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
+                        A._days_data[i] = val._days_data[val_ind]
+                        A._seconds_data[i] = val._seconds_data[val_ind]
+                        A._microseconds_data[i] = val._microseconds_data[val_ind]
+                        bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+                            val._null_bitmap, val_ind
+                        )
+                        bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
+                        val_ind += 1
+
+            return impl_bool_ind_mask
 
     # slice case
     if isinstance(ind, types.SliceType):
-        if val == datetime_timedelta_array_type or bodo.utils.typing.is_iterable_type(
-            val
-        ):
+        if types.unliteral(val) == datetime_timedelta_type:
+
+            def impl_slice_scalar(A, ind, val):  # pragma: no cover
+                slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    A._days_data[i] = val._days
+                    A._seconds_data[i] = val._seconds
+                    A._microseconds_data[i] = val._microseconds
+                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, 1)
+
+            return impl_slice_scalar
+
+        else:
 
             def impl_slice_mask(A, ind, val):  # pragma: no cover
                 # Heavily influenced by array_setitem_slice_index.
@@ -1583,15 +1648,11 @@ def dt_timedelta_arr_setitem(A, ind, val):
 
             return impl_slice_mask
 
-        # If val is a scalar directly set the value
-        else:
-
-            def impl_slice_scalar(A, ind, val):  # pragma: no cover
-                slice_idx = numba.cpython.unicode._normalize_slice(ind, len(A))
-                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                    A[i] = val
-
-            return impl_slice_scalar
+    # This should be the only IntegerArray implementation.
+    # We only expect to reach this case if more ind options are added.
+    raise BodoError(
+        f"setitem for DatetimeTimedeltaArray with indexing type {ind} not supported."
+    )  # pragma: no cover
 
 
 @overload(len, no_unliteral=True)

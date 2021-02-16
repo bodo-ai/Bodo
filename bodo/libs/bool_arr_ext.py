@@ -46,7 +46,13 @@ from bodo.utils.indexing import (
     array_setitem_int_index,
     array_setitem_slice_index,
 )
-from bodo.utils.typing import is_overload_false, is_overload_true, parse_dtype
+from bodo.utils.typing import (
+    BodoError,
+    is_iterable_type,
+    is_overload_false,
+    is_overload_true,
+    parse_dtype,
+)
 
 
 class BooleanArrayType(types.ArrayCompatible):
@@ -512,16 +518,30 @@ def bool_arr_setitem(A, idx, val):
 
     # TODO: refactor with int arr since almost same code
 
+    if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+        # None/Optional goes through a separate step.
+        return
+
+    typ_err_msg = f"setitem for BooleanArray with indexing type {idx} received an incorrect 'value' type {val}."
+
     # scalar case
     if isinstance(idx, types.Integer):
-        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
-            return
 
-        def impl_scalar(A, idx, val):  # pragma: no cover
-            A._data[idx] = val
-            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
+        if types.unliteral(val) == types.bool_:
 
-        return impl_scalar
+            def impl_scalar(A, idx, val):  # pragma: no cover
+                A._data[idx] = val
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
+
+            return impl_scalar
+        else:
+            raise BodoError(typ_err_msg)
+
+    if not (
+        (is_iterable_type(val) and val.dtype == types.bool_)
+        or types.unliteral(val) == types.bool_
+    ):
+        raise BodoError(typ_err_msg)
 
     # array of int indices
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
@@ -546,6 +566,12 @@ def bool_arr_setitem(A, idx, val):
             array_setitem_slice_index(A, idx, val)
 
         return impl_slice_mask
+
+    # This should be the only BooleanArray implementation.
+    # We only expect to reach this case if more idx options are added.
+    raise BodoError(
+        f"setitem for BooleanArray with indexing type {idx} not supported."
+    )  # pragma: no cover
 
 
 @overload(len, no_unliteral=True)

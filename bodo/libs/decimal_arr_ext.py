@@ -21,8 +21,6 @@ from numba.extending import (
     NativeValue,
     box,
     intrinsic,
-    lower_builtin,
-    lower_getattr,
     make_attribute_wrapper,
     models,
     overload,
@@ -62,11 +60,11 @@ from bodo.utils.typing import (
     BodoError,
     get_overload_const_int,
     get_overload_const_str,
+    is_iterable_type,
     is_list_like_index_type,
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
-    parse_dtype,
 )
 
 int128_type = types.Integer("int128", 128)
@@ -666,22 +664,39 @@ def decimal_arr_setitem(A, idx, val):
     if not isinstance(A, DecimalArrayType):
         return
 
+    if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+        # None/Optional goes through a separate step.
+        return
+
+    typ_err_msg = f"setitem for DecimalArray with indexing type {idx} received an incorrect 'value' type {val}."
+
     # scalar case
     if isinstance(idx, types.Integer):
-        if val == types.none or isinstance(val, types.optional):  # pragma: no cover
-            return
         # This is the existing type check
-        assert isinstance(val, Decimal128Type)
+        if isinstance(val, Decimal128Type):
 
-        def impl_scalar(A, idx, val):  # pragma: no cover
-            A._data[idx] = decimal128type_to_int128(val)
-            bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
+            def impl_scalar(A, idx, val):  # pragma: no cover
+                A._data[idx] = decimal128type_to_int128(val)
+                bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, idx, 1)
 
-        # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
-        return impl_scalar
+            # Covered by test_series_iat_setitem , test_series_iloc_setitem_int , test_series_setitem_int
+            return impl_scalar
+        else:
+            raise BodoError(typ_err_msg)
+
+    if not (
+        (is_iterable_type(val) and isinstance(val.dtype, bodo.Decimal128Type))
+        or isinstance(val, Decimal128Type)
+    ):
+        raise BodoError(typ_err_msg)
 
     # index is integer array/list
     if is_list_like_index_type(idx) and isinstance(idx.dtype, types.Integer):
+
+        if isinstance(val, Decimal128Type):
+            return lambda A, idx, val: array_setitem_int_index(
+                A, idx, decimal128type_to_int128(val)
+            )  # pragma: no cover
 
         def impl_arr_ind_mask(A, idx, val):  # pragma: no cover
             array_setitem_int_index(A, idx, val)
@@ -692,6 +707,11 @@ def decimal_arr_setitem(A, idx, val):
     # bool array
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
 
+        if isinstance(val, Decimal128Type):
+            return lambda A, idx, val: array_setitem_bool_index(
+                A, idx, decimal128type_to_int128(val)
+            )  # pragma: no cover
+
         def impl_bool_ind_mask(A, idx, val):  # pragma: no cover
             array_setitem_bool_index(A, idx, val)
 
@@ -700,11 +720,22 @@ def decimal_arr_setitem(A, idx, val):
     # slice case
     if isinstance(idx, types.SliceType):
 
+        if isinstance(val, Decimal128Type):
+            return lambda A, idx, val: array_setitem_slice_index(
+                A, idx, decimal128type_to_int128(val)
+            )  # pragma: no cover
+
         def impl_slice_mask(A, idx, val):  # pragma: no cover
             array_setitem_slice_index(A, idx, val)
 
         # covered by test_series_setitem_slice
         return impl_slice_mask
+
+    # This should be the only DecimalArray implementation.
+    # We only expect to reach this case if more idx options are added.
+    raise BodoError(
+        f"setitem for DecimalArray with indexing type {idx} not supported."
+    )  # pragma: no cover
 
 
 @overload(operator.getitem, no_unliteral=True)

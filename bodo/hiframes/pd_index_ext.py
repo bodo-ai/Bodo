@@ -2428,6 +2428,8 @@ def _install_binary_ops():
 _install_binary_ops()
 
 
+# TODO(Nick): Consolidate this with is_pd_index_type?
+# They only differ by HeterogeneousIndexType
 def is_index_type(t):
     """return True if 't' is an Index type"""
     return isinstance(
