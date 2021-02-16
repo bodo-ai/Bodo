@@ -483,7 +483,7 @@ def test_np_linspace(memory_leak_check):
     check_func(test_impl, (-5, 4.5252, 1000))
 
 
-# TODO(Nick): Readd slow when np.linspace is confirmed to work on CI
+@pytest.mark.slow
 def test_np_linspace_int(memory_leak_check):
     def test_impl(start, stop, num, dtype):
         return np.linspace(start, stop, num=num, dtype=dtype)
@@ -493,7 +493,7 @@ def test_np_linspace_int(memory_leak_check):
     check_func(test_impl, (-5, 4.5252, 1000, np.int32))
 
 
-# TODO(Nick): Readd slow when np.linspace is confirmed to work on CI
+@pytest.mark.slow
 def test_np_linspace_float(memory_leak_check):
     def test_impl(start, stop, num, dtype):
         return np.linspace(start, stop, num=num, dtype=dtype)
@@ -503,7 +503,7 @@ def test_np_linspace_float(memory_leak_check):
     check_func(test_impl, (-5, 4.5252, 1000, np.float32))
 
 
-# TODO(Nick): Readd slow when np.linspace is confirmed to work on CI
+@pytest.mark.slow
 def test_np_linspace_kwargs(memory_leak_check):
     def test_impl(start, stop, num, dtype, endpoint):
         return np.linspace(
@@ -515,7 +515,7 @@ def test_np_linspace_kwargs(memory_leak_check):
     check_func(test_impl, (-5, 4.5252, 100000, np.int64, False))
 
 
-# TODO: Move test to slow after merge
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "num_arr",
     [
