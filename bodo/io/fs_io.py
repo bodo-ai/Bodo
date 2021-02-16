@@ -204,7 +204,7 @@ def hdfs_is_directory(path):
     except Exception as e:
         raise BodoError(" Hadoop file system cannot be created: {}".format(e))
     # target stat of the path: file or just the directory itself
-    target_stat = hdfs.get_file_info([path])
+    target_stat = hdfs.get_file_info([hdfs_path])
 
     if target_stat[0].type in (FileType.NotFound, FileType.Unknown):
         raise BodoError("{} is a " "non-existing or unreachable file".format(path))
@@ -360,20 +360,22 @@ def find_file_name_or_handler(path, ftype):
     elif parsed_url.scheme == "hdfs":  # pragma: no cover
         is_handler = True
         (fs, all_files) = hdfs_list_dir_fnames(path)
-        f_size = fs.get_file_info([fname])[0].size
+        f_size = fs.get_file_info([parsed_url.path])[0].size
 
         if all_files:
             path = path.rstrip("/")
             all_files = [
                 (path + "/" + f) for f in sorted(filter(filter_func, all_files))
             ]
-            all_csv_files = [f for f in all_files if fs.get_file_info([f])[0].size > 0]
+            all_csv_files = [
+                f for f in all_files if fs.get_file_info([urlparse(f).path])[0].size > 0
+            ]
             if len(all_csv_files) == 0:  # pragma: no cover
                 # TODO: test
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
-            f_size = fs.get_file_info([fname])[0].size
             fname = urlparse(fname).path  # strip off hdfs://port:host/
+            f_size = fs.get_file_info([fname])[0].size
 
         file_name_or_handler = fs.open_input_file(fname)
     # TODO: this can be merged with hdfs path above when pyarrow's new

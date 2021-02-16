@@ -40,6 +40,8 @@ struct DatasetReader {
     int start_row_first_file = 0;
     /// Total number of rows this process has to read (across files)
     int count = 0;
+    // Prefix to add to each of the paths before they're appended to filepaths
+    std::string prefix = "";
 };
 
 /**
@@ -208,6 +210,11 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
     int64_t total_rows = PyLong_AsLongLong(total_rows_py);
     Py_DECREF(total_rows_py);
 
+    // prefix = ds._prefix
+    PyObject *prefix_py = PyObject_GetAttrString(ds, "_prefix");
+    ds_reader->prefix = PyUnicode_AsUTF8(prefix_py);
+    Py_DECREF(prefix_py);
+
     // all_pieces = ds.pieces
     PyObject *all_pieces = PyObject_GetAttrString(ds, "pieces");
     Py_DECREF(ds);
@@ -238,7 +245,8 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                     PyObject *p = PyObject_GetAttrString(piece, "path");
                     const char *c_path = PyUnicode_AsUTF8(p);
                     // store the filename for this piece
-                    ds_reader->filepaths.push_back(c_path);
+                    // prepend the prefix to the path
+                    ds_reader->filepaths.push_back(ds_reader->prefix + c_path);
                     // for this parquet file: store partition value of each
                     // partition column in ds_reader
                     get_partition_info(ds_reader, piece);
@@ -296,7 +304,8 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                 // open and store filepath for this piece
                 PyObject *p = PyObject_GetAttrString(piece, "path");
                 const char *c_path = PyUnicode_AsUTF8(p);
-                ds_reader->filepaths.push_back(c_path);
+                // prepend the prefix to the path and add it to filepaths
+                ds_reader->filepaths.push_back(ds_reader->prefix + c_path);
                 // for this parquet file: store partition value of each
                 // partition column in ds_reader
                 get_partition_info(ds_reader, piece);

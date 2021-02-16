@@ -206,9 +206,13 @@ FileReader *init_hdfs_reader(const char *fname, const char *suffix,
     arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempfs =
         ::arrow::fs::FileSystemFromUri(fname, &path);
     arrow::fs::FileInfo file_stat;
+    
+    arrow::internal::Uri uri;
+    (void)uri.Parse(fname);
     arrow::Result<arrow::fs::FileInfo> result =
-        fs->GetFileInfo(fname);
+        fs->GetFileInfo(uri.path());
     CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stat)
+    
     if (file_stat.IsDirectory()) {
         return new HdfsDirectoryFileReader(fname, suffix, csv_header, json_lines);
     } else if (file_stat.IsFile()) {

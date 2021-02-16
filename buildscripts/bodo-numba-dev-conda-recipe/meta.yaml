@@ -24,7 +24,7 @@ requirements:
     - cython
     - s3fs =0.4.2
     - pandas 1.2.0
-    - pyarrow =2.0.0
+    - pyarrow =3.0.0
     - boost-cpp =1.74.0
     - hdf5 * mpi_mpich_* # [not win]
     - h5py
@@ -39,7 +39,7 @@ requirements:
     - python =3.8
     - {{ pin_compatible('numpy') }}
     - pandas 1.2.0
-    - pyarrow =2.0.0
+    - pyarrow =3.0.0
     - boost-cpp =1.74.0
     - numba
     - openjdk =8

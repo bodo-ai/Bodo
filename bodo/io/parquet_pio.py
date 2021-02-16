@@ -75,6 +75,7 @@ use_nullable_int_arr = True
 
 
 import pyarrow.parquet as pq
+from urllib.parse import urlparse
 
 
 class ParquetPredicateType(types.Type):
@@ -1014,6 +1015,34 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
     if isinstance(dataset, Exception):
         e = dataset
         raise e
+
+    # When we pass in a path instead of a filename or list of files to
+    # pq.ParquetDataset, the path of the pieces of the resulting dataset
+    # object may not contain the prefix such as hdfs://localhost:9000,
+    # so we need to store the information in some way since the
+    # code that uses this dataset object needs to know this information.
+    # Therefore, in case this prefix is not present, we add it
+    # to the dataset object as a new attribute (_prefix).
+
+    # Parse the URI
+    fpath_options = urlparse(fpath)
+    # Only hdfs seems to be affected based on:
+    # https://github.com/apache/arrow/blob/ab307365198d5724a0b3331a05704d0fe4bcd710/python/pyarrow/parquet.py#L50
+    # which is called in pq.ParquetDataset.__init__
+    # https://github.com/apache/arrow/blob/ab307365198d5724a0b3331a05704d0fe4bcd710/python/pyarrow/parquet.py#L1235
+    dataset._prefix = ""
+    if fpath_options.scheme in ["hdfs"]:
+        # Compute the prefix that is expected to be there in the
+        # path of the pieces
+        prefix = f"{fpath_options.scheme}://{fpath_options.netloc}"
+        # As a heuristic, we only check if the first piece is missing
+        # this prefix
+        if len(dataset.pieces) > 0:
+            piece = dataset.pieces[0]
+            # If it is missing, then assign it to _prefix attribute of
+            # the dataset object, else set _prefix to an empty string
+            if not piece.path.startswith(prefix):
+                dataset._prefix = prefix
 
     return dataset
 

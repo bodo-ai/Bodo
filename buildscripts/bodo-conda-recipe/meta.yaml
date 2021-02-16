@@ -25,7 +25,7 @@ requirements:
     - cython
     - s3fs =0.4.2
     - pandas 1.2.*
-    - pyarrow =2.0.0
+    - pyarrow =3.0.0
     - boost-cpp =1.74.0
     - libcurl
     - hdf5 * mpi_mpich_* # [not win]
@@ -41,7 +41,7 @@ requirements:
     - python =3.8
     - {{ pin_compatible('numpy') }}
     - pandas 1.2.*
-    - pyarrow =2.0.0
+    - pyarrow =3.0.0
     - boost-cpp =1.74.0
     - libcurl
     - numba 0.52.0
