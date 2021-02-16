@@ -1149,6 +1149,7 @@ class UntypedPass:
             )
 
         # if inference is required
+        dtype_map = {}
         if dtype_var == "" or col_names == 0:
             # infer column names and types from constant filename
             msg = (
@@ -1178,6 +1179,13 @@ class UntypedPass:
                 )
             dtypes = df_type.data
             usecols = list(range(len(dtypes))) if usecols == "" else usecols
+            # make sure usecols has column indices (not names)
+            usecols = [
+                _get_col_ind_from_name_or_ind(
+                    c, col_names if col_names else df_type.columns
+                )
+                for c in usecols
+            ]
             # convert Pandas generated integer names if any
             cols = [str(df_type.columns[i]) for i in usecols]
             # overwrite column names like Pandas if explicitly provided
@@ -1187,9 +1195,12 @@ class UntypedPass:
             dtype_map = {c: dtypes[usecols[i]] for i, c in enumerate(col_names)}
 
         usecols = list(range(len(col_names))) if usecols == "" else usecols
+        # make sure usecols has column indices (not names)
+        usecols = [_get_col_ind_from_name_or_ind(c, col_names) for c in usecols]
 
         # handle dtype arg if provided
         if dtype_var != "":
+            # NOTE: the user may provide dtype for only a subset of columns
 
             dtype_map_const = get_const_value(
                 dtype_var,
@@ -1199,9 +1210,14 @@ class UntypedPass:
             )
             if isinstance(dtype_map_const, dict):
                 self._fix_dict_typing(dtype_var)
-                dtype_map = {
-                    c: _dtype_val_to_arr_type(t) for c, t in dtype_map_const.items()
-                }
+                dtype_map.update(
+                    {
+                        col_names[
+                            _get_col_ind_from_name_or_ind(c, col_names)
+                        ]: _dtype_val_to_arr_type(t)
+                        for c, t in dtype_map_const.items()
+                    }
+                )
             else:
                 dtype_map = _dtype_val_to_arr_type(dtype_map_const)
 
@@ -1459,6 +1475,8 @@ class UntypedPass:
         return nodes
 
     def _get_read_file_col_info(self, dtype_map, date_cols, col_names, lhs):
+        """get column names, ir.Var objects, and data types for file read (csv/json)"""
+        # single dtype is provided instead of dictionary
         if isinstance(dtype_map, types.Type):
             typ = dtype_map
             data_arrs = [
@@ -2002,6 +2020,14 @@ def _dtype_val_to_arr_type(t):
         pass
 
     raise BodoError(f"invalid dtype value {t}")
+
+
+def _get_col_ind_from_name_or_ind(c, col_names):
+    """get column index from column name or index"""
+    # TODO(ehsan): error checking
+    if isinstance(c, int) and c not in col_names:
+        return c
+    return col_names.index(c)
 
 
 class JSONFileInfo(FileInfo):
