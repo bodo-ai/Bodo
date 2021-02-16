@@ -1179,6 +1179,13 @@ class UntypedPass:
                 )
             dtypes = df_type.data
             usecols = list(range(len(dtypes))) if usecols == "" else usecols
+            # make sure usecols has column indices (not names)
+            usecols = [
+                _get_col_ind_from_name_or_ind(
+                    c, col_names if col_names else df_type.columns
+                )
+                for c in usecols
+            ]
             # convert Pandas generated integer names if any
             cols = [str(df_type.columns[i]) for i in usecols]
             # overwrite column names like Pandas if explicitly provided
@@ -1188,6 +1195,8 @@ class UntypedPass:
             dtype_map = {c: dtypes[usecols[i]] for i, c in enumerate(col_names)}
 
         usecols = list(range(len(col_names))) if usecols == "" else usecols
+        # make sure usecols has column indices (not names)
+        usecols = [_get_col_ind_from_name_or_ind(c, col_names) for c in usecols]
 
         # handle dtype arg if provided
         if dtype_var != "":

@@ -1805,6 +1805,17 @@ def test_csv_dtype_col_ind(datapath, memory_leak_check):
     check_func(test_impl, (fname,))
 
 
+def test_csv_usecols_names(datapath, memory_leak_check):
+    """test passing column names in usecols"""
+
+    def test_impl(fname):
+        df = pd.read_csv(fname, usecols=["A", "B"])
+        return df
+
+    fname = datapath("csv_data_infer1.csv")
+    check_func(test_impl, (fname,), check_dtype=False)
+
+
 def test_csv_spark_header(datapath, memory_leak_check):
     """Test reading Spark csv outputs containing header & infer dtypes"""
     fname1 = datapath("example_single.csv")
