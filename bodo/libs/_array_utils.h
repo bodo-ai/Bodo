@@ -286,6 +286,14 @@ isnan_categorical(T const& val) {
     return false;
 }
 
+/** This function is used to determine if the value in a Categorical pointer
+ * (pointer to a single value in a CategoricalArray) isnan.
+ * @param the data type for the codes.
+ * @param the Categorical Pointer
+ * @returns if the value stored at the ptr is nan
+ */
+bool isnan_categorical_ptr(int dtype, char* ptr);
+
 template <typename T, int dtype>
 inline typename std::enable_if<std::is_floating_point<T>::value, bool>::type
 isnan_alltype(T const& val) {

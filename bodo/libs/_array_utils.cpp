@@ -1,7 +1,9 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_array_utils.h"
+
 #include <iostream>
 #include <string>
+
 #include "_decimal_ext.h"
 
 /**
@@ -1007,6 +1009,34 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
     return true;
 };
 
+/** This function is used to determine if the value in a Categorical pointer
+ * (pointer to a single value in a CategoricalArray) isnan.
+ * @param the data type for the codes.
+ * @param the Categorical Pointer
+ * @returns if the value stored at the ptr is nan
+ */
+inline bool isnan_categorical_ptr(int dtype, char* ptr) {
+    switch (dtype) {
+        case Bodo_CTypes::INT8:
+            return isnan_categorical<int8_t, Bodo_CTypes::INT8>(
+                *((const int8_t*)ptr));
+        case Bodo_CTypes::INT16:
+            return isnan_categorical<int16_t, Bodo_CTypes::INT16>(
+                *((const int16_t*)ptr));
+        case Bodo_CTypes::INT32:
+            return isnan_categorical<int32_t, Bodo_CTypes::INT32>(
+                *((const int32_t*)ptr));
+        case Bodo_CTypes::INT64:
+            return isnan_categorical<int64_t, Bodo_CTypes::INT64>(
+                *((const int64_t*)ptr));
+
+        default:
+            throw std::runtime_error(
+                "_array_utils.h::NumericComparison: Invalid dtype put on "
+                "CategoricalArray.");
+    }
+}
+
 int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
                                  size_t const& iRow1, array_info* arr2,
                                  size_t const& iRow2) {
@@ -1018,8 +1048,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         return ComparisonArrowColumn(arr1->array, pos1_s, pos1_e, arr2->array,
                                      pos2_s, pos2_e, na_position_bis);
     }
-    if (arr1->arr_type == bodo_array_type::NUMPY ||
-        arr1->arr_type == bodo_array_type::CATEGORICAL) {
+    if (arr1->arr_type == bodo_array_type::NUMPY) {
         // In the case of NUMPY, we compare the values for concluding.
         uint64_t siztype = numpy_item_size[arr1->dtype];
         char* ptr1 = arr1->data1 + (siztype * iRow1);
@@ -1037,6 +1066,19 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
         }
         return 0;
     };
+    if (arr1->arr_type == bodo_array_type::CATEGORICAL) {
+        // In the case of CATEGORICAL, we need to check for null
+        uint64_t siztype = numpy_item_size[arr1->dtype];
+        char* ptr1 = arr1->data1 + (siztype * iRow1);
+        char* ptr2 = arr2->data1 + (siztype * iRow2);
+        bool is_not_na1 = !isnan_categorical_ptr(arr1->dtype, ptr1);
+        bool is_not_na2 = !isnan_categorical_ptr(arr2->dtype, ptr2);
+        int reply = process_bits(is_not_na1, is_not_na2);
+        if (reply != 0) return reply;
+        if (is_not_na1) {
+            return NumericComparison(arr1->dtype, ptr1, ptr2, na_position_bis);
+        }
+    }
     if (arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // NULLABLE case. We need to consider the bitmask and the values.
         uint8_t* null_bitmask1 = (uint8_t*)arr1->null_bitmask;

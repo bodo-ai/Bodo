@@ -94,6 +94,26 @@ from bodo.utils.typing import BodoError, BodoWarning
             },
             [-2, 1, 3, 5, 9],
         ),
+        # Categorical columns (all with ordered=True)
+        pd.DataFrame(
+            {
+                # Make sure there are no duplicates for consistent, comparable results
+                "A": pd.Categorical(["AA", "BB", "", "C", None], ordered=True),
+                "B": pd.Categorical([1, 2, 4, None, 5], ordered=True),
+                "C": pd.Categorical(
+                    pd.Series(
+                        pd.date_range(start="2/1/2015", end="2/24/2021", periods=4)
+                    ).append(pd.Series(data=[None], index=[4])),
+                    ordered=True,
+                ),
+                "D": pd.Categorical(
+                    pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                        pd.Series(data=[None], index=[4])
+                    ),
+                    ordered=True,
+                ),
+            }
+        ),
         # TODO: timedelta
     ]
 )
@@ -226,6 +246,21 @@ def test_sort_values_1col(df_value, memory_leak_check):
 
     def impl(df):
         return df.sort_values(by="A", kind="mergesort")
+
+    if is_bool_object_series(df_value["A"]):
+        check_func(impl, (df_value,), check_dtype=False)
+        return
+
+    check_func(impl, (df_value,))
+
+
+def test_sort_values_1col_ascending(df_value, memory_leak_check):
+    """
+    Test sort_values(): with just 1 column and ascending=True
+    """
+
+    def impl(df):
+        return df.sort_values(by="A", kind="mergesort", ascending=True)
 
     if is_bool_object_series(df_value["A"]):
         check_func(impl, (df_value,), check_dtype=False)
