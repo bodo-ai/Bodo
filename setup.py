@@ -413,11 +413,7 @@ _ext_mods = [
 
 if clean_mode:
     assert not development_mode
-    pyx_files = glob.glob("bodo/**/*.pyx", recursive=True)
-    if len(pyx_files) > 0:
-        _cython_ext_mods = pyx_files
-    else:
-        _cython_ext_mods = []
+    _cython_ext_mods = glob.glob("bodo/**/*.pyx", recursive=True)
 elif development_mode:
     _cython_ext_mods = []
     # make sure there are no .pyx files in development mode
