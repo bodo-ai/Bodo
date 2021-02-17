@@ -18,7 +18,7 @@ import versioneer
 np_compile_args = np_misc.get_info("npymath")
 
 is_win = platform.system() == "Windows"
-development_mode = "develop" in sys.argv
+development_mode = "develop" in sys.argv or "clean" in sys.argv
 
 
 def readme():
@@ -37,7 +37,7 @@ else:
 
 
 try:
-    import pyarrow
+    import pyarrow  # noqa
 except ImportError:
     _has_pyarrow = False
 else:
@@ -45,7 +45,7 @@ else:
 
 
 try:
-    import h5py
+    import h5py  # noqa
 except ImportError:
     _has_h5py = False
 else:
