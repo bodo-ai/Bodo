@@ -432,7 +432,7 @@ if _has_pyarrow:
 setup(
     name="bodo",
     version=versioneer.get_version(),
-    description="compiling Python code for clusters",
+    description="The Python Supercomputing Analytics Platform",
     long_description=readme(),
     classifiers=[
         "Development Status :: 4 - Beta",

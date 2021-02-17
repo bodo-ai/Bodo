@@ -63,7 +63,7 @@ test:
 
 
 about:
-  home: https://www.bodo-inc.com/
+  home: https://bodo.ai
   license: Proprietary
   license_file: LICENSE.md
-  summary: Bodo Core Engine for analytics
+  summary: Python Supercomputing Analytics Platform
