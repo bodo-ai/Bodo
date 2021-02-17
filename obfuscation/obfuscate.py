@@ -400,6 +400,7 @@ class Obfuscator(ast.NodeTransformer):
     # ---For function created via exec(...) the name of the argument is actually important.
     # Thus for simplicity all function arguments are fixed.
     def visit_FunctionDef(self, node):
+        node = self._remove_docstring(node)
         # The function name itself is set to fixed because it can be potentially part of the API.
         self.insert_fixed_names(node.name)
         n_decorator = len(node.decorator_list)
@@ -451,6 +452,7 @@ class Obfuscator(ast.NodeTransformer):
         return node
 
     def visit_Module(self, node):
+        node = self.generic_visit(node)
         retriev = VariableRetriever(False)
         retriev.visit(node)
         for x in retriev.list_variables:
@@ -461,6 +463,7 @@ class Obfuscator(ast.NodeTransformer):
 
     # The class entries are fixed by default since they may be accessed from outside
     def visit_ClassDef(self, node):
+        node = self._remove_docstring(node)
         # Need to consider supporting: name, bases, keywords, decorator_list
         for x in node.body:
             if isinstance(x, ast.Assign):
@@ -481,6 +484,19 @@ class Obfuscator(ast.NodeTransformer):
     def visit_Expr(self, node):
         # Only one attribute in this case.
         self.visit(node.value)
+        return node
+
+    def _remove_docstring(self, node):
+        if len(node.body) == 0:
+            return node
+
+        first_node = node.body[0]
+        if isinstance(first_node, ast.Expr) and isinstance(first_node.value, ast.Str):
+            node.body = node.body[1:]
+            if len(node.body) == 0:
+                # add a pass statement in case the function/class/module has
+                # only a docstring
+                node.body.append(ast.Pass())
         return node
 
 
