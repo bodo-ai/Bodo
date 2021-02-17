@@ -19,6 +19,7 @@ np_compile_args = np_misc.get_info("npymath")
 
 is_win = platform.system() == "Windows"
 development_mode = "develop" in sys.argv
+clean_mode = "clean" in sys.argv
 
 
 def readme():
@@ -37,7 +38,7 @@ else:
 
 
 try:
-    import pyarrow
+    import pyarrow  # noqa
 except ImportError:
     _has_pyarrow = False
 else:
@@ -45,7 +46,7 @@ else:
 
 
 try:
-    import h5py
+    import h5py  # noqa
 except ImportError:
     _has_h5py = False
 else:
@@ -409,7 +410,11 @@ _ext_mods = [
     ext_hdfs,
 ]
 
-if development_mode:
+
+if clean_mode:
+    assert not development_mode
+    _cython_ext_mods = glob.glob("bodo/**/*.pyx", recursive=True)
+elif development_mode:
     _cython_ext_mods = []
     # make sure there are no .pyx files in development mode
     assert len(glob.glob("bodo/**/*.pyx", recursive=True)) == 0
