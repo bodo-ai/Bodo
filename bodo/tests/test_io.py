@@ -939,6 +939,7 @@ def test_read_partitions():
         bodo_func("pq_data", "a")
         _check_for_pq_reader_filters(bodo_func)
         check_func(impl3, ("pq_data", "a"))
+        bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
@@ -972,7 +973,7 @@ def test_read_partitions2():
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", 3)
         _check_for_pq_reader_filters(bodo_func)
-
+        bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
@@ -1006,7 +1007,7 @@ def test_read_partitions_two_level():
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", 3)
         _check_for_pq_reader_filters(bodo_func)
-
+        bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
@@ -1049,7 +1050,7 @@ def test_read_partitions_datetime():
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", "2018-01-02", "2019-10-02")
         _check_for_pq_reader_filters(bodo_func)
-
+        bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
@@ -1081,7 +1082,7 @@ def test_read_partitions_large():
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", "2018-01-02", "2019-10-02")
         _check_for_pq_reader_filters(bodo_func)
-
+        bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
