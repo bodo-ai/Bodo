@@ -18,7 +18,8 @@ import versioneer
 np_compile_args = np_misc.get_info("npymath")
 
 is_win = platform.system() == "Windows"
-development_mode = "develop" in sys.argv or "clean" in sys.argv
+development_mode = "develop" in sys.argv
+clean_mode = "clean" in sys.argv
 
 
 def readme():
@@ -409,7 +410,15 @@ _ext_mods = [
     ext_hdfs,
 ]
 
-if development_mode:
+
+if clean_mode:
+    assert not development_mode
+    pyx_files = glob.glob("bodo/**/*.pyx", recursive=True)
+    if len(pyx_files) > 0:
+        _cython_ext_mods = pyx_files
+    else:
+        _cython_ext_mods = []
+elif development_mode:
     _cython_ext_mods = []
     # make sure there are no .pyx files in development mode
     assert len(glob.glob("bodo/**/*.pyx", recursive=True)) == 0
