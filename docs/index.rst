@@ -13,9 +13,9 @@ Bodo
 
    source/overview
    source/install
-   source/bodo_platform
-   source/getting_started
+   source/_getting_started
    source/user_guide
+   source/bodo_platform
    source/file_io
    source/pandas
    source/numpy
