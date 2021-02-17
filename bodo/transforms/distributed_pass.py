@@ -276,7 +276,7 @@ class DistributedPass:
                         inst.target, index_var, inst, inst, equiv_set, avail_vars
                     )
                 elif isinstance(inst, ir.Return):
-                    out_nodes = self._gen_barrier() + [inst]
+                    out_nodes = [inst]
                 # avoid replicated prints, print on all PEs only when there is dist arg
                 elif isinstance(inst, ir.Print) and all(
                     self._is_REP(v.name) for v in inst.args
@@ -3310,15 +3310,6 @@ class DistributedPass:
             # TODO: handle control flow
             require(var_def.op in ("getitem", "static_getitem"))
             var = var_def.value.name
-
-    def _gen_barrier(self):
-        return compile_func_single_block(
-            eval("lambda: _barrier()"),
-            (),
-            None,
-            self,
-            extra_globals={"_barrier": bodo.libs.distributed_api.barrier},
-        )
 
     def _gen_reduce(self, reduce_var, reduce_op, scope, loc):
         """generate distributed reduction code for after parfor's local execution"""
