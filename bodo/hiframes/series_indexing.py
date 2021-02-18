@@ -206,8 +206,9 @@ def overload_series_iloc_getitem(I, idx):
             )
 
         # Integer case returns scalar
-        if isinstance(types.unliteral(idx), types.Integer):
+        if isinstance(idx, types.Integer):
             # box dt64 to timestamp
+
             # TODO: box timedelta64, datetime.datetime/timedelta
             return lambda I, idx: bodo.utils.conversion.box_if_dt64(
                 bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx]
@@ -217,6 +218,7 @@ def overload_series_iloc_getitem(I, idx):
         # list of ints or array of ints
         # list of bools or array of bools
         # TODO: fix list of int getitem on Arrays in Numba
+        # so we can unify the slice and list implementations
         # TODO: other list-like such as Series/Index
         if is_list_like_index_type(idx) and isinstance(
             idx.dtype, (types.Integer, types.Boolean)
@@ -224,6 +226,9 @@ def overload_series_iloc_getitem(I, idx):
 
             def impl(I, idx):  # pragma: no cover
                 S = I._obj
+                # This has a separate implementation because numpy arrays
+                # cannot support list of int getitem and we must first
+                # convert to an array
                 idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
                 arr = bodo.hiframes.pd_series_ext.get_series_data(S)[idx_t]
                 index = bodo.hiframes.pd_series_ext.get_series_index(S)[idx_t]
@@ -390,6 +395,9 @@ def overload_series_loc_getitem(I, idx):
             return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
 
         return impl
+
+    # TODO: [BE-122] Throw an Error if idx isn't within the range.
+    # Pandas throws a KeyError
 
     # int label from RangeIndex, e.g. S.loc[3]
     if isinstance(idx, types.Integer) and isinstance(I.stype.index, RangeIndexType):

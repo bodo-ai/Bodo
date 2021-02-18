@@ -772,10 +772,6 @@ def test_series_to_numpy(numeric_series_val, memory_leak_check):
 # TODO: add memory_leak_check (it leaks with Decimal array)
 @pytest.mark.smoke
 def test_series_iat_getitem(series_val):
-
-    if series_val.dtype == np.dtype("timedelta64[ns]"):
-        return
-
     def test_impl(S):
         return S.iat[2]
 
@@ -785,6 +781,28 @@ def test_series_iat_getitem(series_val):
     _test_equal(bodo_out, py_out)
     # fix distributed
     # check_func(test_impl, (series_val,))
+
+
+@pytest.mark.slow
+def test_series_iat_getitem_datetime(memory_leak_check):
+    """Test to check that series.iat properly converts
+    unboxes datetime.date, dt64, and td64"""
+
+    def test_impl(S):
+        return S.iat[2]
+
+    date_series = pd.Series(pd.date_range("2020-01-14", "2020-01-17").date)
+    datetime_series = pd.Series(pd.date_range("2020-01-14", "2020-01-17"))
+    timedelta_series = pd.Series(
+        np.append(
+            [datetime.timedelta(days=5, seconds=4, weeks=4)] * 2,
+            [datetime.timedelta(seconds=202, hours=5)] * 2,
+        )
+    )
+    # TODO: Ensure parallel implementation works
+    check_func(test_impl, (date_series,), dist_test=False)
+    check_func(test_impl, (datetime_series,), dist_test=False)
+    check_func(test_impl, (timedelta_series,), dist_test=False)
 
 
 @pytest.mark.smoke
@@ -822,10 +840,6 @@ def test_series_iat_setitem(series_val, memory_leak_check):
 
 @pytest.mark.smoke
 def test_series_iloc_getitem_int(series_val):
-    # timedelta setitem not supported yet
-    if series_val.dtype == np.dtype("timedelta64[ns]"):
-        return
-
     def test_impl(S):
         return S.iloc[2]
 
@@ -835,6 +849,28 @@ def test_series_iloc_getitem_int(series_val):
     _test_equal(bodo_out, py_out)
     # fix distributed
     # check_func(test_impl, (series_val,))
+
+
+@pytest.mark.slow
+def test_series_iloc_getitem_datetime(memory_leak_check):
+    """Test to check that series.iloc properly converts
+    unboxes datetime.date, dt64, and td64"""
+
+    def test_impl(S):
+        return S.iloc[2]
+
+    date_series = pd.Series(pd.date_range("2020-01-14", "2020-01-17").date)
+    datetime_series = pd.Series(pd.date_range("2020-01-14", "2020-01-17"))
+    timedelta_series = pd.Series(
+        np.append(
+            [datetime.timedelta(days=5, seconds=4, weeks=4)] * 2,
+            [datetime.timedelta(seconds=202, hours=5)] * 2,
+        )
+    )
+    # TODO: Ensure parallel implementation works
+    check_func(test_impl, (date_series,), dist_test=False)
+    check_func(test_impl, (datetime_series,), dist_test=False)
+    check_func(test_impl, (timedelta_series,), dist_test=False)
 
 
 def test_series_iloc_getitem_slice(series_val, memory_leak_check):
@@ -860,6 +896,8 @@ def test_series_iloc_getitem_array_int(series_val, memory_leak_check):
 
 
 def test_series_iloc_getitem_array_bool(series_val, memory_leak_check):
+    """Tests that getitem with Series.iloc works with a Boolean List index"""
+
     def test_impl(S):
         return S.iloc[[True, True, False, True, False]]
 
@@ -871,6 +909,33 @@ def test_series_iloc_getitem_array_bool(series_val, memory_leak_check):
     pd.testing.assert_series_equal(
         bodo_func(series_val), test_impl(series_val), check_dtype=False
     )
+
+
+def test_series_loc_getitem_array_bool(series_val, memory_leak_check):
+    """Tests that getitem with Series.loc works with a Boolean List index"""
+
+    def test_impl(S):
+        return S.loc[[True, True, False, True, False]]
+
+    # Make sure cond always matches length
+    if len(series_val) > 5:
+        series_val = series_val[:5]
+
+    bodo_func = bodo.jit(test_impl)
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val), check_dtype=False
+    )
+
+
+@pytest.mark.slow
+def test_series_loc_getitem_int_range(memory_leak_check):
+    def test_impl(S):
+        return S.loc[2]
+
+    S = pd.Series(
+        data=[1, 12, 1421, -241, 4214], index=pd.RangeIndex(start=0, stop=5, step=1)
+    )
+    check_func(test_impl, (S,))
 
 
 @pytest.mark.smoke
