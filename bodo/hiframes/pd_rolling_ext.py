@@ -230,8 +230,12 @@ def _gen_df_rolling_out_data(rolling):
         return (
             f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_series_ext.get_series_data(df), {on_arr_arg}index_arr, window, minp, center, func, raw)",
             on_arr,
+            rolling.selection,
         )
 
+    assert isinstance(rolling.obj_type, DataFrameType), "expected df in rolling obj"
+    data_types = rolling.obj_type.data
+    out_cols = []
     for c in rolling.selection:
         c_ind = rolling.obj_type.columns.index(c)
         if c == rolling.on:
@@ -239,11 +243,16 @@ def _gen_df_rolling_out_data(rolling):
             if len(rolling.selection) == 2 and rolling.explicit_select:
                 continue
             out = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind})"
+            out_cols.append(c)
         else:
+            # skip non-numeric data columns
+            if not isinstance(data_types[c_ind].dtype, (types.Boolean, types.Number)):
+                continue
             out = f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind}), {on_arr_arg}index_arr, window, minp, center, func, raw)"
+            out_cols.append(c)
         data_args.append(out)
 
-    return ", ".join(data_args), on_arr
+    return ", ".join(data_args), on_arr, tuple(out_cols)
 
 
 @overload_method(RollingType, "apply", inline="always", no_unliteral=True)
@@ -327,8 +336,7 @@ def _gen_rolling_impl(rolling, fname, other=None):
             out_cols, df_cols, other_cols, rolling.window_type, fname
         )
     else:
-        out_cols = rolling.selection
-        data_args, on_arr = _gen_df_rolling_out_data(rolling)
+        data_args, on_arr, out_cols = _gen_df_rolling_out_data(rolling)
 
     # NOTE: 'on' column is discarded and output is a Series if there is only one data
     # column with explicit column selection

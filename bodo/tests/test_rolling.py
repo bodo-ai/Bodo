@@ -253,6 +253,38 @@ def test_groupby_rolling(is_slow_run):
     check_func(impl3, (df,), sort_output=True, reset_index=True)
 
 
+def test_skip_non_numeric_columns(memory_leak_check):
+    """Make sure non-numeric columns are skipped properly"""
+
+    def impl1(df):
+        return df.rolling(2).sum()
+
+    def impl2(df):
+        return df.rolling("2s", on="time").sum()
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 4, 4, 11, 4, 1, 1, 1, 4],
+            "B": [1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 7.7, 8.8, 9.9],
+            "C": ["A", "AB", "C", "D", "E", "AA", "BB", "C", "CC"],
+            "D": [True, False, False, True, True, False, False, True, False],
+            "time": [
+                pd.Timestamp("20130101 09:00:00"),
+                pd.Timestamp("20130101 09:00:02"),
+                pd.Timestamp("20130101 09:00:03"),
+                pd.Timestamp("20130101 09:00:05"),
+                pd.Timestamp("20130101 09:00:06"),
+                pd.Timestamp("20130101 09:00:07"),
+                pd.Timestamp("20130101 09:00:08"),
+                pd.Timestamp("20130101 09:00:10"),
+                pd.Timestamp("20130101 09:00:11"),
+            ],
+        }
+    )
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+
+
 def test_rolling_error_checking():
     """test error checking in rolling calls"""
 
