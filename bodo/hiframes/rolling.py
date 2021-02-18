@@ -653,7 +653,7 @@ def overload_fix_index_arr(A):
 # variable window
 
 
-def get_offset_nanos(w):
+def get_offset_nanos(w):  # pragma: no cover
     """convert 'w' to offset if possible. Return success code 0 or failure 1."""
     out = status = 0
     try:
@@ -1486,7 +1486,7 @@ def get_first_non_na(arr):
     # just return 0 for non-floats
     if isinstance(arr.dtype, (types.Integer, types.Boolean)):
         zero = arr.dtype(0)
-        return lambda arr: zero if len(arr) == 0 else arr[0]
+        return lambda arr: zero if len(arr) == 0 else arr[0]  # pragma: no cover
 
     assert isinstance(arr.dtype, types.Float)
     # TODO: int array
@@ -1511,7 +1511,7 @@ def get_last_non_na(arr):
     # just return 0 for non-floats
     if isinstance(arr.dtype, (types.Integer, types.Boolean)):
         zero = arr.dtype(0)
-        return lambda arr: zero if len(arr) == 0 else arr[-1]
+        return lambda arr: zero if len(arr) == 0 else arr[-1]  # pragma: no cover
 
     assert isinstance(arr.dtype, types.Float)
     # TODO: int array
@@ -1535,7 +1535,7 @@ def get_last_non_na(arr):
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_one_from_arr_dtype(arr):
     one = arr.dtype(1)
-    return lambda arr: one
+    return lambda arr: one  # pragma: no cover
 
 
 @register_jitable(cache=True)
@@ -1941,7 +1941,7 @@ def prep_values_overload(A):
 
 
 @register_jitable
-def _validate_roll_fixed_args(win, minp):
+def _validate_roll_fixed_args(win, minp):  # pragma: no cover
     """error checking for arguments to rolling with fixed window"""
     if win < 0:
         raise ValueError("window must be non-negative")
@@ -1956,7 +1956,7 @@ def _validate_roll_fixed_args(win, minp):
 
 
 @register_jitable
-def _validate_roll_var_args(minp, center):
+def _validate_roll_var_args(minp, center):  # pragma: no cover
     """error checking for arguments to rolling with offset window"""
     if minp < 0:
         raise ValueError("min_periods must be >= 0")

@@ -605,3 +605,7 @@ def _validate_rolling_args(obj, window, min_periods, center, on):
             raise BodoError(
                 f"{func_name}.rolling(): 'on' column should have datetime64 data."
             )
+
+    # input should have numeric data types
+    if not any(isinstance(A.dtype, (types.Boolean, types.Number)) for A in data_types):
+        raise BodoError(f"{func_name}.rolling(): No numeric types to aggregate")

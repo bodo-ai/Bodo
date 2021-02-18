@@ -300,6 +300,10 @@ def test_rolling_error_checking():
     def impl11(df):
         return df.rolling("22")["B"].mean()
 
+    # input should have numeric types
+    def impl12(df):
+        return df.rolling(3).mean()
+
     df = pd.DataFrame(
         {
             "A": [5, 12, 21, np.nan, 3],
@@ -337,6 +341,8 @@ def test_rolling_error_checking():
         bodo.jit(impl10)(df)
     with pytest.raises(ValueError, match=r"Invalid offset value"):
         bodo.jit(impl11)(df)
+    with pytest.raises(BodoError, match=r"No numeric types to aggregate"):
+        bodo.jit(impl12)(df[["C"]])
 
 
 @pytest.mark.slow
