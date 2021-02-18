@@ -400,6 +400,10 @@ def overload_dataframe_notna(df):
 
 @overload_method(DataFrameType, "head", inline="always", no_unliteral=True)
 def overload_dataframe_head(df, n=5):
+    # n must be an integer for indexing.
+    if not isinstance(n, types.Integer):
+        raise BodoError("Dataframe.head(): 'n' must be an Integer")
+
     # call head() on column Series
     data_args = ", ".join(
         f"df.iloc[:, {i}].head(n).values" for i in range(len(df.columns))
@@ -411,6 +415,9 @@ def overload_dataframe_head(df, n=5):
 
 @overload_method(DataFrameType, "tail", inline="always", no_unliteral=True)
 def overload_dataframe_tail(df, n=5):
+    # n must be an integer for indexing.
+    if not isinstance(n, types.Integer):
+        raise BodoError("Dataframe.tail(): 'n' must be an Integer")
     # call tail() on column Series
     data_args = ", ".join(
         f"df.iloc[:, {i}].tail(n).values" for i in range(len(df.columns))

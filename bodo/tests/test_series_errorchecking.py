@@ -33,3 +33,55 @@ def test_series_dt_not_supported(memory_leak_check):
 
     with pytest.raises(BodoError, match="not supported"):
         bodo.jit(impl)()
+
+
+@pytest.mark.slow
+def test_series_head_errors(memory_leak_check):
+    def impl():
+        S = pd.Series(np.random.randn(10))
+        return S.head(5.0)
+
+    with pytest.raises(BodoError, match="Series.head\(\): 'n' must be an Integer"):
+        bodo.jit(impl)()
+
+
+@pytest.mark.slow
+def test_series_tail_errors(memory_leak_check):
+    def impl():
+        S = pd.Series(np.random.randn(10))
+        return S.tail(5.0)
+
+    with pytest.raises(BodoError, match="Series.tail\(\): 'n' must be an Integer"):
+        bodo.jit(impl)()
+
+
+@pytest.mark.slow
+def test_series_rename_none(memory_leak_check):
+    S = pd.Series(np.random.randn(10))
+
+    def impl(S):
+        return S.rename(None)
+
+    with pytest.raises(
+        BodoError, match="Series.rename\(\) 'index' can only be a string"
+    ):
+        bodo.jit(impl)(S)
+
+
+@pytest.mark.slow
+def test_series_take_errors(memory_leak_check):
+    S = pd.Series(np.random.randn(10))
+
+    def impl1(S):
+        return S.take([1.0, 2.0])
+
+    def impl2(S):
+        return S.take(1)
+
+    err_msg = "Series.take\(\) 'indices' must be an array-like and contain integers."
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(S)
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(S)

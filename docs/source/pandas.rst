@@ -415,9 +415,9 @@ Reindexing / Selection / Label manipulation:
   Requires Index name to be known at compilation time if `drop=False`.
 * :meth:`pandas.Series.tail` (`n` argument is supported)
 * :meth:`pandas.Series.take`
-* :meth:`pandas.Series.equals`
-* :meth:`pandas.Series.where`
-* :meth:`pandas.Series.mask`
+* :meth:`pandas.Series.equals` (series and `other` should contain scalar values in each row)
+* :meth:`pandas.Series.where` (`cond` and `other` arguments supported for 1d numpy data arrays)
+* :meth:`pandas.Series.mask` (`cond` and `other` arguments supported for 1d numpy data arrays)
 
 Missing data handling:
 

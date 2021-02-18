@@ -285,6 +285,14 @@ def is_overload_constant_number(val):
     return is_overload_constant_int(val) or is_overload_constant_float(val)
 
 
+def is_overload_constant_nan(val):
+    """Returns True if val is a constant np.nan. This is useful
+    for situations where setting a null value may be allowed,
+    but general float support would have a different implementation.
+    """
+    return is_overload_constant_float(val) and np.isnan(get_overload_const_float(val))
+
+
 def is_overload_constant_float(val):
     return isinstance(val, float) or (
         (isinstance(val, types.Omitted) and isinstance(val.value, float))
@@ -531,6 +539,15 @@ def get_overload_const_int(val):
         assert isinstance(val.literal_value, int)
         return val.literal_value
     raise BodoError("{} not constant integer".format(val))
+
+
+def get_overload_const_float(val):
+    if isinstance(val, float):
+        return val
+    if isinstance(val, types.Omitted):
+        assert isinstance(val.value, float)
+        return val.value
+    raise BodoError("{} not constant float".format(val))
 
 
 def get_overload_const_bool(val):
@@ -972,6 +989,28 @@ def is_scalar_type(t):
         bodo.date_offset_type,
         types.none,
     )
+
+
+def is_common_scalar_dtype(scalar_types):
+    """Returns True if a list of scalar types share a common
+    Numpy type or are equal."""
+    try:
+        common_dtype = np.find_common_type(
+            [numba.np.numpy_support.as_dtype(t) for t in scalar_types], []
+        )
+        # If we get an object dtype we do not have a common type.
+        # Otherwise, the types can be used together
+        if common_dtype != object:
+            return True
+    # If we have a Bodo or Numba type that isn't implemented in
+    # Numpy, we will get a NotImplementedError
+    except NotImplementedError:
+        pass
+
+    # If we don't have a common type, then all types need to be equal.
+    # See: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-identical
+    grouped_types = itertools.groupby(scalar_types)
+    return next(grouped_types, True) and not next(grouped_types, False)
 
 
 def find_common_np_dtype(arr_types):

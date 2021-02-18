@@ -2592,43 +2592,69 @@ def test_series_min_max_int_output_type(memory_leak_check):
 
 
 def test_series_idxmin(series_val, memory_leak_check):
+    def test_impl(A):
+        return A.idxmin()
+
+    err_msg = "Series.idxmin\(\) only supported for non-nullable numeric array types."
+
+    # TODO: [BE-96]
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
     # not supported for Datetime.date yet, TODO: support and test
+    # This isn't supported in Pandas
     if isinstance(series_val.values[0], datetime.date):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
     # not supported for Decimal yet, TODO: support and test
+    # This isn't supported in Pandas
     if isinstance(series_val.values[0], Decimal):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
-    # IntegerArray doesn't have argmin yet, TODO: implement
+    # not supported for IntegerArray, TODO: support and test
+    # This isn't supported in Pandas
     if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
-    # skip strings, TODO: handle strings
+    # not supported for Strings, TODO: support and test
+    # This isn't supported in Pandas
     if isinstance(series_val.values[0], str):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
-    # argmin() not supported for bools in Pandas
+    # not supported for BooleanArray, TODO: support and test
+    # This isn't supported in Pandas
+    # bools in Numpy arrays are supported in Pandas.
     if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
+    # not supported for CategoricalArray, TODO: support and test [BE-79]
+    # This isn't supported in Pandas
     if isinstance(series_val.dtype, pd.CategoricalDtype) and (
         series_val.values.categories.dtype == np.dtype("timedelta64[ns]")
         or pd.api.types.is_numeric_dtype(series_val.values.categories.dtype)
     ):
-        # TODO: [BE-79] support argmin/argmax for all Categorical Array values
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
-
-    def test_impl(A):
-        return A.idxmin()
 
     bodo_func = bodo.jit(test_impl)
     assert bodo_func(series_val) == test_impl(series_val)
@@ -2636,43 +2662,69 @@ def test_series_idxmin(series_val, memory_leak_check):
 
 
 def test_series_idxmax(series_val, memory_leak_check):
+    def test_impl(A):
+        return A.idxmax()
+
+    err_msg = "Series.idxmax\(\) only supported for non-nullable numeric array types."
+
+    # TODO: [BE-96]
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
     # not supported for Datetime.date yet, TODO: support and test
+    # This isn't supported in Pandas
     if isinstance(series_val.values[0], datetime.date):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
     # not supported for Decimal yet, TODO: support and test
+    # This isn't supported in Pandas
     if isinstance(series_val.values[0], Decimal):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
-    # IntegerArray doesn't have argmin yet, TODO: implement
+    # not supported for IntegerArray, TODO: support and test
+    # This isn't supported in Pandas
     if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
-    # skip strings, TODO: handle strings
+    # not supported for Strings, TODO: support and test
+    # This isn't supported in Pandas
     if isinstance(series_val.values[0], str):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
-    # argmax() not supported for bools in Pandas
+    # not supported for BooleanArray, TODO: support and test
+    # This isn't supported in Pandas
+    # bools in Numpy arrays are supported in Pandas.
     if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
 
+    # not supported for CategoricalArray, TODO: support and test [BE-79]
+    # This isn't supported in Pandas
     if isinstance(series_val.dtype, pd.CategoricalDtype) and (
         series_val.values.categories.dtype == np.dtype("timedelta64[ns]")
         or pd.api.types.is_numeric_dtype(series_val.values.categories.dtype)
     ):
-        # TODO: [BE-79] support argmin/argmax for all Categorical Array values
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val)
         return
-
-    def test_impl(A):
-        return A.idxmax()
 
     bodo_func = bodo.jit(test_impl)
     assert bodo_func(series_val) == test_impl(series_val)
@@ -2738,6 +2790,43 @@ def test_series_equals(memory_leak_check):
     check_func(f, (S1, S2))
 
 
+@pytest.mark.slow
+def test_series_equals_true(series_val, memory_leak_check):
+    """
+    Tests that all series values can be used in equals.
+    Every value is expected to return True.
+    """
+
+    def test_impl(S1, S2):
+        return S1.equals(S2)
+
+    # TODO: [BE-109] support equals with ArrayItemArrayType
+    if isinstance(series_val.values[0], list):
+        with pytest.raises(
+            BodoError,
+            match="Series.equals\(\) not supported for Series where each element is an array or list",
+        ):
+            bodo.jit(test_impl)(series_val, series_val)
+        return
+
+    check_func(test_impl, (series_val, series_val))
+
+
+@pytest.mark.slow
+def test_series_equals_false(series_val, memory_leak_check):
+    """
+    Tests that all series values with different types
+    return False.
+    """
+    # Series that matches another series but differs in type
+    other = pd.Series([1, 8, 4, 0, 3], dtype=np.uint16)
+
+    def test_impl(S1, S2):
+        return S1.equals(S2)
+
+    check_func(test_impl, (series_val, other))
+
+
 def test_series_head(series_val, memory_leak_check):
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
@@ -2758,6 +2847,17 @@ def test_series_tail(series_val, memory_leak_check):
         return S.tail(3)
 
     check_func(test_impl, (series_val,), False)
+
+
+# Pandas returns an empty df but Bodo is returning the whole df.
+@pytest.mark.skip("[BE-95]: Incorrect result")
+def test_series_tail_zero(memory_leak_check):
+    S = pd.Series([3, 4, 0, 2, 5])
+
+    def test_impl(S):
+        return S.tail(0)
+
+    check_func(test_impl, (S,), False)
 
 
 @pytest.mark.parametrize(
@@ -2781,6 +2881,41 @@ def test_series_isin(S, values, memory_leak_check):
         return S.isin(values)
 
     check_func(test_impl, (S, values))
+
+
+# TODO: Readd the memory leak check when constant lower leak is fixed
+# This leak results from Categorical Constant lowering
+@pytest.mark.slow
+def test_series_isin_true(series_val):
+    """
+    Checks Series.isin() works with a variety of Series types.
+    This aims at ensuring everything can compile because all
+    values should be true.
+    """
+
+    def test_impl(S, values):
+        return S.isin(values)
+
+    values = series_val.iloc[:2]
+
+    # Pandas doesn't support nested data with isin
+    # This may result in a system error
+    # See: https://github.com/pandas-dev/pandas/issues/20883
+    if isinstance(series_val.values[0], list):
+        # This seems to work in Bodo
+        py_output = pd.Series(
+            [True, True] + [False] * (len(series_val) - 2), index=series_val.index
+        )
+    elif isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
+        series_val.dtype.categories, (pd.TimedeltaIndex, pd.DatetimeIndex)
+    ):
+        # Bug in Pandas https://github.com/pandas-dev/pandas/issues/36550
+        py_output = pd.Series(
+            [True, True] + [False] * (len(series_val) - 2), index=series_val.index
+        )
+    else:
+        py_output = None
+    check_func(test_impl, (series_val, values), py_output=py_output)
 
 
 @pytest.mark.slow
@@ -3653,6 +3788,71 @@ def test_series_np_where_num(memory_leak_check):
     check_func(test_impl2, (S, 12, cond))
 
 
+@pytest.mark.slow
+def test_series_where_true(series_val, memory_leak_check):
+    """Tests that all types can be used in Series.where(cond)
+    with all True values."""
+    cond = np.array([True] * len(series_val))
+    val = series_val.iloc[0]
+
+    def test_impl(S, cond, val):
+        return S.where(cond, val)
+
+    # TODO: [BE-110] support series.where for more Bodo array types
+    series_err_msg = (
+        "Series.where\(\) Series data must be a 1-dim numpy array or StringArrayType"
+    )
+
+    # not supported for list(string) and array(item)
+    if isinstance(series_val.values[0], list):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # not supported for IntegerArray yet, TODO: support and test
+    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # not supported for BooleanArray yet, TODO: support and test
+    if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # not supported for CategoricalArray yet, TODO: support and test
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # not supported for datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # td64 and dt64 not supported yet with scalar values.
+    if series_val.dtype in [np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")]:
+        with pytest.raises(
+            BodoError,
+            match="Series.where\(\) series and 'other' must share a common type.",
+        ):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # Bodo differs from Pandas because Bodo sets the type before
+    # it knows that the other value (np.nan) will never be chosen
+    check_func(test_impl, (series_val, cond, val), check_dtype=False)
+
+
 def test_series_where(memory_leak_check):
     """basic test for Series.where(cond, val)"""
 
@@ -3664,6 +3864,22 @@ def test_series_where(memory_leak_check):
     )
     cond = S == 2.0
     check_func(test_impl, (S, cond, 12))
+
+
+def test_series_where_arr(memory_leak_check):
+    """Test for Series.where(cond, arr) where arr is either
+    a series or array that shares a common dtype."""
+
+    def test_impl(S, cond, val):
+        return S.where(cond, val)
+
+    S = pd.Series(np.array([1, 2, 51, 61, -2], dtype=np.int8))
+    other_series = pd.Series([2.1, 232.24, 231.2421, np.nan, 3242.112])
+    other_arr = np.array([323, 0, 1341, -4, 232], dtype=np.int16)
+    np.random.seed(0)
+    cond = np.random.ranf(len(S)) < 0.5
+    check_func(test_impl, (S, cond, other_series))
+    check_func(test_impl, (S, cond, other_arr))
 
 
 def test_series_where_str(memory_leak_check):
@@ -3691,6 +3907,71 @@ def test_np_where_one_arg(memory_leak_check):
     check_func(test_impl, (cond,), dist_test=False)
 
 
+@pytest.mark.slow
+def test_series_mask_false(series_val, memory_leak_check):
+    """Tests that all types can be used in Series.mask(cond)
+    with all False values."""
+    cond = np.array([False] * len(series_val))
+    val = series_val.iloc[0]
+
+    def test_impl(S, cond, val):
+        return S.mask(cond, val)
+
+    # TODO: [BE-110] support series.mask for more Bodo array types
+    series_err_msg = (
+        "Series.mask\(\) Series data must be a 1-dim numpy array or StringArrayType"
+    )
+
+    # not supported for list(string) and array(item)
+    if isinstance(series_val.values[0], list):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # not supported for IntegerArray yet, TODO: support and test
+    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # not supported for BooleanArray yet, TODO: support and test
+    if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # not supported for CategoricalArray yet, TODO: support and test
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # not supported for datetime.date yet, TODO: support and test
+    if isinstance(series_val.values[0], datetime.date):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # td64 and dt64 not supported yet with scalar values.
+    if series_val.dtype in [np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")]:
+        with pytest.raises(
+            BodoError,
+            match="Series.mask\(\) series and 'other' must share a common type.",
+        ):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # Bodo differs from Pandas because Bodo sets the type before
+    # it knows that the other value (np.nan) will never be chosen
+    check_func(test_impl, (series_val, cond, val), check_dtype=False)
+
+
 def test_series_mask(memory_leak_check):
     """basic test for Series.mask(cond, val)"""
 
@@ -3706,6 +3987,22 @@ def test_series_mask(memory_leak_check):
     cond = S == 2.0
     check_func(test_impl, (S, cond, 12))
     check_func(test_impl_nan, (S, cond))
+
+
+def test_series_mask_arr(memory_leak_check):
+    """Test for Series.where(cond, arr) where arr is either
+    a series or array that shares a common dtype."""
+
+    def test_impl(S, cond, val):
+        return S.mask(cond, val)
+
+    S = pd.Series(np.array([1, 2, 51, 61, -2], dtype=np.int8))
+    other_series = pd.Series([2.1, 232.24, 231.2421, np.nan, 3242.112])
+    other_arr = np.array([323, 0, 1341, -4, 232], dtype=np.int16)
+    np.random.seed(0)
+    cond = np.random.ranf(len(S)) < 0.5
+    check_func(test_impl, (S, cond, other_series))
+    check_func(test_impl, (S, cond, other_arr))
 
 
 @pytest.mark.parametrize(

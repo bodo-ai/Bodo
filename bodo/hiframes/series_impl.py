@@ -34,16 +34,19 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_int,
     get_overload_const_str,
+    is_common_scalar_dtype,
     is_iterable_type,
     is_literal_type,
     is_overload_constant_bool,
     is_overload_constant_int,
+    is_overload_constant_nan,
     is_overload_constant_str,
     is_overload_false,
     is_overload_int,
     is_overload_none,
     is_overload_true,
     is_overload_zero,
+    is_scalar_type,
     raise_bodo_error,
 )
 
@@ -195,7 +198,7 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
     # make sure 'drop' is a constant bool
     if not is_overload_constant_bool(drop):  # pragma: no cover
         raise_bodo_error(
-            "reset_index(): 'drop' parameter should be a constant boolean value"
+            "Series.reset_index(): 'drop' parameter should be a constant boolean value"
         )
 
     if is_overload_true(drop):
@@ -219,6 +222,7 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
                 "Series.reset_index() not supported for non-literal series names"
             )
 
+    # TODO: [BE-100] Support name argument with a constant string.
     columns = [get_name_literal(S.index.name_typ), get_name_literal(S.name_typ)]
 
     func_text = "def _impl(S, level=None, drop=False, name=None, inplace=False):\n"
@@ -418,6 +422,28 @@ def overload_series_any(S, axis=0, bool_only=None, skipna=True, level=None):
 
 @overload_method(SeriesType, "equals", inline="always", no_unliteral=True)
 def overload_series_any(S, other):
+    if not isinstance(other, SeriesType):
+        raise BodoError("Series.equals() 'other' must be a Series")
+
+    # Bodo Limitation. Compilation fails with ArrayItemArrayType because A1[i] != A2[i]
+    # doesn't work properly
+    # TODO: [BE-109] Support ArrayItemArrayType
+    if isinstance(S.data, bodo.ArrayItemArrayType):
+        raise BodoError(
+            "Series.equals() not supported for Series where each element is an array or list"
+        )
+
+    # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.equals.html#pandas.Series.equals
+    # From the docs: "DataFrames df and different_data_type have different types for the same values for their
+    # elements, and will return False even though their column labels are the same values and types"
+    # This check ensures the types are exactly the same (even int32 and int64 returns False)
+
+    # We match this behavior by checking that both series have the "same" types at compile time,
+    # and returning False if not.
+    # TODO: [BE-132] Check that the index and name values are equal
+    if S.data != other.data:
+        return lambda S, other: False  # pragma: no cover
+
     def impl(S, other):  # pragma: no cover
         A1 = bodo.hiframes.pd_series_ext.get_series_data(S)
         A2 = bodo.hiframes.pd_series_ext.get_series_data(other)
@@ -829,14 +855,19 @@ def overload_series_cummax(S, axis=0, skipna=True):
 def overload_series_rename(
     S, index=None, axis=None, copy=True, inplace=False, level=None, errors="ignore"
 ):
+    # TODO: Pandas has * after index, so only index should be able to be provided
+    # without kwargs.
+
     if not (index == bodo.string_type or isinstance(index, types.StringLiteral)):
         raise BodoError("Series.rename() 'index' can only be a string")
 
     unsupported_args = dict(copy=copy, inplace=inplace, level=level, errors=errors)
     arg_defaults = dict(copy=True, inplace=False, level=None, errors="ignore")
     check_unsupported_args("Series.rename", unsupported_args, arg_defaults)
-    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
-        raise BodoError("Series.where(): axis argument not supported")
+
+    # Pandas ignores axis value entirely (in both implementation and documented)
+    # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.rename.html
+    # We can match Pandas and just ignore it.
 
     # TODO: support index rename, kws
     def impl(
@@ -1153,7 +1184,29 @@ def overload_series_idxmin(S, axis=0, skipna=True):
     arg_defaults = dict(axis=0, skipna=True)
     check_unsupported_args("Series.idxmin", unsupported_args, arg_defaults)
 
-    # TODO: other types like strings
+    # TODO: Make sure we handle the issue with numpy library leading to argmin
+    # https://github.com/pandas-dev/pandas/blob/7d32926db8f7541c356066dcadabf854487738de/pandas/compat/numpy/function.py#L91
+
+    # Pandas restrictions:
+    # Only supported for numeric types with numpy arrays
+    # - int, floats, bool, dt64, td64. (maybe complex)
+    # Bodo restrictions:
+    # - td64 (TODO: support td64)
+    # - Pandas cannot support BooleanArray,
+    # so we may not support bool if we map it to BooleanArray
+    if not (
+        S.dtype == types.none
+        or (
+            bodo.utils.utils.is_np_array_typ(S.data)
+            and (
+                S.dtype == bodo.datetime64ns
+                or isinstance(S.dtype, (types.Number, types.Boolean))
+            )
+        )
+    ):
+        raise BodoError(
+            f"Series.idxmin() only supported for non-nullable numeric array types. Array type: {S.data} not supported."
+        )
     if S.dtype == types.none:
         return (
             lambda S, axis=0, skipna=True: bodo.hiframes.pd_series_ext.get_series_data(
@@ -1161,7 +1214,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
             ).argmin()
         )
     else:
-
+        # TODO: Make sure -1 is replaced with np.nan
         def impl(S, axis=0, skipna=True):  # pragma: no cover
             i = bodo.hiframes.pd_series_ext.get_series_data(S).argmin()
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -1173,13 +1226,33 @@ def overload_series_idxmin(S, axis=0, skipna=True):
 @overload_method(SeriesType, "idxmax", inline="always", no_unliteral=True)
 def overload_series_idxmax(S, axis=0, skipna=True):
 
-    unsupported_args = dict(skipna=skipna)
-    arg_defaults = dict(skipna=True)
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=0, skipna=True)
     check_unsupported_args("Series.idxmax", unsupported_args, arg_defaults)
 
-    if not is_overload_zero(axis):
-        raise BodoError("Series.idxmax(): axis argument not supported")
+    # TODO: Make sure we handle the issue with numpy library leading to argmax
+    # https://github.com/pandas-dev/pandas/blob/7d32926db8f7541c356066dcadabf854487738de/pandas/compat/numpy/function.py#L103
 
+    # Pandas restrictions:
+    # Only supported for numeric types with numpy arrays
+    # - int, floats, bool, dt64, td64. (maybe complex)
+    # Bodo restrictions:
+    # - td64 (TODO: support td64)
+    # - Pandas cannot support BooleanArray,
+    # so we may not support bool if we map it to BooleanArray
+    if not (
+        S.dtype == types.none
+        or (
+            bodo.utils.utils.is_np_array_typ(S.data)
+            and (
+                S.dtype == bodo.datetime64ns
+                or isinstance(S.dtype, (types.Number, types.Boolean))
+            )
+        )
+    ):
+        raise BodoError(
+            f"Series.idxmax() only supported for non-nullable numeric array types. Array type: {S.data} not supported."
+        )
     # TODO: other types like strings
     if S.dtype == types.none:
         return (
@@ -1187,8 +1260,9 @@ def overload_series_idxmax(S, axis=0, skipna=True):
                 S
             ).argmax()
         )
-    else:
 
+    else:
+        # TODO: Make sure -1 is replaced with np.nan
         def impl(S, axis=0, skipna=True):  # pragma: no cover
             i = bodo.hiframes.pd_series_ext.get_series_data(S).argmax()
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -1235,6 +1309,10 @@ def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=N
 
 @overload_method(SeriesType, "head", inline="always", no_unliteral=True)
 def overload_series_head(S, n=5):
+    # n must be an integer for indexing.
+    if not isinstance(n, types.Integer):
+        raise BodoError("Series.head(): 'n' must be an Integer")
+
     def impl(S, n=5):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -1248,6 +1326,10 @@ def overload_series_head(S, n=5):
 
 @overload_method(SeriesType, "tail", inline="always", no_unliteral=True)
 def overload_series_tail(S, n=5):
+    # n must be an integer for indexing.
+    if not isinstance(n, types.Integer):
+        raise BodoError("Series.tail(): 'n' must be an Integer")
+
     def impl(S, n=5):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -1330,14 +1412,23 @@ def overload_series_astype(S, dtype, copy=True, errors="raise"):
 
 
 @overload_method(SeriesType, "take", inline="always", no_unliteral=True)
-def overload_series_take(S, indices, axis=0, convert=None, is_copy=True):
-    # TODO: categorical, etc.
+def overload_series_take(S, indices, axis=0, is_copy=True):
+    # TODO: Pandas accepts but ignores additional kwargs from Numpy
+    # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.take.html
 
-    unsupported_args = dict(axis=axis, convert=convert, is_copy=is_copy)
-    arg_defaults = dict(axis=0, convert=None, is_copy=True)
+    unsupported_args = dict(axis=axis, is_copy=is_copy)
+    arg_defaults = dict(axis=0, is_copy=True)
     check_unsupported_args("Series.take", unsupported_args, arg_defaults)
 
-    def impl(S, indices, axis=0, convert=None, is_copy=True):  # pragma: no cover
+    # Pandas requirement: Indices must be array like with integers
+    if not (is_iterable_type(indices) and isinstance(indices.dtype, types.Integer)):
+        # TODO: Ensure is_iterable_type is consistent with valid inputs
+        # to coerce_to_ndarray
+        raise BodoError(
+            f"Series.take() 'indices' must be an array-like and contain integers. Found type {indices}."
+        )
+
+    def impl(S, indices, axis=0, is_copy=True):  # pragma: no cover
         indices_t = bodo.utils.conversion.coerce_to_ndarray(indices)
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -2291,16 +2382,24 @@ def overload_series_where(
     errors="raise",
     try_cast=False,
 ):
-    # TODO: handle other cases
-    # TODO: error-checking for input
-    unsupported_args = dict(
-        inplace=inplace, level=level, errors=errors, try_cast=try_cast
-    )
-    arg_defaults = dict(inplace=False, level=None, errors="raise", try_cast=False)
-    check_unsupported_args("Series.where", unsupported_args, arg_defaults)
-    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
-        raise BodoError("Series.where(): axis argument not supported")
+    """Overload Series.where. It replaces element with other if cond is False.
+    It's the opposite of Series.mask
+    """
 
+    # Validate the inputs
+    _validate_arguments_mask_where(
+        "Series.where",
+        S,
+        cond,
+        other,
+        inplace,
+        axis,
+        level,
+        errors,
+        try_cast,
+    )
+
+    # TODO: handle other cases
     def impl(
         S,
         cond,
@@ -2334,16 +2433,21 @@ def overload_series_mask(
     """Overload Series.mask. It replaces element with other if cond is True.
     It's the opposite of Series.where
     """
-    # TODO: handle other cases
-    # TODO: error-checking for input
-    unsupported_args = dict(
-        inplace=inplace, level=level, errors=errors, try_cast=try_cast
-    )
-    arg_defaults = dict(inplace=False, level=None, errors="raise", try_cast=False)
-    check_unsupported_args("Series.mask", unsupported_args, arg_defaults)
-    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
-        raise BodoError("Series.mask(): axis argument not supported")
 
+    # Validate the inputs
+    _validate_arguments_mask_where(
+        "Series.mask",
+        S,
+        cond,
+        other,
+        inplace,
+        axis,
+        level,
+        errors,
+        try_cast,
+    )
+
+    # TODO: handle other cases
     def impl(
         S,
         cond,
@@ -2361,6 +2465,82 @@ def overload_series_mask(
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
+
+
+def _validate_arguments_mask_where(
+    func_name,
+    S,
+    cond,
+    other,
+    inplace,
+    axis,
+    level,
+    errors,
+    try_cast,
+):
+    """Helper function to perform the necessary error checking for
+    Series.where() and Series.mask()."""
+    unsupported_args = dict(
+        inplace=inplace, level=level, errors=errors, try_cast=try_cast
+    )
+    arg_defaults = dict(inplace=False, level=None, errors="raise", try_cast=False)
+    check_unsupported_args(f"{func_name}", unsupported_args, arg_defaults)
+    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
+        raise BodoError(f"{func_name}(): axis argument not supported")
+
+    # Bodo Limitation. Where/Mask is only supported for string arrays and numpy arrays
+    # Nullable int/bool arrays can be used, but they may have the wrong type or
+    # drop NaN values.
+    if not (isinstance(S.data, types.Array) or S.dtype == bodo.string_type):
+        raise BodoError(
+            f"{func_name}() Series data must be a 1-dim numpy array or StringArrayType"
+        )
+
+    # TODO: Support multidimensional arrays for cond + Dataframes
+    # Check that cond is a supported array of booleans
+    if not (
+        isinstance(cond, (SeriesType, types.Array, BooleanArrayType))
+        and cond.ndim == 1
+        and cond.dtype == types.bool_
+    ):
+        raise BodoError(
+            f"{func_name}() 'cond' argument must be a Series or 1-dim array of booleans"
+        )
+
+    # Bodo Restriction: Strict typing limits the type of 'other'
+    # Check that other is an accepted value and that its type matches.
+    # It can either be:
+    # - a scalar of the "same" type as S (or np.nan)
+    # - a Series or 1-dim Numpy array with the "same" type as S
+
+    # Bodo Limitation. Where is only supported for string arrays and numpy arrays
+    # Nullable int/bool arrays can be used, but they may have the wrong type or
+    # drop NaN values.
+    val_is_nan = is_overload_constant_nan(other)
+    if not (
+        # Handle actual np.nan value if other is omitted
+        val_is_nan
+        or is_scalar_type(other)
+        or (isinstance(other, types.Array) and other.ndim == 1)
+        or (
+            isinstance(other, SeriesType)
+            and (isinstance(S.data, types.Array) or S.dtype == bodo.string_type)
+        )
+    ):
+        raise BodoError(
+            f"{func_name}() 'other' must be a scalar, series, 1-dim numpy array or StringArray with a matching type for Series."
+        )
+
+    # Check that the types match
+    if is_iterable_type(other):
+        value_typ = other.dtype
+    elif val_is_nan:
+        value_typ = types.float64
+    else:
+        value_typ = types.unliteral(other)
+
+    if not (is_common_scalar_dtype([S.dtype, value_typ])):
+        raise BodoError(f"{func_name}() series and 'other' must share a common type.")
 
 
 ############################ binary operators #############################
