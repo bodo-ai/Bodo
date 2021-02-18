@@ -194,6 +194,14 @@ comm_border_tag = 22  # arbitrary, TODO: revisit comm tags
 def roll_fixed_linear_generic(
     in_arr, win, minp, center, parallel, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
+    # error checking
+    if minp < 0:
+        raise ValueError("min_periods must be >= 0")
+    if minp > win:
+        # add minp/win values to error when possible in Numba (string should be const
+        # currently)
+        raise ValueError("min_periods must be <= window")
+
     in_arr = prep_values(in_arr)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
@@ -324,6 +332,12 @@ def overload_roll_fixed_apply(
 def roll_fixed_apply_impl(
     in_arr, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
+    # error checking
+    if minp < 0:
+        raise ValueError("min_periods must be >= 0")
+    if minp > win:
+        raise ValueError("min_periods must be <= window")
+
     in_arr = prep_values(in_arr)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
@@ -680,6 +694,10 @@ def roll_var_linear_generic(
     remove_obs,
     calc_out,
 ):  # pragma: no cover
+    # error checking
+    if minp < 0:
+        raise ValueError("min_periods must be >= 0")
+
     in_arr = prep_values(in_arr)
     win = offset_to_nanos(win)
     rank = bodo.libs.distributed_api.get_rank()
@@ -852,6 +870,10 @@ def overload_roll_variable_apply(
 def roll_variable_apply_impl(
     in_arr, on_arr_dt, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
+    # error checking
+    if minp < 0:
+        raise ValueError("min_periods must be >= 0")
+
     in_arr = prep_values(in_arr)
     win = offset_to_nanos(win)
     rank = bodo.libs.distributed_api.get_rank()

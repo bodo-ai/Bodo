@@ -253,7 +253,7 @@ def test_groupby_rolling(is_slow_run):
     check_func(impl3, (df,), sort_output=True, reset_index=True)
 
 
-def test_rolling_error_checking(memory_leak_check):
+def test_rolling_error_checking():
     """test error checking in rolling calls"""
 
     # center should be boolean
@@ -263,6 +263,14 @@ def test_rolling_error_checking(memory_leak_check):
     # min_periods should be int
     def impl2(df):
         return df.rolling(2, min_periods=False)["B"].mean()
+
+    # min_periods should be positive
+    def impl3(df):
+        return df.rolling("2s", on="C", min_periods=-3)["B"].mean()
+
+    # min_periods should be less than window size
+    def impl4(df):
+        return df.rolling(2, min_periods=3)["B"].mean()
 
     df = pd.DataFrame(
         {
@@ -281,6 +289,10 @@ def test_rolling_error_checking(memory_leak_check):
         bodo.jit(impl1)(df)
     with pytest.raises(BodoError, match=r"rolling\(\): min_periods must be an integer"):
         bodo.jit(impl2)(df)
+    with pytest.raises(ValueError, match=r"min_periods must be >= 0"):
+        bodo.jit(impl3)(df)
+    with pytest.raises(ValueError, match=r"min_periods must be <= window"):
+        bodo.jit(impl4)(df)
 
 
 @pytest.mark.slow
