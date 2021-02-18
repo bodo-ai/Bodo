@@ -280,6 +280,18 @@ def test_rolling_error_checking():
     def impl6(df):
         return df.rolling(-2)["B"].mean()
 
+    # 'on' not supported for Series yet
+    def impl7(df):
+        return df.A.rolling("2s", on="C").mean()
+
+    # 'on' should be constant
+    def impl8(df):
+        return df.rolling("2s", on=df.B)["B"].mean()
+
+    # 'on' should be datetime64[ns]
+    def impl9(df):
+        return df.rolling("2s", on="A")["B"].mean()
+
     df = pd.DataFrame(
         {
             "A": [5, 12, 21, np.nan, 3],
@@ -307,6 +319,12 @@ def test_rolling_error_checking():
         bodo.jit(impl5)(df)
     with pytest.raises(ValueError, match=r"window must be non-negative"):
         bodo.jit(impl6)(df)
+    with pytest.raises(BodoError, match=r"'on' not supported for Series yet"):
+        bodo.jit(impl7)(df)
+    with pytest.raises(BodoError, match=r"'on' should be a constant column name"):
+        bodo.jit(impl8)(df)
+    with pytest.raises(BodoError, match=r"'on' column should have datetime64 data"):
+        bodo.jit(impl9)(df)
 
 
 @pytest.mark.slow

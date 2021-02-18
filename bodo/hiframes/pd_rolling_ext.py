@@ -29,6 +29,7 @@ from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
     get_literal_value,
+    is_literal_type,
     is_overload_bool,
     is_overload_none,
     raise_const_error,
@@ -140,7 +141,7 @@ def overload_series_rolling(
     ):  # pragma: no cover
         min_periods = _handle_default_min_periods(min_periods, window)
         return bodo.hiframes.pd_rolling_ext.init_rolling(
-            df, window, min_periods, center, on
+            S, window, min_periods, center, on
         )
 
     return impl
@@ -549,3 +550,40 @@ def _validate_rolling_args(obj, window, min_periods, center, on):
         raise BodoError(
             f"{func_name}.rolling(): min_periods must be an integer, not {min_periods}"
         )
+
+    # 'on' not supported for Series yet (TODO: support)
+    if isinstance(obj, SeriesType) and not is_overload_none(on):
+        raise BodoError(
+            f"{func_name}.rolling(): 'on' not supported for Series yet (can use a DataFrame instead)."
+        )
+
+    col_names = (
+        obj.columns
+        if isinstance(obj, DataFrameType)
+        else obj.df_type.columns
+        if isinstance(obj, DataFrameGroupByType)
+        else []
+    )
+    data_types = (
+        [obj.data]
+        if isinstance(obj, SeriesType)
+        else obj.data
+        if isinstance(obj, DataFrameType)
+        else obj.df_type.data
+    )
+
+    # 'on' should be in column names
+    if not is_overload_none(on) and (
+        not is_literal_type(on) or get_literal_value(on) not in col_names
+    ):
+        raise BodoError(
+            f"{func_name}.rolling(): 'on' should be a constant column name."
+        )
+
+    # 'on' column should be datetime
+    if not is_overload_none(on):
+        on_data_type = data_types[col_names.index(get_literal_value(on))]
+        if on_data_type != types.Array(bodo.datetime64ns, 1, "C"):
+            raise BodoError(
+                f"{func_name}.rolling(): 'on' column should have datetime64 data."
+            )
