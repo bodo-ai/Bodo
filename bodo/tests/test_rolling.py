@@ -10,6 +10,7 @@ import pytest
 import bodo
 from bodo.hiframes.rolling import supported_rolling_funcs
 from bodo.tests.utils import check_func, count_array_REPs, count_parfor_REPs
+from bodo.utils.typing import BodoError
 
 LONG_TEST = (
     int(os.environ["BODO_LONG_ROLLING_TEST"]) != 0
@@ -250,6 +251,36 @@ def test_groupby_rolling(is_slow_run):
         }
     )
     check_func(impl3, (df,), sort_output=True, reset_index=True)
+
+
+def test_rolling_error_checking(memory_leak_check):
+    """test error checking in rolling calls"""
+
+    # center should be boolean
+    def impl1(df):
+        return df.rolling(2, center=2)["B"].mean()
+
+    # min_periods should be int
+    def impl2(df):
+        return df.rolling(2, min_periods=False)["B"].mean()
+
+    df = pd.DataFrame(
+        {
+            "A": [5, 12, 21, np.nan, 3],
+            "B": [0, 1, 2, np.nan, 4],
+            "C": [
+                pd.Timestamp("20130101 09:00:00"),
+                pd.Timestamp("20130101 09:00:02"),
+                pd.Timestamp("20130101 09:00:03"),
+                pd.Timestamp("20130101 09:00:05"),
+                pd.Timestamp("20130101 09:00:06"),
+            ],
+        }
+    )
+    with pytest.raises(BodoError, match=r"rolling\(\): center must be a boolean"):
+        bodo.jit(impl1)(df)
+    with pytest.raises(BodoError, match=r"rolling\(\): min_periods must be an integer"):
+        bodo.jit(impl2)(df)
 
 
 @pytest.mark.slow

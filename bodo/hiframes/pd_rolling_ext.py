@@ -29,6 +29,7 @@ from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
     get_literal_value,
+    is_overload_bool,
     is_overload_none,
     raise_const_error,
 )
@@ -91,6 +92,7 @@ def df_rolling_overload(
     unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
     arg_defaults = dict(win_type=None, axis=0, closed=None)
     check_unsupported_args("DataFrame.rolling", unsupported_args, arg_defaults)
+    _validate_rolling_args(df, window, min_periods, center, on)
 
     def impl(
         df,
@@ -112,7 +114,7 @@ def df_rolling_overload(
 
 @overload_method(SeriesType, "rolling", inline="always", no_unliteral=True)
 def overload_series_rolling(
-    df,
+    S,
     window,
     min_periods=None,
     center=False,
@@ -124,9 +126,10 @@ def overload_series_rolling(
     unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
     arg_defaults = dict(win_type=None, axis=0, closed=None)
     check_unsupported_args("Series.rolling", unsupported_args, arg_defaults)
+    _validate_rolling_args(S, window, min_periods, center, on)
 
     def impl(
-        df,
+        S,
         window,
         min_periods=None,
         center=False,
@@ -257,6 +260,7 @@ def groupby_rolling_overload(
     unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
     arg_defaults = dict(win_type=None, axis=0, closed=None)
     check_unsupported_args("GroupBy.rolling", unsupported_args, arg_defaults)
+    _validate_rolling_args(grp, window, min_periods, center, on)
 
     def _impl(
         grp,
@@ -516,3 +520,32 @@ class RollingAttribute(AttributeTemplate):
                 (attr,) if rolling.on is None else (attr, rolling.on),
                 True,
             )
+
+
+def _validate_rolling_args(obj, window, min_periods, center, on):
+    """Validate argument types of DataFrame/Series/DataFrameGroupBy.rolling() calls"""
+    # similar to argument validation in Pandas:
+    # https://github.com/pandas-dev/pandas/blob/93d46cfc76f939ec5e2148c35728fad4e2389c90/pandas/core/window/rolling.py#L196
+    # https://github.com/pandas-dev/pandas/blob/93d46cfc76f939ec5e2148c35728fad4e2389c90/pandas/core/window/rolling.py#L1393
+    assert isinstance(
+        obj, (SeriesType, DataFrameType, DataFrameGroupByType)
+    ), "invalid rolling obj"
+    func_name = (
+        "Series"
+        if isinstance(obj, SeriesType)
+        else "DataFrame"
+        if isinstance(obj, DataFrameType)
+        else "DataFrameGroupBy"
+    )
+
+    # center should be bool
+    if not is_overload_bool(center):
+        raise BodoError(
+            f"{func_name}.rolling(): center must be a boolean, not {center}"
+        )
+
+    # min_periods should be None or int
+    if not (is_overload_none(min_periods) or isinstance(min_periods, types.Integer)):
+        raise BodoError(
+            f"{func_name}.rolling(): min_periods must be an integer, not {min_periods}"
+        )
