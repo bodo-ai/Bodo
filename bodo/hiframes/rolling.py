@@ -194,13 +194,7 @@ comm_border_tag = 22  # arbitrary, TODO: revisit comm tags
 def roll_fixed_linear_generic(
     in_arr, win, minp, center, parallel, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
-    # error checking
-    if minp < 0:
-        raise ValueError("min_periods must be >= 0")
-    if minp > win:
-        # add minp/win values to error when possible in Numba (string should be const
-        # currently)
-        raise ValueError("min_periods must be <= window")
+    _validate_roll_fixed_args(win, minp)
 
     in_arr = prep_values(in_arr)
     rank = bodo.libs.distributed_api.get_rank()
@@ -332,11 +326,7 @@ def overload_roll_fixed_apply(
 def roll_fixed_apply_impl(
     in_arr, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
-    # error checking
-    if minp < 0:
-        raise ValueError("min_periods must be >= 0")
-    if minp > win:
-        raise ValueError("min_periods must be <= window")
+    _validate_roll_fixed_args(win, minp)
 
     in_arr = prep_values(in_arr)
     rank = bodo.libs.distributed_api.get_rank()
@@ -694,9 +684,7 @@ def roll_var_linear_generic(
     remove_obs,
     calc_out,
 ):  # pragma: no cover
-    # error checking
-    if minp < 0:
-        raise ValueError("min_periods must be >= 0")
+    _validate_roll_var_args(minp, center)
 
     in_arr = prep_values(in_arr)
     win = offset_to_nanos(win)
@@ -870,9 +858,7 @@ def overload_roll_variable_apply(
 def roll_variable_apply_impl(
     in_arr, on_arr_dt, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
-    # error checking
-    if minp < 0:
-        raise ValueError("min_periods must be >= 0")
+    _validate_roll_var_args(minp, center)
 
     in_arr = prep_values(in_arr)
     win = offset_to_nanos(win)
@@ -1940,3 +1926,30 @@ def prep_values_overload(A):
         return lambda A: A  # pragma: no cover
 
     return lambda A: A.astype(np.float64)  # pragma: no cover
+
+
+@register_jitable
+def _validate_roll_fixed_args(win, minp):
+    """error checking for arguments to rolling with fixed window"""
+    if minp < 0:
+        raise ValueError("min_periods must be >= 0")
+
+    if minp > win:
+        # add minp/win values to error when possible in Numba (string should be const
+        # currently)
+        raise ValueError("min_periods must be <= window")
+
+
+@register_jitable
+def _validate_roll_var_args(minp, center):
+    """error checking for arguments to rolling with offset window"""
+    if minp < 0:
+        raise ValueError("min_periods must be >= 0")
+
+    # TODO(ehsan): make sure on_arr_dt is monotonic
+
+    if center:
+        raise NotImplementedError(
+            "rolling: center is not implemented for "
+            "datetimelike and offset based windows"
+        )

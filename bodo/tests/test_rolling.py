@@ -272,6 +272,10 @@ def test_rolling_error_checking():
     def impl4(df):
         return df.rolling(2, min_periods=3)["B"].mean()
 
+    # center is not implemented for datetime windows
+    def impl5(df):
+        return df.rolling("2s", on="C", center=True)["B"].mean()
+
     df = pd.DataFrame(
         {
             "A": [5, 12, 21, np.nan, 3],
@@ -293,6 +297,10 @@ def test_rolling_error_checking():
         bodo.jit(impl3)(df)
     with pytest.raises(ValueError, match=r"min_periods must be <= window"):
         bodo.jit(impl4)(df)
+    with pytest.raises(
+        NotImplementedError, match=r"center is not implemented for datetimelike"
+    ):
+        bodo.jit(impl5)(df)
 
 
 @pytest.mark.slow
