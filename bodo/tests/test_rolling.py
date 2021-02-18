@@ -292,6 +292,14 @@ def test_rolling_error_checking():
     def impl9(df):
         return df.rolling("2s", on="A")["B"].mean()
 
+    # window should be int or offset
+    def impl10(df):
+        return df.rolling(1.4)["B"].mean()
+
+    # check window to be valid offset
+    def impl11(df):
+        return df.rolling("22")["B"].mean()
+
     df = pd.DataFrame(
         {
             "A": [5, 12, 21, np.nan, 3],
@@ -325,6 +333,10 @@ def test_rolling_error_checking():
         bodo.jit(impl8)(df)
     with pytest.raises(BodoError, match=r"'on' column should have datetime64 data"):
         bodo.jit(impl9)(df)
+    with pytest.raises(BodoError, match=r"'window' should be int or time offset"):
+        bodo.jit(impl10)(df)
+    with pytest.raises(ValueError, match=r"Invalid offset value"):
+        bodo.jit(impl11)(df)
 
 
 @pytest.mark.slow

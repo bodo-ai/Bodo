@@ -21,6 +21,10 @@ from numba.extending import (
 )
 
 import bodo
+from bodo.hiframes.datetime_timedelta_ext import (
+    datetime_timedelta_type,
+    pd_timedelta_type,
+)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -31,6 +35,8 @@ from bodo.utils.typing import (
     get_literal_value,
     is_literal_type,
     is_overload_bool,
+    is_overload_constant_str,
+    is_overload_int,
     is_overload_none,
     raise_const_error,
 )
@@ -538,6 +544,18 @@ def _validate_rolling_args(obj, window, min_periods, center, on):
         if isinstance(obj, DataFrameType)
         else "DataFrameGroupBy"
     )
+
+    # window should be integer or time offset (str, timedelta)
+    # TODO(ehsan): support offset types like Week
+    if not (
+        is_overload_int(window)
+        or is_overload_constant_str(window)
+        or window == bodo.string_type
+        or window in (pd_timedelta_type, datetime_timedelta_type)
+    ):
+        raise BodoError(
+            f"{func_name}.rolling(): 'window' should be int or time offset (str, pd.Timedelta, datetime.timedelta), not {window}"
+        )
 
     # center should be bool
     if not is_overload_bool(center):

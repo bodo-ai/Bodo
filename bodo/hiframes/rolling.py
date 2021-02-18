@@ -653,6 +653,16 @@ def overload_fix_index_arr(A):
 # variable window
 
 
+def get_offset_nanos(w):
+    """convert 'w' to offset if possible. Return success code 0 or failure 1."""
+    out = status = 0
+    try:
+        out = pd.tseries.frequencies.to_offset(w).nanos
+    except:
+        status = 1
+    return out, status
+
+
 def offset_to_nanos(w):  # pragma: no cover
     return w
 
@@ -664,8 +674,10 @@ def overload_offset_to_nanos(w):
         return lambda w: w  # pragma: no cover
 
     def impl(w):  # pragma: no cover
-        with numba.objmode(out="int64"):
-            out = pd.tseries.frequencies.to_offset(w).nanos
+        with numba.objmode(out="int64", status="int64"):
+            out, status = get_offset_nanos(w)
+        if status != 0:
+            raise ValueError("Invalid offset value")
         return out
 
     return impl
