@@ -358,7 +358,8 @@ def _gen_rolling_impl(rolling, fname, other=None):
     # NOTE: 'on' column is discarded and output is a Series if there is only one data
     # column with explicit column selection
     is_out_series = is_series or (
-        len(out_cols) == (1 if rolling.on is None else 2) and rolling.explicit_select
+        len(rolling.selection) == (1 if rolling.on is None else 2)
+        and rolling.explicit_select
     )
 
     header = f"def impl(rolling, {_get_rolling_func_args(fname)}):\n"
