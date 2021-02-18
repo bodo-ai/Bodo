@@ -5,7 +5,6 @@
 """
 import datetime
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -506,3 +505,23 @@ def test_pd_timedelta_abs(timedelta_value, memory_leak_check):
         return abs(a)
 
     check_func(test_impl, (timedelta_value,))
+
+
+def test_pd_timedelta_range():
+    def test1():
+        return pd.timedelta_range(start="1 day", periods=4)
+
+    def test2():
+        return pd.timedelta_range(start="1 day", periods=4, closed="right")
+
+    def test3():
+        return pd.timedelta_range(start="1 day", end="2 days", freq="6H")
+
+    def test4():
+        return pd.timedelta_range(start="1 day", end="5 days", periods=4)
+
+    tests = [test1, test2, test3, test4]
+    for test in tests:
+        actual = bodo.jit(test)()
+        expected = test()
+        pd.testing.assert_index_equal(actual, expected)

@@ -828,6 +828,101 @@ def pd_date_range_overload(
     return f
 
 
+@overload(pd.timedelta_range, no_unliteral=True)
+def pd_timedelta_range_overload(
+    start=None,
+    end=None,
+    periods=None,
+    freq=None,
+    name=None,
+    closed=None,
+):
+    if is_overload_none(freq) and any(
+        is_overload_none(t) for t in (start, end, periods)
+    ):
+        freq = "D"  # change just to enable check below
+
+    # exactly three parameters should
+    if sum(not is_overload_none(t) for t in (start, end, periods, freq)) != 3:
+        raise BodoError(
+            "Of the four parameters: start, end, periods, "
+            "and freq, exactly three must be specified"
+        )
+
+    def f(
+        start=None,
+        end=None,
+        periods=None,
+        freq=None,
+        name=None,
+        closed=None,
+    ):  # pragma: no cover
+
+        # pandas source code performs the below conditional in timedelta_range
+        if freq is None and (start is None or end is None or periods is None):
+            freq = "D"
+        freq = bodo.hiframes.pd_index_ext.to_offset_value(freq)
+
+        start_t = pd.Timedelta("1 day")  # dummy value for typing
+        if start is not None:
+            start_t = pd.Timedelta(start)
+
+        end_t = pd.Timedelta("1 day")  # dummy value for typing
+        if end is not None:
+            end_t = pd.Timedelta(end)
+
+        if start is None and end is None and closed is not None:
+            raise ValueError(
+                "Closed has to be None if not both of start and end are defined"
+            )
+
+        left_closed, right_closed = bodo.hiframes.pd_index_ext.validate_endpoints(
+            closed
+        )
+
+        if freq is not None:
+            # pandas/core/arrays/_ranges/generate_regular_range
+            stride = freq
+            if periods is None:
+                b = start_t.value
+                e = b + (end_t.value - b) // stride * stride + stride // 2 + 1
+            elif start is not None:
+                periods = _dummy_convert_none_to_int(periods)
+                b = start_t.value
+                addend = np.int64(periods) * np.int64(stride)
+                e = np.int64(b) + addend
+            elif end is not None:
+                periods = _dummy_convert_none_to_int(periods)
+                e = end_t.value + stride
+                addend = np.int64(periods) * np.int64(-stride)
+                b = np.int64(e) + addend
+            else:
+                raise ValueError(
+                    "at least 'start' or 'end' should be specified "
+                    "if a 'period' is given."
+                )
+            arr = np.arange(b, e, stride, np.int64)
+        else:
+            periods = _dummy_convert_none_to_int(periods)
+            delta = end_t.value - start_t.value
+            step = delta / (periods - 1)
+            arr1 = np.arange(0, periods, 1, np.float64)
+            arr1 *= step
+            arr1 += start_t.value
+            arr = arr1.astype(np.int64)
+            arr[-1] = end_t.value
+
+        if not left_closed and len(arr) and arr[0] == start_t.value:
+            arr = arr[1:]
+        if not right_closed and len(arr) and arr[-1] == end_t.value:
+            arr = arr[:-1]
+
+        S = bodo.utils.conversion.convert_to_dt64ns(arr)
+        return bodo.hiframes.pd_index_ext.init_timedelta_index(S, name)
+
+    return f
+
+
 @overload_method(DatetimeIndexType, "isocalendar", inline="always", no_unliteral=True)
 def overload_pd_timestamp_isocalendar(idx):
     def impl(idx):  # pragma: no cover

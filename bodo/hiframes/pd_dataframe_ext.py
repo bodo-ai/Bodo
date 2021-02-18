@@ -3597,7 +3597,6 @@ pd_unsupported = (
     ## Top-level dealing with datetimelike
     pd.bdate_range,
     pd.period_range,
-    pd.timedelta_range,
     pd.infer_freq,
     ## Top-level dealing with intervals
     pd.interval_range,
