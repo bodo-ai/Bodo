@@ -742,7 +742,7 @@ def test_np_random_multivariate_normal(memory_leak_check):
         ),
     ]
 )
-def mutable_bodo_arrs(request):
+def mutable_bodo_arr(request):
     return request.param
 
 
@@ -750,7 +750,7 @@ def mutable_bodo_arrs(request):
 
 
 @pytest.mark.slow
-def test_setitem_none(mutable_bodo_arrs, memory_leak_check):
+def test_setitem_none(mutable_bodo_arr, memory_leak_check):
     def test_impl(A, idx):
         A[idx] = None
         return A
@@ -758,32 +758,32 @@ def test_setitem_none(mutable_bodo_arrs, memory_leak_check):
     np.random.seed(0)
 
     # scalar idx
-    idx = np.random.randint(0, len(mutable_bodo_arrs), 1)[0]
+    idx = np.random.randint(0, len(mutable_bodo_arr), 1)[0]
     check_func(
-        test_impl, (mutable_bodo_arrs.copy(), idx), copy_input=True, dist_test=False
+        test_impl, (mutable_bodo_arr.copy(), idx), copy_input=True, dist_test=False
     )
 
     # int arr idx
-    idx = np.random.randint(0, len(mutable_bodo_arrs), 11)
+    idx = np.random.randint(0, len(mutable_bodo_arr), 11)
     check_func(
-        test_impl, (mutable_bodo_arrs.copy(), idx), copy_input=True, dist_test=False
+        test_impl, (mutable_bodo_arr.copy(), idx), copy_input=True, dist_test=False
     )
 
     # bool arr idx
-    idx = np.random.ranf(len(mutable_bodo_arrs)) < 0.2
+    idx = np.random.ranf(len(mutable_bodo_arr)) < 0.2
     check_func(
-        test_impl, (mutable_bodo_arrs.copy(), idx), copy_input=True, dist_test=False
+        test_impl, (mutable_bodo_arr.copy(), idx), copy_input=True, dist_test=False
     )
 
     # slice idx
     idx = slice(1, 4)
     check_func(
-        test_impl, (mutable_bodo_arrs.copy(), idx), copy_input=True, dist_test=False
+        test_impl, (mutable_bodo_arr.copy(), idx), copy_input=True, dist_test=False
     )
 
 
 @pytest.mark.slow
-def test_setitem_optional(mutable_bodo_arrs, memory_leak_check):
+def test_setitem_optional(mutable_bodo_arr, memory_leak_check):
     def test_impl(A, i, flag, val):
         if flag:
             x = None
@@ -795,47 +795,47 @@ def test_setitem_optional(mutable_bodo_arrs, memory_leak_check):
     np.random.seed(0)
 
     # scalar idx
-    idx = np.random.randint(0, len(mutable_bodo_arrs), 1)[0]
-    val = mutable_bodo_arrs[0]
+    idx = np.random.randint(0, len(mutable_bodo_arr), 1)[0]
+    val = mutable_bodo_arr[0]
     check_func(
         test_impl,
-        (mutable_bodo_arrs.copy(), idx, False, val),
+        (mutable_bodo_arr.copy(), idx, False, val),
         copy_input=True,
         dist_test=False,
     )
     check_func(
         test_impl,
-        (mutable_bodo_arrs.copy(), idx, True, val),
+        (mutable_bodo_arr.copy(), idx, True, val),
         copy_input=True,
         dist_test=False,
     )
 
     # int arr idx
-    idx = np.random.randint(0, len(mutable_bodo_arrs), 11)
+    idx = np.random.randint(0, len(mutable_bodo_arr), 11)
     check_func(
         test_impl,
-        (mutable_bodo_arrs.copy(), idx, False, val),
+        (mutable_bodo_arr.copy(), idx, False, val),
         copy_input=True,
         dist_test=False,
     )
     check_func(
         test_impl,
-        (mutable_bodo_arrs.copy(), idx, True, val),
+        (mutable_bodo_arr.copy(), idx, True, val),
         copy_input=True,
         dist_test=False,
     )
 
     # bool arr idx
-    idx = np.random.ranf(len(mutable_bodo_arrs)) < 0.2
+    idx = np.random.ranf(len(mutable_bodo_arr)) < 0.2
     check_func(
         test_impl,
-        (mutable_bodo_arrs.copy(), idx, False, val),
+        (mutable_bodo_arr.copy(), idx, False, val),
         copy_input=True,
         dist_test=False,
     )
     check_func(
         test_impl,
-        (mutable_bodo_arrs.copy(), idx, True, val),
+        (mutable_bodo_arr.copy(), idx, True, val),
         copy_input=True,
         dist_test=False,
     )
@@ -844,20 +844,103 @@ def test_setitem_optional(mutable_bodo_arrs, memory_leak_check):
     idx = slice(1, 4)
     check_func(
         test_impl,
-        (mutable_bodo_arrs.copy(), idx, False, val),
+        (mutable_bodo_arr.copy(), idx, False, val),
         copy_input=True,
         dist_test=False,
     )
     check_func(
         test_impl,
-        (mutable_bodo_arrs.copy(), idx, True, val),
+        (mutable_bodo_arr.copy(), idx, True, val),
         copy_input=True,
         dist_test=False,
     )
 
 
 @pytest.mark.slow
-def test_bad_setitem(mutable_bodo_arrs, memory_leak_check):
+def test_getitem(mutable_bodo_arr, memory_leak_check):
+    """
+    Tests that getitem works properly for mutable arrays in bodo
+    """
+
+    def test_impl(A, idx):
+        return A[idx]
+
+    np.random.seed(0)
+
+    # A single integer
+    idx = 0
+    check_func(test_impl, (mutable_bodo_arr, idx), dist_test=False)
+
+    # Array of integers
+    idx = np.random.randint(0, len(mutable_bodo_arr), 11)
+    check_func(test_impl, (mutable_bodo_arr, idx), dist_test=False)
+
+    # Array of booleans
+    idx = np.random.ranf(len(mutable_bodo_arr)) < 0.2
+    check_func(test_impl, (mutable_bodo_arr, idx), dist_test=False)
+
+    # Slice
+    idx = slice(1, 4)
+    check_func(test_impl, (mutable_bodo_arr, idx), dist_test=False)
+
+
+@pytest.mark.slow
+def test_int_getitem_none(mutable_bodo_arr, memory_leak_check):
+    """
+    Test that getitem with None won't fail at runtime.
+    It will give a garbage value because users need to check for
+    NaN with pd.isnan
+    """
+
+    def test_impl(A, idx):
+        return A[idx]
+
+    # Find the first nan value in the array
+    idx = pd.Series(mutable_bodo_arr).isna().idxmax()
+
+    # Test that we don't get a runtime error. The result is garbage,
+    # so we ignore it.
+    bodo.jit(test_impl)(mutable_bodo_arr, idx)
+
+
+@pytest.mark.slow
+def test_isna_check(mutable_bodo_arr, memory_leak_check):
+    """
+    Test that isna works properly for each array
+    """
+
+    def test_impl(S):
+        return S.map(lambda a: a if not pd.isna(a) else None).values
+
+    check_func(test_impl, (pd.Series(mutable_bodo_arr),))
+
+
+@pytest.mark.slow
+def test_setna_getitem(mutable_bodo_arr, memory_leak_check):
+    """
+    Test that setna works properly for each array and can be used
+    with getitem.
+    """
+
+    def test_impl(arr):
+        # Use range to prevent loop fusion.
+        # We want to verify setna actually modifies
+        # the data array to a valid value.
+        n = len(arr)
+        out_arr = arr.copy()
+        for i in range(n):
+            arr[i] = None
+        for i in range(n):
+            out_arr[i] = arr[i]
+        return out_arr
+
+    # Test that we don't get a runtime error. The result is garbage,
+    # because arr[i] will return a garbage value if pd.isna(arr[i])
+    bodo.jit(test_impl)(mutable_bodo_arr)
+
+
+@pytest.mark.slow
+def test_bad_setitem(mutable_bodo_arr, memory_leak_check):
     """
     Tests that a type mismatch gives a reasonable error message and doesn't just fail
     randomly in Numba.
@@ -883,17 +966,17 @@ def test_bad_setitem(mutable_bodo_arrs, memory_leak_check):
 
     error_msg = "received an incorrect 'value' type"
     with pytest.raises(BodoError, match=error_msg):
-        bodo.jit(test_impl_scalar)(mutable_bodo_arrs)
+        bodo.jit(test_impl_scalar)(mutable_bodo_arr)
     indices = [
         np.array([False, True, True, False, False]),
-        np.random.randint(0, len(mutable_bodo_arrs), 2),
+        np.random.randint(0, len(mutable_bodo_arr), 2),
         [1, 2],
         slice(0, 2),
     ]
     for ind in indices:
         with pytest.raises(BodoError, match=error_msg):
-            bodo.jit(test_impl_arr_like)(mutable_bodo_arrs, ind)
+            bodo.jit(test_impl_arr_like)(mutable_bodo_arr, ind)
         with pytest.raises(BodoError, match=error_msg):
-            bodo.jit(test_impl_series_like)(mutable_bodo_arrs, ind)
+            bodo.jit(test_impl_series_like)(mutable_bodo_arr, ind)
         with pytest.raises(BodoError, match=error_msg):
-            bodo.jit(test_impl_list_like)(mutable_bodo_arrs, ind)
+            bodo.jit(test_impl_list_like)(mutable_bodo_arr, ind)

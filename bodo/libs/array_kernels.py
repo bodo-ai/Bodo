@@ -140,7 +140,6 @@ def setna(arr, ind, int_nan_const=0):  # pragma: no cover
 
 @overload(setna, no_unliteral=True)
 def setna_overload(arr, ind, int_nan_const=0):
-
     if isinstance(arr.dtype, types.Float):
         return setna
 
@@ -161,10 +160,7 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         return impl
 
-    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
-        boolean_array,
-        datetime_date_array_type,
-    ):
+    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr == boolean_array:
         return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
             arr._null_bitmap, ind, 0
         )  # pragma: no cover
@@ -227,6 +223,17 @@ def setna_overload(arr, ind, int_nan_const=0):
             arr[ind] = int_nan_const
 
         return setna_int
+
+    # Add support for datetime.date array. This checks that the value in the
+    # array won't cause a runtime error in getitem.
+    if arr == datetime_date_array_type:
+
+        def setna_datetime_date(arr, ind, int_nan_const=0):  # pragma: no cover
+            # Set the actual value to a valid date (i.e. 1970, 1, 1)
+            arr._data[ind] = (1970 << 32) + (1 << 16) + 1
+            bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, 0)
+
+        return setna_datetime_date
 
     # Add support for datetime.timedelta array
     if arr == datetime_timedelta_array_type:

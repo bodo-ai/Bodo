@@ -21,53 +21,6 @@ def date_arr_value(request):
     return request.param
 
 
-@pytest.mark.smoke
-def test_getitem_int(date_arr_value, memory_leak_check):
-    def test_impl(A, i):
-        return A[i]
-
-    bodo_func = bodo.jit(test_impl)
-    i = 1
-    assert bodo_func(date_arr_value, i) == test_impl(date_arr_value, i)
-
-
-def test_getitem_bool(date_arr_value, memory_leak_check):
-    def test_impl(A, ind):
-        return A[ind]
-
-    bodo_func = bodo.jit(test_impl)
-    np.random.seed(0)
-    ind = np.random.ranf(len(date_arr_value)) < 0.2
-    # TODO: parallel test
-    np.testing.assert_array_equal(
-        bodo_func(date_arr_value, ind), test_impl(date_arr_value, ind)
-    )
-
-
-def test_getitem_slice(date_arr_value, memory_leak_check):
-    def test_impl(A, ind):
-        return A[ind]
-
-    bodo_func = bodo.jit(test_impl)
-    ind = slice(1, 4)
-    # TODO: parallel test
-    np.testing.assert_array_equal(
-        bodo_func(date_arr_value, ind), test_impl(date_arr_value, ind)
-    )
-
-
-def test_getitem_int_arr(date_arr_value, memory_leak_check):
-    def test_impl(A, ind):
-        return A[ind]
-
-    bodo_func = bodo.jit(test_impl)
-    ind = np.array([2, 3])
-    # TODO: parallel test
-    np.testing.assert_array_equal(
-        bodo_func(date_arr_value, ind), test_impl(date_arr_value, ind)
-    )
-
-
 def test_np_repeat(date_arr_value, memory_leak_check):
     def impl(arr):
         return np.repeat(arr, 2)
@@ -151,3 +104,23 @@ def test_setitem_arr(date_arr_value, memory_leak_check):
     # Single datetime.date as a value, reuses the same idx
     val = datetime.date(2021, 2, 11)
     check_func(test_impl, (date_arr_value, idx, val), dist_test=False, copy_input=True)
+
+
+@pytest.mark.slow
+def test_lower_constant_getitem(date_arr_value, memory_leak_check):
+    """Test that lowering a constant datetime_date array with a
+    None value has getitem support."""
+
+    def test_impl(idx):
+        # Lower A as a constant
+        return A[idx]
+
+    A = date_arr_value
+    # Find the first nan value in the array
+    idx = pd.Series(date_arr_value).isna().idxmax()
+
+    # Test that we don't get a runtime error. The result is garbage,
+    # so we ignore it.
+    bodo.jit(test_impl)(
+        idx,
+    )

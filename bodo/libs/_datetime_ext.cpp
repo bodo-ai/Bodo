@@ -259,7 +259,8 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
             (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
             s == C_NA || s == C_NAT) {
             value_bitmap = false;
-            value_data = 0;
+            // Set na data to a legal value for array getitem.
+            value_data = (1970L << 32) + (1L << 16) + 1L;
         } else {
             PyObject* year_obj = PyObject_GetAttrString(s, "year");
             PyObject* month_obj = PyObject_GetAttrString(s, "month");
@@ -481,20 +482,20 @@ PyObject* box_date_offset(int64_t n, bool normalize, int64_t fields_arr[18], boo
     // Those ending with s cannot be distinguished so they will always be added if has_kws
     // This is fine because 0 is the same behavior as not being included, so long as 1 field
     // is included.
-    const char* fields[2][9] = {{"years", "months", "weeks", "days", "hours", "minutes", "seconds", "microseconds", "nanoseconds"}, 
+    const char* fields[2][9] = {{"years", "months", "weeks", "days", "hours", "minutes", "seconds", "microseconds", "nanoseconds"},
     {"year", "month", "day", "weekday", "hour", "minute", "second", "microsecond", "nanosecond"}};
 
     int64_t default_values[2] = {0, -1};
     bool keep_if_default[2] = {true, false};
     // Vector of pyobjs for tracking decref
     std::vector<PyObject *> pyobjs;
-    
+
     // Create a kwargs dict
     PyObject* kwargs = PyDict_New();
     CHECK(kwargs, "Creating kwargs dict failed");
     pyobjs.push_back(kwargs);
     if (has_kws) {
-        // If has_kws all fields that are non-null or cannot be distinguished 
+        // If has_kws all fields that are non-null or cannot be distinguished
         // need to be added to the Python dictionary. We split by default value,
         // those that default to -1 should be omitted if they match the default/missing
         // value.
@@ -536,7 +537,7 @@ PyObject* box_date_offset(int64_t n, bool normalize, int64_t fields_arr[18], boo
             pyobjs.push_back(nanosecond_obj_key);
             pyobjs.push_back(nanosecond_obj_val);
         }
-        
+
     }
     PyObject* n_obj = Py_BuildValue("l", n);
     CHECK(n_obj, "Creating n object failed");
@@ -581,7 +582,7 @@ bool unbox_date_offset(PyObject* obj, int64_t fields_arr[18]) {
     auto gilstate = PyGILState_Ensure();
 
     // set of fields, split by default value if missing
-    const char* fields[2][9] = {{"years", "months", "weeks", "days", "hours", "minutes", "seconds", "microseconds", "nanoseconds"}, 
+    const char* fields[2][9] = {{"years", "months", "weeks", "days", "hours", "minutes", "seconds", "microseconds", "nanoseconds"},
     {"year", "month", "day", "weekday", "hour", "minute", "second", "microsecond", "nanosecond"}};
 
     int64_t default_values[2] = {0, -1};
@@ -629,7 +630,7 @@ PyMODINIT_FUNC PyInit_hdatetime_ext(void) {
 
     // These are all C functions, so they don't throw any exceptions.
     // We might still need to add better error handling in the future.
-    
+
     PyObject_SetAttrString(m, "get_isocalendar",
                            PyLong_FromVoidPtr((void*)(&get_isocalendar)));
     PyObject_SetAttrString(m, "extract_year_days",

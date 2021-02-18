@@ -750,7 +750,10 @@ def init_datetime_date_array(typingctx, data, nulls=None):
 @lower_constant(DatetimeDateArrayType)
 def lower_constant_datetime_date_arr(context, builder, typ, pyval):
     n = len(pyval)
-    data_arr = np.empty(n, np.int64)
+    # Set data to a default value to avoid issues with getitem
+    # returning an invalid value.
+    valid_date = (1970 << 32) + (1 << 16) + 1
+    data_arr = np.full(n, valid_date, np.int64)
     nulls_arr = np.empty((n + 7) >> 3, np.uint8)
 
     for i, s in enumerate(pyval):

@@ -220,55 +220,6 @@ def test_int_dtype(memory_leak_check):
 
 
 @pytest.mark.smoke
-def test_getitem_int(int_arr_value, memory_leak_check):
-    def test_impl(A, i):
-        return A[i]
-
-    bodo_func = bodo.jit(test_impl)
-    i = 1
-    # make sure the element is not NA
-    int_arr_value._mask[i] = False
-    assert bodo_func(int_arr_value, i) == test_impl(int_arr_value, i)
-
-
-def test_getitem_bool(int_arr_value, memory_leak_check):
-    def test_impl(A, ind):
-        return A[ind]
-
-    bodo_func = bodo.jit(test_impl)
-    np.random.seed(0)
-    ind = np.random.ranf(len(int_arr_value)) < 0.2
-    # TODO: parallel test
-    pd.util.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value, ind), test_impl(int_arr_value, ind)
-    )
-
-
-def test_getitem_slice(int_arr_value, memory_leak_check):
-    def test_impl(A, ind):
-        return A[ind]
-
-    bodo_func = bodo.jit(test_impl)
-    ind = slice(1, 4)
-    # TODO: parallel test
-    pd.util.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value, ind), test_impl(int_arr_value, ind)
-    )
-
-
-def test_getitem_int_arr(int_arr_value, memory_leak_check):
-    def test_impl(A, ind):
-        return A[ind]
-
-    bodo_func = bodo.jit(test_impl)
-    ind = np.array([1, 3])
-    # TODO: parallel test
-    pd.util.testing.assert_extension_array_equal(
-        bodo_func(int_arr_value, ind), test_impl(int_arr_value, ind)
-    )
-
-
-@pytest.mark.smoke
 def test_setitem_int(int_arr_value, memory_leak_check):
     def test_impl(A, val):
         A[2] = val
@@ -283,6 +234,7 @@ def test_setitem_int(int_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.smoke
 def test_setitem_arr(int_arr_value, memory_leak_check):
     def test_impl(A, idx, val):
         A[idx] = val
