@@ -1931,6 +1931,9 @@ def prep_values_overload(A):
 @register_jitable
 def _validate_roll_fixed_args(win, minp):
     """error checking for arguments to rolling with fixed window"""
+    if win < 0:
+        raise ValueError("window must be non-negative")
+
     if minp < 0:
         raise ValueError("min_periods must be >= 0")
 

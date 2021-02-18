@@ -276,6 +276,10 @@ def test_rolling_error_checking():
     def impl5(df):
         return df.rolling("2s", on="C", center=True)["B"].mean()
 
+    # window should be non-negative
+    def impl6(df):
+        return df.rolling(-2)["B"].mean()
+
     df = pd.DataFrame(
         {
             "A": [5, 12, 21, np.nan, 3],
@@ -301,6 +305,8 @@ def test_rolling_error_checking():
         NotImplementedError, match=r"center is not implemented for datetimelike"
     ):
         bodo.jit(impl5)(df)
+    with pytest.raises(ValueError, match=r"window must be non-negative"):
+        bodo.jit(impl6)(df)
 
 
 @pytest.mark.slow
