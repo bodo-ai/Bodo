@@ -33,6 +33,7 @@ from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
     get_literal_value,
+    is_const_func_type,
     is_literal_type,
     is_overload_bool,
     is_overload_constant_str,
@@ -259,6 +260,22 @@ def _gen_df_rolling_out_data(rolling):
 def overload_rolling_apply(
     rolling, func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None
 ):
+    unsupported_args = dict(
+        engine=engine, engine_kwargs=engine_kwargs, args=args, kwargs=kwargs
+    )
+    arg_defaults = dict(engine=None, engine_kwargs=None, args=None, kwargs=None)
+    check_unsupported_args("Rolling.apply", unsupported_args, arg_defaults)
+
+    # func should be function
+    if not is_const_func_type(func):
+        raise BodoError(
+            f"Rolling.apply(): 'func' parameter must be a function, not {func}."
+        )
+
+    # raw should be bool
+    if not is_overload_bool(raw):
+        raise BodoError(f"Rolling.apply(): 'raw' parameter must be bool, not {raw}.")
+
     return _gen_rolling_impl(rolling, "apply")
 
 

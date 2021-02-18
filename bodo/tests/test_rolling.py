@@ -336,6 +336,14 @@ def test_rolling_error_checking():
     def impl12(df):
         return df.rolling(3).mean()
 
+    # func should be function
+    def impl13(df):
+        return df.rolling(3).apply(4)
+
+    # raw should be bool
+    def impl14(df):
+        return df.rolling(3).apply(lambda a: a.sum(), raw=3)
+
     df = pd.DataFrame(
         {
             "A": [5, 12, 21, np.nan, 3],
@@ -375,6 +383,10 @@ def test_rolling_error_checking():
         bodo.jit(impl11)(df)
     with pytest.raises(BodoError, match=r"No numeric types to aggregate"):
         bodo.jit(impl12)(df[["C"]])
+    with pytest.raises(BodoError, match=r"'func' parameter must be a function"):
+        bodo.jit(impl13)(df)
+    with pytest.raises(BodoError, match=r"'raw' parameter must be bool"):
+        bodo.jit(impl14)(df)
 
 
 @pytest.mark.slow

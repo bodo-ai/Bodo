@@ -572,7 +572,9 @@ Function application, GroupBy & Window:
   or column labels.
   `sort=False` is set by default. `as_index` argument is supported.
 * :meth:`pandas.DataFrame.rolling` `window` argument should be integer or a time
-  offset as a constant string. `min_periods`, `center` and `on` arguments are also supported.
+  offset (as a constant string, pd.Timedelta, or datetime.timedelta).
+  `min_periods`, `center` and `on` arguments are also supported.
+  `on` should be a constant column name.
 
 Computations / Descriptive Stats:
 
@@ -878,7 +880,7 @@ Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas
 * :meth:`pandas.core.window.rolling.Rolling.max`
 * :meth:`pandas.core.window.rolling.Rolling.corr`
 * :meth:`pandas.core.window.rolling.Rolling.cov`
-* :meth:`pandas.core.window.rolling.Rolling.apply`
+* :meth:`pandas.core.window.rolling.Rolling.apply` (`raw` argument supported)
 
 
 GroupBy
