@@ -76,16 +76,28 @@ jobs:
     displayName: 'Obfuscation'
   
   - script: |
+       set -eo pipefail
+       export PATH=$HOME/miniconda3/bin:${PATH}
+       source activate bodo_build
+       python rename_to_pyx.py
+    displayName: 'Rename py to pyx'
+  
+  - script: |
       set -eo pipefail
-      if [[ $OBFUSCATE == 1 ]] && [[ ! -z $IS_RELEASE ]]; then
-        ## Remove existing tag
+      if [[ ! -z $IS_RELEASE ]]; then
+        ## Remove existing tag if it's a release
         git -c user.name='Bot Herman' -c user.email='bot_herman@bodo.ai' tag -d $IS_RELEASE
-        ## Commit the changes after obfuscation
-        git -c user.name='Bot Herman' -c user.email='bot_herman@bodo.ai' commit -a --amend --no-edit
-        ## Tag new commit with the old tag
+      fi
+
+      ## Commit the changes after obfuscation
+      git -c user.name='Bot Herman' -c user.email='bot_herman@bodo.ai' add .
+      git -c user.name='Bot Herman' -c user.email='bot_herman@bodo.ai' commit -a --amend --no-edit
+
+      if [[ ! -z $IS_RELEASE ]]; then
+        ## Tag new commit with the old tag, if it's a release
         git -c user.name='Bot Herman' -c user.email='bot_herman@bodo.ai' tag -a $IS_RELEASE -m $IS_RELEASE
       fi
-    displayName: 'Amend Commit to remove dirty from version (if release)'
+    displayName: 'Amend Commit to remove dirty from version'
 
   - script: |
       set -eo pipefail
