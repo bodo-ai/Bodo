@@ -1305,6 +1305,16 @@ def test_df_max(numeric_df_value, memory_leak_check):
             ),
             marks=pytest.mark.slow,
         ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": ["a", "b", "c", "d", None, None, None, "e", "f"],
+                    "B": [1, 4, 3, 4, None, 5, 6, None, np.nan],
+                    "C": [1, 2, None, 3, 4, 5, 6, None, 0],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_df_reduce_axis1(df, memory_leak_check, is_slow_run):

@@ -464,7 +464,7 @@ def to_string_overload(
         line_width=None,
         max_colwidth=None,
         encoding=None,
-    ): # pragma: no cover
+    ):  # pragma: no cover
         with numba.objmode(res="string"):
             res = df.to_string(
                 buf=buf,
@@ -929,11 +929,11 @@ def _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df_type):
         for i in col_inds
     )
     data_accesses = "\n        ".join(
-        f"row[{i}] = arr_{i}[i]" for i in range(len(out_colnames))
+        f"row[{i}] = arr_{col_inds[i]}[i]" for i in range(len(out_colnames))
     )
     # TODO: support empty dataframes
     assert len(data_args) > 0, f"empty dataframe in DataFrame.{func_name}()"
-    df_len = "len(arr_0)"
+    df_len = f"len(arr_{col_inds[0]})"
 
     func_np_func_map = {
         "max": "np.nanmax",
