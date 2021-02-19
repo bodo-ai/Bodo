@@ -285,6 +285,8 @@ def test_skip_non_numeric_columns(memory_leak_check):
     check_func(impl2, (df,))
 
 
+# TODO: move to slow
+# @pytest.mark.slow
 def test_rolling_error_checking():
     """test error checking in rolling calls"""
 
