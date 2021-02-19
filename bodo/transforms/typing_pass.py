@@ -131,7 +131,12 @@ class BodoTypeInference(PartialTypeInference):
                 ran_transform,
             )
             ran_transform = True
+            prev_needs_transform = needs_transform
             changed, needs_transform = typing_transforms_pass.run()
+            # transform pass has failed if transform was needed but IR is not changed.
+            # This avoids infinite loop, see [BE-140]
+            if prev_needs_transform and needs_transform and not changed:
+                break
             # can't be typed if IR not changed
             if not changed and not needs_transform:
                 # error will be raised below if there are still unknown types
