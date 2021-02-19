@@ -3208,6 +3208,28 @@ def test_series_reset_index(memory_leak_check):
     check_func(impl, (S,))
 
 
+def test_series_reset_index_error(memory_leak_check):
+    """make sure compilation doesn't hang with reset_index/setattr combination,
+    see [BE-140]
+    """
+
+    def impl(S):
+        df = S.reset_index(drop=False)
+        df.columns = ["A", "B"]
+        return df
+
+    S = pd.Series(
+        [3, 2, 1, 5],
+        index=[3, 2, 1, 4],
+        name="A",
+    )
+    with pytest.raises(
+        BodoError,
+        match=r"Series.reset_index\(\) not supported for non-literal series names",
+    ):
+        bodo.jit(impl)(S)
+
+
 @pytest.mark.parametrize(
     "S,value",
     [
