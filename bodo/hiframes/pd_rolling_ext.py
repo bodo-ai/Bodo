@@ -269,7 +269,7 @@ def overload_rolling_apply(
     # func should be function
     if not is_const_func_type(func):
         raise BodoError(
-            f"Rolling.apply(): 'func' parameter must be a function, not {func}."
+            f"Rolling.apply(): 'func' parameter must be a function, not {func} (builtin functions not supported yet)."
         )
 
     # raw should be bool
@@ -627,7 +627,10 @@ def _validate_rolling_args(obj, window, min_periods, center, on):
     # 'on' column should be datetime
     if not is_overload_none(on):
         on_data_type = data_types[col_names.index(get_literal_value(on))]
-        if on_data_type != types.Array(bodo.datetime64ns, 1, "C"):
+        if (
+            not isinstance(on_data_type, types.Array)
+            or on_data_type != bodo.datetime64ns
+        ):
             raise BodoError(
                 f"{func_name}.rolling(): 'on' column should have datetime64 data."
             )
