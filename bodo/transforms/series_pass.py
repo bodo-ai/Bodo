@@ -2454,8 +2454,10 @@ class SeriesPass:
                 func_var = get_call_expr_arg("map", rhs.args, kws, 0, "arg")
             if func_name == "map":
                 kws.pop("arg", None)
+                kws.pop("na_action", None)
             else:
                 kws.pop("func", None)
+                kws.pop("convert_dtype", None)
             kws.pop("args", None)
             return self._handle_series_map(
                 assign, lhs, rhs, series_var, func_var, extra_args, kws

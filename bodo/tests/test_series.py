@@ -1929,6 +1929,115 @@ def test_series_apply_args_and_kwargs(memory_leak_check):
     check_func(test_impl, (S, 3, 2))
 
 
+@pytest.mark.slow
+def test_series_apply_supported_types(series_val, memory_leak_check):
+    """ Test Series.apply with all Bodo supported Types """
+
+    def test_impl(S, val):
+        return S.apply(lambda a, val: a if a != val else None, val=val)
+
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        # TODO: [BE-130] support apply for pd.Categorical
+        return
+    # Bodo gives different value for NaN from Pandas.(e.g. NaN vs. False for boolean)
+    S = series_val.dropna()
+    # Increase data size to pass testing with 3 ranks.
+    S = S.repeat(3)
+    # TODO: Fails with array of lists. Test when equality operation support list comparison.
+    if isinstance(S.values[0], list):
+        return
+    val = S.iloc[0]
+    # Disable check_dtype since Pandas return uint8 as int64
+    check_func(test_impl, (S, val), check_dtype=False)
+
+
+@pytest.mark.slow
+def test_series_apply_args(memory_leak_check):
+    """ Test Series.apply with unsupported and wrong arguments """
+
+    def test_convert_dtype_false(S):
+        return S.apply(lambda a: a, convert_dtype=False)
+
+    def test_convert_dtype_true(S):
+        return S.apply(lambda a: a, convert_dtype=True)
+
+    def test_np_func(S):
+        return S.apply(np.abs)
+
+    def test_wrong_func(S):
+        return S.apply("XX")
+
+    S = pd.Series([2, 1, 3])
+    with pytest.raises(
+        BodoError, match="Series.apply.* only supports default value True"
+    ):
+        bodo.jit(test_convert_dtype_false)(S)
+
+    bodo.jit(test_convert_dtype_true)(S)
+
+    with pytest.raises(
+        BodoError, match="Series.apply.* not support built-in functions yet"
+    ):
+        bodo.jit(test_np_func)(S)
+
+    with pytest.raises(
+        BodoError, match="Series.apply.*: user-defined function not supported"
+    ):
+        bodo.jit(test_wrong_func)(S)
+
+
+@pytest.mark.slow
+def test_series_map_supported_types(series_val, memory_leak_check):
+    """ Test Series.map with all Bodo supported Types """
+
+    def test_impl(S):
+        return S.map(lambda a: a)  # if not pd.isna(a) else None)
+
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        # TODO: [BE-130] support apply for pd.Categorical
+        return
+
+    # nan vs. 0
+    S = series_val.dropna()
+    # Increase data size to pass testing with 3 ranks
+    S = S.repeat(3)
+    # Disable check_dtype since Pandas return int64 vs. Int64
+    check_func(test_impl, (S,), check_dtype=False)
+
+
+@pytest.mark.slow
+def test_series_map_args(memory_leak_check):
+    """ Test Series.map with unsupported and wrong arguments """
+
+    def test_na_action_ignore(S):
+        return S.map(lambda a: a, na_action="ignore")
+
+    def test_na_action_none(S):
+        return S.map(lambda a: a, na_action=None)
+
+    def test_np_func(S):
+        return S.map(np.abs)
+
+    def test_wrong_func(S):
+        return S.map("XX")
+
+    S = pd.Series([2, 1, 3])
+    with pytest.raises(BodoError, match="Series.map.* only supports default value"):
+        bodo.jit(test_na_action_ignore)(S)
+
+    bodo.jit(test_na_action_none)(S)
+
+    with pytest.raises(
+        BodoError, match="Series.map.* not support built-in functions yet"
+    ):
+        bodo.jit(test_np_func)(S)
+
+    with pytest.raises(
+        BodoError, match="Series.map.*: user-defined function not supported"
+    ):
+        bodo.jit(test_wrong_func)(S)
+
+
 @pytest.mark.parametrize(
     "S",
     [

@@ -744,9 +744,13 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context):
         f_ir, typemap, calltypes, f_return_type = bodo.compiler.get_func_type_info(
             py_func, arg_types, kw_types
         )
+    # TODO: [BE-129] If func is a built-in function we support, we should make use of it.
     else:
         if not isinstance(func, types.Dispatcher):  # pragma: no cover
-            raise BodoError(f"Function type expected, not {func}")
+            if isinstance(func, types.Function):
+                raise BodoError(f"Bodo does not support built-in functions yet, {func}")
+            else:
+                raise BodoError(f"Function type expected, not {func}")
         py_func = func.dispatcher.py_func
         f_ir, typemap, calltypes, f_return_type = bodo.compiler.get_func_type_info(
             py_func, arg_types, kw_types

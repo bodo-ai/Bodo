@@ -678,7 +678,7 @@ class SeriesAttribute(AttributeTemplate):
         map_defaults = dict(
             na_action=None,
         )
-        check_unsupported_args("map", unsupported_args, map_defaults)
+        check_unsupported_args("Series.map", unsupported_args, map_defaults)
 
         def map_stub(arg, na_action=None):  # pragma: no cover
             pass
@@ -702,7 +702,7 @@ class SeriesAttribute(AttributeTemplate):
         apply_defaults = dict(
             convert_dtype=True,
         )
-        check_unsupported_args("apply", unsupported_args, apply_defaults)
+        check_unsupported_args("Series.apply", unsupported_args, apply_defaults)
 
         # add dummy default value for UDF kws to avoid errors
         kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
