@@ -508,8 +508,12 @@ class DummyCR(FunctionPass):
 
     def run_pass(self, state):
         # save the compilation results to be used by get_func_type_info()
-        # pipeline may not have the latest results since "with lifting" calls the
-        # compiler recursively
+        # NOTE: Numba's "with lifting" (objmode handling) has a special structure where
+        # it creates a new main function, compiles it, and returns its compilation
+        # result instead of the original function. This results in the original
+        # pipeline's data structures to be empty. Therefore we save compilation data
+        # structures in our dummy pass which is the last compiler stage and called for
+        # the new function, so the actual compiler data structures are available.
         state.cr = (
             state.func_ir,
             state.typemap,
