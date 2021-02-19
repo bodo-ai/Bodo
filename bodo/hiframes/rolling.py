@@ -194,6 +194,8 @@ comm_border_tag = 22  # arbitrary, TODO: revisit comm tags
 def roll_fixed_linear_generic(
     in_arr, win, minp, center, parallel, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
+    _validate_roll_fixed_args(win, minp)
+
     in_arr = prep_values(in_arr)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
@@ -324,6 +326,8 @@ def overload_roll_fixed_apply(
 def roll_fixed_apply_impl(
     in_arr, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
+    _validate_roll_fixed_args(win, minp)
+
     in_arr = prep_values(in_arr)
     rank = bodo.libs.distributed_api.get_rank()
     n_pes = bodo.libs.distributed_api.get_size()
@@ -649,6 +653,16 @@ def overload_fix_index_arr(A):
 # variable window
 
 
+def get_offset_nanos(w):  # pragma: no cover
+    """convert 'w' to offset if possible. Return success code 0 or failure 1."""
+    out = status = 0
+    try:
+        out = pd.tseries.frequencies.to_offset(w).nanos
+    except:
+        status = 1
+    return out, status
+
+
 def offset_to_nanos(w):  # pragma: no cover
     return w
 
@@ -660,8 +674,10 @@ def overload_offset_to_nanos(w):
         return lambda w: w  # pragma: no cover
 
     def impl(w):  # pragma: no cover
-        with numba.objmode(out="int64"):
-            out = pd.tseries.frequencies.to_offset(w).nanos
+        with numba.objmode(out="int64", status="int64"):
+            out, status = get_offset_nanos(w)
+        if status != 0:
+            raise ValueError("Invalid offset value")
         return out
 
     return impl
@@ -680,6 +696,8 @@ def roll_var_linear_generic(
     remove_obs,
     calc_out,
 ):  # pragma: no cover
+    _validate_roll_var_args(minp, center)
+
     in_arr = prep_values(in_arr)
     win = offset_to_nanos(win)
     rank = bodo.libs.distributed_api.get_rank()
@@ -852,6 +870,8 @@ def overload_roll_variable_apply(
 def roll_variable_apply_impl(
     in_arr, on_arr_dt, index_arr, win, minp, center, parallel, kernel_func, raw=True
 ):  # pragma: no cover
+    _validate_roll_var_args(minp, center)
+
     in_arr = prep_values(in_arr)
     win = offset_to_nanos(win)
     rank = bodo.libs.distributed_api.get_rank()
@@ -1466,7 +1486,7 @@ def get_first_non_na(arr):
     # just return 0 for non-floats
     if isinstance(arr.dtype, (types.Integer, types.Boolean)):
         zero = arr.dtype(0)
-        return lambda arr: zero if len(arr) == 0 else arr[0]
+        return lambda arr: zero if len(arr) == 0 else arr[0]  # pragma: no cover
 
     assert isinstance(arr.dtype, types.Float)
     # TODO: int array
@@ -1491,7 +1511,7 @@ def get_last_non_na(arr):
     # just return 0 for non-floats
     if isinstance(arr.dtype, (types.Integer, types.Boolean)):
         zero = arr.dtype(0)
-        return lambda arr: zero if len(arr) == 0 else arr[-1]
+        return lambda arr: zero if len(arr) == 0 else arr[-1]  # pragma: no cover
 
     assert isinstance(arr.dtype, types.Float)
     # TODO: int array
@@ -1515,7 +1535,7 @@ def get_last_non_na(arr):
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_one_from_arr_dtype(arr):
     one = arr.dtype(1)
-    return lambda arr: one
+    return lambda arr: one  # pragma: no cover
 
 
 @register_jitable(cache=True)
@@ -1918,3 +1938,33 @@ def prep_values_overload(A):
         return lambda A: A  # pragma: no cover
 
     return lambda A: A.astype(np.float64)  # pragma: no cover
+
+
+@register_jitable
+def _validate_roll_fixed_args(win, minp):  # pragma: no cover
+    """error checking for arguments to rolling with fixed window"""
+    if win < 0:
+        raise ValueError("window must be non-negative")
+
+    if minp < 0:
+        raise ValueError("min_periods must be >= 0")
+
+    if minp > win:
+        # add minp/win values to error when possible in Numba (string should be const
+        # currently)
+        raise ValueError("min_periods must be <= window")
+
+
+@register_jitable
+def _validate_roll_var_args(minp, center):  # pragma: no cover
+    """error checking for arguments to rolling with offset window"""
+    if minp < 0:
+        raise ValueError("min_periods must be >= 0")
+
+    # TODO(ehsan): make sure on_arr_dt is monotonic
+
+    if center:
+        raise NotImplementedError(
+            "rolling: center is not implemented for "
+            "datetimelike and offset based windows"
+        )

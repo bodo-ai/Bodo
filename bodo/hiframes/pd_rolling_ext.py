@@ -21,6 +21,10 @@ from numba.extending import (
 )
 
 import bodo
+from bodo.hiframes.datetime_timedelta_ext import (
+    datetime_timedelta_type,
+    pd_timedelta_type,
+)
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -29,6 +33,11 @@ from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
     get_literal_value,
+    is_const_func_type,
+    is_literal_type,
+    is_overload_bool,
+    is_overload_constant_str,
+    is_overload_int,
     is_overload_none,
     raise_const_error,
 )
@@ -91,6 +100,7 @@ def df_rolling_overload(
     unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
     arg_defaults = dict(win_type=None, axis=0, closed=None)
     check_unsupported_args("DataFrame.rolling", unsupported_args, arg_defaults)
+    _validate_rolling_args(df, window, min_periods, center, on)
 
     def impl(
         df,
@@ -112,7 +122,7 @@ def df_rolling_overload(
 
 @overload_method(SeriesType, "rolling", inline="always", no_unliteral=True)
 def overload_series_rolling(
-    df,
+    S,
     window,
     min_periods=None,
     center=False,
@@ -124,9 +134,10 @@ def overload_series_rolling(
     unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
     arg_defaults = dict(win_type=None, axis=0, closed=None)
     check_unsupported_args("Series.rolling", unsupported_args, arg_defaults)
+    _validate_rolling_args(S, window, min_periods, center, on)
 
     def impl(
-        df,
+        S,
         window,
         min_periods=None,
         center=False,
@@ -137,7 +148,7 @@ def overload_series_rolling(
     ):  # pragma: no cover
         min_periods = _handle_default_min_periods(min_periods, window)
         return bodo.hiframes.pd_rolling_ext.init_rolling(
-            df, window, min_periods, center, on
+            S, window, min_periods, center, on
         )
 
     return impl
@@ -220,8 +231,12 @@ def _gen_df_rolling_out_data(rolling):
         return (
             f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_series_ext.get_series_data(df), {on_arr_arg}index_arr, window, minp, center, func, raw)",
             on_arr,
+            rolling.selection,
         )
 
+    assert isinstance(rolling.obj_type, DataFrameType), "expected df in rolling obj"
+    data_types = rolling.obj_type.data
+    out_cols = []
     for c in rolling.selection:
         c_ind = rolling.obj_type.columns.index(c)
         if c == rolling.on:
@@ -229,17 +244,38 @@ def _gen_df_rolling_out_data(rolling):
             if len(rolling.selection) == 2 and rolling.explicit_select:
                 continue
             out = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind})"
+            out_cols.append(c)
         else:
+            # skip non-numeric data columns
+            if not isinstance(data_types[c_ind].dtype, (types.Boolean, types.Number)):
+                continue
             out = f"bodo.hiframes.rolling.rolling_{ftype}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind}), {on_arr_arg}index_arr, window, minp, center, func, raw)"
+            out_cols.append(c)
         data_args.append(out)
 
-    return ", ".join(data_args), on_arr
+    return ", ".join(data_args), on_arr, tuple(out_cols)
 
 
 @overload_method(RollingType, "apply", inline="always", no_unliteral=True)
 def overload_rolling_apply(
     rolling, func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None
 ):
+    unsupported_args = dict(
+        engine=engine, engine_kwargs=engine_kwargs, args=args, kwargs=kwargs
+    )
+    arg_defaults = dict(engine=None, engine_kwargs=None, args=None, kwargs=None)
+    check_unsupported_args("Rolling.apply", unsupported_args, arg_defaults)
+
+    # func should be function
+    if not is_const_func_type(func):
+        raise BodoError(
+            f"Rolling.apply(): 'func' parameter must be a function, not {func} (builtin functions not supported yet)."
+        )
+
+    # raw should be bool
+    if not is_overload_bool(raw):
+        raise BodoError(f"Rolling.apply(): 'raw' parameter must be bool, not {raw}.")
+
     return _gen_rolling_impl(rolling, "apply")
 
 
@@ -257,6 +293,7 @@ def groupby_rolling_overload(
     unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
     arg_defaults = dict(win_type=None, axis=0, closed=None)
     check_unsupported_args("GroupBy.rolling", unsupported_args, arg_defaults)
+    _validate_rolling_args(grp, window, min_periods, center, on)
 
     def _impl(
         grp,
@@ -316,13 +353,13 @@ def _gen_rolling_impl(rolling, fname, other=None):
             out_cols, df_cols, other_cols, rolling.window_type, fname
         )
     else:
-        out_cols = rolling.selection
-        data_args, on_arr = _gen_df_rolling_out_data(rolling)
+        data_args, on_arr, out_cols = _gen_df_rolling_out_data(rolling)
 
     # NOTE: 'on' column is discarded and output is a Series if there is only one data
     # column with explicit column selection
     is_out_series = is_series or (
-        len(out_cols) == (1 if rolling.on is None else 2) and rolling.explicit_select
+        len(rolling.selection) == (1 if rolling.on is None else 2)
+        and rolling.explicit_select
     )
 
     header = f"def impl(rolling, {_get_rolling_func_args(fname)}):\n"
@@ -516,3 +553,88 @@ class RollingAttribute(AttributeTemplate):
                 (attr,) if rolling.on is None else (attr, rolling.on),
                 True,
             )
+
+
+def _validate_rolling_args(obj, window, min_periods, center, on):
+    """Validate argument types of DataFrame/Series/DataFrameGroupBy.rolling() calls"""
+    # similar to argument validation in Pandas:
+    # https://github.com/pandas-dev/pandas/blob/93d46cfc76f939ec5e2148c35728fad4e2389c90/pandas/core/window/rolling.py#L196
+    # https://github.com/pandas-dev/pandas/blob/93d46cfc76f939ec5e2148c35728fad4e2389c90/pandas/core/window/rolling.py#L1393
+    assert isinstance(
+        obj, (SeriesType, DataFrameType, DataFrameGroupByType)
+    ), "invalid rolling obj"
+    func_name = (
+        "Series"
+        if isinstance(obj, SeriesType)
+        else "DataFrame"
+        if isinstance(obj, DataFrameType)
+        else "DataFrameGroupBy"
+    )
+
+    # window should be integer or time offset (str, timedelta)
+    # TODO(ehsan): support offset types like Week
+    if not (
+        is_overload_int(window)
+        or is_overload_constant_str(window)
+        or window == bodo.string_type
+        or window in (pd_timedelta_type, datetime_timedelta_type)
+    ):
+        raise BodoError(
+            f"{func_name}.rolling(): 'window' should be int or time offset (str, pd.Timedelta, datetime.timedelta), not {window}"
+        )
+
+    # center should be bool
+    if not is_overload_bool(center):
+        raise BodoError(
+            f"{func_name}.rolling(): center must be a boolean, not {center}"
+        )
+
+    # min_periods should be None or int
+    if not (is_overload_none(min_periods) or isinstance(min_periods, types.Integer)):
+        raise BodoError(
+            f"{func_name}.rolling(): min_periods must be an integer, not {min_periods}"
+        )
+
+    # 'on' not supported for Series yet (TODO: support)
+    if isinstance(obj, SeriesType) and not is_overload_none(on):
+        raise BodoError(
+            f"{func_name}.rolling(): 'on' not supported for Series yet (can use a DataFrame instead)."
+        )
+
+    col_names = (
+        obj.columns
+        if isinstance(obj, DataFrameType)
+        else obj.df_type.columns
+        if isinstance(obj, DataFrameGroupByType)
+        else []
+    )
+    data_types = (
+        [obj.data]
+        if isinstance(obj, SeriesType)
+        else obj.data
+        if isinstance(obj, DataFrameType)
+        else obj.df_type.data
+    )
+
+    # 'on' should be in column names
+    if not is_overload_none(on) and (
+        not is_literal_type(on) or get_literal_value(on) not in col_names
+    ):
+        raise BodoError(
+            f"{func_name}.rolling(): 'on' should be a constant column name."
+        )
+
+    # 'on' column should be datetime
+    if not is_overload_none(on):
+        on_data_type = data_types[col_names.index(get_literal_value(on))]
+        if (
+            not isinstance(on_data_type, types.Array)
+            or on_data_type.dtype != bodo.datetime64ns
+        ):
+            raise BodoError(
+                f"{func_name}.rolling(): 'on' column should have datetime64 data."
+            )
+
+    # input should have numeric data types
+    if not any(isinstance(A.dtype, (types.Boolean, types.Number)) for A in data_types):
+        raise BodoError(f"{func_name}.rolling(): No numeric types to aggregate")

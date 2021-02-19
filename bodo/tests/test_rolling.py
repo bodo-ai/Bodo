@@ -10,6 +10,7 @@ import pytest
 import bodo
 from bodo.hiframes.rolling import supported_rolling_funcs
 from bodo.tests.utils import check_func, count_array_REPs, count_parfor_REPs
+from bodo.utils.typing import BodoError
 
 LONG_TEST = (
     int(os.environ["BODO_LONG_ROLLING_TEST"]) != 0
@@ -250,6 +251,144 @@ def test_groupby_rolling(is_slow_run):
         }
     )
     check_func(impl3, (df,), sort_output=True, reset_index=True)
+
+
+def test_skip_non_numeric_columns(memory_leak_check):
+    """Make sure non-numeric columns are skipped properly"""
+
+    def impl1(df):
+        return df.rolling(2).sum()
+
+    def impl2(df):
+        return df.rolling("2s", on="time").sum()
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 4, 4, 11, 4, 1, 1, 1, 4],
+            "B": [1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 7.7, 8.8, 9.9],
+            "C": ["A", "AB", "C", "D", "E", "AA", "BB", "C", "CC"],
+            "D": [True, False, False, True, True, False, False, True, False],
+            "time": [
+                pd.Timestamp("20130101 09:00:00"),
+                pd.Timestamp("20130101 09:00:02"),
+                pd.Timestamp("20130101 09:00:03"),
+                pd.Timestamp("20130101 09:00:05"),
+                pd.Timestamp("20130101 09:00:06"),
+                pd.Timestamp("20130101 09:00:07"),
+                pd.Timestamp("20130101 09:00:08"),
+                pd.Timestamp("20130101 09:00:10"),
+                pd.Timestamp("20130101 09:00:11"),
+            ],
+        }
+    )
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+
+
+# TODO: move to slow
+# @pytest.mark.slow
+def test_rolling_error_checking():
+    """test error checking in rolling calls"""
+
+    # center should be boolean
+    def impl1(df):
+        return df.rolling(2, center=2)["B"].mean()
+
+    # min_periods should be int
+    def impl2(df):
+        return df.rolling(2, min_periods=False)["B"].mean()
+
+    # min_periods should be positive
+    def impl3(df):
+        return df.rolling("2s", on="C", min_periods=-3)["B"].mean()
+
+    # min_periods should be less than window size
+    def impl4(df):
+        return df.rolling(2, min_periods=3)["B"].mean()
+
+    # center is not implemented for datetime windows
+    def impl5(df):
+        return df.rolling("2s", on="C", center=True)["B"].mean()
+
+    # window should be non-negative
+    def impl6(df):
+        return df.rolling(-2)["B"].mean()
+
+    # 'on' not supported for Series yet
+    def impl7(df):
+        return df.A.rolling("2s", on="C").mean()
+
+    # 'on' should be constant
+    def impl8(df):
+        return df.rolling("2s", on=df.B)["B"].mean()
+
+    # 'on' should be datetime64[ns]
+    def impl9(df):
+        return df.rolling("2s", on="A")["B"].mean()
+
+    # window should be int or offset
+    def impl10(df):
+        return df.rolling(1.4)["B"].mean()
+
+    # check window to be valid offset
+    def impl11(df):
+        return df.rolling("22")["B"].mean()
+
+    # input should have numeric types
+    def impl12(df):
+        return df.rolling(3).mean()
+
+    # func should be function
+    def impl13(df):
+        return df.rolling(3).apply(4)
+
+    # raw should be bool
+    def impl14(df):
+        return df.rolling(3).apply(lambda a: a.sum(), raw=3)
+
+    df = pd.DataFrame(
+        {
+            "A": [5, 12, 21, np.nan, 3],
+            "B": [0, 1, 2, np.nan, 4],
+            "C": [
+                pd.Timestamp("20130101 09:00:00"),
+                pd.Timestamp("20130101 09:00:02"),
+                pd.Timestamp("20130101 09:00:03"),
+                pd.Timestamp("20130101 09:00:05"),
+                pd.Timestamp("20130101 09:00:06"),
+            ],
+        }
+    )
+    with pytest.raises(BodoError, match=r"rolling\(\): center must be a boolean"):
+        bodo.jit(impl1)(df)
+    with pytest.raises(BodoError, match=r"rolling\(\): min_periods must be an integer"):
+        bodo.jit(impl2)(df)
+    with pytest.raises(ValueError, match=r"min_periods must be >= 0"):
+        bodo.jit(impl3)(df)
+    with pytest.raises(ValueError, match=r"min_periods must be <= window"):
+        bodo.jit(impl4)(df)
+    with pytest.raises(
+        NotImplementedError, match=r"center is not implemented for datetimelike"
+    ):
+        bodo.jit(impl5)(df)
+    with pytest.raises(ValueError, match=r"window must be non-negative"):
+        bodo.jit(impl6)(df)
+    with pytest.raises(BodoError, match=r"'on' not supported for Series yet"):
+        bodo.jit(impl7)(df)
+    with pytest.raises(BodoError, match=r"'on' should be a constant column name"):
+        bodo.jit(impl8)(df)
+    with pytest.raises(BodoError, match=r"'on' column should have datetime64 data"):
+        bodo.jit(impl9)(df)
+    with pytest.raises(BodoError, match=r"'window' should be int or time offset"):
+        bodo.jit(impl10)(df)
+    with pytest.raises(ValueError, match=r"Invalid offset value"):
+        bodo.jit(impl11)(df)
+    with pytest.raises(BodoError, match=r"No numeric types to aggregate"):
+        bodo.jit(impl12)(df[["C"]])
+    with pytest.raises(BodoError, match=r"'func' parameter must be a function"):
+        bodo.jit(impl13)(df)
+    with pytest.raises(BodoError, match=r"'raw' parameter must be bool"):
+        bodo.jit(impl14)(df)
 
 
 @pytest.mark.slow
