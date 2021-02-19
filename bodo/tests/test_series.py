@@ -3194,6 +3194,21 @@ def test_series_describe(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,), False)
 
 
+def test_series_reset_index_no_drop(memory_leak_check):
+    """Test Series.reset_index(drop=False)"""
+
+    def impl1(df):
+        return df["A"].reset_index(drop=False)
+
+    # add value_counts() since common pattern
+    def impl2(df):
+        return df["A"].value_counts().reset_index(drop=False)
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 1, 2, 3]})
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+
+
 def test_series_reset_index(memory_leak_check):
     """Test Series.reset_index(drop=True)"""
 

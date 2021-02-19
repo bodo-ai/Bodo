@@ -213,8 +213,15 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
 
         return impl_drop
 
-    def get_name_literal(name_typ):
-        """ return literal value or throw error in non-literal type """
+    def get_name_literal(name_typ, is_index):
+        """return literal value or throw error in non-literal type"""
+        # if Series name is None, Pandas uses 0.
+        # if Index name is None, Pandas uses "index".
+        if is_overload_none(name_typ):
+            if is_index:
+                return "index"
+            return 0
+
         if is_literal_type(name_typ):
             return get_literal_value(name_typ)
         else:
@@ -223,7 +230,10 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
             )
 
     # TODO: [BE-100] Support name argument with a constant string.
-    columns = [get_name_literal(S.index.name_typ), get_name_literal(S.name_typ)]
+    columns = [
+        get_name_literal(S.index.name_typ, True),
+        get_name_literal(S.name_typ, False),
+    ]
 
     func_text = "def _impl(S, level=None, drop=False, name=None, inplace=False):\n"
     func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
@@ -1543,6 +1553,7 @@ def overload_series_value_counts(
     ):  # pragma: no cover
         # create a dummy dataframe to use groupby/count and sort_values
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
         dummy_index = bodo.hiframes.pd_index_ext.init_range_index(0, len(arr), 1, None)
         in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
             (arr, arr), dummy_index, ("A", "B")
@@ -1554,7 +1565,7 @@ def overload_series_value_counts(
         )
         index = bodo.utils.conversion.index_from_array(ind_arr)
         count_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(count_df, 0)
-        return bodo.hiframes.pd_series_ext.init_series(count_arr, index, None)
+        return bodo.hiframes.pd_series_ext.init_series(count_arr, index, name)
 
     return impl
 
