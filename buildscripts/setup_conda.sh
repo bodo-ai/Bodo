@@ -4,33 +4,38 @@ set -exo pipefail
 # Install Miniconda
 # Reference:
 # https://github.com/numba/numba/blob/master/buildscripts/incremental/install_miniconda.sh
-unamestr=`uname`
-if [[ "$unamestr" == 'Linux' ]]; then
-  wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-elif [[ "$unamestr" == 'Darwin' ]]; then
-  wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
-else
-  echo Error
+if [ "$RUNTIME" != "yes" ];
+then
+  unamestr=`uname`
+  if [[ "$unamestr" == 'Linux' ]]; then
+    wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+  elif [[ "$unamestr" == 'Darwin' ]]; then
+    wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
+  else
+    echo Error
+  fi
+    chmod +x miniconda.sh
+    ./miniconda.sh -b
 fi
-chmod +x miniconda.sh
-./miniconda.sh -b
 export PATH=$HOME/miniconda3/bin:$PATH
 
 
 # ---- Create Conda Env ----
 CONDA_INSTALL="conda install -q -y"
-source deactivate
-conda remove --all -q -y -n $CONDA_ENV
+# Deactivate if another script has already activated the env
+source deactivate || true
 
 # Set 5 retries with 1 minute in between to try avoid HTTP errors
 conda config --set remote_max_retries 5
 conda config --set remote_backoff_factor 60
-
-if [ "$RUN_NIGHTLY" != "yes" ];
+if [ "$RUNTIME" != "yes" ];
 then
-    conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 numpy scipy boost-cpp=1.74.0 cmake h5py=2.10 mpich mpi
-else
-    conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 cmake make
+  if [ "$RUN_NIGHTLY" != "yes" ];
+  then
+      conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 numpy scipy boost-cpp=1.74.0 cmake h5py=2.10 mpich mpi
+  else
+      conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 cmake make
+  fi
 fi
 source activate $CONDA_ENV
 
@@ -60,6 +65,6 @@ then
 else
    $CONDA_INSTALL -c pytorch -c conda-forge -c defaults bokeh pytorch=1.5 torchvision=0.6
    $CONDA_INSTALL -c conda-forge tensorflow
-   pip install horovod[pytorch,tensorflow]
+   if [ "$RUNTIME" != "yes" ]; then pip install horovod[pytorch,tensorflow]; fi
    pip install credstash
 fi

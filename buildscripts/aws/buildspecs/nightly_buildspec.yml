@@ -11,8 +11,14 @@ env:
       CONDA_ENV: "BodoCodeBuild"
       RUN_NIGHTLY: "yes"
       ENGINE_E2E_TESTS: "engine-e2e-tests"
+      RUNTIME: "yes"
 
 phases:
+    install:
+        commands:
+        - buildscripts/setup_conda.sh
+        - buildscripts/aws/test_installs.sh
+
     build:
         commands:
         - echo Building Obfuscated Binary
