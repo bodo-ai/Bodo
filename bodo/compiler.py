@@ -507,7 +507,15 @@ class DummyCR(FunctionPass):
         FunctionPass.__init__(self)
 
     def run_pass(self, state):
-        state.cr = 1  # arbitrary non-None value
+        # save the compilation results to be used by get_func_type_info()
+        # pipeline may not have the latest results since "with lifting" calls the
+        # compiler recursively
+        state.cr = (
+            state.func_ir,
+            state.typemap,
+            state.calltypes,
+            state.return_type,
+        )
         return True
 
 
@@ -580,10 +588,10 @@ def get_func_type_info(func, arg_types, kw_types):
     pipeline = TyperCompiler(
         typingctx, targetctx, library, args, return_type, flags, _locals
     )
-    pipeline.compile_extra(func)
-    return (
-        pipeline.state.func_ir,
-        pipeline.state.typemap,
-        pipeline.state.calltypes,
-        pipeline.state.return_type,
-    )
+
+    # DummyCR pass sets the compilation results as (func_ir, typemap, calltypes,
+    # return_type)
+    # NOTE: cannot use pipline.state.typemap and others since "with lifting" creates
+    # a new main function and calls the compiler recursively, so pipeline doesn't have
+    # the latest results. See test_groupby.py::test_groupby_apply_objmode
+    return pipeline.compile_extra(func)
