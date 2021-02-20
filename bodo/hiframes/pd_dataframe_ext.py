@@ -350,7 +350,9 @@ class DataFrameAttribute(AttributeTemplate):
         if attr in df.columns:
             ind = df.columns.index(attr)
             arr_typ = df.data[ind]
-            return SeriesType(arr_typ.dtype, arr_typ, df.index, string_type)
+            return SeriesType(
+                arr_typ.dtype, arr_typ, df.index, types.StringLiteral(attr)
+            )
 
         # level selection in multi-level df
         if len(df.columns) > 0 and isinstance(df.columns[0], tuple):
