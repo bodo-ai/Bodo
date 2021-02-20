@@ -994,7 +994,12 @@ def agg_distributed_run(
 
     return_key = agg_node.return_key
 
-    glbs = {"bodo": bodo, "np": np, "dt64_dtype": np.dtype("datetime64[ns]")}
+    glbs = {
+        "bodo": bodo,
+        "np": np,
+        "dt64_dtype": np.dtype("datetime64[ns]"),
+        "td64_dtype": np.dtype("timedelta64[ns]"),
+    }
 
     has_pivot_value = agg_node.pivot_arr is not None
     udf_func_struct = get_udf_func_struct(
@@ -1195,6 +1200,8 @@ def _gen_dummy_alloc(t):
 def _get_np_dtype(t):
     if t == types.NPDatetime("ns"):
         return "dt64_dtype"
+    if t == types.NPTimedelta("ns"):
+        return "td64_dtype"
     return "np.{}".format(t)
 
 

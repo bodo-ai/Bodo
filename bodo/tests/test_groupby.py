@@ -3439,19 +3439,31 @@ def test_groupby_shift_int():
     print(bodo.jit(distributed=["df"])(impl2)(df_multicol))
 
 
-@pytest.mark.skip(reason="Timedelta typing error. TODO: debug it")
+@pytest.mark.slow
 def test_groupby_shift_timedelta():
     def impl2(df):
         df2 = df.groupby("A").shift(-2)
         return df2
 
-    # E           numba.core.errors.TypingError: Failed in bodo mode pipeline (step: <class 'bodo.compiler.BodoDistributedPass'>)
-    # E           NameError: name 'ns' is not defined
-    # print("*********")
-    # print(df1_timedelta)
-    # print(impl2(df1_timedelta))
-    # print("----")
-    # print(bodo.jit(distributed=["df"])(impl2)(df1_timedelta))
+    df = pd.DataFrame(
+        {
+            "A": [
+                datetime.timedelta(3, 3, 3),
+                datetime.timedelta(2, 2, 2),
+                datetime.timedelta(1, 1, 1),
+                np.nan,
+                datetime.timedelta(5, 5, 5),
+            ],
+            "B": [
+                datetime.timedelta(3, 3, 3),
+                datetime.timedelta(2, 2, 2),
+                datetime.timedelta(1, 1, 1),
+                np.nan,
+                datetime.timedelta(5, 5, 5),
+            ],
+        }
+    )
+    check_func(impl2, (df,))
 
 
 def test_groupby_shift_simple():
