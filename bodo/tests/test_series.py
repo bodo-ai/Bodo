@@ -161,6 +161,15 @@ def test_series_constructor_int_arr(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_series_constructor_range(memory_leak_check):
+    def impl(start, stop, step):
+        return pd.Series(range(10))
+
+    check_func(impl, (0, 10, 1))
+    check_func(impl, (10, -1, -3))
+
+
+@pytest.mark.slow
 def test_series_cov_ddof(memory_leak_check):
     def test_impl(s1, s2, ddof=1):
         return s1.cov(s2, ddof=ddof)

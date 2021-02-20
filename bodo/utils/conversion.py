@@ -213,6 +213,12 @@ def overload_coerce_to_ndarray(
             data._start, data._stop, data._step
         )  # pragma: no cover
 
+    # types.RangeType
+    if isinstance(data, types.RangeType):
+        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: np.arange(
+            data.start, data.stop, data.step
+        )  # pragma: no cover
+
     # convert scalar to ndarray
     # TODO: make sure scalar is a Numpy dtype
 
