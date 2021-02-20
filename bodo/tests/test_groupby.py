@@ -1871,6 +1871,36 @@ def test_groupby_apply(is_slow_run):
     check_func(impl6, (df,), sort_output=True, reset_index=True)
 
 
+def test_groupby_apply_objmode():
+    """
+    Test Groupby.apply() with objmode inside UDF
+    """
+
+    bodo.numba.types.test_df_type = bodo.DataFrameType(
+        (bodo.string_array_type, bodo.float64[::1]),
+        bodo.NumericIndexType(bodo.int64, bodo.none),
+        ("B", "C"),
+    )
+
+    def apply_func(df):
+        with bodo.objmode(df2="test_df_type"):
+            df2 = df[["B", "C"]]
+        return df2
+
+    def impl1(df):
+        return df.groupby("A").apply(apply_func)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 4, 4, 11, 4, 1],
+            "B": ["AB", "DD", "E", "A", "DD", "AB"],
+            "C": [1.1, 2.2, 3.3, 4.4, 5.5, -1.1],
+            "D": [3, 1, 2, 4, 5, 5],
+        }
+    )
+    check_func(impl1, (df,), sort_output=True, reset_index=True)
+
+
 @pytest.mark.slow
 def test_single_col_reset_index(test_df, memory_leak_check):
     """We need the reset_index=True because otherwise the order is scrambled"""
