@@ -3,6 +3,7 @@
 Unittests for DataFrames
 """
 import datetime
+import operator
 import random
 import sys
 import unittest
@@ -1833,6 +1834,44 @@ def test_dataframe_binary_op(op, memory_leak_check):
     # df/scalar
     check_func(test_impl, (df, 2))
     check_func(test_impl, (2, df))
+
+
+# TODO: Mark as slow after CI passes
+@pytest.mark.parametrize("op", (operator.eq, operator.ne))
+def test_dataframe_binary_comp_op_diff_types(op, memory_leak_check):
+    """
+    Checks for == and != between dataframes and scalars with types
+    that may not match. Equality checks should always result in not
+    equal if the types do not match.
+    """
+    # TODO: test parallelism
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(df, other):\n"
+    func_text += "  return df {} other\n".format(op_str)
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    test_impl = loc_vars["test_impl"]
+
+    df1 = pd.DataFrame(
+        {"A": [None, "str", "wall", "eat", "bear"], "B": [4, 6, 7, 1, 3]},
+        index=[3, 5, 0, 7, 2],
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": [None, "str", "wall", "eat", "bear"],
+            "B": [4, 6, 7, 1, 3],
+            "C": [None, "str", "wall", "eat", "bear"],
+        },
+        index=[3, 5, 0, 7, 2],
+    )
+    # df/scalar with 1 skipped column
+    check_func(test_impl, (df1, 2))
+    check_func(test_impl, (2, df1))
+    # df/scalar with multiple skipped columns.
+    # Adding this check ensures our generated arrays properly create
+    # unique variable names.
+    check_func(test_impl, (df2, 2))
+    check_func(test_impl, (2, df2))
 
 
 def test_dataframe_binary_iadd(memory_leak_check):

@@ -50,6 +50,7 @@ from bodo.utils.typing import (
     get_overload_const_list,
     get_overload_const_str,
     get_overload_constant_dict,
+    is_common_scalar_dtype,
     is_overload_constant_bool,
     is_overload_constant_dict,
     is_overload_constant_list,
@@ -1269,6 +1270,9 @@ def _is_numeric_dtype(dtype):
 def create_binary_op_overload(op):
     def overload_dataframe_binary_op(left, right):
         op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+        # Handle equality specially because we can determine the result
+        # when there are mismatched types.
+        eq_ops = (operator.eq, operator.ne)
         if isinstance(left, DataFrameType):
             # df/df case
             if isinstance(right, DataFrameType):
@@ -1290,26 +1294,91 @@ def create_binary_op_overload(op):
                 index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(left)"
                 return _gen_init_df(header, left.columns, data_args, index)
 
-            # scalar case, TODO: check
-            data_args = ", ".join(
-                (
-                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0}) {1}"
-                    "right"
-                ).format(i, op_str)
-                for i in range(len(left.columns))
-            )
+            # scalar case, TODO: Proper error handling for all operators
+            # TODO: Test with ArrayItemArrayType
+            data_impl = []
+            # For each array with a different type, we generate an array
+            # of all True/False using a prange. This is because np.full
+            # support can have parallelism issues in Numba.
+            diff_types = []
+            # TODO: What is the best way to place these constants in the code.
+            if op in eq_ops:
+                for i, col in enumerate(left.data):
+                    # If the types don't match, generate an array of False/True values
+                    if is_common_scalar_dtype([col.dtype, right]):
+                        data_impl.append(
+                            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {i}) {op_str} right"
+                        )
+                    else:
+                        arr_name = f"arr{i}"
+                        diff_types.append(arr_name)
+                        data_impl.append(arr_name)
+                data_args = ", ".join(data_impl)
+            else:
+                data_args = ", ".join(
+                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0}) {1} right".format(
+                        i, op_str
+                    )
+                    for i in range(len(left.columns))
+                )
+
             header = "def impl(left, right):\n"
+            if len(diff_types) > 0:
+                header += "  numba.parfors.parfor.init_prange()\n"
+                header += "  n = len(left)\n"
+                header += "".join(
+                    "  {0} = np.empty(n, dtype=np.bool_)\n".format(arr_name)
+                    for arr_name in diff_types
+                )
+                header += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+                header += "".join(
+                    "    {0}[i] = {1}\n".format(arr_name, op == operator.ne)
+                    for arr_name in diff_types
+                )
             index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(left)"
             return _gen_init_df(header, left.columns, data_args, index)
 
         if isinstance(right, DataFrameType):
-            data_args = ", ".join(
-                "left {1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0})".format(
-                    i, op_str
+            # scalar case, TODO: Proper error handling for all operators
+            # TODO: Test with ArrayItemArrayType
+            data_impl = []
+            # For each array with a different type, we generate an array
+            # of all True/False using a prange. This is because np.full
+            # support can have parallelism issues in Numba.
+            diff_types = []
+            # TODO: What is the best way to place these constants in the code.
+            if op in eq_ops:
+                for i, col in enumerate(right.data):
+                    # If the types don't match, generate an array of False/True values
+                    if is_common_scalar_dtype([left, col.dtype]):
+                        data_impl.append(
+                            f"left {op_str} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {i})"
+                        )
+                    else:
+                        arr_name = f"arr{i}"
+                        diff_types.append(arr_name)
+                        data_impl.append(arr_name)
+                data_args = ", ".join(data_impl)
+            else:
+                data_args = ", ".join(
+                    "left {1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0})".format(
+                        i, op_str
+                    )
+                    for i in range(len(right.columns))
                 )
-                for i in range(len(right.columns))
-            )
             header = "def impl(left, right):\n"
+            if len(diff_types) > 0:
+                header += "  numba.parfors.parfor.init_prange()\n"
+                header += "  n = len(right)\n"
+                header += "".join(
+                    "  {0} = np.empty(n, dtype=np.bool_)\n".format(arr_name)
+                    for arr_name in diff_types
+                )
+                header += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+                header += "".join(
+                    "    {0}[i] = {1}\n".format(arr_name, op == operator.ne)
+                    for arr_name in diff_types
+                )
             index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(right)"
             return _gen_init_df(header, right.columns, data_args, index)
 
