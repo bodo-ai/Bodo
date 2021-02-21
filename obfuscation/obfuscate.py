@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # Copyright (C) 2020 Bodo Inc. All rights reserved.
 
-"""The main obfuscate script. It does the job of taking a python file and returning
-another one which is harder to read.
+"""The main obfuscation script. It converts a python file to a harder to read version
+by renaming variables.
 
 Use:
 
@@ -436,6 +436,8 @@ class Obfuscator(ast.NodeTransformer):
         if isinstance(node.context_expr, ast.Call):
             for xarg in node.context_expr.args:
                 self.visit(xarg)
+            for kw in node.context_expr.keywords:
+                self.visit(kw.value)
 
         return node
 
