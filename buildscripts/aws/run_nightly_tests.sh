@@ -10,7 +10,7 @@ USERNAME=`credstash -r us-east-2 get artifactory.ci.username`
 TOKEN=`credstash -r us-east-2 get artifactory.ci.token`
 
 # ------ Install Bodo -----------
-conda install -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/bodo-binary -c conda-forge bodo=$BODO_VERSION
+conda install -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/bodo-binary -c numba -c conda-forge bodo=$BODO_VERSION
 
 # ------ Run Tests -----------
 git clone https://github.com/Bodo-inc/engine-e2e-tests.git $ENGINE_E2E_TESTS
