@@ -213,13 +213,13 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
 
         return impl_drop
 
-    def get_name_literal(name_typ, is_index):
+    def get_name_literal(name_typ, is_index=False, series_name=None):
         """return literal value or throw error in non-literal type"""
         # if Series name is None, Pandas uses 0.
         # if Index name is None, Pandas uses "index".
         if is_overload_none(name_typ):
             if is_index:
-                return "index"
+                return "index" if series_name != "index" else "level_0"
             return 0
 
         if is_literal_type(name_typ):
@@ -230,9 +230,11 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
             )
 
     # TODO: [BE-100] Support name argument with a constant string.
+    series_name = get_name_literal(S.name_typ)
+    index_name = get_name_literal(S.index.name_typ, True, series_name)
     columns = [
-        get_name_literal(S.index.name_typ, True),
-        get_name_literal(S.name_typ, False),
+        index_name,
+        series_name,
     ]
 
     func_text = "def _impl(S, level=None, drop=False, name=None, inplace=False):\n"

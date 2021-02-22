@@ -3194,6 +3194,7 @@ def test_series_describe(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,), False)
 
 
+# TODO: move some cases to slow path
 def test_series_reset_index_no_drop(memory_leak_check):
     """Test Series.reset_index(drop=False)"""
 
@@ -3204,9 +3205,15 @@ def test_series_reset_index_no_drop(memory_leak_check):
     def impl2(df):
         return df["A"].value_counts().reset_index(drop=False)
 
+    # Series name is index, so output should use level_0
+    def impl3(df):
+        return df["index"].reset_index(drop=False)
+
     df = pd.DataFrame({"A": [1, 2, 3, 4, 1, 2, 3]})
     check_func(impl1, (df,))
     check_func(impl2, (df,))
+    df = pd.DataFrame({"index": [1, 2, 3, 4, 1, 2, 3]})
+    check_func(impl3, (df,))
 
 
 def test_series_reset_index(memory_leak_check):
