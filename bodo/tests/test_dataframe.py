@@ -1121,11 +1121,37 @@ def test_df_head(df_value, memory_leak_check):
     check_func(impl, (df_value,), is_out_distributed=False)
 
 
+# TODO: Mark as slow
+def test_df_head_no_args(memory_leak_check):
+    """
+    Test that df.head() works with the default args.
+    """
+
+    def impl(df):
+        return df.head()
+
+    df = pd.DataFrame({"A": np.arange(5), "C": np.arange(5) ** 2})
+    check_func(impl, (df,), is_out_distributed=False)
+
+
 def test_df_tail(df_value, memory_leak_check):
     def impl(df):
         return df.tail(3)
 
     check_func(impl, (df_value,), is_out_distributed=False)
+
+
+# TODO: Mark as slow
+def test_df_tail_no_args(memory_leak_check):
+    """
+    Test that df.tail() works with the default args.
+    """
+
+    def impl(df):
+        return df.tail()
+
+    df = pd.DataFrame({"A": np.arange(5), "C": np.arange(5) ** 2})
+    check_func(impl, (df,), is_out_distributed=False)
 
 
 @pytest.mark.parametrize(

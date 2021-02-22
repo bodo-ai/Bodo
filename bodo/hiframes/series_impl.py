@@ -1310,7 +1310,7 @@ def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=N
 @overload_method(SeriesType, "head", inline="always", no_unliteral=True)
 def overload_series_head(S, n=5):
     # n must be an integer for indexing.
-    if not isinstance(n, types.Integer):
+    if not is_overload_int(n):
         raise BodoError("Series.head(): 'n' must be an Integer")
 
     def impl(S, n=5):  # pragma: no cover
@@ -1327,7 +1327,7 @@ def overload_series_head(S, n=5):
 @overload_method(SeriesType, "tail", inline="always", no_unliteral=True)
 def overload_series_tail(S, n=5):
     # n must be an integer for indexing.
-    if not isinstance(n, types.Integer):
+    if not is_overload_int(n):
         raise BodoError("Series.tail(): 'n' must be an Integer")
 
     def impl(S, n=5):  # pragma: no cover
