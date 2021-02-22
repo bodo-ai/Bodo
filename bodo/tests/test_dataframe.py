@@ -2831,6 +2831,12 @@ def test_df_setitem_multi(memory_leak_check):
         df[["A", "B"]] = df[["D", "B"]]
         return df
 
+    # test definition update error in BE-139
+    def impl3():
+        df = pd.DataFrame({"A": [1], "B": [2]})
+        if len(df) > 1:
+            df[["E", "F"]] = df.apply(lambda x: x)
+
     n = 11
     df = pd.DataFrame(
         {
@@ -2842,6 +2848,8 @@ def test_df_setitem_multi(memory_leak_check):
     )
     check_func(impl1, (df,), copy_input=True)
     check_func(impl2, (df,), copy_input=True)
+    with pytest.raises(BodoError, match=r"only apply\(\) with axis"):
+        bodo.jit(impl3)()
 
 
 def test_iloc_bool_arr(memory_leak_check):
