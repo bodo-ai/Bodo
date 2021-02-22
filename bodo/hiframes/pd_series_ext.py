@@ -383,7 +383,6 @@ def init_series(typingctx, data, index, name=None):
 
     assert is_pd_index_type(index) or isinstance(index, MultiIndexType)
     name = types.none if name is None else name
-    name = types.unliteral(name)
 
     def codegen(context, builder, signature, args):
         data_val, index_val, name_val = args
