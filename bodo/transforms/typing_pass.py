@@ -671,13 +671,13 @@ class TypingTransforms:
             if i > 0:
                 df_expr = nodes[-2].value
                 df_var = nodes[-1].target
-                self.func_ir._definitions[df_var.name] = [df_expr]
+                self.func_ir._definitions[df_var.name].append(df_expr)
                 self.rhs_labels[df_expr] = label
             dummy_inst = ir.SetItem(df_var, df_var, column_values[i], loc)
             nodes += self._run_df_set_column(dummy_inst, c, label)
             # clean up to avoid conflict with later definition update in run()
             if i > 0:
-                self.func_ir._definitions[df_var.name] = []
+                self.func_ir._definitions[df_var.name].remove(df_expr)
         return nodes
 
     def _run_setattr(self, inst, label):
