@@ -1994,7 +1994,7 @@ def overload_np_linspace_get_stepsize(start, stop, num, endpoint):
 def arr_contains(A, val):
     # TODO: Add support for types with different width. i.e. int64 and int16
     if not (
-        bodo.utils.utils.is_array_typ(A, False) and A.dtype == val
+        bodo.utils.utils.is_array_typ(A, False) and A.dtype == types.unliteral(val)
     ):  # pragma: no cover
         return
 

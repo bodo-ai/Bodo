@@ -944,7 +944,11 @@ class SeriesPass:
                 return replace_func(self, impl, [arg1, arg2])
 
         # TODO: Make sure this doesn't conflict with Numba implementations in 0.52
-        if rhs.fn == operator.contains and bodo.utils.utils.is_array_typ(typ1, False):
+        if (
+            rhs.fn == operator.contains
+            and bodo.utils.utils.is_array_typ(typ1, False)
+            and typ1.dtype == types.unliteral(typ2)
+        ):
             # Currently only supported for our array types.
             return replace_func(
                 self, bodo.libs.array_kernels.arr_contains(typ1, typ2), [arg1, arg2]

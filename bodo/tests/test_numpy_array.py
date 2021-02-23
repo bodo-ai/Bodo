@@ -980,3 +980,15 @@ def test_bad_setitem(mutable_bodo_arr, memory_leak_check):
             bodo.jit(test_impl_series_like)(mutable_bodo_arr, ind)
         with pytest.raises(BodoError, match=error_msg):
             bodo.jit(test_impl_list_like)(mutable_bodo_arr, ind)
+
+
+# TODO: Mark as slow after CI passes
+def test_numpy_contains_inline(memory_leak_check):
+    """Checks that we inline the in operator if a valid impl exists
+    supported by Bodo (not Numba)."""
+
+    def test_impl(arr):
+        return "a" in arr
+
+    arr = np.array([3, 4, 0, 2, 5])
+    check_func(test_impl, (arr,))
