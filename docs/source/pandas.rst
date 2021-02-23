@@ -68,7 +68,7 @@ The following table can be used to select the necessary Bodo Type based upon the
 
   * - Bodo Type Name
     - Equivalent Python, Numpy, or Pandas type
-  * - ``np.bool_[:]``, ``np.int8[:]``, ..., ``np.int64[:]``, ``np.uint8[:]``, ..., ``np.uint64[:]``, ``np.float32[:]``, ``np.float64[:]``
+  * - ``bodo.bool_[:]``, ``bodo.int8[:]``, ..., ``bodo.int64[:]``, ``bodo.uint8[:]``, ..., ``bodo.uint64[:]``, ``bodo.float32[:]``, ``bodo.float64[:]``
     - One-dimensional Numpy array of the given type. A full list of supported Numpy types can be found `here <https://numba.readthedocs.io/en/stable/reference/types.html#numbers>`_.
       A multidimensional can be specified by adding additional colons (e.g. ``bodo.int32[:, :, :]`` for a three-dimensional array).
   * - ``bodo.string_array_type``
