@@ -29,9 +29,10 @@ from numba.extending import (
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
-# NOTE: importing hdist is necessary for MPI initialization before array_ext
-from bodo.libs import array_ext, hstr_ext
 from bodo.libs.str_arr_ext import kBitmask
+
+# NOTE: importing hdist is necessary for MPI initialization before array_ext
+from bodo.libs import array_ext, hstr_ext  # isort:skip
 
 ll.add_symbol("mask_arr_to_bitmap", hstr_ext.mask_arr_to_bitmap)
 ll.add_symbol("is_pd_int_array", array_ext.is_pd_int_array)
@@ -951,6 +952,13 @@ def get_nullable_array_binary_impl(op, A1, A2):
         op, (dtype1, dtype2), {}
     ).return_type
     ret_dtype = to_nullable_type(ret_dtype)
+
+    # make sure there is no ZeroDivisionError (BE-200, test_div_by_zero)
+    if op in (operator.truediv, operator.itruediv):
+        op = np.true_divide
+    elif op in (operator.floordiv, operator.ifloordiv):
+        op = np.floor_divide
+
     # generate implementation function. Example:
     # def impl(A1, A2):
     #   n = len(A1)

@@ -424,6 +424,33 @@ def test_binary_op(op, memory_leak_check):
     check_func(test_impl, (2, A2))
 
 
+def test_div_by_zero(memory_leak_check):
+    """make sure division by zero doesn't throw an error (returns inf in Pandas)"""
+
+    def impl1(A1, A2):
+        return A1 / A2
+
+    def impl2(A1, A2):
+        return A1 // A2
+
+    def impl3(A1, A2):
+        A1 /= A2
+        return A1
+
+    def impl4(A1, A2):
+        A1 //= A2
+        return A1
+
+    A1 = pd.array([1, 2, None, 3, 11, 0], "Int64")
+    A2 = pd.array([1, None, 3, 0, 11, 4], "Int64")
+
+    check_func(impl1, (A1, A2))
+    check_func(impl2, (A1, A2))
+    # TODO: support inplace truediv (difficult due to type change to float)
+    # check_func(impl3, (A1, A2), copy_input=True)
+    check_func(impl4, (A1, A2), copy_input=True)
+
+
 def test_inplace_iadd(memory_leak_check):
     def test_impl(A, other):
         A += other
