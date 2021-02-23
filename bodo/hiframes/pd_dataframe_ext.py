@@ -294,10 +294,15 @@ class DataFrameAttribute(AttributeTemplate):
             None,
         )
         data_type = types.BaseTuple.from_types(dtypes)
+        name_dtype = df.index.dtype
+        if name_dtype == types.NPDatetime("ns"):
+            name_dtype = bodo.pandas_timestamp_type
+        if name_dtype == types.NPTimedelta("ns"):
+            name_dtype = bodo.pd_timedelta_type
         if is_heterogeneous_tuple_type(data_type):
-            row_typ = HeterogeneousSeriesType(data_type, index_type, name_type)
+            row_typ = HeterogeneousSeriesType(data_type, index_type, name_dtype)
         else:
-            row_typ = SeriesType(data_type.dtype, data_type, index_type, name_type)
+            row_typ = SeriesType(data_type.dtype, data_type, index_type, name_dtype)
         arg_typs = (row_typ,)
         if f_args is not None:
             arg_typs += tuple(f_args.types)

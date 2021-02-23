@@ -19,7 +19,11 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
 )
 from bodo.hiframes.pd_offsets_ext import is_offsets_type
-from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
+from bodo.hiframes.pd_series_ext import (
+    HeterogeneousSeriesType,
+    SeriesType,
+    if_series_to_array_type,
+)
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
@@ -105,6 +109,7 @@ def overload_series_dtypes(s):
     return lambda s: s.dtype
 
 
+@overload_attribute(HeterogeneousSeriesType, "name", inline="always")
 @overload_attribute(SeriesType, "name", inline="always")
 def overload_series_name(s):
     return lambda s: bodo.hiframes.pd_series_ext.get_series_name(s)

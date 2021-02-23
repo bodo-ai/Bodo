@@ -4460,6 +4460,19 @@ def test_series_none_data(memory_leak_check):
     check_func(impl, ())
 
 
+@pytest.mark.skip("[BE-199] Name unsupported because input type is an array")
+def test_series_apply_name(memory_leak_check):
+    """
+    Check that you can get name information from series.apply.
+    """
+
+    def test_impl(S):
+        return S.apply(lambda x: x.name)
+
+    S = pd.Series([1, 2, 3, 4, 1])
+    check_func(test_impl, (S,))
+
+
 def test_series_astype_num_constructors(memory_leak_check):
     """
     test Series.astype() with number constructor functions "float" and "int"

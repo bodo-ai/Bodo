@@ -2243,6 +2243,66 @@ def test_df_apply_getitem(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+def test_df_apply_name_heterogeneous(memory_leak_check):
+    """
+    Check that you can get name information from DataFrame.apply with
+    a heterogeneous series.
+    """
+
+    def test_impl(df):
+        return df.apply(lambda x: x.name, axis=1)
+
+    df = pd.DataFrame({"C": ["go", "to", "bed", "a", "b"], "A": [1, 2, 3, 4, 1]})
+    check_func(test_impl, (df,))
+
+
+def test_df_apply_name_homogeneous(memory_leak_check):
+    """
+    Check that you can get name information from DataFrame.apply with
+    a homogeneous series.
+    """
+
+    def test_impl(df):
+        return df.apply(lambda x: x.name, axis=1)
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 1]})
+    check_func(test_impl, (df,))
+
+
+# TODO: Mark as slow after CI passes
+def test_df_apply_name_datetime_index(memory_leak_check):
+    """
+    Check that you can get name information from DataFrame.apply with
+    a homogeneous series. It checks for the correct type by using an
+    attribute that only a pd.Timestamp value has.
+    """
+
+    def test_impl(df):
+        return df.apply(lambda x: x.name.value, axis=1)
+
+    df = pd.DataFrame(
+        {"A": [1, 2, 3, 4, 1]}, index=pd.date_range("2018-01-01", periods=5, freq="H")
+    )
+    check_func(test_impl, (df,))
+
+
+# TODO: Mark as slow after CI passes
+def test_df_apply_name_timedelta_index(memory_leak_check):
+    """
+    Check that you can get name information from DataFrame.apply with
+    a homogeneous series. It checks for the correct type by using an
+    attribute that only a pd.Timedelta value has.
+    """
+
+    def test_impl(df):
+        return df.apply(lambda x: x.name.value, axis=1)
+
+    df = pd.DataFrame(
+        {"A": [1, 2, 3, 4, 1]}, index=pd.timedelta_range(start="1 day", periods=5)
+    )
+    check_func(test_impl, (df,))
+
+
 def test_df_apply_int_getitem_unsorted_columns(memory_leak_check):
     """
     test int getitem access of row passed in df.apply() where column names are not in

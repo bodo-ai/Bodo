@@ -496,6 +496,7 @@ class DataFramePass:
         func_text = "def f({}, df_index, {}):\n".format(col_name_args, extra_arg_names)
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  n = len(c0)\n"
+        func_text += "  index_arr = bodo.utils.conversion.coerce_to_array(df_index)\n"
 
         for i in range(n_out_cols):
             func_text += (
@@ -503,12 +504,12 @@ class DataFramePass:
             )
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
         # TODO: unbox to array value if necessary (e.g. Timestamp to dt64)
-        func_text += "    row_idx = bodo.hiframes.pd_index_ext.init_heter_index({}, None)\n".format(
+        func_text += "    row_idx = bodo.hiframes.pd_index_ext.init_heter_index({}, bodo.utils.conversion.box_if_dt64(index_arr[i]))\n".format(
             gen_const_tup(used_cols)
         )
         # TODO: pass df_index[i] as row name (after issue with RangeIndex getitem in
         # test_df_apply_assertion is resolved)
-        func_text += "    row = bodo.hiframes.pd_series_ext.init_series(({},), row_idx, None)\n".format(
+        func_text += "    row = bodo.hiframes.pd_series_ext.init_series(({},), row_idx, bodo.utils.conversion.box_if_dt64(index_arr[i]))\n".format(
             row_args
         )
         func_text += "    v = map_func(row, {})\n".format(udf_arg_names)
