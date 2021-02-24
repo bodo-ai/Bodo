@@ -4,13 +4,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import (
-    _get_dist_arg,
-    _test_equal_guard,
-    check_func,
-    reduce_sum,
-)
-from bodo.utils.testing import ensure_clean
+from bodo.tests.utils import _get_dist_arg, check_func
 
 pytestmark = pytest.mark.s3
 
@@ -45,6 +39,44 @@ def test_s3_csv_data1(minio_server, bucket_fixture, datapath, bucket_name, reque
     )
 
     check_func(test_impl, (f"s3://{bucket_name}/csv_data1.csv",), py_output=py_output)
+
+
+@pytest.mark.parametrize(
+    "bucket_fixture,bucket_name",
+    [
+        ("s3_bucket", "bodo-test"),
+        ("s3_bucket_us_west_2", "bodo-test-2"),
+    ],
+)
+def test_s3_csv_dir(minio_server, bucket_fixture, datapath, bucket_name, request):
+    """
+    test s3 read_csv directory
+    reading from s3_bucket_us_west_2 will check if the s3 auto region
+    detection functionality works
+    the directory name has a space character in it; we had a case where this
+    used to fail, so this is a test for avoiding that regression as well.
+    """
+    request.getfixturevalue(bucket_fixture)
+
+    fname_dir_multi = f"s3://{bucket_name}/example multi.csv"
+
+    def test_impl_with_dtype(fname):
+        return pd.read_csv(
+            fname,
+            dtype={
+                "one": np.float32,
+                "two": str,
+                "three": "bool",
+                "four": np.float32,
+                "five": str,
+            },
+        )
+
+    py_out = pd.read_csv(datapath("example.csv"))
+    # specify dtype here because small partition of dataframe causes only
+    # int values(x.0) in float columns, and causes type mismatch becasue
+    # pandas infer them as int columns
+    check_func(test_impl_with_dtype, (fname_dir_multi,), py_output=py_out)
 
 
 def test_s3_csv_data1_compressed(minio_server, s3_bucket, datapath):

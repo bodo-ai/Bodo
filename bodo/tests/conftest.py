@@ -193,6 +193,7 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
             ("asof1.pq", datapath("asof1.pq")),
             ("groupby3.pq", datapath("groupby3.pq")),
             ("example.json", datapath("example.json")),
+            ("example.csv", datapath("example.csv")),
         ]
         for s3_key, file_name in test_s3_files:
             s3.meta.client.upload_file(file_name, bucket_name, s3_key)
@@ -211,7 +212,7 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
 
         prefix = datapath("example_single.json")
         pat = prefix + "/*.json"
-        example_single_parts = [f for f in glob.glob(pat)]
+        example_single_parts = glob.glob(pat)
         for path in example_single_parts:
             fname = path[len(prefix) + 1 :]
             fname = "example_single.json/{}".format(fname)
@@ -219,10 +220,18 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
 
         prefix = datapath("example_multi.json")
         pat = prefix + "/*.json"
-        example_multi_parts = [f for f in glob.glob(pat)]
+        example_multi_parts = glob.glob(pat)
         for path in example_multi_parts:
             fname = path[len(prefix) + 1 :]
             fname = "example_multi.json/{}".format(fname)
+            s3.meta.client.upload_file(path, bucket_name, fname)
+
+        prefix = datapath("example multi.csv")
+        pat = prefix + "/*.csv"
+        example_multi_parts_csv = glob.glob(pat)
+        for path in example_multi_parts_csv:
+            fname = path[len(prefix) + 1 :]
+            fname = "example multi.csv/{}".format(fname)
             s3.meta.client.upload_file(path, bucket_name, fname)
 
     bodo.barrier()

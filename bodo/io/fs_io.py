@@ -14,8 +14,9 @@ from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.io import csv_cpp
+from bodo.io import csv_cpp, s3_reader
 from bodo.libs.distributed_api import Reduce_Type
+from bodo.libs.str_arr_ext import _memcpy
 from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning
 
@@ -30,7 +31,17 @@ _csv_write = types.ExternalFunction(
         types.voidptr,
     ),
 )
+_get_region_from_s3_path = types.ExternalFunction(
+    "get_region_from_s3_path",
+    types.voidptr(types.voidptr, types.voidptr),
+)
+_del_region_str = types.ExternalFunction(
+    "del_region_str",
+    types.void(types.voidptr),
+)
 ll.add_symbol("csv_write", csv_cpp.csv_write)
+ll.add_symbol("get_region_from_s3_path", s3_reader.get_region_from_s3_path)
+ll.add_symbol("del_region_str", s3_reader.del_region_str)
 
 
 def get_s3_fs():
@@ -249,7 +260,6 @@ def abfs_is_directory(path):  # pragma: no cover
     """
     Return whether abfs path is a directory or not
     """
-    import pyarrow as pa
 
     hdfs = get_hdfs_fs(path)
     try:
@@ -273,8 +283,6 @@ def abfs_list_dir_fnames(path):  # pragma: no cover
     If path is a file, return None
     return (pyarrow.fs.HadoopFileSystem, file_names)
     """
-
-    from pyarrow.fs import FileSelector
 
     file_names = None
     hdfs, isdir = abfs_is_directory(path)
@@ -419,56 +427,49 @@ def find_file_name_or_handler(path, ftype):
     return is_handler, file_name_or_handler, f_size, fs
 
 
-def get_s3_bucket_name(s3_fs, s3_filepath):
-    """Get the name of the bucket from a s3 url of type s3://<BUCKET_NAME>/<FILEPATH (optional)>"""
-    path_parts = s3_filepath.replace("s3://", "").split("/")
-    bucket = path_parts[0]
-    return bucket
-
-
-def get_s3_bucket_region(s3_filepath):
-    """Get the region of the s3 bucket from a s3 url of type s3://<BUCKET_NAME>/<FILEPATH>"""
-    try:
-        import s3fs
-    except:  # pragma: no cover
-        raise BodoError("Reading from s3 requires s3fs currently.")
-
-    from mpi4py import MPI
-
-    comm = MPI.COMM_WORLD
-
-    bucket_loc = None
-    if bodo.get_rank() == 0:
-        s3_fs = get_s3_fs()
-        bucket_name = get_s3_bucket_name(s3_fs, s3_filepath)
-        try:
-            bucket_loc = s3_fs.s3.get_bucket_location(Bucket=bucket_name)[
-                "LocationConstraint"
-            ]
-            if bucket_loc is None:
-                bucket_loc = "us-east-1"
-
-        except Exception as e:
-            # Something went wrong with region detection (permissions issue most likely)
-            # If AWS_DEFAULT_REGION isn't set either, then print a warning.
-            if os.environ.get("AWS_DEFAULT_REGION", "") == "":
-                warnings.warn(
-                    BodoWarning(
-                        f"Unable to get S3 Bucket Region.\n{e}.\nValue not defined in the AWS_DEFAULT_REGION environment variable either. Region defaults to us-east-1 currently."
-                    )
+@numba.njit()
+def raise_region_detection_warning(bucket_loc):  # pragma: no cover
+    """
+    Print a warning if bucket_loc is an empty string
+    and AWS_DEFAULT_REGION environment variable
+    hasn't been set either.
+    Separate function due to caching issues.
+    """
+    with numba.objmode():
+        if (
+            bodo.get_rank() == 0
+            and bucket_loc == "\x00"
+            and os.environ.get("AWS_DEFAULT_REGION", "") == ""
+        ):
+            warnings.warn(
+                BodoWarning(
+                    "Unable to determine S3 Bucket Region. Value not defined in the AWS_DEFAULT_REGION environment variable either. Region defaults to us-east-1 currently."
                 )
-            bucket_loc = ""
-
-    bucket_loc = comm.bcast(bucket_loc)
-    return bucket_loc
+            )
 
 
 @numba.njit()
 def get_s3_bucket_region_njit(s3_filepath):  # pragma: no cover
-    with numba.objmode(bucket_loc="unicode_type"):
-        bucket_loc = ""
-        if s3_filepath.startswith("s3://"):
-            bucket_loc = get_s3_bucket_region(s3_filepath)
+    """
+    Wrapper around the get_region_from_s3_path function in _s3_reader.cpp
+    """
+    if not s3_filepath.startswith("s3://"):
+        return ""
+    A = np.empty(1, np.int64)  # Buffer to store the length of the returned string
+    # Call the C++ function
+    char_ptr = _get_region_from_s3_path(unicode_to_utf8(s3_filepath), A.ctypes)
+    length = A[0]  # Length of the region returned
+    # Define type of characters, in our case each is 1 byte
+    kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
+    # Allocate space for a numba string type
+    bucket_loc = numba.cpython.unicode._malloc_string(kind, 1, length, True)
+    # Copy contents over from the C string to this new buffer
+    _memcpy(bucket_loc._data, char_ptr, length, 1)
+    # Free the space used by the C string (to avoid memory leaks)
+    _del_region_str(char_ptr)
+    ## Warning when region cannot be determined and AWS_DEFAULT_REGION is not set
+    raise_region_detection_warning(bucket_loc)
+
     return bucket_loc
 
 

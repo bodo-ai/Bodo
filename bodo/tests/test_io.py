@@ -234,6 +234,7 @@ def test_pq_write_metadata(df, index_name):
                         bodo_func = bodo.jit(func, all_args_distributed_varlength=True)
 
                     bodo_func(_get_dist_arg(df, False), "bodo_metadatatest.pq")
+                    bodo.barrier()
                     bodo_table = pq.read_table("bodo_metadatatest.pq")
                     if func is impl_index_false:
                         assert [] == bodo_table.schema.pandas_metadata.get(

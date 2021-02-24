@@ -488,7 +488,7 @@ class PathInfo {
                     s3_get_fs(&s3_fs, bucket_region);
                     fs = s3_fs;
                     // remove s3:// prefix from file_path
-                    file_path = file_path.substr(5);
+                    file_path = file_path.substr(strlen("s3://"));
                 } else if (is_hdfs) {
                     import_fs_module(Bodo_Fs::hdfs, "", fs_mod);
                     get_get_fs_pyobject(Bodo_Fs::hdfs, "", fs_mod, func_obj);

@@ -99,7 +99,7 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge boto3 botocore "s3fs=0.4.2"
+      conda install -y -c conda-forge boto3 botocore s3fs
     displayName: 'Setup s3_tesing'
 
   - script: |
