@@ -29,6 +29,7 @@ from bodo.utils.typing import (
     check_unsupported_args,
     get_literal_value,
     get_overload_const,
+    get_overload_const_bool,
     is_list_like_index_type,
     is_literal_type,
     is_overload_constant_bool,
@@ -760,6 +761,26 @@ def pd_categorical_overload(
 
     # categories are provided
     if not is_overload_none(categories):
+        const_categories = get_overload_const(categories)
+        # We can create a type at compile time if we have constant categories and ordered.
+        if (
+            const_categories is not NOT_CONSTANT
+            and get_overload_const(ordered) is not NOT_CONSTANT
+        ):
+            if is_overload_none(ordered):
+                is_ordered = False
+            else:
+                is_ordered = get_overload_const_bool(ordered)
+            _cat_dtype = pd.CategoricalDtype(const_categories, is_ordered)
+
+            # If the categories are constant, create the type at compile time.
+            def impl_cats_const(
+                values, categories=None, ordered=None, dtype=None, fastpath=False
+            ):  # pragma: no cover
+                data = bodo.utils.conversion.coerce_to_array(values)
+                return bodo.utils.conversion.fix_arr_dtype(data, _cat_dtype)
+
+            return impl_cats_const
 
         def impl_cats(
             values, categories=None, ordered=None, dtype=None, fastpath=False

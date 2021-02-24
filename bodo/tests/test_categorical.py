@@ -413,3 +413,25 @@ def test_replace_missing_const():
 
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"])
     check_func(test_impl, (A,))
+
+
+def test_pd_categorical_compile_time():
+    """Checks that pd.Categorical exposes categories at compile time
+    when the categories are known."""
+
+    def test_impl1(S):
+        cat_S = pd.Categorical(S, categories=["A", "B", "C"], ordered=False)
+        return pd.get_dummies(cat_S)
+
+    def test_impl2(S):
+        cat_S = pd.Categorical(S, categories=["A", "B", "C"], ordered=True)
+        return pd.get_dummies(cat_S)
+
+    def test_impl3(S):
+        cat_S = pd.Categorical(S, categories=["A", "B", "C"])
+        return pd.get_dummies(cat_S)
+
+    S = pd.Series(["A", None, "B", "C", "B", "C", "A"])
+    check_func(test_impl1, (S,), check_categorical=False)
+    check_func(test_impl2, (S,), check_categorical=False)
+    check_func(test_impl3, (S,), check_categorical=False)
