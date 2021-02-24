@@ -2679,6 +2679,22 @@ class TestIO(unittest.TestCase):
         pd_expected.index.name = None  # TODO: handle index name
         pd.testing.assert_frame_equal(bodo_func(), pd_expected, check_dtype=False)
 
+    def test_csv_index_ind0(self):
+        fname = os.path.join("bodo", "tests", "data", "csv_data_date1.csv")
+
+        def test_impl():
+            return pd.read_csv(
+                fname,
+                names=["A", "B", "C", "D"],
+                dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+                index_col=0,
+            )
+
+        bodo_func = bodo.jit(test_impl)
+        pd_expected = test_impl()
+        pd_expected.index.name = None  # TODO: handle index name
+        pd.testing.assert_frame_equal(bodo_func(), pd_expected, check_dtype=False)
+
     def test_csv_index_ind1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_date1.csv")
 

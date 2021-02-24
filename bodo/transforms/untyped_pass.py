@@ -1252,13 +1252,13 @@ class UntypedPass:
         data_args = args.copy()
 
         # one column is index
-        if index_col != -1 and index_col != False:
+        if index_col != -1 and not (isinstance(index_col, bool) and index_col == False):
             # convert column number to column name
             if isinstance(index_col, int):
                 index_col = columns[index_col]
             index_ind = columns.index(index_col)
-            index_arg = "bodo.utils.conversion.convert_to_index({})".format(
-                data_args[index_ind]
+            index_arg = "bodo.utils.conversion.convert_to_index({}, '{}')".format(
+                data_args[index_ind], index_col
             )
             columns.remove(index_col)
             data_args.remove(data_args[index_ind])
