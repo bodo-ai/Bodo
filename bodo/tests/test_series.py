@@ -3963,7 +3963,6 @@ def test_series_np_where_num(memory_leak_check):
     check_func(test_impl2, (S, 12, cond))
 
 
-@pytest.mark.slow
 def test_series_where_true(series_val, memory_leak_check):
     """Tests that all types can be used in Series.where(cond)
     with all True values."""
@@ -3974,9 +3973,7 @@ def test_series_where_true(series_val, memory_leak_check):
         return S.where(cond, val)
 
     # TODO: [BE-110] support series.where for more Bodo array types
-    series_err_msg = (
-        "Series.where\(\) Series data must be a 1-dim numpy array or StringArrayType"
-    )
+    series_err_msg = "Series.where.* Series data with type .* not yet supported"
 
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
@@ -4003,13 +4000,17 @@ def test_series_where_true(series_val, memory_leak_check):
         return
 
     # not supported for CategoricalArray yet, TODO: support and test
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
+    if isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
+        series_val.dtype.categories[0], (pd.Timestamp, pd.Timedelta)
+    ):
         with pytest.raises(BodoError, match=series_err_msg):
             bodo.jit(test_impl)(series_val, cond, val)
         return
 
     # not supported for datetime.date yet, TODO: support and test
-    if isinstance(series_val.values[0], datetime.date):
+    if not isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
+        series_val.values[0], datetime.date
+    ):
         with pytest.raises(BodoError, match=series_err_msg):
             bodo.jit(test_impl)(series_val, cond, val)
         return
@@ -4082,7 +4083,6 @@ def test_np_where_one_arg(memory_leak_check):
     check_func(test_impl, (cond,), dist_test=False)
 
 
-@pytest.mark.slow
 def test_series_mask_false(series_val, memory_leak_check):
     """Tests that all types can be used in Series.mask(cond)
     with all False values."""
@@ -4093,9 +4093,7 @@ def test_series_mask_false(series_val, memory_leak_check):
         return S.mask(cond, val)
 
     # TODO: [BE-110] support series.mask for more Bodo array types
-    series_err_msg = (
-        "Series.mask\(\) Series data must be a 1-dim numpy array or StringArrayType"
-    )
+    series_err_msg = "Series.mask.* Series data with type .* not yet supported"
 
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
@@ -4121,14 +4119,17 @@ def test_series_mask_false(series_val, memory_leak_check):
             bodo.jit(test_impl)(series_val, cond, val)
         return
 
-    # not supported for CategoricalArray yet, TODO: support and test
-    if isinstance(series_val.dtype, pd.CategoricalDtype):
+    if isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
+        series_val.dtype.categories[0], (pd.Timestamp, pd.Timedelta)
+    ):
         with pytest.raises(BodoError, match=series_err_msg):
             bodo.jit(test_impl)(series_val, cond, val)
         return
 
     # not supported for datetime.date yet, TODO: support and test
-    if isinstance(series_val.values[0], datetime.date):
+    if not isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
+        series_val.values[0], datetime.date
+    ):
         with pytest.raises(BodoError, match=series_err_msg):
             bodo.jit(test_impl)(series_val, cond, val)
         return

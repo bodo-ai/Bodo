@@ -1915,7 +1915,9 @@ class SeriesPass:
             # create new functions for cases that need dtype since 'dtype' becomes a
             # freevar in overload and doesn't work properly currently.
             # TODO: fix freevar support
-            typ = self.typemap[rhs.args[1].name].instance_type
+            typ = self.typemap[rhs.args[1].name]
+            if isinstance(typ, types.TypeRef):
+                typ = typ.instance_type
             dtype = None
             # nullable int array
             if isinstance(typ, IntegerArrayType):

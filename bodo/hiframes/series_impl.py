@@ -2506,12 +2506,28 @@ def _validate_arguments_mask_where(
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError(f"{func_name}(): axis argument not supported")
 
-    # Bodo Limitation. Where/Mask is only supported for string arrays and numpy arrays
+    # Bodo Limitation. Where/Mask is only supported for string arrays, categorical + scalar, and numpy arrays
     # Nullable int/bool arrays can be used, but they may have the wrong type or
     # drop NaN values.
-    if not (isinstance(S.data, types.Array) or S.dtype == bodo.string_type):
+    if not (
+        isinstance(S.data, types.Array)
+        or (
+            bodo.utils.utils.is_array_typ(S.data, False) and S.dtype == bodo.string_type
+        )
+        # TODO: Support categorical of Timestamp/Timedelta
+        or (
+            isinstance(S.data, bodo.CategoricalArray)
+            and S.dtype.elem_type
+            not in [
+                bodo.datetime64ns,
+                bodo.timedelta64ns,
+                bodo.pandas_timestamp_type,
+                bodo.pd_timedelta_type,
+            ]
+        )
+    ):
         raise BodoError(
-            f"{func_name}() Series data must be a 1-dim numpy array or StringArrayType"
+            f"{func_name}() Series data with type {S.data} not yet supported"
         )
 
     # TODO: Support multidimensional arrays for cond + Dataframes
@@ -2550,14 +2566,19 @@ def _validate_arguments_mask_where(
         )
 
     # Check that the types match
-    if is_iterable_type(other):
-        value_typ = other.dtype
-    elif val_is_nan:
-        value_typ = types.float64
+    if isinstance(S.dtype, bodo.PDCategoricalDtype):
+        s_typ = S.dtype.elem_type
     else:
-        value_typ = types.unliteral(other)
+        s_typ = S.dtype
 
-    if not (is_common_scalar_dtype([S.dtype, value_typ])):
+    if is_iterable_type(other):
+        other_typ = other.dtype
+    elif val_is_nan:
+        other_typ = types.float64
+    else:
+        other_typ = types.unliteral(other)
+
+    if not (is_common_scalar_dtype([s_typ, other_typ])):
         raise BodoError(f"{func_name}() series and 'other' must share a common type.")
 
 
@@ -3274,6 +3295,11 @@ def overload_np_where(condition, x, y):
     # output is string if any input is string
     elif x_dtype == string_type or y_dtype == string_type:
         out_dtype = bodo.string_array_type
+    # TODO: Support 2 categorical arrays
+    # If the dtype is categorical, we need to use an actual
+    # dtype from runtime.
+    elif isinstance(x_dtype, bodo.PDCategoricalDtype):
+        out_dtype = None
     else:
         # similar to np.where typer of Numba
         out_dtype = numba.from_dtype(
@@ -3283,7 +3309,11 @@ def overload_np_where(condition, x, y):
             )
         )
         out_dtype = types.Array(out_dtype, 1, "C")
-    func_text += "  out_arr = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
+    if isinstance(x_dtype, bodo.PDCategoricalDtype):
+        arr_typ_ref = "x"
+    else:
+        arr_typ_ref = "out_dtype"
+    func_text += f"  out_arr = bodo.utils.utils.alloc_type(n, {arr_typ_ref}, (-1,))\n"
     func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "    if condition[j]:\n"
     if is_x_arr:

@@ -697,10 +697,15 @@ def overload_alloc_type(n, t, s=None):
         )  # pragma: no cover
 
     if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArray):
-        _cat_dtype = pd.CategoricalDtype(typ.dtype.categories, typ.dtype.ordered)
-        return lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
-            n, _cat_dtype
-        )  # pragma: no cover
+        if isinstance(t, types.TypeRef):
+            _cat_dtype = pd.CategoricalDtype(typ.dtype.categories, typ.dtype.ordered)
+            return lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
+                n, _cat_dtype
+            )  # pragma: no cover
+        else:
+            return lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
+                n, t.dtype
+            )  # pragma: no cover
 
     if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
         return lambda n, t, s=None: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
