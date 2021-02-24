@@ -3432,6 +3432,25 @@ def test_groupby_dead_col_multifunc(memory_leak_check):
     assert impl5(df) == bodo.jit(impl5)(df)
 
 
+def test_groupby_shift_cat():
+    """Checks that groupby.shift is supported
+    when the target column is categorical."""
+
+    def test_impl(df):
+        df2 = df.groupby("A")["B"].shift(-1)
+        return df2
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 1, 1, 4, 5],
+            "B": pd.Categorical(["LB1", "LB2", "LB1", None, "LB2"], ordered=True),
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5],
+        }
+    )
+
+    check_func(test_impl, (df,))
+
+
 @pytest.mark.skip(reason="TODO: Return nullable int")
 def test_groupby_shift_int():
     """

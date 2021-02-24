@@ -993,13 +993,20 @@ def agg_distributed_run(
     arg_typs = tuple(key_typs + in_col_typs + (pivot_typ,))
 
     return_key = agg_node.return_key
-
     glbs = {
         "bodo": bodo,
         "np": np,
         "dt64_dtype": np.dtype("datetime64[ns]"),
         "td64_dtype": np.dtype("timedelta64[ns]"),
     }
+    # TODO: Support for Categories not known at compile time
+    for i, in_col_typ in enumerate(in_col_typs):
+        if isinstance(in_col_typ, bodo.CategoricalArray):
+            glbs.update({f"in_cat_dtype_{i}": in_col_typ})
+
+    for i, out_col_typ in enumerate(out_col_typs):
+        if isinstance(out_col_typ, bodo.CategoricalArray):
+            glbs.update({f"out_cat_dtype_{i}": out_col_typ})
 
     has_pivot_value = agg_node.pivot_arr is not None
     udf_func_struct = get_udf_func_struct(
@@ -1174,7 +1181,7 @@ def setitem_array_with_str_overload(arr, i, val):
 
 
 # TODO: Use `bodo.utils.utils.alloc_type` instead if possible
-def _gen_dummy_alloc(t):
+def _gen_dummy_alloc(t, colnum=0, is_input=False):
     """generate dummy allocation text for type `t`, used for creating dummy arrays that
     just pass data type to functions.
     """
@@ -1193,6 +1200,10 @@ def _gen_dummy_alloc(t):
         return "alloc_decimal_array(1, {}, {})".format(t.precision, t.scale)
     elif isinstance(t, DatetimeDateArrayType):
         return "bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))"
+    elif isinstance(t, bodo.CategoricalArray):
+        # TODO: Support categories that aren't known at compile time
+        starter = "in" if is_input else "out"
+        return f"bodo.utils.utils.alloc_type(1, {starter}_cat_dtype_{colnum})"
     else:
         return "np.empty(1, {})".format(_get_np_dtype(t.dtype))
 
@@ -1275,8 +1286,8 @@ def gen_update_cb(
     # get input data types
     n_data_cols = len(data_in_typs)
     data_in_dummy_text = []
-    for t in data_in_typs:
-        data_in_dummy_text.append(_gen_dummy_alloc(t))
+    for i, t in enumerate(data_in_typs):
+        data_in_dummy_text.append(_gen_dummy_alloc(t, i, True))
     func_text += "    data_in_dummy = ({}{})\n".format(
         ",".join(data_in_dummy_text), "," if len(data_in_typs) == 1 else ""
     )
@@ -1672,7 +1683,9 @@ def gen_top_level_agg_func(
     for i in range(len(out_names)):
         out_name = out_names[i] + "_dummy"
         out_col_typ = out_col_typs[i]
-        func_text += "    {} = {}\n".format(out_name, _gen_dummy_alloc(out_col_typ))
+        func_text += "    {} = {}\n".format(
+            out_name, _gen_dummy_alloc(out_col_typ, i, False)
+        )
 
     # do_combine indicates whether GroupbyPipeline in C++ will need to do
     # `void combine()` operation or not
