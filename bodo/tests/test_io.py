@@ -901,6 +901,15 @@ def test_read_write_parquet():
         bodo.jit(error_check3)(df)
 
 
+def test_read_dask_parquet(datapath):
+    def test_impl(filename):
+        df = pd.read_parquet(filename)
+        return df
+
+    filename = datapath("dask_data.parquet")
+    check_func(test_impl, (filename,))
+
+
 def test_read_partitions():
     """test reading and filtering partitioned parquet data"""
     import pyarrow as pa

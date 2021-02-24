@@ -302,13 +302,14 @@ def abfs_list_dir_fnames(path):  # pragma: no cover
 
 
 def directory_of_files_common_filter(fname):
-    # Discard Spark-generated files like _SUCCESS and files ending with .crc
-    # as well as hidden files
+    # Ignore the same files as pyarrow,
+    # https://github.com/apache/arrow/blob/master/python/pyarrow/parquet.py#L1039
     fname_l = fname.lower()
-    return (
-        fname_l != "_success"
-        and not fname_l.startswith(".")
-        and not fname_l.endswith(".crc")
+    return not (
+        fname_l.endswith(".crc")  # Checksums
+        or fname_l.endswith("_$folder$")  # HDFS directories in S3
+        or fname_l.startswith(".")  # Hidden files starting with .
+        or fname_l.startswith("_")  # Hidden files starting with _
     )
 
 
