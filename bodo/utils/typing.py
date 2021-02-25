@@ -682,6 +682,7 @@ def get_index_names(t, func_name, default_name):
 
 
 def get_index_data_arr_types(t):
+    """get array type corresponding to Index type 't'"""
     from bodo.hiframes.pd_index_ext import (
         DatetimeIndexType,
         NumericIndexType,
@@ -711,6 +712,30 @@ def get_index_data_arr_types(t):
         return (bodo.hiframes.pd_index_ext._timedelta_index_data_typ,)
 
     raise BodoError("Invalid index type {}".format(t))
+
+
+def get_index_type_from_dtype(t):
+    """get Index type that can hold dtype 't' values."""
+    from bodo.hiframes.pd_index_ext import (
+        DatetimeIndexType,
+        NumericIndexType,
+        StringIndexType,
+        TimedeltaIndexType,
+    )
+
+    if t == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+        return DatetimeIndexType(types.none)
+
+    if t == bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type:
+        return TimedeltaIndexType(types.none)
+
+    if t == bodo.string_type:
+        return StringIndexType(types.none)
+
+    if isinstance(t, (types.Integer, types.Float)):
+        return NumericIndexType(t, types.none)
+
+    raise BodoError(f"Cannot convert dtype {t} to index type")
 
 
 def get_val_type_maybe_str_literal(value):
