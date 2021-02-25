@@ -3309,18 +3309,34 @@ def overload_np_where(condition, x, y):
             )
         )
         out_dtype = types.Array(out_dtype, 1, "C")
+    # If x_dtype is Categorical is_x_arr must be a true
+    # (Categorical Array or Series)
     if isinstance(x_dtype, bodo.PDCategoricalDtype):
         arr_typ_ref = "x"
     else:
         arr_typ_ref = "out_dtype"
     func_text += f"  out_arr = bodo.utils.utils.alloc_type(n, {arr_typ_ref}, (-1,))\n"
+    # Optimization for Categorical data that only transfers the codes directly.
+    # This works because we know the input and output categories match.
+    # If x_dtype is Categorical is_x_arr must be a true
+    # (Categorical Array or Series)
+    if isinstance(x_dtype, bodo.PDCategoricalDtype):
+        func_text += "  out_codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(out_arr)\n"
+        func_text += "  x_codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(x)\n"
     func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "    if condition[j]:\n"
     if is_x_arr:
         func_text += "      if bodo.libs.array_kernels.isna(x, j):\n"
         func_text += "        setna(out_arr, j)\n"
         func_text += "        continue\n"
-    func_text += "      out_arr[j] = {}\n".format("x[j]" if is_x_arr else "x")
+    # Optimization for Categorical data that only transfers the codes directly.
+    # This works because we know the input and output categories match.
+    # If x_dtype is Categorical is_x_arr must be a true
+    # (Categorical Array or Series)
+    if isinstance(x_dtype, bodo.PDCategoricalDtype):
+        func_text += "      out_codes[j] = x_codes[j]\n"
+    else:
+        func_text += "      out_arr[j] = {}\n".format("x[j]" if is_x_arr else "x")
     func_text += "    else:\n"
     if is_y_arr:
         func_text += "      if bodo.libs.array_kernels.isna(y, j):\n"
