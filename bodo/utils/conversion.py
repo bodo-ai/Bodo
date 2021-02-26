@@ -637,7 +637,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
             numba.parfors.parfor.init_prange()
             label_dict = (
                 bodo.hiframes.pd_categorical_ext.get_label_dict_from_categories(
-                    new_dtype.categories
+                    new_dtype.categories.values
                 )
             )
             A = bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, new_dtype)
@@ -670,7 +670,9 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
             # sort categories to match Pandas
             # TODO(ehsan): refactor to avoid long compilation time (too much inlining)
             cats = pd.Series(cats).dropna().sort_values().values
-            cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(cats, False)
+            cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(
+                bodo.utils.conversion.index_from_array(cats, None), False
+            )
             return bodo.utils.conversion.fix_arr_dtype(data, cat_dtype, copy)
 
         return impl_category

@@ -61,29 +61,19 @@ def _typeof_pd_cat_dtype(val, c):
     return PDCategoricalDtype(tuple(cats), elem_type, val.ordered)
 
 
-def _get_cat_arr_type(elem_type):
-    """return the array type that holds "categories" values give the element type"""
+def _get_cat_index_type(elem_type):
+    """return the Index type that holds "categories" values given the element type"""
     # NOTE assuming data type is string if unknown (TODO: test this possibility)
-    return (
-        bodo.string_array_type
-        if elem_type is None
-        else bodo.hiframes.pd_series_ext._get_series_array_type(elem_type)
-    )
+    elem_type = bodo.string_type if elem_type is None else elem_type
+    return bodo.utils.typing.get_index_type_from_dtype(elem_type)
 
 
 @lower_constant(PDCategoricalDtype)
 def lower_constant_categorical_type(context, builder, typ, pyval):
     categorical_dtype = context.make_helper(builder, typ)
-    py_cat_vals = pyval.categories.values
-    # Handle dt64 and td64 specially for lowering errors
-    if pyval.categories.dtype in (
-        np.dtype("datetime64[ns]"),
-        np.dtype("timedelta64[ns]"),
-    ):
-        py_cat_vals = py_cat_vals.view(np.int64)
 
     categorical_dtype.categories = context.get_constant_generic(
-        builder, bodo.typeof(pyval.categories.values), py_cat_vals
+        builder, bodo.typeof(pyval.categories), pyval.categories
     )
     categorical_dtype.ordered = context.get_constant(types.bool_, pyval.ordered)
 
@@ -98,10 +88,10 @@ def lower_constant_categorical_type(context, builder, typ, pyval):
 @register_model(PDCategoricalDtype)
 class PDCategoricalDtypeModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        arr_type = _get_cat_arr_type(fe_type.elem_type)
+        index_type = _get_cat_index_type(fe_type.elem_type)
         members = [
             ("ordered", types.bool_),
-            ("categories", arr_type),
+            ("categories", index_type),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -113,7 +103,7 @@ make_attribute_wrapper(PDCategoricalDtype, "categories", "categories")
 @intrinsic
 def init_cat_dtype(typingctx, categories_typ, ordered_typ=None):
     """Create a CategoricalDtype from categories array and ordered flag"""
-    assert bodo.utils.utils.is_array_typ(categories_typ, False)
+    assert bodo.hiframes.pd_index_ext.is_index_type(categories_typ)
     assert is_overload_constant_bool(ordered_typ)
 
     def codegen(context, builder, sig, args):
@@ -145,11 +135,11 @@ def unbox_cat_dtype(typ, obj, c):
 
     # unbox obj.categories.values
     categories_index_obj = c.pyapi.object_getattr_string(obj, "categories")
-    categories_arr_obj = c.pyapi.object_getattr_string(categories_index_obj, "values")
-    arr_type = _get_cat_arr_type(typ.elem_type)
-    cat_dtype.categories = c.pyapi.to_native_value(arr_type, categories_arr_obj).value
+    index_type = _get_cat_index_type(typ.elem_type)
+    cat_dtype.categories = c.pyapi.to_native_value(
+        index_type, categories_index_obj
+    ).value
     c.pyapi.decref(categories_index_obj)
-    c.pyapi.decref(categories_arr_obj)
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(cat_dtype._getvalue(), is_error=is_error)
@@ -165,10 +155,10 @@ def box_cat_dtype(typ, val, c):
         types.bool_, cat_dtype.ordered, c.env_manager
     )
     # box categories data
-    arr_type = _get_cat_arr_type(typ.elem_type)
-    c.context.nrt.incref(c.builder, arr_type, cat_dtype.categories)
+    index_type = _get_cat_index_type(typ.elem_type)
+    c.context.nrt.incref(c.builder, index_type, cat_dtype.categories)
     categories_obj = c.pyapi.from_native_value(
-        arr_type, cat_dtype.categories, c.env_manager
+        index_type, cat_dtype.categories, c.env_manager
     )
     # call pd.CategoricalDtype()
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
@@ -631,7 +621,7 @@ def cat_replace_overload(arr, to_replace, value):
         def impl_str(arr, to_replace, value):  # pragma: no cover
             categories = arr.dtype.categories
             categories_dict, codes_map_arr, num_deleted = build_replace_dicts(
-                to_replace, value, categories
+                to_replace, value, categories.values
             )
             if len(categories_dict) == 0:
                 return init_categorical_array(
@@ -658,7 +648,10 @@ def cat_replace_overload(arr, to_replace, value):
                     new_categories[new_idx] = old_cat_val
                     new_idx += 1
             cat_arr = alloc_categorical_array(
-                len(arr.codes), init_cat_dtype(new_categories, _ordered)
+                len(arr.codes),
+                init_cat_dtype(
+                    bodo.utils.conversion.index_from_array(new_categories), _ordered
+                ),
             )
             # Update all of the codes
             reassign_codes(cat_arr.codes, arr.codes, codes_map_arr)
@@ -671,7 +664,7 @@ def cat_replace_overload(arr, to_replace, value):
     def impl(arr, to_replace, value):  # pragma: no cover
         categories = arr.dtype.categories
         categories_dict, codes_map_arr, num_deleted = build_replace_dicts(
-            to_replace, value, categories
+            to_replace, value, categories.values
         )
         if len(categories_dict) == 0:
             return init_categorical_array(
@@ -695,7 +688,10 @@ def cat_replace_overload(arr, to_replace, value):
                 new_idx += 1
         # Update all of the codes
         cat_arr = alloc_categorical_array(
-            len(arr.codes), init_cat_dtype(new_categories, _ordered)
+            len(arr.codes),
+            init_cat_dtype(
+                bodo.utils.conversion.index_from_array(new_categories), _ordered
+            ),
         )
         reassign_codes(cat_arr.codes, arr.codes, codes_map_arr)
         return cat_arr
@@ -787,7 +783,7 @@ def pd_categorical_overload(
         ):  # pragma: no cover
             ordered = bodo.utils.conversion.false_if_none(ordered)
             data = bodo.utils.conversion.coerce_to_array(values)
-            cats = bodo.utils.conversion.coerce_to_array(categories)
+            cats = bodo.utils.conversion.convert_to_index(categories)
             cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(cats, ordered)
             return bodo.utils.conversion.fix_arr_dtype(data, cat_dtype)
 
@@ -816,7 +812,7 @@ def categorical_array_getitem(arr, ind):
         return
 
     # scalar int
-    if isinstance(types.unliteral(ind), types.Integer):
+    if isinstance(ind, types.Integer):
         # TODO: support returning NA
         def categorical_getitem_impl(arr, ind):  # pragma: no cover
             code = arr.codes[ind]

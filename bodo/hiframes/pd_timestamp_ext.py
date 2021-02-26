@@ -1396,7 +1396,7 @@ def overload_to_datetime(
             codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(arg_a)
             # get datetime64 value for each category code
             dt64_vals = pandas_string_array_to_datetime(
-                arg_a.dtype.categories,
+                arg_a.dtype.categories.values,
                 errors,
                 dayfirst,
                 yearfirst,

@@ -34,6 +34,12 @@ def test_unbox_dtype(dtype, memory_leak_check):
 
     check_func(impl2, (dtype,))
 
+    # make sure proper Index type is used for categories and get_loc is supported
+    def impl3(dtype):
+        return dtype.categories.get_loc(dtype.categories[0])
+
+    check_func(impl3, (dtype,))
+
 
 @pytest.fixture(
     params=[

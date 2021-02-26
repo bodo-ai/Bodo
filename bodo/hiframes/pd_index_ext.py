@@ -625,7 +625,7 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
 def overload_datetime_index_getitem(dti, ind):
     # TODO: other getitem cases
     if isinstance(dti, DatetimeIndexType):
-        if isinstance(types.unliteral(ind), types.Integer):
+        if isinstance(ind, types.Integer):
 
             def impl(dti, ind):  # pragma: no cover
                 dti_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
@@ -645,6 +645,31 @@ def overload_datetime_index_getitem(dti, ind):
                 return bodo.hiframes.pd_index_ext.init_datetime_index(new_arr, name)
 
             return impl
+
+
+@overload(operator.getitem, no_unliteral=True)
+def overload_timedelta_index_getitem(I, ind):
+    """getitem overload for TimedeltaIndex"""
+    if not isinstance(I, TimedeltaIndexType):
+        return
+
+    if isinstance(ind, types.Integer):
+
+        def impl(I, ind):  # pragma: no cover
+            tdi_arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+            return pd.Timedelta(tdi_arr[ind])
+
+        return impl
+
+    # slice, boolean array, etc.
+    # TODO: other Index or Series objects as index?
+    def impl(I, ind):  # pragma: no cover
+        tdi_arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+        name = bodo.hiframes.pd_index_ext.get_index_name(I)
+        new_arr = tdi_arr[ind]
+        return bodo.hiframes.pd_index_ext.init_timedelta_index(new_arr, name)
+
+    return impl
 
 
 # from pandas.core.arrays.datetimelike
