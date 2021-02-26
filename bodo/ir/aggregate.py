@@ -1201,6 +1201,10 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
     elif isinstance(t, DatetimeDateArrayType):
         return "bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))"
     elif isinstance(t, bodo.CategoricalArray):
+        if t.dtype.categories is None:
+            raise BodoError(
+                "Groupby agg operations on Categorical types require constant categories"
+            )
         # TODO: Support categories that aren't known at compile time
         starter = "in" if is_input else "out"
         return f"bodo.utils.utils.alloc_type(1, {starter}_cat_dtype_{colnum})"
@@ -1683,9 +1687,22 @@ def gen_top_level_agg_func(
     for i in range(len(out_names)):
         out_name = out_names[i] + "_dummy"
         out_col_typ = out_col_typs[i]
-        func_text += "    {} = {}\n".format(
-            out_name, _gen_dummy_alloc(out_col_typ, i, False)
-        )
+        # Shift maintains the same output and input type
+        # We handle shift separately with Categorical data because if a
+        # CategoricalArray doesn't have types known at compile time then
+        # we must associate it with another DType that has it's categories
+        # set at runtime. The existing approach for other types just uses
+        # Typerefs and those can't be resolved.
+        if (
+            isinstance(agg_func, pytypes.SimpleNamespace)
+            and agg_func.fname == "shift"
+            and isinstance(out_col_typ, bodo.CategoricalArray)
+        ):
+            func_text += "    {} = {}\n".format(out_name, in_names[i])
+        else:
+            func_text += "    {} = {}\n".format(
+                out_name, _gen_dummy_alloc(out_col_typ, i, False)
+            )
 
     # do_combine indicates whether GroupbyPipeline in C++ will need to do
     # `void combine()` operation or not
