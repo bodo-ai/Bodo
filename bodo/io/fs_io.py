@@ -303,13 +303,12 @@ def abfs_list_dir_fnames(path):  # pragma: no cover
 
 def directory_of_files_common_filter(fname):
     # Ignore the same files as pyarrow,
-    # https://github.com/apache/arrow/blob/master/python/pyarrow/parquet.py#L1039
-    fname_l = fname.lower()
+    # https://github.com/apache/arrow/blob/4beb514d071c9beec69b8917b5265e77ade22fb3/python/pyarrow/parquet.py#L1039
     return not (
-        fname_l.endswith(".crc")  # Checksums
-        or fname_l.endswith("_$folder$")  # HDFS directories in S3
-        or fname_l.startswith(".")  # Hidden files starting with .
-        or fname_l.startswith("_")  # Hidden files starting with _
+        fname.endswith(".crc")  # Checksums
+        or fname.endswith("_$folder$")  # HDFS directories in S3
+        or fname.startswith(".")  # Hidden files starting with .
+        or fname.startswith("_")  # Hidden files starting with _
     )
 
 
