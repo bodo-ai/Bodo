@@ -58,3 +58,31 @@ For example::
 
 In this example, we chose to manually parallelize the parameter array for simplicity, since the workload
 is compute-heavy and the parameter data is relatively small.
+
+Load Balancing Distributed Data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Some computations such as ``filter``, ``join`` or ``groupby`` can result in imbalanced data chunks across cores for distributed data.
+This may result in some cores operating on nearly empty dataframes, and others on relatively large ones.
+
+Bodo provides ``bodo.rebalance`` to allow manual load balance if necessary. For example::
+
+
+    @bodo.jit(distributed={"df"})
+    def rebalance_example(df):
+        df = df[df["A"] > 3]
+        df = bodo.rebalance(df)
+        return df.sum()
+
+In this case, we use `bodo.rebalance` to make sure the filtered dataframe has near-equal data chunk sizes across cores, which would accelerate later computations (`sum` in this case).
+
+
+We can also use the `dests` keyword to specify a subset of ranks to which bodo should distribute the data from all ranks.
+
+Example usage::
+
+    @bodo.jit(distributed={"df"})
+    def rebalance_example(df):
+        df = df[df["A"] > 3]
+        df = bodo.rebalance(df, dests=[0, 1])
+        return df.sum()
