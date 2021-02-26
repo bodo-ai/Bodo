@@ -2,6 +2,7 @@
 #include "_groupby.h"
 #include <functional>
 #include <limits>
+#include <map>
 #include "_array_hash.h"
 #include "_array_operations.h"
 #include "_array_utils.h"
@@ -9,7 +10,6 @@
 #include "_distributed.h"
 #include "_murmurhash3.h"
 #include "_shuffle.h"
-
 #undef DEBUG_GROUPBY
 #undef DEBUG_GROUPBY_SYMBOL
 #undef DEBUG_GROUPBY_FULL
@@ -78,6 +78,7 @@ void groupby_init() {
     combine_funcs[Bodo_FTypes::prod] = Bodo_FTypes::prod;
     combine_funcs[Bodo_FTypes::first] = Bodo_FTypes::first;
     combine_funcs[Bodo_FTypes::last] = Bodo_FTypes::last;
+    combine_funcs[Bodo_FTypes::nunique] = Bodo_FTypes::sum;
 }
 
 /**
@@ -735,8 +736,8 @@ struct grouping_info {
     std::vector<int64_t> group_to_first_row;
     std::vector<int64_t> next_row_in_group;
     std::vector<int64_t> list_missing;
-    table_info* dispatch_table;
-    table_info* dispatch_info;
+    table_info* dispatch_table = nullptr;
+    table_info* dispatch_info = nullptr;
     size_t num_groups;
     size_t n_pivot;
     int mode;  // 1: for the update, 2: for the combine
@@ -1203,24 +1204,30 @@ struct key_hash {
 };
 
 /**
- * Given a table with n key columns, this function calculates the row to group
- * mapping for every row based on its key.
- * For every row in the table, this only does *one* lookup in the hash map.
+ * Given a set of tables with n key columns, this function calculates the row to
+ * group mapping for every row based on its key. For every row in the tables,
+ * this only does *one* lookup in the hash map.
  *
- * @param the table
- * @param[out] vector that maps row number in the table to a group number
- * @param[out] vector that maps group number to the first row in the table
- *                that belongs to that group
+ * @param[in] the tables
+ * @param[out] grouping_info structures that map row numbers to group numbers
+ * @param[in] whether to check for null keys. If a key is null that row will
+ *            not be mapped to any group
  */
-void get_group_info(table_info* table, std::vector<int64_t>& row_to_group,
-                    std::vector<int64_t>& group_to_first_row,
+void get_group_info(std::vector<table_info*>& tables,
+                    std::vector<grouping_info>& grp_infos,
                     bool check_for_null_keys) {
+    if (tables.size() == 0) {
+        throw std::runtime_error("get_group_info: tables is empty");
+    }
+    table_info* table = tables[0];
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table->columns.begin(), table->columns.begin() + table->num_keys);
-    uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
+    const uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
     uint32_t* hashes = hash_keys(key_cols, seed);
 
-    row_to_group.reserve(table->nrows());
+    grp_infos.emplace_back();
+    grouping_info& grp_info = grp_infos.back();
+    grp_info.row_to_group.reserve(table->nrows());
     // start at 1 because I'm going to use 0 to mean nothing was inserted yet
     // in the map (but note that the group values I record in the output go from
     // 0 to num_groups - 1)
@@ -1234,7 +1241,7 @@ void get_group_info(table_info* table, std::vector<int64_t>& row_to_group,
     for (int64_t i = 0; i < table->nrows(); i++) {
         if (key_is_nullable) {
             if (does_row_has_nulls(key_cols, i)) {
-                row_to_group.emplace_back(-1);
+                grp_info.row_to_group.emplace_back(-1);
                 continue;
             }
         }
@@ -1244,11 +1251,18 @@ void get_group_info(table_info* table, std::vector<int64_t>& row_to_group,
         if (group == 0) {
             group = next_group++;  // this updates the value in the map without
                                    // another lookup
-            group_to_first_row.emplace_back(i);
+            grp_info.group_to_first_row.emplace_back(i);
         }
-        row_to_group.emplace_back(group - 1);
+        grp_info.row_to_group.emplace_back(group - 1);
     }
     delete[] hashes;
+    grp_info.num_groups = grp_info.group_to_first_row.size();
+
+    if (tables.size() > 1) {
+        // This case is not currently used
+        throw std::runtime_error(
+            "get_group_info not implemented for multiple tables");
+    }
 }
 
 /**
@@ -1290,29 +1304,32 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels) {
 }
 
 /**
- * Given a table with n key columns, this function calculates the row to group
- * mapping for every row based on its key.
- * For every row in the table, this only does *one* lookup in the hash map.
+ * Given a set of tables with n key columns, this function calculates the row to
+ * group mapping for every row based on its key. For every row in the tables,
+ * this only does *one* lookup in the hash map.
  *
- * @param            table: the table
+ * @param           tables: the tables
+ * @param[out]      grouping_info structures that map row numbers to group
+ * numbers
  * @param consider_missing: whether to return the list of missing rows or not
- * @return vector that maps group number to the first row in the table
- *                that belongs to that group
  */
-grouping_info get_group_info_iterate(table_info* table, bool consider_missing) {
-#ifdef DEBUG_GROUPBY
-    std::cout << "Beginning of get_group_info_iterate\n";
-#endif
-    std::vector<int64_t> row_to_group(table->nrows());
-    std::vector<int64_t> group_to_first_row;
-    std::vector<int64_t> next_row_in_group(table->nrows(), -1);
-    std::vector<int64_t> active_group_repr;
-    std::vector<int64_t> list_missing;
-
+void get_group_info_iterate(std::vector<table_info*>& tables,
+                            std::vector<grouping_info>& grp_infos,
+                            bool consider_missing) {
+    if (tables.size() == 0) {
+        throw std::runtime_error("get_group_info: tables is empty");
+    }
+    table_info* table = tables[0];
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table->columns.begin(), table->columns.begin() + table->num_keys);
-    uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
+    const uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
     uint32_t* hashes = hash_keys(key_cols, seed);
+
+    grp_infos.emplace_back();
+    grouping_info& grp_info = grp_infos.back();
+    grp_info.row_to_group.resize(table->nrows());
+    grp_info.next_row_in_group.resize(table->nrows(), -1);
+    std::vector<int64_t> active_group_repr;
 
     bool key_is_nullable = does_keys_have_nulls(key_cols);
     // start at 1 because I'm going to use 0 to mean nothing was inserted yet
@@ -1323,8 +1340,8 @@ grouping_info get_group_info_iterate(table_info* table, bool consider_missing) {
     for (int64_t i = 0; i < table->nrows(); i++) {
         if (key_is_nullable) {
             if (does_row_has_nulls(key_cols, i)) {
-                row_to_group[i] = -1;
-                if (consider_missing) list_missing.push_back(i);
+                grp_info.row_to_group[i] = -1;
+                if (consider_missing) grp_info.list_missing.push_back(i);
                 continue;
             }
         }
@@ -1334,24 +1351,70 @@ grouping_info get_group_info_iterate(table_info* table, bool consider_missing) {
         if (group == 0) {
             group = next_group++;  // this updates the value in the map without
                                    // another lookup
-            group_to_first_row.emplace_back(i);
+            grp_info.group_to_first_row.emplace_back(i);
             active_group_repr.emplace_back(i);
         } else {
             int64_t prev_elt = active_group_repr[group - 1];
-            next_row_in_group[prev_elt] = i;
+            grp_info.next_row_in_group[prev_elt] = i;
             active_group_repr[group - 1] = i;
         }
-        row_to_group[i] = group - 1;
+        grp_info.row_to_group[i] = group - 1;
     }
     delete[] hashes;
-    size_t num_groups = group_to_first_row.size();
-    return {std::move(row_to_group),
-            std::move(group_to_first_row),
-            std::move(next_row_in_group),
-            std::move(list_missing),
-            nullptr,
-            nullptr,
-            num_groups};
+    grp_info.num_groups = grp_info.group_to_first_row.size();
+
+    for (size_t j = 1; j < tables.size(); j++) {
+        int64_t num_groups = next_group - 1;
+        // IMPORTANT assuming all the tables have the same key columns
+        table = tables[j];
+        key_cols = std::vector<array_info*>(
+            table->columns.begin(), table->columns.begin() + table->num_keys);
+        hashes = hash_keys(key_cols, seed);
+        grp_infos.emplace_back();
+        grouping_info& grp_info = grp_infos.back();
+        grp_info.row_to_group.resize(table->nrows());
+        grp_info.next_row_in_group.resize(table->nrows(), -1);
+        grp_info.group_to_first_row.resize(num_groups, -1);
+        active_group_repr.resize(num_groups);
+
+        for (int64_t i = 0; i < table->nrows(); i++) {
+            if (key_is_nullable) {
+                if (does_row_has_nulls(key_cols, i)) {
+                    grp_info.row_to_group[i] = -1;
+                    if (consider_missing) grp_info.list_missing.push_back(i);
+                    continue;
+                }
+            }
+            multi_col_key key(hashes[i], table, i);
+            int64_t& group = key_to_group[key];  // this inserts 0 into the map
+                                                 // if key doesn't exist
+            if ((group == 0) ||
+                (grp_info.group_to_first_row[group - 1] == -1)) {
+                if (group == 0) {
+                    group = next_group++;  // this updates the value in the map
+                                           // without another lookup
+                    grp_info.group_to_first_row.emplace_back(i);
+                } else {
+                    grp_info.group_to_first_row[group - 1] = i;
+                }
+                active_group_repr[group - 1] = i;
+            } else {
+                int64_t prev_elt = active_group_repr[group - 1];
+                grp_info.next_row_in_group[prev_elt] = i;
+                active_group_repr[group - 1] = i;
+            }
+            grp_info.row_to_group[i] = group - 1;
+        }
+        delete[] hashes;
+        grp_info.num_groups = grp_info.group_to_first_row.size();
+    }
+
+    // set same num_groups in every group_info
+    int64_t num_groups = next_group - 1;
+    for (auto& grp_info : grp_infos) {
+        grp_info.group_to_first_row.resize(num_groups, -1);
+        grp_info.num_groups = num_groups;
+    }
 }
 
 /**
@@ -1899,6 +1962,9 @@ nunique_computation(array_info* arr, array_info* out_arr,
                                 std::function<bool(int64_t, int64_t)>>
                 eset({}, hash_fct, equal_fct);
             int64_t i = grp_info.group_to_first_row[igrp];
+            // with nunique mode=2 some groups might not be present in the
+            // nunique table
+            if (i < 0) continue;
             bool HasNullRow = false;
             while (true) {
                 char* ptr = arr->data1 + (i * siztype);
@@ -1970,6 +2036,9 @@ nunique_computation(array_info* arr, array_info* out_arr,
                                 std::function<bool(int64_t, int64_t)>>
                 eset({}, hash_fct, equal_fct);
             int64_t i = grp_info.group_to_first_row[igrp];
+            // with nunique mode=2 some groups might not be present in the
+            // nunique table
+            if (i < 0) continue;
             bool HasNullRow = false;
             while (true) {
                 if (arr->get_null_bit(i)) {
@@ -2010,6 +2079,9 @@ nunique_computation(array_info* arr, array_info* out_arr,
                                 std::function<bool(int64_t, int64_t)>>
                 eset({}, hash_fct, equal_fct);
             int64_t i = grp_info.group_to_first_row[igrp];
+            // with nunique mode=2 some groups might not be present in the
+            // nunique table
+            if (i < 0) continue;
             bool HasNullRow = false;
             while (true) {
                 if (arr->get_null_bit(i)) {
@@ -2047,6 +2119,9 @@ nunique_computation(array_info* arr, array_info* out_arr,
                                 std::function<bool(int64_t, int64_t)>>
                 eset({}, hash_fct, equal_fct);
             int64_t i = grp_info.group_to_first_row[igrp];
+            // with nunique mode=2 some groups might not be present in the
+            // nunique table
+            if (i < 0) continue;
             bool HasNullRow = false;
             while (true) {
                 if (arr->get_null_bit(i)) {
@@ -4000,10 +4075,11 @@ class BasicColSet {
      * the result of the aggregation operation corresponding to this column set
      * @param grouping info calculated by GroupbyPipeline
      */
-    virtual void update(const grouping_info& grp_info) {
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
         std::vector<ARRAY*> aux_cols;
         aggfunc_output_initialize(update_cols[0], ftype);
-        do_apply_to_column(in_col, update_cols[0], aux_cols, grp_info, ftype);
+        do_apply_to_column(in_col, update_cols[0], aux_cols, grp_infos[0],
+                           ftype);
     }
 
     /**
@@ -4119,12 +4195,12 @@ class MeanColSet : public BasicColSet<ARRAY> {
         this->update_cols.push_back(c2);
     }
 
-    virtual void update(const grouping_info& grp_info) {
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
         std::vector<ARRAY*> aux_cols = {this->update_cols[1]};
         aggfunc_output_initialize(this->update_cols[0], this->ftype);
         aggfunc_output_initialize(this->update_cols[1], this->ftype);
         do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
-                           grp_info, this->ftype);
+                           grp_infos[0], this->ftype);
     }
 
     virtual void combine(const grouping_info& grp_info) {
@@ -4210,7 +4286,7 @@ class IdxMinMaxColSet : public BasicColSet<ARRAY> {
         this->update_cols.push_back(index_pos_col);
     }
 
-    virtual void update(const grouping_info& grp_info) {
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
         ARRAY* index_pos_col = this->update_cols[2];
         std::vector<ARRAY*> aux_cols = {index_pos_col};
         if (this->ftype == Bodo_FTypes::idxmax)
@@ -4220,7 +4296,7 @@ class IdxMinMaxColSet : public BasicColSet<ARRAY> {
         aggfunc_output_initialize(index_pos_col,
                                   Bodo_FTypes::count);  // zero init
         do_apply_to_column(this->in_col, this->update_cols[1], aux_cols,
-                           grp_info, this->ftype);
+                           grp_infos[0], this->ftype);
 
         ARRAY* real_out_col =
             RetrieveArray_SingleColumn_ARRAY(index_col, index_pos_col);
@@ -4320,19 +4396,19 @@ class VarStdColSet : public BasicColSet<ARRAY> {
         this->update_cols.push_back(m2_col);
     }
 
-    virtual void update(const grouping_info& grp_info) {
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
         if (!this->combine_step) {
             std::vector<ARRAY*> aux_cols = {this->update_cols[1],
                                             this->update_cols[2],
                                             this->update_cols[3]};
             do_apply_to_column(this->in_col, this->update_cols[1], aux_cols,
-                               grp_info, this->ftype);
+                               grp_infos[0], this->ftype);
         } else {
             std::vector<ARRAY*> aux_cols = {this->update_cols[0],
                                             this->update_cols[1],
                                             this->update_cols[2]};
             do_apply_to_column(this->in_col, this->update_cols[0], aux_cols,
-                               grp_info, this->ftype);
+                               grp_infos[0], this->ftype);
         }
     }
 
@@ -4413,7 +4489,7 @@ class UdfColSet : public BasicColSet<ARRAY> {
         }
     }
 
-    virtual void update(const grouping_info& grp_info) {
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
         // do nothing because this is done in JIT-compiled code (invoked from
         // GroupbyPipeline once for all udf columns sets)
     }
@@ -4494,9 +4570,9 @@ class MedianColSet : public BasicColSet<ARRAY> {
           skipna(_skipna) {}
     virtual ~MedianColSet() {}
 
-    virtual void update(const grouping_info& grp_info) {
-        median_computation<ARRAY>(this->in_col, this->update_cols[0], grp_info,
-                                  this->skipna);
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
+        median_computation<ARRAY>(this->in_col, this->update_cols[0],
+                                  grp_infos[0], this->skipna);
     }
 
    private:
@@ -4506,18 +4582,39 @@ class MedianColSet : public BasicColSet<ARRAY> {
 template <typename ARRAY>
 class NUniqueColSet : public BasicColSet<ARRAY> {
    public:
-    NUniqueColSet(array_info* in_col, bool _dropna)
-        : BasicColSet<ARRAY>(in_col, Bodo_FTypes::nunique, false),
-          dropna(_dropna) {}
-    virtual ~NUniqueColSet() {}
+    NUniqueColSet(array_info* in_col, bool _dropna,
+                  table_info* nunique_table = nullptr,
+                  bool nunique_grp_shuffle_after = false)
+        : BasicColSet<ARRAY>(in_col, Bodo_FTypes::nunique,
+                             nunique_grp_shuffle_after),
+          dropna(_dropna),
+          my_nunique_table(nunique_table),
+          nunique_grp_shuffle_after(nunique_grp_shuffle_after) {}
 
-    virtual void update(const grouping_info& grp_info) {
-        nunique_computation<ARRAY>(this->in_col, this->update_cols[0], grp_info,
-                                   dropna);
+    virtual ~NUniqueColSet() {
+        if (my_nunique_table != nullptr)
+            delete_table_decref_arrays(my_nunique_table);
+    }
+
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
+        // TODO: check nunique with pivot_table operation
+        if (nunique_grp_shuffle_after) {  // nunique_mode=2
+            // use the grouping_info that corresponds to my nunique table
+            aggfunc_output_initialize(this->update_cols[0],
+                                      Bodo_FTypes::sum);  // zero initialize
+            nunique_computation<ARRAY>(this->in_col, this->update_cols[0],
+                                       grp_infos[my_nunique_table->id], dropna);
+        } else {
+            // use default grouping_info
+            nunique_computation<ARRAY>(this->in_col, this->update_cols[0],
+                                       grp_infos[0], dropna);
+        }
     }
 
    private:
     bool dropna;
+    bool nunique_grp_shuffle_after;  // shuffling after update
+    table_info* my_nunique_table;
 };
 
 template <typename ARRAY>
@@ -4538,9 +4635,9 @@ class CumOpColSet : public BasicColSet<ARRAY> {
         this->update_cols.push_back(out_cols.back());
     }
 
-    virtual void update(const grouping_info& grp_info) {
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
         cumulative_computation<ARRAY>(this->in_col, this->update_cols[0],
-                                      grp_info, this->ftype, this->skipna);
+                                      grp_infos[0], this->ftype, this->skipna);
     }
 
    private:
@@ -4565,9 +4662,9 @@ class ShiftColSet : public BasicColSet<ARRAY> {
         this->update_cols.push_back(out_cols.back());
     }
 
-    virtual void update(const grouping_info& grp_info) {
-        shift_computation<ARRAY>(this->in_col, this->update_cols[0], grp_info,
-                                 this->periods);
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
+        shift_computation<ARRAY>(this->in_col, this->update_cols[0],
+                                 grp_infos[0], this->periods);
     }
 
    private:
@@ -4680,18 +4777,29 @@ class GroupbyPipeline {
         // with non cumulative ops. This is checked at compile time in
         // aggregate.py
 
+        int table_id_counter = 1;
+        int ftypes_count = 0;  // count if we have groupby operations that
+                               // requires shuffle after update
         for (int i = 0;
              i < func_offsets[in_table->ncols() - num_keys - index_i]; i++) {
             int ftype = ftypes[i];
             if (ftype == Bodo_FTypes::gen_udf && is_parallel)
                 shuffle_before_update = true;
-            if (ftype == Bodo_FTypes::nunique || ftype == Bodo_FTypes::median ||
-                ftype == Bodo_FTypes::cumsum || ftype == Bodo_FTypes::cumprod ||
-                ftype == Bodo_FTypes::cummin || ftype == Bodo_FTypes::cummax ||
-                ftype == Bodo_FTypes::shift) {
+            // Don't break out of loop to see if there other groupby operations
+            // that require shuffling before update
+            if (ftype == Bodo_FTypes::nunique) {
+                if (is_parallel) nunique_op = true;
+                req_extended_group_info = true;
+            } else if (ftype == Bodo_FTypes::median ||
+                       ftype == Bodo_FTypes::cumsum ||
+                       ftype == Bodo_FTypes::cumprod ||
+                       ftype == Bodo_FTypes::cummin ||
+                       ftype == Bodo_FTypes::cummax ||
+                       ftype == Bodo_FTypes::shift) {
                 // these operations first require shuffling the data to
                 // gather all rows with the same key in the same process
                 if (is_parallel) shuffle_before_update = true;
+                nunique_grp_shuffle_before = true;
                 // these operations require extended group info
                 req_extended_group_info = true;
                 if (ftype == Bodo_FTypes::cumsum ||
@@ -4701,30 +4809,87 @@ class GroupbyPipeline {
                     cumulative_op = true;
                 if (ftype == Bodo_FTypes::shift) shift_op = true;
                 break;
+            } else
+                ftypes_count++;
+        }
+        if (nunique_op) {
+            if (nunique_grp_shuffle_before)
+                nunique_mode = 1;
+            else if (ftypes_count == 0) {
+                nunique_only = true;
+                nunique_mode = 0;
+            } else {
+                nunique_grp_shuffle_after = true;
+                nunique_mode = 2;
             }
         }
-
-        if (shuffle_before_update) {
-            // Code below is equivalent to
-            // table_info* shuf_table = shuffle_table(update_table, num_keys);
-            // We do this more complicated construction because we may need
-            // later the hashes and comm_info.
-            comm_info_ptr = new mpi_comm_info(in_table->columns);
-            hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION);
-            comm_info_ptr->set_counts(hashes);
-            // shuffle_table_kernel steals the reference but we still need it
-            // for the code after C++ groupby
-            for (auto a : in_table->columns) incref_array(a);
-            in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr);
-            if (!(cumulative_op || shift_op)) {
-                delete hashes;
-                delete comm_info_ptr;
+        switch (nunique_mode) {
+            // TODO: Move to a function
+            case -1:  // If groupby without nunique or sequential nunique
+            case 1:   // If nunique + groupby function that requires shuffle
+                      // before update.
+                if (shuffle_before_update) {
+                    // Code below is equivalent to
+                    // table_info* shuf_table = shuffle_table(update_table,
+                    // num_keys); We do this more complicated construction
+                    // because we may need later the hashes and comm_info.
+                    comm_info_ptr = new mpi_comm_info(in_table->columns);
+                    hashes = hash_keys_table(in_table, num_keys,
+                                             SEED_HASH_PARTITION);
+                    comm_info_ptr->set_counts(hashes);
+                    // shuffle_table_kernel steals the reference but we still
+                    // need it for the code after C++ groupby
+                    for (auto a : in_table->columns) incref_array(a);
+                    in_table =
+                        shuffle_table_kernel(in_table, hashes, *comm_info_ptr);
+                    if (!(cumulative_op || shift_op)) {
+                        delete hashes;
+                        delete comm_info_ptr;
+                    }
+                }
+                break;
+            case 0: {  // nunique operation only. Drop duplicates
+                // shuffle_table_kernel (in drop_duplicates_table) steals the
+                // reference but we still need it for the code after C++ groupby
+                for (auto a : in_table->columns) incref_array(a);
+                table_info* dd_table = drop_duplicates_table(
+                    in_table, is_parallel, num_keys, 0, in_table->ncols());
+                in_table = dd_table;
+                shuffle_before_update = true;
+                break;
             }
+            case 2:  // nunique + groupby_functions that needs shuffle after
+                     // update.
+                // Create a table for each nunique col and send for
+                // drop_duplicates.
+                for (int i = 0, c = num_keys;
+                     i < func_offsets[in_table->ncols() - num_keys - index_i];
+                     i++, c++) {
+                    if (ftypes[i] == Bodo_FTypes::nunique) {
+                        table_info* tmp = new table_info();
+                        tmp->columns.assign(
+                            in_table->columns.begin(),
+                            in_table->columns.begin() + num_keys);
+                        tmp->num_keys = num_keys;
+                        push_back_arrays(tmp->columns, in_table->columns[c]);
+                        // shuffle_table_kernel (in drop_duplicates_table)
+                        // steals the reference but we still need it for the
+                        // code after C++ groupby
+                        for (auto a : tmp->columns) incref_array(a);
+                        table_info* tmp2 = drop_duplicates_table(
+                            tmp, is_parallel, num_keys, 0, tmp->ncols());
+                        tmp2->num_keys = num_keys;
+
+                        tmp2->id = table_id_counter++;
+                        nunique_tables[c] = tmp2;
+                    }
+                }
+                break;
         }
 
         // a combine operation is only necessary when data is distributed and
         // a shuffle has not been done at the start of the groupby pipeline
-        do_combine = is_parallel && !shuffle_before_update;
+        do_combine = is_parallel && !shuffle_before_update && !nunique_only;
 
         array_info* index_col = nullptr;
         if (input_has_index)
@@ -4740,9 +4905,19 @@ class GroupbyPipeline {
             int start = func_offsets[k];
             int end = func_offsets[k + 1];
             for (int j = start; j != end; j++) {
-                col_sets.push_back(makeColSet(col, index_col, ftypes[j],
-                                              do_combine, skipna, periods,
-                                              n_udf));
+                // nunique_mode == 2
+                if (ftypes[j] == Bodo_FTypes::nunique &&
+                    nunique_grp_shuffle_after) {
+                    array_info* n_col = nunique_tables[i]->columns[num_keys];
+                    col_sets.push_back(makeColSet(n_col, index_col, ftypes[j],
+                                                  do_combine, skipna, periods,
+                                                  n_udf, nunique_tables[i],
+                                                  nunique_grp_shuffle_after));
+                } else {
+                    col_sets.push_back(makeColSet(col, index_col, ftypes[j],
+                                                  do_combine, skipna, periods,
+                                                  n_udf));
+                }
                 if (ftypes[j] == Bodo_FTypes::udf ||
                     ftypes[j] == Bodo_FTypes::gen_udf) {
                     udf_table_idx += (1 + udf_n_redvars[n_udf]);
@@ -4762,6 +4937,8 @@ class GroupbyPipeline {
                                           ftypes[0], do_combine, skipna,
                                           periods, n_udf));
         }
+
+        in_table->id = 0;
     }
 
     ~GroupbyPipeline() {
@@ -4773,11 +4950,15 @@ class GroupbyPipeline {
      */
     table_info* run() {
         update();
-        if (shuffle_before_update)
+        if (shuffle_before_update || nunique_only) {
             // in_table was created in C++ during shuffling and not needed
             // anymore
             delete_table_decref_arrays(in_table);
-        if (is_parallel && !shuffle_before_update) {
+        }
+        if (nunique_mode == 2) {
+            nunique_tables.clear();
+        }
+        if (is_parallel && !shuffle_before_update && !nunique_only) {
             shuffle();
             combine();
         }
@@ -4797,7 +4978,9 @@ class GroupbyPipeline {
      */
     BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
                                    int ftype, bool do_combine, bool skipna,
-                                   int64_t periods, int n_udf) {
+                                   int64_t periods, int n_udf,
+                                   table_info* nunique_table = nullptr,
+                                   bool nunique_shuffle_after_update = false) {
         switch (ftype) {
             case Bodo_FTypes::udf:
                 return new UdfColSet<ARRAY>(in_col, do_combine, udf_table,
@@ -4809,7 +4992,8 @@ class GroupbyPipeline {
             case Bodo_FTypes::median:
                 return new MedianColSet<ARRAY>(in_col, skipna);
             case Bodo_FTypes::nunique:
-                return new NUniqueColSet<ARRAY>(in_col, skipna);
+                return new NUniqueColSet<ARRAY>(in_col, skipna, nunique_table,
+                                                nunique_shuffle_after_update);
             case Bodo_FTypes::cumsum:
             case Bodo_FTypes::cummin:
             case Bodo_FTypes::cummax:
@@ -4838,17 +5022,21 @@ class GroupbyPipeline {
      */
     void update() {
         in_table->num_keys = num_keys;
+        std::vector<table_info*> tables;
+        tables.push_back(in_table);
+        for (auto it = nunique_tables.begin(); it != nunique_tables.end(); it++)
+            tables.push_back(it->second);
+
         if (req_extended_group_info) {
             bool consider_missing = cumulative_op || shift_op;
-            grp_info = get_group_info_iterate(in_table, consider_missing);
+            get_group_info_iterate(tables, grp_infos, consider_missing);
         } else
-            get_group_info(in_table, grp_info.row_to_group,
-                           grp_info.group_to_first_row, true);
+            get_group_info(tables, grp_infos, true);
+        grouping_info& grp_info = grp_infos[0];
         grp_info.dispatch_table = dispatch_table;
         grp_info.dispatch_info = dispatch_info;
         grp_info.mode = 1;
-        num_groups = grp_info.group_to_first_row.size();
-        grp_info.num_groups = num_groups;
+        num_groups = grp_info.num_groups;
         grp_info.n_pivot = n_pivot;
 
         update_table = cur_table = new table_info();
@@ -4856,7 +5044,7 @@ class GroupbyPipeline {
             num_keys = 0;  // there are no key columns in output of cumulative
                            // operations
         else
-            alloc_init_keys(in_table, update_table);
+            alloc_init_keys(tables, update_table);
 
         for (auto col_set : col_sets) {
             std::vector<ARRAY*> list_arr;
@@ -4864,7 +5052,7 @@ class GroupbyPipeline {
                                           list_arr);
             for (auto& e_arr : list_arr)
                 push_back_arrays(update_table->columns, e_arr);
-            col_set->update(grp_info);
+            col_set->update(grp_infos);
         }
         if (return_index)
             update_table->columns.push_back(
@@ -4922,25 +5110,27 @@ class GroupbyPipeline {
      * the combine method of each column set.
      */
     void combine() {
-        grp_info.row_to_group.clear();
-        grp_info.group_to_first_row.clear();
         update_table->num_keys = num_keys;
-        get_group_info(update_table, grp_info.row_to_group,
-                       grp_info.group_to_first_row, false);
-        num_groups = grp_info.group_to_first_row.size();
-        grp_info.num_groups = num_groups;
+        grp_infos.clear();
+        std::vector<table_info*> tables = {update_table};
+        get_group_info(tables, grp_infos, false);
+        grouping_info& grp_info = grp_infos[0];
+        num_groups = grp_info.num_groups;
+        grp_info.dispatch_table = dispatch_table;
+        grp_info.dispatch_info = dispatch_info;
         grp_info.n_pivot = n_pivot;
         grp_info.mode = 2;
 
         combine_table = cur_table = new table_info();
-        alloc_init_keys(update_table, combine_table);
+        alloc_init_keys({update_table}, combine_table);
         std::vector<array_info*> list_arr;
         for (auto col_set : col_sets) {
             std::vector<ARRAY*> list_arr;
             col_set->alloc_combine_columns(num_groups, n_pivot, is_crosstab,
                                            list_arr);
-            for (auto& e_arr : list_arr)
+            for (auto& e_arr : list_arr) {
                 push_back_arrays(combine_table->columns, e_arr);
+            }
             col_set->combine(grp_info);
         }
         if (n_udf > 0)
@@ -4954,7 +5144,7 @@ class GroupbyPipeline {
      * set. It call the eval method of each column set.
      */
     void eval() {
-        for (auto col_set : col_sets) col_set->eval(grp_info);
+        for (auto col_set : col_sets) col_set->eval(grp_infos[0]);
         // only regular UDFs need eval step
         if (n_udf - gen_udf_col_sets.size() > 0) udf_info.eval(cur_table);
     }
@@ -4971,7 +5161,7 @@ class GroupbyPipeline {
             output_list_arrays(out_table->columns, col_set->getOutputColumn());
         if (return_index)
             out_table->columns.push_back(cur_table->columns.back());
-        if ((cumulative_op || shift_op) && is_parallel) {
+        if ((cumulative_op || shift_op) && is_parallel && !nunique_only) {
             table_info* revshuf_table =
                 reverse_shuffle_table_kernel(out_table, hashes, *comm_info_ptr);
             delete hashes;
@@ -4983,13 +5173,29 @@ class GroupbyPipeline {
         return out_table;
     }
 
+    void find_key_for_group(int64_t group,
+                            const std::vector<table_info*>& from_tables,
+                            int64_t key_col_idx, array_info*& key_col,
+                            int64_t& key_row) {
+        for (size_t k = 0; k < grp_infos.size(); k++) {
+            key_row = grp_infos[k].group_to_first_row[group];
+            if (key_row >= 0) {
+                key_col = (*from_tables[k])[key_col_idx];
+                return;
+            }
+        }
+        // this is error
+    }
+
     /**
      * Allocate and fill key columns, based on grouping info. It uses the
      * values of key columns from from_table to populate out_table.
      */
-    void alloc_init_keys(table_info* from_table, table_info* out_table) {
+    void alloc_init_keys(std::vector<table_info*> from_tables,
+                         table_info* out_table) {
+        int64_t key_row;
         for (int64_t i = 0; i < num_keys; i++) {
-            const array_info* key_col = (*from_table)[i];
+            array_info* key_col = (*from_tables[0])[i];
             array_info* new_key_col;
             if (key_col->arr_type == bodo_array_type::NUMPY ||
                 key_col->arr_type == bodo_array_type::CATEGORICAL ||
@@ -4998,15 +5204,15 @@ class GroupbyPipeline {
                     alloc_array(num_groups, 1, 1, key_col->arr_type,
                                 key_col->dtype, 0, key_col->num_categories);
                 int64_t dtype_size = numpy_item_size[key_col->dtype];
-                for (size_t j = 0; j < num_groups; j++)
+                for (size_t j = 0; j < num_groups; j++) {
+                    find_key_for_group(j, from_tables, i, key_col, key_row);
                     memcpy(new_key_col->data1 + j * dtype_size,
-                           key_col->data1 +
-                               grp_info.group_to_first_row[j] * dtype_size,
-                           dtype_size);
+                           key_col->data1 + key_row * dtype_size, dtype_size);
+                }
                 if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
                     for (size_t j = 0; j < num_groups; j++) {
-                        size_t in_row = grp_info.group_to_first_row[j];
-                        bool bit = key_col->get_null_bit(in_row);
+                        find_key_for_group(j, from_tables, i, key_col, key_row);
+                        bool bit = key_col->get_null_bit(key_row);
                         new_key_col->set_null_bit(j, bit);
                     }
                 }
@@ -5016,10 +5222,11 @@ class GroupbyPipeline {
                 // string for each group
                 int64_t n_chars = 0;  // total number of chars of all keys for
                                       // this column
-                offset_t* in_offsets = (offset_t*)key_col->data2;
+                offset_t* in_offsets;
                 for (size_t j = 0; j < num_groups; j++) {
-                    int64_t row = grp_info.group_to_first_row[j];
-                    n_chars += in_offsets[row + 1] - in_offsets[row];
+                    find_key_for_group(j, from_tables, i, key_col, key_row);
+                    in_offsets = (offset_t*)key_col->data2;
+                    n_chars += in_offsets[key_row + 1] - in_offsets[key_row];
                 }
                 new_key_col =
                     alloc_array(num_groups, n_chars, 1, key_col->arr_type,
@@ -5028,14 +5235,15 @@ class GroupbyPipeline {
                 offset_t* out_offsets = (offset_t*)new_key_col->data2;
                 offset_t pos = 0;
                 for (size_t j = 0; j < num_groups; j++) {
-                    size_t in_row = grp_info.group_to_first_row[j];
-                    offset_t start_offset = in_offsets[in_row];
-                    offset_t str_len = in_offsets[in_row + 1] - start_offset;
+                    find_key_for_group(j, from_tables, i, key_col, key_row);
+                    in_offsets = (offset_t*)key_col->data2;
+                    offset_t start_offset = in_offsets[key_row];
+                    offset_t str_len = in_offsets[key_row + 1] - start_offset;
                     out_offsets[j] = pos;
                     memcpy(&new_key_col->data1[pos],
                            &key_col->data1[start_offset], str_len);
                     pos += str_len;
-                    bool bit = key_col->get_null_bit(in_row);
+                    bool bit = key_col->get_null_bit(key_row);
                     new_key_col->set_null_bit(j, bit);
                 }
                 out_offsets[num_groups] = pos;
@@ -5047,14 +5255,16 @@ class GroupbyPipeline {
                                         // for this column
                 int64_t n_chars = 0;    // total number of chars of all keys for
                                         // this column
-                offset_t* in_index_offsets = (offset_t*)key_col->data3;
-                offset_t* in_data_offsets = (offset_t*)key_col->data2;
+                offset_t* in_index_offsets;
+                offset_t* in_data_offsets;
                 for (size_t j = 0; j < num_groups; j++) {
-                    int64_t row = grp_info.group_to_first_row[j];
-                    n_strings +=
-                        in_index_offsets[row + 1] - in_index_offsets[row];
-                    n_chars += in_data_offsets[in_index_offsets[row + 1]] -
-                               in_data_offsets[in_index_offsets[row]];
+                    find_key_for_group(j, from_tables, i, key_col, key_row);
+                    in_index_offsets = (offset_t*)key_col->data3;
+                    in_data_offsets = (offset_t*)key_col->data2;
+                    n_strings += in_index_offsets[key_row + 1] -
+                                 in_index_offsets[key_row];
+                    n_chars += in_data_offsets[in_index_offsets[key_row + 1]] -
+                               in_data_offsets[in_index_offsets[key_row]];
                 }
                 new_key_col = alloc_array(num_groups, n_strings, n_chars,
                                           key_col->arr_type, key_col->dtype, 0,
@@ -5070,10 +5280,12 @@ class GroupbyPipeline {
                 out_data_offsets[0] = 0;
                 out_index_offsets[0] = 0;
                 for (size_t j = 0; j < num_groups; j++) {
-                    size_t in_row = grp_info.group_to_first_row[j];
-                    offset_t size_index =
-                        in_index_offsets[in_row + 1] - in_index_offsets[in_row];
-                    offset_t pos_start = in_index_offsets[in_row];
+                    find_key_for_group(j, from_tables, i, key_col, key_row);
+                    in_index_offsets = (offset_t*)key_col->data3;
+                    in_data_offsets = (offset_t*)key_col->data2;
+                    offset_t size_index = in_index_offsets[key_row + 1] -
+                                          in_index_offsets[key_row];
+                    offset_t pos_start = in_index_offsets[key_row];
                     for (offset_t i_str = 0; i_str < size_index; i_str++) {
                         offset_t len_str =
                             in_data_offsets[pos_start + i_str + 1] -
@@ -5088,14 +5300,14 @@ class GroupbyPipeline {
                     out_index_offsets[j + 1] = pos_index;
                     // Now the strings themselves
                     offset_t in_start_offset =
-                        in_data_offsets[in_index_offsets[in_row]];
+                        in_data_offsets[in_index_offsets[key_row]];
                     offset_t n_chars_o =
-                        in_data_offsets[in_index_offsets[in_row + 1]] -
-                        in_data_offsets[in_index_offsets[in_row]];
+                        in_data_offsets[in_index_offsets[key_row + 1]] -
+                        in_data_offsets[in_index_offsets[key_row]];
                     memcpy(&new_key_col->data1[pos_data],
                            &key_col->data1[in_start_offset], n_chars_o);
                     pos_data += n_chars_o;
-                    bool bit = key_col->get_null_bit(in_row);
+                    bool bit = key_col->get_null_bit(key_row);
                     new_key_col->set_null_bit(j, bit);
                 }
             }
@@ -5129,13 +5341,24 @@ class GroupbyPipeline {
     bool req_extended_group_info = false;
     bool do_combine;
 
+    std::map<int, table_info*>
+        nunique_tables;  // column position + one table that contains key
+                         // columns +  one nunique column after drop_duplicates
+    int nunique_mode =
+        -1;  //-1: no nunique, 0: just nunique, 1: nunique+(groupyby with
+             // shuffle_before_update), 2: (nunique+groupby with do_combine)
+    bool nunique_op = false;
+    bool nunique_only = false;
+    bool nunique_grp_shuffle_before = false;
+    bool nunique_grp_shuffle_after = false;
+
     udfinfo_t udf_info;
 
     table_info* update_table = nullptr;
     table_info* combine_table = nullptr;
     table_info* cur_table = nullptr;
 
-    grouping_info grp_info;
+    std::vector<grouping_info> grp_infos;
     size_t num_groups;
     // shuffling stuff
     uint32_t* hashes;
@@ -5757,6 +5980,7 @@ table_info* groupby_and_aggregate(
                 return_key, return_index);
 
             table_info* ret_table = groupby.run();
+
             return ret_table;
         };
         auto implement_categorical_exscan =

@@ -1426,6 +1426,40 @@ def test_groupby_agg_const_dict(memory_leak_check):
     check_func(impl17, (df,), sort_output=True, dist_test=False)
 
 
+def test_groupby_nunique(memory_leak_check):
+    """
+    Test nunique only and with groupy.agg (nunique_mode:0, 1,2)
+    """
+
+    def impl0(df):
+        """ Test nunique alone (nunique_mode=0)"""
+        df2 = df.groupby("A").agg({"D": "nunique"})
+        return df2
+
+    def impl1(df):
+        """ Test nunique with median (nunique_mode=1)"""
+        df2 = df.groupby("A").agg({"D": "nunique", "B": "median"})
+        return df2
+
+    def impl2(df):
+        """ Test nunique with sum (nunique_mode=2)"""
+        df2 = df.groupby("A").agg({"D": "nunique", "B": "sum"})
+        return df2
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "D": ["AA", "B", "BB", "B", "AA", "AA", "B"],
+            "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, 7.1],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        },
+        index=np.arange(10, 17),
+    )
+    check_func(impl0, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+
+
 def test_groupby_agg_caching(memory_leak_check):
     """Test compiling function that uses groupby.agg(udf) with cache=True
     and loading from cache"""

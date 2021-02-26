@@ -526,6 +526,11 @@ static void hash_array_combine(uint32_t* out_hashes, array_info* array,
         return hash_array_combine_inner<double>(
             out_hashes, (double*)array->data1, n_rows, seed);
     }
+    if (array->dtype == Bodo_CTypes::DECIMAL ||
+        array->dtype == Bodo_CTypes::INT128) {
+        return hash_array_combine_inner<decimal_value_cpp>(
+            out_hashes, (decimal_value_cpp*)array->data1, n_rows, seed);
+    }
     Bodo_PyErr_SetString(PyExc_RuntimeError,
                          "Invalid data type for hash combine");
 }

@@ -597,7 +597,7 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
  * @return the vector of pointers to be used.
  */
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
-                                  int64_t num_keys, int64_t keep) {
+                                  int64_t num_keys, int64_t keep, int64_t total_cols) {
     try {
 #ifdef DEBUG_DD
         std::cout << "drop_duplicates_table : is_parallel=" << is_parallel
@@ -605,19 +605,23 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
 #endif
         // serial case
         if (!is_parallel) {
+            if (total_cols != -1)
+                num_keys = total_cols;
             return drop_duplicates_table_inner(in_table, num_keys, keep, 1);
         }
         // parallel case
         // pre reduction of duplicates
-        table_info* red_table =
-            drop_duplicates_table_inner(in_table, num_keys, keep, 2);
+        table_info* red_table; 
+        if (total_cols == -1)
+            total_cols = num_keys;
+        red_table = drop_duplicates_table_inner(in_table, total_cols, keep, 2);
         // shuffling of values
         table_info* shuf_table = shuffle_table(red_table, num_keys);
         // no need to decref since shuffle_table() steals a reference
         delete_table(red_table);
         // reduction after shuffling
         table_info* ret_table =
-            drop_duplicates_table_inner(shuf_table, num_keys, keep, 1);
+            drop_duplicates_table_inner(shuf_table, total_cols, keep, 1);
         delete_table(shuf_table);
 #ifdef DEBUG_DD
         std::cout << "OUTPUT drop_duplicates_table. ret_table=\n";

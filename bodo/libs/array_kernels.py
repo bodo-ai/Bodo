@@ -750,7 +750,7 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
     # We keep the first entry in the drop_duplicates
     func_text += "  keep_i = 0\n"
-    func_text += "  out_table = drop_duplicates_table(table_total, parallel, {}, keep_i)\n".format(
+    func_text += "  out_table = drop_duplicates_table(table_total, parallel, {}, keep_i, -1)\n".format(
         count
     )
     for i_col in range(count):
@@ -1342,7 +1342,7 @@ def unique_overload(A, parallel=False):
         input_table = arr_info_list_to_table([array_to_info(A)])
         n_key = 1
         keep_i = 0
-        out_table = drop_duplicates_table(input_table, parallel, n_key, keep_i)
+        out_table = drop_duplicates_table(input_table, parallel, n_key, keep_i, -1)
         out_arr = info_to_array(info_from_table(out_table, 0), A)
         delete_table(input_table)
         delete_table(out_table)

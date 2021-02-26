@@ -460,6 +460,7 @@ struct table_info {
     // TODO: refactor out?
     mpi_comm_info* comm_info;
     uint32_t* hashes;
+    int id;
     table_info() {}
     explicit table_info(std::vector<array_info*>& _columns)
         : columns(_columns) {}
