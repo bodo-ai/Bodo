@@ -1155,16 +1155,15 @@ class DataFramePass:
             return replace_func(
                 self,
                 eval(
-                    "lambda df, cname, arr, inplace: bodo.hiframes.pd_dataframe_ext.set_df_column_with_reflect("
+                    "lambda df, cname, arr: bodo.hiframes.pd_dataframe_ext.set_df_column_with_reflect("
                     "    df,"
                     "    cname,"
                     "    bodo.utils.conversion.coerce_to_array("
                     "        arr, scalar_to_arr_len=len(df)"
                     "    ),"
-                    "    inplace,"
                     ")"
                 ),
-                [df_var, rhs.args[1], new_arr, rhs.args[3]],
+                [df_var, rhs.args[1], new_arr],
                 pre_nodes=nodes,
             )
 

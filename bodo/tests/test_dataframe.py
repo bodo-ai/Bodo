@@ -2199,6 +2199,25 @@ def test_set_column_reflect_error(memory_leak_check):
     pd.testing.assert_frame_equal(bodo.jit(impl)(), impl())
 
 
+def test_set_column_native_reflect(memory_leak_check):
+    """set column of dataframe argument that is passed from another JIT function, so it
+    doesn't have a parent dataframe object (even though it is an argument).
+    It still needs to be updated inplace for the caller to see changes.
+    See set_df_column_with_reflect()
+    """
+
+    @bodo.jit
+    def f(df):
+        df["A"] = 0.0
+
+    def impl():
+        df = pd.DataFrame({"A": np.ones(4)})
+        f(df)
+        return df
+
+    check_func(impl, (), only_seq=True)
+
+
 def test_df_filter(memory_leak_check):
     def test_impl(df, cond):
         df2 = df[cond]

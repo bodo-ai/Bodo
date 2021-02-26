@@ -769,12 +769,11 @@ def set_df_index(typingctx, df_t, index_t=None):
 
 
 @intrinsic
-def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
+def set_df_column_with_reflect(typingctx, df, cname, arr=None):
     """Set df column and reflect to parent Python object
     return a new df.
     """
-    assert is_overload_constant_bool(inplace) and is_literal_type(cname)
-    is_inplace = is_overload_true(inplace)
+    assert is_literal_type(cname), "constant column name expected"
     col_name = get_literal_value(cname)
     n_cols = len(df.columns)
     new_n_cols = n_cols
@@ -794,7 +793,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         )
 
     def codegen(context, builder, signature, args):
-        df_arg, _, arr_arg, _ = args
+        df_arg, _, arr_arg = args
 
         in_dataframe_payload = get_dataframe_payload(context, builder, df, df_arg)
         in_dataframe = cgutils.create_struct_proxy(df)(context, builder, value=df_arg)
@@ -845,27 +844,24 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         for var, typ in zip(data_arrs, data_typs):
             context.nrt.incref(builder, typ, var)
 
-        # TODO: test this
-        # test_set_column_cond3 doesn't test it for some reason
-        if is_inplace:
-            # TODO: test refcount properly
-            # old data arrays will be replaced so need a decref
-            decref_df_data(context, builder, in_dataframe_payload, df)
-            # store payload
-            payload_type = DataFramePayloadType(df)
-            payload_ptr = context.nrt.meminfo_data(builder, in_dataframe.meminfo)
-            ptrty = context.get_value_type(payload_type).as_pointer()
-            payload_ptr = builder.bitcast(payload_ptr, ptrty)
-            out_dataframe_payload = get_dataframe_payload(
-                context, builder, df, out_dataframe
-            )
-            builder.store(out_dataframe_payload._getvalue(), payload_ptr)
+        # update existing native dataframe inplace
+        # old data arrays will be replaced so need a decref
+        decref_df_data(context, builder, in_dataframe_payload, df)
+        # store payload
+        payload_type = DataFramePayloadType(df)
+        payload_ptr = context.nrt.meminfo_data(builder, in_dataframe.meminfo)
+        ptrty = context.get_value_type(payload_type).as_pointer()
+        payload_ptr = builder.bitcast(payload_ptr, ptrty)
+        out_dataframe_payload = get_dataframe_payload(
+            context, builder, df, out_dataframe
+        )
+        builder.store(out_dataframe_payload._getvalue(), payload_ptr)
 
-            # incref data again since there will be too references updated
-            # TODO: incref only unboxed arrays to be safe?
-            context.nrt.incref(builder, index_typ, index_val)
-            for var, typ in zip(data_arrs, data_typs):
-                context.nrt.incref(builder, typ, var)
+        # incref data again since there will be too references updated
+        # TODO: incref only unboxed arrays to be safe?
+        context.nrt.incref(builder, index_typ, index_val)
+        for var, typ in zip(data_arrs, data_typs):
+            context.nrt.incref(builder, typ, var)
 
         # set column of parent if not null, which is not fully known until runtime
         # see test_set_column_reflect_error
@@ -904,7 +900,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr, inplace=None):
         return out_dataframe
 
     ret_typ = DataFrameType(data_typs, index_typ, column_names)
-    sig = signature(ret_typ, df, cname, arr, inplace)
+    sig = signature(ret_typ, df, cname, arr)
     return sig, codegen
 
 
