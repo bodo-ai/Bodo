@@ -769,34 +769,36 @@ def set_df_index(typingctx, df_t, index_t=None):
 
 
 @intrinsic
-def set_df_column_with_reflect(typingctx, df, cname, arr=None):
+def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
     """Set df column and reflect to parent Python object
     return a new df.
     """
-    assert is_literal_type(cname), "constant column name expected"
-    col_name = get_literal_value(cname)
-    n_cols = len(df.columns)
+    assert is_literal_type(cname_type), "constant column name expected"
+    col_name = get_literal_value(cname_type)
+    n_cols = len(df_type.columns)
     new_n_cols = n_cols
-    data_typs = df.data
-    column_names = df.columns
-    index_typ = df.index
-    is_new_col = col_name not in df.columns
+    data_typs = df_type.data
+    column_names = df_type.columns
+    index_typ = df_type.index
+    is_new_col = col_name not in df_type.columns
     col_ind = n_cols
     if is_new_col:
-        data_typs += (arr,)
+        data_typs += (arr_type,)
         column_names += (col_name,)
         new_n_cols += 1
     else:
-        col_ind = df.columns.index(col_name)
+        col_ind = df_type.columns.index(col_name)
         data_typs = tuple(
-            (arr if i == col_ind else data_typs[i]) for i in range(n_cols)
+            (arr_type if i == col_ind else data_typs[i]) for i in range(n_cols)
         )
 
     def codegen(context, builder, signature, args):
         df_arg, _, arr_arg = args
 
-        in_dataframe_payload = get_dataframe_payload(context, builder, df, df_arg)
-        in_dataframe = cgutils.create_struct_proxy(df)(context, builder, value=df_arg)
+        in_dataframe_payload = get_dataframe_payload(context, builder, df_type, df_arg)
+        in_dataframe = cgutils.create_struct_proxy(df_type)(
+            context, builder, value=df_arg
+        )
 
         data_arrs = [
             builder.extract_value(in_dataframe_payload.data, i)
@@ -844,24 +846,27 @@ def set_df_column_with_reflect(typingctx, df, cname, arr=None):
         for var, typ in zip(data_arrs, data_typs):
             context.nrt.incref(builder, typ, var)
 
-        # update existing native dataframe inplace
-        # old data arrays will be replaced so need a decref
-        decref_df_data(context, builder, in_dataframe_payload, df)
-        # store payload
-        payload_type = DataFramePayloadType(df)
-        payload_ptr = context.nrt.meminfo_data(builder, in_dataframe.meminfo)
-        ptrty = context.get_value_type(payload_type).as_pointer()
-        payload_ptr = builder.bitcast(payload_ptr, ptrty)
-        out_dataframe_payload = get_dataframe_payload(
-            context, builder, df, out_dataframe
-        )
-        builder.store(out_dataframe_payload._getvalue(), payload_ptr)
+        # update existing native dataframe inplace if possible (not a new column name
+        # and data type matches existing column)
+        # see test_set_column_native_reflect
+        if not is_new_col and arr_type == df_type.data[col_ind]:
+            # old data arrays will be replaced so need a decref
+            decref_df_data(context, builder, in_dataframe_payload, df_type)
+            # store payload
+            payload_type = DataFramePayloadType(df_type)
+            payload_ptr = context.nrt.meminfo_data(builder, in_dataframe.meminfo)
+            ptrty = context.get_value_type(payload_type).as_pointer()
+            payload_ptr = builder.bitcast(payload_ptr, ptrty)
+            out_dataframe_payload = get_dataframe_payload(
+                context, builder, df_type, out_dataframe
+            )
+            builder.store(out_dataframe_payload._getvalue(), payload_ptr)
 
-        # incref data again since there will be too references updated
-        # TODO: incref only unboxed arrays to be safe?
-        context.nrt.incref(builder, index_typ, index_val)
-        for var, typ in zip(data_arrs, data_typs):
-            context.nrt.incref(builder, typ, var)
+            # incref data again since there will be too references updated
+            # TODO: incref only unboxed arrays to be safe?
+            context.nrt.incref(builder, index_typ, index_val)
+            for var, typ in zip(data_arrs, data_typs):
+                context.nrt.incref(builder, typ, var)
 
         # set column of parent if not null, which is not fully known until runtime
         # see test_set_column_reflect_error
@@ -872,12 +877,12 @@ def set_df_column_with_reflect(typingctx, df, cname, arr=None):
             gil_state = pyapi.gil_ensure()  # acquire GIL
             env_manager = context.get_env_manager(builder)
 
-            context.nrt.incref(builder, arr, arr_arg)
+            context.nrt.incref(builder, arr_type, arr_arg)
 
             # call boxing for array data
             # TODO: check complex data types possible for Series for dataframes set column here
             c = numba.core.pythonapi._BoxContext(context, builder, pyapi, env_manager)
-            py_arr = c.pyapi.from_native_value(arr, arr_arg, c.env_manager)
+            py_arr = c.pyapi.from_native_value(arr_type, arr_arg, c.env_manager)
 
             # get column as string or int obj
             if isinstance(col_name, str):
@@ -900,7 +905,7 @@ def set_df_column_with_reflect(typingctx, df, cname, arr=None):
         return out_dataframe
 
     ret_typ = DataFrameType(data_typs, index_typ, column_names)
-    sig = signature(ret_typ, df, cname, arr)
+    sig = signature(ret_typ, df_type, cname_type, arr_type)
     return sig, codegen
 
 
