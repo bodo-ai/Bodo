@@ -148,6 +148,14 @@ def test_pq_select_column(
             os.remove("test.pq")
 
 
+def test_read_parquet_from_deltalake(memory_leak_check):
+    def impl():
+        return pd.read_parquet("bodo/tests/data/example_deltalake")
+
+    py_output = pd.DataFrame({"value": [1,1,2,3,2,3]})
+    check_func(impl, (), py_output=py_output, check_dtype=False)
+
+
 def test_pq_multiIdx_errcheck(memory_leak_check):
     """ Remove this test when multi index is supported for read_parquet """
     np.random.seed(0)

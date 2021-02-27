@@ -730,3 +730,52 @@ def test_s3_json_read_recoreds_lines_1D_var(minio_server, s3_bucket, test_df):
 
     check_func(test_read, (), py_output=test_df)
     check_func(test_read_infer_dtype, (), py_output=test_df)
+
+
+@pytest.mark.skip("DeltaTable doesn't seem to support custom S3 endpoints")
+def test_read_parquet_from_s3_deltalake(minio_server, s3_bucket):
+    
+    """
+    DeltaTable doesn't seem to support custom S3 endpoints, so we can't test
+    using MinIO on CI for now.
+    Run the test manually:
+    
+    import bodo
+    import pandas as pd
+    import os
+
+    # 427 account
+    os.environ["AWS_ACCESS_KEY_ID"] = "AKIA...."
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "OOibMP..."
+    
+    def read_data(f):
+        df = pd.read_parquet(f)
+        return df
+    
+    bodo_read_data = bodo.jit(distributed=["df"])(read_data)
+
+    print(bodo_read_data("s3://deltalake-sample/simple_table"))
+    ## Expected output:
+    #       id
+    #    0   5
+    #    1   7
+    #    2   9
+
+    print(bodo_read_data("s3://deltalake-sample/example_deltalake"))
+    ## Expected output:
+    #       value
+    #    0      1
+    #    1      1
+    #    2      2
+    #    3      3
+    #    4      2
+    #    5      3
+    """
+    
+    
+    def impl():
+        df = pd.read_parquet("s3://bodo-test/example_deltalake")
+        return df
+
+    py_output = pd.DataFrame({"value": [1,1,2,3,2,3]})
+    check_func(impl, (), py_output=py_output, check_dtype=False)

@@ -45,6 +45,7 @@ from bodo.io.fs_io import (
     hdfs_list_dir_fnames,
     s3_is_directory,
     s3_list_dir_fnames,
+    get_s3_bucket_region_njit,
 )
 from bodo.libs.array import _lower_info_to_array_numpy, array_info_type
 from bodo.libs.array_item_arr_ext import (
@@ -864,7 +865,11 @@ def is_nested_parallel(fpath, file_names):
                 else:
                     is_dir_func = os.path.isdir
                 for fname in file_names:
-                    if is_dir_func(fname):
+                    is_dir = is_dir_func(fname)
+                    # TODO improve
+                    if not isinstance(is_dir, bool):
+                        is_dir = is_dir[1]
+                    if is_dir:
                         is_nested = True
                         break
         except Exception as e:
@@ -913,6 +918,66 @@ def get_filenames_parallel(path, filter_func):
     return file_names
 
 
+def get_parquet_filesnames_from_deltalake(delta_lake_path):
+    """Get sorted list of parquet file names in a DeltaLake 'delta_lake_path'.
+    Is meant to be called by all ranks. Rank 0 will get the list and
+    communicate the result."""
+
+    from mpi4py import MPI
+
+    try:
+        from deltalake import DeltaTable
+    except Exception as e:
+        raise ImportError(
+            "Bodo Error: please pip install the 'deltalake' package to read parquet from delta lake"
+        )
+
+    comm = MPI.COMM_WORLD
+    file_names = None
+    path = delta_lake_path.rstrip("/")
+    
+    # The DeltaTable API doesn't have automatic S3 region detection and doesn't
+    # seem to provide a way to specify a region except through the AWS_DEFAULT_REGION
+    # environment variable.
+    # So, we detect the region using our existing infrastructure and set the env var
+    # so that it's picked up by the deltalake library
+    aws_default_region_set = "AWS_DEFAULT_REGION" in os.environ  # is the env var set
+    orig_aws_default_region = os.environ.get("AWS_DEFAULT_REGION", "")  # get original value
+    aws_default_region_modified = False  # not modified yet
+    if delta_lake_path.startswith("s3://"):
+        s3_bucket_region = get_s3_bucket_region_njit(delta_lake_path)
+        if s3_bucket_region != "\x00" and s3_bucket_region != "":
+            # [:-1] to remove the null byte at the end
+            os.environ["AWS_DEFAULT_REGION"] = s3_bucket_region[:-1]
+            aws_default_region_modified = True  # mark as modified
+
+    if bodo.get_rank() == 0:
+        try:
+            dt = DeltaTable(delta_lake_path)
+            file_names = dt.files()
+
+            # pq.ParquetDataset() needs the full path for each file
+            file_names = [(path + "/" + f) for f in sorted(file_names)]
+        except Exception as e:
+            file_names = e
+    file_names = comm.bcast(file_names)
+    
+    # Restore AWS_DEFAULT_REGION env var if it was modified
+    if aws_default_region_modified:
+        if aws_default_region_set:
+            # If it was originally set to a value, restore it to that value
+            os.environ["AWS_DEFAULT_REGION"] = orig_aws_default_region
+        else:
+            # Else delete the env var
+            del os.environ["AWS_DEFAULT_REGION"]
+
+    
+    if isinstance(file_names, Exception):
+        e = file_names
+        raise e
+    return file_names
+
+
 def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
     """get ParquetDataset object for 'fpath' and set the number of total rows as an
     attribute. Also, sets the number of rows per file as an attribute of
@@ -944,6 +1009,10 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
 
     if is_directory_parallel(fpath):
         file_names = get_filenames_parallel(fpath, directory_of_files_common_filter)
+        # if deltalake, then get the list of parquet files from metadata
+        delta_log = os.path.join(fpath, "_delta_log")
+        if delta_log in file_names:
+            file_names = get_parquet_filesnames_from_deltalake(fpath)
         if filters is not None or is_nested_parallel(fpath, file_names):
             # For now, for nested directories (for example partitioned datasets using
             # hive scheme) we let pyarrow.parquet.ParquetDataset

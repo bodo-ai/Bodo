@@ -226,6 +226,13 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
             fname = "example_multi.json/{}".format(fname)
             s3.meta.client.upload_file(path, bucket_name, fname)
 
+        path = datapath("example_deltalake")
+        for root,dirs,files in os.walk(path):
+            for fname in files:
+                full_path = os.path.join(root, fname)
+                rel_path = os.path.join("example_deltalake", os.path.relpath(full_path, path))
+                s3.meta.client.upload_file(full_path, bucket_name, rel_path)
+
         prefix = datapath("example multi.csv")
         pat = prefix + "/*.csv"
         example_multi_parts_csv = glob.glob(pat)
