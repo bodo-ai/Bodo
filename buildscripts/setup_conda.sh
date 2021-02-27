@@ -32,9 +32,9 @@ if [ "$RUNTIME" != "yes" ];
 then
   if [ "$RUN_NIGHTLY" != "yes" ];
   then
-      conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 numpy scipy boost-cpp=1.74.0 cmake h5py=2.10 mpich mpi
+      conda create -n $CONDA_ENV -q -y -c conda-forge python">=3.8,<3.10.0a0" numpy scipy boost-cpp=1.74.0 cmake h5py=2.10 mpich mpi
   else
-      conda create -n $CONDA_ENV -q -y -c conda-forge python=3.8 cmake make
+      conda create -n $CONDA_ENV -q -y -c conda-forge python">=3.8,<3.10.0a0" cmake make
   fi
 fi
 source activate $CONDA_ENV
