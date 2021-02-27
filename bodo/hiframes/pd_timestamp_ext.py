@@ -1048,6 +1048,12 @@ def dt64_hash(val):
     return lambda val: hash(dt64_to_integer(val))
 
 
+# TODO: fix in Numba
+@overload_method(types.NPTimedelta, "__hash__", no_unliteral=True)
+def td64_hash(val):
+    return lambda val: hash(dt64_to_integer(val))
+
+
 @intrinsic
 def timedelta64_to_integer(typingctx, val=None):
     """Cast a timedelta64 value to integer"""

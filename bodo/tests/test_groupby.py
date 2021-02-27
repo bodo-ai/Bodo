@@ -3474,6 +3474,7 @@ def test_groupby_shift_cat():
         df2 = df.groupby("A")["B"].shift(-1)
         return df2
 
+    # Check with all categorical dtypes for index conversion
     df = pd.DataFrame(
         {
             "A": [1, 1, 1, 4, 5],
@@ -3494,7 +3495,7 @@ def test_groupby_shift_unknown_cats():
         df2 = df.groupby("A")["B"].shift(-1)
         return df2
 
-    df = pd.DataFrame(
+    df1 = pd.DataFrame(
         {
             "A": [1, 1, 1, 4, 5],
             "B": ["LB1", "LB2", "LB1", None, "LB2"],
@@ -3502,7 +3503,54 @@ def test_groupby_shift_unknown_cats():
         }
     )
 
-    check_func(test_impl, (df,))
+    df2 = pd.DataFrame(
+        {
+            "A": [1, 1, 1, 4, 5],
+            "B": [2, 3, 4, -2, None],
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5],
+        }
+    )
+
+    df3 = pd.DataFrame(
+        {
+            "A": [1, 1, 1, 4, 5],
+            "B": np.array([2, 3, 4, 5, 8], dtype=np.uint8),
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5],
+        }
+    )
+
+    df4 = pd.DataFrame(
+        {
+            "A": [1, 1, 1, 4, 5],
+            "B": pd.date_range(start="2/1/2015", end="2/24/2021", periods=5),
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5],
+        }
+    )
+
+    df5 = pd.DataFrame(
+        {
+            "A": [1, 1, 1, 4, 5],
+            "B": pd.timedelta_range(start="1 day", periods=5),
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5],
+        }
+    )
+
+    df6 = pd.DataFrame(
+        {
+            "A": [1, 1, 1, 4, 5],
+            "B": [2.5, 3.3, 4.1, 5.0, np.nan],
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5],
+        }
+    )
+
+    check_func(test_impl, (df1,), copy_input=True)
+    check_func(test_impl, (df2,), copy_input=True)
+    # TODO: Fix dtype. Bodo creates a Int64Index, Pandas UInt64Index
+    # check_dtype/check_categorical doesn't work for testing
+    # check_func(test_impl, (df3,), copy_input=True)
+    check_func(test_impl, (df4,), copy_input=True)
+    check_func(test_impl, (df5,), copy_input=True)
+    check_func(test_impl, (df6,), copy_input=True)
 
 
 @pytest.mark.skip(reason="TODO: Return nullable int")

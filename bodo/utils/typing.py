@@ -723,10 +723,13 @@ def get_index_type_from_dtype(t):
         TimedeltaIndexType,
     )
 
-    if t == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+    if t in [bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type, bodo.datetime64ns]:
         return DatetimeIndexType(types.none)
 
-    if t == bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type:
+    if t in [
+        bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type,
+        bodo.timedelta64ns,
+    ]:
         return TimedeltaIndexType(types.none)
 
     if t == bodo.string_type:

@@ -894,7 +894,7 @@ def overload_index_from_array(data, name=None):
     if data == bodo.string_array_type:
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_string_index(
             data, name
-        )
+        )  # pragma: no cover
 
     assert (
         isinstance(data, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType))
