@@ -331,6 +331,26 @@ class DataFramePass:
         if fdef == ("set_df_col", "bodo.hiframes.dataframe_impl"):
             return self._run_call_set_df_column(assign, lhs, rhs)
 
+        if fdef == ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext"):
+            df_var = rhs.args[0]
+            ind = guard(find_const, self.func_ir, rhs.args[1])
+            var_def = guard(get_definition, self.func_ir, df_var)
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if not self._is_updated_df(df_var.name) and call_def == (
+                "init_dataframe",
+                "bodo.hiframes.pd_dataframe_ext",
+            ):
+                seq_info = guard(find_build_sequence, self.func_ir, var_def.args[0])
+                assert seq_info is not None
+                assign.value = seq_info[0][ind]
+
+        if fdef == ("get_dataframe_index", "bodo.hiframes.pd_dataframe_ext"):
+            df_var = rhs.args[0]
+            var_def = guard(get_definition, self.func_ir, df_var)
+            call_def = guard(find_callname, self.func_ir, var_def)
+            if call_def == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
+                assign.value = var_def.args[1]
+
         if fdef == ("join_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_join(assign, lhs, rhs)
 
@@ -2016,7 +2036,10 @@ class DataFramePass:
         ind = df_typ.columns.index(col_name)
         var_def = guard(get_definition, self.func_ir, df_var)
         call_def = guard(find_callname, self.func_ir, var_def)
-        if call_def == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
+        if not self._is_updated_df(df_var.name) and call_def == (
+            "init_dataframe",
+            "bodo.hiframes.pd_dataframe_ext",
+        ):
             seq_info = guard(find_build_sequence, self.func_ir, var_def.args[0])
             assert seq_info is not None
             return seq_info[0][ind]
@@ -2041,6 +2064,7 @@ class DataFramePass:
         df_typ = self.typemap[df_var.name]
         var_def = guard(get_definition, self.func_ir, df_var)
         call_def = guard(find_callname, self.func_ir, var_def)
+        # TODO(ehsan): make sure dataframe index is not updated elsewhere
         if call_def == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
             return var_def.args[1]
 
@@ -2076,6 +2100,15 @@ class DataFramePass:
 
         nodes += compile_func_single_block(f, (dt_var,), None, self)
         return nodes[-1].target
+
+    def _is_updated_df(self, varname):
+        """returns True if columns of dataframe 'varname' may be updated inplace
+        somewhere in the program.
+        """
+        return varname in self._updated_dataframes or any(
+            isinstance(v, ir.Var) and self._is_updated_df(v.name)
+            for v in self.func_ir._definitions[varname]
+        )
 
     def _is_df_var(self, var):
         return isinstance(self.typemap[var.name], DataFrameType)

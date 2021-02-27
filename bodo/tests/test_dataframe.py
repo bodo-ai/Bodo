@@ -2218,6 +2218,42 @@ def test_set_column_native_reflect(memory_leak_check):
     check_func(impl, (), only_seq=True)
 
 
+def test_set_column_detect_update1(memory_leak_check):
+    """Make sure get_dataframe_data optimization can detect that a dataframe may be
+    updated in another JIT function
+    """
+
+    @bodo.jit
+    def f(df):
+        df["A"] = 0.0
+
+    def impl():
+        df = pd.DataFrame({"A": np.ones(4)})
+        f(df)
+        return df["A"].sum()
+
+    check_func(impl, (), only_seq=True)
+
+
+def test_set_column_detect_update2(memory_leak_check):
+    """Make sure get_dataframe_data optimization can detect that a dataframe may be
+    updated in a UDF
+    """
+
+    @bodo.jit
+    def f(r, data):
+        data["A"] = 0.0
+        return 1
+
+    def impl():
+        df1 = pd.DataFrame({"A": np.zeros(4)})
+        df = pd.DataFrame({"A": np.ones(4)})
+        df1.apply(f, axis=1, data=df)
+        return df["A"].sum()
+
+    check_func(impl, (), only_seq=True)
+
+
 def test_df_filter(memory_leak_check):
     def test_impl(df, cond):
         df2 = df[cond]

@@ -40,6 +40,7 @@ from bodo.hiframes.datetime_timedelta_ext import (
 )
 from bodo.hiframes.pd_categorical_ext import CategoricalArray
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 from bodo.hiframes.pd_index_ext import (
     DatetimeIndexType,
     HeterogeneousIndexType,
@@ -100,10 +101,13 @@ from bodo.utils.typing import (
     is_overload_constant_tuple,
 )
 from bodo.utils.utils import (
+    find_build_tuple,
     gen_getitem,
     get_getsetitem_index_var,
     is_array_typ,
+    is_assign,
     is_call,
+    is_call_assign,
     is_expr,
     is_whole_slice,
 )
@@ -197,7 +201,12 @@ class SeriesPass:
         self.curr_loc = self.func_ir.loc
 
     def run(self):
+        """run series/dataframe transformations"""
         blocks = self.func_ir.blocks
+        # find the potentially updated dataframes to avoid optimizing out
+        # get_dataframe_data() calls incorrectly
+        self.dataframe_pass._updated_dataframes = self._get_updated_dataframes(blocks)
+
         # topo_order necessary so Series data replacement optimization can be
         # performed in one pass
         topo_order = find_topo_order(blocks)
@@ -2027,26 +2036,6 @@ class SeriesPass:
                 rhs.args,
             )
 
-        # XXX sometimes init_dataframe() can't be resolved in dataframe_pass
-        # and there are get_dataframe_data() calls that could be optimized
-        # example: test_sort_parallel
-        if fdef == ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext"):
-            df_var = rhs.args[0]
-            ind = guard(find_const, self.func_ir, rhs.args[1])
-            var_def = guard(get_definition, self.func_ir, df_var)
-            call_def = guard(find_callname, self.func_ir, var_def)
-            if call_def == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
-                seq_info = guard(find_build_sequence, self.func_ir, var_def.args[0])
-                assert seq_info is not None
-                assign.value = seq_info[0][ind]
-
-        if fdef == ("get_dataframe_index", "bodo.hiframes.pd_dataframe_ext"):
-            df_var = rhs.args[0]
-            var_def = guard(get_definition, self.func_ir, df_var)
-            call_def = guard(find_callname, self.func_ir, var_def)
-            if call_def == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
-                assign.value = var_def.args[1]
-
         # inline conversion functions to enable optimization
         if func_mod == "bodo.utils.conversion" and func_name != "flatten_array":
             # TODO: use overload IR inlining when available
@@ -2993,6 +2982,67 @@ class SeriesPass:
             self,
         )
         return nodes[-1].target
+
+    def _get_updated_dataframes(self, blocks):
+        """find the potentially updated dataframes to avoid optimizing out
+        get_dataframe_data() calls incorrectly.
+        Looks for dataframe column set calls, dataframe args to JIT calls and UDFs.
+        NOTE: This assumes that Bodo implementations of other APIs do not include
+        setting dataframe columns inplace.
+        """
+        updated_dfs = set()
+        for block in blocks.values():
+            for stmt in block.body:
+                if (
+                    is_assign(stmt)
+                    and isinstance(stmt.value, ir.Var)
+                    and stmt.value.name in updated_dfs
+                ):
+                    updated_dfs.add(stmt.target.name)
+                if is_call_assign(stmt):
+                    rhs = stmt.value
+                    func_type = self.typemap[rhs.func.name]
+                    fdef = guard(find_callname, self.func_ir, rhs)
+                    if fdef in (
+                        (
+                            "set_df_column_with_reflect",
+                            "bodo.hiframes.pd_dataframe_ext",
+                        ),
+                        ("set_dataframe_data", "bodo.hiframes.pd_dataframe_ext"),
+                        ("set_df_col", "bodo.hiframes.pd_dataframe_ext"),
+                    ):
+                        updated_dfs.add(rhs.args[0].name)
+                    if isinstance(func_type, numba.core.types.Dispatcher):
+                        for arg in rhs.args:
+                            self._set_add_if_df(updated_dfs, arg.name)
+                    # apply calls take both positional and kw args
+                    if (
+                        fdef
+                        and fdef[0] == "apply"
+                        and isinstance(fdef[1], ir.Var)
+                        and isinstance(
+                            self.typemap[fdef[1].name],
+                            (DataFrameType, SeriesType, DataFrameGroupByType),
+                        )
+                    ):
+                        for arg in rhs.args + list(dict(rhs.kws).values()):
+                            self._set_add_if_df(updated_dfs, arg.name)
+
+        return updated_dfs
+
+    def _set_add_if_df(self, updated_dfs, varname):
+        """add 'varname' to 'updated_dfs' if it is a dataframe. Handles tuples
+        recursively as well.
+        TODO: support dataframe containers (list/dict) that may include updated dfs.
+        """
+        var_type = self.typemap[varname]
+        if isinstance(var_type, DataFrameType):
+            updated_dfs.add(varname)
+        if isinstance(var_type, types.BaseTuple):
+            tup_list = guard(find_build_tuple, self.func_ir, varname)
+            if tup_list is not None:
+                for v in tup_list:
+                    self._set_add_if_df(updated_dfs, v.name)
 
     def _convert_series_calltype(self, call):
         sig = self.calltypes[call]

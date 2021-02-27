@@ -1232,7 +1232,7 @@ class TypingTransforms:
         cname_var = ir.Var(inst.value.scope, mk_unique_var("$cname_const"), inst.loc)
         self.typemap[cname_var.name] = types.literal(col_name)
         nodes = [ir.Assign(ir.Const(col_name, inst.loc), cname_var, inst.loc)]
-        inplace = not dominates
+        inplace = not dominates or isinstance(df_def, ir.Arg)
 
         if dominates:
             # rename the dataframe variable to keep schema static
