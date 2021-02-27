@@ -2942,6 +2942,14 @@ def test_series_equals_false(series_val, memory_leak_check):
     def test_impl(S1, S2):
         return S1.equals(S2)
 
+    if isinstance(series_val.values[0], list):
+        with pytest.raises(
+            BodoError,
+            match="Series.equals\(\) not supported for Series where each element is an array or list",
+        ):
+            bodo.jit(test_impl)(series_val, other)
+        return
+
     check_func(test_impl, (series_val, other))
 
 
@@ -3046,7 +3054,8 @@ def test_series_isin_true(series_val):
         )
     else:
         py_output = None
-    check_func(test_impl, (series_val, values), py_output=py_output)
+    # TODO: Check distributed
+    check_func(test_impl, (series_val, values), py_output=py_output, dist_test=False)
 
 
 @pytest.mark.slow

@@ -2684,7 +2684,6 @@ class TestIO(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         pd_expected = test_impl()
-        pd_expected.index.name = None  # TODO: handle index name
         pd.testing.assert_frame_equal(bodo_func(), pd_expected, check_dtype=False)
 
     def test_csv_index_ind0(self):
@@ -2700,7 +2699,6 @@ class TestIO(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         pd_expected = test_impl()
-        pd_expected.index.name = None  # TODO: handle index name
         pd.testing.assert_frame_equal(bodo_func(), pd_expected, check_dtype=False)
 
     def test_csv_index_ind1(self):
@@ -2716,7 +2714,6 @@ class TestIO(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         pd_expected = test_impl()
-        pd_expected.index.name = None  # TODO: handle index name
         pd.testing.assert_frame_equal(bodo_func(), pd_expected, check_dtype=False)
 
     def test_csv_parallel1(self):
