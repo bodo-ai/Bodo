@@ -3,6 +3,7 @@ CONDA_BUILD_SYSROOT:
 
 python:
   - 3.8
+  - 3.9
 
 numpy:
-  - 1.16
+  - 1.19
