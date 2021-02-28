@@ -2254,6 +2254,34 @@ def test_set_column_detect_update2(memory_leak_check):
     check_func(impl, (), only_seq=True)
 
 
+def test_set_column_detect_update3(memory_leak_check):
+    """Make sure get_dataframe_data optimization can detect that a dataframe may be
+    updated in nested UDFs
+    """
+
+    def impl(df):
+        def f(r1):
+            copy_df = pd.DataFrame({"B": np.ones(4)})
+
+            def h(r2, copy_df):
+                copy_df["B"] = 5.0
+                return 4.0
+
+            temp_df = pd.DataFrame({"A": np.ones(4)})
+            temp_df.apply(h, axis=1, args=(copy_df,))
+
+            return copy_df["B"].sum()
+
+        output = df.apply(
+            f,
+            axis=1,
+        )
+        return output
+
+    df = pd.DataFrame({"C": [2.1, 1.2, 4.2, 232.1]})
+    check_func(impl, (df,), only_seq=True)
+
+
 def test_df_filter(memory_leak_check):
     def test_impl(df, cond):
         df2 = df[cond]

@@ -317,6 +317,11 @@ class SeriesPass:
                         # add blocks added by inliner to be processed
                         work_list = work_list[:n_prev_work_items]  # avoid duplication
                         for l in new_labels:
+                            # detect if the newly inlined function updates dataframe
+                            # columns inplace, see test_set_column_detect_update3
+                            self._get_updated_dataframes(
+                                {0: blocks[l]}, self.dataframe_pass._updated_dataframes
+                            )
                             work_list.append((l, blocks[l]))
                     # Loc objects are not updated for user Bodo functions to keep source
                     # mapping
@@ -2983,14 +2988,15 @@ class SeriesPass:
         )
         return nodes[-1].target
 
-    def _get_updated_dataframes(self, blocks):
+    def _get_updated_dataframes(self, blocks, updated_dfs=None):
         """find the potentially updated dataframes to avoid optimizing out
         get_dataframe_data() calls incorrectly.
         Looks for dataframe column set calls, dataframe args to JIT calls and UDFs.
         NOTE: This assumes that Bodo implementations of other APIs do not include
         setting dataframe columns inplace.
         """
-        updated_dfs = set()
+        if updated_dfs is None:
+            updated_dfs = set()
         for block in blocks.values():
             for stmt in block.body:
                 if (
