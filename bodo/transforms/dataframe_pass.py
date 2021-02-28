@@ -1188,6 +1188,11 @@ class DataFramePass:
             )
 
         if inplace:
+            if cname not in df_typ.columns:
+                raise BodoError(
+                    "Setting new dataframe columns inplace is not supported in conditionals/loops or for dataframe arguments",
+                    loc=rhs.loc,
+                )
             return replace_func(
                 self,
                 eval(

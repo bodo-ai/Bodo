@@ -1195,10 +1195,7 @@ class TypingTransforms:
         # if cond:
         #     df['B'] = B
         # return df
-        # TODO: add this check back in
-        # if label not in cfg.backbone() and label not in cfg.post_dominators()[df_label]:
-        #     raise ValueError("setting dataframe columns inside conditionals and"
-        #                      " loops not supported yet")
+
         # see if setitem dominates creation, # TODO: handle changing labels
         df_var = inst.target
         df_def = guard(get_definition, self.func_ir, df_var)
@@ -1242,7 +1239,8 @@ class TypingTransforms:
         else:
             # cannot replace variable, but can set existing column with the
             # same data type
-            # TODO: check data type and throw clear error
+            # NOTE: data type is checked in _run_call_set_df_column() and
+            # set_dataframe_data()
             out_var = df_var
 
         func = eval(
