@@ -2327,23 +2327,28 @@ def test_set_column_detect_update_err2(memory_leak_check):
         bodo.jit(impl)()
 
 
-# TODO(ehsan): detect changing input dataframe column data type in nested JIT calls
-# def test_set_column_detect_update_err3(memory_leak_check):
-#     """Make sure invalid dataframe column set is detected properly when column data type
-#     changes in nested Bodo JIT calls.
-#     """
+@pytest.mark.skip(
+    reason="[BE-240] detect changing input dataframe column data type in nested JIT calls"
+)
+def test_set_column_detect_update_err3(memory_leak_check):
+    """Make sure invalid dataframe column set is detected properly when column data type
+    changes in nested Bodo JIT calls.
+    """
 
-#     @bodo.jit
-#     def f(data):
-#         data["A"] = 3
+    @bodo.jit
+    def f(data):
+        data["A"] = 3
 
-#     def impl():
-#         df = pd.DataFrame({"A": np.ones(4)})
-#         f(df)
-#         return df["A"].sum()
+    def impl():
+        df = pd.DataFrame({"A": np.ones(4)})
+        f(df)
+        return df["A"].sum()
 
-#     print(bodo.jit(impl)())
-#     print(impl())
+    with pytest.raises(
+        BodoError,
+        match="Changing dataframe column data type inplace is not supported",
+    ):
+        bodo.jit(impl)()
 
 
 def test_df_filter(memory_leak_check):
