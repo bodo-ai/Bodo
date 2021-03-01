@@ -2966,6 +2966,7 @@ class DistributedPass:
         )
 
     def _gen_parfor_reductions(self, parfor):
+        """generate distributed reduction calls for parfor reductions"""
         scope = parfor.init_block.scope
         loc = parfor.init_block.loc
         pre = []
@@ -2979,6 +2980,11 @@ class DistributedPass:
             # TODO: initialize reduction vars (arrays)
             pre += self._gen_init_reduce(reduce_var, reduce_op)
             out += self._gen_reduce(reduce_var, reduce_op, scope, loc)
+            # make sure all versions of the reduce variable have the right output
+            # SSA changes in Numba 0.53.0rc2 may create extra versions of the reduce
+            # variable, see test_df_prod
+            for v in reduce_var.versioned_names:
+                out.append(ir.Assign(reduce_var, ir.Var(scope, v, loc), loc))
 
         return pre, out
 
