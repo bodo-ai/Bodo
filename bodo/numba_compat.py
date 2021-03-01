@@ -2635,6 +2635,7 @@ def _typeof_dict(val, c):
 def unbox_dicttype(typ, val, c):
     from llvmlite import ir as lir
     from numba.typed import dictobject
+    from numba.typed.typeddict import Dict
 
     context = c.context
 
@@ -2667,31 +2668,64 @@ def unbox_dicttype(typ, val, c):
     val = c.builder.load(valptr)
     # done Bodo change
 
-    miptr = c.pyapi.object_getattr_string(val, "_opaque")
+    # Check that `type(val) is Dict`
+    dict_type = c.pyapi.unserialize(c.pyapi.serialize_object(Dict))
+    valtype = c.pyapi.object_type(val)
+    same_type = c.builder.icmp_unsigned("==", valtype, dict_type)
 
-    mip_type = types.MemInfoPointer(types.voidptr)
-    native = c.unbox(mip_type, miptr)
+    with c.builder.if_else(same_type) as (then, orelse):
+        with then:
+            miptr = c.pyapi.object_getattr_string(val, "_opaque")
 
-    mi = native.value
+            mip_type = types.MemInfoPointer(types.voidptr)
+            native = c.unbox(mip_type, miptr)
 
-    argtypes = mip_type, typeof(typ)
+            mi = native.value
 
-    def convert(mi, typ):
-        return dictobject._from_meminfo(mi, typ)
+            argtypes = mip_type, typeof(typ)
 
-    sig = signature(typ, *argtypes)
-    nil_typeref = context.get_constant_null(argtypes[1])
-    args = (mi, nil_typeref)
-    is_error, dctobj = c.pyapi.call_jit_code(convert, sig, args)
-    # decref here because we are stealing a reference.
-    c.context.nrt.decref(c.builder, typ, dctobj)
+            def convert(mi, typ):
+                return dictobject._from_meminfo(mi, typ)
+
+            sig = signature(typ, *argtypes)
+            nil_typeref = context.get_constant_null(argtypes[1])
+            args = (mi, nil_typeref)
+            is_error, dctobj = c.pyapi.call_jit_code(convert, sig, args)
+            # decref here because we are stealing a reference.
+            c.context.nrt.decref(c.builder, typ, dctobj)
+
+            c.pyapi.decref(miptr)
+            bb_unboxed = c.builder.basic_block
+
+        with orelse:
+            # Raise error on incorrect type
+            c.pyapi.err_format(
+                "PyExc_TypeError",
+                "can't unbox a %S as a %S",
+                valtype,
+                dict_type,
+            )
+            bb_else = c.builder.basic_block
+
+    # Phi nodes to gather the output
+    dctobj_res = c.builder.phi(dctobj.type)
+    is_error_res = c.builder.phi(is_error.type)
+
+    dctobj_res.add_incoming(dctobj, bb_unboxed)
+    dctobj_res.add_incoming(dctobj.type(None), bb_else)
+
+    is_error_res.add_incoming(is_error, bb_unboxed)
+    is_error_res.add_incoming(cgutils.true_bit, bb_else)
+
+    # cleanup
+    c.pyapi.decref(dict_type)
+    c.pyapi.decref(valtype)
 
     # Bodo change: remove the typed.Dict object that is not necessary anymore
     with c.builder.if_then(is_regular_dict):
         c.pyapi.decref(val)
 
-    c.pyapi.decref(miptr)
-    return NativeValue(dctobj, is_error=is_error)
+    return NativeValue(dctobj_res, is_error=is_error_res)
 
 
 lines = inspect.getsource(
@@ -2699,7 +2733,7 @@ lines = inspect.getsource(
 )
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "409df3107bdd4ead138aa98a22af500b91d2072c250a5eb9da618eab9b717305"
+    != "5f6f183b94dc57838538c668a54c2476576c85d8553843f3219f5162c61e7816"
 ):  # pragma: no cover
     warnings.warn("unbox_dicttype has changed")
 numba.core.pythonapi._unboxers.functions[types.DictType] = unbox_dicttype
