@@ -2749,15 +2749,20 @@ def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):
 
     require(len(reduce_nodes) >= 1)
     require(isinstance(reduce_nodes[-1], ir.Assign))
-    # there could be an extra assignment after the reduce node
+
+    # ignore extra assignments after reduction operator
+    # there could be any number of extra assignment after the reduce node due to SSA
+    # changes in Numba 0.53.0rc2
     # See: test_reduction_var_reuse in Numba
-    if isinstance(reduce_nodes[-1].value, ir.Var):
-        require(len(reduce_nodes) >= 2)
-        require(isinstance(reduce_nodes[-2], ir.Assign))
-        require(reduce_nodes[-2].target.name == reduce_nodes[-1].value.name)
-        rhs = reduce_nodes[-2].value
-    else:
-        rhs = reduce_nodes[-1].value
+    last_ind = -1
+    while isinstance(reduce_nodes[last_ind].value, ir.Var):
+        require(len(reduce_nodes[:last_ind]) >= 1)
+        require(isinstance(reduce_nodes[last_ind - 1], ir.Assign))
+        require(
+            reduce_nodes[last_ind - 1].target.name == reduce_nodes[last_ind].value.name
+        )
+        last_ind -= 1
+    rhs = reduce_nodes[last_ind].value
     require(isinstance(rhs, ir.Expr))
 
     if rhs.op == "inplace_binop":
