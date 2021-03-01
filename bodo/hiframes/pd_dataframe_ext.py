@@ -700,6 +700,12 @@ def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
     assert is_overload_constant_int(c_ind_typ)
     col_ind = get_overload_const_int(c_ind_typ)
 
+    # make sure dataframe column data type is not changed (avoids lowering error)
+    if df_typ.data[col_ind] != arr_typ:
+        raise BodoError(
+            "Changing dataframe column data type inplace is not supported in conditionals/loops or for dataframe arguments"
+        )
+
     def codegen(context, builder, signature, args):
         df_arg, _, arr_arg = args
         dataframe_payload = get_dataframe_payload(context, builder, df_typ, df_arg)

@@ -2218,6 +2218,139 @@ def test_set_column_native_reflect(memory_leak_check):
     check_func(impl, (), only_seq=True)
 
 
+def test_set_column_detect_update1(memory_leak_check):
+    """Make sure get_dataframe_data optimization can detect that a dataframe may be
+    updated in another JIT function
+    """
+
+    @bodo.jit
+    def f(df):
+        df["A"] = 0.0
+
+    def impl():
+        df = pd.DataFrame({"A": np.ones(4)})
+        f(df)
+        return df["A"].sum()
+
+    check_func(impl, (), only_seq=True)
+
+
+def test_set_column_detect_update2(memory_leak_check):
+    """Make sure get_dataframe_data optimization can detect that a dataframe may be
+    updated in a UDF
+    """
+
+    @bodo.jit
+    def f(r, data):
+        data["A"] = 0.0
+        return 1
+
+    def impl():
+        df1 = pd.DataFrame({"A": np.zeros(4)})
+        df = pd.DataFrame({"A": np.ones(4)})
+        df1.apply(f, axis=1, data=df)
+        return df["A"].sum()
+
+    check_func(impl, (), only_seq=True)
+
+
+def test_set_column_detect_update3(memory_leak_check):
+    """Make sure get_dataframe_data optimization can detect that a dataframe may be
+    updated in nested UDFs
+    """
+
+    def impl(df):
+        def f(r1):
+            copy_df = pd.DataFrame({"B": np.ones(4)})
+
+            def h(r2, copy_df):
+                copy_df["B"] = 5.0
+                return 4.0
+
+            temp_df = pd.DataFrame({"A": np.ones(4)})
+            temp_df.apply(h, axis=1, args=(copy_df,))
+
+            return copy_df["B"].sum()
+
+        output = df.apply(
+            f,
+            axis=1,
+        )
+        return output
+
+    df = pd.DataFrame({"C": [2.1, 1.2, 4.2, 232.1]})
+    check_func(impl, (df,), only_seq=True)
+
+
+def test_set_column_detect_update_err1(memory_leak_check):
+    """Make sure invalid dataframe column set is detected properly when new column
+    is being set in UDF.
+    """
+
+    @bodo.jit
+    def f(r, data):
+        data["B"] = 1
+        return 1
+
+    def impl():
+        df1 = pd.DataFrame({"A": np.zeros(4)})
+        df = pd.DataFrame({"A": np.ones(4)})
+        df1.apply(f, axis=1, data=df)
+        return df["A"].sum()
+
+    with pytest.raises(
+        BodoError, match="Setting new dataframe columns inplace is not supported"
+    ):
+        bodo.jit(impl)()
+
+
+def test_set_column_detect_update_err2(memory_leak_check):
+    """Make sure invalid dataframe column set is detected properly when column data type
+    changes in UDF.
+    """
+
+    @bodo.jit
+    def f(r, data):
+        data["A"] = 1
+        return 1
+
+    def impl():
+        df1 = pd.DataFrame({"A": np.zeros(4)})
+        df = pd.DataFrame({"A": np.ones(4)})
+        df1.apply(f, axis=1, data=df)
+        return df["A"].sum()
+
+    with pytest.raises(
+        BodoError,
+        match="Changing dataframe column data type inplace is not supported in conditionals/loops",
+    ):
+        bodo.jit(impl)()
+
+
+@pytest.mark.skip(
+    reason="[BE-240] detect changing input dataframe column data type in nested JIT calls"
+)
+def test_set_column_detect_update_err3(memory_leak_check):
+    """Make sure invalid dataframe column set is detected properly when column data type
+    changes in nested Bodo JIT calls.
+    """
+
+    @bodo.jit
+    def f(data):
+        data["A"] = 3
+
+    def impl():
+        df = pd.DataFrame({"A": np.ones(4)})
+        f(df)
+        return df["A"].sum()
+
+    with pytest.raises(
+        BodoError,
+        match="Changing dataframe column data type inplace is not supported",
+    ):
+        bodo.jit(impl)()
+
+
 def test_df_filter(memory_leak_check):
     def test_impl(df, cond):
         df2 = df[cond]
