@@ -248,77 +248,78 @@ def _install_binary_ops():
 _install_binary_ops()
 
 
-@overload(operator.add, no_unliteral=True)
-def overload_string_array_add(A, B):
-    a_is_unicode_or_string_array = A == string_array_type or (
-        isinstance(A, types.Array) and A.dtype == string_type
+def overload_add_operator_string_array(lhs, rhs):
+    lhs_is_unicode_or_string_array = lhs == string_array_type or (
+        isinstance(lhs, types.Array) and lhs.dtype == string_type
     )
-    b_is_unicode_or_string_array = B == string_array_type or (
-        isinstance(B, types.Array) and B.dtype == string_type
+    rhs_is_unicode_or_string_array = rhs == string_array_type or (
+        isinstance(rhs, types.Array) and rhs.dtype == string_type
     )
 
     # both string arrays
     # Check that at least 1 arg is an actual string_array_type to avoid
     # conflict with Numba's overload.
-    if (A == string_array_type and b_is_unicode_or_string_array) or (
-        a_is_unicode_or_string_array and B == string_array_type
+    if (lhs == string_array_type and rhs_is_unicode_or_string_array) or (
+        lhs_is_unicode_or_string_array and rhs == string_array_type
     ):
 
-        def impl_both(A, B):  # pragma: no cover
+        def impl_both(lhs, rhs):  # pragma: no cover
             numba.parfors.parfor.init_prange()
-            l = len(A)
+            l = len(lhs)
 
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)
             for j in numba.parfors.parfor.internal_prange(l):
-                if bodo.libs.array_kernels.isna(A, j) or bodo.libs.array_kernels.isna(
-                    B, j
+                if bodo.libs.array_kernels.isna(lhs, j) or bodo.libs.array_kernels.isna(
+                    rhs, j
                 ):
                     out_arr[j] = ""
                     bodo.libs.array_kernels.setna(out_arr, j)
                 else:
-                    out_arr[j] = A[j] + B[j]
+                    out_arr[j] = lhs[j] + rhs[j]
 
             return out_arr
 
         return impl_both
 
     # left arg is string array
-    if A == string_array_type and types.unliteral(B) == string_type:
+    if lhs == string_array_type and types.unliteral(rhs) == string_type:
 
-        def impl_left(A, B):  # pragma: no cover
+        def impl_left(lhs, rhs):  # pragma: no cover
             numba.parfors.parfor.init_prange()
-            l = len(A)
+            l = len(lhs)
 
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)
             for j in numba.parfors.parfor.internal_prange(l):
-                if bodo.libs.array_kernels.isna(A, j):
+                if bodo.libs.array_kernels.isna(lhs, j):
                     out_arr[j] = ""
                     bodo.libs.array_kernels.setna(out_arr, j)
                 else:
-                    out_arr[j] = A[j] + B
+                    out_arr[j] = lhs[j] + rhs
 
             return out_arr
 
         return impl_left
 
     # right arg is string array
-    if types.unliteral(A) == string_type and B == string_array_type:
+    if types.unliteral(lhs) == string_type and rhs == string_array_type:
 
-        def impl_right(A, B):  # pragma: no cover
+        def impl_right(lhs, rhs):  # pragma: no cover
             numba.parfors.parfor.init_prange()
-            l = len(B)
+            l = len(rhs)
 
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)
             for j in numba.parfors.parfor.internal_prange(l):
-                if bodo.libs.array_kernels.isna(B, j):
+                if bodo.libs.array_kernels.isna(rhs, j):
                     out_arr[j] = ""
                     bodo.libs.array_kernels.setna(out_arr, j)
                 else:
-                    out_arr[j] = A + B[j]
+                    out_arr[j] = lhs + rhs[j]
 
             return out_arr
 
         return impl_right
+
+    # TODO: raise bodo error
 
 
 @overload(operator.mul, no_unliteral=True)

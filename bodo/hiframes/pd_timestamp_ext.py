@@ -1823,8 +1823,7 @@ def timestamp_sub(lhs, rhs):
         return impl
 
 
-@overload(operator.add, no_unliteral=True)
-def timestamp_add(lhs, rhs):
+def overload_add_operator_timestamp(lhs, rhs):
     if lhs == pandas_timestamp_type and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -1870,24 +1869,13 @@ def timestamp_add(lhs, rhs):
 
         return impl
 
-    if lhs == pd_timedelta_type and rhs == pandas_timestamp_type:
+    # if lhs and rhs flipped, flip args and call add again
+    if (lhs == pd_timedelta_type and rhs == pandas_timestamp_type) or (
+        lhs == datetime_timedelta_type and rhs == pandas_timestamp_type
+    ):
 
         def impl(lhs, rhs):  # pragma: no cover
-            # The time itself
-            days1 = rhs.toordinal()
-            secs1 = rhs.second + rhs.minute * 60 + rhs.hour * 3600
-            msec1 = rhs.microsecond
-            nanosec1 = rhs.nanosecond
-            # The timedelta
-            msec2 = lhs.value // 1000
-            nanosec2 = lhs.nanoseconds
-            # Computing the difference
-            msecF = msec1 + msec2
-            # Getting total microsecond
-            totmicrosec = 1000000 * (days1 * 86400 + secs1) + msecF
-            # Getting total nano_seconds
-            totnanosec = nanosec1 + nanosec2
-            return compute_pd_timestamp(totmicrosec, totnanosec)
+            return rhs + lhs
 
         return impl
 

@@ -35,7 +35,7 @@ from bodo.hiframes.pd_timestamp_ext import (
     pandas_timestamp_type,
 )
 from bodo.libs import hdatetime_ext
-from bodo.utils.typing import is_overload_none
+from bodo.utils.typing import is_overload_none, BodoError
 
 ll.add_symbol("box_date_offset", hdatetime_ext.box_date_offset)
 ll.add_symbol("unbox_date_offset", hdatetime_ext.unbox_date_offset)
@@ -181,8 +181,7 @@ def calculate_month_end_date(year, month, day, n):  # pragma: no cover
     return year, month, day
 
 
-@overload(operator.add, no_unliteral=True)
-def month_end_add_scalar(lhs, rhs):
+def overload_add_operator_month_end_offset_type(lhs, rhs):
     """Implement all of the relevant scalar types additions.
     These will be reused to implement arrays.
     """
@@ -252,7 +251,8 @@ def month_end_add_scalar(lhs, rhs):
             return rhs + lhs
 
         return impl
-
+    # Raise Bodo error if not supported
+    raise BodoError(f"add operator not supported for data types {lhs} and {rhs}.")
 
 # TODO: Support operators with arrays
 
@@ -766,8 +766,7 @@ def relative_delta_addition(dateoffset, ts):  # pragma: no cover
         return pd.Timedelta(days=dateoffset.n) + ts
 
 
-@overload(operator.add, no_unliteral=True)
-def date_offset_add_scalar(lhs, rhs):
+def overload_add_perator_date_offset_type(lhs, rhs):
     """Implement all of the relevant scalar types additions.
     These will be reused to implement arrays.
     """
@@ -804,6 +803,8 @@ def date_offset_add_scalar(lhs, rhs):
 
         return impl
 
+    # Raise Bodo error if not supported
+    raise BodoError(f"add operator not supported for data types {lhs} and {rhs}.")
 
 @overload(operator.sub, no_unliteral=True)
 def overload_sub(lhs, rhs):
@@ -1047,8 +1048,7 @@ def unbox_week(typ, val, c):
     return NativeValue(week._getvalue(), is_error=is_error)
 
 
-@overload(operator.add, no_unliteral=True)
-def week_add_scalar(lhs, rhs):
+def overload_add_operator_week_offset_type(lhs, rhs):
     """Implement all of the relevant scalar types additions.
     These will be reused to implement arrays.
     """
@@ -1108,6 +1108,8 @@ def week_add_scalar(lhs, rhs):
 
         return impl
 
+    # Raise Bodo error if not supported
+    raise BodoError(f"add operator not supported for data types {lhs} and {rhs}.")
 
 @register_jitable
 def calculate_week_date(n, weekday, other_weekday):  # pragma: no cover

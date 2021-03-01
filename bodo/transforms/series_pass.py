@@ -981,7 +981,7 @@ class SeriesPass:
                 return replace_func(self, impl, [arg1, arg2])
 
             if typ1 == string_array_type or typ2 == string_array_type:
-                impl = bodo.libs.str_arr_ext.overload_string_array_add(typ1, typ2)
+                impl = bodo.libs.str_arr_ext.overload_add_operator_string_array(typ1, typ2)
                 return replace_func(self, impl, [arg1, arg2])
 
         # inline overload for comparisons

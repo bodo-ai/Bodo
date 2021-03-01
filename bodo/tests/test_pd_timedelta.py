@@ -224,12 +224,65 @@ def binary_params(request):
     return request.param
 
 
+@pytest.fixture(
+    params=[
+        (
+            pd.Timestamp(
+                year=2018,
+                month=4,
+                day=1,
+                hour=5,
+                minute=3,
+                microsecond=12100,
+                second=2,
+                nanosecond=42,
+            ),
+            pd.Timedelta(232142),
+        ),
+        (
+            datetime.timedelta(
+                days=1,
+                weeks=10,
+                hours=5,
+                minutes=3,
+                microseconds=121,
+                milliseconds=787,
+                seconds=2,
+            ),
+            pd.Timestamp(
+                year=2018,
+                month=4,
+                day=1,
+                hour=5,
+                minute=3,
+                microsecond=12100,
+                second=2,
+                nanosecond=42,
+            ),
+        ),
+    ]
+)
+def add_params(request):
+    return request.param
+
+
 def test_pd_timedelta_add(binary_params, memory_leak_check):
     def test_impl(a, b):
         return a + b
 
     val1 = binary_params[0]
     val2 = binary_params[1]
+
+    check_func(test_impl, (val1, val2))
+    check_func(test_impl, (val2, val1))
+
+
+def test_timestamp_timedelta_add(add_params, memory_leak_check):
+    def test_impl(a, b):
+        return a + b
+
+    val1 = add_params[0]
+    val2 = add_params[1]
 
     check_func(test_impl, (val1, val2))
     check_func(test_impl, (val2, val1))

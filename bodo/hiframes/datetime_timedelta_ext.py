@@ -416,8 +416,7 @@ def pd_td_total_seconds(td):
     return impl
 
 
-@overload(operator.add, no_unliteral=True)
-def pd_timedelta_add(lhs, rhs):
+def overload_add_operator_datetime_timedelta(lhs, rhs):
     if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -479,6 +478,61 @@ def pd_timedelta_add(lhs, rhs):
 
         def impl(lhs, rhs):  # pragma: no cover
             return lhs + rhs.to_pytimedelta()
+
+        return impl
+
+
+    if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            d = lhs.days + rhs.days
+            s = lhs.seconds + rhs.seconds
+            us = lhs.microseconds + rhs.microseconds
+            return datetime.timedelta(d, s, us)
+
+        return impl
+
+    if lhs == datetime_timedelta_type and rhs == datetime_datetime_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            delta = datetime.timedelta(
+                rhs.toordinal(),
+                hours=rhs.hour,
+                minutes=rhs.minute,
+                seconds=rhs.second,
+                microseconds=rhs.microsecond,
+            )
+            delta = delta + lhs
+            hour, rem = divmod(delta.seconds, 3600)
+            minute, second = divmod(rem, 60)
+            if 0 < delta.days <= _MAXORDINAL:
+                d = bodo.hiframes.datetime_date_ext.fromordinal_impl(delta.days)
+                return datetime.datetime(
+                    d.year, d.month, d.day, hour, minute, second, delta.microseconds
+                )
+            raise OverflowError("result out of range")
+
+        return impl
+
+    if lhs == datetime_datetime_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            delta = datetime.timedelta(
+                lhs.toordinal(),
+                hours=lhs.hour,
+                minutes=lhs.minute,
+                seconds=lhs.second,
+                microseconds=lhs.microsecond,
+            )
+            delta = delta + rhs
+            hour, rem = divmod(delta.seconds, 3600)
+            minute, second = divmod(rem, 60)
+            if 0 < delta.days <= _MAXORDINAL:
+                d = bodo.hiframes.datetime_date_ext.fromordinal_impl(delta.days)
+                return datetime.datetime(
+                    d.year, d.month, d.day, hour, minute, second, delta.microseconds
+                )
+            raise OverflowError("result out of range")
 
         return impl
 
@@ -877,63 +931,6 @@ def _divide_and_round(a, b):  # pragma: no cover
 
 
 _MAXORDINAL = 3652059
-
-
-@overload(operator.add, no_unliteral=True)
-def timedelta_add(lhs, rhs):
-    if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            d = lhs.days + rhs.days
-            s = lhs.seconds + rhs.seconds
-            us = lhs.microseconds + rhs.microseconds
-            return datetime.timedelta(d, s, us)
-
-        return impl
-
-    if lhs == datetime_timedelta_type and rhs == datetime_datetime_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            delta = datetime.timedelta(
-                rhs.toordinal(),
-                hours=rhs.hour,
-                minutes=rhs.minute,
-                seconds=rhs.second,
-                microseconds=rhs.microsecond,
-            )
-            delta = delta + lhs
-            hour, rem = divmod(delta.seconds, 3600)
-            minute, second = divmod(rem, 60)
-            if 0 < delta.days <= _MAXORDINAL:
-                d = bodo.hiframes.datetime_date_ext.fromordinal_impl(delta.days)
-                return datetime.datetime(
-                    d.year, d.month, d.day, hour, minute, second, delta.microseconds
-                )
-            raise OverflowError("result out of range")
-
-        return impl
-
-    if lhs == datetime_datetime_type and rhs == datetime_timedelta_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            delta = datetime.timedelta(
-                lhs.toordinal(),
-                hours=lhs.hour,
-                minutes=lhs.minute,
-                seconds=lhs.second,
-                microseconds=lhs.microsecond,
-            )
-            delta = delta + rhs
-            hour, rem = divmod(delta.seconds, 3600)
-            minute, second = divmod(rem, 60)
-            if 0 < delta.days <= _MAXORDINAL:
-                d = bodo.hiframes.datetime_date_ext.fromordinal_impl(delta.days)
-                return datetime.datetime(
-                    d.year, d.month, d.day, hour, minute, second, delta.microseconds
-                )
-            raise OverflowError("result out of range")
-
-        return impl
 
 
 @overload(operator.sub, no_unliteral=True)

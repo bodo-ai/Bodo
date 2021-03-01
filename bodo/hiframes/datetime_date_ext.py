@@ -437,8 +437,7 @@ def overload_pd_timestamp_isocalendar(date):
     return impl
 
 
-@overload(operator.add, no_unliteral=True)
-def date_add(lhs, rhs):
+def overload_add_operator_datetime_date(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
