@@ -2,11 +2,12 @@
 import datetime
 import operator
 
+import llvmlite.llvmpy.core as lc
 import numba
 import numpy as np
 import pandas as pd
 from numba.core import cgutils, types
-from numba.core.imputils import lower_constant
+from numba.core.imputils import impl_ret_new_ref, lower_constant
 from numba.core.typing.templates import AttributeTemplate, signature
 from numba.extending import (
     NativeValue,
@@ -89,6 +90,8 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
         name_typ = types.none if name_typ is None else name_typ
         # TODO: support other properties like freq/tz/dtype/yearfirst?
         self.name_typ = name_typ
+        # Add a .data field for consistency with other index types
+        self.data = types.Array(bodo.datetime64ns, 1, "C")
         super(DatetimeIndexType, self).__init__(
             name="DatetimeIndex(name = {})".format(name_typ)
         )
@@ -988,6 +991,8 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
         name_typ = types.none if name_typ is None else name_typ
         # TODO: support other properties like unit/freq?
         self.name_typ = name_typ
+        # Add a .data field for consistency with other index types
+        self.data = types.Array(bodo.timedelta64ns, 1, "C")
         super(TimedeltaIndexType, self).__init__(
             name="TimedeltaIndexType(named = {})".format(name_typ)
         )
@@ -1968,6 +1973,8 @@ class StringIndexType(types.IterableType, types.ArrayCompatible):
     def __init__(self, name_typ=None):
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
+        # Add a .data field for consistency with other index types
+        self.data = string_array_type
         super(StringIndexType, self).__init__(
             name="StringIndexType({})".format(name_typ)
         )
@@ -2756,6 +2763,82 @@ def lower_constant_string_index(context, builder, ty, pyval):
     dt_val.name = name
 
     return dt_val._getvalue()
+
+
+@lower_builtin("getiter", RangeIndexType)
+def getiter_range_index(context, builder, sig, args):
+    """
+    Support for getiter with Index types. Influenced largely by
+    numba.np.arrayobj.getiter_array:
+    https://github.com/numba/numba/blob/dbc71b78c0686314575a516db04ab3856852e0f5/numba/np/arrayobj.py#L256
+    and numba.cpython.range_obj.RangeIter.from_range_state:
+    https://github.com/numba/numba/blob/dbc71b78c0686314575a516db04ab3856852e0f5/numba/cpython/rangeobj.py#L107
+    """
+    [indexty] = sig.args
+    [index] = args
+    indexobj = context.make_helper(builder, indexty, value=index)
+
+    iterobj = context.make_helper(builder, sig.return_type)
+
+    iterptr = cgutils.alloca_once_value(builder, indexobj.start)
+
+    zero = context.get_constant(types.intp, 0)
+    countptr = cgutils.alloca_once_value(builder, zero)
+
+    iterobj.iter = iterptr
+    iterobj.stop = indexobj.stop
+    iterobj.step = indexobj.step
+    iterobj.count = countptr
+
+    diff = builder.sub(indexobj.stop, indexobj.start)
+    one = context.get_constant(types.intp, 1)
+    pos_diff = builder.icmp(lc.ICMP_SGT, diff, zero)
+    pos_step = builder.icmp(lc.ICMP_SGT, indexobj.step, zero)
+    sign_same = builder.not_(builder.xor(pos_diff, pos_step))
+
+    with builder.if_then(sign_same):
+        rem = builder.srem(diff, indexobj.step)
+        rem = builder.select(pos_diff, rem, builder.neg(rem))
+        uneven = builder.icmp(lc.ICMP_SGT, rem, zero)
+        newcount = builder.add(
+            builder.sdiv(diff, indexobj.step), builder.select(uneven, one, zero)
+        )
+        builder.store(newcount, countptr)
+
+    res = iterobj._getvalue()
+
+    # Note: a decref on the iterator will dereference all internal MemInfo*
+    out = impl_ret_new_ref(context, builder, sig.return_type, res)
+    return out
+
+
+def getiter_index(context, builder, sig, args):
+    """
+    Support for getiter with Index types. Extracts the stored array and
+    calls numba.np.arrayobj.getiter_array.
+    """
+    [indexty] = sig.args
+    [index] = args
+    indexobj = context.make_helper(builder, indexty, value=index)
+    return numba.np.arrayobj.getiter_array(
+        context, builder, signature(sig.return_type, sig.args[0].data), (indexobj.data,)
+    )
+
+
+def _install_index_getiter():
+    """install an overload that raises BodoError for unsupported methods of pd.Index"""
+    index_types = [
+        NumericIndexType,
+        StringIndexType,
+        TimedeltaIndexType,
+        DatetimeIndexType,
+    ]
+
+    for typ in index_types:
+        lower_builtin("getiter", typ)(getiter_index)
+
+
+_install_index_getiter()
 
 
 index_unsupported = [

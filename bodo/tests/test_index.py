@@ -759,6 +759,35 @@ def test_init_string_index_array_analysis(memory_leak_check):
     assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
 
 
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Int64Index([10, 12]),
+        pd.Float64Index([10.1, 12.1]),
+        pd.UInt64Index([10, 12]),
+        pd.Index(["A", "B"] * 4),
+        pd.RangeIndex(1, 15, 2),
+        pd.RangeIndex(-4, 8, 4),
+        pd.RangeIndex(-10, -1, -3),
+        pd.RangeIndex(-4, 8, -4),
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+        pd.timedelta_range(start="1D", end="3D", name="A"),
+    ],
+)
+def test_index_iter(index, memory_leak_check):
+    def test_impl1(index):
+        return list(index)
+
+    def test_impl2(index):
+        lst = []
+        for val in index:
+            lst.append(val)
+        return lst
+
+    check_func(test_impl1, (index,), dist_test=False)
+    check_func(test_impl2, (index,), dist_test=False)
+
+
 def test_init_range_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_range_index() is applied correctly"""
     import numba.tests.test_array_analysis
