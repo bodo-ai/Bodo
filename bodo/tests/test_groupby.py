@@ -1446,18 +1446,25 @@ def test_groupby_nunique(memory_leak_check):
         df2 = df.groupby("A").agg({"D": "nunique", "B": "sum"})
         return df2
 
+    def impl3(df):
+        """ Test multiple nunique (nunique_mode=0)"""
+        df2 = df.groupby("A").nunique()
+        return df2
+
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
             "D": ["AA", "B", "BB", "B", "AA", "AA", "B"],
             "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, 7.1],
             "C": [3, 5, 6, 5, 4, 4, 3],
+            "E": [3, 3, 3, 4, 5, 6, 2],
         },
         index=np.arange(10, 17),
     )
     check_func(impl0, (df,), sort_output=True)
     check_func(impl1, (df,), sort_output=True)
     check_func(impl2, (df,), sort_output=True)
+    check_func(impl3, (df,), sort_output=True)
 
 
 def test_groupby_agg_caching(memory_leak_check):

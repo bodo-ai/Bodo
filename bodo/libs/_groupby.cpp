@@ -78,7 +78,8 @@ void groupby_init() {
     combine_funcs[Bodo_FTypes::prod] = Bodo_FTypes::prod;
     combine_funcs[Bodo_FTypes::first] = Bodo_FTypes::first;
     combine_funcs[Bodo_FTypes::last] = Bodo_FTypes::last;
-    combine_funcs[Bodo_FTypes::nunique] = Bodo_FTypes::sum;
+    combine_funcs[Bodo_FTypes::nunique] =
+        Bodo_FTypes::sum;  // used in nunique_mode = 2
 }
 
 /**
@@ -4584,12 +4585,14 @@ class NUniqueColSet : public BasicColSet<ARRAY> {
    public:
     NUniqueColSet(array_info* in_col, bool _dropna,
                   table_info* nunique_table = nullptr,
-                  bool nunique_grp_shuffle_after = false)
+                  bool nunique_grp_shuffle_after = false,
+                  bool nunique_only = false)
         : BasicColSet<ARRAY>(in_col, Bodo_FTypes::nunique,
-                             nunique_grp_shuffle_after),
+                             nunique_grp_shuffle_after),  // do_combine
           dropna(_dropna),
           my_nunique_table(nunique_table),
-          nunique_grp_shuffle_after(nunique_grp_shuffle_after) {}
+          nunique_grp_shuffle_after(nunique_grp_shuffle_after),
+          nunique_only(nunique_only) {}
 
     virtual ~NUniqueColSet() {
         if (my_nunique_table != nullptr)
@@ -4598,7 +4601,7 @@ class NUniqueColSet : public BasicColSet<ARRAY> {
 
     virtual void update(const std::vector<grouping_info>& grp_infos) {
         // TODO: check nunique with pivot_table operation
-        if (nunique_grp_shuffle_after) {  // nunique_mode=2
+        if (nunique_grp_shuffle_after || nunique_only) {  // nunique_mode=0 or 2
             // use the grouping_info that corresponds to my nunique table
             aggfunc_output_initialize(this->update_cols[0],
                                       Bodo_FTypes::sum);  // zero initialize
@@ -4614,6 +4617,8 @@ class NUniqueColSet : public BasicColSet<ARRAY> {
    private:
     bool dropna;
     bool nunique_grp_shuffle_after;  // shuffling after update
+    bool nunique_only;  // groupby operation is only nunique on 1 or more
+                        // columns
     table_info* my_nunique_table;
 };
 
@@ -4747,6 +4752,24 @@ output_list_arrays(std::vector<array_info*>& ListArr, ARRAY* arr) {
 template <typename ARRAY>
 class GroupbyPipeline {
    public:
+    /*
+     nunique operation has 3 different implementation depending on its mode.
+     1- nunique_mode=1: groupby has mix of
+     nunique and operations that require shuffling before doing an update.
+     This is the original approach. In this case, we don't use
+     drop_duplicates_table and follow `shuffle_before_update` path. 3-
+     2- nunique_mode=2: groupby has mix of nunique and operations that do
+     update and then shuffle/combine. In this mode, we create a table per
+     nunique column and does drop_duplciates_table on each of them
+     independently. Then, we update the update_cols with nunique_computation.
+     Lastly, we do shuffle and combine to reduce results (partial sum) 3-
+     nunique_mode=0: groupby has only nunique operation. In this case, we only
+     do 1st part in nunique_mode=2 (drop_duplciates_tables per nunique
+     column). We don't need to shuffle and combine since ranks already have
+     its grouping done in drop_duplicates_table step 4- nunique_mode=-1: means
+     there's no nunique operation in this groupby/agg step, or nunique is
+     serial)
+    */
     GroupbyPipeline(table_info* _in_table, int64_t _num_keys,
                     table_info* _dispatch_table, table_info* _dispatch_info,
                     bool input_has_index, bool _is_parallel, bool _is_crosstab,
@@ -4777,7 +4800,7 @@ class GroupbyPipeline {
         // with non cumulative ops. This is checked at compile time in
         // aggregate.py
 
-        int table_id_counter = 1;
+        int table_id_counter;
         int ftypes_count = 0;  // count if we have groupby operations that
                                // requires shuffle after update
         for (int i = 0;
@@ -4785,8 +4808,8 @@ class GroupbyPipeline {
             int ftype = ftypes[i];
             if (ftype == Bodo_FTypes::gen_udf && is_parallel)
                 shuffle_before_update = true;
-            // Don't break out of loop to see if there other groupby operations
-            // that require shuffling before update
+            // Don't break out of loop to see if there are other groupby
+            // operations that require shuffling before update
             if (ftype == Bodo_FTypes::nunique) {
                 if (is_parallel) nunique_op = true;
                 req_extended_group_info = true;
@@ -4823,10 +4846,16 @@ class GroupbyPipeline {
                 nunique_mode = 2;
             }
         }
+        // If it's just nunique we set count to 0 as we won't add in_table to
+        // our list of tables Otherwise, set to 1 as 0 is reserved for in_table
+        if (nunique_only)
+            table_id_counter = 0;
+        else
+            table_id_counter = 1;
         switch (nunique_mode) {
             // TODO: Move to a function
-            case -1:  // If groupby without nunique or sequential nunique
-            case 1:   // If nunique + groupby function that requires shuffle
+            case -1:  // groupby without nunique or sequential nunique
+            case 1:   // nunique + groupby function that requires shuffle
                       // before update.
                 if (shuffle_before_update) {
                     // Code below is equivalent to
@@ -4848,16 +4877,7 @@ class GroupbyPipeline {
                     }
                 }
                 break;
-            case 0: {  // nunique operation only. Drop duplicates
-                // shuffle_table_kernel (in drop_duplicates_table) steals the
-                // reference but we still need it for the code after C++ groupby
-                for (auto a : in_table->columns) incref_array(a);
-                table_info* dd_table = drop_duplicates_table(
-                    in_table, is_parallel, num_keys, 0, in_table->ncols());
-                in_table = dd_table;
-                shuffle_before_update = true;
-                break;
-            }
+            case 0:  // nunique operation only. Drop duplicates
             case 2:  // nunique + groupby_functions that needs shuffle after
                      // update.
                 // Create a table for each nunique col and send for
@@ -4905,14 +4925,15 @@ class GroupbyPipeline {
             int start = func_offsets[k];
             int end = func_offsets[k + 1];
             for (int j = start; j != end; j++) {
-                // nunique_mode == 2
+                // nunique_mode == 0 or 2
                 if (ftypes[j] == Bodo_FTypes::nunique &&
-                    nunique_grp_shuffle_after) {
-                    array_info* n_col = nunique_tables[i]->columns[num_keys];
-                    col_sets.push_back(makeColSet(n_col, index_col, ftypes[j],
-                                                  do_combine, skipna, periods,
-                                                  n_udf, nunique_tables[i],
-                                                  nunique_grp_shuffle_after));
+                    (nunique_grp_shuffle_after || nunique_only)) {
+                    array_info* nunique_col =
+                        nunique_tables[i]->columns[num_keys];
+                    col_sets.push_back(makeColSet(
+                        nunique_col, index_col, ftypes[j], do_combine, skipna,
+                        periods, n_udf, nunique_tables[i],
+                        nunique_grp_shuffle_after, nunique_only));
                 } else {
                     col_sets.push_back(makeColSet(col, index_col, ftypes[j],
                                                   do_combine, skipna, periods,
@@ -4950,13 +4971,10 @@ class GroupbyPipeline {
      */
     table_info* run() {
         update();
-        if (shuffle_before_update || nunique_only) {
+        if (shuffle_before_update) {
             // in_table was created in C++ during shuffling and not needed
             // anymore
             delete_table_decref_arrays(in_table);
-        }
-        if (nunique_mode == 2) {
-            nunique_tables.clear();
         }
         if (is_parallel && !shuffle_before_update && !nunique_only) {
             shuffle();
@@ -4980,7 +4998,8 @@ class GroupbyPipeline {
                                    int ftype, bool do_combine, bool skipna,
                                    int64_t periods, int n_udf,
                                    table_info* nunique_table = nullptr,
-                                   bool nunique_shuffle_after_update = false) {
+                                   bool nunique_shuffle_after_update = false,
+                                   bool nunique_only = false) {
         switch (ftype) {
             case Bodo_FTypes::udf:
                 return new UdfColSet<ARRAY>(in_col, do_combine, udf_table,
@@ -4993,7 +5012,8 @@ class GroupbyPipeline {
                 return new MedianColSet<ARRAY>(in_col, skipna);
             case Bodo_FTypes::nunique:
                 return new NUniqueColSet<ARRAY>(in_col, skipna, nunique_table,
-                                                nunique_shuffle_after_update);
+                                                nunique_shuffle_after_update,
+                                                nunique_only);
             case Bodo_FTypes::cumsum:
             case Bodo_FTypes::cummin:
             case Bodo_FTypes::cummax:
@@ -5023,7 +5043,10 @@ class GroupbyPipeline {
     void update() {
         in_table->num_keys = num_keys;
         std::vector<table_info*> tables;
-        tables.push_back(in_table);
+        // Add in_table if operation doesn't include nunique or has nunique
+        // mixed with other operations This is because in_table has columns with
+        // other operations.
+        if (!nunique_only) tables.push_back(in_table);
         for (auto it = nunique_tables.begin(); it != nunique_tables.end(); it++)
             tables.push_back(it->second);
 
@@ -5342,15 +5365,23 @@ class GroupbyPipeline {
     bool do_combine;
 
     std::map<int, table_info*>
-        nunique_tables;  // column position + one table that contains key
-                         // columns +  one nunique column after drop_duplicates
+        nunique_tables;  // column position in in_table, table that contains key
+                         // columns + one nunique column after
+                         // drop_duplicates_table
     int nunique_mode =
         -1;  //-1: no nunique, 0: just nunique, 1: nunique+(groupyby with
              // shuffle_before_update), 2: (nunique+groupby with do_combine)
+    // These flags are used to determine the nunique mode. They are set during
+    // iteration over type of functions. Then, they are used to set
+    // nunique_mode.
     bool nunique_op = false;
     bool nunique_only = false;
-    bool nunique_grp_shuffle_before = false;
-    bool nunique_grp_shuffle_after = false;
+    bool nunique_grp_shuffle_before =
+        false;  // indicates that groupby/agg has nunique and another operation
+                // that requires shuffling before update (e.g. cummin)
+    bool nunique_grp_shuffle_after =
+        false;  // indicates that groupby/agg has nunique and another operation
+                // that requires a shuffle and combine after update (e.g. sum)
 
     udfinfo_t udf_info;
 
