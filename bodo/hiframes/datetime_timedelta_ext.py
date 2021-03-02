@@ -481,7 +481,6 @@ def overload_add_operator_datetime_timedelta(lhs, rhs):
 
         return impl
 
-
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -636,12 +635,25 @@ def pd_create_cmp_op_overload(op):
     """create overload function for comparison operators with datetime_date_array"""
 
     def overload_pd_timedelta_cmp(A1, A2):
+        # Timedelta/Timedelta
         if A1 == pd_timedelta_type and A2 == pd_timedelta_type:
 
             def impl(A1, A2):  # pragma: no cover
                 return op(A1.value, A2.value)
 
             return impl
+
+        # Timedelta/td64
+        if A1 == pd_timedelta_type and A2 == bodo.timedelta64ns:
+            return lambda A1, A2: op(
+                bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(A1.value), A2
+            )  # pragma: no cover
+
+        # td64/Timedelta
+        if A1 == bodo.timedelta64ns and A2 == pd_timedelta_type:
+            return lambda A1, A2: op(
+                A1, bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(A2.value)
+            )  # pragma: no cover
 
     return overload_pd_timedelta_cmp
 

@@ -826,15 +826,6 @@ def test_series_iat_setitem(series_val, memory_leak_check):
 
     val = series_val.iat[0]
 
-    if isinstance(
-        series_val.dtype, pd.CategoricalDtype
-    ) and series_val.values.categories.dtype in [
-        np.dtype("datetime64[ns]"),
-        np.dtype("timedelta64[ns]"),
-    ]:
-        # TODO: [BE-78] support array setitem with Categorical Arrays of dt64/td64
-        return
-
     def test_impl(S, val):
         S.iat[2] = val
         return S
@@ -957,15 +948,6 @@ def test_series_iloc_setitem_int(series_val, memory_leak_check):
     if isinstance(series_val.iat[0], str):
         return
 
-    if isinstance(
-        series_val.dtype, pd.CategoricalDtype
-    ) and series_val.values.categories.dtype in [
-        np.dtype("datetime64[ns]"),
-        np.dtype("timedelta64[ns]"),
-    ]:
-        # TODO: [BE-78] support array setitem with Categorical Arrays of dt64/td64
-        return
-
     val = series_val.iat[0]
 
     def test_impl(S, val):
@@ -996,7 +978,7 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
         np.dtype("datetime64[ns]"),
         np.dtype("timedelta64[ns]"),
     ]:
-        # TODO: [BE-78] support array setitem with Categorical Arrays of dt64/td64
+        # Fixed by iloc setitem PR
         return
 
     def test_impl(S, idx, val):
@@ -1057,7 +1039,7 @@ def test_series_iloc_setitem_slice(series_val, memory_leak_check):
         np.dtype("datetime64[ns]"),
         np.dtype("timedelta64[ns]"),
     ]:
-        # TODO: [BE-78] support array setitem with Categorical Arrays of dt64/td64
+        # Fixed by iloc setitem PR
         return
 
     def test_impl(S, val):
@@ -1118,7 +1100,7 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
         np.dtype("datetime64[ns]"),
         np.dtype("timedelta64[ns]"),
     ]:
-        # TODO: [BE-78] support array setitem with Categorical Arrays of dt64/td64
+        # Fixed by iloc setitem PR
         return
 
     def test_impl(S, val, idx):

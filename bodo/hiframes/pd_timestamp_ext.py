@@ -1625,6 +1625,18 @@ def create_timestamp_cmp_op_overload(op):
         if A1 == pandas_timestamp_type and A2 == pandas_timestamp_type:
             return lambda A1, A2: op(A1.value, A2.value)
 
+        # Timestamp/dt64
+        if A1 == pandas_timestamp_type and A2 == bodo.datetime64ns:
+            return lambda A1, A2: op(
+                bodo.hiframes.pd_timestamp_ext.integer_to_dt64(A1.value), A2
+            )  # pragma: no cover
+
+        # dt64/Timestamp
+        if A1 == bodo.datetime64ns and A2 == pandas_timestamp_type:
+            return lambda A1, A2: op(
+                A1, bodo.hiframes.pd_timestamp_ext.integer_to_dt64(A2.value)
+            )  # pragma: no cover
+
     return overload_date_timestamp_cmp
 
 
