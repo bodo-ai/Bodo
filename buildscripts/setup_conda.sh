@@ -39,6 +39,8 @@ then
 fi
 source activate $CONDA_ENV
 
+# TODO: update image to 3.9 and remove this
+$CONDA_INSTALL -c conda-forge python=3.9
 
 # ---- install compilers ----
 if [[ "$unamestr" == 'Linux' ]]; then
