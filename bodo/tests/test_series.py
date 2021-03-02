@@ -3351,7 +3351,10 @@ def test_series_reset_index_no_drop(memory_leak_check):
 
     df = pd.DataFrame({"A": [1, 2, 3, 4, 1, 2, 3]})
     check_func(impl1, (df,))
-    check_func(impl2, (df,))
+    # value_counts returns 2 in multiple rows, so Bodo may not match
+    # the Pandas output. As a result, we sort the output and replace
+    # the index. Fix [BE-253]
+    check_func(impl2, (df,), sort_output=True, reset_index=True)
     df = pd.DataFrame({"index": [1, 2, 3, 4, 1, 2, 3]})
     check_func(impl3, (df,))
 
