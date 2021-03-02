@@ -106,6 +106,13 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
+      pip install deltalake
+    displayName: 'Setup deltalake testing'
+  
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
       conda install -y -c conda-forge pymysql
     displayName: 'Setup MySQL testing'
 
