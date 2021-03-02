@@ -704,39 +704,42 @@ def test_np_random_multivariate_normal(memory_leak_check):
 @pytest.fixture(
     params=[
         pd.arrays.IntegerArray(
-            np.array([1, -3, 2, 3, 10], np.int8),
-            np.array([False, True, True, False, False]),
+            np.array([1, -3, 2, 3, 10] * 2, np.int8),
+            np.array([False, True, True, False, False] * 2),
         ),
-        pd.array([True, False, True, pd.NA, False]),
+        pd.array([True, False, True, pd.NA, False] * 2),
         np.array(
             [
                 Decimal("1.6"),
                 None,
                 Decimal("-0.222"),
                 Decimal("1111.316"),
-                Decimal("1234.00046"),
                 Decimal("5.1"),
             ]
+            * 2
         ),
-        np.append(pd.date_range("2020-01-14", "2020-01-17").date, [None]),
+        np.append(pd.date_range("2020-01-14", "2020-01-22").date, [None]),
         np.append(
-            datetime.timedelta(days=5, seconds=4, weeks=4),
-            [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 2,
+            [
+                datetime.timedelta(days=5, seconds=4, weeks=4),
+                datetime.timedelta(days=2, microseconds=121),
+            ],
+            [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 4,
         ),
         # TODO: Fix Categorical in another PR
-        pytest.param(pd.Categorical([1, 2, 5, None, 2]), marks=pytest.mark.skip),
+        pytest.param(pd.Categorical([1, 2, 5, None, 2] * 2), marks=pytest.mark.skip),
         pytest.param(
-            pd.Categorical(["AA", "BB", "", "AA", None]), marks=pytest.mark.skip
+            pd.Categorical(["AA", "BB", "", "AA", None] * 2), marks=pytest.mark.skip
         ),
         pytest.param(
             pd.Categorical(
-                np.append(pd.date_range("2020-01-14", "2020-01-17").date, [None])
+                np.append(pd.date_range("2020-01-14", "2020-01-22").date, [None])
             ),
             marks=pytest.mark.skip,
         ),
         pytest.param(
             pd.Categorical(
-                np.append(pd.timedelta_range(start="1 day", periods=4), [None])
+                np.append(pd.timedelta_range(start="1 day", periods=9), [None])
             ),
             marks=pytest.mark.skip,
         ),
@@ -912,7 +915,14 @@ def test_isna_check(mutable_bodo_arr, memory_leak_check):
     def test_impl(S):
         return S.map(lambda a: a if not pd.isna(a) else None).values
 
-    check_func(test_impl, (pd.Series(mutable_bodo_arr),))
+    if isinstance(mutable_bodo_arr, pd.core.arrays.IntegerArray):
+        # Pandas converts IntegerArrays into floating point arrays.
+        # As a result, None is set to np.nan, so simply setting check_dtype=False
+        # fails.
+        py_output = mutable_bodo_arr
+    else:
+        py_output = None
+    check_func(test_impl, (pd.Series(mutable_bodo_arr),), py_output=py_output)
 
 
 @pytest.mark.slow
