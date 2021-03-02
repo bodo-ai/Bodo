@@ -1509,6 +1509,13 @@ if (
 numba.parfors.parfor.ParforPassStates.__init__ = ParforPassStates__init__
 
 
+# disable push_call_vars() since it is only useful for threading not used in Bodo and
+# it's buggy. See "test_series_combine"[S10-S20-None-False]"
+numba.parfors.parfor.push_call_vars = (
+    lambda blocks, saved_globals, saved_getattrs, typemap, nested=False: None
+)
+
+
 # replace Numba's maybe_literal to avoid using our ListLiteral in type inference
 def maybe_literal(value):
     """Get a Literal type for the value or None."""
