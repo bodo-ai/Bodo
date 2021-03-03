@@ -40,12 +40,12 @@ from bodo.io.fs_io import (
     abfs_list_dir_fnames,
     directory_of_files_common_filter,
     get_hdfs_fs,
+    get_s3_bucket_region_njit,
     get_s3_fs,
     hdfs_is_directory,
     hdfs_list_dir_fnames,
     s3_is_directory,
     s3_list_dir_fnames,
-    get_s3_bucket_region_njit,
 )
 from bodo.libs.array import _lower_info_to_array_numpy, array_info_type
 from bodo.libs.array_item_arr_ext import (
@@ -75,8 +75,9 @@ from bodo.utils.utils import (
 use_nullable_int_arr = True
 
 
-import pyarrow.parquet as pq
 from urllib.parse import urlparse
+
+import pyarrow.parquet as pq
 
 
 class ParquetPredicateType(types.Type):
@@ -935,20 +936,21 @@ def get_parquet_filesnames_from_deltalake(delta_lake_path):
     comm = MPI.COMM_WORLD
     file_names = None
     path = delta_lake_path.rstrip("/")
-    
+
     # The DeltaTable API doesn't have automatic S3 region detection and doesn't
     # seem to provide a way to specify a region except through the AWS_DEFAULT_REGION
     # environment variable.
     # So, we detect the region using our existing infrastructure and set the env var
     # so that it's picked up by the deltalake library
     aws_default_region_set = "AWS_DEFAULT_REGION" in os.environ  # is the env var set
-    orig_aws_default_region = os.environ.get("AWS_DEFAULT_REGION", "")  # get original value
+    orig_aws_default_region = os.environ.get(
+        "AWS_DEFAULT_REGION", ""
+    )  # get original value
     aws_default_region_modified = False  # not modified yet
     if delta_lake_path.startswith("s3://"):
         s3_bucket_region = get_s3_bucket_region_njit(delta_lake_path)
-        if s3_bucket_region != "\x00" and s3_bucket_region != "":
-            # [:-1] to remove the null byte at the end
-            os.environ["AWS_DEFAULT_REGION"] = s3_bucket_region[:-1]
+        if s3_bucket_region != "":
+            os.environ["AWS_DEFAULT_REGION"] = s3_bucket_region
             aws_default_region_modified = True  # mark as modified
 
     if bodo.get_rank() == 0:
@@ -961,7 +963,7 @@ def get_parquet_filesnames_from_deltalake(delta_lake_path):
         except Exception as e:
             file_names = e
     file_names = comm.bcast(file_names)
-    
+
     # Restore AWS_DEFAULT_REGION env var if it was modified
     if aws_default_region_modified:
         if aws_default_region_set:
@@ -971,7 +973,6 @@ def get_parquet_filesnames_from_deltalake(delta_lake_path):
             # Else delete the env var
             del os.environ["AWS_DEFAULT_REGION"]
 
-    
     if isinstance(file_names, Exception):
         e = file_names
         raise e

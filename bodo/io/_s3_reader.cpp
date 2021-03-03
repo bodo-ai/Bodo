@@ -1,10 +1,8 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
 #include <iostream>
-#include <mpi.h>
 
 #include "../libs/_bodo_common.h"
-#include "../libs/_distributed.h"
 #include "_bodo_file_reader.h"
 #include "arrow/filesystem/filesystem.h"
 #include "arrow/filesystem/s3fs.h"
@@ -45,18 +43,6 @@
     CHECK_ARROW(res.status(), msg, s3_fs_region)            \
     lhs = std::move(res).ValueOrDie();
 
-/* Helper to broadcast std::string variable from rank 0 to all others.
-   Get the size of the string and broadcast it to the rest of the ranks,
-   resize the strings on all ranks to this size, and then broadcast the
-   string characters themselves
-*/
-static void mpi_bcast_std_string(std::string &str) {
-    int str_size = str.size();
-    MPI_Bcast(&str_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    str.resize(str_size);
-    MPI_Bcast(const_cast<char *>(str.data()), str_size, 
-              MPI_CHAR, 0, MPI_COMM_WORLD);
-}
 
 // a global singleton instance of S3FileSystem that is
 // initialized the first time it is needed and reused afterwards
@@ -110,37 +96,6 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region) {
     return s3_fs;
 }
 
-/*
-Get region of bucket corresponding to the filepath.
-Input is expected to be of the form 
-s3://<BUCKET_NAME>/<(optional)PATH_TO_FILE>
-Returns an empty string when region cannot be determined.
-This can happen when a custom endpoint is being used or
-due to permissions issues.
-*/
-std::string get_region_from_s3_path(const char* filepath) {
-    std::string region = "";
-    try {
-        // Create URI object from the filepath
-        arrow::internal::Uri uri;
-        (void)uri.Parse(filepath);
-        // Load S3Options from URI
-        arrow::fs::S3Options options;
-        arrow::Result<arrow::fs::S3Options> result;
-        result = arrow::fs::S3Options::FromUri(uri);
-        CHECK_ARROW_AND_ASSIGN(result, "S3Options::FromUri", options, std::string(""));
-        // Get region from the S3Options object
-        region = options.region;
-    } catch (const std::exception &e) {
-        // In case of an error, catch and ignore it.
-        // Errors can occur when using a custom endpoint for instance.
-        // They can potentially occur when AWS credentials don't have
-        // the right permissions as well, in which case we'd want to
-        // use the AWS_DEFAULT_REGION if one is provided
-    }
-    return region;
-    
-}
 
 static int finalize_s3() {
     try {
@@ -289,21 +244,6 @@ void s3_open_file(const char *fname,
     CHECK_ARROW_AND_ASSIGN(result, "fs->OpenInputFile", *file, fs->region())
 }
 
-char* get_region_from_s3_path_py_entrypt(const char *filepath, int64_t *len) {
-    std::string region_str = "";
-    // Get the bucket region (on one rank)
-    if (dist_get_rank() == 0)
-        region_str = get_region_from_s3_path(filepath);
-    // Broadcast to all other ranks
-    mpi_bcast_std_string(region_str);
-    // Get length of string and convert to char*
-    *len = region_str.length() + 1;
-    char *region = new char[*len];
-    strcpy(region, region_str.c_str());
-    return region;
-}
-
-void del_region_str(char *region_str) { delete region_str; }
 
 PyMODINIT_FUNC PyInit_s3_reader(void) {
     PyObject *m;
@@ -324,11 +264,6 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
                            PyLong_FromVoidPtr((void *)(&s3_get_fs)));
     PyObject_SetAttrString(m, "finalize_s3",
                            PyLong_FromVoidPtr((void *)(&finalize_s3)));
-    PyObject_SetAttrString(m, "get_region_from_s3_path",
-                           PyLong_FromVoidPtr((void *)(&get_region_from_s3_path_py_entrypt)));
-    PyObject_SetAttrString(m, "del_region_str",
-                           PyLong_FromVoidPtr((void *)(&del_region_str)));
-
     return m;
 }
 
