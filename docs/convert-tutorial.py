@@ -121,6 +121,18 @@ def process(infile_name, outfile_name):
             outfile.write("\n\n")
             continue
 
+        if (
+            l.lower().startswith("bodo caching")
+            or l.lower().startswith("caching example")
+            or l.lower().startswith("cache location and portability")
+            or l.lower().startswith("cache invalidation")
+            or l.lower().startswith("current caching limitations")
+        ):
+            skip_section = True
+            header = read_next()  # skip section header
+            assert is_section_header(header)
+            continue
+
         if l.startswith(".. raw:: html"):
             l = process_html_block(l, infile, outfile)
             line_buf.append(l)

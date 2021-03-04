@@ -21,6 +21,7 @@ Bodo
    source/numpy
    source/ml
    source/dl
+   source/caching
    source/not_supported
    source/advanced
    source/performance
