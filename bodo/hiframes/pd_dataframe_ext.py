@@ -2703,8 +2703,8 @@ def drop_overload(
     errors="raise",
     _bodo_transformed=False,
 ):
-    unsupported_args = dict(level=level, errors=errors)
-    arg_defaults = dict(level=None, errors="raise")
+    unsupported_args = dict(index=index, level=level, errors=errors)
+    arg_defaults = dict(index=None, level=None, errors="raise")
     check_unsupported_args("DataFrame.drop", unsupported_args, arg_defaults)
 
     handle_inplace_df_type_change(inplace, _bodo_transformed, "drop")
@@ -2715,11 +2715,16 @@ def drop_overload(
         )
 
     if not is_overload_none(labels):
+        if not is_overload_none(columns):
+            raise BodoError(
+                "Dataframe.drop(): Cannot specify both 'labels' and 'columns'"
+            )
+
         # make sure axis=1
         if (
             not is_overload_constant_int(axis) or get_overload_const_int(axis) != 1
         ):  # pragma: no cover
-            raise_bodo_error("only axis=1 supported for df.drop()")
+            raise_bodo_error("DataFrame.drop(): only axis=1 supported")
         # get 'labels' column list
         if is_overload_constant_str(labels):
             drop_cols = (get_overload_const_str(labels),)
@@ -2727,18 +2732,21 @@ def drop_overload(
             drop_cols = get_overload_const_list(labels)
         else:  # pragma: no cover
             raise_bodo_error(
-                "constant list of columns expected for labels in df.drop()"
+                "constant list of columns expected for labels in DataFrame.drop()"
             )
     else:
-        assert not is_overload_none(columns)
-        # TODO: error checking
+        if is_overload_none(columns):
+            raise BodoError(
+                "DataFrame.drop(): Need to specify at least one of 'labels' or 'columns'"
+            )
+
         if is_overload_constant_str(columns):  # pragma: no cover
             drop_cols = (get_overload_const_str(columns),)
         elif is_overload_constant_list(columns):
             drop_cols = get_overload_const_list(columns)
         else:  # pragma: no cover
             raise_bodo_error(
-                "constant list of columns expected for labels in df.drop()"
+                "constant list of columns expected for labels in DataFrame.drop()"
             )
 
     # check drop columns to be in df schema

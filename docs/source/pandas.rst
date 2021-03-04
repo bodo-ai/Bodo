@@ -603,8 +603,10 @@ Computations / Descriptive Stats:
 
 Reindexing / Selection / Label manipulation:
 
-* :meth:`pandas.DataFrame.drop` (only dropping columns supported,
-  either using `columns` argument or setting `axis=1`)
+* :meth:`pandas.DataFrame.drop`
+
+  * Only dropping columns supported, either using `columns` argument or setting `axis=1`
+  * `inplace` supported with a constant boolean value
 * :meth:`pandas.DataFrame.drop_duplicates`
 * :meth:`pandas.DataFrame.duplicated`
 * :meth:`pandas.DataFrame.head` (including `n` argument)

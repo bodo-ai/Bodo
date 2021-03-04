@@ -1170,12 +1170,21 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
     # TODO: support subset and first
     args_dict = {
         "subset": subset,
+        "keep": keep,
     }
     args_default_dict = {
         "subset": None,
+        "keep": "first",
     }
 
-    check_unsupported_args("duplicated", args_dict, args_default_dict)
+    check_unsupported_args("DataFrame.duplicated", args_dict, args_default_dict)
+
+    # Bodo Limitation: duplicated doesn't work for Categorical Columns.
+    for dtype in df.data:
+        if isinstance(dtype, bodo.CategoricalArray):
+            raise BodoError(
+                "DataFrame.duplicated() not supported for DataFrames with Categorical Columns"
+            )
 
     n_cols = len(df.columns)
 
@@ -1202,17 +1211,19 @@ def overload_dataframe_drop_duplicates(
 ):
     # TODO: support inplace
     args_dict = {
+        "keep": keep,
         "inplace": inplace,
         "subset": subset,
         "ignore_index": ignore_index,
     }
     args_default_dict = {
+        "keep": "first",
         "inplace": False,
         "subset": None,
         "ignore_index": False,
     }
 
-    check_unsupported_args("drop_duplicates", args_dict, args_default_dict)
+    check_unsupported_args("DataFrame.drop_duplicates", args_dict, args_default_dict)
 
     # XXX: can't reuse duplicated() here since it shuffles data and chunks
     # may not match

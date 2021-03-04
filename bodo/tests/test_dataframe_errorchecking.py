@@ -12,7 +12,7 @@ def test_df_head_errors(memory_leak_check):
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         return df.head(5.0)
 
-    with pytest.raises(BodoError, match="Dataframe.head\(\): 'n' must be an Integer"):
+    with pytest.raises(BodoError, match="Dataframe.head.*: 'n' must be an Integer"):
         bodo.jit(impl)()
 
 
@@ -22,5 +22,132 @@ def test_df_tail_errors(memory_leak_check):
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         return df.tail(5.0)
 
-    with pytest.raises(BodoError, match="Dataframe.tail\(\): 'n' must be an Integer"):
+    with pytest.raises(BodoError, match="Dataframe.tail.*: 'n' must be an Integer"):
         bodo.jit(impl)()
+
+
+@pytest.mark.slow
+def test_df_drop_errors(memory_leak_check):
+    def impl1():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop(index=[0, 1])
+
+    def impl2():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop(level=0)
+
+    def impl3():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop(errors="warn")
+
+    def impl4():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop(inplace=None)
+
+    def impl5():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop(labels="A", columns="A")
+
+    def impl6():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop(labels="A")
+
+    def impl7(labels):
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop(labels=labels[0], axis=1)
+
+    def impl8(labels):
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop(columns=labels[0], axis=1)
+
+    def impl9():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop(columns=["A", "C"], axis=1)
+
+    def impl10():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop()
+
+    unsupported_arg_err_msg = "DataFrame.drop.* parameter only supports default value"
+    const_err_msg = "constant list of columns expected for labels in DataFrame.drop.*"
+    col = ["A"]
+    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
+        bodo.jit(impl1)()
+    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
+        bodo.jit(impl2)()
+    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
+        bodo.jit(impl3)()
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.drop.*: 'inplace' parameter should be a constant bool",
+    ):
+        bodo.jit(impl4)()
+    with pytest.raises(
+        BodoError, match="Dataframe.drop.*: Cannot specify both 'labels' and 'columns'"
+    ):
+        bodo.jit(impl5)()
+    with pytest.raises(BodoError, match="DataFrame.drop.*: only axis=1 supported"):
+        bodo.jit(impl6)()
+    with pytest.raises(BodoError, match=const_err_msg):
+        bodo.jit(impl7)(col)
+    with pytest.raises(BodoError, match=const_err_msg):
+        bodo.jit(impl8)(col)
+    with pytest.raises(
+        BodoError, match="DataFrame.drop.*: column C not in DataFrame columns .*"
+    ):
+        bodo.jit(impl9)()
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.drop.*: Need to specify at least one of 'labels' or 'columns'",
+    ):
+        bodo.jit(impl10)()
+
+
+@pytest.mark.slow
+def test_df_drop_duplicates_errors(memory_leak_check):
+    def impl1():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop_duplicates(keep="last")
+
+    def impl2():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop_duplicates(subset=["A"])
+
+    def impl3():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        df.drop_duplicates(inplace=True)
+
+    def impl4():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.drop_duplicates(ignore_index=True)
+
+    unsupported_arg_err_msg = (
+        "DataFrame.drop_duplicates.* parameter only supports default value"
+    )
+    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
+        bodo.jit(impl1)()
+    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
+        bodo.jit(impl2)()
+    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
+        bodo.jit(impl3)()
+    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
+        bodo.jit(impl4)()
+
+
+@pytest.mark.slow
+def test_df_duplicated_errors(memory_leak_check):
+    def impl1():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.duplicated(keep="last")
+
+    def impl2():
+        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
+        return df.duplicated(subset=["A"])
+
+    unsupported_arg_err_msg = (
+        "DataFrame.duplicated.* parameter only supports default value"
+    )
+    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
+        bodo.jit(impl1)()
+    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
+        bodo.jit(impl2)()

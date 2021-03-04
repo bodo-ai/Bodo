@@ -1827,6 +1827,73 @@ def test_df_duplicated():
     check_func(impl, (df,), sort_output=True)
 
 
+def test_drop_all_types(df_value, memory_leak_check):
+    """
+    Function that tests that drop works on our df types.
+    """
+
+    def test_impl1(df):
+        return df.drop(labels="A", axis=1)
+
+    def test_impl2(df):
+        return df.drop(columns=["A"])
+
+    if "A" not in df_value.columns:
+        df = df_value.rename(columns={df_value.columns[0]: "A"})
+    else:
+        df = df_value
+    # Pandas seems to error in our framework with an empty df
+    if len(df_value.columns) == 1:
+        df["B"] = df["A"]
+    check_func(
+        test_impl1,
+        (df,),
+    )
+    check_func(
+        test_impl2,
+        (df,),
+    )
+
+
+def test_drop_duplicates_all_types(df_value, memory_leak_check):
+    """
+    Function that tests that drop_duplicates works on our df types.
+    """
+
+    def test_impl(df):
+        return df.drop_duplicates()
+
+    # Sort outputs for the distributed case where the output order doesn't
+    # match.
+    check_func(test_impl, (df_value,), sort_output=True, reset_index=True)
+
+
+# TODO: [BE-266] Fix memory leak in duplicated
+def test_duplicated_all_types(df_value):
+    """
+    Function that tests that duplicated works on our df types.
+    """
+
+    def test_impl(df):
+        return df.duplicated()
+
+    is_categorical = False
+    for dtype in df_value.dtypes:
+        if isinstance(dtype, pd.CategoricalDtype):
+            is_categorical = True
+            break
+    if is_categorical:
+        # TODO: [BE-267] Support Categorical DataFrames
+        with pytest.raises(
+            BodoError,
+            match="DataFrame.duplicated.* not supported for DataFrames with Categorical Columns",
+        ):
+            bodo.jit(test_impl)(df_value)
+    else:
+        # Index and order doesn't match in distributed case.
+        check_func(test_impl, (df_value,), sort_output=True, reset_index=True)
+
+
 ##################### binary ops ###############################
 
 
