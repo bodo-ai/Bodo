@@ -33,6 +33,7 @@ def test_write_sql_aws(memory_leak_check):
         else:
             df_input = df_in
         bodo_impl(df_input, table_name, conn)
+        bodo.barrier()
         if bodo.get_rank() == 0:
             df_load = pd.read_sql("select * from " + table_name, conn)
             # The writing does not preserve the order a priori
