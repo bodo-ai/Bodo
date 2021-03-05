@@ -272,7 +272,8 @@ def test_index_get_loc(index, key, memory_leak_check):
     check_func(impl, (index, key), only_seq=True)
 
 
-def test_index_get_loc_error_checking(memory_leak_check):
+# TODO(ehsan): add memory_leak_check when Numba's Exception memory leaks are fixed
+def test_index_get_loc_error_checking():
     """Test possible errors in Index.get_loc() such as non-unique Index which is not
     supported.
     """
@@ -288,9 +289,17 @@ def test_index_get_loc_error_checking(memory_leak_check):
     ):
         bodo.jit(impl)(index, key)
     # key not in Index
+    index = pd.Index(["A", "B", "C", "AA", "DD"])
     key = "E"
     with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
         bodo.jit(impl)(index, key)
+    # key not in RangeIndex
+    with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
+        bodo.jit(impl)(pd.RangeIndex(1, 4, 2), 2)
+    with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
+        bodo.jit(impl)(pd.RangeIndex(1, 4, 2), 11)
+    with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
+        bodo.jit(impl)(pd.RangeIndex(3, 11, 2), 2)
 
 
 # Need to add the code and the check for the PeriodIndex
