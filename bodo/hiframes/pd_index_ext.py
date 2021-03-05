@@ -21,6 +21,7 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
+    register_jitable,
     register_model,
     typeof_impl,
     unbox,
@@ -2286,6 +2287,22 @@ def overload_index_take(I, indices):
     return lambda I, indices: I[indices]  # pragma: no cover
 
 
+@register_jitable
+def range_contains(start, stop, step, val):
+    """check 'val' to be in range(start, stop, step)"""
+    if step == 0:
+        return False
+
+    # check to see if value in start/stop range
+    if step > 0 and not (start <= val < stop):
+        return False
+    if step < 0 and not (stop <= val < start):
+        return False
+
+    # check stride
+    return ((val - start) % step) == 0
+
+
 @overload_method(RangeIndexType, "get_loc", no_unliteral=True)
 @overload_method(NumericIndexType, "get_loc", no_unliteral=True)
 @overload_method(StringIndexType, "get_loc", no_unliteral=True)
@@ -2311,6 +2328,17 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
 
     if not types.unliteral(key) == dtype:  # pragma: no cover
         raise_bodo_error("Index.get_loc(): invalid label type in Index.get_loc()")
+
+    # RangeIndex doesn't need a hashmap
+    if isinstance(I, RangeIndexType):
+        # Pandas uses range.index() of Python, so using similar implementation
+        # https://github.com/python/cpython/blob/8e1b40627551909687db8914971b0faf6cf7a079/Objects/rangeobject.c#L576
+        def impl_range(I, key, method=None, tolerance=None):  # pragma: no cover
+            if not range_contains(I.start, I.stop, I.step, key):
+                raise KeyError("Index.get_loc(): key not found")
+            return key - I.start if I.step == 1 else (key - I.start) // I.step
+
+        return impl_range
 
     def impl(I, key, method=None, tolerance=None):  # pragma: no cover
         # build the index dict if not initialized yet

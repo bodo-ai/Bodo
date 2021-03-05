@@ -253,6 +253,7 @@ def test_index_slice_name(index, memory_leak_check):
 @pytest.mark.parametrize(
     "index, key",
     [
+        (pd.RangeIndex(3, 22, 3), 9),
         (pd.Int64Index([10, 12, 15, 18]), 15),
         (pd.Index(["A", "B", "C", "AA", "DD"]), "A"),
         (
