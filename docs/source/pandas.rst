@@ -622,6 +622,9 @@ Reindexing / Selection / Label manipulation:
 Missing data handling:
 
 * :meth:`pandas.DataFrame.dropna`
+
+  * Arguments ``how``, ``thresh`` and ``subset`` are supported.
+
 * :meth:`pandas.DataFrame.fillna`
 * :meth:`pandas.DataFrame.replace`
 

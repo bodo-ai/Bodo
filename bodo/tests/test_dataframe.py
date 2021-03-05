@@ -64,7 +64,6 @@ from bodo.utils.typing import BodoError, BodoWarning
                     .astype("category"),
                 }
             ),
-            marks=pytest.mark.slow,
         ),
         pd.DataFrame(
             {
@@ -2974,6 +2973,21 @@ def test_df_const_set_rm_index(memory_leak_check):
             bodo.jit(impl)(A)
     else:
         bodo.jit(impl)(A)
+
+
+def test_df_dropna_df_value(df_value):
+    def impl(df):
+        return df.dropna()
+
+    if any(
+        isinstance(col, pd.core.dtypes.dtypes.CategoricalDtype)
+        for col in df_value.dtypes
+    ):
+        match = "Categorical columns are currently not supported"
+        with pytest.raises(BodoError, match=match):
+            bodo.jit(impl)(df_value)
+    else:
+        check_func(impl, (df_value,))
 
 
 def test_df_dropna(memory_leak_check):
