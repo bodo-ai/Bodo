@@ -726,22 +726,26 @@ def test_np_random_multivariate_normal(memory_leak_check):
             ],
             [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 4,
         ),
-        # TODO: Fix Categorical in another PR
-        pytest.param(pd.Categorical([1, 2, 5, None, 2] * 2), marks=pytest.mark.skip),
-        pytest.param(
-            pd.Categorical(["AA", "BB", "", "AA", None] * 2), marks=pytest.mark.skip
-        ),
+        pytest.param(pd.Categorical([1, 2, 5, None, 2] * 2), marks=pytest.mark.slow),
+        pytest.param(pd.Categorical(["AA", "BB", "", "AA", None] * 2)),
         pytest.param(
             pd.Categorical(
                 np.append(pd.date_range("2020-01-14", "2020-01-22").date, [None])
             ),
-            marks=pytest.mark.skip,
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Categorical(
-                np.append(pd.timedelta_range(start="1 day", periods=9), [None])
+                np.append(
+                    pd.timedelta_range(start="1 day", periods=9),
+                    [np.timedelta64("NaT")],
+                )
             ),
-            marks=pytest.mark.skip,
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Categorical([3, 1.321, 0.0122, -1.321, 0.0, 1, 3, 2]),
+            marks=pytest.mark.slow,
         ),
     ]
 )
@@ -911,6 +915,9 @@ def test_isna_check(mutable_bodo_arr, memory_leak_check):
     """
     Test that isna works properly for each array
     """
+    if isinstance(mutable_bodo_arr, pd.Categorical):
+        # TODO: [BE-130] Support Categorical in UDFs.
+        return
 
     def test_impl(S):
         return S.map(lambda a: a if not pd.isna(a) else None).values
@@ -949,8 +956,9 @@ def test_setna_getitem(mutable_bodo_arr, memory_leak_check):
     bodo.jit(test_impl)(mutable_bodo_arr)
 
 
+# TODO: Add memory leak check when constant lowering memory leak is fixed.
 @pytest.mark.slow
-def test_bad_setitem(mutable_bodo_arr, memory_leak_check):
+def test_bad_setitem(mutable_bodo_arr):
     """
     Tests that a type mismatch gives a reasonable error message and doesn't just fail
     randomly in Numba.
@@ -974,8 +982,15 @@ def test_bad_setitem(mutable_bodo_arr, memory_leak_check):
         A[ind] = [1.1, 1.4]
         return A
 
-    error_msg = "received an incorrect 'value' type"
-    with pytest.raises(BodoError, match=error_msg):
+    if isinstance(mutable_bodo_arr, pd.Categorical) and np.issubdtype(
+        mutable_bodo_arr.categories.dtype, np.float64
+    ):
+        err_typ = ValueError
+        error_msg = "Cannot setitem on a Categorical with a new category, set the categories first"
+    else:
+        err_typ = BodoError
+        error_msg = "received an incorrect 'value' type"
+    with pytest.raises(err_typ, match=error_msg):
         bodo.jit(test_impl_scalar)(mutable_bodo_arr)
     indices = [
         np.array([False, True, True, False, False]),
@@ -983,12 +998,13 @@ def test_bad_setitem(mutable_bodo_arr, memory_leak_check):
         [1, 2],
         slice(0, 2),
     ]
+    print(error_msg)
     for ind in indices:
-        with pytest.raises(BodoError, match=error_msg):
+        with pytest.raises(err_typ, match=error_msg):
             bodo.jit(test_impl_arr_like)(mutable_bodo_arr, ind)
-        with pytest.raises(BodoError, match=error_msg):
+        with pytest.raises(err_typ, match=error_msg):
             bodo.jit(test_impl_series_like)(mutable_bodo_arr, ind)
-        with pytest.raises(BodoError, match=error_msg):
+        with pytest.raises(err_typ, match=error_msg):
             bodo.jit(test_impl_list_like)(mutable_bodo_arr, ind)
 
 

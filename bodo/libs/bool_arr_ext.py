@@ -510,6 +510,12 @@ def bool_arr_getitem(A, ind):
 
         return impl_slice
 
+    # This should be the only BooleanArray implementation.
+    # We only expect to reach this case if more idx options are added.
+    raise BodoError(
+        f"getitem for BooleanArray with indexing type {ind} not supported."
+    )  # pragma: no cover
+
 
 @overload(operator.setitem, no_unliteral=True)
 def bool_arr_setitem(A, idx, val):

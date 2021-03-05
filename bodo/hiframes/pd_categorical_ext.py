@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import enum
 import operator
 
 import numba
@@ -30,11 +31,14 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const,
     get_overload_const_bool,
+    is_common_scalar_dtype,
+    is_iterable_type,
     is_list_like_index_type,
     is_literal_type,
     is_overload_constant_bool,
     is_overload_none,
     is_overload_true,
+    is_scalar_type,
 )
 
 
@@ -816,18 +820,59 @@ def categorical_array_getitem(arr, ind):
         # TODO: support returning NA
         def categorical_getitem_impl(arr, ind):  # pragma: no cover
             code = arr.codes[ind]
-            assert code != -1, "returning NA value from Categorical array not supported"
-            return arr.dtype.categories[code]
+            # Returns a dummy value if code == -1. The user needs to handle
+            # this with isna the same as other arrays.
+            return arr.dtype.categories[max(code, 0)]
 
         return categorical_getitem_impl
 
-    # bool/int arr indexing
+    # bool/int/slice arr indexing
     if is_list_like_index_type(ind) or isinstance(ind, types.SliceType):
 
         def impl_bool(arr, ind):  # pragma: no cover
             return init_categorical_array(arr.codes[ind], arr.dtype)
 
         return impl_bool
+
+    # This should be the only CategoricalArray implementation.
+    # We only expect to reach this case if more idx options are added.
+    raise BodoError(
+        f"getitem for CategoricalArray with indexing type {ind} not supported."
+    )  # pragma: no cover
+
+
+class CategoricalMatchingValues(enum.Enum):
+    """
+    Enum used to determine if two values match.
+    MAY_MATCH means the two values may match at runtime,
+    but we can't tell at compile time.
+
+    DIFFERENT_TYPES is used if a type examined is not a CategoricalArray,
+    which should produce a different error message.
+    """
+
+    DIFFERENT_TYPES = -1
+    DONT_MATCH = 0
+    MAY_MATCH = 1
+    DO_MATCH = 2
+
+
+def categorical_arrs_match(arr1, arr2):
+    """
+    Helper functions that determines if the inputs are matching
+    categorical arrays. If either category is None, the types
+    can match at runtime (need a runtime check).
+    """
+    if not (isinstance(arr1, CategoricalArray) and isinstance(arr2, CategoricalArray)):
+        return CategoricalMatchingValues.DIFFERENT_TYPES
+    if arr1.dtype.categories is None or arr2.dtype.categories is None:
+        return CategoricalMatchingValues.MAY_MATCH
+    return (
+        CategoricalMatchingValues.DO_MATCH
+        if arr1.dtype.categories == arr2.dtype.categories
+        and arr1.dtype.ordered == arr2.dtype.ordered
+        else CategoricalMatchingValues.DONT_MATCH
+    )
 
 
 @overload(operator.setitem, no_unliteral=True)
@@ -839,8 +884,43 @@ def categorical_array_setitem(arr, ind, val):
         # None/Optional goes through a separate step.
         return
 
+    # val is scalar RHS that can be assigned.
+    is_scalar_match = (
+        is_scalar_type(val)
+        and is_common_scalar_dtype([val, arr.dtype.elem_type])
+        # Make sure we don't try insert a float into an int. This
+        # will pass is_common_scalar_dtype but is incorrect
+        and not (
+            isinstance(arr.dtype.elem_type, types.Integer)
+            and isinstance(val, types.Float)
+        )
+    )
+    # val is an array RHS that can be assigned
+    is_arr_rhs = (
+        not isinstance(val, CategoricalArray)
+        and is_iterable_type(val)
+        and is_common_scalar_dtype([val.dtype, arr.dtype.elem_type])
+        # Make sure we don't try insert a float into an int. This
+        # will pass is_common_scalar_dtype but is incorrect
+        and not (
+            isinstance(arr.dtype.elem_type, types.Integer)
+            and isinstance(val.dtype, types.Float)
+        )
+    )
+    # val is a Categorical Array and categories match/can match
+    # if they can match we check at compile time.
+    cats_match = categorical_arrs_match(arr, val)
+
+    typ_err_msg = f"setitem for CategoricalArray of dtype {arr.dtype} with indexing type {ind} received an incorrect 'value' type {val}."
+    categories_err_msg = (
+        "Cannot set a Categorical with another, without identical categories"
+    )
+
     # scalar case
     if isinstance(ind, types.Integer):
+
+        if not is_scalar_match:
+            raise BodoError(typ_err_msg)
 
         def impl_scalar(arr, ind, val):  # pragma: no cover
             for i in range(len(arr.dtype.categories)):
@@ -856,8 +936,35 @@ def categorical_array_setitem(arr, ind, val):
     # array of int indices
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
-        # TODO: Check categories match
-        if isinstance(val, CategoricalArray):
+        if not (
+            is_scalar_match
+            or is_arr_rhs
+            or cats_match != CategoricalMatchingValues.DIFFERENT_TYPES
+        ):
+            raise BodoError(typ_err_msg)
+
+        if cats_match == CategoricalMatchingValues.DONT_MATCH:
+            raise BodoError(categories_err_msg)
+
+        if is_scalar_match:
+
+            def impl_scalar(arr, ind, val):  # pragma: no cover
+                val_code = -1
+                for i in range(len(arr.dtype.categories)):
+                    if arr.dtype.categories[i] == val:
+                        val_code = i
+                        break
+                if val_code == -1:
+                    raise ValueError(
+                        "Cannot setitem on a Categorical with a new category, set the categories first"
+                    )
+                n = len(ind)
+                for j in range(n):
+                    arr.codes[ind[j]] = val_code
+
+            return impl_scalar
+
+        if cats_match == CategoricalMatchingValues.DO_MATCH:
 
             def impl_arr_ind_mask(arr, ind, val):  # pragma: no cover
                 n = len(val.codes)
@@ -866,7 +973,22 @@ def categorical_array_setitem(arr, ind, val):
 
             return impl_arr_ind_mask
 
-        if val.dtype == arr.dtype.elem_type:
+        if cats_match == CategoricalMatchingValues.MAY_MATCH:
+
+            def impl_arr_ind_mask(arr, ind, val):  # pragma: no cover
+                if (
+                    arr.dtype.ordered != val.dtype.ordered
+                    or len(arr.dtype.categories) != len(val.dtype.categories)
+                    or (arr.dtype.categories != val.dtype.categories).any()
+                ):
+                    raise ValueError(categories_err_msg)
+                n = len(val.codes)
+                for i in range(n):
+                    arr.codes[ind[i]] = val.codes[i]
+
+            return impl_arr_ind_mask
+
+        if is_arr_rhs:
 
             def impl_arr_ind_mask_cat_values(arr, ind, val):  # pragma: no cover
                 n = len(val)
@@ -874,9 +996,15 @@ def categorical_array_setitem(arr, ind, val):
                 cat_len = len(categories)
                 cats_dict = {}
                 for i in range(cat_len):
-                    cats_dict[categories[i]] = i
+                    # Timestamp/Timedelta are stored internally as dt64 but inside the index as
+                    # Timestamp and Timedelta
+                    cats_dict[
+                        bodo.utils.conversion.unbox_if_timestamp(categories[i])
+                    ] = i
                 for j in range(n):
-                    new_val = val[j]
+                    # Timestamp/Timedelta are stored internally as dt64 but inside the index as
+                    # Timestamp and Timedelta
+                    new_val = bodo.utils.conversion.unbox_if_timestamp(val[j])
                     if new_val in cats_dict:
                         code = cats_dict[new_val]
                     else:
@@ -890,8 +1018,36 @@ def categorical_array_setitem(arr, ind, val):
     # bool array
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
-        # TODO: Check categories match
-        if isinstance(val, CategoricalArray):
+        if not (
+            is_scalar_match
+            or is_arr_rhs
+            or cats_match != CategoricalMatchingValues.DIFFERENT_TYPES
+        ):
+            raise BodoError(typ_err_msg)
+
+        if cats_match == CategoricalMatchingValues.DONT_MATCH:
+            raise BodoError(categories_err_msg)
+
+        if is_scalar_match:
+
+            def impl_scalar(arr, ind, val):  # pragma: no cover
+                val_code = -1
+                for i in range(len(arr.dtype.categories)):
+                    if arr.dtype.categories[i] == val:
+                        val_code = i
+                        break
+                if val_code == -1:
+                    raise ValueError(
+                        "Cannot setitem on a Categorical with a new category, set the categories first"
+                    )
+                n = len(ind)
+                for j in range(n):
+                    if ind[j]:
+                        arr.codes[j] = val_code
+
+            return impl_scalar
+
+        if cats_match == CategoricalMatchingValues.DO_MATCH:
 
             def impl_bool_ind_mask(arr, ind, val):  # pragma: no cover
                 n = len(ind)
@@ -903,7 +1059,25 @@ def categorical_array_setitem(arr, ind, val):
 
             return impl_bool_ind_mask
 
-        if val.dtype == arr.dtype.elem_type:
+        if cats_match == CategoricalMatchingValues.MAY_MATCH:
+
+            def impl_bool_ind_mask(arr, ind, val):  # pragma: no cover
+                if (
+                    arr.dtype.ordered != val.dtype.ordered
+                    or len(arr.dtype.categories) != len(val.dtype.categories)
+                    or (arr.dtype.categories != val.dtype.categories).any()
+                ):
+                    raise ValueError(categories_err_msg)
+                n = len(ind)
+                val_ind = 0
+                for i in range(n):
+                    if ind[i]:
+                        arr.codes[i] = val.codes[val_ind]
+                        val_ind += 1
+
+            return impl_bool_ind_mask
+
+        if is_arr_rhs:
 
             def impl_bool_ind_mask_cat_values(arr, ind, val):  # pragma: no cover
                 n = len(ind)
@@ -912,10 +1086,16 @@ def categorical_array_setitem(arr, ind, val):
                 cat_len = len(categories)
                 cats_dict = {}
                 for i in range(cat_len):
-                    cats_dict[categories[i]] = i
+                    # Timestamp/Timedelta are stored internally as dt64 but inside the index as
+                    # Timestamp and Timedelta
+                    cats_dict[
+                        bodo.utils.conversion.unbox_if_timestamp(categories[i])
+                    ] = i
                 for j in range(n):
                     if ind[j]:
-                        new_val = val[val_ind]
+                        # Timestamp/Timedelta are stored internally as dt64 but inside the index as
+                        # Timestamp and Timedelta
+                        new_val = bodo.utils.conversion.unbox_if_timestamp(val[val_ind])
                         if new_val in cats_dict:
                             code = cats_dict[new_val]
                         else:
@@ -929,35 +1109,73 @@ def categorical_array_setitem(arr, ind, val):
 
     # slice case
     if isinstance(ind, types.SliceType):
-        if val == arr.dtype.elem_type:
+
+        if not (
+            is_scalar_match
+            or is_arr_rhs
+            or cats_match != CategoricalMatchingValues.DIFFERENT_TYPES
+        ):
+            raise BodoError(typ_err_msg)
+
+        if cats_match == CategoricalMatchingValues.DONT_MATCH:
+            raise BodoError(categories_err_msg)
+
+        if is_scalar_match:
 
             def impl_scalar(arr, ind, val):  # pragma: no cover
+                val_code = -1
+                for i in range(len(arr.dtype.categories)):
+                    if arr.dtype.categories[i] == val:
+                        val_code = i
+                        break
+                if val_code == -1:
+                    raise ValueError(
+                        "Cannot setitem on a Categorical with a new category, set the categories first"
+                    )
                 slice_ind = numba.cpython.unicode._normalize_slice(ind, len(arr))
-                for i in range(slice_ind.start, slice_ind.stop, slice_ind.step):
-                    arr[i] = val
+                for j in range(slice_ind.start, slice_ind.stop, slice_ind.step):
+                    arr.codes[j] = val_code
 
             return impl_scalar
 
-        # TODO: Check categories match
-        if isinstance(val, CategoricalArray):
+        if cats_match == CategoricalMatchingValues.DO_MATCH:
 
             def impl_arr(arr, ind, val):  # pragma: no cover
                 arr.codes[ind] = val.codes
 
             return impl_arr
 
-        if val.dtype == arr.dtype.elem_type:
+        if cats_match == CategoricalMatchingValues.MAY_MATCH:
+
+            def impl_arr(arr, ind, val):  # pragma: no cover
+                if (
+                    arr.dtype.ordered != val.dtype.ordered
+                    or len(arr.dtype.categories) != len(val.dtype.categories)
+                    or (arr.dtype.categories != val.dtype.categories).any()
+                ):
+                    raise ValueError(categories_err_msg)
+                arr.codes[ind] = val.codes
+
+            return impl_arr
+
+        if is_arr_rhs:
 
             def impl_slice_cat_values(arr, ind, val):  # pragma: no cover
                 categories = arr.dtype.categories
                 cat_len = len(categories)
                 cats_dict = {}
                 for i in range(cat_len):
-                    cats_dict[categories[i]] = i
+                    # Timestamp/Timedelta are stored internally as dt64 but inside the index as
+                    # Timestamp and Timedelta
+                    cats_dict[
+                        bodo.utils.conversion.unbox_if_timestamp(categories[i])
+                    ] = i
                 slice_ind = numba.cpython.unicode._normalize_slice(ind, len(arr))
                 val_ind = 0
                 for j in range(slice_ind.start, slice_ind.stop, slice_ind.step):
-                    new_val = val[val_ind]
+                    # Timestamp/Timedelta are stored internally as dt64 but inside the index as
+                    # Timestamp and Timedelta
+                    new_val = bodo.utils.conversion.unbox_if_timestamp(val[val_ind])
                     if new_val in cats_dict:
                         code = cats_dict[new_val]
                     else:
@@ -968,3 +1186,9 @@ def categorical_array_setitem(arr, ind, val):
                     val_ind += 1
 
             return impl_slice_cat_values
+
+    # This should be the only CategoricalArray implementation.
+    # We only expect to reach this case if more idx options are added.
+    raise BodoError(
+        f"setitem for CategoricalArray with indexing type {ind} not supported."
+    )  # pragma: no cover

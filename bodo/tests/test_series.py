@@ -4006,15 +4006,6 @@ def test_series_where_true(series_val, memory_leak_check):
             bodo.jit(test_impl)(series_val, cond, val)
         return
 
-    # td64 and dt64 not supported yet with scalar values.
-    if series_val.dtype in [np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")]:
-        with pytest.raises(
-            BodoError,
-            match="Series.where\(\) series and 'other' must share a common type.",
-        ):
-            bodo.jit(test_impl)(series_val, cond, val)
-        return
-
     # Bodo differs from Pandas because Bodo sets the type before
     # it knows that the other value (np.nan) will never be chosen
     check_func(test_impl, (series_val, cond, val), check_dtype=False)
@@ -4122,15 +4113,6 @@ def test_series_mask_false(series_val, memory_leak_check):
         series_val.values[0], datetime.date
     ):
         with pytest.raises(BodoError, match=series_err_msg):
-            bodo.jit(test_impl)(series_val, cond, val)
-        return
-
-    # td64 and dt64 not supported yet with scalar values.
-    if series_val.dtype in [np.dtype("datetime64[ns]"), np.dtype("timedelta64[ns]")]:
-        with pytest.raises(
-            BodoError,
-            match="Series.mask\(\) series and 'other' must share a common type.",
-        ):
             bodo.jit(test_impl)(series_val, cond, val)
         return
 

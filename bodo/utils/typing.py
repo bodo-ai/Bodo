@@ -1028,7 +1028,10 @@ def is_scalar_type(t):
 
 def is_common_scalar_dtype(scalar_types):
     """Returns True if a list of scalar types share a common
-    Numpy type or are equal."""
+    Numpy type or are equal.
+    """
+    if len(scalar_types) == 0:
+        return True
     try:
         common_dtype = np.find_common_type(
             [numba.np.numpy_support.as_dtype(t) for t in scalar_types], []
@@ -1041,6 +1044,22 @@ def is_common_scalar_dtype(scalar_types):
     # Numpy, we will get a NotImplementedError
     except NotImplementedError:
         pass
+
+    # Timestamp/dt64 can be used interchangably
+    # TODO: Should datetime.datetime also be included?
+    if scalar_types[0] in (bodo.datetime64ns, bodo.pandas_timestamp_type):
+        for typ in scalar_types[1:]:
+            if typ not in (bodo.datetime64ns, bodo.pandas_timestamp_type):
+                return False
+        return True
+
+    # Timdelta/td64 can be used interchangably
+    # TODO: Should datetime.timedelta also be included?
+    if scalar_types[0] in (bodo.timedelta64ns, bodo.pd_timedelta_type):
+        for typ in scalar_types[1:]:
+            if scalar_types[0] not in (bodo.timedelta64ns, bodo.pd_timedelta_type):
+                return False
+        return True
 
     # If we don't have a common type, then all types need to be equal.
     # See: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-identical

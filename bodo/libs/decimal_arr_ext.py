@@ -782,3 +782,9 @@ def decimal_arr_getitem(A, ind):
             return init_decimal_array(new_data, new_mask, precision, scale)
 
         return impl_slice
+
+    # This should be the only DecimalArray implementation.
+    # We only expect to reach this case if more idx options are added.
+    raise BodoError(
+        f"getitem for DecimalArray with indexing type {ind} not supported."
+    )  # pragma: no cover

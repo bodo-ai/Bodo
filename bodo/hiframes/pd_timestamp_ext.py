@@ -642,6 +642,11 @@ def overload_week_number(ptt):
     return pd_week_number
 
 
+@overload_method(PandasTimestampType, "__hash__", no_unliteral=True)
+def dt64_hash(val):
+    return lambda val: hash(val.value)
+
+
 # Pandas Implementation:
 # https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L59
 @overload_attribute(PandasTimestampType, "days_in_month")

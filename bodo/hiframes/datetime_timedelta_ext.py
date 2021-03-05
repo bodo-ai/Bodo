@@ -1510,6 +1510,12 @@ def dt_timedelta_arr_getitem(A, ind):
 
         return impl_slice
 
+    # This should be the only DatetimeTimedeltaArray implementation.
+    # We only expect to reach this case if more idx options are added.
+    raise BodoError(
+        f"getitem for DatetimeTimedeltaArray with indexing type {ind} not supported."
+    )  # pragma: no cover
+
 
 @overload(operator.setitem, no_unliteral=True)
 def dt_timedelta_arr_setitem(A, ind, val):

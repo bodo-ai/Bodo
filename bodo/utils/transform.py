@@ -970,7 +970,13 @@ def gen_const_val_str(c):
         return "'{}{}', ".format(NESTED_TUP_SENTINEL, len(c)) + ", ".join(
             gen_const_val_str(v) for v in c
         )
-    return "'{}'".format(c) if isinstance(c, str) else str(c)
+    if isinstance(c, str):
+        return "'{}'".format(c)
+    # TODO: Support actual timestamp, timedelta, float values
+    if isinstance(c, (pd.Timestamp, pd.Timedelta, float)):
+        # Timestamp has a space
+        return "'{}'".format(c)
+    return str(c)
 
 
 def gen_const_tup(vals):

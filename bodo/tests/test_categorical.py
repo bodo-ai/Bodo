@@ -8,6 +8,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
@@ -53,6 +54,25 @@ def test_unbox_dtype(dtype, memory_leak_check):
             pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2], ordered=True),
             marks=pytest.mark.slow,
         ),
+        pytest.param(
+            pd.Categorical(
+                np.append(pd.date_range("2020-01-14", "2020-01-17").date, [None])
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Categorical(
+                np.append(
+                    pd.timedelta_range(start="1 day", periods=4),
+                    [np.timedelta64("NaT")],
+                )
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Categorical([3, 1.321, 0.0122, -1.321, 0.0, 1, 3, 2]),
+            marks=pytest.mark.slow,
+        ),
     ]
 )
 def cat_arr_value(request):
@@ -75,92 +95,145 @@ def test_unbox_cat_arr(cat_arr_value, memory_leak_check):
 
 
 @pytest.mark.smoke
-def test_setitem_int(cat_arr_value, memory_leak_check):
+def test_setitem_scalar(cat_arr_value, memory_leak_check):
+    """
+    Tests setitem for Categorical Arrays on scalar values.
+    """
+
     def test_impl(A, i, val):
         A[i] = val
         return A
 
-    i = 1
     val = cat_arr_value[0]
-    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
-
-
-def test_setitem_list(cat_arr_value, memory_leak_check):
-    def test_impl(A, i, val):
-        A[i] = val
-        return A
-
-    i = [0, 1, 4]
-    val = cat_arr_value[: len(i)]
-    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
-
-
-def test_setitem_list_cats(cat_arr_value, memory_leak_check):
-    def test_impl(A, i, val):
-        A[i] = val
-        return A
-
-    i = [0, 1, 4]
-    val = cat_arr_value.categories.values[:3]
-    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
-
-
-def test_setitem_bool(cat_arr_value, memory_leak_check):
-    def test_impl(A, i, val):
-        A[i] = val
-        return A
-
     np.random.seed(1)
-    i = np.random.ranf(len(cat_arr_value)) < 0.2
-    # Change at least 1 value
-    i[0] = True
-    num_trues = sum(i)
-    val = cat_arr_value[:num_trues]
-    val[0] = val[1]
-    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
+    for ind in [1, [0, 1, 4], np.random.ranf(len(cat_arr_value)) < 0.2, slice(1, 4)]:
+        check_func(
+            test_impl, (cat_arr_value, ind, val), dist_test=False, copy_input=True
+        )
 
 
-def test_setitem_bool_cats(cat_arr_value, memory_leak_check):
+def test_setitem_cat_array_compile_time(cat_arr_value, memory_leak_check):
+    """
+    Tests setitem for Categorical Arrays with Categorical
+    Array.
+    """
+
     def test_impl(A, i, val):
         A[i] = val
         return A
 
-    i = np.zeros(len(cat_arr_value), np.bool_)
-    i[0] = True
-    i[1] = True
-    i[len(cat_arr_value) - 1] = True
-    val = cat_arr_value.categories.values[:3]
-    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
-
-
-def test_setitem_slice_scalar(cat_arr_value, memory_leak_check):
-    def test_impl(A, i, val):
-        A[i] = val
-        return A
-
-    i = slice(1, 4)
-    val = cat_arr_value[0]
-    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
-
-
-def test_setitem_slice_list(cat_arr_value, memory_leak_check):
-    def test_impl(A, i, val):
-        A[i] = val
-        return A
-
-    i = slice(1, 4)
     val = cat_arr_value[:3]
-    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
+    for idx in [
+        [0, 1, 4],
+        np.array([True, True] + ([False] * (len(cat_arr_value) - 3)) + [True]),
+        slice(1, 4),
+    ]:
+        check_func(
+            test_impl, (cat_arr_value, idx, val), dist_test=False, copy_input=True
+        )
 
 
-def test_setitem_slice_cats(cat_arr_value, memory_leak_check):
+# TODO: Add memory leak check when constant lowering memory leak is fixed.
+def test_setitem_cat_array_compile_time_err(cat_arr_value):
+    """
+    Tests setitem err for Categorical Arrays with Categorical
+    Array known at compile time.
+    """
+
     def test_impl(A, i, val):
         A[i] = val
         return A
 
-    i = slice(1, 4)
+    val = pd.Series(cat_arr_value.categories)[:3].astype("category").values
+    for idx in [
+        [0, 1, 4],
+        np.array([True, True] + ([False] * (len(cat_arr_value) - 3)) + [True]),
+        slice(1, 4),
+    ]:
+        with pytest.raises(
+            BodoError,
+            match="Cannot set a Categorical with another, without identical categories",
+        ):
+            bodo.jit(test_impl)(cat_arr_value, idx, val)
+
+
+# TODO: Add memory leak check when constant lowering memory leak is fixed.
+# TODO: Mark as slow after CI passes
+def test_setitem_cat_array_runtime(cat_arr_value):
+    """
+    Tests setitem for Categorical Arrays with Categorical
+    Array not known at compile time.
+    """
+
+    def test_impl(A, i, val):
+        A[i] = val.astype("category").values[:3]
+        return A
+
+    # Set ordered to false so the dtypes at compile/runtime match
+    cat_arr_value = cat_arr_value.astype(
+        pd.Categorical(cat_arr_value.dtype.categories, ordered=False)
+    )
+
+    val = pd.Series(cat_arr_value.categories)
+    for idx in [
+        [0, 1, 4],
+        np.array([True, True] + ([False] * (len(cat_arr_value) - 3)) + [True]),
+        slice(1, 4),
+    ]:
+        check_func(
+            test_impl, (cat_arr_value, idx, val), dist_test=False, copy_input=True
+        )
+
+
+# TODO: Add memory leak check when constant lowering memory leak is fixed.
+@pytest.mark.slow
+def test_setitem_cat_array_runtime_err(cat_arr_value):
+    """
+    Tests setitem err for Categorical Arrays with Categorical
+    Array not known at compile time.
+    """
+
+    def test_impl(A, i, val):
+        A[i] = val.astype("category").values
+        return A
+
+    # Set ordered to false so the dtypes at compile time match
+    cat_arr_value = cat_arr_value.astype(
+        pd.Categorical(cat_arr_value.dtype.categories, ordered=False)
+    )
+
+    val = pd.Series(cat_arr_value.categories)[:3]
+    for idx in [
+        [0, 1, 4],
+        np.array([True, True] + ([False] * (len(cat_arr_value) - 3)) + [True]),
+        slice(1, 4),
+    ]:
+        with pytest.raises(
+            ValueError,
+            match="Cannot set a Categorical with another, without identical categories",
+        ):
+            bodo.jit(test_impl)(cat_arr_value, idx, val)
+
+
+def test_setitem_categories(cat_arr_value, memory_leak_check):
+    """
+    Tests setitem for Categorical Arrays with a list/array
+    of values that match the categories.
+    """
+
+    def test_impl(A, i, val):
+        A[i] = val
+        return A
+
     val = cat_arr_value.categories.values[:3]
-    check_func(test_impl, (cat_arr_value, i, val), dist_test=False)
+    for idx in [
+        [0, 1, 4],
+        np.array([True, True] + ([False] * (len(cat_arr_value) - 3)) + [True]),
+        slice(1, 4),
+    ]:
+        check_func(
+            test_impl, (cat_arr_value, idx, val), dist_test=False, copy_input=True
+        )
 
 
 @pytest.mark.smoke
@@ -169,7 +242,7 @@ def test_getitem_int(cat_arr_value, memory_leak_check):
         return A[i]
 
     i = 1
-    assert bodo.jit(test_impl)(cat_arr_value, i) == test_impl(cat_arr_value, i)
+    check_func(test_impl, (cat_arr_value, i), dist_test=False)
 
 
 def test_getitem_bool(cat_arr_value, memory_leak_check):
@@ -178,9 +251,7 @@ def test_getitem_bool(cat_arr_value, memory_leak_check):
 
     np.random.seed(1)
     ind = np.random.ranf(len(cat_arr_value)) < 0.2
-    bodo_out = bodo.jit(test_impl)(cat_arr_value, ind)
-    py_out = test_impl(cat_arr_value, ind)
-    pd.testing.assert_extension_array_equal(py_out, bodo_out)
+    check_func(test_impl, (cat_arr_value, ind), dist_test=False)
 
 
 @pytest.mark.slow
@@ -189,9 +260,7 @@ def test_getitem_slice(cat_arr_value, memory_leak_check):
         return A[ind]
 
     ind = slice(1, 4)
-    bodo_out = bodo.jit(test_impl)(cat_arr_value, ind)
-    py_out = test_impl(cat_arr_value, ind)
-    pd.testing.assert_extension_array_equal(py_out, bodo_out)
+    check_func(test_impl, (cat_arr_value, ind), dist_test=False)
 
 
 @pytest.mark.slow
@@ -263,15 +332,31 @@ def test_pd_get_dummies(cat_arr_value, memory_leak_check):
     def test_impl(A):
         return pd.get_dummies(A)
 
-    check_func(test_impl, (cat_arr_value,), check_categorical=False)
+    # TODO: Support using pd.Timestamp, pd.Timedelta, float as a column name.
+    if isinstance(cat_arr_value[0], (pd.Timestamp, pd.Timedelta, float)):
+        py_output = test_impl(cat_arr_value)
+        py_output.columns = [str(c) for c in py_output.columns]
+    else:
+        py_output = None
+
+    check_func(
+        test_impl, (cat_arr_value,), check_categorical=False, py_output=py_output
+    )
 
 
 def test_pd_get_dummies_series(cat_arr_value, memory_leak_check):
     def test_impl(S):
         return pd.get_dummies(S)
 
+    # TODO: Support using pd.Timestamp, pd.Timedelta, float as a column name.
+    if isinstance(cat_arr_value[0], (pd.Timestamp, pd.Timedelta, float)):
+        py_output = test_impl(cat_arr_value)
+        py_output.columns = [str(c) for c in py_output.columns]
+    else:
+        py_output = None
+
     S = pd.Series(cat_arr_value)
-    check_func(test_impl, (S,), check_categorical=False)
+    check_func(test_impl, (S,), check_categorical=False, py_output=py_output)
 
 
 def test_replace(memory_leak_check):

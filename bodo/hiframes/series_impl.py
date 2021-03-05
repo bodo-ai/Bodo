@@ -3300,6 +3300,11 @@ def overload_np_where(condition, x, y):
     # dtype from runtime.
     elif isinstance(x_dtype, bodo.PDCategoricalDtype):
         out_dtype = None
+    # Support conversion between Timestamp/dt64 and Timedelta/td64.
+    elif x_dtype in [bodo.timedelta64ns, bodo.datetime64ns]:
+        out_dtype = types.Array(x_dtype, 1, "C")
+    elif y_dtype in [bodo.timedelta64ns, bodo.datetime64ns]:
+        out_dtype = types.Array(y_dtype, 1, "C")
     else:
         # similar to np.where typer of Numba
         out_dtype = numba.from_dtype(
@@ -3336,13 +3341,21 @@ def overload_np_where(condition, x, y):
     if isinstance(x_dtype, bodo.PDCategoricalDtype):
         func_text += "      out_codes[j] = x_codes[j]\n"
     else:
-        func_text += "      out_arr[j] = {}\n".format("x[j]" if is_x_arr else "x")
+        func_text += (
+            "      out_arr[j] = bodo.utils.conversion.unbox_if_timestamp({})\n".format(
+                "x[j]" if is_x_arr else "x"
+            )
+        )
     func_text += "    else:\n"
     if is_y_arr:
         func_text += "      if bodo.libs.array_kernels.isna(y, j):\n"
         func_text += "        setna(out_arr, j)\n"
         func_text += "        continue\n"
-    func_text += "      out_arr[j] = {}\n".format("y[j]" if is_y_arr else "y")
+    func_text += (
+        "      out_arr[j] = bodo.utils.conversion.unbox_if_timestamp({})\n".format(
+            "y[j]" if is_y_arr else "y"
+        )
+    )
     func_text += "  return out_arr\n"
     loc_vars = {}
     exec(
