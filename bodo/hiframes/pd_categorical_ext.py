@@ -923,13 +923,12 @@ def categorical_array_setitem(arr, ind, val):
             raise BodoError(typ_err_msg)
 
         def impl_scalar(arr, ind, val):  # pragma: no cover
-            for i in range(len(arr.dtype.categories)):
-                if arr.dtype.categories[i] == val:
-                    arr.codes[ind] = i
-                    return
-            raise ValueError(
-                "Cannot setitem on a Categorical with a new category, set the categories first"
-            )
+            if val not in arr.dtype.categories:
+                raise ValueError(
+                    "Cannot setitem on a Categorical with a new category, set the categories first"
+                )
+            code = arr.dtype.categories.get_loc(val)
+            arr.codes[ind] = code
 
         return impl_scalar
 
@@ -949,15 +948,11 @@ def categorical_array_setitem(arr, ind, val):
         if is_scalar_match:
 
             def impl_scalar(arr, ind, val):  # pragma: no cover
-                val_code = -1
-                for i in range(len(arr.dtype.categories)):
-                    if arr.dtype.categories[i] == val:
-                        val_code = i
-                        break
-                if val_code == -1:
+                if val not in arr.dtype.categories:
                     raise ValueError(
                         "Cannot setitem on a Categorical with a new category, set the categories first"
                     )
+                val_code = arr.dtype.categories.get_loc(val)
                 n = len(ind)
                 for j in range(n):
                     arr.codes[ind[j]] = val_code
@@ -1031,15 +1026,11 @@ def categorical_array_setitem(arr, ind, val):
         if is_scalar_match:
 
             def impl_scalar(arr, ind, val):  # pragma: no cover
-                val_code = -1
-                for i in range(len(arr.dtype.categories)):
-                    if arr.dtype.categories[i] == val:
-                        val_code = i
-                        break
-                if val_code == -1:
+                if val not in arr.dtype.categories:
                     raise ValueError(
                         "Cannot setitem on a Categorical with a new category, set the categories first"
                     )
+                val_code = arr.dtype.categories.get_loc(val)
                 n = len(ind)
                 for j in range(n):
                     if ind[j]:

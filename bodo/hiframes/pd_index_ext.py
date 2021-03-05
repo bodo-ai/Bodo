@@ -2287,6 +2287,37 @@ def overload_index_take(I, indices):
     return lambda I, indices: I[indices]  # pragma: no cover
 
 
+@numba.njit(no_cpython_wrapper=True)
+def _init_engine(I):
+    """initialize the Index hashmap engine (just a simple dict for now)"""
+    if len(I) > 0 and not I._dict:
+        arr = bodo.utils.conversion.coerce_to_array(I)
+        for i in range(len(arr)):
+            val = arr[i]
+            if val in I._dict:
+                raise ValueError("Index.get_loc(): non-unique Index not supported yet")
+            I._dict[val] = i
+
+
+@overload(operator.contains, no_unliteral=True)
+def index_contains(I, val):
+    """support for "val in I" operator. Uses the Index hashmap for faster results."""
+    if not is_index_type(I):  # pragma: no cover
+        return
+
+    if isinstance(I, RangeIndexType):
+        return lambda I, val: range_contains(
+            I.start, I.stop, I.step, val
+        )  # pragma: no cover
+
+    def impl(I, val):  # pragma: no cover
+        # build the index dict if not initialized yet
+        _init_engine(I)
+        return val in I._dict
+
+    return impl
+
+
 @register_jitable
 def range_contains(start, stop, step, val):
     """check 'val' to be in range(start, stop, step)"""
@@ -2342,15 +2373,7 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
 
     def impl(I, key, method=None, tolerance=None):  # pragma: no cover
         # build the index dict if not initialized yet
-        if len(I) > 0 and not I._dict:
-            arr = bodo.utils.conversion.coerce_to_array(I)
-            for i in range(len(arr)):
-                val = arr[i]
-                if val in I._dict:
-                    raise ValueError(
-                        "Index.get_loc(): non-unique Index not supported yet"
-                    )
-                I._dict[val] = i
+        _init_engine(I)
 
         key = bodo.utils.conversion.unbox_if_timestamp(key)
         ind = I._dict.get(key, -1)
