@@ -1822,12 +1822,14 @@ class NumericIndexModel(models.StructModel):
         members = [
             ("data", fe_type.data),
             ("name", fe_type.name_typ),
+            ("dict", types.DictType(fe_type.dtype, types.int64)),
         ]
         super(NumericIndexModel, self).__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(NumericIndexType, "data", "_data")
 make_attribute_wrapper(NumericIndexType, "name", "_name")
+make_attribute_wrapper(NumericIndexType, "dict", "_dict")
 
 
 @overload_method(NumericIndexType, "copy", no_unliteral=True)
@@ -1891,6 +1893,14 @@ def init_numeric_index(typingctx, data, name=None):
         # increase refcount of stored values
         context.nrt.incref(builder, index_typ.data, args[0])
         context.nrt.incref(builder, index_typ.name_typ, args[1])
+        # create empty dict for get_loc hashmap
+        dtype = index_typ.dtype
+        index_val.dict = context.compile_internal(
+            builder,
+            lambda: numba.typed.Dict.empty(dtype, types.int64),
+            types.DictType(dtype, types.int64)(),
+            [],
+        )
         return index_val._getvalue()
 
     return NumericIndexType(data.dtype, name, data)(data, name), codegen
@@ -1916,6 +1926,14 @@ def unbox_numeric_index(typ, val, c):
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     index_val.data = data
     index_val.name = name
+    # create empty dict for get_loc hashmap
+    dtype = typ.dtype
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(dtype, types.int64),
+        types.DictType(dtype, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
     return NativeValue(index_val._getvalue())
 
 
