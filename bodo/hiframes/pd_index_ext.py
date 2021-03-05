@@ -1696,12 +1696,14 @@ class PeriodIndexModel(models.StructModel):
         members = [
             ("data", types.Array(types.int64, 1, "C")),
             ("name", fe_type.name_typ),
+            ("dict", types.DictType(types.int64, types.int64)),
         ]
         super(PeriodIndexModel, self).__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(PeriodIndexType, "data", "_data")
 make_attribute_wrapper(PeriodIndexType, "name", "_name")
+make_attribute_wrapper(PeriodIndexType, "dict", "_dict")
 
 
 @overload_method(PeriodIndexType, "copy", no_unliteral=True)
@@ -1727,6 +1729,14 @@ def init_period_index(typingctx, data, name, freq):
         # increase refcount of stored values
         context.nrt.incref(builder, signature.args[0], args[0])
         context.nrt.incref(builder, signature.args[1], args[1])
+
+        # create empty dict for get_loc hashmap
+        period_index.dict = context.compile_internal(
+            builder,
+            lambda: numba.typed.Dict.empty(string_type, types.int64),
+            types.DictType(types.int64, types.int64)(),
+            [],
+        )
 
         return period_index._getvalue()
 
@@ -1790,6 +1800,13 @@ def unbox_period_index(typ, val, c):
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     index_val.data = data
     index_val.name = name
+    # create empty dict for get_loc hashmap
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(types.int64, types.int64),
+        types.DictType(types.int64, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
     return NativeValue(index_val._getvalue())
 
 
