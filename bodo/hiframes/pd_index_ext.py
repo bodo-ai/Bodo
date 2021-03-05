@@ -1054,7 +1054,11 @@ types.timedelta_index = timedelta_index
 @register_model(TimedeltaIndexType)
 class TimedeltaIndexTypeModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        members = [("data", _timedelta_index_data_typ), ("name", fe_type.name_typ)]
+        members = [
+            ("data", _timedelta_index_data_typ),
+            ("name", fe_type.name_typ),
+            ("dict", types.DictType(_timedelta_index_data_typ.dtype, types.int64)),
+        ]
         super(TimedeltaIndexTypeModel, self).__init__(dmm, fe_type, members)
 
 
@@ -1111,6 +1115,14 @@ def unbox_timedelta_index(typ, val, c):
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     index_val.data = data
     index_val.name = name
+    # create empty dict for get_loc hashmap
+    dtype = _timedelta_index_data_typ.dtype
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(dtype, types.int64),
+        types.DictType(dtype, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
     return NativeValue(index_val._getvalue())
 
 
@@ -1131,6 +1143,15 @@ def init_timedelta_index(typingctx, data, name=None):
         # increase refcount of stored values
         context.nrt.incref(builder, signature.args[0], data_val)
         context.nrt.incref(builder, signature.args[1], name_val)
+
+        # create empty dict for get_loc hashmap
+        dtype = _timedelta_index_data_typ.dtype
+        dt_index.dict = context.compile_internal(
+            builder,
+            lambda: numba.typed.Dict.empty(dtype, types.int64),
+            types.DictType(dtype, types.int64)(),
+            [],
+        )
 
         return timedelta_index._getvalue()
 
@@ -1165,6 +1186,7 @@ class TimedeltaIndexAttribute(AttributeTemplate):
 
 make_attribute_wrapper(TimedeltaIndexType, "data", "_data")
 make_attribute_wrapper(TimedeltaIndexType, "name", "_name")
+make_attribute_wrapper(TimedeltaIndexType, "dict", "_dict")
 
 
 @overload_method(TimedeltaIndexType, "copy", no_unliteral=True)
