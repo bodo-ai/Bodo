@@ -396,7 +396,6 @@ def init_series(typingctx, data, index, name=None):
         context.nrt.incref(builder, signature.args[0], data_val)
         context.nrt.incref(builder, signature.args[1], index_val)
         context.nrt.incref(builder, signature.args[2], name_val)
-
         return series_val
 
     if is_heterogeneous_tuple_type(data):

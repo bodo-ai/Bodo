@@ -41,7 +41,7 @@ def test_series_head_errors(memory_leak_check):
         S = pd.Series(np.random.randn(10))
         return S.head(5.0)
 
-    with pytest.raises(BodoError, match="Series.head\(\): 'n' must be an Integer"):
+    with pytest.raises(BodoError, match="Series.head.*: 'n' must be an Integer"):
         bodo.jit(impl)()
 
 
@@ -51,7 +51,7 @@ def test_series_tail_errors(memory_leak_check):
         S = pd.Series(np.random.randn(10))
         return S.tail(5.0)
 
-    with pytest.raises(BodoError, match="Series.tail\(\): 'n' must be an Integer"):
+    with pytest.raises(BodoError, match="Series.tail.*: 'n' must be an Integer"):
         bodo.jit(impl)()
 
 
@@ -62,9 +62,7 @@ def test_series_rename_none(memory_leak_check):
     def impl(S):
         return S.rename(None)
 
-    with pytest.raises(
-        BodoError, match="Series.rename\(\) 'index' can only be a string"
-    ):
+    with pytest.raises(BodoError, match="Series.rename.* 'index' can only be a string"):
         bodo.jit(impl)(S)
 
 
@@ -78,10 +76,31 @@ def test_series_take_errors(memory_leak_check):
     def impl2(S):
         return S.take(1)
 
-    err_msg = "Series.take\(\) 'indices' must be an array-like and contain integers."
+    err_msg = "Series.take.* 'indices' must be an array-like and contain integers."
 
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl1)(S)
 
     with pytest.raises(BodoError, match=err_msg):
-        bodo.jit(impl1)(S)
+        bodo.jit(impl2)(S)
+
+
+# TODO: Mark as slow after CI passes
+def test_series_map_runtime_categorical(memory_leak_check):
+    """
+    Tests that a UDF with categories that aren't known at
+    compile time throws a reasonable error.
+    """
+    # TODO: Modify test once input -> output categories are supported.
+
+    S = pd.Series(["A", "bbr", "wf", "cewf", "Eqcq", "qw"])
+
+    def impl(S):
+        cat_series = S.astype("category")
+        return cat_series.map(lambda x: x)
+
+    with pytest.raises(
+        BodoError,
+        match="UDFs or Groupbys that return Categorical values must have categories known at compile time.",
+    ):
+        bodo.jit(impl)(S)

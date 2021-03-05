@@ -995,7 +995,9 @@ class SeriesPass:
                 return replace_func(self, impl, [arg1, arg2])
 
             if typ1 == string_array_type or typ2 == string_array_type:
-                impl = bodo.libs.str_arr_ext.overload_add_operator_string_array(typ1, typ2)
+                impl = bodo.libs.str_arr_ext.overload_add_operator_string_array(
+                    typ1, typ2
+                )
                 return replace_func(self, impl, [arg1, arg2])
 
         # inline overload for comparisons
@@ -1951,9 +1953,21 @@ class SeriesPass:
                     "lambda n, t, s=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(n, s, _dtype)"
                 )
             elif isinstance(typ, CategoricalArray):
-                impl = eval(
-                    "lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, t.dtype)"
-                )
+                if isinstance(self.typemap[rhs.args[1].name], types.TypeRef):
+                    # If we have a type ref we must have types that are compile time constants
+                    if typ.dtype.categories is None:
+                        raise BodoError(
+                            "UDFs that return Categorical values must have categories known at compile time."
+                        )
+                    dtype = pd.CategoricalDtype(typ.dtype.categories, typ.dtype.ordered)
+                    impl = eval(
+                        "lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, _dtype)"
+                    )
+                else:
+                    # TODO: Fix the infrastructure so types will match when input-type == output-type
+                    impl = eval(
+                        "lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, t.dtype)"
+                    )
             elif isinstance(typ, StructArrayType):
                 dtypes = typ.data
                 names = typ.names

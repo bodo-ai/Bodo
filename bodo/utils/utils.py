@@ -38,7 +38,7 @@ from bodo.libs.str_arr_ext import (
     string_array_type,
 )
 from bodo.libs.str_ext import string_type
-from bodo.utils.typing import NOT_CONSTANT
+from bodo.utils.typing import NOT_CONSTANT, BodoError
 
 int128_type = types.Integer("int128", 128)
 
@@ -698,6 +698,11 @@ def overload_alloc_type(n, t, s=None):
 
     if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArray):
         if isinstance(t, types.TypeRef):
+            if typ.dtype.categories is None:
+                # TODO: Fix error message if there are other usages?
+                raise BodoError(
+                    "UDFs or Groupbys that return Categorical values must have categories known at compile time."
+                )
             _cat_dtype = pd.CategoricalDtype(typ.dtype.categories, typ.dtype.ordered)
             return lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
                 n, _cat_dtype
