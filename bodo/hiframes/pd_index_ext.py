@@ -135,12 +135,17 @@ def typeof_datetime_index(val, c):
 class DatetimeIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         # TODO: use payload to support mutable name
-        members = [("data", _dt_index_data_typ), ("name", fe_type.name_typ)]
+        members = [
+            ("data", _dt_index_data_typ),
+            ("name", fe_type.name_typ),
+            ("dict", types.DictType(_dt_index_data_typ.dtype, types.int64)),
+        ]
         super(DatetimeIndexModel, self).__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(DatetimeIndexType, "data", "_data")
 make_attribute_wrapper(DatetimeIndexType, "name", "_name")
+make_attribute_wrapper(DatetimeIndexType, "dict", "_dict")
 
 
 @overload_method(DatetimeIndexType, "copy", no_unliteral=True)
@@ -201,6 +206,14 @@ def unbox_datetime_index(typ, val, c):
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     index_val.data = data
     index_val.name = name
+    # create empty dict for get_loc hashmap
+    dtype = _dt_index_data_typ.dtype
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(dtype, types.int64),
+        types.DictType(dtype, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
     return NativeValue(index_val._getvalue())
 
 
@@ -219,6 +232,15 @@ def init_datetime_index(typingctx, data, name=None):
         # increase refcount of stored values
         context.nrt.incref(builder, signature.args[0], data_val)
         context.nrt.incref(builder, signature.args[1], name_val)
+
+        # create empty dict for get_loc hashmap
+        dtype = _dt_index_data_typ.dtype
+        dt_index.dict = context.compile_internal(
+            builder,
+            lambda: numba.typed.Dict.empty(dtype, types.int64),
+            types.DictType(dtype, types.int64)(),
+            [],
+        )
 
         return dt_index._getvalue()
 
