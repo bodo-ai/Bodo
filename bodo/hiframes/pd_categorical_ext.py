@@ -988,24 +988,16 @@ def categorical_array_setitem(arr, ind, val):
             def impl_arr_ind_mask_cat_values(arr, ind, val):  # pragma: no cover
                 n = len(val)
                 categories = arr.dtype.categories
-                cat_len = len(categories)
-                cats_dict = {}
-                for i in range(cat_len):
-                    # Timestamp/Timedelta are stored internally as dt64 but inside the index as
-                    # Timestamp and Timedelta
-                    cats_dict[
-                        bodo.utils.conversion.unbox_if_timestamp(categories[i])
-                    ] = i
+
                 for j in range(n):
                     # Timestamp/Timedelta are stored internally as dt64 but inside the index as
                     # Timestamp and Timedelta
                     new_val = bodo.utils.conversion.unbox_if_timestamp(val[j])
-                    if new_val in cats_dict:
-                        code = cats_dict[new_val]
-                    else:
+                    if new_val not in categories:
                         raise ValueError(
                             "Cannot setitem on a Categorical with a new category, set the categories first"
                         )
+                    code = categories.get_loc(new_val)
                     arr.codes[ind[j]] = code
 
             return impl_arr_ind_mask_cat_values
@@ -1074,25 +1066,16 @@ def categorical_array_setitem(arr, ind, val):
                 n = len(ind)
                 val_ind = 0
                 categories = arr.dtype.categories
-                cat_len = len(categories)
-                cats_dict = {}
-                for i in range(cat_len):
-                    # Timestamp/Timedelta are stored internally as dt64 but inside the index as
-                    # Timestamp and Timedelta
-                    cats_dict[
-                        bodo.utils.conversion.unbox_if_timestamp(categories[i])
-                    ] = i
                 for j in range(n):
                     if ind[j]:
                         # Timestamp/Timedelta are stored internally as dt64 but inside the index as
                         # Timestamp and Timedelta
-                        new_val = bodo.utils.conversion.unbox_if_timestamp(val[val_ind])
-                        if new_val in cats_dict:
-                            code = cats_dict[new_val]
-                        else:
+                        new_val = bodo.utils.conversion.unbox_if_timestamp(val[j])
+                        if new_val not in categories:
                             raise ValueError(
                                 "Cannot setitem on a Categorical with a new category, set the categories first"
                             )
+                        code = categories.get_loc(new_val)
                         arr.codes[j] = code
                         val_ind += 1
 
@@ -1114,15 +1097,11 @@ def categorical_array_setitem(arr, ind, val):
         if is_scalar_match:
 
             def impl_scalar(arr, ind, val):  # pragma: no cover
-                val_code = -1
-                for i in range(len(arr.dtype.categories)):
-                    if arr.dtype.categories[i] == val:
-                        val_code = i
-                        break
-                if val_code == -1:
+                if val not in arr.dtype.categories:
                     raise ValueError(
                         "Cannot setitem on a Categorical with a new category, set the categories first"
                     )
+                val_code = arr.dtype.categories.get_loc(val)
                 slice_ind = numba.cpython.unicode._normalize_slice(ind, len(arr))
                 for j in range(slice_ind.start, slice_ind.stop, slice_ind.step):
                     arr.codes[j] = val_code
@@ -1153,26 +1132,18 @@ def categorical_array_setitem(arr, ind, val):
 
             def impl_slice_cat_values(arr, ind, val):  # pragma: no cover
                 categories = arr.dtype.categories
-                cat_len = len(categories)
-                cats_dict = {}
-                for i in range(cat_len):
-                    # Timestamp/Timedelta are stored internally as dt64 but inside the index as
-                    # Timestamp and Timedelta
-                    cats_dict[
-                        bodo.utils.conversion.unbox_if_timestamp(categories[i])
-                    ] = i
+
                 slice_ind = numba.cpython.unicode._normalize_slice(ind, len(arr))
                 val_ind = 0
                 for j in range(slice_ind.start, slice_ind.stop, slice_ind.step):
                     # Timestamp/Timedelta are stored internally as dt64 but inside the index as
                     # Timestamp and Timedelta
-                    new_val = bodo.utils.conversion.unbox_if_timestamp(val[val_ind])
-                    if new_val in cats_dict:
-                        code = cats_dict[new_val]
-                    else:
+                    new_val = bodo.utils.conversion.unbox_if_timestamp(val[j])
+                    if new_val not in categories:
                         raise ValueError(
                             "Cannot setitem on a Categorical with a new category, set the categories first"
                         )
+                    code = categories.get_loc(new_val)
                     arr.codes[j] = code
                     val_ind += 1
 
