@@ -581,7 +581,9 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
         return impl
 
     # ----- Data: Array type ------
-    elif isinstance(data, (SeriesType, types.Array, types.List, types.UniTuple)):
+    elif bodo.utils.utils.is_array_typ(data, False) or isinstance(
+        data, (SeriesType, types.List, types.UniTuple)
+    ):
         # Numeric Indices:
         if elem_type in (
             types.int64,
@@ -2012,12 +2014,17 @@ class StringIndexType(types.IterableType, types.ArrayCompatible):
 @register_model(StringIndexType)
 class StringIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        members = [("data", string_array_type), ("name", fe_type.name_typ)]
+        members = [
+            ("data", string_array_type),
+            ("name", fe_type.name_typ),
+            ("dict", types.DictType(string_type, types.int64)),
+        ]
         super(StringIndexModel, self).__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(StringIndexType, "data", "_data")
 make_attribute_wrapper(StringIndexType, "name", "_name")
+make_attribute_wrapper(StringIndexType, "dict", "_dict")
 
 
 @overload_method(StringIndexType, "copy", no_unliteral=True)
@@ -2068,6 +2075,13 @@ def init_string_index(typingctx, data, name=None):
         # increase refcount of stored values
         context.nrt.incref(builder, string_array_type, args[0])
         context.nrt.incref(builder, index_typ.name_typ, args[1])
+        # create empty dict for get_loc hashmap
+        index_val.dict = context.compile_internal(
+            builder,
+            lambda: numba.typed.Dict.empty(string_type, types.int64),
+            types.DictType(string_type, types.int64)(),
+            [],
+        )
         return index_val._getvalue()
 
     return StringIndexType(name)(data, name), codegen
@@ -2093,6 +2107,13 @@ def unbox_string_index(typ, val, c):
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     index_val.data = data
     index_val.name = name
+    # create empty dict for get_loc hashmap
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(string_type, types.int64),
+        types.DictType(string_type, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
     return NativeValue(index_val._getvalue())
 
 
@@ -2213,16 +2234,20 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
         raise_bodo_error("Index.get_loc(): invalid label type in Index.get_loc()")
 
     def impl(I, key, method=None, tolerance=None):  # pragma: no cover
-        key = bodo.utils.conversion.unbox_if_timestamp(key)
-        arr = bodo.utils.conversion.coerce_to_array(I)
-        ind = -1
-        for i in range(len(arr)):
-            if arr[i] == key:
-                if ind != -1:
+        # build the index dict if not initialized yet
+        if len(I) > 0 and not I._dict:
+            arr = bodo.utils.conversion.coerce_to_array(I)
+            for i in range(len(arr)):
+                val = arr[i]
+                if val in I._dict:
                     raise ValueError(
                         "Index.get_loc(): non-unique Index not supported yet"
                     )
-                ind = i
+                I._dict[val] = i
+
+        key = bodo.utils.conversion.unbox_if_timestamp(key)
+        ind = I._dict.get(key, -1)
+
         if ind == -1:
             raise KeyError("Index.get_loc(): key not found")
         return ind
