@@ -172,9 +172,11 @@ def box_dt_index(typ, val, c):
 
     dt_index = numba.core.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
+    c.context.nrt.incref(c.builder, _dt_index_data_typ, dt_index.data)
     arr_obj = c.pyapi.from_native_value(
         _dt_index_data_typ, dt_index.data, c.env_manager
     )
+    c.context.nrt.incref(c.builder, typ.name_typ, dt_index.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, dt_index.name, c.env_manager)
 
     # call pd.DatetimeIndex(arr, name=name)
@@ -189,6 +191,7 @@ def box_dt_index(typ, val, c):
     c.pyapi.decref(const_call)
     c.pyapi.decref(args)
     c.pyapi.decref(kws)
+    c.context.nrt.decref(c.builder, typ, val)
     return res
 
 
@@ -1079,9 +1082,11 @@ def box_timedelta_index(typ, val, c):
         c.context, c.builder, val
     )
 
+    c.context.nrt.incref(c.builder, _timedelta_index_data_typ, timedelta_index.data)
     arr_obj = c.pyapi.from_native_value(
         _timedelta_index_data_typ, timedelta_index.data, c.env_manager
     )
+    c.context.nrt.incref(c.builder, typ.name_typ, timedelta_index.name)
     name_obj = c.pyapi.from_native_value(
         typ.name_typ, timedelta_index.name, c.env_manager
     )
@@ -1098,6 +1103,7 @@ def box_timedelta_index(typ, val, c):
     c.pyapi.decref(const_call)
     c.pyapi.decref(args)
     c.pyapi.decref(kws)
+    c.context.nrt.decref(c.builder, typ, val)
     return res
 
 
@@ -1147,7 +1153,7 @@ def init_timedelta_index(typingctx, data, name=None):
 
         # create empty dict for get_loc hashmap
         dtype = _timedelta_index_data_typ.dtype
-        dt_index.dict = context.compile_internal(
+        timedelta_index.dict = context.compile_internal(
             builder,
             lambda: numba.typed.Dict.empty(dtype, types.int64),
             types.DictType(dtype, types.int64)(),
@@ -1437,6 +1443,7 @@ def box_range_index(typ, val, c):
     start_obj = c.pyapi.from_native_value(types.int64, range_val.start, c.env_manager)
     stop_obj = c.pyapi.from_native_value(types.int64, range_val.stop, c.env_manager)
     step_obj = c.pyapi.from_native_value(types.int64, range_val.step, c.env_manager)
+    c.context.nrt.incref(c.builder, typ.name_typ, range_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, range_val.name, c.env_manager)
 
     # call pd.RangeIndex(start, stop, step, name=name)
@@ -1453,6 +1460,7 @@ def box_range_index(typ, val, c):
     c.pyapi.decref(const_call)
     c.pyapi.decref(args)
     c.pyapi.decref(kws)
+    c.context.nrt.decref(c.builder, typ, val)
     return index_obj
 
 
@@ -1734,7 +1742,7 @@ def init_period_index(typingctx, data, name, freq):
         # create empty dict for get_loc hashmap
         period_index.dict = context.compile_internal(
             builder,
-            lambda: numba.typed.Dict.empty(string_type, types.int64),
+            lambda: numba.typed.Dict.empty(types.int64, types.int64),
             types.DictType(types.int64, types.int64)(),
             [],
         )
@@ -1762,9 +1770,11 @@ def box_period_index(typ, val, c):
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
+    c.context.nrt.incref(c.builder, types.Array(types.int64, 1, "C"), index_val.data)
     data_obj = c.pyapi.from_native_value(
         types.Array(types.int64, 1, "C"), index_val.data, c.env_manager
     )
+    c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
     freq_obj = c.pyapi.string_from_constant_string(typ.freq)
 
@@ -1783,6 +1793,7 @@ def box_period_index(typ, val, c):
     c.pyapi.decref(const_call)
     c.pyapi.decref(args)
     c.pyapi.decref(kws)
+    c.context.nrt.decref(c.builder, typ, val)
     return index_obj
 
 
@@ -1914,7 +1925,9 @@ def box_numeric_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     class_obj = c.pyapi.import_module_noblock(mod_name)
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    c.context.nrt.incref(c.builder, typ.data, index_val.data)
     data_obj = c.pyapi.from_native_value(typ.data, index_val.data, c.env_manager)
+    c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
 
     assert typ.dtype in (types.int64, types.uint64, types.float64)
@@ -1938,6 +1951,7 @@ def box_numeric_index(typ, val, c):
     c.pyapi.decref(copy_obj)
     c.pyapi.decref(name_obj)
     c.pyapi.decref(class_obj)
+    c.context.nrt.decref(c.builder, typ, val)
     return index_obj
 
 
@@ -2120,9 +2134,11 @@ def box_string_index(typ, val, c):
     class_obj = c.pyapi.import_module_noblock(mod_name)
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    c.context.nrt.incref(c.builder, string_array_type, index_val.data)
     data_obj = c.pyapi.from_native_value(
         string_array_type, index_val.data, c.env_manager
     )
+    c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
 
     dtype_obj = c.pyapi.make_none()
@@ -2138,6 +2154,7 @@ def box_string_index(typ, val, c):
     c.pyapi.decref(copy_obj)
     c.pyapi.decref(name_obj)
     c.pyapi.decref(class_obj)
+    c.context.nrt.decref(c.builder, typ, val)
     return index_obj
 
 
@@ -2790,7 +2807,9 @@ def box_heter_index(typ, val, c):  # pragma: no cover
     class_obj = c.pyapi.import_module_noblock(mod_name)
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    c.context.nrt.incref(c.builder, typ.data, index_val.data)
     data_obj = c.pyapi.from_native_value(typ.data, index_val.data, c.env_manager)
+    c.context.nrt.incref(c.builder, typ.name_type, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_type, index_val.name, c.env_manager)
 
     dtype_obj = c.pyapi.make_none()
@@ -2806,6 +2825,7 @@ def box_heter_index(typ, val, c):  # pragma: no cover
     c.pyapi.decref(copy_obj)
     c.pyapi.decref(name_obj)
     c.pyapi.decref(class_obj)
+    c.context.nrt.decref(c.builder, typ, val)
     return index_obj
 
 
