@@ -152,7 +152,7 @@ def test_read_parquet_from_deltalake(memory_leak_check):
     def impl():
         return pd.read_parquet("bodo/tests/data/example_deltalake")
 
-    py_output = pd.DataFrame({"value": [1,1,2,3,2,3]})
+    py_output = pd.DataFrame({"value": [1, 1, 2, 3, 2, 3]})
     check_func(impl, (), py_output=py_output, check_dtype=False)
 
 
@@ -1203,6 +1203,7 @@ def test_write_parquet_params():
                     func(df, pd_fname)  # write with pandas
                 bodo.barrier()
                 bodo_func(data, bodo_fname)
+                bodo.barrier()
                 df_a = pd.read_parquet(pd_fname)
                 df_b = pd.read_parquet(bodo_fname)
                 pd.testing.assert_frame_equal(df_a, df_b)
