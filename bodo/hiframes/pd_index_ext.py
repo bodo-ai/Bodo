@@ -244,7 +244,7 @@ def init_datetime_index(typingctx, data, name=None):
             lambda: numba.typed.Dict.empty(dtype, types.int64),
             types.DictType(dtype, types.int64)(),
             [],
-        )
+        )  # pragma: no cover
 
         return dt_index._getvalue()
 
@@ -346,14 +346,14 @@ def overload_datetime_index_date(dti):
     return impl
 
 
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def _dti_val_finalize(s, count):  # pragma: no cover
     if not count:
         s = iNaT  # TODO: NaT type boxing in timestamp
     return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
 
 
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def _tdi_val_finalize(s, count):  # pragma: no cover
     return pd.Timedelta("nan") if not count else pd.Timedelta(s)
 
@@ -704,7 +704,7 @@ def overload_timedelta_index_getitem(I, ind):
 
 
 # from pandas.core.arrays.datetimelike
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def validate_endpoints(closed):  # pragma: no cover
     """
     Check that the `closed` argument is among [None, "left", "right"]
@@ -738,7 +738,7 @@ def validate_endpoints(closed):  # pragma: no cover
     return left_closed, right_closed
 
 
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def to_offset_value(freq):  # pragma: no cover
     """Converts freq (string and integer) to offset nanoseconds."""
     if freq is None:
@@ -1158,7 +1158,7 @@ def init_timedelta_index(typingctx, data, name=None):
             lambda: numba.typed.Dict.empty(dtype, types.int64),
             types.DictType(dtype, types.int64)(),
             [],
-        )
+        )  # pragma: no cover
 
         return timedelta_index._getvalue()
 
@@ -1745,7 +1745,7 @@ def init_period_index(typingctx, data, name, freq):
             lambda: numba.typed.Dict.empty(types.int64, types.int64),
             types.DictType(types.int64, types.int64)(),
             [],
-        )
+        )  # pragma: no cover
 
         return period_index._getvalue()
 
@@ -1976,7 +1976,7 @@ def init_numeric_index(typingctx, data, name=None):
             lambda: numba.typed.Dict.empty(dtype, types.int64),
             types.DictType(dtype, types.int64)(),
             [],
-        )
+        )  # pragma: no cover
         return index_val._getvalue()
 
     return NumericIndexType(data.dtype, name, data)(data, name), codegen
@@ -2178,7 +2178,7 @@ def init_string_index(typingctx, data, name=None):
             lambda: numba.typed.Dict.empty(string_type, types.int64),
             types.DictType(string_type, types.int64)(),
             [],
-        )
+        )  # pragma: no cover
         return index_val._getvalue()
 
     return StringIndexType(name)(data, name), codegen
@@ -2305,7 +2305,7 @@ def overload_index_take(I, indices):
 
 
 @numba.njit(no_cpython_wrapper=True)
-def _init_engine(I):
+def _init_engine(I):  # pragma: no cover
     """initialize the Index hashmap engine (just a simple dict for now)"""
     if len(I) > 0 and not I._dict:
         arr = bodo.utils.conversion.coerce_to_array(I)
@@ -2336,7 +2336,7 @@ def index_contains(I, val):
 
 
 @register_jitable
-def range_contains(start, stop, step, val):
+def range_contains(start, stop, step, val):  # pragma: no cover
     """check 'val' to be in range(start, stop, step)"""
     if step == 0:
         return False
@@ -2895,7 +2895,7 @@ def lower_constant_time_index(context, builder, ty, pyval):
         lambda: numba.typed.Dict.empty(dtype, types.int64),
         types.DictType(dtype, types.int64)(),
         [],
-    )
+    )  # pragma: no cover
 
     return dt_val._getvalue()
 
@@ -2917,7 +2917,7 @@ def lower_constant_period_index(context, builder, ty, pyval):
         lambda: numba.typed.Dict.empty(types.int64, types.int64),
         types.DictType(types.int64, types.int64)(),
         [],
-    )
+    )  # pragma: no cover
 
     return index_val._getvalue()
 
@@ -2945,7 +2945,7 @@ def lower_constant_numeric_index(context, builder, ty, pyval):
         lambda: numba.typed.Dict.empty(dtype, types.int64),
         types.DictType(dtype, types.int64)(),
         [],
-    )
+    )  # pragma: no cover
 
     return index_val._getvalue()
 
@@ -2965,7 +2965,7 @@ def lower_constant_string_index(context, builder, ty, pyval):
         lambda: numba.typed.Dict.empty(string_type, types.int64),
         types.DictType(string_type, types.int64)(),
         [],
-    )
+    )  # pragma: no cover
 
     return index_val._getvalue()
 
