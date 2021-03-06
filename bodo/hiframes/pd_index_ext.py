@@ -2330,7 +2330,7 @@ def index_contains(I, val):
     def impl(I, val):  # pragma: no cover
         # build the index dict if not initialized yet
         _init_engine(I)
-        return val in I._dict
+        return bodo.utils.conversion.unbox_if_timestamp(val) in I._dict
 
     return impl
 
@@ -2366,15 +2366,14 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
     arg_defaults = dict(method=None, tolerance=None)
     check_unsupported_args("Index.get_loc", unsupported_args, arg_defaults)
 
-    dtype = I.dtype
-    # DatatimeIndex values are comparable to Timestamp
-    if dtype == types.NPDatetime("ns"):
-        dtype = pandas_timestamp_type
-    # TimedeltaIndex values are comparable to Timedelta
-    if dtype == types.NPTimedelta("ns"):
-        dtype = pd_timedelta_type
+    # Timestamp/Timedelta types are handled the same as datetime64/timedelta64
+    key = types.unliteral(key)
+    if key == pandas_timestamp_type:
+        key = types.NPDatetime("ns")
+    if key == pd_timedelta_type:
+        key = types.NPTimedelta("ns")
 
-    if not types.unliteral(key) == dtype:  # pragma: no cover
+    if key != I.dtype:  # pragma: no cover
         raise_bodo_error("Index.get_loc(): invalid label type in Index.get_loc()")
 
     # RangeIndex doesn't need a hashmap
