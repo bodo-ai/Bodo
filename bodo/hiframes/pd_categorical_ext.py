@@ -1070,7 +1070,7 @@ def categorical_array_setitem(arr, ind, val):
                     if ind[j]:
                         # Timestamp/Timedelta are stored internally as dt64 but inside the index as
                         # Timestamp and Timedelta
-                        new_val = bodo.utils.conversion.unbox_if_timestamp(val[j])
+                        new_val = bodo.utils.conversion.unbox_if_timestamp(val[val_ind])
                         if new_val not in categories:
                             raise ValueError(
                                 "Cannot setitem on a Categorical with a new category, set the categories first"
@@ -1138,7 +1138,7 @@ def categorical_array_setitem(arr, ind, val):
                 for j in range(slice_ind.start, slice_ind.stop, slice_ind.step):
                     # Timestamp/Timedelta are stored internally as dt64 but inside the index as
                     # Timestamp and Timedelta
-                    new_val = bodo.utils.conversion.unbox_if_timestamp(val[j])
+                    new_val = bodo.utils.conversion.unbox_if_timestamp(val[val_ind])
                     if new_val not in categories:
                         raise ValueError(
                             "Cannot setitem on a Categorical with a new category, set the categories first"
