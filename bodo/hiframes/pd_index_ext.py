@@ -2889,6 +2889,15 @@ def lower_constant_time_index(context, builder, ty, pyval):
     dt_val.data = data
     dt_val.name = name
 
+    # create empty dict for get_loc hashmap
+    dtype = ty.dtype
+    dt_val.dict = context.compile_internal(
+        builder,
+        lambda: numba.typed.Dict.empty(dtype, types.int64),
+        types.DictType(dtype, types.int64)(),
+        [],
+    )
+
     return dt_val._getvalue()
 
 
@@ -2900,11 +2909,18 @@ def lower_constant_period_index(context, builder, ty, pyval):
     )
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
-    dt_val = cgutils.create_struct_proxy(ty)(context, builder)
-    dt_val.data = data
-    dt_val.name = name
+    index_val = cgutils.create_struct_proxy(ty)(context, builder)
+    index_val.data = data
+    index_val.name = name
+    # create empty dict for get_loc hashmap
+    index_val.dict = context.compile_internal(
+        builder,
+        lambda: numba.typed.Dict.empty(types.int64, types.int64),
+        types.DictType(types.int64, types.int64)(),
+        [],
+    )
 
-    return dt_val._getvalue()
+    return index_val._getvalue()
 
 
 @lower_constant(NumericIndexType)
@@ -2920,24 +2936,39 @@ def lower_constant_numeric_index(context, builder, ty, pyval):
     )
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
-    dt_val = cgutils.create_struct_proxy(ty)(context, builder)
-    dt_val.data = data
-    dt_val.name = name
+    index_val = cgutils.create_struct_proxy(ty)(context, builder)
+    index_val.data = data
+    index_val.name = name
+    # create empty dict for get_loc hashmap
+    dtype = ty.dtype
+    index_val.dict = context.compile_internal(
+        builder,
+        lambda: numba.typed.Dict.empty(dtype, types.int64),
+        types.DictType(dtype, types.int64)(),
+        [],
+    )
 
-    return dt_val._getvalue()
+    return index_val._getvalue()
 
 
 @lower_constant(StringIndexType)
 def lower_constant_string_index(context, builder, ty, pyval):
     """ Constant lowering for StringIndexType. """
-    _data = context.get_constant_generic(builder, string_array_type, pyval.values)
+    data = context.get_constant_generic(builder, string_array_type, pyval.values)
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
-    dt_val = cgutils.create_struct_proxy(ty)(context, builder)
-    dt_val.data = _data
-    dt_val.name = name
+    index_val = cgutils.create_struct_proxy(ty)(context, builder)
+    index_val.data = data
+    index_val.name = name
+    # create empty dict for get_loc hashmap
+    index_val.dict = context.compile_internal(
+        builder,
+        lambda: numba.typed.Dict.empty(string_type, types.int64),
+        types.DictType(string_type, types.int64)(),
+        [],
+    )
 
-    return dt_val._getvalue()
+    return index_val._getvalue()
 
 
 @lower_builtin("getiter", RangeIndexType)
