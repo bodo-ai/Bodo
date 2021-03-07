@@ -1653,6 +1653,9 @@ class DataFramePass:
 
         # find which columns are actually used if possible
         used_cols = _get_df_apply_used_cols(func, in_col_names)
+        # avoid empty data which results in errors
+        if not used_cols:
+            used_cols = [df_type.columns[0]]
 
         n_keys = len(grp_typ.keys)
         key_names = ["k" + str(i) for i in range(n_keys)]
