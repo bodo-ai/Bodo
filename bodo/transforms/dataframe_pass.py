@@ -571,7 +571,6 @@ class DataFramePass:
         }
         for i in range(n_out_cols):
             glbs[f"_arr_typ{i}"] = out_arr_types[i]
-            glbs[f"data_arr_type{i}"] = out_arr_types[i].dtype
 
         return replace_func(
             self,
@@ -1625,7 +1624,6 @@ class DataFramePass:
 
         # find kw arguments to UDF (pop apply() args first)
         kws.pop("func", None)
-
         udf_arg_names = (
             ", ".join("e{}".format(i) for i in range(len(extra_args)))
             + (", " if extra_args else "")
@@ -1738,8 +1736,10 @@ class DataFramePass:
         udf_return_type,
         out_typ,
     ):
+        """generate groupby apply function that groups input rows, calls the UDF, and
+        constructs the output.
+        """
 
-        sum_no = bodo.libs.distributed_api.Reduce_Type.Sum.value
         func_text = f"def _bodo_groupby_apply_impl(keys, in_df, {extra_arg_names}_is_parallel=False):\n"
         func_text += f"  if _is_parallel:\n"
         func_text += f"    in_df, keys, shuffle_info = shuffle_dataframe(in_df, keys)\n"
@@ -1760,7 +1760,22 @@ class DataFramePass:
             ",0" if is_series_in else ""
         )
 
-        # loop over groups and call UDF
+        func_text += self._gen_groupby_apply_acc_loop(
+            grp_typ, udf_return_type, out_typ, udf_arg_names, n_out_cols, n_keys
+        )
+        return func_text
+
+    def _gen_groupby_apply_acc_loop(
+        self, grp_typ, udf_return_type, out_typ, udf_arg_names, n_out_cols, n_keys
+    ):
+        """generate groupby apply loop in cases where the UDF output is multiple rows
+        and needs to be accumulated properly
+        """
+
+        sum_no = bodo.libs.distributed_api.Reduce_Type.Sum.value
+
+        func_text = ""
+
         # gather output array, index and keys in lists to concatenate for output
         for i in range(n_out_cols):
             func_text += f"  arrs{i} = []\n"
@@ -1770,6 +1785,7 @@ class DataFramePass:
         else:
             func_text += "  in_key_arr = []\n"
         func_text += "  arrs_index = []\n"
+
         # NOTE: Pandas assigns group numbers in sorted order to Index when
         # as_index=False. Matching it exactly requires expensive sorting, so we assign
         # numbers in the order of groups across processors (using exscan)
@@ -1781,6 +1797,8 @@ class DataFramePass:
         # to match input if Index hasn't changed
         # https://github.com/pandas-dev/pandas/blob/9ee8674a9fb593f138e66d7b108a097beaaab7f2/pandas/_libs/reduction.pyx#L369
         func_text += f"  mutated = False\n"
+
+        # loop over groups and call UDF
         func_text += f"  for i in range(ngroups):\n"
         func_text += "    piece = in_data[starts[i]:ends[i]]\n"
 
@@ -1850,6 +1868,8 @@ class DataFramePass:
             func_text += (
                 f"      out_arr{i} = reverse_shuffle(out_arr{i}, shuffle_info)\n"
             )
+
+        # parallel shuffle clean up
         func_text += f"  if _is_parallel:\n"
         func_text += f"    delete_shuffle_info(shuffle_info)\n"
 
@@ -1861,6 +1881,7 @@ class DataFramePass:
             func_text += f"  return bodo.hiframes.pd_series_ext.init_series(out_arr0, out_index, out_name)\n"
         else:
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
+
         return func_text
 
     def _run_call_pivot_table(self, assign, lhs, rhs):
