@@ -1681,6 +1681,61 @@ class DataFramePass:
         if extra_arg_names:
             extra_arg_names += ", "
 
+        func_text = self._gen_groupby_apply_func(
+            grp_typ,
+            n_keys,
+            n_out_cols,
+            extra_arg_names,
+            udf_arg_names,
+            udf_return_type,
+            out_typ,
+        )
+
+        glbs = {
+            "numba": numba,
+            "np": np,
+            "bodo": bodo,
+            "get_group_indices": bodo.hiframes.pd_groupby_ext.get_group_indices,
+            "generate_slices": bodo.hiframes.pd_groupby_ext.generate_slices,
+            "shuffle_dataframe": bodo.hiframes.pd_groupby_ext.shuffle_dataframe,
+            "reverse_shuffle": bodo.hiframes.pd_groupby_ext.reverse_shuffle,
+            "delete_shuffle_info": bodo.libs.array.delete_shuffle_info,
+            "dist_reduce": bodo.libs.distributed_api.dist_reduce,
+            "map_func": map_func,
+        }
+        loc_vars = {}
+        exec(func_text, glbs, loc_vars)
+        _bodo_groupby_apply_impl = bodo.jit(distributed=False)(
+            loc_vars["_bodo_groupby_apply_impl"]
+        )
+
+        glbs = {
+            "numba": numba,
+            "np": np,
+            "bodo": bodo,
+            "out_type": out_typ,
+            "_bodo_groupby_apply_impl": _bodo_groupby_apply_impl,
+        }
+
+        return replace_func(
+            self,
+            f,
+            key_vars + col_vars + [df_index_var] + extra_args,
+            extra_globals=glbs,
+            pre_nodes=nodes,
+        )
+
+    def _gen_groupby_apply_func(
+        self,
+        grp_typ,
+        n_keys,
+        n_out_cols,
+        extra_arg_names,
+        udf_arg_names,
+        udf_return_type,
+        out_typ,
+    ):
+
         sum_no = bodo.libs.distributed_api.Reduce_Type.Sum.value
         func_text = f"def _bodo_groupby_apply_impl(keys, in_df, {extra_arg_names}_is_parallel=False):\n"
         func_text += f"  if _is_parallel:\n"
@@ -1803,39 +1858,7 @@ class DataFramePass:
             func_text += f"  return bodo.hiframes.pd_series_ext.init_series(out_arr0, out_index, out_name)\n"
         else:
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
-        glbs = {
-            "numba": numba,
-            "np": np,
-            "bodo": bodo,
-            "get_group_indices": bodo.hiframes.pd_groupby_ext.get_group_indices,
-            "generate_slices": bodo.hiframes.pd_groupby_ext.generate_slices,
-            "shuffle_dataframe": bodo.hiframes.pd_groupby_ext.shuffle_dataframe,
-            "reverse_shuffle": bodo.hiframes.pd_groupby_ext.reverse_shuffle,
-            "delete_shuffle_info": bodo.libs.array.delete_shuffle_info,
-            "dist_reduce": bodo.libs.distributed_api.dist_reduce,
-            "map_func": map_func,
-        }
-        loc_vars = {}
-        exec(func_text, glbs, loc_vars)
-        _bodo_groupby_apply_impl = bodo.jit(distributed=False)(
-            loc_vars["_bodo_groupby_apply_impl"]
-        )
-
-        glbs = {
-            "numba": numba,
-            "np": np,
-            "bodo": bodo,
-            "out_type": out_typ,
-            "_bodo_groupby_apply_impl": _bodo_groupby_apply_impl,
-        }
-
-        return replace_func(
-            self,
-            f,
-            key_vars + col_vars + [df_index_var] + extra_args,
-            extra_globals=glbs,
-            pre_nodes=nodes,
-        )
+        return func_text
 
     def _run_call_pivot_table(self, assign, lhs, rhs):
         df_var, values, index, columns, aggfunc, _pivot_values = rhs.args
