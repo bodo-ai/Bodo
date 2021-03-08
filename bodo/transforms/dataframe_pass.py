@@ -36,7 +36,7 @@ from bodo.hiframes.pd_groupby_ext import (
 )
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.ir.aggregate import get_agg_func
 from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.utils.transform import (
@@ -1704,6 +1704,12 @@ class DataFramePass:
             "dist_reduce": bodo.libs.distributed_api.dist_reduce,
             "map_func": map_func,
         }
+        out_arr_types = out_typ.data
+        out_arr_types = (
+            out_arr_types if isinstance(out_typ, DataFrameType) else [out_arr_types]
+        )
+        for i in range(n_out_cols):
+            glbs[f"_arr_typ{i}"] = out_arr_types[i]
         loc_vars = {}
         exec(func_text, glbs, loc_vars)
         _bodo_groupby_apply_impl = bodo.jit(distributed=False)(
@@ -1760,9 +1766,81 @@ class DataFramePass:
             ",0" if is_series_in else ""
         )
 
-        func_text += self._gen_groupby_apply_acc_loop(
-            grp_typ, udf_return_type, out_typ, udf_arg_names, n_out_cols, n_keys
-        )
+        # whether UDF returns a single row
+        if (
+            isinstance(udf_return_type, (SeriesType, HeterogeneousSeriesType))
+            and udf_return_type.const_info is not None
+        ):
+            func_text += self._gen_groupby_apply_row_loop(
+                grp_typ, udf_return_type, out_typ, udf_arg_names, n_out_cols, n_keys
+            )
+        else:
+            func_text += self._gen_groupby_apply_acc_loop(
+                grp_typ, udf_return_type, out_typ, udf_arg_names, n_out_cols, n_keys
+            )
+        return func_text
+
+    def _gen_groupby_apply_row_loop(
+        self, grp_typ, udf_return_type, out_typ, udf_arg_names, n_out_cols, n_keys
+    ):
+        """generate groupby apply loop in cases where the UDF output returns a single
+        row of output
+        """
+
+        n_out_keys = 0 if grp_typ.as_index else n_keys
+        sum_no = bodo.libs.distributed_api.Reduce_Type.Sum.value
+
+        func_text = ""
+
+        # output always has input keys (either Index or regular columns)
+        for i in range(n_keys):
+            func_text += f"  in_key_arrs{i} = bodo.utils.utils.alloc_type(ngroups, s_key{i}, (-1,))\n"
+        for i in range(n_out_cols - n_out_keys):
+            func_text += f"  arrs{i} = bodo.utils.utils.alloc_type(ngroups, _arr_typ{i+n_out_keys}, (-1,))\n"
+        # as_index=False includes group number as Index
+        # NOTE: Pandas assigns group numbers in sorted order to Index when
+        # as_index=False. Matching it exactly requires expensive sorting, so we assign
+        # numbers in the order of groups across processors (using exscan)
+        if not grp_typ.as_index:
+            func_text += "  out_index_arr = np.empty(ngroups, np.int64)\n"
+            func_text += "  n_prev_groups = 0\n"
+            func_text += "  if _is_parallel:\n"
+            func_text += f"    n_prev_groups = bodo.libs.distributed_api.dist_exscan(ngroups, np.int32({sum_no}))\n"
+
+        # loop over groups and call UDF
+        func_text += f"  for i in range(ngroups):\n"
+        func_text += "    piece = in_data[starts[i]:ends[i]]\n"
+
+        func_text += f"    out = map_func(piece, {udf_arg_names})\n"
+        func_text += "    out_vals = bodo.hiframes.pd_series_ext.get_series_data(out)\n"
+        for i in range(n_out_cols - n_out_keys):
+            func_text += f"    arrs{i}[i] = bodo.utils.conversion.unbox_if_timestamp(out_vals[{i}])\n"
+        for i in range(n_keys):
+            func_text += f"    in_key_arrs{i}[i] = s_key{i}[starts[i]]\n"
+        if not grp_typ.as_index:
+            func_text += f"    out_index_arr[i] = n_prev_groups + i\n"
+
+        # create output dataframe
+        if grp_typ.as_index:
+            index_names = ", ".join(
+                f"'{v}'" if isinstance(v, str) else f"{v}" for v in grp_typ.keys
+            )
+        else:
+            index_names = "None"
+        if isinstance(out_typ.index, MultiIndexType):
+            out_key_arr_names = ", ".join(f"in_key_arrs{i}" for i in range(n_keys))
+            func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names},), ({index_names},), None)\n"
+        else:
+            out_index_arr = "out_index_arr" if not grp_typ.as_index else "in_key_arrs0"
+            func_text += f"  out_index = bodo.utils.conversion.index_from_array({out_index_arr}, {index_names})\n"
+
+        out_data = ", ".join(f"arrs{i}" for i in range(n_out_cols - n_out_keys))
+        if not grp_typ.as_index:
+            out_data = (
+                ", ".join(f"in_key_arrs{i}" for i in range(n_keys)) + ", " + out_data
+            )
+
+        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
         return func_text
 
     def _gen_groupby_apply_acc_loop(

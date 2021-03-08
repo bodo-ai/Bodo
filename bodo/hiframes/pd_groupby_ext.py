@@ -26,9 +26,13 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.hiframes.pd_index_ext import RangeIndexType
+from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.hiframes.pd_series_ext import SeriesType, _get_series_array_type
+from bodo.hiframes.pd_series_ext import (
+    HeterogeneousSeriesType,
+    SeriesType,
+    _get_series_array_type,
+)
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
@@ -882,27 +886,82 @@ class DataframeGroupByAttribute(AttributeTemplate):
         )
 
         # TODO: support scalar output
-        if not isinstance(f_return_type, (DataFrameType, SeriesType)):
+        if not isinstance(
+            f_return_type, (DataFrameType, SeriesType, HeterogeneousSeriesType)
+        ):
             raise BodoError(
                 "GroupBy.apply(): only functions with dataframe/series output supported currently"
             )
 
-        key_arr_types = tuple(
-            grp.df_type.data[grp.df_type.columns.index(c)] for c in grp.keys
-        )
-        index_names = tuple(types.literal(v) for v in grp.keys) + get_index_name_types(
-            f_return_type.index
-        )
-        if not grp.as_index:
-            key_arr_types = (types.Array(types.int64, 1, "C"),)
-            index_names = (types.none,) + get_index_name_types(f_return_type.index)
-        out_index_type = MultiIndexType(
-            key_arr_types + get_index_data_arr_types(f_return_type.index),
-            index_names,
+        # whether UDF returns a single row of output
+        single_row_output = (
+            isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
+            and f_return_type.const_info is not None
         )
 
-        # TODO: support const Series UDF output that becomes dataframe
-        if isinstance(f_return_type, SeriesType):
+        # get Index type
+        if single_row_output:
+            out_data = []
+            out_columns = []
+            out_column_type = []  # unused
+            if not grp.as_index:
+                # for as_index=False, index arrays become regular columns
+                self._get_keys_not_as_index(grp, out_columns, out_data, out_column_type)
+                # group number is assigned to output
+                out_index_type = NumericIndexType(types.int64, types.none)
+            else:
+                if len(grp.keys) > 1:
+                    key_col_inds = tuple(
+                        grp.df_type.columns.index(grp.keys[i])
+                        for i in range(len(grp.keys))
+                    )
+                    arr_types = tuple(grp.df_type.data[ind] for ind in key_col_inds)
+                    out_index_type = MultiIndexType(
+                        arr_types, tuple(types.literal(k) for k in grp.keys)
+                    )
+                else:
+                    ind = grp.df_type.columns.index(grp.keys[0])
+                    out_index_type = bodo.hiframes.pd_index_ext.array_typ_to_index(
+                        grp.df_type.data[ind], types.literal(grp.keys[0])
+                    )
+            out_data = tuple(out_data)
+            out_columns = tuple(out_columns)
+        else:
+            key_arr_types = tuple(
+                grp.df_type.data[grp.df_type.columns.index(c)] for c in grp.keys
+            )
+            index_names = tuple(
+                types.literal(v) for v in grp.keys
+            ) + get_index_name_types(f_return_type.index)
+            if not grp.as_index:
+                key_arr_types = (types.Array(types.int64, 1, "C"),)
+                index_names = (types.none,) + get_index_name_types(f_return_type.index)
+            out_index_type = MultiIndexType(
+                key_arr_types + get_index_data_arr_types(f_return_type.index),
+                index_names,
+            )
+
+        # const Series output returns a DataFrame
+        # NOTE: get_const_func_output_type() adds const_info attribute for const Series
+        # output
+        if single_row_output:
+            if isinstance(f_return_type, HeterogeneousSeriesType):
+                _, index_vals = f_return_type.const_info
+                arrs = tuple(
+                    _get_series_array_type(t) for t in f_return_type.data.types
+                )
+                ret_type = DataFrameType(
+                    out_data + arrs, out_index_type, out_columns + index_vals
+                )
+            elif isinstance(f_return_type, SeriesType):
+                n_cols, index_vals = f_return_type.const_info
+                arrs = tuple(
+                    _get_series_array_type(f_return_type.dtype) for _ in range(n_cols)
+                )
+                ret_type = DataFrameType(
+                    out_data + arrs, out_index_type, out_columns + index_vals
+                )
+        elif isinstance(f_return_type, SeriesType):
             ret_type = SeriesType(
                 f_return_type.dtype,
                 f_return_type.data,

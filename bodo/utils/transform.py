@@ -545,7 +545,7 @@ def get_const_value_inner(
         )
 
     # range() call
-    if call_name == ("range", "builtins"):
+    if call_name == ("range", "builtins") and len(var_def.args) == 1:
         return range(
             get_const_value_inner(
                 func_ir, var_def.args[0], arg_types, typemap, updated_containers
@@ -571,6 +571,7 @@ def get_const_value_inner(
             )
         )
 
+    # Index calls
     if call_name in (
         ("init_string_index", "bodo.hiframes.pd_index_ext"),
         ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
@@ -611,6 +612,14 @@ def get_const_value_inner(
         and isinstance(typemap.get(var_def.args[0].name, None), types.BaseTuple)
     ):
         return len(typemap[var_def.args[0].name])
+
+    # len(data)
+    if call_name == ("len", "builtins"):
+        return len(
+            get_const_value_inner(
+                func_ir, var_def.args[0], arg_types, typemap, updated_containers
+            )
+        )
 
     # pd.CategoricalDtype() calls
     if call_name == ("CategoricalDtype", "pandas"):
