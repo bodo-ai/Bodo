@@ -612,10 +612,9 @@ Reindexing / Selection / Label manipulation:
 * :meth:`pandas.DataFrame.head` (including `n` argument)
 * :meth:`pandas.DataFrame.idxmax`
 * :meth:`pandas.DataFrame.idxmin`
-* :meth:`pandas.DataFrame.rename` (only `columns` argument with a constant dictionary)
-* :meth:`pandas.DataFrame.reset_index` only dropping all levels supported. `drop` and `inplace` also supported.
-* :meth:`pandas.DataFrame.set_index` `keys` can only be a column label
-  (a constant string).
+* :meth:`pandas.DataFrame.rename` (can only rename columns with a constant dictionary, either through `columns` or `mapper` and `axis=1`)
+* :meth:`pandas.DataFrame.reset_index` (only dropping all levels supported. `drop` and `inplace` also supported)
+* :meth:`pandas.DataFrame.set_index` (`keys` must be a constant string column label)
 * :meth:`pandas.DataFrame.tail` (including `n` argument)
 * :meth:`pandas.DataFrame.take`
 

@@ -7,6 +7,239 @@ from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
+def test_df_rename_errors(memory_leak_check):
+    """
+    Tests BodoErrors from DataFrame.rename.
+    """
+
+    def test_impl1():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.rename(index=[0])
+
+    def test_impl2():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.rename(level=0)
+
+    def test_impl3():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.rename(errors="raise")
+
+    def test_impl4():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.rename(inplace=None)
+
+    def test_impl5():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.rename({"A": "B"}, columns={"A": "B"})
+
+    def test_impl6():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.rename({"A": "B"})
+
+    def test_impl7(cols):
+        d = {"A": cols[0]}
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.rename(d, axis=1)
+
+    def test_impl8(cols):
+        d = {"A": cols[0]}
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.rename(columns=d)
+
+    def test_impl9():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.rename(columns={"A": "B"}, axis=1)
+
+    def test_impl10():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.rename()
+
+    def test_impl11():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.rename({"A": "B"}, axis=0)
+
+    unsupported_arg_err_msg = "DataFrame.rename.* parameter only supports default value"
+
+    with pytest.raises(
+        BodoError,
+        match=unsupported_arg_err_msg,
+    ):
+        bodo.jit(test_impl1)()
+    with pytest.raises(
+        BodoError,
+        match=unsupported_arg_err_msg,
+    ):
+        bodo.jit(test_impl2)()
+    with pytest.raises(
+        BodoError,
+        match=unsupported_arg_err_msg,
+    ):
+        bodo.jit(test_impl3)()
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.rename.*: 'inplace' keyword only supports boolean constant assignment",
+    ):
+        bodo.jit(test_impl4)()
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.rename.*: Cannot specify both 'mapper' and 'columns'",
+    ):
+        bodo.jit(test_impl5)()
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.rename.*: 'mapper' only supported with axis=1",
+    ):
+        bodo.jit(test_impl6)()
+    with pytest.raises(
+        BodoError,
+        match="'mapper' argument to DataFrame.rename.* should be a constant dictionary",
+    ):
+        bodo.jit(test_impl7)(["B", "C"])
+    with pytest.raises(
+        BodoError,
+        match="'columns' argument to DataFrame.rename.* should be a constant dictionary",
+    ):
+        bodo.jit(test_impl8)(["B", "C"])
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.rename.*: Cannot specify both 'axis' and 'columns'",
+    ):
+        bodo.jit(test_impl9)()
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.rename.*: must pass columns either via 'mapper' and 'axis'=1 or 'columns'",
+    ):
+        bodo.jit(test_impl10)()
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.rename.*: 'mapper' only supported with axis=1",
+    ):
+        bodo.jit(test_impl11)()
+
+
+@pytest.mark.slow
+def test_df_set_index_errors(memory_leak_check):
+    """
+    Tests BodoErrors from DataFrame.set_index.
+    """
+
+    def test_impl1():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.set_index("A", inplace=True)
+
+    def test_impl2():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.set_index("A", append=True)
+
+    def test_impl3():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.set_index("A", verify_integrity=True)
+
+    def test_impl4():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.set_index(["A"])
+
+    unsupported_arg_err_msg = (
+        "DataFrame.set_index.* parameter only supports default value"
+    )
+
+    with pytest.raises(
+        BodoError,
+        match=unsupported_arg_err_msg,
+    ):
+        bodo.jit(test_impl1)()
+    with pytest.raises(
+        BodoError,
+        match=unsupported_arg_err_msg,
+    ):
+        bodo.jit(test_impl2)()
+    with pytest.raises(
+        BodoError,
+        match=unsupported_arg_err_msg,
+    ):
+        bodo.jit(test_impl3)()
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.set_index.*: 'keys' must be a constant string",
+    ):
+        bodo.jit(test_impl4)()
+
+
+@pytest.mark.slow
+def test_df_set_index_empty_dataframe(memory_leak_check):
+    """
+    Tests DataFrame.set_index that produces an empty DataFrame.
+    """
+
+    def test_impl():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.set_index("A")
+
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.set_index.*: Not supported on single column DataFrames.",
+    ):
+        bodo.jit(test_impl)()
+
+
+@pytest.mark.slow
+def test_df_reset_index_errors(memory_leak_check):
+    """
+    Tests BodoErrors from DataFrame.rename_index.
+    """
+
+    def test_impl1():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.reset_index(col_fill="*")
+
+    def test_impl2():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.reset_index(col_level=1)
+
+    def test_impl3():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.reset_index(drop=None)
+
+    def test_impl4():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.reset_index(level=1)
+
+    def test_impl5():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.reset_index(inplace=None)
+
+    unsupported_arg_err_msg = (
+        "DataFrame.reset_index.* parameter only supports default value"
+    )
+
+    with pytest.raises(
+        BodoError,
+        match=unsupported_arg_err_msg,
+    ):
+        bodo.jit(test_impl1)()
+    with pytest.raises(
+        BodoError,
+        match=unsupported_arg_err_msg,
+    ):
+        bodo.jit(test_impl2)()
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.reset_index.*: 'drop' parameter should be a constant boolean value",
+    ):
+        bodo.jit(test_impl3)()
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.reset_index.*: only dropping all index levels supported",
+    ):
+        bodo.jit(test_impl4)()
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.reset_index.*: 'inplace' parameter should be a constant boolean value",
+    ):
+        bodo.jit(test_impl5)()
+
+
+@pytest.mark.slow
 def test_df_head_errors(memory_leak_check):
     def impl():
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})

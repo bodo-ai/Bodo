@@ -583,10 +583,13 @@ def test_empty_df_drop_column(memory_leak_check):
 
     def impl1(n):
         df = pd.DataFrame({"A": np.arange(n) * 2})
-        df.drop(columns=["A"])
-        return df
+        return df.drop(columns=["A"])
 
-    check_func(impl1, (11,))
+    err_msg = "DataFrame.drop.*: Dropping all columns not supported."
+
+    # TODO: [BE-285] Fix empty df issue
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(11)
 
 
 @pytest.mark.slow
@@ -1030,6 +1033,30 @@ def test_df_copy_shallow(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
+def test_df_rename_all_types(df_value, memory_leak_check):
+    """
+    Tests that df rename works with all dataframes
+    in the fixture.
+    """
+
+    def test_impl(df):
+        df.rename(columns={"A": "first", "B": "second"})
+
+    check_func(test_impl, (df_value,))
+
+
+def test_df_rename_mapper_all_types(df_value, memory_leak_check):
+    """
+    Tests that df rename works with all dataframes
+    in the fixture using mapper.
+    """
+
+    def test_impl(df):
+        df.rename({"A": "first", "B": "second"}, axis=1)
+
+    check_func(test_impl, (df_value,))
+
+
 def test_df_rename(memory_leak_check):
     def impl(df):
         return df.rename(columns={"B": "bb", "C": "cc"})
@@ -1089,7 +1116,7 @@ def test_df_rename(memory_leak_check):
         bodo.jit(impl5)(df, 2, 3)
     with pytest.raises(
         BodoError,
-        match="'error' keyword only supports default parameter values 'None' and 'ignore'",
+        match="DataFrame.rename.*: errors parameter only supports default value ignore",
     ):
         bodo.jit(impl6)(df)
     check_func(impl7, (df, {"B": "bb", "C": "cc"}))
@@ -1769,27 +1796,39 @@ def test_df_shift_error_periods(memory_leak_check):
 
 
 def test_df_set_index(df_value, memory_leak_check):
-    # singe column dfs become zero column which are not supported, TODO: fix
-    if len(df_value.columns) < 2:
-        return
-
-    # TODO: fix nullable int
-    if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer._IntegerDtype):
-        return
-
-    # TODO: [BE-77] support Categorical Index types
-    if isinstance(df_value.iloc[:, 0].dtype, pd.CategoricalDtype):
-        return
-
-    # TODO(ehsan): test non-str columns using 'df_value.columns[0]' instead of 'A" when
-    # Numba can convert freevars to literals
-    if "A" not in df_value.columns:
-        return
+    """
+    Test DataFrame.set_index on all of our df types.
+    """
 
     def impl(df):
         return df.set_index("A")
 
-    check_func(impl, (df_value,))
+    # TODO: [BE-77] support Categorical Index types
+    if isinstance(df_value.iloc[:, 0].dtype, pd.CategoricalDtype):
+        with pytest.raises(
+            BodoError,
+            match="DataFrame.set_index.*: Not supported for categorical columns.",
+        ):
+            bodo.jit(impl)(df_value)
+        return
+
+    # TODO: [BE-284] fix nullable int. Produces the incorrect value when there are nulls.
+    if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
+    # # TODO(ehsan): test non-str columns using 'df_value.columns[0]' instead of 'A" when
+    # # Numba can convert freevars to literals
+
+    # single column dfs become zero column which are not supported, TODO: fix
+    if "A" not in df_value.columns:
+        df = df_value.rename(columns={df_value.columns[0]: "A"})
+    else:
+        df = df_value.copy(deep=True)
+    # Pandas seems to error in our framework with an empty df
+    if len(df_value.columns) == 1:
+        df["B"] = df["A"]
+
+    check_func(impl, (df,))
 
 
 def test_df_reset_index1(df_value, memory_leak_check):
@@ -1954,8 +1993,8 @@ def test_drop_all_types(df_value, memory_leak_check):
     if "A" not in df_value.columns:
         df = df_value.rename(columns={df_value.columns[0]: "A"})
     else:
-        df = df_value
-    # Pandas seems to error in our framework with an empty df
+        df = df_value.copy(deep=True)
+    # Bodo Errors if it returns an empty DataFrame.
     if len(df_value.columns) == 1:
         df["B"] = df["A"]
     check_func(

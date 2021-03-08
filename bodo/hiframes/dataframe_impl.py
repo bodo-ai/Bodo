@@ -45,7 +45,6 @@ from bodo.utils.transform import gen_const_tup
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
-    get_overload_const,
     get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
@@ -53,6 +52,7 @@ from bodo.utils.typing import (
     is_common_scalar_dtype,
     is_overload_constant_bool,
     is_overload_constant_dict,
+    is_overload_constant_int,
     is_overload_constant_list,
     is_overload_constant_str,
     is_overload_false,
@@ -257,33 +257,48 @@ def overload_dataframe_rename(
     # check unsupported arguments
     args_dict = {
         "index": index,
-        "axis": axis,
         "level": level,
-        "mapper": mapper,
+        "errors": errors,
     }
-    args_default_dict = {"index": None, "axis": None, "level": None, "mapper": None}
+    args_default_dict = {"index": None, "level": None, "errors": "ignore"}
 
-    check_unsupported_args("df.rename", args_dict, args_default_dict)
-
-    if not (
-        is_overload_constant_str(errors) and get_overload_const_str(errors) == "ignore"
-    ):
-        raise BodoError(
-            "df.rename(): 'error' keyword only supports default parameter values 'None' and 'ignore'"
-        )
+    check_unsupported_args("DataFrame.rename", args_dict, args_default_dict)
 
     if not (is_overload_constant_bool(inplace)):
         raise BodoError(
-            "df.rename(): 'inplace' keyword only supports boolean constant assignment"
+            "DataFrame.rename(): 'inplace' keyword only supports boolean constant assignment"
         )
 
     # columns should be constant dictionary
-    if not is_overload_constant_dict(columns):
-        raise_bodo_error(
-            "'columns' argument to df.rename() should be a constant dictionary"
-        )
+    if not is_overload_none(mapper):
+        if not is_overload_none(columns):
+            raise BodoError(
+                "DataFrame.rename(): Cannot specify both 'mapper' and 'columns'"
+            )
+        if not (is_overload_constant_int(axis) and get_overload_const_int(axis) == 1):
+            raise BodoError("DataFrame.rename(): 'mapper' only supported with axis=1")
+        if not is_overload_constant_dict(mapper):
+            raise_bodo_error(
+                "'mapper' argument to DataFrame.rename() should be a constant dictionary"
+            )
 
-    col_map = get_overload_constant_dict(columns)
+        col_map = get_overload_constant_dict(mapper)
+
+    elif not is_overload_none(columns):
+        if not is_overload_none(axis):
+            raise BodoError(
+                "DataFrame.rename(): Cannot specify both 'axis' and 'columns'"
+            )
+        if not is_overload_constant_dict(columns):
+            raise_bodo_error(
+                "'columns' argument to DataFrame.rename() should be a constant dictionary"
+            )
+
+        col_map = get_overload_constant_dict(columns)
+    else:
+        raise_bodo_error(
+            "DataFrame.rename(): must pass columns either via 'mapper' and 'axis'=1 or 'columns'"
+        )
     new_cols = [
         col_map.get(df.columns[i], df.columns[i]) for i in range(len(df.columns))
     ]
@@ -1169,10 +1184,19 @@ def overload_dataframe_set_index(
     }
     args_default_dict = {"inplace": False, "append": False, "verify_integrity": False}
 
-    check_unsupported_args("set_index", args_dict, args_default_dict)
+    check_unsupported_args("DataFrame.set_index", args_dict, args_default_dict)
 
-    col_name = get_overload_const(keys)
+    # Column name only supproted on constant string
+    if not is_overload_constant_str(keys):
+        raise_bodo_error("DataFrame.set_index(): 'keys' must be a constant string")
+    col_name = get_overload_const_str(keys)
     col_ind = df.columns.index(col_name)
+    if isinstance(df.data[col_ind], bodo.CategoricalArray):
+        raise BodoError("DataFrame.set_index(): Not supported for categorical columns.")
+    if len(df.columns) == 1:
+        raise BodoError(
+            "DataFrame.set_index(): Not supported on single column DataFrames."
+        )
 
     data_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)

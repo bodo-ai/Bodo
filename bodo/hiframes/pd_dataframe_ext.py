@@ -2574,13 +2574,13 @@ def reset_index_overload(
     # make sure 'drop' is a constant bool
     if not is_overload_constant_bool(drop):  # pragma: no cover
         raise BodoError(
-            "reset_index(): 'drop' parameter should be a constant boolean value"
+            "DataFrame.reset_index(): 'drop' parameter should be a constant boolean value"
         )
 
     # make sure 'inplace' is a constant bool
     if not is_overload_constant_bool(inplace):
         raise BodoError(
-            "reset_index(): 'inplace' parameter should be a constant boolean value"
+            "DataFrame.reset_index(): 'inplace' parameter should be a constant boolean value"
         )
 
     # impl: for each column, copy data and create a new dataframe
@@ -2765,6 +2765,8 @@ def drop_overload(
                     c, df.columns
                 )
             )
+    if len(set(drop_cols)) == len(df.columns):
+        raise BodoError("DataFrame.drop(): Dropping all columns not supported.")
 
     inplace = is_overload_true(inplace)
     # TODO: inplace of df with parent (reflection)
