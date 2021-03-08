@@ -327,13 +327,13 @@ class DataFrameAttribute(AttributeTemplate):
             # output
             _, index_vals = f_return_type.const_info
             arrs = tuple(_get_series_array_type(t) for t in f_return_type.data.types)
-            ret_type = bodo.DataFrameType(arrs, df.index, index_vals)
+            ret_type = DataFrameType(arrs, df.index, index_vals)
         elif isinstance(f_return_type, SeriesType):
             n_cols, index_vals = f_return_type.const_info
             arrs = tuple(
                 _get_series_array_type(f_return_type.dtype) for _ in range(n_cols)
             )
-            ret_type = bodo.DataFrameType(arrs, df.index, index_vals)
+            ret_type = DataFrameType(arrs, df.index, index_vals)
         else:
             data_arr = get_udf_out_arr_type(f_return_type)
             ret_type = SeriesType(data_arr.dtype, data_arr, df.index, None)

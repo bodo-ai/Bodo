@@ -1842,6 +1842,20 @@ def test_groupby_apply(is_slow_run):
         )
         return df2
 
+    # const size series output, input not used
+    def impl7(df):
+        df2 = df.groupby(["A", "B"]).apply(
+            lambda x: pd.Series([1, 2, 3]),
+        )
+        return df2
+
+    # scalar return
+    def impl11(df):
+        df2 = df.groupby(["A", "B"]).apply(
+            lambda x: 3.3,
+        )
+        return df2
+
     # no arg, explicit select
     def impl2(df):
         df2 = df.groupby("A")[["C", "D"]].apply(
@@ -1890,6 +1904,35 @@ def test_groupby_apply(is_slow_run):
         )
         return df2
 
+    # const size series output, as_index=False, input not used
+    def impl8(df):
+        df2 = df.groupby(["A", "B"], as_index=False).apply(
+            lambda x: pd.Series((1, "A", 3)),
+        )
+        return df2
+
+    # const size series output, single key, input not used
+    def impl9(df):
+        df2 = df.groupby(["A"]).apply(
+            lambda x: pd.Series([1, 2, 3]),
+        )
+        return df2
+
+    # const size series output, single key, as_index=False, input not used
+    def impl10(df):
+        df2 = df.groupby(["A"], as_index=False).apply(
+            lambda x: pd.Series([1, 2, 3]),
+        )
+        return df2
+
+    # scalar return, as_index=False
+    def impl12(df):
+        df2 = df.groupby(["A", "B"], as_index=False).apply(
+            lambda x: 3.3,
+        )
+        df2.columns = ["A", "B", "C"]  # set name since Pandas sets NaN for data column
+        return df2
+
     df = pd.DataFrame(
         {
             "A": [1, 4, 4, 11, 4, 1],
@@ -1899,6 +1942,8 @@ def test_groupby_apply(is_slow_run):
         }
     )
     check_func(impl1, (df,), sort_output=True)
+    check_func(impl7, (df,), sort_output=True, reset_index=True)
+    check_func(impl11, (df,), sort_output=True, reset_index=True)
     if not is_slow_run:
         return
     check_func(impl2, (df,), sort_output=True)
@@ -1910,6 +1955,10 @@ def test_groupby_apply(is_slow_run):
     # NOTE: Pandas bug: drops the key arrays from output Index if it's Series sometimes
     # (as of 1.1.5)
     check_func(impl6, (df,), sort_output=True, reset_index=True)
+    check_func(impl8, (df,), sort_output=True, reset_index=True)
+    check_func(impl9, (df,), sort_output=True, reset_index=True)
+    check_func(impl10, (df,), sort_output=True, reset_index=True)
+    check_func(impl12, (df,), sort_output=True, reset_index=True)
 
 
 def test_groupby_apply_objmode():
