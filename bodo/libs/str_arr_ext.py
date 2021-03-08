@@ -1826,7 +1826,41 @@ def str_arr_setitem(A, idx, val):
 
         return impl_bool_scalar
 
+    if (
+        is_list_like_index_type(idx)
+        and idx.dtype == types.bool_
+        and val == string_array_type
+    ):
+
+        def impl_bool_arr(A, idx, val):  # pragma: no cover
+            n = len(A)
+            # NOTE: necessary to convert potential Series to array
+            idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+            out_arr = pre_alloc_string_array(n, -1)
+            ind_count = 0
+            for i in numba.parfors.parfor.internal_prange(n):
+                if idx[i]:
+                    if bodo.libs.array_kernels.isna(val, ind_count):
+                        out_arr[i] = ""
+                        str_arr_set_na(val, ind_count)
+                    else:
+                        out_arr[i] = val[ind_count]
+                    ind_count += 1
+                else:
+                    if bodo.libs.array_kernels.isna(A, i):
+                        out_arr[i] = ""
+                        str_arr_set_na(out_arr, i)
+                    else:
+                        out_arr[i] = A[i]  # TODO(ehsan): copy inplace
+
+            move_str_arr_payload(A, out_arr)
+
+        return impl_bool_arr
+
     # TODO: other setitem cases
+    raise BodoError(
+        f"StringArray setitem with index {idx} and value {val} not supported."
+    )
 
 
 @overload_attribute(StringArrayType, "dtype")

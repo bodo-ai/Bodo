@@ -547,6 +547,42 @@ def overload_coerce_to_array(
 
         return impl_str
 
+    # Convert list of Timestamps to dt64 array
+    if isinstance(data, types.List) and data.dtype == bodo.pandas_timestamp_type:
+
+        def impl_list_timestamp(
+            data,
+            error_on_nonarray=True,
+            use_nullable_array=None,
+            scalar_to_arr_len=None,
+        ):  # pragma: no cover
+            n = len(data)
+            A = np.empty(n, np.dtype("datetime64[ns]"))
+            for i in range(n):
+                A[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(data[i].value)
+            return A
+
+        return impl_list_timestamp
+
+    # Convert list of Timedeltas to td64 array
+    if isinstance(data, types.List) and data.dtype == bodo.pd_timedelta_type:
+
+        def impl_list_timedelta(
+            data,
+            error_on_nonarray=True,
+            use_nullable_array=None,
+            scalar_to_arr_len=None,
+        ):  # pragma: no cover
+            n = len(data)
+            A = np.empty(n, np.dtype("timedelta64[ns]"))
+            for i in range(n):
+                A[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                    data[i].value
+                )
+            return A
+
+        return impl_list_timedelta
+
     # assuming can be ndarray
     return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.utils.conversion.coerce_to_ndarray(
         data, error_on_nonarray, use_nullable_array, scalar_to_arr_len

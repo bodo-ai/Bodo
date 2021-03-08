@@ -1016,6 +1016,7 @@ def is_scalar_type(t):
         bodo.timedelta64ns,
         bodo.string_type,
         bodo.datetime_date_type,
+        bodo.datetime_datetime_type,
         bodo.datetime_timedelta_type,
         bodo.pandas_timestamp_type,
         bodo.pd_timedelta_type,
@@ -1073,6 +1074,20 @@ def find_common_np_dtype(arr_types):
         np.find_common_type(
             [numba.np.numpy_support.as_dtype(t.dtype) for t in arr_types], []
         )
+    )
+
+
+def is_immutable_array(typ):
+    """
+    Returns if typ is an immutable array types. This is used for setitem
+    error checking.
+    """
+    return isinstance(
+        typ,
+        (
+            bodo.ArrayItemArrayType,
+            bodo.MapArrayType,
+        ),
     )
 
 

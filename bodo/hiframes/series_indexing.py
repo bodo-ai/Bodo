@@ -36,9 +36,11 @@ from bodo.utils.typing import (
     BodoError,
     get_literal_value,
     get_overload_const_tuple,
+    is_immutable_array,
     is_list_like_index_type,
     is_literal_type,
     is_overload_constant_tuple,
+    is_scalar_type,
     raise_bodo_error,
 )
 
@@ -111,12 +113,17 @@ def overload_series_iat_getitem(I, idx):
 @overload(operator.setitem, no_unliteral=True)
 def overload_series_iat_setitem(I, idx, val):
     if isinstance(I, SeriesIatType):
-        if not isinstance(types.unliteral(idx), types.Integer):
+        if not isinstance(idx, types.Integer):
             raise BodoError("iAt based indexing can only have integer indexers")
         # check string setitem
         if I.stype.dtype == bodo.string_type and val is not types.none:
             raise BodoError("Series string setitem not supported yet")
-        # unbox dt64 from Timestamp (TODO: timedelta and other datetimelike)
+        # Bodo Restriction, cannot set item with immutable array.
+        if is_immutable_array(I.stype.data):
+            raise BodoError(
+                f"Series setitem not supported for Series with immutable array type {I.stype.data}"
+            )
+        # unbox dt64 from Timestamp
         # see unboxing pandas/core/arrays/datetimes.py:
         # DatetimeArray._unbox_scalar
         if I.stype.dtype == types.NPDatetime("ns") and val == pandas_timestamp_type:
@@ -127,6 +134,19 @@ def overload_series_iat_setitem(I, idx, val):
 
             return impl_dt
 
+        # unbox dt64 from datetime.datetime
+        if (
+            I.stype.dtype == types.NPDatetime("ns")
+            and val == bodo.datetime_datetime_type
+        ):
+
+            def impl_dt(I, idx, val):  # pragma: no cover
+                s = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(val)
+                bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx] = s
+
+            return impl_dt
+
+        # unbox td64 from datetime.timedelta
         if I.stype.dtype == types.NPTimedelta("ns") and val == datetime_timedelta_type:
 
             def impl_dt(I, idx, val):  # pragma: no cover
@@ -136,6 +156,7 @@ def overload_series_iat_setitem(I, idx, val):
 
             return impl_dt
 
+        # unbox td64 from datetime.Timedelta
         if I.stype.dtype == types.NPTimedelta("ns") and val == pd_timedelta_type:
 
             def impl_dt(I, idx, val):  # pragma: no cover
@@ -264,14 +285,33 @@ def overload_series_iloc_setitem(I, idx, val):
             raise BodoError(
                 "Series string setitem not supported yet"
             )  # pragma: no cover
+        # Bodo Restriction, cannot set item with immutable array.
+        if is_immutable_array(I.stype.data):
+            raise BodoError(
+                f"Series setitem not supported for Series with immutable array type {I.stype.data}"
+            )
 
         # integer case same as iat
-        if isinstance(idx, types.Integer):
+        # Scalar val is the same as integer case.
+        if isinstance(idx, types.Integer) or (
+            isinstance(idx, types.SliceType) and is_scalar_type(val)
+        ):
             # unbox dt64 from Timestamp (TODO: timedelta and other datetimelike)
             if I.stype.dtype == types.NPDatetime("ns") and val == pandas_timestamp_type:
 
                 def impl_dt(I, idx, val):  # pragma: no cover
                     s = integer_to_dt64(val.value)
+                    bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx] = s
+
+                return impl_dt
+
+            if (
+                I.stype.dtype == types.NPDatetime("ns")
+                and val == bodo.datetime_datetime_type
+            ):
+
+                def impl_dt(I, idx, val):  # pragma: no cover
+                    s = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(val)
                     bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx] = s
 
                 return impl_dt
@@ -319,6 +359,70 @@ def overload_series_iloc_setitem(I, idx, val):
         if is_list_like_index_type(idx) and isinstance(
             idx.dtype, (types.Integer, types.Boolean)
         ):
+
+            # Scalar case the same as int/slice. Needs a separate
+            # implementation for bodo.utils.conversion.coerce_to_ndarray
+            if is_scalar_type(val):
+
+                if (
+                    I.stype.dtype == types.NPDatetime("ns")
+                    and val == pandas_timestamp_type
+                ):
+
+                    def impl_dt(I, idx, val):  # pragma: no cover
+                        s = integer_to_dt64(val.value)
+                        idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                        bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t] = s
+
+                    return impl_dt
+
+                if (
+                    I.stype.dtype == types.NPDatetime("ns")
+                    and val == bodo.datetime_datetime_type
+                ):
+
+                    def impl_dt(I, idx, val):  # pragma: no cover
+                        s = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(
+                            val
+                        )
+                        idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                        bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t] = s
+
+                    return impl_dt
+
+                if (
+                    I.stype.dtype == types.NPTimedelta("ns")
+                    and val == datetime_timedelta_type
+                ):
+
+                    def impl_dt(I, idx, val):  # pragma: no cover
+                        val_b = bodo.hiframes.datetime_timedelta_ext._to_nanoseconds(
+                            val
+                        )
+                        s = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val_b)
+                        idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                        bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t] = s
+
+                    return impl_dt
+
+                if (
+                    I.stype.dtype == types.NPTimedelta("ns")
+                    and val == pd_timedelta_type
+                ):
+
+                    def impl_dt(I, idx, val):  # pragma: no cover
+                        val_b = val.value
+                        s = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(val_b)
+                        idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                        bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t] = s
+
+                    return impl_dt
+
+                def impl(I, idx, val):  # pragma: no cover
+                    idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
+                    bodo.hiframes.pd_series_ext.get_series_data(I._obj)[idx_t] = val
+
+                return impl
 
             def impl_arr(I, idx, val):  # pragma: no cover
                 idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)
