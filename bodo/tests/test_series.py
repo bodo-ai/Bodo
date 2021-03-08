@@ -3058,9 +3058,8 @@ def test_series_idxmax(series_val, memory_leak_check):
             bodo.jit(test_impl)(series_val)
         return
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
     # TODO: support more distribtued types and test
+    check_func(test_impl, (series_val,), dist_test=False)
 
 
 @pytest.mark.parametrize(

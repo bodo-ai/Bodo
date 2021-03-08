@@ -810,9 +810,29 @@ def overload_dataframe_quantile(
 @overload_method(DataFrameType, "idxmax", inline="always", no_unliteral=True)
 def overload_dataframe_idxmax(df, axis=0, skipna=True):
 
-    unsupported_args = dict(skipna=skipna)
-    arg_defaults = dict(skipna=True)
+    # TODO: [BE-281] Support idxmax with axis=1
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=0, skipna=True)
     check_unsupported_args("DataFrame.idxmax", unsupported_args, arg_defaults)
+
+    # Pandas restrictions:
+    # Only supported for numeric types with numpy arrays
+    # - int, floats, bool, dt64, td64. (maybe complex)
+    # Bodo restrictions:
+    # - td64 (TODO: support td64)
+    # - Pandas cannot support BooleanArray,
+    # so we may not support bool if we map it to BooleanArray
+    for coltype in df.data:
+        if not (
+            bodo.utils.utils.is_np_array_typ(coltype)
+            and (
+                coltype.dtype == bodo.datetime64ns
+                or isinstance(coltype.dtype, (types.Number, types.Boolean))
+            )
+        ):
+            raise BodoError(
+                f"DataFrame.idxmax() only supported for non-nullable numeric column types. Column type: {coltype} not supported."
+            )
 
     return _gen_reduce_impl(df, "idxmax", axis=axis)
 
@@ -820,9 +840,29 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
 @overload_method(DataFrameType, "idxmin", inline="always", no_unliteral=True)
 def overload_dataframe_idxmin(df, axis=0, skipna=True):
 
-    unsupported_args = dict(skipna=skipna)
-    arg_defaults = dict(skipna=True)
+    # TODO: [BE-281] Support idxmin with axis=1
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=0, skipna=True)
     check_unsupported_args("DataFrame.idxmin", unsupported_args, arg_defaults)
+
+    # Pandas restrictions:
+    # Only supported for numeric types with numpy arrays
+    # - int, floats, bool, dt64, td64. (maybe complex)
+    # Bodo restrictions:
+    # - td64 (TODO: support td64)
+    # - Pandas cannot support BooleanArray,
+    # so we may not support bool if we map it to BooleanArray
+    for coltype in df.data:
+        if not (
+            bodo.utils.utils.is_np_array_typ(coltype)
+            and (
+                coltype.dtype == bodo.datetime64ns
+                or isinstance(coltype.dtype, (types.Number, types.Boolean))
+            )
+        ):
+            raise BodoError(
+                f"DataFrame.idxmin() only supported for non-nullable numeric column types. Column type: {coltype} not supported."
+            )
 
     return _gen_reduce_impl(df, "idxmin", axis=axis)
 
@@ -851,11 +891,21 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
     # TODO: support empty dataframe
     assert len(out_colnames) != 0
 
-    dtypes = [
-        numba.np.numpy_support.as_dtype(df.data[df.columns.index(c)].dtype)
-        for c in out_colnames
-    ]
-    comm_dtype = numba.np.numpy_support.from_dtype(np.find_common_type(dtypes, []))
+    # Ensure that the dtypes can be supported and raise a BodoError if
+    # they cannot be combined. This is a safety net and should generally
+    # be handled by the individual functions.
+    try:
+        # TODO: Only generate common types when necessary to prevent errors.
+        dtypes = [
+            numba.np.numpy_support.as_dtype(df.data[df.columns.index(c)].dtype)
+            for c in out_colnames
+        ]
+        # TODO: Determine what possible exceptions this might raise.
+        comm_dtype = numba.np.numpy_support.from_dtype(np.find_common_type(dtypes, []))
+    except NotImplementedError:
+        raise BodoError(
+            f"Dataframe.{func_name}() with column types: {df.data} could not be merged to a common type."
+        )
 
     # generate function signature
     minc = ""
@@ -978,7 +1028,10 @@ def _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df_type):
         A[i] = {np_func}(row)
     return bodo.hiframes.pd_series_ext.init_series(A, {index})
 """
-    return func_text
+        return func_text
+    else:
+        # Prevent internal error from func_text not existing
+        raise BodoError(f"DataFrame.{func_name}(): Not supported for axis=1")
 
 
 @overload_method(DataFrameType, "pct_change", inline="always", no_unliteral=True)

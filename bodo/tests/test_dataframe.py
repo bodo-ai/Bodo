@@ -1569,6 +1569,120 @@ def test_df_idxmax_datetime(memory_leak_check):
     check_func(impl, (df,), is_out_distributed=False)
 
 
+def test_df_idxmax_all_types_axis0(df_value, memory_leak_check):
+    """
+    Test df.idxmax on all df types with axis=0
+    """
+
+    def test_impl(df):
+        return df.idxmax()
+
+    err_msg = "DataFrame.idxmax.* only supported for non-nullable numeric column types. Column type: .* not supported."
+
+    skip = False
+    for i, dtype in enumerate(df_value.dtypes):
+        # not supported for BooleanArray, TODO: support and test
+        # This isn't supported in Pandas
+        # bools in Numpy arrays are supported in Pandas.
+        if dtype == np.bool_:
+            skip = True
+            break
+
+        # not supported for CategoricalArray, TODO: support and test [BE-79]
+        # This isn't supported in Pandas
+        if isinstance(dtype, pd.CategoricalDtype):
+            skip = True
+            break
+
+        # not supported for CategoricalArray, TODO: support and test [BE-79]
+        # This isn't supported in Pandas
+        if isinstance(dtype, pd.core.arrays.integer._IntegerDtype):
+            skip = True
+            break
+
+        # not supported for Strings, TODO: support and test
+        # This isn't supported in Pandas
+        if isinstance(df_value[df_value.columns[i]].iat[0], str):
+            skip = True
+            break
+
+    if skip:
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(df_value)
+    else:
+        check_func(test_impl, (df_value,), dist_test=False)
+
+
+def test_df_idxmax_all_types_axis1(df_value, memory_leak_check):
+    """
+    Test df.idxmax on all df types with axis=1
+    """
+    # TODO: Support axis=1 [BE-281]
+    def test_impl(df):
+        return df.idxmax(axis=1)
+
+    err_msg = "DataFrame.idxmax.*: axis parameter only supports default value 0"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(test_impl)(df_value)
+
+
+def test_df_idxmin_all_types_axis0(df_value, memory_leak_check):
+    """
+    Test df.idxmin on all df types with axis=0
+    """
+
+    def test_impl(df):
+        return df.idxmin()
+
+    err_msg = "DataFrame.idxmin.* only supported for non-nullable numeric column types. Column type: .* not supported."
+
+    skip = False
+    for i, dtype in enumerate(df_value.dtypes):
+        # not supported for BooleanArray, TODO: support and test
+        # This isn't supported in Pandas
+        # bools in Numpy arrays are supported in Pandas.
+        if dtype == np.bool_:
+            skip = True
+            break
+
+        # not supported for CategoricalArray, TODO: support and test [BE-79]
+        # This isn't supported in Pandas
+        if isinstance(dtype, pd.CategoricalDtype):
+            skip = True
+            break
+
+        # not supported for CategoricalArray, TODO: support and test [BE-79]
+        # This isn't supported in Pandas
+        if isinstance(dtype, pd.core.arrays.integer._IntegerDtype):
+            skip = True
+            break
+
+        # not supported for Strings, TODO: support and test
+        # This isn't supported in Pandas
+        if isinstance(df_value[df_value.columns[i]].iat[0], str):
+            skip = True
+            break
+
+    if skip:
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(df_value)
+    else:
+        check_func(test_impl, (df_value,), dist_test=False)
+
+
+def test_df_idxmin_all_types_axis1(df_value, memory_leak_check):
+    """
+    Test df.idxmin on all df types with axis=1
+    """
+    # TODO: Support axis=1 [BE-281]
+    def test_impl(df):
+        return df.idxmin(axis=1)
+
+    err_msg = "DataFrame.idxmin.*: axis parameter only supports default value 0"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(test_impl)(df_value)
+
+
 def test_df_idxmax(numeric_df_value, memory_leak_check):
     if any(not _is_supported_argminmax_typ(d) for d in numeric_df_value.dtypes):
         return
