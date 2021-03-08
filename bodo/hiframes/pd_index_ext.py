@@ -2338,10 +2338,8 @@ def index_contains(I, val):
 @register_jitable
 def range_contains(start, stop, step, val):  # pragma: no cover
     """check 'val' to be in range(start, stop, step)"""
-    if step == 0:
-        return False
 
-    # check to see if value in start/stop range
+    # check to see if value in start/stop range (NOTE: step cannot be 0)
     if step > 0 and not (start <= val < stop):
         return False
     if step < 0 and not (stop <= val < start):
@@ -2369,9 +2367,9 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
     # Timestamp/Timedelta types are handled the same as datetime64/timedelta64
     key = types.unliteral(key)
     if key == pandas_timestamp_type:
-        key = types.NPDatetime("ns")
+        key = bodo.datetime64ns
     if key == pd_timedelta_type:
-        key = types.NPTimedelta("ns")
+        key = bodo.timedelta64ns
 
     if key != I.dtype:  # pragma: no cover
         raise_bodo_error("Index.get_loc(): invalid label type in Index.get_loc()")
