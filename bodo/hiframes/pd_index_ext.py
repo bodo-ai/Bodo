@@ -21,6 +21,7 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
+    register_jitable,
     register_model,
     typeof_impl,
     unbox,
@@ -135,12 +136,17 @@ def typeof_datetime_index(val, c):
 class DatetimeIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         # TODO: use payload to support mutable name
-        members = [("data", _dt_index_data_typ), ("name", fe_type.name_typ)]
+        members = [
+            ("data", _dt_index_data_typ),
+            ("name", fe_type.name_typ),
+            ("dict", types.DictType(_dt_index_data_typ.dtype, types.int64)),
+        ]
         super(DatetimeIndexModel, self).__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(DatetimeIndexType, "data", "_data")
 make_attribute_wrapper(DatetimeIndexType, "name", "_name")
+make_attribute_wrapper(DatetimeIndexType, "dict", "_dict")
 
 
 @overload_method(DatetimeIndexType, "copy", no_unliteral=True)
@@ -166,9 +172,11 @@ def box_dt_index(typ, val, c):
 
     dt_index = numba.core.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
+    c.context.nrt.incref(c.builder, _dt_index_data_typ, dt_index.data)
     arr_obj = c.pyapi.from_native_value(
         _dt_index_data_typ, dt_index.data, c.env_manager
     )
+    c.context.nrt.incref(c.builder, typ.name_typ, dt_index.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, dt_index.name, c.env_manager)
 
     # call pd.DatetimeIndex(arr, name=name)
@@ -183,6 +191,7 @@ def box_dt_index(typ, val, c):
     c.pyapi.decref(const_call)
     c.pyapi.decref(args)
     c.pyapi.decref(kws)
+    c.context.nrt.decref(c.builder, typ, val)
     return res
 
 
@@ -201,6 +210,14 @@ def unbox_datetime_index(typ, val, c):
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     index_val.data = data
     index_val.name = name
+    # create empty dict for get_loc hashmap
+    dtype = _dt_index_data_typ.dtype
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(dtype, types.int64),
+        types.DictType(dtype, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
     return NativeValue(index_val._getvalue())
 
 
@@ -219,6 +236,15 @@ def init_datetime_index(typingctx, data, name=None):
         # increase refcount of stored values
         context.nrt.incref(builder, signature.args[0], data_val)
         context.nrt.incref(builder, signature.args[1], name_val)
+
+        # create empty dict for get_loc hashmap
+        dtype = _dt_index_data_typ.dtype
+        dt_index.dict = context.compile_internal(
+            builder,
+            lambda: numba.typed.Dict.empty(dtype, types.int64),
+            types.DictType(dtype, types.int64)(),
+            [],
+        )  # pragma: no cover
 
         return dt_index._getvalue()
 
@@ -320,14 +346,14 @@ def overload_datetime_index_date(dti):
     return impl
 
 
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def _dti_val_finalize(s, count):  # pragma: no cover
     if not count:
         s = iNaT  # TODO: NaT type boxing in timestamp
     return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(s)
 
 
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def _tdi_val_finalize(s, count):  # pragma: no cover
     return pd.Timedelta("nan") if not count else pd.Timedelta(s)
 
@@ -581,7 +607,9 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
         return impl
 
     # ----- Data: Array type ------
-    elif isinstance(data, (SeriesType, types.Array, types.List, types.UniTuple)):
+    elif bodo.utils.utils.is_array_typ(data, False) or isinstance(
+        data, (SeriesType, types.List, types.UniTuple)
+    ):
         # Numeric Indices:
         if elem_type in (
             types.int64,
@@ -676,7 +704,7 @@ def overload_timedelta_index_getitem(I, ind):
 
 
 # from pandas.core.arrays.datetimelike
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def validate_endpoints(closed):  # pragma: no cover
     """
     Check that the `closed` argument is among [None, "left", "right"]
@@ -710,7 +738,7 @@ def validate_endpoints(closed):  # pragma: no cover
     return left_closed, right_closed
 
 
-@numba.njit
+@numba.njit(no_cpython_wrapper=True)
 def to_offset_value(freq):  # pragma: no cover
     """Converts freq (string and integer) to offset nanoseconds."""
     if freq is None:
@@ -1030,7 +1058,11 @@ types.timedelta_index = timedelta_index
 @register_model(TimedeltaIndexType)
 class TimedeltaIndexTypeModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        members = [("data", _timedelta_index_data_typ), ("name", fe_type.name_typ)]
+        members = [
+            ("data", _timedelta_index_data_typ),
+            ("name", fe_type.name_typ),
+            ("dict", types.DictType(_timedelta_index_data_typ.dtype, types.int64)),
+        ]
         super(TimedeltaIndexTypeModel, self).__init__(dmm, fe_type, members)
 
 
@@ -1050,9 +1082,11 @@ def box_timedelta_index(typ, val, c):
         c.context, c.builder, val
     )
 
+    c.context.nrt.incref(c.builder, _timedelta_index_data_typ, timedelta_index.data)
     arr_obj = c.pyapi.from_native_value(
         _timedelta_index_data_typ, timedelta_index.data, c.env_manager
     )
+    c.context.nrt.incref(c.builder, typ.name_typ, timedelta_index.name)
     name_obj = c.pyapi.from_native_value(
         typ.name_typ, timedelta_index.name, c.env_manager
     )
@@ -1069,6 +1103,7 @@ def box_timedelta_index(typ, val, c):
     c.pyapi.decref(const_call)
     c.pyapi.decref(args)
     c.pyapi.decref(kws)
+    c.context.nrt.decref(c.builder, typ, val)
     return res
 
 
@@ -1087,6 +1122,14 @@ def unbox_timedelta_index(typ, val, c):
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     index_val.data = data
     index_val.name = name
+    # create empty dict for get_loc hashmap
+    dtype = _timedelta_index_data_typ.dtype
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(dtype, types.int64),
+        types.DictType(dtype, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
     return NativeValue(index_val._getvalue())
 
 
@@ -1107,6 +1150,15 @@ def init_timedelta_index(typingctx, data, name=None):
         # increase refcount of stored values
         context.nrt.incref(builder, signature.args[0], data_val)
         context.nrt.incref(builder, signature.args[1], name_val)
+
+        # create empty dict for get_loc hashmap
+        dtype = _timedelta_index_data_typ.dtype
+        timedelta_index.dict = context.compile_internal(
+            builder,
+            lambda: numba.typed.Dict.empty(dtype, types.int64),
+            types.DictType(dtype, types.int64)(),
+            [],
+        )  # pragma: no cover
 
         return timedelta_index._getvalue()
 
@@ -1141,6 +1193,7 @@ class TimedeltaIndexAttribute(AttributeTemplate):
 
 make_attribute_wrapper(TimedeltaIndexType, "data", "_data")
 make_attribute_wrapper(TimedeltaIndexType, "name", "_name")
+make_attribute_wrapper(TimedeltaIndexType, "dict", "_dict")
 
 
 @overload_method(TimedeltaIndexType, "copy", no_unliteral=True)
@@ -1390,6 +1443,7 @@ def box_range_index(typ, val, c):
     start_obj = c.pyapi.from_native_value(types.int64, range_val.start, c.env_manager)
     stop_obj = c.pyapi.from_native_value(types.int64, range_val.stop, c.env_manager)
     step_obj = c.pyapi.from_native_value(types.int64, range_val.step, c.env_manager)
+    c.context.nrt.incref(c.builder, typ.name_typ, range_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, range_val.name, c.env_manager)
 
     # call pd.RangeIndex(start, stop, step, name=name)
@@ -1406,6 +1460,7 @@ def box_range_index(typ, val, c):
     c.pyapi.decref(const_call)
     c.pyapi.decref(args)
     c.pyapi.decref(kws)
+    c.context.nrt.decref(c.builder, typ, val)
     return index_obj
 
 
@@ -1650,12 +1705,14 @@ class PeriodIndexModel(models.StructModel):
         members = [
             ("data", types.Array(types.int64, 1, "C")),
             ("name", fe_type.name_typ),
+            ("dict", types.DictType(types.int64, types.int64)),
         ]
         super(PeriodIndexModel, self).__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(PeriodIndexType, "data", "_data")
 make_attribute_wrapper(PeriodIndexType, "name", "_name")
+make_attribute_wrapper(PeriodIndexType, "dict", "_dict")
 
 
 @overload_method(PeriodIndexType, "copy", no_unliteral=True)
@@ -1682,6 +1739,14 @@ def init_period_index(typingctx, data, name, freq):
         context.nrt.incref(builder, signature.args[0], args[0])
         context.nrt.incref(builder, signature.args[1], args[1])
 
+        # create empty dict for get_loc hashmap
+        period_index.dict = context.compile_internal(
+            builder,
+            lambda: numba.typed.Dict.empty(types.int64, types.int64),
+            types.DictType(types.int64, types.int64)(),
+            [],
+        )  # pragma: no cover
+
         return period_index._getvalue()
 
     freq_val = get_overload_const_str(freq)
@@ -1705,9 +1770,11 @@ def box_period_index(typ, val, c):
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
+    c.context.nrt.incref(c.builder, types.Array(types.int64, 1, "C"), index_val.data)
     data_obj = c.pyapi.from_native_value(
         types.Array(types.int64, 1, "C"), index_val.data, c.env_manager
     )
+    c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
     freq_obj = c.pyapi.string_from_constant_string(typ.freq)
 
@@ -1726,6 +1793,7 @@ def box_period_index(typ, val, c):
     c.pyapi.decref(const_call)
     c.pyapi.decref(args)
     c.pyapi.decref(kws)
+    c.context.nrt.decref(c.builder, typ, val)
     return index_obj
 
 
@@ -1744,6 +1812,13 @@ def unbox_period_index(typ, val, c):
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     index_val.data = data
     index_val.name = name
+    # create empty dict for get_loc hashmap
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(types.int64, types.int64),
+        types.DictType(types.int64, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
     return NativeValue(index_val._getvalue())
 
 
@@ -1820,12 +1895,14 @@ class NumericIndexModel(models.StructModel):
         members = [
             ("data", fe_type.data),
             ("name", fe_type.name_typ),
+            ("dict", types.DictType(fe_type.dtype, types.int64)),
         ]
         super(NumericIndexModel, self).__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(NumericIndexType, "data", "_data")
 make_attribute_wrapper(NumericIndexType, "name", "_name")
+make_attribute_wrapper(NumericIndexType, "dict", "_dict")
 
 
 @overload_method(NumericIndexType, "copy", no_unliteral=True)
@@ -1848,7 +1925,9 @@ def box_numeric_index(typ, val, c):
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     class_obj = c.pyapi.import_module_noblock(mod_name)
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    c.context.nrt.incref(c.builder, typ.data, index_val.data)
     data_obj = c.pyapi.from_native_value(typ.data, index_val.data, c.env_manager)
+    c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
 
     assert typ.dtype in (types.int64, types.uint64, types.float64)
@@ -1872,6 +1951,7 @@ def box_numeric_index(typ, val, c):
     c.pyapi.decref(copy_obj)
     c.pyapi.decref(name_obj)
     c.pyapi.decref(class_obj)
+    c.context.nrt.decref(c.builder, typ, val)
     return index_obj
 
 
@@ -1889,6 +1969,14 @@ def init_numeric_index(typingctx, data, name=None):
         # increase refcount of stored values
         context.nrt.incref(builder, index_typ.data, args[0])
         context.nrt.incref(builder, index_typ.name_typ, args[1])
+        # create empty dict for get_loc hashmap
+        dtype = index_typ.dtype
+        index_val.dict = context.compile_internal(
+            builder,
+            lambda: numba.typed.Dict.empty(dtype, types.int64),
+            types.DictType(dtype, types.int64)(),
+            [],
+        )  # pragma: no cover
         return index_val._getvalue()
 
     return NumericIndexType(data.dtype, name, data)(data, name), codegen
@@ -1914,6 +2002,14 @@ def unbox_numeric_index(typ, val, c):
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     index_val.data = data
     index_val.name = name
+    # create empty dict for get_loc hashmap
+    dtype = typ.dtype
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(dtype, types.int64),
+        types.DictType(dtype, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
     return NativeValue(index_val._getvalue())
 
 
@@ -2012,12 +2108,17 @@ class StringIndexType(types.IterableType, types.ArrayCompatible):
 @register_model(StringIndexType)
 class StringIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        members = [("data", string_array_type), ("name", fe_type.name_typ)]
+        members = [
+            ("data", string_array_type),
+            ("name", fe_type.name_typ),
+            ("dict", types.DictType(string_type, types.int64)),
+        ]
         super(StringIndexModel, self).__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(StringIndexType, "data", "_data")
 make_attribute_wrapper(StringIndexType, "name", "_name")
+make_attribute_wrapper(StringIndexType, "dict", "_dict")
 
 
 @overload_method(StringIndexType, "copy", no_unliteral=True)
@@ -2033,9 +2134,11 @@ def box_string_index(typ, val, c):
     class_obj = c.pyapi.import_module_noblock(mod_name)
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    c.context.nrt.incref(c.builder, string_array_type, index_val.data)
     data_obj = c.pyapi.from_native_value(
         string_array_type, index_val.data, c.env_manager
     )
+    c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
 
     dtype_obj = c.pyapi.make_none()
@@ -2051,6 +2154,7 @@ def box_string_index(typ, val, c):
     c.pyapi.decref(copy_obj)
     c.pyapi.decref(name_obj)
     c.pyapi.decref(class_obj)
+    c.context.nrt.decref(c.builder, typ, val)
     return index_obj
 
 
@@ -2068,6 +2172,13 @@ def init_string_index(typingctx, data, name=None):
         # increase refcount of stored values
         context.nrt.incref(builder, string_array_type, args[0])
         context.nrt.incref(builder, index_typ.name_typ, args[1])
+        # create empty dict for get_loc hashmap
+        index_val.dict = context.compile_internal(
+            builder,
+            lambda: numba.typed.Dict.empty(string_type, types.int64),
+            types.DictType(string_type, types.int64)(),
+            [],
+        )  # pragma: no cover
         return index_val._getvalue()
 
     return StringIndexType(name)(data, name), codegen
@@ -2093,6 +2204,13 @@ def unbox_string_index(typ, val, c):
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     index_val.data = data
     index_val.name = name
+    # create empty dict for get_loc hashmap
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(string_type, types.int64),
+        types.DictType(string_type, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
     return NativeValue(index_val._getvalue())
 
 
@@ -2186,6 +2304,51 @@ def overload_index_take(I, indices):
     return lambda I, indices: I[indices]  # pragma: no cover
 
 
+@numba.njit(no_cpython_wrapper=True)
+def _init_engine(I):  # pragma: no cover
+    """initialize the Index hashmap engine (just a simple dict for now)"""
+    if len(I) > 0 and not I._dict:
+        arr = bodo.utils.conversion.coerce_to_array(I)
+        for i in range(len(arr)):
+            val = arr[i]
+            if val in I._dict:
+                raise ValueError("Index.get_loc(): non-unique Index not supported yet")
+            I._dict[val] = i
+
+
+@overload(operator.contains, no_unliteral=True)
+def index_contains(I, val):
+    """support for "val in I" operator. Uses the Index hashmap for faster results."""
+    if not is_index_type(I):  # pragma: no cover
+        return
+
+    if isinstance(I, RangeIndexType):
+        return lambda I, val: range_contains(
+            I.start, I.stop, I.step, val
+        )  # pragma: no cover
+
+    def impl(I, val):  # pragma: no cover
+        # build the index dict if not initialized yet
+        _init_engine(I)
+        return bodo.utils.conversion.unbox_if_timestamp(val) in I._dict
+
+    return impl
+
+
+@register_jitable
+def range_contains(start, stop, step, val):  # pragma: no cover
+    """check 'val' to be in range(start, stop, step)"""
+
+    # check to see if value in start/stop range (NOTE: step cannot be 0)
+    if step > 0 and not (start <= val < stop):
+        return False
+    if step < 0 and not (stop <= val < start):
+        return False
+
+    # check stride
+    return ((val - start) % step) == 0
+
+
 @overload_method(RangeIndexType, "get_loc", no_unliteral=True)
 @overload_method(NumericIndexType, "get_loc", no_unliteral=True)
 @overload_method(StringIndexType, "get_loc", no_unliteral=True)
@@ -2201,28 +2364,34 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
     arg_defaults = dict(method=None, tolerance=None)
     check_unsupported_args("Index.get_loc", unsupported_args, arg_defaults)
 
-    dtype = I.dtype
-    # DatatimeIndex values are comparable to Timestamp
-    if dtype == types.NPDatetime("ns"):
-        dtype = pandas_timestamp_type
-    # TimedeltaIndex values are comparable to Timedelta
-    if dtype == types.NPTimedelta("ns"):
-        dtype = pd_timedelta_type
+    # Timestamp/Timedelta types are handled the same as datetime64/timedelta64
+    key = types.unliteral(key)
+    if key == pandas_timestamp_type:
+        key = bodo.datetime64ns
+    if key == pd_timedelta_type:
+        key = bodo.timedelta64ns
 
-    if not types.unliteral(key) == dtype:  # pragma: no cover
+    if key != I.dtype:  # pragma: no cover
         raise_bodo_error("Index.get_loc(): invalid label type in Index.get_loc()")
 
+    # RangeIndex doesn't need a hashmap
+    if isinstance(I, RangeIndexType):
+        # Pandas uses range.index() of Python, so using similar implementation
+        # https://github.com/python/cpython/blob/8e1b40627551909687db8914971b0faf6cf7a079/Objects/rangeobject.c#L576
+        def impl_range(I, key, method=None, tolerance=None):  # pragma: no cover
+            if not range_contains(I.start, I.stop, I.step, key):
+                raise KeyError("Index.get_loc(): key not found")
+            return key - I.start if I.step == 1 else (key - I.start) // I.step
+
+        return impl_range
+
     def impl(I, key, method=None, tolerance=None):  # pragma: no cover
+        # build the index dict if not initialized yet
+        _init_engine(I)
+
         key = bodo.utils.conversion.unbox_if_timestamp(key)
-        arr = bodo.utils.conversion.coerce_to_array(I)
-        ind = -1
-        for i in range(len(arr)):
-            if arr[i] == key:
-                if ind != -1:
-                    raise ValueError(
-                        "Index.get_loc(): non-unique Index not supported yet"
-                    )
-                ind = i
+        ind = I._dict.get(key, -1)
+
         if ind == -1:
             raise KeyError("Index.get_loc(): key not found")
         return ind
@@ -2635,7 +2804,9 @@ def box_heter_index(typ, val, c):  # pragma: no cover
     class_obj = c.pyapi.import_module_noblock(mod_name)
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    c.context.nrt.incref(c.builder, typ.data, index_val.data)
     data_obj = c.pyapi.from_native_value(typ.data, index_val.data, c.env_manager)
+    c.context.nrt.incref(c.builder, typ.name_type, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_type, index_val.name, c.env_manager)
 
     dtype_obj = c.pyapi.make_none()
@@ -2651,6 +2822,7 @@ def box_heter_index(typ, val, c):  # pragma: no cover
     c.pyapi.decref(copy_obj)
     c.pyapi.decref(name_obj)
     c.pyapi.decref(class_obj)
+    c.context.nrt.decref(c.builder, typ, val)
     return index_obj
 
 
@@ -2714,6 +2886,15 @@ def lower_constant_time_index(context, builder, ty, pyval):
     dt_val.data = data
     dt_val.name = name
 
+    # create empty dict for get_loc hashmap
+    dtype = ty.dtype
+    dt_val.dict = context.compile_internal(
+        builder,
+        lambda: numba.typed.Dict.empty(dtype, types.int64),
+        types.DictType(dtype, types.int64)(),
+        [],
+    )  # pragma: no cover
+
     return dt_val._getvalue()
 
 
@@ -2725,11 +2906,18 @@ def lower_constant_period_index(context, builder, ty, pyval):
     )
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
-    dt_val = cgutils.create_struct_proxy(ty)(context, builder)
-    dt_val.data = data
-    dt_val.name = name
+    index_val = cgutils.create_struct_proxy(ty)(context, builder)
+    index_val.data = data
+    index_val.name = name
+    # create empty dict for get_loc hashmap
+    index_val.dict = context.compile_internal(
+        builder,
+        lambda: numba.typed.Dict.empty(types.int64, types.int64),
+        types.DictType(types.int64, types.int64)(),
+        [],
+    )  # pragma: no cover
 
-    return dt_val._getvalue()
+    return index_val._getvalue()
 
 
 @lower_constant(NumericIndexType)
@@ -2745,24 +2933,39 @@ def lower_constant_numeric_index(context, builder, ty, pyval):
     )
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
-    dt_val = cgutils.create_struct_proxy(ty)(context, builder)
-    dt_val.data = data
-    dt_val.name = name
+    index_val = cgutils.create_struct_proxy(ty)(context, builder)
+    index_val.data = data
+    index_val.name = name
+    # create empty dict for get_loc hashmap
+    dtype = ty.dtype
+    index_val.dict = context.compile_internal(
+        builder,
+        lambda: numba.typed.Dict.empty(dtype, types.int64),
+        types.DictType(dtype, types.int64)(),
+        [],
+    )  # pragma: no cover
 
-    return dt_val._getvalue()
+    return index_val._getvalue()
 
 
 @lower_constant(StringIndexType)
 def lower_constant_string_index(context, builder, ty, pyval):
     """ Constant lowering for StringIndexType. """
-    _data = context.get_constant_generic(builder, string_array_type, pyval.values)
+    data = context.get_constant_generic(builder, string_array_type, pyval.values)
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
-    dt_val = cgutils.create_struct_proxy(ty)(context, builder)
-    dt_val.data = _data
-    dt_val.name = name
+    index_val = cgutils.create_struct_proxy(ty)(context, builder)
+    index_val.data = data
+    index_val.name = name
+    # create empty dict for get_loc hashmap
+    index_val.dict = context.compile_internal(
+        builder,
+        lambda: numba.typed.Dict.empty(string_type, types.int64),
+        types.DictType(string_type, types.int64)(),
+        [],
+    )  # pragma: no cover
 
-    return dt_val._getvalue()
+    return index_val._getvalue()
 
 
 @lower_builtin("getiter", RangeIndexType)

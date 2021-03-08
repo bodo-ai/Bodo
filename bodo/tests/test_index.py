@@ -253,6 +253,7 @@ def test_index_slice_name(index, memory_leak_check):
 @pytest.mark.parametrize(
     "index, key",
     [
+        (pd.RangeIndex(3, 22, 3), 9),
         (pd.Int64Index([10, 12, 15, 18]), 15),
         (pd.Index(["A", "B", "C", "AA", "DD"]), "A"),
         (
@@ -271,7 +272,8 @@ def test_index_get_loc(index, key, memory_leak_check):
     check_func(impl, (index, key), only_seq=True)
 
 
-def test_index_get_loc_error_checking(memory_leak_check):
+# TODO(ehsan): add memory_leak_check when Numba's Exception memory leaks are fixed
+def test_index_get_loc_error_checking():
     """Test possible errors in Index.get_loc() such as non-unique Index which is not
     supported.
     """
@@ -287,9 +289,17 @@ def test_index_get_loc_error_checking(memory_leak_check):
     ):
         bodo.jit(impl)(index, key)
     # key not in Index
+    index = pd.Index(["A", "B", "C", "AA", "DD"])
     key = "E"
     with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
         bodo.jit(impl)(index, key)
+    # key not in RangeIndex
+    with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
+        bodo.jit(impl)(pd.RangeIndex(1, 4, 2), 2)
+    with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
+        bodo.jit(impl)(pd.RangeIndex(1, 4, 2), 11)
+    with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
+        bodo.jit(impl)(pd.RangeIndex(3, 11, 2), 2)
 
 
 # Need to add the code and the check for the PeriodIndex
@@ -408,7 +418,7 @@ def test_datetime_sub(dti_val, memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(dti_val, t), impl2(dti_val, t))
 
 
-def test_datetimeindex_constant_lowering(memory_leak_check):
+def test_datetimeindex_constant_lowering():
     dti = pd.to_datetime(
         ["1/1/2018", np.datetime64("2018-01-01"), datetime.datetime(2018, 1, 1)]
     )
@@ -644,7 +654,7 @@ def test_timedelta_index_max(tdi_data, memory_leak_check):
     assert bodo_func(tdi_data) == test_impl(tdi_data)
 
 
-def test_timedelta_index_constant_lowering(memory_leak_check):
+def test_timedelta_index_constant_lowering():
     tdi = pd.TimedeltaIndex(np.arange(10))
 
     def impl():
@@ -703,7 +713,7 @@ def test_period_index_box(period_index, memory_leak_check):
     pd.testing.assert_index_equal(bodo.jit(impl)(period_index), impl(period_index))
 
 
-def test_periodindex_constant_lowering(memory_leak_check):
+def test_periodindex_constant_lowering():
     pi = pd.PeriodIndex(year=[2015, 2016, 2018], quarter=[1, 2, 3])
 
     def impl():
