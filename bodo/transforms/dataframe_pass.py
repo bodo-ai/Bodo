@@ -1766,11 +1766,11 @@ class DataFramePass:
             ",0" if is_series_in else ""
         )
 
-        # whether UDF returns a single row
+        # whether UDF returns a single row (as Series) or scalar
         if (
             isinstance(udf_return_type, (SeriesType, HeterogeneousSeriesType))
             and udf_return_type.const_info is not None
-        ):
+        ) or not isinstance(udf_return_type, (SeriesType, DataFrameType)):
             func_text += self._gen_groupby_apply_row_loop(
                 grp_typ, udf_return_type, out_typ, udf_arg_names, n_out_cols, n_keys
             )
@@ -1812,9 +1812,16 @@ class DataFramePass:
         func_text += "    piece = in_data[starts[i]:ends[i]]\n"
 
         func_text += f"    out = map_func(piece, {udf_arg_names})\n"
-        func_text += "    out_vals = bodo.hiframes.pd_series_ext.get_series_data(out)\n"
-        for i in range(n_out_cols - n_out_keys):
-            func_text += f"    arrs{i}[i] = bodo.utils.conversion.unbox_if_timestamp(out_vals[{i}])\n"
+        if isinstance(udf_return_type, (SeriesType, HeterogeneousSeriesType)):
+            func_text += (
+                "    out_vals = bodo.hiframes.pd_series_ext.get_series_data(out)\n"
+            )
+            for i in range(n_out_cols - n_out_keys):
+                func_text += f"    arrs{i}[i] = bodo.utils.conversion.unbox_if_timestamp(out_vals[{i}])\n"
+        else:
+            func_text += (
+                f"    arrs0[i] = bodo.utils.conversion.unbox_if_timestamp(out)\n"
+            )
         for i in range(n_keys):
             func_text += f"    in_key_arrs{i}[i] = s_key{i}[starts[i]]\n"
         if not grp_typ.as_index:
@@ -1840,7 +1847,14 @@ class DataFramePass:
                 ", ".join(f"in_key_arrs{i}" for i in range(n_keys)) + ", " + out_data
             )
 
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
+        # parallel shuffle clean up
+        func_text += f"  if _is_parallel:\n"
+        func_text += f"    delete_shuffle_info(shuffle_info)\n"
+
+        if isinstance(out_typ, DataFrameType):
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
+        else:
+            func_text += f"  return bodo.hiframes.pd_series_ext.init_series(arrs0, out_index, None)\n"
         return func_text
 
     def _gen_groupby_apply_acc_loop(

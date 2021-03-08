@@ -66,6 +66,7 @@ from bodo.utils.typing import (
     get_overload_const_str,
     get_overload_constant_dict,
     get_udf_error_msg,
+    get_udf_out_arr_type,
     is_dtype_nullable,
     is_literal_type,
     is_overload_constant_bool,
@@ -885,19 +886,13 @@ class DataframeGroupByAttribute(AttributeTemplate):
             func, grp, f_args, kws, self.context
         )
 
-        # TODO: support scalar output
-        if not isinstance(
-            f_return_type, (DataFrameType, SeriesType, HeterogeneousSeriesType)
-        ):
-            raise BodoError(
-                "GroupBy.apply(): only functions with dataframe/series output supported currently"
-            )
+        # TODO: check output data type to array-compatible scalar, Series or DataFrame
 
         # whether UDF returns a single row of output
         single_row_output = (
             isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
             and f_return_type.const_info is not None
-        )
+        ) or not isinstance(f_return_type, (SeriesType, DataFrameType))
 
         # get Index type
         if single_row_output:
@@ -961,6 +956,17 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 ret_type = DataFrameType(
                     out_data + arrs, out_index_type, out_columns + index_vals
                 )
+            else:  # scalar case
+                data_arr = get_udf_out_arr_type(f_return_type)
+                if not grp.as_index:
+                    # TODO: Pandas sets NaN for data column
+                    ret_type = DataFrameType(
+                        out_data + (data_arr,), out_index_type, out_columns + ("",)
+                    )
+                else:
+                    ret_type = SeriesType(
+                        data_arr.dtype, data_arr, out_index_type, None
+                    )
         elif isinstance(f_return_type, SeriesType):
             ret_type = SeriesType(
                 f_return_type.dtype,
