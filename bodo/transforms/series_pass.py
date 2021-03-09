@@ -83,9 +83,9 @@ from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.transforms.dataframe_pass import DataFramePass
 from bodo.utils.transform import (
     ReplaceFunc,
+    avoid_udf_inline,
     compile_func_single_block,
     extract_keyvals_from_struct_map,
-    func_has_assertions,
     gen_const_tup,
     get_call_expr_arg,
     replace_func,
@@ -1217,10 +1217,13 @@ class SeriesPass:
             func_name, func_mod = fdef
 
         # inline UDFs to enable more optimization
+        # avoid_udf_inline() decides about inlining. For example,
         # cannot inline if function has assertions. see test_df_apply_assertion
         func_type = self.typemap[rhs.func.name]
-        if bodo.compiler.is_udf_call(func_type) and not func_has_assertions(
-            func_type.dispatcher.py_func
+        if bodo.compiler.is_udf_call(func_type) and not avoid_udf_inline(
+            func_type.dispatcher.py_func,
+            tuple(self.typemap[v.name] for v in rhs.args),
+            {k: self.typemap[v.name] for k, v in dict(rhs.kws).items()},
         ):
             return replace_func(
                 self,

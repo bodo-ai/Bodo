@@ -5,12 +5,14 @@ import re
 import string
 import sys
 
+import numba
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.tests.utils import (
+    DeadcodeTestPipeline,
     check_caching,
     check_func,
     check_parallel_coherency,
@@ -18,6 +20,7 @@ from bodo.tests.utils import (
     gen_random_decimal_array,
     gen_random_list_string_array,
     get_start_end,
+    has_udf_call,
 )
 from bodo.utils.typing import BodoError
 
@@ -1989,6 +1992,25 @@ def test_groupby_apply_objmode():
         }
     )
     check_func(impl1, (df,), sort_output=True, reset_index=True)
+
+    def analysis_func(df):
+        return 3
+
+    def apply_func(df):
+        with bodo.objmode(out="int64"):
+            out = analysis_func(df)
+        return pd.Series([out])
+
+    def main_func(df):
+        res = df.groupby("A").apply(apply_func)
+        return res
+
+    # test for BE-290
+    df = pd.DataFrame({"A": [1.0, 2, 3, 1.0, 5], "B": [4.0, 5, 6, 2, 1]})
+    j_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(main_func)
+    pd.testing.assert_frame_equal(j_func(df), main_func(df))
+    fir = j_func.overloads[j_func.signatures[0]].metadata["preserved_ir"]
+    assert not has_udf_call(fir)
 
 
 @pytest.mark.slow

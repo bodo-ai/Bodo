@@ -17,6 +17,7 @@ import pytest
 import bodo
 from bodo.tests.utils import (
     AnalysisTestPipeline,
+    DeadcodeTestPipeline,
     _get_dist_arg,
     _test_equal,
     check_func,
@@ -29,6 +30,7 @@ from bodo.tests.utils import (
     gen_random_arrow_list_list_int,
     gen_random_arrow_struct_struct,
     get_start_end,
+    has_udf_call,
     is_bool_object_series,
 )
 from bodo.utils.typing import BodoError, BodoWarning
@@ -2939,6 +2941,36 @@ def test_df_apply_df_output_multistring(memory_leak_check):
 
     df = pd.DataFrame({"A": np.arange(40), "B": [0, 1] * 20, "C": np.arange(40)})
     check_func(test_impl, (df,))
+
+
+@pytest.mark.slow
+def test_df_apply_udf_inline(memory_leak_check):
+    """make sure UDFs with dataframe input are not inlined, but _bodo_inline=True can
+    be used to force inlining.
+    """
+
+    def g(r, df, _bodo_inline=False):
+        return r.A + df.A.sum()
+
+    def impl1(df, df2):
+        return df.apply(g, axis=1, df=df2)
+
+    def impl2(df, df2):
+        return df.apply(g, axis=1, df=df2, _bodo_inline=True)
+
+    j_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(impl1)
+    df = pd.DataFrame({"A": [1, 2, 3, 4], "B": [4, 5, 6, 7]})
+    df2 = pd.DataFrame({"A": [1, 2, 3, 4], "B": [4, 5, 6, 7]})
+    # check correctness first
+    pd.testing.assert_series_equal(j_func(df, df2), impl1(df, df2))
+    fir = j_func.overloads[j_func.signatures[0]].metadata["preserved_ir"]
+    assert has_udf_call(fir)
+
+    j_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(impl2)
+    # check correctness first
+    pd.testing.assert_series_equal(j_func(df, df2), impl2(df, df2))
+    fir = j_func.overloads[j_func.signatures[0]].metadata["preserved_ir"]
+    assert not has_udf_call(fir)
 
 
 def test_df_drop_inplace_branch(memory_leak_check):

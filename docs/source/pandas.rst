@@ -568,6 +568,9 @@ Indexing, iteration:
 Function application, GroupBy & Window:
 
 * :meth:`pandas.DataFrame.apply`
+  Supports extra `_bodo_inline` boolean argument to manually control bodo's inlining behavior.
+  Inlining user-defined functions (UDFs) can potentially improve performance at the expense of
+  extra compilation time. Bodo uses heuristics to make a decision automatically if `_bodo_inline` is not provided.
 * :meth:`pandas.DataFrame.groupby` `by` should be a constant column label
   or column labels.
   `sort=False` is set by default. `as_index` argument is supported.
