@@ -4134,6 +4134,13 @@ def test_random_series_any(memory_leak_check):
     check_func(impl, (S,))
 
 
+def test_series_dropna_series_val(memory_leak_check, series_val):
+    def impl(S):
+        return S.dropna()
+
+    check_func(impl, (series_val,))
+
+
 def test_series_groupby_arr(memory_leak_check):
     """test Series.groupby() with input array as keys"""
 

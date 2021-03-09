@@ -104,3 +104,19 @@ def test_series_map_runtime_categorical(memory_leak_check):
         match="UDFs or Groupbys that return Categorical values must have categories known at compile time.",
     ):
         bodo.jit(impl)(S)
+
+
+def test_series_dropna_axis_error(memory_leak_check):
+    S = pd.Series([0, np.nan, 1])
+
+    match = "axis parameter only supports default value 0"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(lambda: S.dropna(axis=1))()
+
+
+def test_series_dropna_inplace_error(memory_leak_check):
+    S = pd.Series([0, np.nan, 1])
+
+    match = "inplace parameter only supports default value False"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(lambda: S.dropna(inplace=True))()
