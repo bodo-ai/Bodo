@@ -404,55 +404,82 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
 
 @overload_method(SeriesStrMethodType, "contains", no_unliteral=True)
 def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, regex=True):
-    not_supported_arg_check("contains", "case", case, True)
     not_supported_arg_check("contains", "na", na, np.nan)
     str_arg_check("contains", "pat", pat)
-    int_arg_check("contians", "flags", flags)
+    int_arg_check("contains", "flags", flags)
     # TODO: support other arguments
     # TODO: support dynamic values for regex
+
+    # Error checking for regex argument
+    if not is_overload_constant_bool(regex):
+        raise BodoError(
+            "Series.str.contains(): 'regex' argument should be a constant boolean"
+        )
+    # Error checking for case argument
+    if not is_overload_constant_bool(case):
+        raise BodoError(
+            "Series.str.contains(): 'case' argument should be a constant boolean"
+        )
+
+    # Get value of re.IGNORECASE. It cannot be computed inside the impl
+    # since this is a custom enum class (not regular Enum) and numba doesn't
+    # support it. https://numba.readthedocs.io/en/stable/reference/pysupported.html#enum
+    re_ignorecase_value = re.IGNORECASE.value
+
+    func_text = "def impl(\n"
+    func_text += "    S_str, pat, case=True, flags=0, na=np.nan, regex=True\n"
+    func_text += "):\n"
+    func_text += "  S = S_str._obj\n"
+    func_text += "  arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "  index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+    func_text += "  numba.parfors.parfor.init_prange()\n"
+
     if is_overload_true(regex):
+        if is_overload_false(case):
+            # Modify re flag to ignore case
+            func_text += "  flags |= re_ignorecase_value\n"
+        func_text += "  e = re.compile(pat, flags)\n"
 
-        def _str_contains_regex_impl(
-            S_str, pat, case=True, flags=0, na=np.nan, regex=True
-        ):  # pragma: no cover
-            S = S_str._obj
-            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            index = bodo.hiframes.pd_series_ext.get_series_index(S)
-            name = bodo.hiframes.pd_series_ext.get_series_name(S)
-            numba.parfors.parfor.init_prange()
-            e = re.compile(pat, flags)
-            l = len(arr)
-            out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)
-            for i in numba.parfors.parfor.internal_prange(l):
-                if bodo.libs.array_kernels.isna(arr, i):
-                    bodo.libs.array_kernels.setna(out_arr, i)
-                else:
-                    out_arr[i] = bodo.libs.str_ext.contains_regex(e, arr[i])
-            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+    func_text += "  l = len(arr)\n"
+    func_text += "  out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
 
-        return _str_contains_regex_impl
+    # Only needed for the non-regex case-insensitive case
+    if is_overload_false(regex) and is_overload_false(case):
+        func_text += "  upper_pat = pat.upper()\n"
 
-    if not is_overload_false(regex):
-        raise BodoError("Series.str.contains(): regex argument should be bool")
+    func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
+    func_text += "      if bodo.libs.array_kernels.isna(arr, i):\n"
+    func_text += "          bodo.libs.array_kernels.setna(out_arr, i)\n"
+    func_text += "      else:\n"
 
-    def _str_contains_noregex_impl(
-        S_str, pat, case=True, flags=0, na=np.nan, regex=True
-    ):  # pragma: no cover
-        S = S_str._obj
-        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        index = bodo.hiframes.pd_series_ext.get_series_index(S)
-        name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        numba.parfors.parfor.init_prange()
-        l = len(arr)
-        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)
-        for i in numba.parfors.parfor.internal_prange(l):
-            if bodo.libs.array_kernels.isna(arr, i):
-                bodo.libs.array_kernels.setna(out_arr, i)
-            else:
-                out_arr[i] = pat in arr[i]
-        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+    if is_overload_true(regex):
+        func_text += (
+            "          out_arr[i] = bodo.libs.str_ext.contains_regex(e, arr[i])\n"
+        )
+    else:
+        if is_overload_true(case):
+            func_text += "          out_arr[i] = pat in arr[i]\n"
+        else:
+            func_text += "          out_arr[i] = upper_pat in arr[i].upper()\n"
+    func_text += (
+        "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+    )
 
-    return _str_contains_noregex_impl
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "re": re,
+            "bodo": bodo,
+            "numba": numba,
+            "np": np,
+            "re_ignorecase_value": re_ignorecase_value,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
 
 
 @overload_method(SeriesStrMethodType, "count", inline="always", no_unliteral=True)

@@ -358,13 +358,8 @@ def test_contains_args(test_sr, memory_leak_check):
     def impl(test_sr):
         return test_sr.str.contains("New", na=np.nan)
 
-    def impl2(test_sr):
-        return test_sr.str.contains("New", case=False)
-
     with pytest.raises(BodoError, match="is not supported"):
         bodo.jit(impl)(test_sr)
-    with pytest.raises(BodoError, match="is not supported"):
-        bodo.jit(impl2)(test_sr)
 
 
 def test_contains_flags(test_sr, memory_leak_check):
@@ -376,6 +371,32 @@ def test_contains_flags(test_sr, memory_leak_check):
         return test_sr.str.contains("New", flags="x")
 
     with pytest.raises(BodoError, match="expected an int object"):
+        bodo.jit(impl)(test_sr)
+
+
+def test_contains_regex(test_sr, memory_leak_check):
+    """
+    tests error for contains argument regex being incorrect type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.contains("New", regex="x")
+
+    with pytest.raises(
+        BodoError, match="'regex' argument should be a constant boolean"
+    ):
+        bodo.jit(impl)(test_sr)
+
+
+def test_contains_case(test_sr, memory_leak_check):
+    """
+    tests error for contains argument case being incorrect type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.contains("New", case="x")
+
+    with pytest.raises(BodoError, match="'case' argument should be a constant boolean"):
         bodo.jit(impl)(test_sr)
 
 

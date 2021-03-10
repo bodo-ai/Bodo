@@ -476,7 +476,7 @@ String handling:
 
 * :meth:`pandas.Series.str.capitalize`
 * :meth:`pandas.Series.str.center`
-* :meth:`pandas.Series.str.contains` `regex` argument supported.
+* :meth:`pandas.Series.str.contains` `regex` and `case` arguments supported.
 * :meth:`pandas.Series.str.count`
 * :meth:`pandas.Series.str.endswith`
 * :meth:`pandas.Series.str.extract` (input pattern should be a constant string)

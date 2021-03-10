@@ -422,26 +422,36 @@ def test_replace_noregex(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,))
 
 
-def test_contains_regex(test_unicode, memory_leak_check):
+@pytest.mark.parametrize("case", [True, False])
+def test_contains_regex(test_unicode, case, memory_leak_check):
     def test_impl(S):
-        return S.str.contains("AB*", regex=True)
+        return S.str.contains("AB*", regex=True, case=case)
 
     def test_impl2(S):
-        return S.str.contains("피츠버*", regex=True)
+        return S.str.contains("피츠버*", regex=True, case=case)
+
+    def test_impl3(S):
+        return S.str.contains("ab*", regex=True, case=case)
 
     check_func(test_impl, (test_unicode,))
     check_func(test_impl2, (test_unicode,))
+    check_func(test_impl3, (test_unicode,))
 
 
-def test_contains_noregex(test_unicode, memory_leak_check):
+@pytest.mark.parametrize("case", [True, False])
+def test_contains_noregex(test_unicode, case, memory_leak_check):
     def test_impl(S):
-        return S.str.contains("AB", regex=False)
+        return S.str.contains("AB", regex=False, case=case)
 
     def test_impl2(S):
-        return S.str.contains("피츠버그", regex=False)
+        return S.str.contains("피츠버그", regex=False, case=case)
+
+    def test_impl3(S):
+        return S.str.contains("ab", regex=False, case=case)
 
     check_func(test_impl, (test_unicode,))
     check_func(test_impl2, (test_unicode,))
+    check_func(test_impl3, (test_unicode,))
 
 
 def test_extract(test_unicode, memory_leak_check):
