@@ -1967,7 +1967,7 @@ def _dtype_val_to_arr_type(t):
     e.g. "str" -> string_array_type
     """
 
-    if t in ("str", str):
+    if t in ("str", str, "unicode"):
         return string_array_type
 
     if isinstance(t, str):

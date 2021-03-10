@@ -2343,6 +2343,18 @@ def test_read_parquet_all_null_col_subsets(col_subset, memory_leak_check, datapa
     check_func(test_impl, (fname,), py_output=py_output)
 
 
+def test_csv_dtype_unicode(memory_leak_check):
+    """
+    Tests read_csv using dtype="unicode"
+    """
+
+    def test_impl(fname):
+        return pd.read_csv(fname, names=["A", "B", "C", "D"], dtype="unicode")
+
+    fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
+    check_func(test_impl, (fname,))
+
+
 @pytest.mark.slow
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
