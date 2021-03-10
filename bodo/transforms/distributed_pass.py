@@ -3359,6 +3359,8 @@ class DistributedPass:
         if reduce_op == Reduce_Type.Min:
             if el_typ == types.bool_:
                 init_val = "True"
+            elif el_typ == bodo.datetime_date_type:
+                init_val = "bodo.hiframes.series_kernels._get_date_max_value()"
             else:
                 init_val = "numba.cpython.builtins.get_type_max_value(np.ones(1,dtype=np.{}).dtype)".format(
                     el_typ
@@ -3366,6 +3368,8 @@ class DistributedPass:
         if reduce_op == Reduce_Type.Max:
             if el_typ == types.bool_:
                 init_val = "False"
+            elif el_typ == bodo.datetime_date_type:
+                init_val = "bodo.hiframes.series_kernels._get_date_min_value()"
             else:
                 init_val = "numba.cpython.builtins.get_type_min_value(np.ones(1,dtype=np.{}).dtype)".format(
                     el_typ

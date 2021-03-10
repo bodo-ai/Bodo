@@ -12,6 +12,7 @@ from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import overload, overload_attribute, overload_method
 
 import bodo
+from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
 from bodo.hiframes.pd_categorical_ext import (
@@ -1056,6 +1057,29 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
 
         return impl_cat
 
+    # TODO: Setup datetime_date_array.dtype() so we can reuse impl
+    if S.dtype == datetime_date_type:
+
+        def impl_date(
+            S, axis=None, skipna=None, level=None, numeric_only=None
+        ):  # pragma: no cover
+            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            numba.parfors.parfor.init_prange()
+            s = bodo.hiframes.series_kernels._get_date_max_value()
+            count = 0
+            for i in numba.parfors.parfor.internal_prange(len(in_arr)):
+                val = s
+                count_val = 0
+                if not bodo.libs.array_kernels.isna(in_arr, i):
+                    val = in_arr[i]
+                    count_val = 1
+                s = min(s, val)
+                count += count_val
+            res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
+            return res
+
+        return impl_date
+
     def impl(
         S, axis=None, skipna=None, level=None, numeric_only=None
     ):  # pragma: no cover
@@ -1172,6 +1196,29 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
             return res
 
         return impl_cat
+
+    # TODO: Setup datetime_date_array.dtype() so we can reuse impl
+    if S.dtype == datetime_date_type:
+
+        def impl_date(
+            S, axis=None, skipna=None, level=None, numeric_only=None
+        ):  # pragma: no cover
+            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            numba.parfors.parfor.init_prange()
+            s = bodo.hiframes.series_kernels._get_date_min_value()
+            count = 0
+            for i in numba.parfors.parfor.internal_prange(len(in_arr)):
+                val = s
+                count_val = 0
+                if not bodo.libs.array_kernels.isna(in_arr, i):
+                    val = in_arr[i]
+                    count_val = 1
+                s = max(s, val)
+                count += count_val
+            res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
+            return res
+
+        return impl_date
 
     def impl(
         S, axis=None, skipna=None, level=None, numeric_only=None

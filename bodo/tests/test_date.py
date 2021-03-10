@@ -14,6 +14,51 @@ from bodo.utils.typing import BodoError
 
 
 # ------------------------- Test datetime OPs ------------------------- #
+def test_datetime_date_series_min_max(memory_leak_check):
+    """
+    Test Series.min() and Series.max() with a datetime.date Series.
+    """
+    np.random.seed(1)
+    date_arr = pd.date_range(start="2/1/2021", end="3/8/2021").date
+    np.random.shuffle(date_arr)
+    S = pd.Series(date_arr)
+
+    def impl_min(S):
+        return S.min()
+
+    def impl_max(S):
+        return S.max()
+
+    check_func(impl_min, (S,))
+    check_func(impl_max, (S,))
+
+
+def test_datetime_date_series_min_max_none(memory_leak_check):
+    """
+    Test Series.min() and Series.max() with a datetime.date Series
+    and a None entry. This isn't supported in Pandas but should work
+    in Bodo.
+    """
+    np.random.seed(1)
+    date_arr = pd.date_range(start="2/1/2021", end="3/8/2021").date
+    np.random.shuffle(date_arr)
+    S = pd.Series(date_arr)
+    S.iat[10] = None
+
+    def impl_min(S):
+        return S.min()
+
+    def impl_max(S):
+        return S.max()
+
+    # Comparison with None isn't supported in Python, so provide
+    # py_output
+    py_output = S.dropna().min()
+    check_func(impl_min, (S,), py_output=py_output)
+    py_output = S.dropna().max()
+    check_func(impl_max, (S,), py_output=py_output)
+
+
 def test_datetime_operations(memory_leak_check):
     """
     Test operations of datetime module objects in Bodo

@@ -2,10 +2,12 @@
 """Some kernels for Series related functions. This is a legacy file that needs to be
 refactored.
 """
+import datetime
+
 import numba
 import numpy as np
 from numba.core import types
-from numba.extending import overload
+from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.libs.int_arr_ext import IntDtype
@@ -107,6 +109,11 @@ def _get_type_max_value_overload(dtype):
     return lambda dtype: numba.cpython.builtins.get_type_max_value(dtype)
 
 
+@register_jitable
+def _get_date_max_value():  # pragma: no cover
+    return datetime.date(datetime.MAXYEAR, 12, 31)
+
+
 def _get_type_min_value(dtype):  # pragma: no cover
     return 0
 
@@ -132,6 +139,11 @@ def _get_type_min_value_overload(dtype):
     return lambda dtype: numba.cpython.builtins.get_type_min_value(
         dtype
     )  # pragma: no cover
+
+
+@register_jitable
+def _get_date_min_value():  # pragma: no cover
+    return datetime.date(datetime.MINYEAR, 1, 1)
 
 
 @overload(min)
