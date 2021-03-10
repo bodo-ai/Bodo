@@ -6,6 +6,40 @@ import bodo
 from bodo.utils.typing import BodoError
 
 
+# TODO: Mark as slow after CI passes
+def test_df_iat_getitem_nonconstant(memory_leak_check):
+    """
+    Tests DataFrame.iat when the column index isn't a constant.
+    """
+
+    def test_impl(idx):
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.iat[0, idx[0]]
+
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.iat getitem: column index must be a constant integer",
+    ):
+        bodo.jit(test_impl)([0])
+
+
+# TODO: Mark as slow after CI passes
+def test_df_iat_getitem_str(memory_leak_check):
+    """
+    Tests DataFrame.iat when the row index isn't an integer.
+    """
+
+    def test_impl():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        return df.iat["a", 0]
+
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.iat: iAt based indexing can only have integer indexers",
+    ):
+        bodo.jit(test_impl)()
+
+
 @pytest.mark.slow
 def test_df_rename_errors(memory_leak_check):
     """

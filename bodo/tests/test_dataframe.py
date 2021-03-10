@@ -3603,6 +3603,33 @@ def test_loc_setitem_str(memory_leak_check):
     check_func(impl, (df,), copy_input=True, only_1D=True)
 
 
+def test_iat_getitem(df_value, memory_leak_check):
+    """test df.iat[] getitem (single value)"""
+
+    def impl(df, n):
+        return df.iat[n - 1, 0]
+
+    df = df_value.copy(deep=True)
+    n = 1
+
+    # Returning NaN won't match because of Bodo's strict typing
+    # Replace all NaN with a different value.
+    if pd.isna(df.iat[n - 1, 0]):
+        df[df.columns[0]] = df[df.columns[0]].fillna(1)
+
+    # Bodo Limitation: Distributed Version not supported for Categorical Arrays or
+    # nullable integer arrays.
+    # TODO: [BE-319] support it.
+    if isinstance(
+        df.dtypes.iat[0], (pd.CategoricalDtype, pd.core.arrays.integer._IntegerDtype)
+    ):
+        dist_test = False
+    else:
+        dist_test = True
+
+    check_func(impl, (df, n), dist_test=dist_test)
+
+
 @pytest.mark.smoke
 def test_iat_setitem():
     """test df.iat[] setitem (single value)"""

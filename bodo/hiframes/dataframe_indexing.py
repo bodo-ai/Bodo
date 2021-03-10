@@ -532,11 +532,15 @@ def overload_iat_getitem(I, idx):
     df = I.df_type
 
     # df.iat[1,0]
-    if (
-        isinstance(idx, types.BaseTuple)
-        and len(idx) == 2
-        and is_overload_constant_int(idx.types[1])
-    ):
+    if isinstance(idx, types.BaseTuple) and len(idx) == 2:
+        if not isinstance(idx.types[0], types.Integer):
+            raise BodoError(
+                "DataFrame.iat: iAt based indexing can only have integer indexers"
+            )
+        if not is_overload_constant_int(idx.types[1]):
+            raise_bodo_error(
+                "DataFrame.iat getitem: column index must be a constant integer"
+            )
         col_ind = get_overload_const_int(idx.types[1])
 
         def impl_col_ind(I, idx):  # pragma: no cover
@@ -546,7 +550,6 @@ def overload_iat_getitem(I, idx):
 
         return impl_col_ind
 
-    # TODO: error-checking test
     raise BodoError(
         "df.iat[] getitem using {} not supported".format(idx)
     )  # pragma: no cover
