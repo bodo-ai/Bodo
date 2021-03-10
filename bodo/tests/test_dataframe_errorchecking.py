@@ -6,10 +6,10 @@ import bodo
 from bodo.utils.typing import BodoError
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_df_iat_getitem_nonconstant(memory_leak_check):
     """
-    Tests DataFrame.iat when the column index isn't a constant.
+    Tests DataFrame.iat getitem when the column index isn't a constant.
     """
 
     def test_impl(idx):
@@ -23,10 +23,10 @@ def test_df_iat_getitem_nonconstant(memory_leak_check):
         bodo.jit(test_impl)([0])
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_df_iat_getitem_str(memory_leak_check):
     """
-    Tests DataFrame.iat when the row index isn't an integer.
+    Tests DataFrame.iat getitem when the row index isn't an integer.
     """
 
     def test_impl():
@@ -38,6 +38,61 @@ def test_df_iat_getitem_str(memory_leak_check):
         match="DataFrame.iat: iAt based indexing can only have integer indexers",
     ):
         bodo.jit(test_impl)()
+
+
+# TODO: Mark as slow after CI passes
+def test_df_iat_setitem_nonconstant(memory_leak_check):
+    """
+    Tests DataFrame.iat setitem when the column index isn't a constant.
+    """
+
+    def test_impl(idx):
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        df.iat[0, idx[0]] = 2
+        return df
+
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.iat setitem: column index must be a constant integer",
+    ):
+        bodo.jit(test_impl)([0])
+
+
+# TODO: Mark as slow after CI passes
+def test_df_iat_setitem_str(memory_leak_check):
+    """
+    Tests DataFrame.iat setitem when the row index isn't an integer.
+    """
+
+    def test_impl():
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        df.iat["a", 0] = 2
+        return df
+
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.iat: iAt based indexing can only have integer indexers",
+    ):
+        bodo.jit(test_impl)()
+
+
+# TODO: Mark as slow after CI passes
+def test_df_iat_setitem_immutable_array(memory_leak_check):
+    """
+    Tests DataFrame.iat setitem with an immutable array.
+    """
+
+    def test_impl(df):
+        df.iat[0, 0] = [1, 2, 2]
+        return df
+
+    df = pd.DataFrame({"A": [[1, 2, 3], [2, 1, 1], [1, 2, 3], [2, 1, 1]]})
+
+    with pytest.raises(
+        BodoError,
+        match="DataFrame setitem not supported for column with immutable array type .*",
+    ):
+        bodo.jit(test_impl)(df)
 
 
 @pytest.mark.slow

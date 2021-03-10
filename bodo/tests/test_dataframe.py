@@ -3630,6 +3630,23 @@ def test_iat_getitem(df_value, memory_leak_check):
     check_func(impl, (df, n), dist_test=dist_test)
 
 
+def test_iat_setitem_all_types(df_value, memory_leak_check):
+    """test df.iat[] setitem (single value)"""
+
+    def impl(df, n, val):
+        df.iat[n - 1, 0] = val
+        return df
+
+    non_null_vals = df_value.dropna()
+    if len(non_null_vals) == 0:
+        # Only Nullable Int df has all nulls
+        val = 1
+    else:
+        val = non_null_vals.iat[0, 0]
+
+    check_func(impl, (df_value, len(df_value), val), copy_input=True)
+
+
 @pytest.mark.smoke
 def test_iat_setitem():
     """test df.iat[] setitem (single value)"""

@@ -24,6 +24,7 @@ from bodo.utils.typing import (
     get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
+    is_immutable_array,
     is_list_like_index_type,
     is_overload_constant_int,
     is_overload_constant_list,
@@ -529,8 +530,6 @@ def overload_iat_getitem(I, idx):
     if not isinstance(I, DataFrameIatType):
         return
 
-    df = I.df_type
-
     # df.iat[1,0]
     if isinstance(idx, types.BaseTuple) and len(idx) == 2:
         if not isinstance(idx.types[0], types.Integer):
@@ -561,20 +560,28 @@ def overload_iat_setitem(I, idx, val):
     if not isinstance(I, DataFrameIatType):
         return
 
-    df = I.df_type
-
     # df.iat[1,0]
-    if (
-        isinstance(idx, types.BaseTuple)
-        and len(idx) == 2
-        and is_overload_constant_int(idx.types[1])
-    ):
+    if isinstance(idx, types.BaseTuple) and len(idx) == 2:
+        if not isinstance(idx.types[0], types.Integer):
+            raise BodoError(
+                "DataFrame.iat: iAt based indexing can only have integer indexers"
+            )
+        if not is_overload_constant_int(idx.types[1]):
+            raise_bodo_error(
+                "DataFrame.iat setitem: column index must be a constant integer"
+            )
         col_ind = get_overload_const_int(idx.types[1])
+
+        # Bodo Restriction, cannot set item with immutable array.
+        if is_immutable_array(I.df_type.data[col_ind]):
+            raise BodoError(
+                f"DataFrame setitem not supported for column with immutable array type {I.df_type.data}"
+            )
 
         def impl_col_ind(I, idx, val):  # pragma: no cover
             df = I._obj
             data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
-            data[idx[0]] = val
+            data[idx[0]] = bodo.utils.conversion.unbox_if_timestamp(val)
 
         return impl_col_ind
 
