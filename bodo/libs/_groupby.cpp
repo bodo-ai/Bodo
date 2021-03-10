@@ -1945,27 +1945,32 @@ nunique_computation(array_info* arr, array_info* out_arr,
             }
             return false;
         };
-        size_t siztype = numpy_item_size[arr->dtype];
+        const size_t siztype = numpy_item_size[arr->dtype];
+
+        std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
+            char* ptr = arr->data1 + i * siztype;
+            size_t retval = 0;
+            memcpy(&retval, ptr, std::min(siztype, sizeof(size_t)));
+            return retval;
+        };
+        std::function<bool(int64_t, int64_t)> equal_fct =
+            [&](int64_t i1, int64_t i2) -> bool {
+            char* ptr1 = arr->data1 + i1 * siztype;
+            char* ptr2 = arr->data1 + i2 * siztype;
+            return memcmp(ptr1, ptr2, siztype) == 0;
+        };
+        UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
+                            std::function<bool(int64_t, int64_t)>>
+            eset({}, hash_fct, equal_fct);
+        eset.reserve(double(arr->length) / num_group);
+        eset.max_load_factor(0.4);
+
         for (size_t igrp = 0; igrp < num_group; igrp++) {
-            std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
-                char* ptr = arr->data1 + i * siztype;
-                size_t retval = 0;
-                memcpy(&retval, ptr, std::min(siztype, sizeof(size_t)));
-                return retval;
-            };
-            std::function<bool(int64_t, int64_t)> equal_fct =
-                [&](int64_t i1, int64_t i2) -> bool {
-                char* ptr1 = arr->data1 + i1 * siztype;
-                char* ptr2 = arr->data1 + i2 * siztype;
-                return memcmp(ptr1, ptr2, siztype) == 0;
-            };
-            UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
-                                std::function<bool(int64_t, int64_t)>>
-                eset({}, hash_fct, equal_fct);
             int64_t i = grp_info.group_to_first_row[igrp];
             // with nunique mode=2 some groups might not be present in the
             // nunique table
             if (i < 0) continue;
+            eset.clear();
             bool HasNullRow = false;
             while (true) {
                 char* ptr = arr->data1 + (i * siztype);
@@ -1982,107 +1987,70 @@ nunique_computation(array_info* arr, array_info* out_arr,
             out_arr->at<int64_t>(igrp) = size;
         }
     }
+
     if (arr->arr_type == bodo_array_type::LIST_STRING) {
         offset_t* in_index_offsets = (offset_t*)arr->data3;
         offset_t* in_data_offsets = (offset_t*)arr->data2;
         uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
-        uint32_t seed = SEED_HASH_CONTAINER;
-        for (size_t igrp = 0; igrp < num_group; igrp++) {
-            std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
-                // We do not put the lengths and bitmask in the hash
-                // computation. after all, it is just a hash
-                char* val_chars =
-                    arr->data1 + in_data_offsets[in_index_offsets[i]];
-                int len = in_data_offsets[in_index_offsets[i + 1]] -
-                          in_data_offsets[in_index_offsets[i]];
-                uint32_t val;
-                hash_string_32(val_chars, len, seed, &val);
-                return size_t(val);
-            };
-            std::function<bool(int64_t, int64_t)> equal_fct =
-                [&](int64_t i1, int64_t i2) -> bool {
-                bool bit1 = arr->get_null_bit(i1);
-                bool bit2 = arr->get_null_bit(i2);
-                if (bit1 != bit2)
-                    return false;  // That first case, might not be necessary.
-                size_t len1 = in_index_offsets[i1 + 1] - in_index_offsets[i1];
-                size_t len2 = in_index_offsets[i2 + 1] - in_index_offsets[i2];
-                if (len1 != len2) return false;
-                for (size_t u = 0; u < len1; u++) {
-                    offset_t len_str1 =
-                        in_data_offsets[in_index_offsets[i1] + 1] -
-                        in_data_offsets[in_index_offsets[i1]];
-                    offset_t len_str2 =
-                        in_data_offsets[in_index_offsets[i2] + 1] -
-                        in_data_offsets[in_index_offsets[i2]];
-                    if (len_str1 != len_str2) return false;
-                    bool bit1 = GetBit(sub_null_bitmask, in_index_offsets[i1]);
-                    bool bit2 = GetBit(sub_null_bitmask, in_index_offsets[i2]);
-                    if (bit1 != bit2) return false;
-                }
-                offset_t nb_char1 = in_data_offsets[in_index_offsets[i1 + 1]] -
-                                    in_data_offsets[in_index_offsets[i1]];
-                offset_t nb_char2 = in_data_offsets[in_index_offsets[i2 + 1]] -
-                                    in_data_offsets[in_index_offsets[i2]];
-                if (nb_char1 != nb_char2) return false;
-                char* ptr1 =
-                    arr->data1 +
-                    sizeof(offset_t) * in_data_offsets[in_index_offsets[i1]];
-                char* ptr2 =
-                    arr->data1 +
-                    sizeof(offset_t) * in_data_offsets[in_index_offsets[i2]];
-                return strncmp(ptr1, ptr2, len1) == 0;
-            };
-            UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
-                                std::function<bool(int64_t, int64_t)>>
-                eset({}, hash_fct, equal_fct);
-            int64_t i = grp_info.group_to_first_row[igrp];
-            // with nunique mode=2 some groups might not be present in the
-            // nunique table
-            if (i < 0) continue;
-            bool HasNullRow = false;
-            while (true) {
-                if (arr->get_null_bit(i)) {
-                    eset.insert(i);
-                } else {
-                    HasNullRow = true;
-                }
-                i = grp_info.next_row_in_group[i];
-                if (i == -1) break;
+        const uint32_t seed = SEED_HASH_CONTAINER;
+
+        std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
+            // We do not put the lengths and bitmask in the hash
+            // computation. after all, it is just a hash
+            char* val_chars =
+                arr->data1 + in_data_offsets[in_index_offsets[i]];
+            int len = in_data_offsets[in_index_offsets[i + 1]] -
+                      in_data_offsets[in_index_offsets[i]];
+            uint32_t val;
+            hash_string_32(val_chars, len, seed, &val);
+            return size_t(val);
+        };
+        std::function<bool(int64_t, int64_t)> equal_fct =
+            [&](int64_t i1, int64_t i2) -> bool {
+            bool bit1 = arr->get_null_bit(i1);
+            bool bit2 = arr->get_null_bit(i2);
+            if (bit1 != bit2)
+                return false;  // That first case, might not be necessary.
+            size_t len1 = in_index_offsets[i1 + 1] - in_index_offsets[i1];
+            size_t len2 = in_index_offsets[i2 + 1] - in_index_offsets[i2];
+            if (len1 != len2) return false;
+            for (size_t u = 0; u < len1; u++) {
+                offset_t len_str1 =
+                    in_data_offsets[in_index_offsets[i1] + 1] -
+                    in_data_offsets[in_index_offsets[i1]];
+                offset_t len_str2 =
+                    in_data_offsets[in_index_offsets[i2] + 1] -
+                    in_data_offsets[in_index_offsets[i2]];
+                if (len_str1 != len_str2) return false;
+                bool bit1 = GetBit(sub_null_bitmask, in_index_offsets[i1]);
+                bool bit2 = GetBit(sub_null_bitmask, in_index_offsets[i2]);
+                if (bit1 != bit2) return false;
             }
-            int64_t size = eset.size();
-            if (HasNullRow && !dropna) size++;
-            out_arr->at<int64_t>(igrp) = size;
-        }
-    }
-    if (arr->arr_type == bodo_array_type::STRING) {
-        offset_t* in_offsets = (offset_t*)arr->data2;
-        uint32_t seed = SEED_HASH_CONTAINER;
+            offset_t nb_char1 = in_data_offsets[in_index_offsets[i1 + 1]] -
+                                in_data_offsets[in_index_offsets[i1]];
+            offset_t nb_char2 = in_data_offsets[in_index_offsets[i2 + 1]] -
+                                in_data_offsets[in_index_offsets[i2]];
+            if (nb_char1 != nb_char2) return false;
+            char* ptr1 =
+                arr->data1 +
+                sizeof(offset_t) * in_data_offsets[in_index_offsets[i1]];
+            char* ptr2 =
+                arr->data1 +
+                sizeof(offset_t) * in_data_offsets[in_index_offsets[i2]];
+            return strncmp(ptr1, ptr2, len1) == 0;
+        };
+        UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
+                            std::function<bool(int64_t, int64_t)>>
+            eset({}, hash_fct, equal_fct);
+        eset.reserve(double(arr->length) / num_group);
+        eset.max_load_factor(0.4);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
-            std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
-                char* val_chars = arr->data1 + in_offsets[i];
-                size_t len = in_offsets[i + 1] - in_offsets[i];
-                uint32_t val;
-                hash_string_32(val_chars, len, seed, &val);
-                return size_t(val);
-            };
-            std::function<bool(int64_t, int64_t)> equal_fct =
-                [&](int64_t i1, int64_t i2) -> bool {
-                size_t len1 = in_offsets[i1 + 1] - in_offsets[i1];
-                size_t len2 = in_offsets[i2 + 1] - in_offsets[i2];
-                if (len1 != len2) return false;
-                char* ptr1 = arr->data1 + in_offsets[i1];
-                char* ptr2 = arr->data1 + in_offsets[i2];
-                return strncmp(ptr1, ptr2, len1) == 0;
-            };
-            UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
-                                std::function<bool(int64_t, int64_t)>>
-                eset({}, hash_fct, equal_fct);
             int64_t i = grp_info.group_to_first_row[igrp];
             // with nunique mode=2 some groups might not be present in the
             // nunique table
             if (i < 0) continue;
+            eset.clear();
             bool HasNullRow = false;
             while (true) {
                 if (arr->get_null_bit(i)) {
@@ -2098,31 +2066,81 @@ nunique_computation(array_info* arr, array_info* out_arr,
             out_arr->at<int64_t>(igrp) = size;
         }
     }
-    if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        size_t siztype = numpy_item_size[arr->dtype];
+
+    if (arr->arr_type == bodo_array_type::STRING) {
+        offset_t* in_offsets = (offset_t*)arr->data2;
+        const uint32_t seed = SEED_HASH_CONTAINER;
+
+        std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
+            char* val_chars = arr->data1 + in_offsets[i];
+            size_t len = in_offsets[i + 1] - in_offsets[i];
+            uint32_t val;
+            hash_string_32(val_chars, len, seed, &val);
+            return size_t(val);
+        };
+        std::function<bool(int64_t, int64_t)> equal_fct =
+            [&](int64_t i1, int64_t i2) -> bool {
+            size_t len1 = in_offsets[i1 + 1] - in_offsets[i1];
+            size_t len2 = in_offsets[i2 + 1] - in_offsets[i2];
+            if (len1 != len2) return false;
+            char* ptr1 = arr->data1 + in_offsets[i1];
+            char* ptr2 = arr->data1 + in_offsets[i2];
+            return strncmp(ptr1, ptr2, len1) == 0;
+        };
+        UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
+                            std::function<bool(int64_t, int64_t)>>
+            eset({}, hash_fct, equal_fct);
+        eset.reserve(double(arr->length) / num_group);
+        eset.max_load_factor(0.4);
+
         for (size_t igrp = 0; igrp < num_group; igrp++) {
-            std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
-                char* ptr = arr->data1 + i * siztype;
-                size_t retval = 0;
-                size_t* size_t_ptrA = &retval;
-                char* size_t_ptrB = (char*)size_t_ptrA;
-                for (size_t i = 0; i < std::min(siztype, sizeof(size_t)); i++)
-                    size_t_ptrB[i] = ptr[i];
-                return retval;
-            };
-            std::function<bool(int64_t, int64_t)> equal_fct =
-                [&](int64_t i1, int64_t i2) -> bool {
-                char* ptr1 = arr->data1 + i1 * siztype;
-                char* ptr2 = arr->data1 + i2 * siztype;
-                return memcmp(ptr1, ptr2, siztype) == 0;
-            };
-            UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
-                                std::function<bool(int64_t, int64_t)>>
-                eset({}, hash_fct, equal_fct);
             int64_t i = grp_info.group_to_first_row[igrp];
             // with nunique mode=2 some groups might not be present in the
             // nunique table
             if (i < 0) continue;
+            eset.clear();
+            bool HasNullRow = false;
+            while (true) {
+                if (arr->get_null_bit(i)) {
+                    eset.insert(i);
+                } else {
+                    HasNullRow = true;
+                }
+                i = grp_info.next_row_in_group[i];
+                if (i == -1) break;
+            }
+            int64_t size = eset.size();
+            if (HasNullRow && !dropna) size++;
+            out_arr->at<int64_t>(igrp) = size;
+        }
+    }
+
+    if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        const size_t siztype = numpy_item_size[arr->dtype];
+        std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
+            char* ptr = arr->data1 + i * siztype;
+            size_t retval = 0;
+            memcpy(&retval, ptr, std::min(siztype, sizeof(size_t)));
+            return retval;
+        };
+        std::function<bool(int64_t, int64_t)> equal_fct =
+            [&](int64_t i1, int64_t i2) -> bool {
+            char* ptr1 = arr->data1 + i1 * siztype;
+            char* ptr2 = arr->data1 + i2 * siztype;
+            return memcmp(ptr1, ptr2, siztype) == 0;
+        };
+        UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
+                            std::function<bool(int64_t, int64_t)>>
+            eset({}, hash_fct, equal_fct);
+        eset.reserve(double(arr->length) / num_group);
+        eset.max_load_factor(0.4);
+
+        for (size_t igrp = 0; igrp < num_group; igrp++) {
+            int64_t i = grp_info.group_to_first_row[igrp];
+            // with nunique mode=2 some groups might not be present in the
+            // nunique table
+            if (i < 0) continue;
+            eset.clear();
             bool HasNullRow = false;
             while (true) {
                 if (arr->get_null_bit(i)) {
@@ -4845,6 +4863,12 @@ class GroupbyPipeline {
                 nunique_grp_shuffle_after = true;
                 nunique_mode = 2;
             }
+            // XXX Disable nunique modes != 1 for now
+            nunique_mode = 1;
+            nunique_only = false;
+            shuffle_before_update = true;
+            nunique_grp_shuffle_before = true;
+            nunique_grp_shuffle_after = false;
         }
         // If it's just nunique we set count to 0 as we won't add in_table to
         // our list of tables Otherwise, set to 1 as 0 is reserved for in_table

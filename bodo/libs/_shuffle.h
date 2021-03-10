@@ -5,6 +5,29 @@
 #include <mpi.h>
 #include "_bodo_common.h"
 
+#if 0
+
+#define PRIME 109345121  // prime number larger than n_pes
+// random integers from [0, PRIME-1], with SCALE > 0
+#define SCALE 30457  // 1 + random.randrange(PRIME - 1)
+#define SHIFT 84577466  // random.randrange(PRIME)
+
+inline size_t hash_to_rank(uint32_t hash, int n_pes) {
+    return (((size_t)hash * SCALE + SHIFT) % PRIME) % (size_t)n_pes;
+}
+
+#undef PRIME
+#undef SCALE
+#undef SHIFT
+
+#else
+
+inline size_t hash_to_rank(uint32_t hash, int n_pes) {
+    return (size_t)hash % (size_t)n_pes;
+}
+
+#endif
+
 /**
  * @brief shuffle information used to reverse shuffle later
  *
@@ -71,7 +94,7 @@ table_info* coherent_shuffle_table(table_info* in_table, table_info* ref_table,
  *
  * @param in_table     : the input table.
  * @param hashes       : the array containing the values to be
- *                       i_node = hashes[i_row] % n_pes
+ *                       i_node = hash_to_rank(i_row, n_pes)
  *                       for the nodes of rank not equal to 0.
  * @param comm_info    : the array for the communication.
  * @return the new table after the shuffling.
@@ -197,7 +220,7 @@ inline void fill_recv_data_inner(T* recv_buff, T* data, uint32_t* hashes,
                                  int n_pes, size_t n_rows) {
     std::vector<int64_t> tmp_offset(send_disp);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i], n_pes);
         int64_t ind = tmp_offset[node];
         data[i] = recv_buff[ind];
         tmp_offset[node]++;

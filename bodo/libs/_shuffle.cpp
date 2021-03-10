@@ -84,7 +84,7 @@ static void calc_disp(std::vector<T>& disps, std::vector<T> const& counts) {
 void mpi_comm_info::set_counts(uint32_t* hashes) {
     // get send count
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i], n_pes);
         send_count[node]++;
     }
     // get recv count
@@ -104,7 +104,7 @@ void mpi_comm_info::set_counts(uint32_t* hashes) {
             offset_t* offsets = (offset_t*)arr_info->data2;
             for (size_t i = 0; i < n_rows; i++) {
                 offset_t str_len = offsets[i + 1] - offsets[i];
-                size_t node = (size_t)hashes[i] % (size_t)n_pes;
+                size_t node = hash_to_rank(hashes[i], n_pes);
                 sub_counts[node] += str_len;
             }
             // get recv count
@@ -122,7 +122,7 @@ void mpi_comm_info::set_counts(uint32_t* hashes) {
             offset_t* index_offsets = (offset_t*)arr_info->data3;
             offset_t* data_offsets = (offset_t*)arr_info->data2;
             for (size_t i = 0; i < n_rows; i++) {
-                size_t node = (size_t)hashes[i] % (size_t)n_pes;
+                size_t node = hash_to_rank(hashes[i], n_pes);
                 offset_t len_sub = index_offsets[i + 1] - index_offsets[i];
                 offset_t len_sub_sub = data_offsets[index_offsets[i + 1]] -
                                        data_offsets[index_offsets[i]];
@@ -164,7 +164,7 @@ static void fill_send_array_inner(T* send_buff, const T* data,
                                   int n_pes, size_t n_rows) {
     std::vector<int64_t> tmp_offset(send_disp);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i], n_pes);
         int64_t ind = tmp_offset[node];
         send_buff[ind] = data[i];
         tmp_offset[node]++;
@@ -177,7 +177,7 @@ static void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data,
                                           int n_pes, size_t n_rows) {
     std::vector<int64_t> tmp_offset(send_disp);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i], n_pes);
         int64_t ind = tmp_offset[node];
         // send_buff[ind] = data[i];
         memcpy(send_buff + ind * BYTES_PER_DECIMAL,
@@ -207,7 +207,7 @@ static void fill_send_array_string_inner(
     std::vector<int64_t> tmp_offset(send_disp);
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i], n_pes);
         // write length
         int64_t ind = tmp_offset[node];
         uint32_t str_len = arr_offsets[i + 1] - arr_offsets[i];
@@ -249,7 +249,7 @@ static void fill_send_array_list_string_inner(
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
     std::vector<int64_t> tmp_offset_sub_sub(send_disp_sub_sub);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i], n_pes);
         // Compute the number of strings and the number of characters that will
         // have to be sent.
         int64_t ind = tmp_offset[node];
@@ -284,7 +284,7 @@ static void fill_send_array_null_inner(
     std::vector<int64_t> const& send_disp_null, int n_pes, size_t n_rows) {
     std::vector<int64_t> tmp_offset(n_pes, 0);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i], n_pes);
         int64_t ind = tmp_offset[node];
         // write null bit
         bool bit = GetBit(array_null_bitmask, i);
@@ -443,7 +443,7 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
     std::vector<int64_t> send_count(n_pes), recv_count(n_pes);
     offset_t* index_offset = (offset_t*)in_arr->data3;
     for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i_row], n_pes);
         offset_t len = index_offset[i_row + 1] - index_offset[i_row];
         send_count[node] += len;
     }
@@ -470,7 +470,7 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
     uint8_t* sub_null_bitmap = (uint8_t*)in_arr->sub_null_bitmask;
     std::vector<int64_t> shift(n_pes, 0);
     for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i_row], n_pes);
         offset_t len = index_offset[i_row + 1] - index_offset[i_row];
         for (offset_t u = 0; u < len; u++) {
             bool bit = GetBit(sub_null_bitmap, pos_index + u);
@@ -664,7 +664,7 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_offset_buffer(
     std::vector<int64_t> send_len(n_rows);
     std::vector<int64_t> list_shift = send_disp;
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i_row], n_pes);
         int64_t off1 = input_array->value_offset(i_row);
         int64_t off2 = input_array->value_offset(i_row + 1);
         offset_t e_len = off2 - off1;
@@ -735,7 +735,7 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
     char* values = (char*)input_array->values()->data();
     std::vector<int64_t> tmp_offset(send_disp);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i], n_pes);
         int64_t ind = tmp_offset[node];
         memcpy(send_arr.data() + ind * siztype, values + i * siztype, siztype);
         tmp_offset[node]++;
@@ -769,7 +769,7 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     std::vector<int64_t> send_count_char(n_pes, 0);
     std::vector<int64_t> recv_count_char(n_pes);
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i_row], n_pes);
         std::string e_str = string_array->GetString(i_row);
         int64_t n_char = e_str.size();
         send_count_char[node] += n_char;
@@ -796,7 +796,7 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     char* recv_char = (char*)buffer->mutable_data();
     std::vector<int64_t> list_shift = send_disp_char;
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i_row], n_pes);
         std::string e_str = string_array->GetString(i_row);
         int64_t n_char = e_str.size();
         for (int64_t i_char = 0; i_char < n_char; i_char++) {
@@ -828,7 +828,7 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
     std::vector<int64_t> send_count(n_pes, 0);
     std::vector<int64_t> recv_count(n_pes);
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i_row], n_pes);
         send_count[node]++;
     }
     MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
@@ -1038,7 +1038,7 @@ array_info* reverse_shuffle_numpy_array(array_info* in_arr, uint32_t* hashes,
                    mpi_typ, MPI_COMM_WORLD);
     std::vector<int64_t> tmp_offset(comm_info.send_disp);
     for (size_t i = 0; i < n_rows_ret; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)comm_info.n_pes;
+        size_t node = hash_to_rank(hashes[i], comm_info.n_pes);
         int64_t ind = tmp_offset[node];
         memcpy(data1_o + siztype * i, tmp_recv.data() + siztype * ind, siztype);
         tmp_offset[node]++;
@@ -1104,7 +1104,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
                    MPI_COMM_WORLD);
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
     for (int64_t i = 0; i < out_len; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i], n_pes);
         offset_t str_len = out_offset[i + 1] - out_offset[i];
         int64_t c_ind = tmp_offset_sub[node];
         char* out_ptr = out_arr->data1 + out_offset[i];
@@ -1149,7 +1149,7 @@ void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
                    MPI_COMM_WORLD);
     std::vector<int64_t> tmp_offset(n_pes, 0);
     for (int64_t i_row = 0; i_row < out_arr->length; i_row++) {
-        size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i_row], n_pes);
         uint8_t* out_bitmap = &(mask_recv.data())[send_disp_null[node]];
         bool bit = GetBit(out_bitmap, tmp_offset[node]);
         SetBitTo(null_bitmask_out, i_row, bit);
@@ -1235,7 +1235,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
     out_lens.resize(out_sub_len);
 #endif
     for (int64_t i = 0; i < out_len; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i], n_pes);
         uint32_t nb_str = out_str_offset[i + 1] - out_str_offset[i];
         int64_t c_ind = tmp_offset_sub[node];
 #if OFFSET_BITWIDTH == 32
@@ -1263,7 +1263,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                    mpi_typ8, MPI_COMM_WORLD);
     std::vector<int64_t> tmp_offset_sub_sub(send_disp_sub_sub);
     for (int64_t i = 0; i < out_len; i++) {
-        size_t node = (size_t)hashes[i] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i], n_pes);
         uint32_t nb_char = out_data_offset[out_str_offset[i + 1]] -
                            out_data_offset[out_str_offset[i]];
         int64_t c_ind = tmp_offset_sub_sub[node];
@@ -1305,7 +1305,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
     std::vector<int64_t> tmp_offset(n_pes, 0);
     int64_t pos_si = 0;
     for (int64_t i_row = 0; i_row < out_arr->length; i_row++) {
-        size_t node = (size_t)hashes[i_row] % (size_t)n_pes;
+        size_t node = hash_to_rank(hashes[i_row], n_pes);
         uint8_t* sub_out_bitmap = &(mask_recv.data())[send_disp_sub_null[node]];
         int64_t n_str = out_str_offset[i_row + 1] - out_str_offset[i_row];
         for (int64_t i_str = 0; i_str < n_str; i_str++) {
@@ -2434,7 +2434,7 @@ table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
         array_info* out_arr = alloc_array(
             n_rows, -1, -1, bodo_array_type::NUMPY, Bodo_CTypes::INT32, 0, 0);
         for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-            int32_t node_id = hashes[i_row] % n_pes;
+            int32_t node_id = hash_to_rank(hashes[i_row], n_pes);
             out_arr->at<int32_t>(i_row) = node_id;
         }
         out_arrs.push_back(out_arr);
