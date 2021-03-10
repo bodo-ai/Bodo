@@ -254,6 +254,7 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
     # Raise Bodo error if not supported
     raise BodoError(f"add operator not supported for data types {lhs} and {rhs}.")
 
+
 # TODO: Support operators with arrays
 
 
@@ -806,6 +807,7 @@ def overload_add_perator_date_offset_type(lhs, rhs):
     # Raise Bodo error if not supported
     raise BodoError(f"add operator not supported for data types {lhs} and {rhs}.")
 
+
 @overload(operator.sub, no_unliteral=True)
 def overload_sub(lhs, rhs):
     """Implement all of the relevant scalar types subtractions.
@@ -1110,6 +1112,7 @@ def overload_add_operator_week_offset_type(lhs, rhs):
 
     # Raise Bodo error if not supported
     raise BodoError(f"add operator not supported for data types {lhs} and {rhs}.")
+
 
 @register_jitable
 def calculate_week_date(n, weekday, other_weekday):  # pragma: no cover

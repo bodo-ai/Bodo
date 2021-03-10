@@ -361,8 +361,9 @@ def _tdi_val_finalize(s, count):  # pragma: no cover
 @overload_method(DatetimeIndexType, "min", no_unliteral=True)
 def overload_datetime_index_min(dti, axis=None, skipna=True):
     # TODO skipna = False
-    if not is_overload_none(axis) or not is_overload_true(skipna):
-        raise BodoError("Index.min(): axis and skipna arguments not supported yet")
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=None, skipna=True)
+    check_unsupported_args("DatetimeIndex.min", unsupported_args, arg_defaults)
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -383,8 +384,9 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
 @overload_method(DatetimeIndexType, "max", no_unliteral=True)
 def overload_datetime_index_max(dti, axis=None, skipna=True):
     # TODO skipna = False
-    if not is_overload_none(axis) or not is_overload_true(skipna):
-        raise BodoError("Index.max(): axis and skipna arguments not supported yet")
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=None, skipna=True)
+    check_unsupported_args("DatetimeIndex.max", unsupported_args, arg_defaults)
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -779,6 +781,11 @@ def pd_date_range_overload(
     # TODO: check/handle other input
     # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
     # TODO: parallelize after Numba branch pruning issue is fixed
+
+    unsupported_args = dict(tz=tz, normalize=normalize)
+    arg_defaults = dict(tz=None, normalize=False)
+    check_unsupported_args("pd.date_range", unsupported_args, arg_defaults)
+
     if not is_overload_none(tz):
         raise BodoError("pd.date_range(): tz argument not supported yet")
 
