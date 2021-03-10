@@ -8,6 +8,7 @@
 #include <vector>
 
 #define FREE_MAX_CORES 4
+#define EXPIRATION_COUNTDOWN_DAYS 6
 
 #if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT) || \
     defined(CHECK_LICENSE_PLATFORM_AWS)
@@ -308,6 +309,32 @@ static bool is_expired(int exp_year, int exp_month, int exp_day) {
     return false;
 }
 
+static int num_days_till_license_expiration(int exp_year, int exp_month, int exp_day) {
+    /**
+     * Return the number of days between expiry and current day. Return -1 in case of error.
+     * @param exp_year: expiration year
+     * @param exp_month: expiration month
+     * @param exp_day: expiration day
+     * @return : number of days till expiration
+     */
+    
+    // Copied from https://stackoverflow.com/questions/14218894/number-of-days-between-two-dates-c
+
+    struct std::tm exp = {0,0,0,exp_day,exp_month-1,exp_year-1900};
+    std::time_t expiration_ts = std::mktime(&exp);
+    std::time_t now_ts = std::time(nullptr);  // get time now
+
+    int num_days_left = 0;
+    
+    if (expiration_ts != (std::time_t)(-1) && now_ts != (std::time_t)(-1)) {
+        num_days_left = (int)(std::difftime(expiration_ts, now_ts) / (60 * 60 * 24));
+    } else {
+        num_days_left = -1;
+    }
+    return num_days_left;
+
+}
+
 #endif
 
 PyMODINIT_FUNC PyInit_hdist(void) {
@@ -376,10 +403,27 @@ PyMODINIT_FUNC PyInit_hdist(void) {
 
 #ifdef CHECK_LICENSE_EXPIRED
     // check expiration date
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
     if ((num_pes > FREE_MAX_CORES) && is_expired(year, month, day)) {
         PyErr_SetString(PyExc_RuntimeError, "Bodo license has expired");
         return NULL;
+    }
+
+    // license countdown message if within EXPIRATION_COUNTDOWN_DAYS
+    // days of license expiry and using more than FREE_MAX_CORES cores
+    if ((num_pes > FREE_MAX_CORES)) {
+        int countdown_days = num_days_till_license_expiration(year, month, day);
+        if (countdown_days < 0) {
+            PyErr_SetString(PyExc_RuntimeError, "Error in license countdown check.");
+            return NULL;
+        }
+        // only print reminder on rank 0
+        if (countdown_days < EXPIRATION_COUNTDOWN_DAYS && rank == 0) {
+            fprintf(stdout, "Reminder: Bodo License will expire in %d days.",
+                    countdown_days);
+        }
     }
 #endif
 
