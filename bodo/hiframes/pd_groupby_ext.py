@@ -638,7 +638,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 f_vals = tuple(col_map.values())
 
             # make sure selected columns exist in dataframe
-            if any(c not in grp.selection for c in in_col_names):
+            if any(c not in grp.selection and c not in grp.keys for c in in_col_names):
                 raise_const_error(
                     f"Selected column names {in_col_names} not all available in dataframe column names {grp.selection}"
                 )

@@ -3232,6 +3232,48 @@ def test_var_one_col(test_df, memory_leak_check):
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
+def test_groupby_key_value_shared(memory_leak_check):
+    """
+    Test using the key column in a groupby operation.
+    """
+
+    def test_impl(df):
+        return df.groupby("A")["A"].count().reset_index(drop=True)
+
+    df = pd.DataFrame(
+        {
+            "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", "a", "a", "aa", "ccc", "ggg", "a"],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        }
+    )
+    check_func(test_impl, (df,), sort_output=True)
+
+
+def test_groupby_key_value_shared_named_agg(memory_leak_check):
+    """
+    Test using a key column in a groupby operation with the
+    NamedAgg syntax.
+    """
+
+    def test_impl(df):
+        return (
+            df.groupby(["A", "B"], as_index=False)
+            .agg(cnt=pd.NamedAgg(column="A", aggfunc="count"))
+            .sort_values(by=["A", "B", "cnt"])
+            .reset_index(drop=True)
+        )
+
+    df = pd.DataFrame(
+        {
+            "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", "a", "a", "aa", "ccc", "ggg", "a"],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        }
+    )
+    check_func(test_impl, (df,))
+
+
 def test_idxmin_idxmax(memory_leak_check):
     """
     Test Groupby.idxmin() and Groupby.idxmax()

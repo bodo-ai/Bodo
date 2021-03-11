@@ -1477,7 +1477,7 @@ class DataFramePass:
                 if isinstance(c, tuple) and len(c) > 1 and c[1] == "":
                     if c[0] in grp_typ.keys:
                         continue
-                elif c in grp_typ.keys:
+                elif c in grp_typ.keys and not c in grp_typ.selection:
                     continue
                 # output column name can be a string or tuple of strings. the
                 # latter case occurs when doing this:
