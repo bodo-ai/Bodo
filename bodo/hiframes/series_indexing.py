@@ -527,6 +527,11 @@ def overload_series_loc_setitem(I, idx, val):
     if not isinstance(I, SeriesLocType):
         return
 
+    if is_immutable_array(I.stype.data):
+        raise BodoError(
+            f"Series setitem not supported for Series with immutable array type {I.stype.data}"
+        )
+
     # S.loc[cond]
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
 

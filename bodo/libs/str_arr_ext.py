@@ -1829,7 +1829,13 @@ def str_arr_setitem(A, idx, val):
     if (
         is_list_like_index_type(idx)
         and idx.dtype == types.bool_
-        and val == string_array_type
+        and (
+            val == string_array_type
+            or (
+                isinstance(val, types.Array)
+                and isinstance(val.dtype, types.UnicodeCharSeq)
+            )
+        )
     ):
 
         def impl_bool_arr(A, idx, val):  # pragma: no cover
@@ -1842,9 +1848,10 @@ def str_arr_setitem(A, idx, val):
                 if idx[i]:
                     if bodo.libs.array_kernels.isna(val, ind_count):
                         out_arr[i] = ""
-                        str_arr_set_na(val, ind_count)
+                        str_arr_set_na(out_arr, ind_count)
                     else:
-                        out_arr[i] = val[ind_count]
+                        # Convert to a string to support UnicodeCharSeq
+                        out_arr[i] = str(val[ind_count])
                     ind_count += 1
                 else:
                     if bodo.libs.array_kernels.isna(A, i):

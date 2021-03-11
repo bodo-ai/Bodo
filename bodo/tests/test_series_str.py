@@ -943,6 +943,38 @@ def test_join(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_setitem_unichar_arr(memory_leak_check):
+    """test Series setitem when the string array comes from Numpy
+    UnicodeSeq Arrays"""
+
+    def test_impl(S, idx, val):
+        S[idx] = val
+        return S
+
+    S = pd.Series(
+        [
+            "A,B",
+            " bb,CD",
+            " mCD,m",
+            "C,ABB, D",
+            "B,B,CC",
+            "AB,BD",
+            "ABCDD,OSAJD",
+            "a1b2d314f,sdf234",
+            "C,ABB,D",
+            "¿abc¡Y tú, quién te cre\t\tes?",
+            "오늘도 피츠버그의 날씨는 매\t우, 구림",
+            "🏈,💔,𠄩,😅",
+            "🠂,🠋🢇🄐,🞧",
+            "россия очень, холодная страна",
+        ]
+    )
+    arr = np.array(["AA", "BB"])
+    bool_idx = [True, True] + [False] * (len(S) - 2)
+    for idx in (bool_idx, np.array(bool_idx)):
+        check_func(test_impl, (S, idx, arr), copy_input=True, dist_test=False)
+
+
 def test_join_string(test_unicode, memory_leak_check):
     """test the functionality of bodo's join with just a string"""
 

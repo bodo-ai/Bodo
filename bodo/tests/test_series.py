@@ -913,22 +913,15 @@ def test_series_iloc_getitem_slice(series_val, memory_leak_check):
     def test_impl(S):
         return S.iloc[1:4]
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val), check_dtype=False
-    )
     # fix distributed
-    # check_func(test_impl, (series_val,))
+    check_func(test_impl, (series_val,), check_dtype=False, dist_test=False)
 
 
 def test_series_iloc_getitem_array_int(series_val, memory_leak_check):
     def test_impl(S):
         return S.iloc[[1, 3]]
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val), check_dtype=False
-    )
+    check_func(test_impl, (series_val,), check_dtype=False, dist_test=False)
 
 
 def test_series_iloc_getitem_array_bool(series_val, memory_leak_check):
@@ -941,10 +934,7 @@ def test_series_iloc_getitem_array_bool(series_val, memory_leak_check):
     if len(series_val) > 5:
         series_val = series_val[:5]
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val), check_dtype=False
-    )
+    check_func(test_impl, (series_val,), check_dtype=False, dist_test=False)
 
 
 def test_series_loc_getitem_array_bool(series_val, memory_leak_check):
@@ -957,10 +947,7 @@ def test_series_loc_getitem_array_bool(series_val, memory_leak_check):
     if len(series_val) > 5:
         series_val = series_val[:5]
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val), check_dtype=False
-    )
+    check_func(test_impl, (series_val,), check_dtype=False, dist_test=False)
 
 
 @pytest.mark.slow
@@ -972,6 +959,61 @@ def test_series_loc_getitem_int_range(memory_leak_check):
         data=[1, 12, 1421, -241, 4214], index=pd.RangeIndex(start=0, stop=5, step=1)
     )
     check_func(test_impl, (S,))
+
+
+# TODO: Mark as slow after CI passes
+def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
+    """Tests that setitem with Series.loc works with a Boolean List index"""
+
+    def test_impl(S, val):
+        S.loc[[True, True, False, True, False]] = val
+        return S
+
+    # Make sure cond always matches length
+    if len(series_val) > 5:
+        series_val = series_val[:5]
+
+    err_msg = "Series setitem not supported for Series with immutable array type .*"
+
+    # Test with an array
+    val = series_val.iloc[0:3].values.copy()
+    if isinstance(series_val.iat[0], list):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val.copy(deep=True), val)
+    else:
+        check_func(
+            test_impl,
+            (series_val, val),
+            check_dtype=False,
+            copy_input=True,
+            dist_test=False,
+        )
+    # Test with a list
+    val = list(val)
+    if isinstance(series_val.iat[0], list):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val.copy(deep=True), val)
+    else:
+        check_func(
+            test_impl,
+            (series_val, val),
+            check_dtype=False,
+            copy_input=True,
+            dist_test=False,
+        )
+    # Test with a scalar
+    val = val[0]
+    if isinstance(series_val.iat[0], list):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(test_impl)(series_val.copy(deep=True), val)
+    else:
+        check_func(
+            test_impl,
+            (series_val, val),
+            check_dtype=False,
+            copy_input=True,
+            dist_test=False,
+        )
 
 
 # TODO: Mark as slow after CI passes
