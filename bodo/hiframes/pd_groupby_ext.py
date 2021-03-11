@@ -669,13 +669,15 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 )
             for col_name, f_val in zip(in_col_names, f_vals):
                 if isinstance(f_val, (tuple, list)):
-                    # TODO tuple containing function objects (not just strings)
+                    lambda_count = 0
                     for f in f_val:
                         f_name, out_tp = self._get_agg_funcname_and_outtyp(
                             grp, args, col_name, f
                         )
                         has_cumulative_ops = f_name in list_cumulative
-                        # TODO f_name == "<lambda>"
+                        if f_name == "<lambda>" and len(f_val) > 1:
+                            f_name = "<lambda_" + str(lambda_count) + ">"
+                            lambda_count += 1
                         # output column name is 2-level (col_name, func_name)
                         # This happens, for example, with
                         # df.groupby(...).agg({"A": [f1, f2]})

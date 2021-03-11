@@ -1394,6 +1394,15 @@ def test_groupby_agg_const_dict(memory_leak_check):
         df2 = df.groupby("C").agg(d)
         return df1, df2, d
 
+    # test tuple of UDFs inside agg dict
+    def impl18(df):
+        return df.groupby("A").agg(
+            {
+                "C": (lambda x: (x >= 3).sum(),),
+                "B": (lambda x: x.sum(), lambda x: (x < 6.1).sum()),
+            }
+        )
+
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
@@ -1424,6 +1433,8 @@ def test_groupby_agg_const_dict(memory_leak_check):
     bodo.jit(impl16)(df)  # just check for compilation errors
     # TODO: enable is_out_distributed after fixing gatherv issue for tuple output
     check_func(impl17, (df,), sort_output=True, dist_test=False)
+    # Pandas (as of 1.2.2) produces float instead of int for last column for some reason
+    check_func(impl18, (df,), sort_output=True, check_dtype=False)
 
 
 def test_groupby_nunique(memory_leak_check):
