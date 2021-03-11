@@ -435,7 +435,15 @@ def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
     if isinstance(f_val, str):
         return get_agg_func(func_ir, f_val, rhs, series_type, typemap)
     if isinstance(f_val, (tuple, list)):
-        return [get_agg_func_udf(func_ir, f, rhs, series_type, typemap) for f in f_val]
+        lambda_count = 0
+        out = []
+        for f in f_val:
+            func = get_agg_func_udf(func_ir, f, rhs, series_type, typemap)
+            if func.fname == "<lambda>" and len(f_val) > 1:
+                func.fname = f"<lambda_{lambda_count}>"
+                lambda_count += 1
+            out.append(func)
+        return out
     else:
         assert is_expr(f_val, "make_function") or isinstance(
             f_val, (numba.core.registry.CPUDispatcher, types.Dispatcher)
