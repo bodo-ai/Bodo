@@ -836,7 +836,7 @@ def has_udf_call(fir):
             ):
                 if (
                     stmt.value.value._compiler.pipeline_class
-                    == bodo.compiler.BodoCompilerSeqInline
+                    == bodo.compiler.BodoCompilerUDF
                 ):
                     return True
 

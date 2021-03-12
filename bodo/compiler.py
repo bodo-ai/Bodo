@@ -38,6 +38,7 @@ from bodo import config
 from bodo.transforms.series_pass import SeriesPass
 from bodo.transforms.typing_pass import BodoTypeInference
 from bodo.transforms.untyped_pass import UntypedPass
+from bodo.utils.utils import is_call_assign
 
 try:
     import sklearn  # noqa
@@ -98,7 +99,9 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
             distributed=True, inline_calls_pass=inline_all_calls
         )
 
-    def _create_bodo_pipeline(self, distributed=True, inline_calls_pass=False):
+    def _create_bodo_pipeline(
+        self, distributed=True, inline_calls_pass=False, udf_pipeline=False
+    ):
         """create compiler pipeline for Bodo using Numba's nopython pipeline"""
         name = "bodo" if distributed else "bodo_seq"
         name = name + "_inline" if inline_calls_pass else name
@@ -109,6 +112,8 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
         # simplify_CFG() is called (block number is used in EnterWith nodes)
         if inline_calls_pass:
             pm.add_pass_after(InlinePass, WithLifting)
+        if udf_pipeline:
+            pm.add_pass_after(ConvertCallsUDFPass, WithLifting)
         # run untyped pass right before SSA construction and type inference
         # NOTE: SSA includes phi nodes (which have block numbers) that we don't handle.
         # therefore, uptyped pass cannot use SSA since it changes CFG
@@ -192,6 +197,41 @@ class InlinePass(FunctionPass):
         # at the end and there are agg constraints (categorical_split case)
         # CFG simplification fixes this case
         state.func_ir.blocks = ir_utils.simplify_CFG(state.func_ir.blocks)
+        return True
+
+
+@register_pass(mutates_CFG=True, analysis_only=False)
+class ConvertCallsUDFPass(FunctionPass):
+    """Make sure all JUT functions called inside UDFs use the UDF pipeline to avoid
+    distributed code generation (which would lead to hangs).
+    """
+
+    _name = "inline_pass"
+
+    def __init__(self):
+        FunctionPass.__init__(self)
+
+    def run_pass(self, state):
+        """
+        Convert Bodo calls to use the UDF pipeline
+        """
+        # Ensure we have an IR and type information.
+        assert state.func_ir
+        for block in state.func_ir.blocks.values():
+            for inst in block.body:
+                if is_call_assign(inst):
+                    func_def = guard(get_definition, state.func_ir, inst.value.func)
+
+                    if (
+                        isinstance(func_def, (ir.Global, ir.FreeVar))
+                        and isinstance(func_def.value, CPUDispatcher)
+                        and issubclass(
+                            func_def.value._compiler.pipeline_class, BodoCompiler
+                        )
+                        and func_def.value._compiler.pipeline_class != BodoCompilerUDF
+                    ):
+                        func_def.value._compiler.pipeline_class = BodoCompilerUDF
+
         return True
 
 
@@ -337,11 +377,11 @@ class BodoCompilerSeq(BodoCompiler):
         )
 
 
-class BodoCompilerSeqInline(BodoCompiler):
+class BodoCompilerUDF(BodoCompiler):
     """Bodo pipeline with inlining and without the distributed pass (used in df.apply)"""
 
     def define_pipelines(self):
-        return self._create_bodo_pipeline(distributed=False, inline_calls_pass=True)
+        return self._create_bodo_pipeline(distributed=False, udf_pipeline=True)
 
 
 @register_pass(mutates_CFG=False, analysis_only=True)
@@ -482,7 +522,7 @@ def udf_jit(signature_or_function=None, **options):
     return numba.njit(
         signature_or_function,
         parallel=parallel,
-        pipeline_class=bodo.compiler.BodoCompilerSeqInline,
+        pipeline_class=bodo.compiler.BodoCompilerUDF,
         **options
     )
 
@@ -491,7 +531,7 @@ def is_udf_call(func_type):
     """deterimines if function type is a Bodo UDF call"""
     return (
         isinstance(func_type, numba.core.types.Dispatcher)
-        and func_type.dispatcher._compiler.pipeline_class == BodoCompilerSeqInline
+        and func_type.dispatcher._compiler.pipeline_class == BodoCompilerUDF
     )
 
 

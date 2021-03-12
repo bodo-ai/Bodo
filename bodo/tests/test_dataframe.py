@@ -2853,7 +2853,10 @@ def test_df_apply_func_case1(memory_leak_check):
 
 @bodo.jit
 def g2(r):
-    return 2 * r[0]
+    # functions called from UDFs should not be distributed (would cause hanging)
+    # using an array operation to make sure distributed code is not generated
+    A = np.arange(r[0])
+    return 2 * A.sum()
 
 
 @pytest.mark.slow
@@ -2861,7 +2864,7 @@ def test_df_apply_func_case2(memory_leak_check):
     """make sure a UDF calling another function doesn't fail (#964)"""
 
     def test_impl(df):
-        return df.apply(lambda x: g2(x), axis=1)
+        return df.apply(lambda x, _bodo_inline=False: g2(x), axis=1, _bodo_inline=False)
 
     n = 121
     df = pd.DataFrame({"A": np.arange(n)})
@@ -2871,7 +2874,7 @@ def test_df_apply_func_case2(memory_leak_check):
         test_impl, all_args_distributed_block=True, all_returns_distributed=True
     )(_get_dist_arg(df, False))
     res = bodo.allgatherv(res)
-    py_res = df.apply(lambda r: 2 * r[0], axis=1)
+    py_res = df.apply(lambda r: 2 * np.arange(r[0]).sum(), axis=1)
     pd.testing.assert_series_equal(res, py_res)
 
 
