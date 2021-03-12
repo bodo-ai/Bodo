@@ -1516,6 +1516,11 @@ class DistributedAnalysis:
 
             self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
             self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+            self._set_REP(
+                args[2:],
+                array_dists,
+                "extra argument in groupby.apply()",
+            )
             return
 
         # handle calling other Bodo functions that have distributed flags

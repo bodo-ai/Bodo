@@ -2002,6 +2002,24 @@ def test_groupby_apply_objmode():
     check_func(impl1, (df,), sort_output=True, reset_index=True)
 
 
+def test_groupby_apply_arg_dist():
+    """
+    Make sure extra arguments to Groupby.apply() are replicated
+    """
+
+    def impl1(df, n):
+        df2 = pd.DataFrame({"A": np.arange(n)})
+        return df.groupby("A").apply(lambda x, df2: df2.A.sum(), df2=df2)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 4, 4, 11, 4, 1],
+            "B": ["AB", "DD", "E", "A", "DD", "AB"],
+        }
+    )
+    check_func(impl1, (df, 10), sort_output=True, reset_index=True)
+
+
 @pytest.mark.slow
 def test_single_col_reset_index(test_df, memory_leak_check):
     """We need the reset_index=True because otherwise the order is scrambled"""
