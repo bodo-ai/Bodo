@@ -2509,14 +2509,14 @@ def test_set_column_detect_update_err1(memory_leak_check):
     """
 
     @bodo.jit
-    def f(r, data):
+    def f(r, data, _bodo_inline=True):
         data["B"] = 1
         return 1
 
     def impl():
         df1 = pd.DataFrame({"A": np.zeros(4)})
         df = pd.DataFrame({"A": np.ones(4)})
-        df1.apply(f, axis=1, data=df)
+        df1.apply(f, axis=1, data=df, _bodo_inline=True)
         return df["A"].sum()
 
     with pytest.raises(
@@ -2531,14 +2531,14 @@ def test_set_column_detect_update_err2(memory_leak_check):
     """
 
     @bodo.jit
-    def f(r, data):
+    def f(r, data, _bodo_inline=True):
         data["A"] = 1
         return 1
 
     def impl():
         df1 = pd.DataFrame({"A": np.zeros(4)})
         df = pd.DataFrame({"A": np.ones(4)})
-        df1.apply(f, axis=1, data=df)
+        df1.apply(f, axis=1, data=df, _bodo_inline=True)
         return df["A"].sum()
 
     with pytest.raises(
