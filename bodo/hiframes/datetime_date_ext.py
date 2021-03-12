@@ -48,6 +48,8 @@ from bodo.utils.typing import (
     BodoError,
     is_iterable_type,
     is_list_like_index_type,
+    is_overload_int,
+    is_overload_none,
 )
 
 ll.add_symbol("box_datetime_date_array", hdatetime_ext.box_datetime_date_array)
@@ -401,6 +403,24 @@ def fromordinal_impl(n):  # pragma: no cover
     """
     y, m, d = _ord2ymd(n)
     return datetime.date(y, m, d)
+
+
+@overload_method(DatetimeDateType, "replace")
+def replace_overload(date, year=None, month=None, day=None):
+    if not is_overload_none(year) and not is_overload_int(year):
+        raise BodoError("date.replace(): year must be an integer")
+    elif not is_overload_none(month) and not is_overload_int(month):
+        raise BodoError("date.replace(): month must be an integer")
+    elif not is_overload_none(day) and not is_overload_int(day):
+        raise BodoError("date.replace(): day must be an integer")
+
+    def impl(date, year=None, month=None, day=None): # pragma: no cover
+        year_val = date.year if year is None else year
+        month_val = date.month if month is None else month
+        day_val = date.day if day is None else day
+        return datetime.date(year_val, month_val, day_val)
+
+    return impl
 
 
 @overload_method(DatetimeDatetimeType, "toordinal", no_unliteral=True)

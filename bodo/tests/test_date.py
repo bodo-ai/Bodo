@@ -905,6 +905,27 @@ def test_datetime_date_today(memory_leak_check):
     assert bodo.jit(test_impl)() == test_impl()
 
 
+def test_datetime_date_replace(memory_leak_check):
+    def impl(date):
+        return date.replace(year=1991, month=2, day=20)
+
+    date = datetime.date(2020, 12, 1)
+    check_func(impl, (date,))
+
+
+def test_datetime_date_error(memory_leak_check):
+    message = "year must be an integer"
+    date = datetime.date(314, 1, 5)
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: date.replace(year=314.159))()
+    message = "month must be an integer"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: date.replace(month=1.5))()
+    message = "day must be an integer"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: date.replace(day=5.9))()
+
+
 def test_datetime_date_fromordinal(memory_leak_check):
     """
     Test datetime.date.fromordinal() classmethod
