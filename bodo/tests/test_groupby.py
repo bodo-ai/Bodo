@@ -2012,6 +2012,33 @@ def test_groupby_apply_objmode():
     fir = j_func.overloads[j_func.signatures[0]].metadata["preserved_ir"]
     assert not has_udf_call(fir)
 
+    def analysis_func2(ar):
+        return np.array([9, 8, 7, 6, 5])
+
+    @bodo.jit
+    def objmode_wrapper(df):
+        with bodo.objmode(out="int64[::1]"):
+            out = analysis_func2(df)
+        return out
+
+    @bodo.jit
+    def apply_func2(df):
+        out = objmode_wrapper(df)
+        return pd.Series(out)
+
+    def main_func2(df):
+        res = df.groupby("A").apply(apply_func2)
+        return res
+
+    # test for BE-290
+    df = pd.DataFrame({"A": [1.0, 2, 3, 1.0, 5], "B": [4.0, 5, 6, 2, 1]})
+    j_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(main_func2)
+    # NOTE: output results don't match Pandas since it creates a dataframe but
+    # Bodo creates a Series in this case (TODO: fix if possible)
+    j_func(df)
+    fir = j_func.overloads[j_func.signatures[0]].metadata["preserved_ir"]
+    assert not has_udf_call(fir)
+
 
 @pytest.mark.slow
 def test_single_col_reset_index(test_df, memory_leak_check):
