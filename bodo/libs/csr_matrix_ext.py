@@ -6,6 +6,7 @@ import numba
 from numba.core import cgutils, types
 from numba.extending import (
     NativeValue,
+    box,
     make_attribute_wrapper,
     models,
     register_model,
@@ -96,3 +97,46 @@ def unbox_csr_matrix(typ, val, c):
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(csr_matrix._getvalue(), is_error=is_error)
+
+
+@box(CSRMatrixType)
+def box_csr_matrix(typ, val, c):
+    """box scipy.sparse.csv_matrix into python objects"""
+    mod_name = c.context.insert_const_string(c.builder.module, "scipy.sparse")
+    sc_sp_class_obj = c.pyapi.import_module_noblock(mod_name)
+
+    csr_matrix = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+
+    # box data, indices, indptr, shape
+    c.context.nrt.incref(c.builder, types.Array(typ.dtype, 1, "C"), csr_matrix.data)
+    data_obj = c.pyapi.from_native_value(
+        types.Array(typ.dtype, 1, "C"), csr_matrix.data, c.env_manager
+    )
+    c.context.nrt.incref(
+        c.builder, types.Array(typ.idx_dtype, 1, "C"), csr_matrix.indices
+    )
+    indices_obj = c.pyapi.from_native_value(
+        types.Array(typ.idx_dtype, 1, "C"), csr_matrix.indices, c.env_manager
+    )
+    c.context.nrt.incref(
+        c.builder, types.Array(typ.idx_dtype, 1, "C"), csr_matrix.indptr
+    )
+    indptr_obj = c.pyapi.from_native_value(
+        types.Array(typ.idx_dtype, 1, "C"), csr_matrix.indptr, c.env_manager
+    )
+    shape_obj = c.pyapi.from_native_value(
+        types.UniTuple(types.int64, 2), csr_matrix.shape, c.env_manager
+    )
+
+    # call scipy.sparse.csr_matrix((data, indices, indptr), shape)
+    arg1_obj = c.pyapi.tuple_pack([data_obj, indices_obj, indptr_obj])
+    res = c.pyapi.call_method(sc_sp_class_obj, "csr_matrix", (arg1_obj, shape_obj))
+
+    c.pyapi.decref(arg1_obj)
+    c.pyapi.decref(data_obj)
+    c.pyapi.decref(indices_obj)
+    c.pyapi.decref(indptr_obj)
+    c.pyapi.decref(shape_obj)
+    c.pyapi.decref(sc_sp_class_obj)
+    c.context.nrt.decref(c.builder, typ, val)
+    return res

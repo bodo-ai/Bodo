@@ -552,6 +552,8 @@ def _test_equal(
     atol=1e-08,
     rtol=1e-05,
 ):
+    import scipy.sparse
+
     # Bodo converts lists to array in array(item) array cases
     if isinstance(py_out, list) and isinstance(bodo_out, np.ndarray):
         py_out = np.array(py_out)
@@ -650,6 +652,13 @@ def _test_equal(
         if isinstance(bodo_out, pd.Categorical):
             bodo_out.categories = bodo_out.categories.sort_values()
         pd.testing.assert_extension_array_equal(bodo_out, py_out)
+    elif isinstance(py_out, scipy.sparse.csr_matrix):
+        # https://stackoverflow.com/questions/30685024/check-if-two-scipy-sparse-csr-matrix-are-equal
+        assert (
+            isinstance(bodo_out, scipy.sparse.csr_matrix)
+            and py_out.shape == bodo_out.shape
+            and (py_out != bodo_out).nnz == 0
+        )
     elif isinstance(py_out, float):
         # avoid equality check since paralellism can affect floating point operations
         np.testing.assert_allclose(py_out, bodo_out, 1e-4)

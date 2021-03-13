@@ -38,4 +38,4 @@ def test_unbox(csr_matrix_value, memory_leak_check):
         return arr_arg
 
     check_func(impl, (csr_matrix_value,))
-    # check_func(impl2, (csr_matrix_value,))
+    check_func(impl2, (csr_matrix_value,))
