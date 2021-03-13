@@ -4,8 +4,9 @@ Checks for available configurations and sets config flags.
 """
 
 try:
-    from .io import _hdf5
-    import h5py
+    import h5py  # noqa
+
+    from .io import _hdf5  # noqa
 
     # TODO: make sure h5py/hdf5 supports parallel
 except ImportError:
@@ -15,8 +16,15 @@ else:
 
 
 try:
-    import pyarrow
+    import pyarrow  # noqa
 except ImportError:
     _has_pyarrow = False
 else:
     _has_pyarrow = True
+
+try:
+    import scipy  # noqa
+except ImportError:
+    _has_scipy = False
+else:
+    _has_scipy = True
