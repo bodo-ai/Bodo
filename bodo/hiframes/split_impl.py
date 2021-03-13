@@ -31,7 +31,6 @@ from bodo.libs.str_arr_ext import (
     offset_arr_type,
     string_array_type,
 )
-from bodo.libs.str_ext import string_type
 
 ll.add_symbol("array_setitem", hstr_ext.array_setitem)
 ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
@@ -60,8 +59,7 @@ class StringArraySplitViewType(types.ArrayCompatible):
 
     @property
     def dtype(self):
-        # TODO: optimized list type
-        return types.List(string_type)
+        return string_array_type
 
     def copy(self):
         return StringArraySplitViewType()
@@ -463,9 +461,7 @@ def overload_split_view_arr_shape(A):
 
 @overload(operator.getitem, no_unliteral=True)
 def str_arr_split_view_getitem_overload(A, ind):
-    if A == string_array_split_view_type and isinstance(
-        types.unliteral(ind), types.Integer
-    ):
+    if A == string_array_split_view_type and isinstance(ind, types.Integer):
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
 
         def _impl(A, ind):  # pragma: no cover
@@ -479,7 +475,7 @@ def str_arr_split_view_getitem_overload(A, ind):
             end_index = getitem_c_arr(A._index_offsets, ind + 1)
             n = end_index - start_index - 1
 
-            str_list = []
+            str_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
             for i in range(n):
                 data_start = getitem_c_arr(A._data_offsets, start_index + i)
                 data_start += 1
@@ -490,9 +486,9 @@ def str_arr_split_view_getitem_overload(A, ind):
                 length = data_end - data_start
                 ptr = get_array_ctypes_ptr(A._data, data_start)
                 _str = bodo.libs.str_arr_ext.decode_utf8(ptr, length)
-                str_list.append(_str)
+                str_arr[i] = _str
 
-            return str_list
+            return str_arr
 
         return _impl
 

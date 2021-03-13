@@ -2166,10 +2166,11 @@ class SeriesPass:
 
         # If we encounter the explode kernel see if we can replace it
         if fdef == ("explode", "bodo.libs.array_kernels"):
-            assert len(rhs.args) == 2
+            assert len(rhs.args) == 2, "invalid explode() args"
 
             array_src = guard(get_definition, self.func_ir, rhs.args[0].name)
-            if guard(find_callname, self.func_ir, array_src) == (
+            array_src_call = guard(find_callname, self.func_ir, array_src)
+            if array_src_call == (
                 "str_split",
                 "bodo.libs.str_ext",
             ):
@@ -2181,6 +2182,23 @@ class SeriesPass:
                     eval(
                         "lambda arr, pat, n, index_arr: bodo.libs.array_kernels.explode_str_split("
                         "    arr, pat, n, index_arr"
+                        ")"
+                    ),
+                    args,
+                )
+
+            if array_src_call == (
+                "compute_split_view",
+                "bodo.hiframes.split_impl",
+            ):
+                # Replace the function only if we inherited directly from str_split
+                args = array_src.args + [rhs.args[1]]
+
+                return replace_func(
+                    self,
+                    eval(
+                        "lambda arr, pat, index_arr: bodo.libs.array_kernels.explode_str_split("
+                        "    arr, pat, -1, index_arr"
                         ")"
                     ),
                     args,

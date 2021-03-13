@@ -258,13 +258,23 @@ def test_split_regex():
 
 
 def test_series_str_split_explode(memory_leak_check):
-    def test_impl(df):
+    """test split() and explode() combination"""
+
+    def test_impl1(df):
         return df.A.str.split().explode()
+
+    # split view case
+    def test_impl2(df):
+        return df.A.str.split(",").explode()
 
     df = pd.DataFrame(
         {"A": pd.array(["A B C", "A", "D E", "A N C E Q  R#R##R#RR F", np.nan] * 5)}
     )
-    check_func(test_impl, (df,))
+    check_func(test_impl1, (df,))
+    df = pd.DataFrame(
+        {"A": pd.array(["A,B,C", "A", "D,E", "", "A,N,C,E,Q  R#R##R#RR,F", np.nan] * 5)}
+    )
+    check_func(test_impl2, (df,))
 
 
 # TODO: Add memory_leak_check when bugs are resolved.

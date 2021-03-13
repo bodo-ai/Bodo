@@ -1362,7 +1362,7 @@ def overload_explode(arr, index_arr):
     its own row, replicating the index values. Each empty array will have an NA in
     output.
     """
-    assert isinstance(arr, ArrayItemArrayType)
+    assert isinstance(arr, ArrayItemArrayType) or arr == string_array_split_view_type
     data_arr_type = arr.dtype
     index_arr_type = index_arr
     index_dtype = index_arr_type.dtype
