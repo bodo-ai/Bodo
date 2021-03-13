@@ -3456,6 +3456,7 @@ def test_series_repeat(series_val):
         return S.repeat(n)
 
     check_func(test_impl, (series_val, 3))
+    check_func(test_impl, (series_val, np.arange(len(series_val))))
 
 
 @pytest.mark.parametrize("ignore_index", [True, False])

@@ -1750,28 +1750,49 @@ def np_sort(A, axis=-1, kind=None, order=None):
     return impl
 
 
-def repeat_scalar_kernel(A, repeats):
+def repeat_kernel(A, repeats):
     return A
 
 
-@overload(repeat_scalar_kernel, no_unliteral=True)
-def repeat_scalar_kernel_overload(A, repeats):
+@overload(repeat_kernel, no_unliteral=True)
+def repeat_kernel_overload(A, repeats):
+    """kernel for repeating array values (for Series.repeat)"""
     _dtype = A
 
-    def impl(A, repeats):  # pragma: no cover
-        # TODO(Nick): Add a check that repeats > 0
+    # int case
+    if isinstance(repeats, types.Integer):
+
+        def impl_int(A, repeats):  # pragma: no cover
+            # TODO(Nick): Add a check that repeats > 0
+            l = len(A)
+            out_arr = bodo.utils.utils.alloc_type(l * repeats, _dtype, (-1,))
+            for i in range(l):
+                idx = i * repeats
+                if bodo.libs.array_kernels.isna(A, i):
+                    for j in range(repeats):
+                        bodo.libs.array_kernels.setna(out_arr, idx + j)
+                else:
+                    out_arr[idx : idx + repeats] = A[i]
+            return out_arr
+
+        return impl_int
+
+    # array case
+    def impl_arr(A, repeats):  # pragma: no cover
         l = len(A)
-        out_arr = bodo.utils.utils.alloc_type(l * repeats, _dtype, (-1,))
+        out_arr = bodo.utils.utils.alloc_type(repeats.sum(), _dtype, (-1,))
+        idx = 0
         for i in range(l):
-            idx = i * repeats
+            r = repeats[i]
             if bodo.libs.array_kernels.isna(A, i):
-                for j in range(repeats):
+                for j in range(r):
                     bodo.libs.array_kernels.setna(out_arr, idx + j)
             else:
-                out_arr[idx : idx + repeats] = A[i]
+                out_arr[idx : idx + r] = A[i]
+            idx += r
         return out_arr
 
-    return impl
+    return impl_arr
 
 
 @overload(np.repeat, inline="always", no_unliteral=True)
@@ -1784,7 +1805,7 @@ def np_repeat(A, repeats):
         raise BodoError("Only integer type supported for repeats in np.repeat()")
 
     def impl(A, repeats):  # pragma: no cover
-        return bodo.libs.array_kernels.repeat_scalar_kernel(A, repeats)
+        return bodo.libs.array_kernels.repeat_kernel(A, repeats)
 
     return impl
 
