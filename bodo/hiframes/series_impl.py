@@ -2247,12 +2247,15 @@ def _build_replace_dict(to_replace, value):
 
 @overload_method(SeriesType, "explode", inline="always", no_unliteral=True)
 def overload_series_explode(S, ignore_index=False):
+    from bodo.hiframes.split_impl import string_array_split_view_type
 
     unsupported_args = dict(ignore_index=ignore_index)
     merge_defaults = dict(ignore_index=False)
     check_unsupported_args("Series.explode", unsupported_args, merge_defaults)
 
-    if not isinstance(S.data, ArrayItemArrayType):
+    if not (
+        isinstance(S.data, ArrayItemArrayType) or S.data == string_array_split_view_type
+    ):
         # pandas copies input if not iterable
         return lambda S, ignore_index=False: S.copy()  # pragma: no cover
 
