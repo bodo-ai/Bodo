@@ -920,6 +920,16 @@ def array_item_arr_setitem(A, idx, val):
 
         return impl_scalar
 
+    # setting a slice to individual element
+    if isinstance(idx, types.SliceType) and A.dtype == val:
+
+        def impl_slice_elem(A, idx, val):  # pragma: no cover
+            slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
+            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                A[i] = val
+
+        return impl_slice_elem
+
     # slice case (used in unboxing)
     if isinstance(idx, types.SliceType) and is_iterable_type(val):
 
@@ -960,16 +970,6 @@ def array_item_arr_setitem(A, idx, val):
                 val_ind += 1
 
         return impl_slice
-
-    # setting a slice to individual element
-    if isinstance(idx, types.SliceType) and A.dtype == val:
-
-        def impl_slice_elem(A, idx, val):  # pragma: no cover
-            slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
-            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                A[i] = val
-
-        return impl_slice_elem
 
     raise BodoError(
         "only setitem with scalar index is currently supported for list arrays"
