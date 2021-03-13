@@ -3479,7 +3479,9 @@ def overload_series_repeat(S, repeats, axis=None):
         isinstance(repeats, types.Integer)
         or (is_iterable_type(repeats) and isinstance(repeats.dtype, types.Integer))
     ):  # pragma: no cover
-        raise BodoError("Series.repeat(): 'repeats' should be an integer")
+        raise BodoError(
+            "Series.repeat(): 'repeats' should be an integer or array of integers"
+        )
 
     # int case
     if isinstance(repeats, types.Integer):
