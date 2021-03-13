@@ -1128,7 +1128,6 @@ series_unsupported_methods = (
     "unstack",
     "searchsorted",
     "ravel",
-    "repeat",
     "squeeze",
     "view",
     # Combining / joining / merging

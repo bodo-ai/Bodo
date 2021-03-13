@@ -3467,6 +3467,32 @@ def overload_series_between(S, left, right, inclusive=True):
     return impl
 
 
+@overload_method(SeriesType, "repeat", inline="always", no_unliteral=True)
+def overload_series_repeat(S, repeats, axis=None):
+
+    unsupported_args = dict(axis=axis)
+    arg_defaults = dict(axis=None)
+    check_unsupported_args("Series.repeat", unsupported_args, arg_defaults)
+
+    if not isinstance(repeats, types.Integer):  # pragma: no cover
+        raise BodoError("Series.repeat(): 'repeats' should be an integer")
+
+    def impl(S, repeats, axis=None):  # pragma: no cover
+        # get series data
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        index_arr = bodo.utils.conversion.index_to_array(index)
+
+        out_arr = bodo.libs.array_kernels.repeat_scalar_kernel(arr, repeats)
+        out_index_arr = bodo.libs.array_kernels.repeat_scalar_kernel(index_arr, repeats)
+        out_index = bodo.utils.conversion.index_from_array(out_index_arr)
+
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
+
+    return impl
+
+
 @overload_method(SeriesType, "to_dict", inline="always", no_unliteral=True)
 def overload_to_dict(S, into=None):
     """ Support Series.to_dict(). """
