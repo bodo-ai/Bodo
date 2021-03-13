@@ -1780,6 +1780,7 @@ def repeat_kernel_overload(A, repeats):
     # array case
     def impl_arr(A, repeats):  # pragma: no cover
         l = len(A)
+        # TODO(ehsan): Add a check to ensure non-negative repeat values
         out_arr = bodo.utils.utils.alloc_type(repeats.sum(), _dtype, (-1,))
         idx = 0
         for i in range(l):
