@@ -44,7 +44,11 @@ from bodo.utils.cg_helpers import (
     to_arr_obj_if_list_obj,
 )
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
-from bodo.utils.typing import BodoError, is_list_like_index_type
+from bodo.utils.typing import (
+    BodoError,
+    is_iterable_type,
+    is_list_like_index_type,
+)
 
 ll.add_symbol("count_total_elems_list_array", array_ext.count_total_elems_list_array)
 ll.add_symbol(
@@ -916,8 +920,18 @@ def array_item_arr_setitem(A, idx, val):
 
         return impl_scalar
 
+    # setting a slice to individual element
+    if isinstance(idx, types.SliceType) and A.dtype == val:
+
+        def impl_slice_elem(A, idx, val):  # pragma: no cover
+            slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
+            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                A[i] = val
+
+        return impl_slice_elem
+
     # slice case (used in unboxing)
-    if isinstance(idx, types.SliceType):
+    if isinstance(idx, types.SliceType) and is_iterable_type(val):
 
         def impl_slice(A, idx, val):  # pragma: no cover
             # TODO: set scalar_to_arr_len

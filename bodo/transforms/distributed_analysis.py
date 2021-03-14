@@ -1082,8 +1082,8 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
             return
 
-        if fdef == ("repeat_scalar_kernel", "bodo.libs.array_kernels"):
-            # output of repeat_scalar_kernel is variable-length even if input is 1D
+        if fdef == ("repeat_kernel", "bodo.libs.array_kernels"):
+            # output of repeat_kernel is variable-length even if input is 1D
             # because of the boundary case
             # ex repeat(A, 2) where len(A) = 9 -> (10, 8)
             if lhs not in array_dists:
@@ -1091,6 +1091,11 @@ class DistributedAnalysis:
 
             # arg0 is an array
             in_dist = Distribution(array_dists[rhs.args[0].name].value)
+            # arg1 could be an array
+            if is_array_typ(self.typemap[rhs.args[1].name]):
+                in_dist = self._meet_array_dists(
+                    rhs.args[0].name, rhs.args[1].name, array_dists
+                )
             # return is an array
             out_dist = Distribution(
                 min(
@@ -1105,6 +1110,8 @@ class DistributedAnalysis:
                 in_dist = out_dist
 
             self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            if is_array_typ(self.typemap[rhs.args[1].name]):
+                self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
             return
 
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels"):

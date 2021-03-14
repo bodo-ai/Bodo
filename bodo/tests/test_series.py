@@ -3448,6 +3448,17 @@ def test_series_sort_values(series_val):
     check_func(test_impl, (series_val,), check_typing_issues=False)
 
 
+# TODO(ehsan): add memory_leak_check when categorical (series_val18) leak is fixed
+def test_series_repeat(series_val):
+    """Test Series.repeat() method"""
+
+    def test_impl(S, n):
+        return S.repeat(n)
+
+    check_func(test_impl, (series_val, 3))
+    check_func(test_impl, (series_val, np.arange(len(series_val))))
+
+
 @pytest.mark.parametrize("ignore_index", [True, False])
 def test_series_append_single(series_val, ignore_index, memory_leak_check):
     # not supported for list(string) and array(item)
