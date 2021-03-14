@@ -4,37 +4,19 @@ Implementation of pd.read_sql in BODO.
 We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
-from collections import defaultdict
 
 import numba
-import numpy as np
-import pandas as pd
-from numba.core import cgutils, config, ir, ir_utils, typeinfer, types
-from numba.core.ir_utils import (
-    compile_to_numba_ir,
-    replace_arg_nodes,
-    replace_vars_inner,
-    visit_vars_inner,
-)
-from numba.core.typing.templates import signature
-from numba.extending import box, intrinsic, models, overload, register_model
+import pandas as pd  # noqa
+from numba.core import ir, ir_utils, typeinfer
+from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
 import bodo
-from bodo import objmode
-from bodo.hiframes.datetime_date_ext import (
-    DatetimeDateType,
-    datetime_date_array_type,
-)
+from bodo import objmode  # noqa
 from bodo.ir.csv_ext import _get_dtype_str
-from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.distributed_api import bcast, bcast_scalar
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
-from bodo.libs.timsort import copyElement_tup, getitem_arr_tup
 from bodo.transforms import distributed_analysis, distributed_pass
-from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.utils import debug_prints, sanitize_varname
+from bodo.utils.utils import sanitize_varname
 
 MPI_ROOT = 0
 
@@ -120,6 +102,7 @@ def sql_distributed_run(
         sql_node.out_types,
         typingctx,
         targetctx,
+        sql_node.connection.split(":")[0],  # capture db type from connection string
         parallel,
     )
 
@@ -174,11 +157,8 @@ distributed_pass.distributed_run_extensions[SqlReader] = sql_distributed_run
 compiled_funcs = []
 
 
-def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, parallel):
+def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, db_type, parallel):
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
-    date_inds = ", ".join(
-        str(i) for i, t in enumerate(col_typs) if t.dtype == types.NPDatetime("ns")
-    )
     typ_strs = [
         "{}='{}'".format(s_cname, _get_dtype_str(t))
         for s_cname, t in zip(sanitized_cnames, col_typs)
@@ -253,7 +233,15 @@ def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, parallel):
             func_text += "    rank = {}\n".format(rank)
             func_text += "    n_pes = {}\n".format(n_pes)
             func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
-            func_text += "    sql_cons = 'select * from (' + sql_request + ') x LIMIT ' + str(limit) + ' OFFSET ' + str(offset)\n"
+            # Snowflake doesn't provide consistent output in different processes with
+            # LIMIT/OFFSET case and row_number() is recommended instead
+            if db_type == "snowflake":
+                func_text += "    start_num = offset + 1\n"
+                func_text += "    end_num = offset + limit + 1\n"
+                func_text += f"    sql_cons = 'select {', '.join(col_names)} from (select row_number() over (order by 1) as row_num, * from (' + sql_request + ')) where row_num >=' + str(start_num) + ' and row_num <' + str(end_num)\n"
+            else:
+                func_text += f"    sql_cons = 'select {', '.join(col_names)} from (' + sql_request + ') x LIMIT ' + str(limit) + ' OFFSET ' + str(offset)\n"
+
             func_text += "    df_ret = pd.read_sql(sql_cons, conn)\n"
         else:
             func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
