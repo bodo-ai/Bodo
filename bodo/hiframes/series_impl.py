@@ -3020,6 +3020,11 @@ def overload_dt64_arr_sub(arg1, arg2):
         n = len(arg1)
         S = np.empty(n, td64_dtype)
         for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(arg1, i) or bodo.libs.array_kernels.isna(
+                arg2, i
+            ):
+                bodo.libs.array_kernels.setna(S, i)
+                continue
             S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
                 bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arg1[i])
                 - bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arg2[i])

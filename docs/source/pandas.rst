@@ -588,6 +588,7 @@ Computations / Descriptive Stats:
 * :meth:`pandas.DataFrame.cumprod`
 * :meth:`pandas.DataFrame.cumsum`
 * :meth:`pandas.DataFrame.describe`
+* :meth:`pandas.DataFrame.diff`
 * :meth:`pandas.DataFrame.max`
 * :meth:`pandas.DataFrame.mean`
 * :meth:`pandas.DataFrame.median`

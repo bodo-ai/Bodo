@@ -3697,7 +3697,6 @@ dataframe_unsupported = {
     "mul",
     "last",
     "agg",
-    "diff",
     "le",
     "any",
     "xs",

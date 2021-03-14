@@ -1173,6 +1173,48 @@ def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
     return _gen_init_df(header, df.columns, data_args)
 
 
+@overload_method(DataFrameType, "diff", inline="always", no_unliteral=True)
+def overload_dataframe_diff(df, periods=1, axis=0):
+    """DataFrame.diff() support which is the same as df - df.shift(periods)"""
+    # TODO: Support nullable integer/float types
+    unsupported_args = dict(axis=axis)
+    arg_defaults = dict(axis=0)
+    check_unsupported_args("DataFrame.diff", unsupported_args, arg_defaults)
+
+    # Bodo specific limitations for supported types
+    # Currently only float (not nullable), int (not nullable), and dt64 are supported
+    for column_type in df.data:
+        if not (
+            isinstance(column_type, types.Array)
+            and (
+                isinstance(column_type.dtype, (types.Number))
+                or column_type.dtype == bodo.datetime64ns
+            )
+        ):
+            # TODO: Link to supported Column input types.
+            raise BodoError(
+                f"Dataframe.diff() column input type {column_type.dtype} not supported."
+            )
+
+    # Ensure period is int
+    if not is_overload_int(periods):
+        raise BodoError("DataFrame.diff(): 'periods' input must be an integer.")
+
+    header = "def impl(df, periods=1, axis= 0):\n"
+    for i in range(len(df.columns)):
+        header += (
+            f"  data_{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
+        )
+    data_args = ", ".join(
+        # NOTE: using our sub function for dt64 due to bug in Numba (TODO: fix)
+        f"bodo.hiframes.series_impl.dt64_arr_sub(data_{i}, bodo.hiframes.rolling.shift(data_{i}, periods, False))"
+        if df.data[i] == types.Array(bodo.datetime64ns, 1, "C")
+        else f"data_{i} - bodo.hiframes.rolling.shift(data_{i}, periods, False)"
+        for i in range(len(df.columns))
+    )
+    return _gen_init_df(header, df.columns, data_args)
+
+
 @overload_method(DataFrameType, "set_index", inline="always", no_unliteral=True)
 def overload_dataframe_set_index(
     df, keys, drop=True, append=False, inplace=False, verify_integrity=False
