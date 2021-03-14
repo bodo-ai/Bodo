@@ -39,3 +39,12 @@ def test_unbox(csr_matrix_value, memory_leak_check):
 
     check_func(impl, (csr_matrix_value,))
     check_func(impl2, (csr_matrix_value,))
+
+
+def test_getitem_slice(csr_matrix_value, memory_leak_check):
+    """test basic slice getitem for csr matrix"""
+
+    def test_impl(A):
+        return A[:, 1:]
+
+    check_func(test_impl, (csr_matrix_value,), dist_test=False)
