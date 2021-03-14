@@ -404,6 +404,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
     'warn_if_rep' flag controls if a warning is raised if the input is replicated and
     gatherv has no effect (applicable only inside jit functions).
     """
+    from bodo.libs.csr_matrix_ext import CSRMatrixType
 
     if isinstance(data, CategoricalArray):
 
@@ -895,6 +896,45 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             return bodo.libs.map_arr_ext.init_map_arr(all_data)
 
         return impl_map_arr
+
+    # CSR Matrix
+    if isinstance(data, CSRMatrixType):
+
+        def impl_csr_matrix(
+            data, allgather=False, warn_if_rep=True, root=MPI_ROOT
+        ):  # pragma: no cover
+            # gather local data
+            all_data = bodo.gatherv(data.data, allgather, warn_if_rep, root)
+            all_col_inds = bodo.gatherv(data.indices, allgather, warn_if_rep, root)
+            all_indptr = bodo.gatherv(data.indptr, allgather, warn_if_rep, root)
+            all_local_rows = gather_scalar(data.shape[0], allgather, root=root)
+            n_rows = all_local_rows.sum()
+            n_cols = bodo.libs.distributed_api.dist_reduce(
+                data.shape[1], np.int32(Reduce_Type.Max.value)
+            )
+
+            # using np.int64 in output since maximum index value is not known at
+            # compilation time
+            new_indptr = np.empty(n_rows + 1, np.int64)
+            all_col_inds = all_col_inds.astype(np.int64)
+
+            # construct indptr for output
+            new_indptr[0] = 0
+            out_ind = 1  # current position in output new_indptr
+            indptr_ind = 0  # current position in input all_indptr
+            for n_loc_rows in all_local_rows:
+                for _ in range(n_loc_rows):
+                    row_size = all_indptr[indptr_ind + 1] - all_indptr[indptr_ind]
+                    new_indptr[out_ind] = new_indptr[out_ind - 1] + row_size
+                    out_ind += 1
+                    indptr_ind += 1
+                indptr_ind += 1  # skip extra since each arr is n_rows + 1
+
+            return bodo.libs.csr_matrix_ext.init_csr_matrix(
+                all_data, all_col_inds, new_indptr, (n_rows, n_cols)
+            )
+
+        return impl_csr_matrix
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):

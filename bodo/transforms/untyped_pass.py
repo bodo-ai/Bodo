@@ -155,7 +155,7 @@ class UntypedPass:
         if extra_vars and bodo.get_rank() == 0:
             warnings.warn(
                 BodoWarning(
-                    "Only function arguments and return values can be specified as"
+                    "Only function arguments and return values can be specified as "
                     "distributed. Ignoring the flag for variables: {}.".format(
                         extra_vars
                     )
