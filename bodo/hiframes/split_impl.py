@@ -461,6 +461,8 @@ def overload_split_view_arr_shape(A):
 
 @overload(operator.getitem, no_unliteral=True)
 def str_arr_split_view_getitem_overload(A, ind):
+    if A != string_array_split_view_type:
+        return
     if A == string_array_split_view_type and isinstance(ind, types.Integer):
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
 

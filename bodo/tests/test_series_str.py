@@ -953,6 +953,19 @@ def test_join(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_split_non_ascii(memory_leak_check):
+    """
+    Tests that Series.str.split with a non-ascii
+    single character allows subsequent operations.
+    """
+
+    def test_impl(S):
+        return S.str.split("è").apply(lambda x: len(x))
+
+    S = pd.Series(["afeèefwfewèqr3", "fefè3", "33r3"] * 10)
+    check_func(test_impl, (S,))
+
+
 def test_setitem_unichar_arr(memory_leak_check):
     """test Series setitem when the string array comes from Numpy
     UnicodeSeq Arrays"""

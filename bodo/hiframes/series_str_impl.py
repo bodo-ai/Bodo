@@ -205,6 +205,8 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
     if (
         is_overload_constant_str(pat)
         and len(get_overload_const_str(pat)) == 1
+        # _str_split assumes an ascii character
+        and get_overload_const_str(pat).isascii()
         and is_overload_constant_int(n)
         and get_overload_const_int(n) == -1
     ):
