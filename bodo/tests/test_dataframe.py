@@ -67,7 +67,7 @@ from bodo.utils.typing import BodoError, BodoWarning
         ),
         pd.DataFrame(
             {
-                "A": pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
+                "A": pd.array([1, 8, 4, 10, 3], dtype="Int32"),
                 2: [1.1, np.nan, 4.2, 3.1, -1.3],
                 "C": [True, False, False, np.nan, True],
             },
