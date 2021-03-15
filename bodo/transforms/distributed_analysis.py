@@ -743,6 +743,21 @@ class DistributedAnalysis:
             )
             return
 
+        if (
+            func_name in {"fit_transform"}
+            and "bodo.libs.sklearn_ext" in sys.modules
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                (bodo.libs.sklearn_ext.BodoFExtractHashingVectorizerType,),
+            )
+        ):
+            if func_name == "fit_transform":
+                # match input and output distributions (y is ignored)
+                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+
+            return
+
         if func_mod == "sklearn.metrics._classification":
             if func_name in {"precision_score", "recall_score", "f1_score"}:
                 # output is always replicated, and the output can be an array

@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import sklearn.cluster
 import sklearn.ensemble
+import sklearn.feature_extraction
 import sklearn.linear_model
 import sklearn.metrics
 import sklearn.model_selection
@@ -43,6 +44,7 @@ import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import NumericIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.libs.csr_matrix_ext import CSRMatrixType
 from bodo.libs.distributed_api import (
     Reduce_Type,
     create_subcomm_mpi4py,
@@ -336,7 +338,8 @@ def parallel_predict(m, X):
         with numba.objmode(result="int64[:]"):
             # currently we do data-parallel prediction
             m.n_jobs = 1
-            if len(X) == 0:
+            # len cannot be used with csr
+            if X.shape[0] == 0:
                 # TODO If X is replicated this should be an error (same as sklearn)
                 result = np.empty(0, dtype=np.int64)
             else:
@@ -4026,3 +4029,138 @@ def overload_preprocessing_label_encoder_fit_transform(
             return transformed_y
 
         return _preprocessing_label_encoder_fit_transform_impl
+
+
+# ----------------------------------------------------------------------------------------
+# ----------------------------------- HashingVectorizer------------------------------------
+# Support for sklearn.feature_extraction.text.HashingVectorizer
+# Currently only fit_transform function is supported.
+# We use sklearn's fit_transform directly in objmode on each rank.
+# ----------------------------------------------------------------------------------------
+
+
+class BodoFExtractHashingVectorizerType(types.Opaque):
+    def __init__(self):
+        super(BodoFExtractHashingVectorizerType, self).__init__(
+            name="BodoFExtractHashingVectorizerType"
+        )
+
+
+f_extract_hashing_vectorizer_type = BodoFExtractHashingVectorizerType()
+types.f_extract_hashing_vectorizer_type = f_extract_hashing_vectorizer_type
+
+register_model(BodoFExtractHashingVectorizerType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.feature_extraction.text.HashingVectorizer)
+def typeof_f_extract_hashing_vectorizer(val, c):
+    return f_extract_hashing_vectorizer_type
+
+
+@box(BodoFExtractHashingVectorizerType)
+def box_f_extract_hashing_vectorizer(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoFExtractHashingVectorizerType)
+def unbox_f_extract_hashing_vectorizer(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.feature_extraction.text.HashingVectorizer, no_unliteral=True)
+def sklearn_hashing_vectorizer_overload(
+    input="content",
+    encoding="utf-8",
+    decode_error="strict",
+    strip_accents=None,
+    lowercase=True,
+    preprocessor=None,
+    tokenizer=None,
+    stop_words=None,
+    token_pattern=r"(?u)\b\w\w+\b",
+    ngram_range=(1, 1),
+    analyzer="word",
+    n_features=(2 ** 20),
+    binary=False,
+    norm="l2",
+    alternate_sign=True,
+    dtype=np.float64,
+):
+    """
+    Provide implementation for __init__ functions of HashingVectorizer.
+    We simply call sklearn in objmode.
+    """
+
+    def _sklearn_hashing_vectorizer_impl(
+        input="content",
+        encoding="utf-8",
+        decode_error="strict",
+        strip_accents=None,
+        lowercase=True,
+        preprocessor=None,
+        tokenizer=None,
+        stop_words=None,
+        token_pattern=r"(?u)\b\w\w+\b",
+        ngram_range=(1, 1),
+        analyzer="word",
+        n_features=(2 ** 20),
+        binary=False,
+        norm="l2",
+        alternate_sign=True,
+        dtype=np.float64,
+    ):  # pragma: no cover
+
+        with numba.objmode(m="f_extract_hashing_vectorizer_type"):
+            m = sklearn.feature_extraction.text.HashingVectorizer(
+                input=input,
+                encoding=encoding,
+                decode_error=decode_error,
+                strip_accents=strip_accents,
+                lowercase=lowercase,
+                preprocessor=preprocessor,
+                tokenizer=tokenizer,
+                stop_words=stop_words,
+                token_pattern=token_pattern,
+                ngram_range=ngram_range,
+                analyzer=analyzer,
+                n_features=n_features,
+                binary=binary,
+                norm=norm,
+                alternate_sign=alternate_sign,
+                dtype=dtype,
+            )
+        return m
+
+    return _sklearn_hashing_vectorizer_impl
+
+
+@overload_method(BodoFExtractHashingVectorizerType, "fit_transform", no_unliteral=True)
+def overload_hashing_vectorizer_fit_transform(
+    m,
+    X,
+    y=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """
+    Provide implementation for the fit_transform function.
+    We simply call sklearn's fit_transform on each rank.
+    """
+    types.csr_matrix_float64_int64 = CSRMatrixType(types.float64, types.int64)
+
+    def _hashing_vectorizer_fit_transform_impl(
+        m,
+        X,
+        y=None,
+        _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+    ):  # pragma: no cover
+        with numba.objmode(transformed_X="csr_matrix_float64_int64"):
+            transformed_X = m.fit_transform(X, y)
+            transformed_X.indices = transformed_X.indices.astype(np.int64)
+            transformed_X.indptr = transformed_X.indptr.astype(np.int64)
+        return transformed_X
+
+    return _hashing_vectorizer_fit_transform_impl

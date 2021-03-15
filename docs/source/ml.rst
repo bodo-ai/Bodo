@@ -195,6 +195,17 @@ Methods:
   * :any:`sklearn.preprocessing.LabelEncoder.transform`
   * :any:`sklearn.preprocessing.LabelEncoder.fit_transform`
 
+Feature Extraction
+******************
+
+:class:`sklearn.feature_extraction.text.HashingVectorizer`
+
+  This class provides HashingVectorizer support to convert a collection of text documents to a matrix of token occurrences.
+
+Methods:
+  * :any:`sklearn.feature_extraction.text.HashingVectorizer.fit_transform`
+
+
 Model Selection
 ***************
 

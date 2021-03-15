@@ -6,10 +6,12 @@ import time
 import numpy as np
 import pandas as pd
 import pytest
+import scipy
 from sklearn import datasets
 from sklearn.cluster import KMeans
 from sklearn.datasets import make_classification, make_regression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_extraction.text import HashingVectorizer
 from sklearn.linear_model import (
     Lasso,
     LinearRegression,
@@ -31,7 +33,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
 from sklearn.svm import LinearSVC
-from sklearn.utils._testing import assert_allclose, assert_array_equal
+from sklearn.utils._testing import (
+    assert_allclose,
+    assert_almost_equal,
+    assert_array_equal,
+)
 from sklearn.utils.validation import check_random_state
 
 import bodo
@@ -1747,3 +1753,103 @@ def test_label_encoder(values, classes):
         return result
 
     check_func(test_fit_transform, (values,))
+
+
+def test_hashing_vectorizer():
+    """Test HashingVectorizer's fit_transform method.
+    Taken from here (https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/feature_extraction/tests/test_text.py#L573)
+    """
+
+    JUNK_FOOD_DOCS = (
+        "the pizza pizza beer copyright",
+        "the pizza burger beer copyright",
+        "the the pizza beer beer copyright",
+        "the burger beer beer copyright",
+        "the coke burger coke copyright",
+        "the coke burger burger",
+    )
+
+    NOTJUNK_FOOD_DOCS = (
+        "the salad celeri copyright",
+        "the salad salad sparkling water copyright",
+        "the the celeri celeri copyright",
+        "the tomato tomato salad water",
+        "the tomato salad water copyright",
+    )
+
+    ALL_FOOD_DOCS = JUNK_FOOD_DOCS + NOTJUNK_FOOD_DOCS
+
+    def test_fit_transform(X):
+        v = HashingVectorizer()
+        X_transformed = v.fit_transform(X)
+        return X_transformed
+
+    result = bodo.jit(
+        test_fit_transform,
+        all_args_distributed_block=True,
+        all_returns_distributed=True,
+    )(_get_dist_arg(np.array(ALL_FOOD_DOCS), False))
+    result = bodo.allgatherv(result)
+    token_nnz = result.nnz
+    assert result.shape == (len(ALL_FOOD_DOCS), (2 ** 20))
+    # By default the hashed values receive a random sign and l2 normalization
+    # makes the feature values bounded
+    assert np.min(result.data) > -1
+    assert np.min(result.data) < 0
+    assert np.max(result.data) > 0
+    assert np.max(result.data) < 1
+    # Check that the rows are normalized
+    for i in range(result.shape[0]):
+        assert_almost_equal(np.linalg.norm(result[0].data, 2), 1.0)
+
+    check_func(test_fit_transform, (np.array(ALL_FOOD_DOCS),))
+
+    # Check vectorization with some non-default parameters
+    def test_fit_transform_args(X):
+        v = HashingVectorizer(ngram_range=(1, 2), norm="l1")
+        ans = v.fit_transform(X)
+        return ans
+
+    X = bodo.jit(distributed=["X", "ans"])(test_fit_transform_args)(
+        _get_dist_arg(np.array(ALL_FOOD_DOCS))
+    )
+    X = bodo.allgatherv(X)
+    assert X.shape == (len(ALL_FOOD_DOCS), (2 ** 20))
+
+    # ngrams generate more non zeros
+    ngrams_nnz = X.nnz
+    assert ngrams_nnz > token_nnz
+    assert ngrams_nnz < 2 * token_nnz
+
+    # makes the feature values bounded
+    assert np.min(X.data) > -1
+    assert np.max(X.data) < 1
+
+    # Check that the rows are normalized
+    for i in range(X.shape[0]):
+        assert_almost_equal(np.linalg.norm(X[0].data, 1), 1.0)
+
+
+def test_naive_mnnb_csr():
+    """Test csr matrix with MultinomialNB
+    Taken from here (https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/tests/test_naive_bayes.py#L461)
+    """
+
+    def test_mnnb(X, y2):
+        clf = MultinomialNB()
+        clf.fit(X, y2)
+        y_pred = clf.predict(X)
+        return y_pred
+
+    rng = np.random.RandomState(42)
+
+    # Data is 6 random integer points in a 100 dimensional space classified to
+    # three classes.
+    X2 = rng.randint(5, size=(6, 100))
+    y2 = np.array([1, 1, 2, 2, 3, 3])
+    X = scipy.sparse.csr_matrix(X2)
+    y_pred = bodo.jit(distributed=["X"])(test_mnnb)(_get_dist_arg(X), _get_dist_arg(y2))
+    y_pred = bodo.allgatherv(y_pred)
+    assert_array_equal(y_pred, y2)
+
+    check_func(test_mnnb, (X, y2))

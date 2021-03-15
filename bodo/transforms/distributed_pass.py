@@ -456,7 +456,10 @@ class DistributedPass:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                (bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,),
+                (
+                    bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,
+                    bodo.libs.sklearn_ext.BodoFExtractHashingVectorizerType,
+                ),
             )
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
