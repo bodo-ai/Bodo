@@ -435,7 +435,7 @@ Reshaping, sorting:
 * :meth:`pandas.Series.append` `ignore_index` is supported.
   setting name for output Series not supported yet)
 * :meth:`pandas.Series.explode`
-* :meth:`pandas.Series.repeat` `repeats` should be an integer.
+* :meth:`pandas.Series.repeat`
 
 Time series-related:
 
