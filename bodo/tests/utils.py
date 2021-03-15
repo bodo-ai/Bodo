@@ -464,13 +464,14 @@ def _get_arg(a, copy=False):
 
 
 def _get_dist_arg(a, copy=False, var_length=False, check_typing_issues=True):
+    """get distributed chunk for 'a' on current rank (for input to test functions)"""
     if copy and hasattr(a, "copy"):
         a = a.copy()
 
     if isinstance(a, pytypes.FunctionType) or not is_distributable_typ(bodo.typeof(a)):
         return a
 
-    start, end = get_start_end(len(a))
+    start, end = get_start_end(a.shape[0])
     # for var length case to be different than regular 1D in chunk sizes, add
     # one extra element to last processor
     if var_length and bodo.get_size() >= 2:

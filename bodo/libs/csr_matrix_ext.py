@@ -14,6 +14,8 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
+    overload_attribute,
+    overload_method,
     register_model,
     typeof_impl,
     unbox,
@@ -26,6 +28,8 @@ from bodo.utils.typing import BodoError
 class CSRMatrixType(types.ArrayCompatible):
     """Data type for scipy.sparse.csr_matrix"""
 
+    ndim = 2
+
     def __init__(self, dtype, idx_dtype):
         self.dtype = dtype
         # idx_dtype is data type of row/column index values, either int32 or int64
@@ -34,7 +38,7 @@ class CSRMatrixType(types.ArrayCompatible):
 
     @property
     def as_array(self):
-        return types.Array(types.undefined, 1, "C")
+        return types.Array(types.undefined, 2, "C")
 
     def copy(self):
         return CSRMatrixType(self.dtype, self.idx_dtype)
@@ -178,6 +182,28 @@ def box_csr_matrix(typ, val, c):
     c.pyapi.decref(sc_sp_class_obj)
     c.context.nrt.decref(c.builder, typ, val)
     return res
+
+
+# scipy.sparse.csr_matrix doesn't provide len() but we support it for consistency
+@overload(len, no_unliteral=True)
+def overload_csr_matrix_len(A):
+    if isinstance(A, CSRMatrixType):
+        return lambda A: A.shape[0]  # pragma: no cover
+
+
+@overload_attribute(CSRMatrixType, "ndim")
+def overload_csr_matrix_ndim(A):
+    return lambda A: 2  # pragma: no cover
+
+
+@overload_method(CSRMatrixType, "copy", no_unliteral=True)
+def overload_csr_matrix_copy(A):
+    def copy_impl(A):  # pragma: no cover
+        return init_csr_matrix(
+            A.data.copy(), A.indices.copy(), A.indptr.copy(), A.shape
+        )
+
+    return copy_impl
 
 
 @overload(operator.getitem, no_unliteral=True)
