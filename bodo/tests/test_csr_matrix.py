@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 import scipy.sparse
 
+import bodo
 from bodo.tests.utils import check_func
 
 
@@ -48,3 +49,34 @@ def test_getitem_slice(csr_matrix_value, memory_leak_check):
         return A[:, 1:]
 
     check_func(test_impl, (csr_matrix_value,), dist_test=False)
+
+
+# TODO: add @pytest.mark.slow
+def test_len(csr_matrix_value, memory_leak_check):
+    """test len(A) for CSR matrix"""
+
+    def test_impl(A):
+        return len(A)
+
+    # scipy.sparse.csr_matrix doesn't provide len() but we support it for consistency
+    assert bodo.jit(test_impl)(csr_matrix_value) == csr_matrix_value.shape[0]
+
+
+# TODO: add @pytest.mark.slow
+def test_ndim(csr_matrix_value, memory_leak_check):
+    """test A.ndim for CSR matrix"""
+
+    def test_impl(A):
+        return A.ndim
+
+    assert bodo.jit(test_impl)(csr_matrix_value) == test_impl(csr_matrix_value)
+
+
+# TODO: add @pytest.mark.slow
+def test_copy(csr_matrix_value, memory_leak_check):
+    """test A.copy() for CSR matrix"""
+
+    def test_impl(A):
+        return A.copy()
+
+    check_func(test_impl, (csr_matrix_value,))
