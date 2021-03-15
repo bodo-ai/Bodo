@@ -1945,7 +1945,8 @@ def remove_dead_branches(func_ir):
             cond = last_stmt.cond
             cond_def = guard(get_definition, func_ir, cond)
             if (
-                guard(find_callname, func_ir, cond_def) == ("bool", "numpy")
+                guard(find_callname, func_ir, cond_def)
+                in (("bool", "numpy"), ("bool", "builtins"))
                 and guard(find_const, func_ir, cond_def.args[0]) is not None
             ):
                 cond = cond_def.args[0]
