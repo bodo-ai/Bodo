@@ -1699,7 +1699,6 @@ class SeriesPass:
         # TODO: handle more types
         if fdef == ("isna", "bodo.libs.array_kernels"):
             arr = rhs.args[0]
-            ind = rhs.args[1]
             arr_typ = self.typemap[arr.name]
             if isinstance(arr_typ, types.Array):
                 arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -2929,6 +2928,7 @@ class SeriesPass:
         ):
             pass
 
+        bodo.transforms.untyped_pass.remove_dead_branches(self.func_ir)
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
 
     def _get_const_tup(self, tup_var):
