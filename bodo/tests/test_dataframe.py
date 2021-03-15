@@ -1780,7 +1780,7 @@ def test_df_shift_unsupported(df_value, memory_leak_check):
     def impl(df):
         return df.shift(2)
 
-    with pytest.raises(BodoError, match="Dataframe.shift\(\) column input type"):
+    with pytest.raises(BodoError, match=r"Dataframe.shift\(\) column input type"):
         bodo.jit(impl)(df_value)
 
 
@@ -1793,6 +1793,18 @@ def test_df_shift_error_periods(memory_leak_check):
 
     with pytest.raises(BodoError, match="'periods' input must be an integer"):
         bodo.jit(test_impl)(df, 1.0)
+
+
+def test_df_diff(numeric_df_value, memory_leak_check):
+    """test DataFrame.diff()"""
+    # Pandas as of 1.2.2 is buggy for uint8 and produces wrong results
+    if any(t == np.uint8 for t in numeric_df_value.dtypes):
+        return
+
+    def impl(df):
+        return df.diff()
+
+    check_func(impl, (numeric_df_value,))
 
 
 def test_df_set_index(df_value, memory_leak_check):
