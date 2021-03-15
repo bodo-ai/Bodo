@@ -376,6 +376,7 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.cummin`
 * :meth:`pandas.Series.cummax`
 * :meth:`pandas.Series.describe`
+* :meth:`pandas.Series.diff` (suports `periods` argument)
 * :meth:`pandas.Series.max`
 * :meth:`pandas.Series.mean`
 * :meth:`pandas.Series.autocorr` (supports `lag` argument)
@@ -588,7 +589,7 @@ Computations / Descriptive Stats:
 * :meth:`pandas.DataFrame.cumprod`
 * :meth:`pandas.DataFrame.cumsum`
 * :meth:`pandas.DataFrame.describe`
-* :meth:`pandas.DataFrame.diff`
+* :meth:`pandas.DataFrame.diff` (suports `periods` argument)
 * :meth:`pandas.DataFrame.max`
 * :meth:`pandas.DataFrame.mean`
 * :meth:`pandas.DataFrame.median`

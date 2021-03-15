@@ -1016,6 +1016,25 @@ def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
         )
 
 
+def test_series_diff(numeric_series_val, memory_leak_check):
+    """test Series.diff()"""
+    # # Pandas as of 1.2.2 is buggy for uint8 and produces wrong results
+    if numeric_series_val.dtype == np.uint8:
+        return
+
+    def impl(S):
+        return S.diff()
+
+    # TODO: Support nullable arrays
+    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        with pytest.raises(
+            BodoError, match="Series.diff.* column input type .* not supported"
+        ):
+            bodo.jit(impl)(numeric_series_val)
+    else:
+        check_func(impl, (numeric_series_val,))
+
+
 # TODO: Mark as slow after CI passes
 def test_series_iloc_setitem_datetime_scalar(memory_leak_check):
     """

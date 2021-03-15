@@ -1193,7 +1193,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
         ):
             # TODO: Link to supported Column input types.
             raise BodoError(
-                f"Dataframe.diff() column input type {column_type.dtype} not supported."
+                f"DataFrame.diff() column input type {column_type.dtype} not supported."
             )
 
     # Ensure period is int

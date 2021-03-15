@@ -1093,7 +1093,6 @@ series_unsupported_methods = (
     "pipe",
     # Computations / descriptive stats
     "clip",
-    "diff",
     "factorize",
     "mode",
     "rank",

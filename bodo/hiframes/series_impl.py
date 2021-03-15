@@ -2245,6 +2245,50 @@ def _build_replace_dict(to_replace, value):
     # List, List case
 
 
+@overload_method(SeriesType, "diff", inline="always", no_unliteral=True)
+def overload_series_diff(S, periods=1):
+    """Series.diff() support which is the same as S - S.shift(periods)"""
+    # TODO: Support nullable integer/float types
+    # Bodo specific limitations for supported types
+    # Currently only float (not nullable), int (not nullable), and dt64 are supported
+    if not (
+        isinstance(S.data, types.Array)
+        and (
+            isinstance(S.data.dtype, (types.Number))
+            or S.data.dtype == bodo.datetime64ns
+        )
+    ):
+        # TODO: Link to supported Column input types.
+        raise BodoError(f"Series.diff() column input type {S.data} not supported.")
+
+    # Ensure period is int
+    if not is_overload_int(periods):
+        raise BodoError("Series.diff(): 'periods' input must be an integer.")
+
+    # NOTE: using our sub function for dt64 due to bug in Numba (TODO: fix)
+    if S.data == types.Array(bodo.datetime64ns, 1, "C"):
+
+        def impl_datetime(S, periods=1):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.hiframes.series_impl.dt64_arr_sub(
+                arr, bodo.hiframes.rolling.shift(arr, periods, False)
+            )
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return impl_datetime
+
+    def impl(S, periods=1):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        out_arr = arr - bodo.hiframes.rolling.shift(arr, periods, False)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return impl
+
+
 @overload_method(SeriesType, "explode", inline="always", no_unliteral=True)
 def overload_series_explode(S, ignore_index=False):
     from bodo.hiframes.split_impl import string_array_split_view_type
