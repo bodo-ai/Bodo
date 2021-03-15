@@ -961,8 +961,11 @@ def get_parquet_filesnames_from_deltalake(delta_lake_path):
             # pq.ParquetDataset() needs the full path for each file
             file_names = [(path + "/" + f) for f in sorted(file_names)]
         except Exception as e:
-            file_names = e
-    file_names = comm.bcast(file_names)
+            if "Delta" in e.__class__.__name__:
+                file_names = Exception("deltalake error: " + str(e))
+            else:
+                file_names = e
+        file_names = comm.bcast(file_names)
 
     # Restore AWS_DEFAULT_REGION env var if it was modified
     if aws_default_region_modified:
