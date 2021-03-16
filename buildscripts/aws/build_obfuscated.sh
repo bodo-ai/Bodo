@@ -33,5 +33,5 @@ if [[ "$UseNumbaDev" == "true" ]]; then
     conda-build . -c numba/label/dev -c conda-forge --no-test
     echo "Using numba/label/dev channel"
 else
-    conda-build . -c numba -c conda-forge --no-test
+    conda-build . -c conda-forge --no-test
 fi

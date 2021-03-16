@@ -39,7 +39,7 @@ ENV PATH /root/miniconda3/bin/:${PATH}
 RUN conda create -n BODODEV numpy scipy pandas='1.2.*' boost-cpp=1.74.0 cmake h5py mpich mpi gcc_linux-64 gxx_linux-64 -c conda-forge
 RUN conda install -n BODODEV python hdf5=*=*mpich* -c conda-forge
 RUN conda install -n BODODEV python pyarrow=3.0.0 -c conda-forge
-RUN conda install -n BODODEV python numba=0.52.0 -c conda-forge
+RUN conda install -n BODODEV python numba=0.53.0 -c conda-forge
 RUN conda install -v BODODEV python nomkl numpy -c conda-forge
 RUN conda install -v BODODEV python pytest sqlalchemy mypysql xlrd openpyxl mpi4py cython -c conda-forge
 #
