@@ -32,7 +32,12 @@ from numba.extending import (
 
 import bodo.libs.str_ext
 import bodo.utils.utils
-from bodo.hiframes.datetime_date_ext import _ord2ymd, _ymd2ord, get_isocalendar
+from bodo.hiframes.datetime_date_ext import (
+    DatetimeDateType,
+    _ord2ymd,
+    _ymd2ord,
+    get_isocalendar,
+)
 from bodo.hiframes.datetime_timedelta_ext import (
     PDTimeDeltaType,
     _no_input,
@@ -1917,6 +1922,7 @@ def timestamp_max(lhs, rhs):
         return impl
 
 
+@overload_method(DatetimeDateType, "strftime", no_unliteral=True)
 @overload_method(PandasTimestampType, "strftime", no_unliteral=True)
 def strftime(ts, format_str):
     def impl(ts, format_str):  # pragma: no cover

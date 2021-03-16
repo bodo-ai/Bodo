@@ -955,6 +955,15 @@ def test_datetime_date_methods(memory_leak_check):
     check_func(test_toordinal, (date,))
 
 
+def test_datetime_date_strftime(memory_leak_check):
+    def impl(date, fmt_string):
+        return date.strftime(fmt_string)
+
+    date = datetime.date(2012, 6, 18)
+    check_func(impl, (date, "%m/%d/%Y, %H:%M:%S"))
+    check_func(impl, (date, "%Y"))
+
+
 # ------------------------- Test datetime.datetime ------------------------- #
 @pytest.mark.slow
 def test_datetime_datetime_construct(memory_leak_check):
