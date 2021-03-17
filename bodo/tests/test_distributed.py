@@ -390,9 +390,37 @@ def test_bodo_func_dist_call_tup2(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match="is marked as distributed by f2 but not possible to distribute in caller function impl2",
+        match=(
+            r"is marked as distributed by 'f2' but not possible to distribute in caller function 'impl2'.\n"
+            r"Distributed diagnostics:\nSetting distribution of variable"
+        ),
     ):
         impl2(11)
+
+
+def test_diag_for_return_error(memory_leak_check):
+    """make sure the proper error is raised when calling other bodo functions with
+    replicated args that conflict with distributed flag
+    """
+
+    @bodo.jit(distributed=["A"])
+    def f2(n):
+        A = np.arange(n)
+        return A
+
+    @bodo.jit
+    def impl(n):
+        A = f2(n)
+        return A
+
+    with pytest.raises(
+        BodoError,
+        match=(
+            r"is marked as distributed by 'f2' but not possible to distribute in caller function 'impl'.\n"
+            r"Distributed diagnostics:\nSetting distribution of variable"
+        ),
+    ):
+        impl(11)
 
 
 def test_dist_flag_warn1(memory_leak_check):
@@ -1441,7 +1469,8 @@ def get_random_int64index(n):
                     np.nan,
                     [42],
                 ]
-                * 2
+                * 2,
+                dtype=object,
             ),
             marks=pytest.mark.slow,
         ),
@@ -1460,7 +1489,8 @@ def get_random_int64index(n):
                     [2.0, 3.0],
                     np.nan,
                 ]
-                * 2
+                * 2,
+                dtype=object,
             ),
             marks=pytest.mark.slow,
         ),

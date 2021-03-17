@@ -2020,6 +2020,11 @@ class DistributedAnalysis:
             stararg_handler,
         )
 
+        err_msg = (
+            "variable '{}' is marked as distributed by '{}' but not possible to"
+            " distribute in caller function '{}'.\nDistributed diagnostics:\n{}"
+        )
+
         # check return value for distributed flag
         metadata = dispatcher.overloads[arg_types].metadata
         is_return_distributed = metadata.get("is_return_distributed", False)
@@ -2039,9 +2044,11 @@ class DistributedAnalysis:
             for i, dist in enumerate(array_dists[lhs]):
                 if is_REP(dist) and is_return_distributed[i]:
                     raise BodoError(
-                        "variable {} is marked as distributed by {} but not possible to"
-                        " distribute in caller function {}".format(
-                            lhs, dispatcher.__name__, self.func_ir.func_id.func_name
+                        err_msg.format(
+                            lhs,
+                            dispatcher.__name__,
+                            self.func_ir.func_id.func_name,
+                            "\n".join(self.diag_info),
                         )
                     )
         elif is_return_distributed:
@@ -2056,9 +2063,11 @@ class DistributedAnalysis:
         for v in dist_vars:
             if is_REP(array_dists[v]):
                 raise BodoError(
-                    "variable {} is marked as distribtued by {} but not possible to"
-                    " distribute in caller function {}".format(
-                        v, dispatcher.__name__, self.func_ir.func_id.func_name
+                    err_msg.format(
+                        v,
+                        dispatcher.__name__,
+                        self.func_ir.func_id.func_name,
+                        "\n".join(self.diag_info),
                     )
                 )
 
@@ -2481,8 +2490,8 @@ class DistributedAnalysis:
             typ = self.typemap[lhs]
             if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
                 info = (
-                    "Distributed analysis replicated argument {0} (variable "
-                    "{1}). Set distributed flag for {0} if distributed partitions "
+                    "Distributed analysis replicated argument '{0}' (variable "
+                    "'{1}'). Set distributed flag for '{0}' if distributed partitions "
                     "are passed (e.g. @bodo.jit(distributed=['{0}']))."
                 ).format(rhs.name, lhs)
                 self._set_REP(lhs, array_dists, info)
@@ -2538,7 +2547,7 @@ class DistributedAnalysis:
 
         info = (
             "Distributed analysis replicated return variable "
-            "{}. Set distributed flag for the original variable if distributed "
+            "'{}'. Set distributed flag for the original variable if distributed "
             "partitions should be returned."
         ).format(var.name)
         self._set_REP([var], array_dists, info)
