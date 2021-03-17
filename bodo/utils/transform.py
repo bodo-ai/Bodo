@@ -37,8 +37,10 @@ from bodo.utils.typing import (
     BodoError,
     can_literalize_type,
     get_literal_value,
+    get_overload_const_bool,
     get_overload_const_list,
     is_literal_type,
+    is_overload_constant_bool,
 )
 from bodo.utils.utils import is_array_typ, is_assign, is_call, is_expr
 
@@ -616,6 +618,15 @@ def get_const_value_inner(
 
     # len(data)
     if call_name == ("len", "builtins"):
+        # data may not be all constant, but it's length may be fixed (e.g. build_list)
+        arg_def = guard(get_definition, func_ir, var_def.args[0])
+        if isinstance(arg_def, ir.Expr) and arg_def.op in (
+            "build_tuple",
+            "build_list",
+            "build_set",
+            "build_map",
+        ):
+            return len(arg_def.items)
         return len(
             get_const_value_inner(
                 func_ir, var_def.args[0], arg_types, typemap, updated_containers
@@ -1064,12 +1075,34 @@ def set_call_expr_arg(var, args, kws, arg_no, arg_name):
         )  # pragma: no cover
 
 
-def func_has_assertions(py_func):
-    """return True if input function has any assertion inside"""
+def avoid_udf_inline(py_func, arg_types, kw_types):
+    """return True if UDF function should not be inlined because:
+    1) it has assertions (which breaks prange)
+    2) it has context manager like objmode blocks (BE-290)
+    3) it has dataframe input so probably expensive (BE-265)
+    """
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
+
     f_ir = numba.core.compiler.run_frontend(py_func, inline_closures=True)
+
+    # there is explicit _bodo_inline arg
+    if "_bodo_inline" in kw_types and is_overload_constant_bool(
+        kw_types["_bodo_inline"]
+    ):
+        return not get_overload_const_bool(kw_types["_bodo_inline"])
+
+    # there is dataframe input
+    if any(isinstance(t, DataFrameType) for t in arg_types + tuple(kw_types.values())):
+        return True
+
     for block in f_ir.blocks.values():
+        # assertions
         if isinstance(block.body[-1], (ir.Raise, ir.StaticRaise)):
             return True
+        # has context manager
+        for stmt in block.body:
+            if isinstance(stmt, ir.EnterWith):
+                return True
     return False
 
 

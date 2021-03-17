@@ -15,6 +15,7 @@ import numba
 import numpy as np
 import pandas as pd
 from mpi4py import MPI
+from numba.core import ir
 from numba.core.compiler_machinery import FunctionPass, register_pass
 from numba.core.typed_passes import NopythonRewrites
 from numba.core.untyped_passes import PreserveIR
@@ -832,6 +833,24 @@ def is_list_str_object_series(S):
     return S.dtype == np.dtype("O") and bodo.hiframes.boxing._infer_ndarray_obj_dtype(
         S
     ).dtype == numba.core.types.List(numba.core.types.unicode_type)
+
+
+def has_udf_call(fir):
+    """returns True if function IR 'fir' has a UDF call."""
+    for block in fir.blocks.values():
+        for stmt in block.body:
+            if (
+                isinstance(stmt, ir.Assign)
+                and isinstance(stmt.value, ir.Global)
+                and isinstance(stmt.value.value, numba.core.registry.CPUDispatcher)
+            ):
+                if (
+                    stmt.value.value._compiler.pipeline_class
+                    == bodo.compiler.BodoCompilerUDF
+                ):
+                    return True
+
+    return False
 
 
 class DeadcodeTestPipeline(bodo.compiler.BodoCompiler):
