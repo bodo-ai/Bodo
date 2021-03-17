@@ -812,6 +812,24 @@ def test_merge_right_index_rm_dead(memory_leak_check):
     )
 
 
+def test_merge_right_key_nullable(memory_leak_check):
+    """Tests a bug where converting right key to nullable in left join output would
+    throw an error.
+    """
+
+    def impl(df1, df2):
+        return df1.merge(df2, left_on="A1", right_on="A2", how="left")
+
+    df1 = pd.DataFrame({"A1": [1, 2, 4]})
+    df2 = pd.DataFrame({"A2": [1, 2, 3]})
+    check_func(
+        impl,
+        (df1, df2),
+        sort_output=True,
+        check_dtype=False,
+    )
+
+
 def test_merge_key_type_change(memory_leak_check):
     """
     Test merge() key type check when key type changes in the program (handled in partial

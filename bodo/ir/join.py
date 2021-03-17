@@ -860,7 +860,7 @@ def _gen_local_hash_join(
     for i, t in enumerate(right_key_names):
         if not vect_same_key[i] and not is_join:
             rec_typ = get_out_type(
-                idx, right_key_types[i], "t2_keys[{}]".format(i), is_right, False
+                idx, right_key_types[i], f"t2_keys[{i}]", is_left, False
             )
             func_text += rec_typ[0]
             func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), {}){}\n".format(
