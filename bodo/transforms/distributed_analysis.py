@@ -2230,7 +2230,7 @@ class DistributedAnalysis:
             fname = mod + "." + name
         if len(arrs) > 0:
             info = (
-                "Distributed analysis set {} as replicated due "
+                "Distributed analysis set '{}' as replicated due "
                 "to call to function '{}' (unsupported function or usage)"
             ).format(", ".join(f"'{self._get_user_varname(a)}'" for a in arrs), fname)
             self._add_diag_info(info)

@@ -2101,6 +2101,7 @@ def iternext_itertuples(context, builder, sig, args, result):
 
 # FIXME: fix array analysis for tuples in general
 def _analyze_op_pair_first(self, scope, equiv_set, expr, lhs):
+    # TODO(ehsan): Numba 0.53 adds lhs so this code should be refactored
     # make dummy lhs since we don't have access to lhs
     typ = self.typemap[expr.value.name].first_type
     if not isinstance(typ, types.NamedTuple):
@@ -2126,8 +2127,7 @@ def _analyze_op_pair_first(self, scope, equiv_set, expr, lhs):
         size_vars.append(size_var)
     shape = tuple(size_vars)
     return numba.parfors.array_analysis.ArrayAnalysis.AnalyzeResult(
-        shape=shape,
-        pre=[lhs_assign] + out
+        shape=shape, pre=[lhs_assign] + out
     )
 
 

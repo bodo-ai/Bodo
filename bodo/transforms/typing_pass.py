@@ -223,7 +223,7 @@ class BodoTypeInference(PartialTypeInference):
             if isinstance(return_type, types.Function) or isinstance(
                 return_type, types.Phantom
             ):
-                msg = "Can't return function object ({}) in nopython mode"
+                msg = "Can't return function object ({})"
                 raise TypeError(msg.format(return_type))
             state.return_type = return_type
 
