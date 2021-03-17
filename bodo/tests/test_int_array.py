@@ -589,6 +589,15 @@ def test_unique(int_arr_value, memory_leak_check):
     )
 
 
+def test_sum_method(int_arr_value, memory_leak_check):
+    """test IntegerArray.sum()"""
+
+    def test_impl(A):
+        return A.sum()
+
+    check_func(test_impl, (int_arr_value,))
+
+
 # TODO: fix memory leak and add memory_leak_check
 @pytest.mark.slow
 def test_constant_lowering(int_arr_value):

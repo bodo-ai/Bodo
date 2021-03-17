@@ -1363,7 +1363,7 @@ class SeriesPass:
         if (
             isinstance(func_mod, ir.Var)
             and isinstance(self.typemap[func_mod.name], IntegerArrayType)
-            and func_name in ("copy", "astype")
+            and func_name in ("copy", "astype", "sum")
         ):
             rhs.args.insert(0, func_mod)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)

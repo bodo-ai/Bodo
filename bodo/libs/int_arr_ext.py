@@ -48,6 +48,7 @@ from bodo.utils.indexing import (
 )
 from bodo.utils.typing import (
     BodoError,
+    check_unsupported_args,
     is_iterable_type,
     is_list_like_index_type,
     is_overload_false,
@@ -881,6 +882,28 @@ def concat_bitmap_tup(arrs):
     loc_vars = {}
     exec(func_text, {"np": np, "bodo": bodo}, loc_vars)
     impl = loc_vars["f"]
+    return impl
+
+
+# inlining in Series pass but avoiding inline="always" since there are Numba-only cases
+# that don't need inlining such as repeats.sum() in repeat_kernel()
+@overload_method(IntegerArrayType, "sum", no_unliteral=True)
+def overload_int_arr_sum(A, skipna=True, min_count=0):
+    """A.sum() for nullable integer arrays"""
+    unsupported_args = dict(skipna=skipna, min_count=min_count)
+    arg_defaults = dict(skipna=True, min_count=0)
+    check_unsupported_args("IntegerArray.sum", unsupported_args, arg_defaults)
+
+    def impl(A, skipna=True, min_count=0):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        s = 0
+        for i in numba.parfors.parfor.internal_prange(len(A)):
+            val = 0
+            if not bodo.libs.array_kernels.isna(A, i):
+                val = A[i]
+            s += val
+        return s
+
     return impl
 
 
