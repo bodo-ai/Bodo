@@ -2441,7 +2441,7 @@ def test_max_one_col(test_df, memory_leak_check):
 
     # seems like Pandas 1.0 has a regression and returns float64 for Int64 in this case
     check_dtype = True
-    if pd.Int64Dtype() in test_df.dtypes.to_list():
+    if any(pd.Int64Dtype() == v for v in test_df.dtypes.to_list()):
         check_dtype = False
     check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
 
@@ -2639,7 +2639,7 @@ def test_min_one_col(test_df, memory_leak_check):
 
     # seems like Pandas 1.0 has a regression and returns float64 for Int64 in this case
     check_dtype = True
-    if pd.Int64Dtype() in test_df.dtypes.to_list():
+    if any(pd.Int64Dtype() == v for v in test_df.dtypes.to_list()):
         check_dtype = False
     check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
     check_func(impl1, (df_bool,), sort_output=True)
@@ -2756,7 +2756,7 @@ def test_prod_one_col(test_df, memory_leak_check):
 
     # seems like Pandas 1.0 has a regression and returns float64 for Int64 in this case
     check_dtype = True
-    if pd.Int64Dtype() in test_df.dtypes.to_list():
+    if any(pd.Int64Dtype() == v for v in test_df.dtypes.to_list()):
         check_dtype = False
     check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
     # Pandas 1.2.0 converts the all boolean values to integers
@@ -2890,7 +2890,7 @@ def test_first_last_one_col(test_df, memory_leak_check):
 
     # seems like Pandas 1.0 has a regression and returns float64 for Int64 in this case
     check_dtype = True
-    if pd.Int64Dtype() in test_df.dtypes.to_list():
+    if any(pd.Int64Dtype() == v for v in test_df.dtypes.to_list()):
         check_dtype = False
     check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
     check_func(impl1, (df_str,), sort_output=True, check_typing_issues=False)

@@ -181,35 +181,26 @@ class ParquetFileInfo(FileInfo):
 class ParquetHandler:
     """analyze and transform parquet IO calls"""
 
-    def __init__(self, func_ir, typingctx, args, _locals, _reverse_copies):
+    def __init__(self, func_ir, typingctx, args, _locals):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.args = args
         self.locals = _locals
-        self.reverse_copies = _reverse_copies
 
     def gen_parquet_read(self, file_name, lhs, columns):
         scope = lhs.scope
         loc = lhs.loc
 
         table_types = None
-        # lhs is temporary and will possibly be assigned to user variable
-        assert lhs.name.startswith("$")
-        if (
-            lhs.name in self.reverse_copies
-            and self.reverse_copies[lhs.name] in self.locals
-        ):
-            table_types = self.locals[self.reverse_copies[lhs.name]]
-            self.locals.pop(self.reverse_copies[lhs.name])
+        if lhs.name in self.locals:
+            table_types = self.locals[lhs.name]
+            self.locals.pop(lhs.name)
 
         convert_types = {}
         # user-specified type conversion
-        if (
-            lhs.name in self.reverse_copies
-            and (self.reverse_copies[lhs.name] + ":convert") in self.locals
-        ):
-            convert_types = self.locals[self.reverse_copies[lhs.name] + ":convert"]
-            self.locals.pop(self.reverse_copies[lhs.name] + ":convert")
+        if (lhs.name + ":convert") in self.locals:
+            convert_types = self.locals[lhs.name + ":convert"]
+            self.locals.pop(lhs.name + ":convert")
 
         if table_types is None:
             msg = (

@@ -8,7 +8,7 @@ pwd
 echo $PATH
 export PATH=/root/miniconda3/bin:$PATH
 echo $PATH
-conda create -n Bodo python=3.8
+conda create -n Bodo python
 cd /home/ubuntu
 eval "$(conda shell.bash hook)"
 conda activate Bodo

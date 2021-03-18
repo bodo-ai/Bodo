@@ -364,7 +364,7 @@ class BodoDumpDistDiagnosticsPass(AnalysisPass):
             pass
 
         if diag_level > 0 and "distributed_diagnostics" in state.metadata:
-            state.metadata["distributed_diagnostics"].dump(diag_level)
+            state.metadata["distributed_diagnostics"].dump(diag_level, state.metadata)
         return True
 
 
@@ -395,7 +395,11 @@ class LowerParforSeq(FunctionPass):
 
     def run_pass(self, state):
         bodo.transforms.distributed_pass.lower_parfor_sequential(
-            state.typingctx, state.func_ir, state.typemap, state.calltypes
+            state.typingctx,
+            state.func_ir,
+            state.typemap,
+            state.calltypes,
+            state.metadata,
         )
         return True
 

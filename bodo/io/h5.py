@@ -7,16 +7,12 @@ import types as pytypes  # avoid confusion with numba.core.types
 import numba
 from numba.core import ir, types
 from numba.core.ir_utils import (
-    build_definitions,
     compile_to_numba_ir,
     find_callname,
     find_const,
-    find_topo_order,
     get_definition,
     guard,
-    mk_unique_var,
     replace_arg_nodes,
-    replace_vars_inner,
     require,
 )
 
@@ -28,12 +24,11 @@ from bodo.utils.transform import get_const_value_inner
 class H5_IO:
     """analyze and transform hdf5 calls"""
 
-    def __init__(self, func_ir, _locals, flags, arg_types, reverse_copies):
+    def __init__(self, func_ir, _locals, flags, arg_types):
         self.func_ir = func_ir
         self.locals = _locals
         self.flags = flags
         self.arg_types = arg_types
-        self.reverse_copies = reverse_copies
 
     def handle_possible_h5_read(self, assign, lhs, rhs):
         tp = self._get_h5_type(lhs, rhs)
@@ -120,10 +115,7 @@ class H5_IO:
         return types.Array(numba_dtype, ndims, "C")
 
     def _get_h5_type_locals(self, varname):
-        # TODO: can we do this without reverse_copies?
-        # TODO: if copy propagation is done, varname itself should be checked
-        new_name = self.reverse_copies.get(varname, None)
-        typ = self.locals.pop(new_name, None)
-        if typ is None and new_name is not None:
-            typ = self.flags.h5_types.get(new_name, None)
+        typ = self.locals.pop(varname, None)
+        if typ is None and varname is not None:
+            typ = self.flags.h5_types.get(varname, None)
         return typ

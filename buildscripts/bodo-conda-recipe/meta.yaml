@@ -18,9 +18,9 @@ requirements:
     - {{ compiler('cxx') }}
 
   host:
-    - python =3.8
+    - python
     - setuptools
-    - numba 0.52.0
+    - numba 0.53.0
     - numpy
     - cython
     - s3fs
@@ -38,13 +38,13 @@ requirements:
     - vs2015_win-64 # [win]
 
   run:
-    - python =3.8
+    - python
     - {{ pin_compatible('numpy') }}
     - pandas 1.2.*
     - pyarrow =3.0.0
     - boost-cpp =1.74.0
     - libcurl
-    - numba 0.52.0
+    - numba 0.53.0
     - openjdk =8
     - sqlalchemy
     - s3fs

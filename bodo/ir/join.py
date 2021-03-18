@@ -184,11 +184,8 @@ def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
     all_shapes = []
     for col_var in join_node.out_data_vars.values():
         typ = typemap[col_var.name]
-        (shape, c_post) = array_analysis._gen_shape_call(
-            equiv_set, col_var, typ.ndim, None
-        )
+        shape = array_analysis._gen_shape_call(equiv_set, col_var, typ.ndim, None, post)
         equiv_set.insert_equiv(col_var, shape)
-        post.extend(c_post)
         all_shapes.append(shape[0])
         equiv_set.define(col_var, set())
 

@@ -1215,7 +1215,9 @@ def series_cat_codes_overload(S_dt):
         # Pandas ignores Series name for some reason currently
         # name = bodo.hiframes.pd_series_ext.get_series_name(S)
         name = None
-        return bodo.hiframes.pd_series_ext.init_series(arr.codes, index, name)
+        return bodo.hiframes.pd_series_ext.init_series(
+            bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(arr), index, name
+        )
 
     return impl
 

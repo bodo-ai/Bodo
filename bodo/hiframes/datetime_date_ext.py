@@ -12,6 +12,7 @@ from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_builtin, lower_constant
 from numba.core.typing.templates import AttributeTemplate, infer_getattr
+from numba.core.utils import PYVERSION
 from numba.extending import (
     NativeValue,
     box,
@@ -624,6 +625,24 @@ def date_to_bool(date):
     return impl
 
 
+# Python 3.9 uses a namedtuple-like calss for isocalendar output instead of tuple
+if PYVERSION >= (3, 9):
+    # IsoCalendarDate class is hidden from import, so use a value to retrieve it
+    IsoCalendarDate = datetime.date(2011, 1, 1).isocalendar().__class__
+
+    # TODO: [BE-251] support full functionality
+
+    class IsoCalendarDateType(types.Type):
+        def __init__(self):
+            super(IsoCalendarDateType, self).__init__(name="IsoCalendarDateType()")
+
+    iso_calendar_date_type = DatetimeDateType()
+
+    @typeof_impl.register(IsoCalendarDate)
+    def typeof_datetime_date(val, c):
+        return iso_calendar_date_type
+
+
 ##################### Array of datetime.date objects ##########################
 
 
@@ -806,7 +825,7 @@ def alloc_datetime_date_array_equiv(self, scope, equiv_set, loc, args, kws):
     variable.
     """
     assert len(args) == 1 and not kws
-    return args[0], []
+    return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_datetime_date_ext_alloc_datetime_date_array = (

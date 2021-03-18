@@ -1197,9 +1197,9 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
             check_dtype=check_dtype,
         )
         # setitem dt64/td64 array with list Timestamp/Timedelta values not supported
-        if series_val.dtype not in (
-            np.dtype("datetime64[ns]"),
-            np.dtype("timedelta64[ns]"),
+        if not (
+            series_val.dtype == np.dtype("datetime64[ns]")
+            or series_val.dtype == np.dtype("timedelta64[ns]")
         ):
             check_func(
                 test_impl2,
@@ -1341,9 +1341,9 @@ def test_series_iloc_setitem_slice(series_val, memory_leak_check):
             dist_test=False,
         )
         # setitem dt64/td64 array with list Timestamp/Timedelta values not supported
-        if series_val.dtype not in (
-            np.dtype("datetime64[ns]"),
-            np.dtype("timedelta64[ns]"),
+        if not (
+            series_val.dtype == np.dtype("datetime64[ns]")
+            or series_val.dtype == np.dtype("timedelta64[ns]")
         ):
             check_func(
                 test_impl2,
@@ -1405,9 +1405,9 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
             dist_test=False,
         )
         # setitem dt64/td64 array with list(int) idx not supported
-        if series_val.dtype not in (
-            np.dtype("datetime64[ns]"),
-            np.dtype("timedelta64[ns]"),
+        if not (
+            series_val.dtype == np.dtype("datetime64[ns]")
+            or series_val.dtype == np.dtype("timedelta64[ns]")
         ):
             check_func(
                 test_impl2,
@@ -1443,9 +1443,9 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
             dist_test=False,
         )
         # setitem dt64/td64 array with list(int) idx not supported
-        if series_val.dtype not in (
-            np.dtype("datetime64[ns]"),
-            np.dtype("timedelta64[ns]"),
+        if not (
+            series_val.dtype == np.dtype("datetime64[ns]")
+            or series_val.dtype == np.dtype("timedelta64[ns]")
         ):
             check_func(
                 test_impl2,

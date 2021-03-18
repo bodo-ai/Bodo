@@ -117,7 +117,7 @@ no_side_effect_call_tuples = {
     ("_var_handle_mincount", "series_kernels", "hiframes", bodo),
     ("_handle_nan_count", "series_kernels", "hiframes", bodo),
     ("_handle_nan_count_ddof", "series_kernels", "hiframes", bodo),
-    ("dist_return", "distributed_api", bodo),
+    ("dist_return", "distributed_api", "libs", bodo),
     # dataframe
     ("init_dataframe", "pd_dataframe_ext", "hiframes", bodo),
     ("get_dataframe_data", "pd_dataframe_ext", "hiframes", bodo),
@@ -752,6 +752,7 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context):
             typemap,
             f_return_type,
             calltypes,
+            _,
         ) = numba.core.typed_passes.type_inference_stage(
             typing_context, f_ir, arg_types, None
         )

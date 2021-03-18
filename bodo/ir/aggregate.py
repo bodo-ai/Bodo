@@ -825,11 +825,8 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap, array_analysis)
 
     for col_var in out_vars:
         typ = typemap[col_var.name]
-        (shape, c_post) = array_analysis._gen_shape_call(
-            equiv_set, col_var, typ.ndim, None
-        )
+        shape = array_analysis._gen_shape_call(equiv_set, col_var, typ.ndim, None, post)
         equiv_set.insert_equiv(col_var, shape)
-        post.extend(c_post)
         all_shapes.append(shape[0])
         equiv_set.define(col_var, set())
 
@@ -2024,7 +2021,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     )
     untyped_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
-    typemap, return_type, calltypes = numba.core.typed_passes.type_inference_stage(
+    typemap, return_type, calltypes, _ = numba.core.typed_passes.type_inference_stage(
         typingctx, f_ir, arg_typs, None
     )
 

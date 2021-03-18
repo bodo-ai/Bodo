@@ -110,12 +110,20 @@ class DistributedDiagnostics:
         self.diag_info = diag_info
         self.func_ir = func_ir
 
-    def _print_dists(self):
+    def _print_dists(self, level, metadata):
         print("Data distributions:")
         if len(self.array_dists) > 0:
             arrname_width = max(len(a) for a in self.array_dists.keys())
             arrname_width = max(arrname_width + 3, 20)
+            printed_vars = set()
             for arr, dist in self.array_dists.items():
+                # only show original user variable names in level=1
+                # avoid variable repetition (possible with renaming)
+                if level < 2 and arr in metadata["parfors"]["var_rename_map"]:
+                    arr = metadata["parfors"]["var_rename_map"][arr]
+                if level < 2 and (arr in printed_vars or arr.startswith("$")):
+                    continue
+                printed_vars.add(arr)
                 print("   {0:{1}} {2}".format(arr, arrname_width, dist))
         else:
             print("No distributable data structures to distribute.")
@@ -128,12 +136,14 @@ class DistributedDiagnostics:
             print("No parfors to distribute.")
         return
 
-    def dump(self, level=1):
+    # NOTE: adding metadata as input instead of attribute to avoid circular dependency
+    # since DistributedDiagnostics object is inside metadata
+    def dump(self, level, metadata):
         name = self.func_ir.func_id.func_qualname
         line = self.func_ir.loc
 
         print("Distributed diagnostics for function {}, {}\n".format(name, line))
-        self._print_dists()
+        self._print_dists(level, metadata)
 
         # similar to ParforDiagnostics.dump()
         func_name = self.func_ir.func_id.func
@@ -147,7 +157,7 @@ class DistributedDiagnostics:
             return
 
         print("\nDistributed listing for function {}, {}".format(name, line))
-        self._print_src_dists(lines)
+        self._print_src_dists(lines, level, metadata)
 
         # trace diag info
         print()
@@ -155,7 +165,7 @@ class DistributedDiagnostics:
             print(l)
         print()
 
-    def _print_src_dists(self, lines):
+    def _print_src_dists(self, lines, level, metadata):
         filename = self.func_ir.loc.filename
         src_width = max(len(x) for x in lines)
 
@@ -167,12 +177,20 @@ class DistributedDiagnostics:
                 l_no = max(0, loc.line - 1)
                 map_line_to_info[l_no].append("#{}: {}".format(p_id, p_dist))
 
+        printed_vars = set()
         for arr, a_dist in self.array_dists.items():
             if not arr in self.array_locs:
                 continue
             loc = self.array_locs[arr]
             if loc.filename == filename:
                 l_no = max(0, loc.line - 1)
+                # only show original user variable names in level=1
+                # avoid variable repetition (possible with renaming)
+                if level < 2 and arr in metadata["parfors"]["var_rename_map"]:
+                    arr = metadata["parfors"]["var_rename_map"][arr]
+                if level < 2 and (arr in printed_vars or arr.startswith("$")):
+                    continue
+                printed_vars.add(arr)
                 map_line_to_info[l_no].append("{}: {}".format(arr, a_dist))
 
         width = src_width + 4
@@ -586,7 +604,9 @@ class DistributedAnalysis:
         TODO: support other similar reductions?
         """
 
-        for reduce_varname, (_init_val, reduce_nodes, _op) in parfor.reddict.items():
+        for reduce_varname, (_init_val, reduce_nodes, _op) in sorted(
+            parfor.reddict.items()
+        ):
             reduce_op = guard(
                 get_reduce_op, reduce_varname, reduce_nodes, self.func_ir, self.typemap
             )
@@ -606,8 +626,8 @@ class DistributedAnalysis:
                 # if pafor is replicated, output array is replicated
                 if is_REP(out_dist):
                     self._add_diag_info(
-                        "Variable {} set to REP since it is a concat reduction variable for Parfor {} which is REP".format(
-                            reduce_varname, parfor.id
+                        "Variable '{}' set to REP since it is a concat reduction variable for Parfor {} which is REP".format(
+                            self._get_user_varname(reduce_varname), parfor.id
                         )
                     )
                     array_dists[reduce_varname] = Distribution.REP
@@ -2219,9 +2239,9 @@ class DistributedAnalysis:
             fname = mod + "." + name
         if len(arrs) > 0:
             info = (
-                "Distributed analysis set {} as replicated due "
+                "Distributed analysis set '{}' as replicated due "
                 "to call to function '{}' (unsupported function or usage)"
-            ).format(", ".join(arrs), fname)
+            ).format(", ".join(f"'{self._get_user_varname(a)}'" for a in arrs), fname)
             self._add_diag_info(info)
 
     def _analyze_getitem(self, inst, lhs, rhs, equiv_set, array_dists):
@@ -2602,7 +2622,9 @@ class DistributedAnalysis:
                     varname not in array_dists or not is_REP(array_dists[varname])
                 ) and info is not None:
                     info = (
-                        "Setting distribution of variable '{}' to REP: ".format(varname)
+                        "Setting distribution of variable '{}' to REP: ".format(
+                            self._get_user_varname(varname)
+                        )
                         + info
                     )
                     self._add_diag_info(info)
@@ -2724,18 +2746,35 @@ class DistributedAnalysis:
         if info not in self.diag_info:
             self.diag_info.append(info)
 
+    def _get_user_varname(self, v):
+        """get original variable name by user for diagnostics info if possible"""
+        if v in self.metadata["parfors"]["var_rename_map"]:
+            return self.metadata["parfors"]["var_rename_map"][v]
+        return v
+
 
 def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):
     """find reduction operation in parfor reduction IR nodes."""
     if guard(_is_concat_reduce, reduce_varname, reduce_nodes, func_ir, typemap):
         return Reduce_Type.Concat
 
-    require(len(reduce_nodes) == 2)
-    require(isinstance(reduce_nodes[0], ir.Assign))
-    require(isinstance(reduce_nodes[1], ir.Assign))
-    require(isinstance(reduce_nodes[0].value, ir.Expr))
-    require(isinstance(reduce_nodes[1].value, ir.Var))
-    rhs = reduce_nodes[0].value
+    require(len(reduce_nodes) >= 1)
+    require(isinstance(reduce_nodes[-1], ir.Assign))
+
+    # ignore extra assignments after reduction operator
+    # there could be any number of extra assignment after the reduce node due to SSA
+    # changes in Numba 0.53.0rc2
+    # See: test_reduction_var_reuse in Numba
+    last_ind = -1
+    while isinstance(reduce_nodes[last_ind].value, ir.Var):
+        require(len(reduce_nodes[:last_ind]) >= 1)
+        require(isinstance(reduce_nodes[last_ind - 1], ir.Assign))
+        require(
+            reduce_nodes[last_ind - 1].target.name == reduce_nodes[last_ind].value.name
+        )
+        last_ind -= 1
+    rhs = reduce_nodes[last_ind].value
+    require(isinstance(rhs, ir.Expr))
 
     if rhs.op == "inplace_binop":
         if rhs.fn in ("+=", operator.iadd):

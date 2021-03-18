@@ -669,7 +669,9 @@ def init_dataframe_equiv(self, scope, equiv_set, loc, args, kws):
         if len(data_shapes) > 1:
             equiv_set.insert_equiv(*data_shapes)
         if len(data_shapes) > 0:
-            return (data_shapes[0], len(data_shapes)), []
+            return ArrayAnalysis.AnalyzeResult(
+                shape=(data_shapes[0], len(data_shapes)), pre=[]
+            )
     return None
 
 
@@ -685,7 +687,7 @@ def get_dataframe_data_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 2 and not kws
     var = args[0]
     if equiv_set.has_shape(var):
-        return equiv_set.get_shape(var)[0], []
+        return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(var)[0], pre=[])
     return None
 
 
@@ -3538,6 +3540,7 @@ def get_dummies(
     n_cols = len(categories)
 
     # Pandas implementation:
+    func_text += "  codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(data_values)\n"
     func_text += "  numba.parfors.parfor.init_prange()\n"
     func_text += "  n = len(data_values)\n"
     for i in range(n_cols):
@@ -3548,9 +3551,7 @@ def get_dummies(
         func_text += "          data_arr_{}[i] = 0\n".format(j)
     func_text += "      else:\n"
     for k in range(n_cols):
-        func_text += "          data_arr_{0}[i] = data_values.codes[i] == {0}\n".format(
-            k
-        )
+        func_text += "          data_arr_{0}[i] = codes[i] == {0}\n".format(k)
     data_args = ", ".join(f"data_arr_{i}" for i in range(n_cols))
     index = "bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)"
 

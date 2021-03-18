@@ -530,7 +530,7 @@ def alloc_decimal_array_equiv(self, scope, equiv_set, loc, args, kws):
     variable.
     """
     assert len(args) == 3 and not kws
-    return args[0], []
+    return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
 ArrayAnalysis._analyze_op_call_bodo_libs_decimal_arr_ext_alloc_decimal_array = (

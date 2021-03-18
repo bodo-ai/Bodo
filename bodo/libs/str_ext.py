@@ -10,28 +10,19 @@ from numba.core import cgutils, types
 from numba.core.typing.templates import (
     AbstractTemplate,
     AttributeTemplate,
-    ConcreteTemplate,
     bound_function,
-    infer,
     infer_getattr,
     infer_global,
     signature,
 )
 from numba.extending import (
-    NativeValue,
-    box,
     intrinsic,
-    lower_builtin,
     lower_cast,
     make_attribute_wrapper,
     models,
     overload,
     overload_attribute,
-    overload_method,
     register_model,
-    type_callable,
-    typeof_impl,
-    unbox,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
 
@@ -452,7 +443,7 @@ def overload_str_arr_shape(A):
 def alloc_random_access_str_arr_equiv(self, scope, equiv_set, loc, args, kws):
     """Array analysis function for alloc_random_access_string_array()"""
     assert len(args) == 1 and not kws
-    return args[0], []
+    return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
 ArrayAnalysis._analyze_op_call_bodo_libs_str_ext_alloc_random_access_string_array = (

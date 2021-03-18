@@ -298,14 +298,19 @@ def create_cmp_op_overload(op):
             )
 
             def impl_lit(A, other):  # pragma: no cover
-                out_arr = op(A.codes, other_idx)
+                out_arr = op(
+                    bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A),
+                    other_idx,
+                )
                 return out_arr
 
             return impl_lit
 
         def impl(A, other):  # pragma: no cover
             other_idx = get_code_for_value(A.dtype, other)
-            out_arr = op(A.codes, other_idx)
+            out_arr = op(
+                bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A), other_idx
+            )
             return out_arr
 
         return impl
@@ -399,7 +404,7 @@ def init_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 2 and not kws
     var = args[0]
     if equiv_set.has_shape(var):
-        return var, []
+        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
     return None
 
 
@@ -431,7 +436,7 @@ def alloc_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
     extension. Assigns output array's size as equivalent to the input size variable.
     """
     assert len(args) == 2 and not kws
-    return args[0], []
+    return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_categorical_ext_alloc_categorical_array = (

@@ -16,12 +16,14 @@ import types as pytypes
 import warnings
 from collections import OrderedDict
 from collections.abc import Sequence
+from contextlib import ExitStack
 
 import numba
 import numba.np.linalg
 from numba.core import analysis, cgutils, errors, ir, ir_utils, types
 from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
 from numba.core.ir_utils import (
+    GuardException,
     _create_function_from_code_obj,
     analysis,
     build_definitions,
@@ -937,9 +939,10 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
             argtypes.append(types.Omitted(a.value))
         else:
             argtypes.append(self.typeof_pyval(a))
+    return_val = None
     try:
         error = None
-        return self.compile(tuple(argtypes))
+        return_val = self.compile(tuple(argtypes))
     except errors.ForceLiteralArg as e:
         # Received request for compiler re-entry with the list of arguments
         # indicated by e.requested_args.
@@ -978,7 +981,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
                 new_args.append(args[i])
         args = new_args
         # Re-enter compilation with the Literal-ized arguments
-        return self._compile_for_args(*args)
+        return_val = self._compile_for_args(*args)
 
     except errors.TypingError as e:
         # Intercept typing error that may be due to an argument
@@ -1035,11 +1038,13 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         raise e
     # Bodo change: avoid arg leak
     finally:
+        self._types_active_call = []
         # avoid issue of reference leak of arguments to jitted function:
         # https://github.com/numba/numba/issues/5419
         del args
         if error:
             raise error
+    return return_val
 
 
 # workaround for Numba #5419 issue (https://github.com/numba/numba/issues/5419)
@@ -1049,7 +1054,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
 lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "c85205bff102c4447e81110ee82291a2e3ff78bc73535be18e76e6f4539debb1"
+    != "79466480839c6e16cf437dc054937deb639c85664df1fef673e8f34dfe9d41b6"
 ):  # pragma: no cover
     warnings.warn("numba.core.dispatcher._DispatcherBase._compile_for_args has changed")
 # now replace the function with our own
@@ -1078,51 +1083,74 @@ def resolve_gb_agg_funcs(cres):
 
 
 def compile(self, sig):
-    if not self._can_compile:
-        raise RuntimeError("compilation disabled")
-    # Use counter to track recursion compilation depth
-    with self._compiling_counter:
-        args, return_type = numba.core.sigutils.normalize_signature(sig)
-        # Don't recompile if signature already exists
-        existing = self.overloads.get(tuple(args))
-        if existing is not None:
-            return existing.entry_point
-        # Try to load from disk cache
-        cres = self._cache.load_overload(sig, self.targetctx)
-        if cres is not None:
-            resolve_gb_agg_funcs(cres)  # Bodo change
-            self._cache_hits[sig] += 1
-            # XXX fold this in add_overload()? (also see compiler.py)
-            if not cres.objectmode:
-                self.targetctx.insert_user_function(
-                    cres.entry_point, cres.fndesc, [cres.library]
-                )
-            self.add_overload(cres)
+    import numba.core.event as ev
+    from numba.core import sigutils
+    from numba.core.compiler_lock import global_compiler_lock
+
+    with ExitStack() as scope:
+        cres = None
+
+        def cb_compiler(dur):
+            if cres is not None:
+                self._callback_add_compiler_timer(dur, cres)
+
+        def cb_llvm(dur):
+            if cres is not None:
+                self._callback_add_llvm_timer(dur, cres)
+
+        scope.enter_context(ev.install_timer("numba:compiler_lock", cb_compiler))
+        scope.enter_context(ev.install_timer("numba:llvm_lock", cb_llvm))
+        scope.enter_context(global_compiler_lock)
+
+        if not self._can_compile:
+            raise RuntimeError("compilation disabled")
+        # Use counter to track recursion compilation depth
+        with self._compiling_counter:
+            args, return_type = sigutils.normalize_signature(sig)
+            # Don't recompile if signature already exists
+            existing = self.overloads.get(tuple(args))
+            if existing is not None:
+                return existing.entry_point
+            # Try to load from disk cache
+            cres = self._cache.load_overload(sig, self.targetctx)
+            if cres is not None:
+                resolve_gb_agg_funcs(cres)  # Bodo change
+                self._cache_hits[sig] += 1
+                # XXX fold this in add_overload()? (also see compiler.py)
+                if not cres.objectmode:
+                    self.targetctx.insert_user_function(
+                        cres.entry_point, cres.fndesc, [cres.library]
+                    )
+                self.add_overload(cres)
+                return cres.entry_point
+
+            self._cache_misses[sig] += 1
+            ev_details = dict(
+                dispatcher=self,
+                args=args,
+                return_type=return_type,
+            )
+            with ev.trigger_event("numba:compile", data=ev_details):
+                try:
+                    cres = self._compiler.compile(args, return_type)
+                except errors.ForceLiteralArg as e:
+
+                    def folded(args, kws):
+                        return self._compiler.fold_argument_types(args, kws)[1]
+
+                    raise e.bind_fold_arguments(folded)
+                self.add_overload(cres)
+            self._cache.save_overload(sig, cres)
             return cres.entry_point
-
-        self._cache_misses[sig] += 1
-        try:
-            cres = self._compiler.compile(args, return_type)
-        except errors.ForceLiteralArg as e:
-
-            def folded(args, kws):
-                return self._compiler.fold_argument_types(args, kws)[1]
-
-            raise e.bind_fold_arguments(folded)
-        self.add_overload(cres)
-        self._cache.save_overload(sig, cres)
-        return cres.entry_point
 
 
 lines = inspect.getsource(numba.core.dispatcher.Dispatcher.compile)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "d4e9278b09bd4c71855e2930c1b409b62461602a35d5da0fde81f913a9627546"
+    != "bab1d95438fe39d3e26e0ac0989ae3a3b54439ee0eda8507a693ea6ca4a4917b"
 ):  # pragma: no cover
     warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
-numba.core.dispatcher.Dispatcher.compile = (
-    numba.core.compiler_lock.global_compiler_lock(compile)
-)
+numba.core.dispatcher.Dispatcher.compile = compile
 
 
 def _get_module_for_linking(self):
@@ -1442,6 +1470,7 @@ def ParforPassStates__init__(
     typingctx,
     options,
     flags,
+    metadata,
     diagnostics=numba.parfors.parfor.ParforDiagnostics(),
 ):
     self.func_ir = func_ir
@@ -1465,16 +1494,26 @@ def ParforPassStates__init__(
     # bodo change: make sure _max_label is always maximum
     ir_utils._max_label = max(ir_utils._max_label, max(func_ir.blocks.keys()))
     self.flags = flags
+    self.metadata = metadata
+    if "parfors" not in metadata:
+        metadata["parfors"] = {}
 
 
 lines = inspect.getsource(numba.parfors.parfor.ParforPassStates.__init__)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "0b939cec777ef428a224056d8ab92db860a2b1457fd228127b695d02df933c26"
+    != "86614f7cf5b0ce442ac51d1ade9bc42fd5c238cae723c3b0ed3d8e4d9a33d7fb"
 ):  # pragma: no cover
     warnings.warn("numba.parfors.parfor.ParforPassStates.__init__ has changed")
 
 numba.parfors.parfor.ParforPassStates.__init__ = ParforPassStates__init__
+
+
+# disable push_call_vars() since it is only useful for threading not used in Bodo and
+# it's buggy. See "test_series_combine"[S10-S20-None-False]"
+numba.parfors.parfor.push_call_vars = (
+    lambda blocks, saved_globals, saved_getattrs, typemap, nested=False: None
+)
 
 
 # replace Numba's maybe_literal to avoid using our ListLiteral in type inference
@@ -1563,6 +1602,8 @@ def _analyze_broadcast(self, scope, equiv_set, loc, args, fn):
     and return shape of output
     https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html
     """
+    from numba.parfors.array_analysis import ArrayAnalysis
+
     tups = list(filter(lambda a: self._istuple(a.name), args))
     # Here we have a tuple concatenation.
     if len(tups) == 2 and fn.__name__ == "add":
@@ -1571,16 +1612,16 @@ def _analyze_broadcast(self, scope, equiv_set, loc, args, fn):
         tup0typ = self.typemap[tups[0].name]
         tup1typ = self.typemap[tups[1].name]
         if tup0typ.count == 0:
-            return (equiv_set.get_shape(tups[1]), [])
+            return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(tups[1]))
         if tup1typ.count == 0:
-            return (equiv_set.get_shape(tups[0]), [])
+            return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(tups[0]))
 
         try:
             shapes = [equiv_set.get_shape(x) for x in tups]
             if None in shapes:
                 return None
             concat_shapes = sum(shapes, ())
-            return (concat_shapes, [])
+            return ArrayAnalysis.AnalyzeResult(shape=concat_shapes)
         except GuardException:
             return None
 
@@ -1595,17 +1636,31 @@ def _analyze_broadcast(self, scope, equiv_set, loc, args, fn):
     # try:
     #     shapes = [equiv_set.get_shape(x) for x in arrs]
     # except GuardException:
-    #     return arrs[0], self._call_assert_equiv(scope, loc, equiv_set, arrs)
+    #     return ArrayAnalysis.AnalyzeResult(
+    #         shape=arrs[0],
+    #         pre=self._call_assert_equiv(scope, loc, equiv_set, arrs)
+    #     )
+    # if None not in shapes:
+    #     return self._broadcast_assert_shapes(
+    #         scope, equiv_set, loc, shapes, names
+    #     )
+    # else:
+    #     return self._insert_runtime_broadcast_call(
+    #         scope, loc, arrs, max_dim
+    #     )
+
     shapes = [equiv_set.get_shape(x) for x in arrs]
     if any(a is None for a in shapes):
-        return arrs[0], self._call_assert_equiv(scope, loc, equiv_set, arrs)
+        return ArrayAnalysis.AnalyzeResult(
+            shape=arrs[0], pre=self._call_assert_equiv(scope, loc, equiv_set, arrs)
+        )
     return self._broadcast_assert_shapes(scope, equiv_set, loc, shapes, names)
 
 
 lines = inspect.getsource(numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "98f8942836d8430b4496dbc284f6919300485d11fa6600c4c92627cca998bbb7"
+    != "6c91fec038f56111338ea2b08f5f0e7f61ebdab1c81fb811fe26658cc354e40f"
 ):  # pragma: no cover
     warnings.warn(
         "numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast has changed"
@@ -1808,12 +1863,17 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
         if isinstance(rhs, ir.Expr):
             in_vars = set(lookup(v, True).name for v in rhs.list_vars())
             if name in in_vars:
-                next_node = nodes[i + 1]
-                target_name = next_node.target.unversioned_name
                 # Bodo change: avoid raising error for concat reduction case
                 # opened issue to handle Bodo cases and raise proper errors: #1414
                 # see test_concat_reduction
-                # if not (isinstance(next_node, ir.Assign) and target_name == unversioned_name):
+
+                # reductions like sum have an assignment afterwards
+                # e.g. $2 = a + $1; a = $2
+                # reductions that are functions calls like max() don't have an
+                # extra assignment afterwards
+                # if (not (i+1 < len(nodes) and isinstance(nodes[i+1], ir.Assign)
+                #         and nodes[i+1].target.unversioned_name == unversioned_name)
+                #         and lhs.unversioned_name != unversioned_name):
                 #     raise ValueError(
                 #         f"Use of reduction variable {unversioned_name!r} other "
                 #         "than in a supported reduction function is not "
@@ -1843,7 +1903,7 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
 lines = inspect.getsource(numba.parfors.parfor.get_reduce_nodes)
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "5e99297a2346e2c01d60ad39e814da5c7308a3c0e6f342530d2e49f976327079"
+    != "a05b52aff9cb02e595a510cd34e973857303a71097fc5530567cb70ca183ef3b"
 ):  # pragma: no cover
     warnings.warn("numba.parfors.parfor.get_reduce_nodes has changed")
 
@@ -2582,6 +2642,7 @@ def _typeof_dict(val, c):
 def unbox_dicttype(typ, val, c):
     from llvmlite import ir as lir
     from numba.typed import dictobject
+    from numba.typed.typeddict import Dict
 
     context = c.context
 
@@ -2614,31 +2675,64 @@ def unbox_dicttype(typ, val, c):
     val = c.builder.load(valptr)
     # done Bodo change
 
-    miptr = c.pyapi.object_getattr_string(val, "_opaque")
+    # Check that `type(val) is Dict`
+    dict_type = c.pyapi.unserialize(c.pyapi.serialize_object(Dict))
+    valtype = c.pyapi.object_type(val)
+    same_type = c.builder.icmp_unsigned("==", valtype, dict_type)
 
-    mip_type = types.MemInfoPointer(types.voidptr)
-    native = c.unbox(mip_type, miptr)
+    with c.builder.if_else(same_type) as (then, orelse):
+        with then:
+            miptr = c.pyapi.object_getattr_string(val, "_opaque")
 
-    mi = native.value
+            mip_type = types.MemInfoPointer(types.voidptr)
+            native = c.unbox(mip_type, miptr)
 
-    argtypes = mip_type, typeof(typ)
+            mi = native.value
 
-    def convert(mi, typ):
-        return dictobject._from_meminfo(mi, typ)
+            argtypes = mip_type, typeof(typ)
 
-    sig = signature(typ, *argtypes)
-    nil_typeref = context.get_constant_null(argtypes[1])
-    args = (mi, nil_typeref)
-    is_error, dctobj = c.pyapi.call_jit_code(convert, sig, args)
-    # decref here because we are stealing a reference.
-    c.context.nrt.decref(c.builder, typ, dctobj)
+            def convert(mi, typ):
+                return dictobject._from_meminfo(mi, typ)
+
+            sig = signature(typ, *argtypes)
+            nil_typeref = context.get_constant_null(argtypes[1])
+            args = (mi, nil_typeref)
+            is_error, dctobj = c.pyapi.call_jit_code(convert, sig, args)
+            # decref here because we are stealing a reference.
+            c.context.nrt.decref(c.builder, typ, dctobj)
+
+            c.pyapi.decref(miptr)
+            bb_unboxed = c.builder.basic_block
+
+        with orelse:
+            # Raise error on incorrect type
+            c.pyapi.err_format(
+                "PyExc_TypeError",
+                "can't unbox a %S as a %S",
+                valtype,
+                dict_type,
+            )
+            bb_else = c.builder.basic_block
+
+    # Phi nodes to gather the output
+    dctobj_res = c.builder.phi(dctobj.type)
+    is_error_res = c.builder.phi(is_error.type)
+
+    dctobj_res.add_incoming(dctobj, bb_unboxed)
+    dctobj_res.add_incoming(dctobj.type(None), bb_else)
+
+    is_error_res.add_incoming(is_error, bb_unboxed)
+    is_error_res.add_incoming(cgutils.true_bit, bb_else)
+
+    # cleanup
+    c.pyapi.decref(dict_type)
+    c.pyapi.decref(valtype)
 
     # Bodo change: remove the typed.Dict object that is not necessary anymore
     with c.builder.if_then(is_regular_dict):
         c.pyapi.decref(val)
 
-    c.pyapi.decref(miptr)
-    return NativeValue(dctobj, is_error=is_error)
+    return NativeValue(dctobj_res, is_error=is_error_res)
 
 
 lines = inspect.getsource(
@@ -2646,7 +2740,7 @@ lines = inspect.getsource(
 )
 if (
     hashlib.sha256(lines.encode()).hexdigest()
-    != "409df3107bdd4ead138aa98a22af500b91d2072c250a5eb9da618eab9b717305"
+    != "5f6f183b94dc57838538c668a54c2476576c85d8553843f3219f5162c61e7816"
 ):  # pragma: no cover
     warnings.warn("unbox_dicttype has changed")
 numba.core.pythonapi._unboxers.functions[types.DictType] = unbox_dicttype

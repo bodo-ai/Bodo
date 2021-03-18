@@ -92,13 +92,8 @@ class UntypedPass:
         ir_utils._max_label = max(ir_utils._max_label, max(func_ir.blocks.keys()))
 
         self.arrow_tables = {}
-        self.reverse_copies = {}
-        self.pq_handler = ParquetHandler(
-            func_ir, typingctx, args, _locals, self.reverse_copies
-        )
-        self.h5_handler = h5.H5_IO(
-            self.func_ir, _locals, flags, args, self.reverse_copies
-        )
+        self.pq_handler = ParquetHandler(func_ir, typingctx, args, _locals)
+        self.h5_handler = h5.H5_IO(self.func_ir, _locals, flags, args)
         # save names of arguments and return values to catch invalid dist annotation
         self._arg_names = set()
         self._return_varnames = set()
@@ -118,7 +113,6 @@ class UntypedPass:
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         while work_list:
             label, block = work_list.pop()
-            self._get_reverse_copies(blocks[label].body)
             self._working_body = []
             for inst in block.body:
                 out_nodes = [inst]
@@ -166,6 +160,22 @@ class UntypedPass:
     def _run_assign(self, assign, label):
         lhs = assign.target.name
         rhs = assign.value
+
+        # pass pivot values to df.pivot_table() calls using a meta
+        # variable passed as argument. The meta variable's type
+        # is set to MetaType with pivot values baked in.
+        if lhs in self.flags.pivots:
+            pivot_values = self.flags.pivots[lhs]
+            # put back the definition removed earlier
+            self.func_ir._definitions[lhs].append(rhs)
+            pivot_call = guard(get_definition, self.func_ir, lhs)
+            assert pivot_call is not None
+            meta_var = ir.Var(assign.target.scope, mk_unique_var("pivot_meta"), rhs.loc)
+            meta_assign = ir.Assign(ir.Const(0, rhs.loc), meta_var, rhs.loc)
+            self._working_body.insert(0, meta_assign)
+            pivot_call.kws = list(pivot_call.kws)
+            pivot_call.kws.append(("_pivot_values", meta_var))
+            self.locals[meta_var.name] = bodo.utils.typing.MetaType(pivot_values)
 
         # save arg name to catch invalid dist annotations
         if isinstance(rhs, ir.Arg):
@@ -298,22 +308,6 @@ class UntypedPass:
             if rhs.op == "make_function":
                 # HACK make globals availabe for typing in series.map()
                 rhs.globals = self.func_ir.func_id.func.__globals__
-
-        # pass pivot values to df.pivot_table() calls using a meta
-        # variable passed as argument. The meta variable's type
-        # is set to MetaType with pivot values baked in.
-        if lhs in self.flags.pivots:
-            pivot_values = self.flags.pivots[lhs]
-            # put back the definition removed earlier
-            self.func_ir._definitions[lhs].append(rhs)
-            pivot_call = guard(get_definition, self.func_ir, lhs)
-            assert pivot_call is not None
-            meta_var = ir.Var(assign.target.scope, mk_unique_var("pivot_meta"), rhs.loc)
-            meta_assign = ir.Assign(ir.Const(0, rhs.loc), meta_var, rhs.loc)
-            self._working_body.insert(0, meta_assign)
-            pivot_call.kws = list(pivot_call.kws)
-            pivot_call.kws.append(("_pivot_values", meta_var))
-            self.locals[meta_var.name] = bodo.utils.typing.MetaType(pivot_values)
 
         # handle copies lhs = f
         if isinstance(rhs, ir.Var) and rhs.name in self.arrow_tables:
@@ -715,12 +709,6 @@ class UntypedPass:
             rhs.args,
             lhs,
         )
-
-    def _get_reverse_copies(self, body):
-        for inst in body:
-            if isinstance(inst, ir.Assign) and isinstance(inst.value, ir.Var):
-                self.reverse_copies[inst.value.name] = inst.target.name
-        return
 
     def _handle_pd_DataFrame(self, assign, lhs, rhs, label):
         """

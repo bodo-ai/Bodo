@@ -257,7 +257,7 @@ def init_index_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) >= 1 and not kws
     var = args[0]
     if equiv_set.has_shape(var):
-        return var, []
+        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
     return None
 
 
@@ -1501,7 +1501,7 @@ def init_range_index_equiv(self, scope, equiv_set, loc, args, kws):
         and self.typemap[step.name] == types.IntegerLiteral(1)
         and equiv_set.has_shape(stop)
     ):
-        return stop, []
+        return ArrayAnalysis.AnalyzeResult(shape=stop, pre=[])
     return None
 
 
@@ -2525,7 +2525,7 @@ def get_index_data_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 1 and not kws
     var = args[0]
     if equiv_set.has_shape(var):
-        return var, []
+        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
     return None
 
 

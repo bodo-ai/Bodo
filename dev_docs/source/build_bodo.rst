@@ -15,18 +15,18 @@ such as Numba on Ubuntu Linux::
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n DEV python=3.8 numpy scipy pandas='1.2.*' boost-cpp=1.74.0 cmake h5py mpich mpi -c conda-forge
+    conda create -n DEV python numpy scipy pandas='1.2.*' boost-cpp=1.74.0 cmake h5py mpich mpi -c conda-forge
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 -c conda-forge
-    # If you don't want to install Numba from source: conda install numba=0.52.0 -c conda-forge
+    # If you don't want to install Numba from source: conda install numba=0.53.0 -c conda-forge
     # For development/debugging purposes, it's best to install Numba from source instead
     # START OF BUILD NUMBA FROM SOURCE
     git clone https://github.com/numba/numba.git
-    # make sure you checkout version 0.52.0. numba's master may not work with Bodo master
+    # make sure you checkout version 0.53.0. numba's master may not work with Bodo master
     # if you need to remove any numba in your miniconda env before rebuilding from source try:
     # conda remove numba=<version>
-    cd numba; git checkout 0.52.0
+    cd numba; git checkout 0.53.0
     python setup.py develop
     cd ..
     # END OF BUILD NUMBA FROM SOURCE
@@ -69,9 +69,9 @@ On Windows
 * Start 'Anaconda (Miniconda3) prompt'
 * Setup the Conda environment in Anaconda Prompt::
 
-    conda create -n DEV python=3.8 numpy scipy pandas="1.2.*" boost-cpp=1.74.0 cmake h5py -c conda-forge
+    conda create -n DEV python numpy scipy pandas="1.2.*" boost-cpp=1.74.0 cmake h5py -c conda-forge
     source activate DEV
-    conda install numba=0.52.0 -c conda-forge
+    conda install numba=0.53.0 -c conda-forge
     conda install vc vs2015_runtime vs2015_win-64
     conda install -c defaults -c intel impi_rt impi-devel
     conda install -c conda-forge pyarrow=3.0.0

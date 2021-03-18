@@ -114,7 +114,8 @@ class BodoTypeInference(PartialTypeInference):
 
             # done if all types are available and transform not required
             if (
-                types.unknown not in state.typemap.values()
+                not state.typing_errors
+                and self._all_types_available(state)
                 and not curr_typing_pass_required
                 and not needs_transform
             ):
@@ -144,6 +145,7 @@ class BodoTypeInference(PartialTypeInference):
 
         # make sure transformation has run at least once to handle cases that may not
         # throw typing errors like "df.B = v". See test_set_column_setattr
+        rerun_typing = False
         if not ran_transform:
             typing_transforms_pass = TypingTransforms(
                 state.func_ir,
@@ -156,7 +158,7 @@ class BodoTypeInference(PartialTypeInference):
                 False,
                 ran_transform,
             )
-            _changed, needs_transform = typing_transforms_pass.run()
+            changed, needs_transform = typing_transforms_pass.run()
             # some cases need a second transform pass to raise the proper error
             # see test_df_rename::impl4
             if needs_transform:
@@ -171,14 +173,71 @@ class BodoTypeInference(PartialTypeInference):
                     False,
                     True,
                 )
-                typing_transforms_pass.run()
+                changed, needs_transform = typing_transforms_pass.run()
+            # need to rerun type inference if the IR changed
+            # see test_set_column_setattr
+            rerun_typing = changed or needs_transform
 
         dprint_func_ir(state.func_ir, "after typing pass")
-        # run regular type inference again with _raise_errors = True to set function
-        # return type and raise errors if any
-        # TODO: avoid this extra pass when possible in Numba
-        NopythonTypeInference().run_pass(state)
+        self._check_for_errors(state, curr_typing_pass_required or rerun_typing)
         return True
+
+    def _check_for_errors(self, state, curr_typing_pass_required):
+        """check for type inference issues and call Numba's type inference to raise
+        proper errors if necessary.
+        """
+        # get return type since partial type inference skips it for some reason
+        # similar to: https://github.com/numba/numba/blob/1041fa6ee8430471da99b54b3428a673033e7e44/numba/core/typeinfer.py#L1209
+        return_type = None
+        ret_types = []
+        for blk in state.func_ir.blocks.values():
+            inst = blk.terminator
+            if isinstance(inst, ir.Return):
+                ret_types.append(state.typemap.get(inst.value.name, None))
+        if None not in ret_types:
+            try:
+                return_type = state.typingctx.unify_types(*ret_types)
+            except:
+                pass
+            if (
+                not isinstance(return_type, types.FunctionType)
+                and not return_type.is_precise()
+            ):
+                return_type = None
+
+        if (
+            state.typing_errors
+            or curr_typing_pass_required
+            or types.unknown in state.typemap.values()
+            or state.calltypes is None
+            or return_type is None
+            or state.func_ir.generator_info
+        ):
+            # run regular type inference again with _raise_errors = True to set function
+            # return type and raise errors if any
+            # TODO: avoid this extra pass when possible in Numba
+            NopythonTypeInference().run_pass(state)
+        else:
+            # last return type check in Numba:
+            # https://github.com/numba/numba/blob/0bac18af44d08e913cd512babb9f9b7f6386d30a/numba/core/typed_passes.py#L141
+            if isinstance(return_type, types.Function) or isinstance(
+                return_type, types.Phantom
+            ):
+                msg = "Can't return function object ({})"
+                raise TypeError(msg.format(return_type))
+            state.return_type = return_type
+
+    def _all_types_available(self, state):
+        """check to see if all variable types are available in typemap."""
+        # Numba's partial type inference may miss typing some variables as "unknown" so
+        # we set "unknown" if necessary
+        typemap = state.typemap
+        for blk in state.func_ir.blocks.values():
+            for stmt in blk.body:
+                if is_assign(stmt) and stmt.target.name not in typemap:
+                    typemap[stmt.target.name] = types.unknown
+
+        return types.unknown not in typemap.values()
 
 
 class TypingTransforms:
@@ -1894,5 +1953,8 @@ def _find_updated_containers(blocks, topo_order):
 def _set_updated_container(varname, update_func, updated_containers, equiv_vars):
     """helper to set 'varname' and its aliases as updated containers"""
     updated_containers[varname] = update_func
+    # make sure an updated container variable is always equivalent to itself since
+    # assumed in _remove_container_updates()
+    equiv_vars[varname].add(varname)
     for w in equiv_vars[varname]:
         updated_containers[w] = update_func

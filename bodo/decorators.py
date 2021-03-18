@@ -91,7 +91,7 @@ def distributed_diagnostics(self, signature=None, level=1):
         if pfdiag is None:
             msg = "No distributed diagnostic available"
             raise bodo.utils.typing.BodoError(msg)
-        pfdiag.dump(level)
+        pfdiag.dump(level, self.get_metadata(sig))
 
     if signature is not None:
         dump(signature)

@@ -2140,7 +2140,7 @@ def lower_constant_str_arr(context, builder, typ, pyval):
 
 def pre_alloc_str_arr_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 2 and not kws
-    return args[0], []
+    return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
 from numba.parfors.array_analysis import ArrayAnalysis
