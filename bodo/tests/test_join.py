@@ -830,6 +830,25 @@ def test_merge_right_key_nullable(memory_leak_check):
     )
 
 
+def test_merge_bool_to_nullable(memory_leak_check):
+    """Tests converting non-nullable bool input to nullable bool in output"""
+
+    def impl(df1):
+        n = len(df1)
+        df2 = pd.DataFrame({"A": np.arange(n), "B": np.ones(n, np.bool_)})
+        return df1.merge(df2, on="A", how="left")
+
+    df1 = pd.DataFrame({"A": [1, 2, 4]})
+    check_func(
+        impl,
+        (df1,),
+        sort_output=True,
+        check_dtype=False,
+        # no dist test since we are creating a dataframe inside the function
+        dist_test=False,
+    )
+
+
 def test_merge_key_type_change(memory_leak_check):
     """
     Test merge() key type check when key type changes in the program (handled in partial

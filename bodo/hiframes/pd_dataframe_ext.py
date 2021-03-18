@@ -83,7 +83,6 @@ from bodo.utils.typing import (
     get_overload_const_tuple,
     get_udf_error_msg,
     get_udf_out_arr_type,
-    is_dtype_nullable,
     is_heterogeneous_tuple_type,
     is_iterable_type,
     is_literal_type,
@@ -100,6 +99,7 @@ from bodo.utils.typing import (
     is_overload_zero,
     raise_bodo_error,
     raise_const_error,
+    to_nullable_type,
 )
 
 _json_write = types.ExternalFunction(
@@ -1777,16 +1777,6 @@ class JoinTyper(AbstractTemplate):
                 columns.append(left_key)
                 data.append(left_df.data[left_df.columns.index(left_key)])
 
-        def map_data_type(in_type, need_nullable):
-            if (
-                isinstance(in_type, types.Array)
-                and not is_dtype_nullable(in_type.dtype)
-                and need_nullable
-            ):
-                return IntegerArrayType(in_type.dtype)
-            else:
-                return in_type
-
         # The left side. All of it got included.
         for in_type, col in zip(left_df.data, left_df.columns):
             columns.append(
@@ -1797,7 +1787,7 @@ class JoinTyper(AbstractTemplate):
                 data.append(in_type)
             else:
                 # For a key that is not common OR data column, we have to plan for a NaN column
-                data.append(map_data_type(in_type, is_right))
+                data.append(to_nullable_type(in_type) if is_right else in_type)
         # The right side
         # common keys are added only once so avoid adding them
         for in_type, col in zip(right_df.data, right_df.columns):
@@ -1807,7 +1797,7 @@ class JoinTyper(AbstractTemplate):
                 columns.append(
                     str(col) + suffix_y.literal_value if col in add_suffix else col
                 )
-                data.append(map_data_type(in_type, is_left))
+                data.append(to_nullable_type(in_type) if is_left else in_type)
         # In the case of merging with left_index=True or right_index=True then
         # the index is coming from the other index. And so we need to set it adequately.
         index_typ = RangeIndexType(types.none)
