@@ -759,8 +759,18 @@ def overload_astype(A, t):
     if A == typ:
         return lambda A, t: A  # pragma: no cover
 
-    if isinstance(A, types.Array) and isinstance(typ, types.Array):
+    # numpy or nullable int array can convert to numpy directly
+    if isinstance(A, (types.Array, IntegerArrayType)) and isinstance(typ, types.Array):
         return lambda A, t: A.astype(dtype)  # pragma: no cover
+
+    # convert to nullable int
+    if isinstance(typ, IntegerArrayType):
+        return lambda A, t: bodo.libs.int_arr_ext.init_integer_array(
+            A.astype(dtype),
+            np.full((len(A) + 7) >> 3, 255, np.uint8),
+        )  # pragma: no cover
+
+    raise BodoError(f"cannot convert array type {A} to {typ}")
 
 
 def full_type(n, val, t):  # pragma: no cover

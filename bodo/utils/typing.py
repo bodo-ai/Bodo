@@ -992,6 +992,11 @@ def to_nullable_type(t):
     return t
 
 
+def is_nullable_type(t):
+    """return True if 't' is a nullable array type"""
+    return t == to_nullable_type(t)
+
+
 def is_iterable_type(t):
     """return True if 't' is an iterable type like list, array, Series, ..."""
     from bodo.hiframes.pd_dataframe_ext import DataFrameType

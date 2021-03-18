@@ -1314,6 +1314,32 @@ def test_merge_match_key_types2(memory_leak_check):
     check_func(test_impl2, (df2, df1), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
+def test_merge_match_key_types_nullable(memory_leak_check):
+    """
+    test merge(): where key types mismatch in precision and one is nullable
+    """
+
+    def test_impl1(df1, df2):
+        return df1.merge(df2, on=["A"])
+
+    def test_impl2(df1, df2):
+        return df1.merge(df2, on=["A", "B"])
+
+    df1 = pd.DataFrame(
+        {"A": [3, 1, 1, 3, 4], "B": [1, 2, 3, 2, 3], "C": [1, 2, 3, 2, 3]}
+    )
+
+    df2 = pd.DataFrame(
+        {"A": [2, 1, 4, 4, 3], "B": [1, 3, 2, 3, 2], "D": [1, 3, 2, 3, 2]}
+    )
+    df2["A"] = df2.A.astype("Int32")
+    check_func(test_impl1, (df1, df2), sort_output=True, reset_index=True)
+    check_func(test_impl1, (df2, df1), sort_output=True, reset_index=True)
+    check_func(test_impl2, (df1, df2), sort_output=True, reset_index=True)
+    check_func(test_impl2, (df2, df1), sort_output=True, reset_index=True)
+
+
 def test_merge_cat_identical(memory_leak_check):
     """
     Test merge(): merge identical dataframes on categorical column

@@ -58,7 +58,13 @@ from bodo.utils.shuffle import (
     getitem_arr_tup_single,
     update_shuffle_meta,
 )
-from bodo.utils.typing import BodoError, find_common_np_dtype, is_dtype_nullable
+from bodo.utils.typing import (
+    BodoError,
+    find_common_np_dtype,
+    is_dtype_nullable,
+    is_nullable_type,
+    to_nullable_type,
+)
 from bodo.utils.utils import alloc_arr_tup, debug_prints
 
 
@@ -662,8 +668,14 @@ def _match_join_key_types(t1, t2, loc):
         return t1
 
     try:
-        return bodo.hiframes.pd_series_ext._get_series_array_type(
+        arr = bodo.hiframes.pd_series_ext._get_series_array_type(
             find_common_np_dtype([t1, t2])
+        )
+        # output should be nullable if any input is nullable
+        return (
+            to_nullable_type(arr)
+            if is_nullable_type(t1) or is_nullable_type(t2)
+            else arr
         )
     except:
         raise BodoError(f"Join key types {t1} and {t2} do not match", loc=loc)
