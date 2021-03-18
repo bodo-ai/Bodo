@@ -58,7 +58,7 @@ from bodo.utils.shuffle import (
     getitem_arr_tup_single,
     update_shuffle_meta,
 )
-from bodo.utils.typing import BodoError, is_dtype_nullable
+from bodo.utils.typing import BodoError, find_common_np_dtype, is_dtype_nullable
 from bodo.utils.utils import alloc_arr_tup, debug_prints
 
 
@@ -485,6 +485,8 @@ def join_distributed_run(
     right_other_types = tuple([typemap[c.name] for c in right_other_col_vars])
     left_key_names = tuple("t1_key" + str(i) for i in range(n_keys))
     right_key_names = tuple("t2_key" + str(i) for i in range(n_keys))
+    glbs = {}
+    loc = join_node.loc
 
     func_text = "def f({}{}, {},{}{}{}):\n".format(
         ("{},".format(optional_names[0]) if len(optional_names) == 1 else ""),
@@ -498,21 +500,21 @@ def join_distributed_run(
     left_key_types = tuple(typemap[v.name] for v in left_key_vars)
     right_key_types = tuple(typemap[v.name] for v in right_key_vars)
 
+    # add common key type to globals to use below for type conversion
+    for i in range(n_keys):
+        glbs[f"key_type_{i}"] = _match_join_key_types(
+            left_key_types[i], right_key_types[i], loc
+        )
+
     func_text += "    t1_keys = ({},)\n".format(
         ", ".join(
-            "{}{}".format(
-                left_key_names[i],
-                _gen_type_match(left_key_types[i], right_key_types[i]),
-            )
+            f"bodo.utils.utils.astype({left_key_names[i]}, key_type_{i})"
             for i in range(n_keys)
         )
     )
     func_text += "    t2_keys = ({},)\n".format(
         ", ".join(
-            "{}{}".format(
-                right_key_names[i],
-                _gen_type_match(right_key_types[i], left_key_types[i]),
-            )
+            f"bodo.utils.utils.astype({right_key_names[i]}, key_type_{i})"
             for i in range(n_keys)
         )
     )
@@ -585,6 +587,9 @@ def join_distributed_run(
             join_node.is_join,
             left_parallel,
             right_parallel,
+            glbs,
+            [typemap[v.name] for v in merge_out],
+            join_node.loc,
         )
     if join_node.how == "asof":
         for i in range(len(left_other_names)):
@@ -592,51 +597,49 @@ def join_distributed_run(
         for i in range(len(right_other_names)):
             func_text += "    right_{} = out_data_right[{}]\n".format(i, i)
         for i in range(n_keys):
-            func_text += "    t1_keys_{} = out_t1_keys[{}]{}\n".format(
-                i, i, _gen_reverse_type_match(left_key_types[i], right_key_types[i])
-            )
+            func_text += f"    t1_keys_{i} = out_t1_keys[{i}]\n"
         for i in range(n_keys):
-            func_text += "    t2_keys_{} = out_t2_keys[{}]{}\n".format(
-                i, i, _gen_reverse_type_match(right_key_types[i], left_key_types[i])
-            )
+            func_text += f"    t2_keys_{i} = out_t2_keys[{i}]\n"
 
     idx = 0
     if optional_column:
-        func_text += "    {} = opti_0\n".format(out_names[idx])
+        func_text += f"    {out_names[idx]} = opti_0\n"
         idx += 1
     for i in range(n_keys):
-        func_text += "    {} = t1_keys_{}\n".format(out_names[idx], i)
+        func_text += f"    {out_names[idx]} = t1_keys_{i}\n"
         idx += 1
     for i in range(n_keys):
         if not join_node.vect_same_key[i] and not join_node.is_join:
-            func_text += "    {} = t2_keys_{}\n".format(out_names[idx], i)
+            func_text += f"    {out_names[idx]} = t2_keys_{i}\n"
             idx += 1
     for i in range(len(left_other_names)):
-        func_text += "    {} = left_{}\n".format(out_names[idx], i)
+        func_text += f"    {out_names[idx]} = left_{i}\n"
         idx += 1
     for i in range(len(right_other_names)):
-        func_text += "    {} = right_{}\n".format(out_names[idx], i)
+        func_text += f"    {out_names[idx]} = right_{i}\n"
         idx += 1
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     join_impl = loc_vars["f"]
 
-    glbs = {
-        "bodo": bodo,
-        "np": np,
-        "pd": pd,
-        "to_string_list": to_string_list,
-        "cp_str_list_to_array": cp_str_list_to_array,
-        "parallel_asof_comm": parallel_asof_comm,
-        "array_to_info": array_to_info,
-        "arr_info_list_to_table": arr_info_list_to_table,
-        "shuffle_table": shuffle_table,
-        "hash_join_table": hash_join_table,
-        "info_from_table": info_from_table,
-        "info_to_array": info_to_array,
-        "delete_table": delete_table,
-        "delete_table_decref_arrays": delete_table_decref_arrays,
-    }
+    glbs.update(
+        {
+            "bodo": bodo,
+            "np": np,
+            "pd": pd,
+            "to_string_list": to_string_list,
+            "cp_str_list_to_array": cp_str_list_to_array,
+            "parallel_asof_comm": parallel_asof_comm,
+            "array_to_info": array_to_info,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "shuffle_table": shuffle_table,
+            "hash_join_table": hash_join_table,
+            "info_from_table": info_from_table,
+            "info_to_array": info_to_array,
+            "delete_table": delete_table,
+            "delete_table_decref_arrays": delete_table_decref_arrays,
+        }
+    )
 
     f_block = compile_to_numba_ir(
         join_impl, glbs, typingctx, arg_typs, typemap, calltypes
@@ -653,31 +656,17 @@ def join_distributed_run(
 distributed_pass.distributed_run_extensions[Join] = join_distributed_run
 
 
-def _gen_type_match(t1, t2):
-    """Match key types to have equal hash values.
-    Python's hasher is consistent across types (e.g. int vs float) but others
-    are not.
-    """
-    if (
-        isinstance(t1, types.Array)
-        and isinstance(t2, types.Array)
-        and isinstance(t1.dtype, types.Float)
-        and isinstance(t2.dtype, types.Integer)
-    ):
-        return ".astype(np.{})".format(t2.dtype)
-    return ""
+def _match_join_key_types(t1, t2, loc):
+    """make sure join key array types match since required in the C++ join code"""
+    if t1 == t2:
+        return t1
 
-
-def _gen_reverse_type_match(t1, t2):
-    """Reverse of the operation above."""
-    if (
-        isinstance(t1, types.Array)
-        and isinstance(t2, types.Array)
-        and isinstance(t1.dtype, types.Float)
-        and isinstance(t2.dtype, types.Integer)
-    ):
-        return ".astype(np.{})".format(t1.dtype)
-    return ""
+    try:
+        return bodo.hiframes.pd_series_ext._get_series_array_type(
+            find_common_np_dtype([t1, t2])
+        )
+    except:
+        raise BodoError(f"Join key types {t1} and {t2} do not match", loc=loc)
 
 
 def _get_table_parallel_flags(join_node, array_dists):
@@ -725,6 +714,9 @@ def _gen_local_hash_join(
     is_join,
     left_parallel,
     right_parallel,
+    glbs,
+    out_types,
+    loc,
 ):
     # In some case the column in output has a type different from the one in input.
     # TODO: Unify those type changes between all cases.
@@ -748,12 +740,12 @@ def _gen_local_hash_join(
     #  we change the output type.
     # ---For categorical array data, the input is integer and we do not change the type.
     #   We may have to change this if missing data in categorical gets treated differently.
-    # ALSO: The interaction with the _gen_reverse_type_match has maybe potential problems.
 
     vect_need_typechange = []
     for i in range(len(left_key_names)):
+        key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
         vect_need_typechange.append(
-            needs_typechange(left_key_types[i], is_right, vect_same_key[i])
+            needs_typechange(key_type, is_right, vect_same_key[i])
         )
     for i in range(len(left_other_names)):
         vect_need_typechange.append(
@@ -761,9 +753,8 @@ def _gen_local_hash_join(
         )
     for i in range(len(right_key_names)):
         if not vect_same_key[i] and not is_join:
-            vect_need_typechange.append(
-                needs_typechange(right_key_types[i], is_left, False)
-            )
+            key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
+            vect_need_typechange.append(needs_typechange(key_type, is_left, False))
     for i in range(len(right_other_names)):
         vect_need_typechange.append(
             needs_typechange(right_other_types[i], is_left, False)
@@ -837,21 +828,23 @@ def _gen_local_hash_join(
     func_text += "    delete_table(table_right)\n"
     idx = 0
     if optional_column:
-        func_text += "    opti_0 = info_to_array(info_from_table(out_table, {}), opti_c0)\n".format(
-            idx
+        func_text += (
+            f"    opti_0 = info_to_array(info_from_table(out_table, {idx}), opti_c0)\n"
         )
         idx += 1
     for i, t in enumerate(left_key_names):
+        key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
         rec_typ = get_out_type(
-            idx, left_key_types[i], "t1_keys[{}]".format(i), is_right, vect_same_key[i]
+            idx, key_type, f"t1_keys[{i}]", is_right, vect_same_key[i]
         )
         func_text += rec_typ[0]
-        func_text += "    t1_keys_{} = info_to_array(info_from_table(out_table, {}), {}){}\n".format(
-            i,
-            idx,
-            rec_typ[1],
-            _gen_reverse_type_match(left_key_types[i], right_key_types[i]),
-        )
+        glbs[f"out_type_{idx}"] = out_types[idx]
+        # use astype only if necessary due to Index handling bugs
+        # see: test_merge_index_column_second"[df22-df10]" TODO(ehsan): fix
+        if key_type != left_key_types[i]:
+            func_text += f"    t1_keys_{i} = bodo.utils.utils.astype(info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]}), out_type_{idx})\n"
+        else:
+            func_text += f"    t1_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
         idx += 1
     for i, t in enumerate(left_other_names):
         rec_typ = get_out_type(idx, left_other_types[i], t, is_right, False)
@@ -864,16 +857,16 @@ def _gen_local_hash_join(
         idx += 1
     for i, t in enumerate(right_key_names):
         if not vect_same_key[i] and not is_join:
-            rec_typ = get_out_type(
-                idx, right_key_types[i], f"t2_keys[{i}]", is_left, False
-            )
+            key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
+            rec_typ = get_out_type(idx, key_type, f"t2_keys[{i}]", is_left, False)
             func_text += rec_typ[0]
-            func_text += "    t2_keys_{} = info_to_array(info_from_table(out_table, {}), {}){}\n".format(
-                i,
-                idx,
-                rec_typ[1],
-                _gen_reverse_type_match(right_key_types[i], left_key_types[i]),
-            )
+            # NOTE: subtracting len(left_other_names) since output right keys are
+            # generated before left_other_names
+            glbs[f"out_type_{idx}"] = out_types[idx - len(left_other_names)]
+            if key_type != right_key_types[i]:
+                func_text += f"    t2_keys_{i} = bodo.utils.utils.astype(info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]}), out_type_{idx})\n"
+            else:
+                func_text += f"    t2_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
             idx += 1
     for i, t in enumerate(right_other_names):
         rec_typ = get_out_type(idx, right_other_types[i], t, is_left, False)

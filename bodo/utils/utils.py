@@ -746,6 +746,23 @@ def overload_alloc_type(n, t, s=None):
     return lambda n, t, s=None: np.empty(n, dtype)  # pragma: no cover
 
 
+def astype(A, t):  # pragma: no cover
+    return A.astype(t.dtype)
+
+
+@overload(astype, no_unliteral=True)
+def overload_astype(A, t):
+    """Convert array 'A' to type 't'"""
+    typ = t.instance_type if isinstance(t, types.TypeRef) else t
+    dtype = typ.dtype
+
+    if A == typ:
+        return lambda A, t: A  # pragma: no cover
+
+    if isinstance(A, types.Array) and isinstance(typ, types.Array):
+        return lambda A, t: A.astype(dtype)  # pragma: no cover
+
+
 def full_type(n, val, t):  # pragma: no cover
     return np.full(n, val, t.dtype)
 
