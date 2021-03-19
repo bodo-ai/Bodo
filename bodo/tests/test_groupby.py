@@ -1440,6 +1440,31 @@ def test_groupby_agg_const_dict(memory_leak_check):
     check_func(impl18, (df,), sort_output=True, check_dtype=False)
 
 
+def test_groupby_agg_func_list(memory_leak_check):
+    """
+    Test groupy.agg with list of functions in const dict input
+    """
+
+    def impl(df):
+        return df.groupby("A").agg(
+            {
+                "C": [lambda x: (x >= 3).sum()],
+                "B": [lambda x: x.sum(), lambda x: (x < 6.1).sum()],
+            }
+        )
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "D": ["AA", "B", "BB", "B", "AA", "AA", "B"],
+            "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, 7.1],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        },
+        index=np.arange(10, 17),
+    )
+    check_func(impl, (df,), sort_output=True, check_dtype=False)
+
+
 def test_groupby_nunique(memory_leak_check):
     """
     Test nunique only and with groupy.agg (nunique_mode:0, 1,2)
