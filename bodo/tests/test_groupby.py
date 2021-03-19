@@ -13,10 +13,12 @@ import pytest
 import bodo
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
+    DistTestPipeline,
     check_caching,
     check_func,
     check_parallel_coherency,
     convert_non_pandas_columns,
+    dist_IR_contains,
     gen_random_decimal_array,
     gen_random_list_string_array,
     get_start_end,
@@ -1463,6 +1465,12 @@ def test_groupby_agg_func_list(memory_leak_check):
         index=np.arange(10, 17),
     )
     check_func(impl, (df,), sort_output=True, check_dtype=False)
+    # make sure regular optimized UDF path is taken
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
+    bodo_func(df)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    # general UDF codegen adds call to cpp_cb_general as a global
+    assert not dist_IR_contains(f_ir, "global(cpp_cb_general:")
 
 
 def test_groupby_nunique(memory_leak_check):
@@ -1560,6 +1568,12 @@ def test_agg_global_func(memory_leak_check):
     )
 
     check_func(impl_str, (df_str,), sort_output=True)
+    # make sure regular optimized UDF path is taken
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl_str)
+    bodo_func(df_str)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    # general UDF codegen adds call to cpp_cb_general as a global
+    assert not dist_IR_contains(f_ir, "global(cpp_cb_general:")
 
 
 def test_count(memory_leak_check):
