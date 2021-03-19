@@ -1366,7 +1366,8 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
 
     for (size_t j = 1; j < tables.size(); j++) {
         int64_t num_groups = next_group - 1;
-        // IMPORTANT assuming all the tables have the same key columns
+        // IMPORTANT: Assuming all the tables have the same number and type of
+        // key columns (but not the same values in key columns)
         table = tables[j];
         key_cols = std::vector<array_info*>(
             table->columns.begin(), table->columns.begin() + table->num_keys);
@@ -1395,10 +1396,11 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
                     group = next_group++;  // this updates the value in the map
                                            // without another lookup
                     grp_info.group_to_first_row.emplace_back(i);
+                    active_group_repr.emplace_back(i);
                 } else {
                     grp_info.group_to_first_row[group - 1] = i;
+                    active_group_repr[group - 1] = i;
                 }
-                active_group_repr[group - 1] = i;
             } else {
                 int64_t prev_elt = active_group_repr[group - 1];
                 grp_info.next_row_in_group[prev_elt] = i;
@@ -4606,7 +4608,7 @@ class NUniqueColSet : public BasicColSet<ARRAY> {
                   bool nunique_grp_shuffle_after = false,
                   bool nunique_only = false)
         : BasicColSet<ARRAY>(in_col, Bodo_FTypes::nunique,
-                             nunique_grp_shuffle_after),  // do_combine
+                             nunique_grp_shuffle_after || nunique_only),  // do_combine
           dropna(_dropna),
           my_nunique_table(nunique_table),
           nunique_grp_shuffle_after(nunique_grp_shuffle_after),
@@ -4863,12 +4865,6 @@ class GroupbyPipeline {
                 nunique_grp_shuffle_after = true;
                 nunique_mode = 2;
             }
-            // XXX Disable nunique modes != 1 for now
-            nunique_mode = 1;
-            nunique_only = false;
-            shuffle_before_update = true;
-            nunique_grp_shuffle_before = true;
-            nunique_grp_shuffle_after = false;
         }
         // If it's just nunique we set count to 0 as we won't add in_table to
         // our list of tables Otherwise, set to 1 as 0 is reserved for in_table
@@ -4916,14 +4912,17 @@ class GroupbyPipeline {
                             in_table->columns.begin() + num_keys);
                         tmp->num_keys = num_keys;
                         push_back_arrays(tmp->columns, in_table->columns[c]);
-                        // shuffle_table_kernel (in drop_duplicates_table)
-                        // steals the reference but we still need it for the
+
+                        // TODO: If we know that the |set(values)|/len(values) is low
+                        // on all ranks then it should be beneficial to drop local
+                        // duplicates before the shuffle
+
+                        // shuffle_table steals the reference but we still need it for the
                         // code after C++ groupby
                         for (auto a : tmp->columns) incref_array(a);
-                        table_info* tmp2 = drop_duplicates_table(
-                            tmp, is_parallel, num_keys, 0, tmp->ncols());
-                        tmp2->num_keys = num_keys;
+                        table_info* tmp2 = shuffle_table(tmp, tmp->ncols());
 
+                        tmp2->num_keys = num_keys;
                         tmp2->id = table_id_counter++;
                         nunique_tables[c] = tmp2;
                     }
@@ -4933,7 +4932,7 @@ class GroupbyPipeline {
 
         // a combine operation is only necessary when data is distributed and
         // a shuffle has not been done at the start of the groupby pipeline
-        do_combine = is_parallel && !shuffle_before_update && !nunique_only;
+        do_combine = is_parallel && !shuffle_before_update;
 
         array_info* index_col = nullptr;
         if (input_has_index)
@@ -5000,7 +4999,7 @@ class GroupbyPipeline {
             // anymore
             delete_table_decref_arrays(in_table);
         }
-        if (is_parallel && !shuffle_before_update && !nunique_only) {
+        if (is_parallel && !shuffle_before_update) {
             shuffle();
             combine();
         }
@@ -5208,7 +5207,7 @@ class GroupbyPipeline {
             output_list_arrays(out_table->columns, col_set->getOutputColumn());
         if (return_index)
             out_table->columns.push_back(cur_table->columns.back());
-        if ((cumulative_op || shift_op) && is_parallel && !nunique_only) {
+        if ((cumulative_op || shift_op) && is_parallel) {
             table_info* revshuf_table =
                 reverse_shuffle_table_kernel(out_table, hashes, *comm_info_ptr);
             delete hashes;
