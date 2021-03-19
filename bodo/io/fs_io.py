@@ -108,6 +108,24 @@ def get_hdfs_fs(path):  # pragma: no cover
     return fs
 
 
+def gcs_is_directory(path):
+    import gcsfs
+
+    fs = gcsfs.GCSFileSystem(token=None)
+    try:
+        isdir = fs.isdir(path)
+    except gcsfs.utils.HttpError as e:
+        raise BodoError(f"{e}. Make sure your google cloud credentials are set!")
+    return isdir
+
+
+def gcs_list_dir_fnames(path):
+    import gcsfs
+
+    fs = gcsfs.GCSFileSystem(token=None)
+    return [f.split("/")[-1] for f in fs.ls(path)]
+
+
 def s3_is_directory(fs, path):
     """
     Return whether s3 path is a directory or not

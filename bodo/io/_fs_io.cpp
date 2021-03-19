@@ -92,6 +92,9 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
         if (!(tempRes.status().ok())) {
             std::cerr << "Error in arrow hdfs: FileSystemFromUri" << std::endl;
         }
+    } else if ((strncmp(_path_name, "gcs://", 6) == 0)
+               || (strncmp(_path_name, "gs://", 5) == 0)) {
+        *fs_option = Bodo_Fs::gcs;
     } else {  // posix
         *fs_option = Bodo_Fs::posix;
         *path_name = *orig_path;
@@ -112,10 +115,12 @@ void import_fs_module(Bodo_Fs::FsEnum fs_option, const std::string &file_type,
     if (fs_option == Bodo_Fs::s3) {
         f_mod = PyImport_ImportModule("bodo.io.s3_reader");
         CHECK(f_mod, "importing bodo.io.s3_reader module failed", file_type);
+    } else if (fs_option == Bodo_Fs::gcs) {
+        f_mod = PyImport_ImportModule("bodo.io.gcs_reader");
+        CHECK(f_mod, "importing bodo.io.gcs_reader module failed", file_type);
     } else if (fs_option == Bodo_Fs::hdfs) {
         f_mod = PyImport_ImportModule("bodo.io.hdfs_reader");
-        CHECK(f_mod, "importing bodo.io.hdfs_readerder module failed",
-              file_type);
+        CHECK(f_mod, "importing bodo.io.hdfs_reader module failed", file_type);
     }
 }
 
@@ -137,6 +142,9 @@ void get_get_fs_pyobject(Bodo_Fs::FsEnum fs_option,
     if (fs_option == Bodo_Fs::s3) {
         func_obj = PyObject_GetAttrString(f_mod, "s3_get_fs");
         CHECK(func_obj, "getting s3_get_fs func_obj failed", file_type);
+    } else if (fs_option == Bodo_Fs::gcs) {
+        func_obj = PyObject_GetAttrString(f_mod, "gcs_get_fs");
+        CHECK(func_obj, "getting gcs_get_fs func_obj failed", file_type);
     } else if (fs_option == Bodo_Fs::hdfs) {
         func_obj = PyObject_GetAttrString(f_mod, "hdfs_get_fs");
         CHECK(func_obj, "getting hdfs_get_fs func_obj failed", file_type);
@@ -164,6 +172,16 @@ void open_file_outstream(
         CHECK_ARROW_AND_ASSIGN(result, "HdfsFileSystem::OpenOutputStream",
                                *out_stream, file_type)
     }
+}
+
+void open_file_outstream_gcs(
+    Bodo_Fs::FsEnum fs_option, const std::string &file_type,
+    const std::string &fname, std::shared_ptr<arrow::py::fs::PyFileSystem> fs,
+    std::shared_ptr<arrow::io::OutputStream> *out_stream) {
+    arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+        fs->OpenOutputStream(fname);
+    CHECK_ARROW_AND_ASSIGN(result, "PyFileSystem::OpenOutputStream",
+                           *out_stream, file_type);
 }
 
 void open_file_appendstream(
@@ -237,7 +255,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
         Py_DECREF(f_mod);
         Py_DECREF(s3_func_obj);
         return;
-    } else {  // fs == Bodo_Fs::hdfs
+    } else if (fs_option == Bodo_Fs::hdfs) {
         // get hdfs_get_fs function
         PyObject *hdfs_func_obj = nullptr;
         import_fs_module(fs_option, file_type, f_mod);
@@ -264,6 +282,26 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
         Py_DECREF(f_mod);
         Py_DECREF(hdfs_func_obj);
         return;
+    } else if (fs_option == Bodo_Fs::gcs) {
+        PyObject *gcs_func_obj = nullptr;
+        import_fs_module(fs_option, file_type, f_mod);
+        get_get_fs_pyobject(fs_option, file_type, f_mod, gcs_func_obj);
+        gcs_get_fs_t gcs_get_fs =
+            (gcs_get_fs_t)PyNumber_AsSsize_t(gcs_func_obj, NULL);
+        std::shared_ptr<::arrow::py::fs::PyFileSystem> fs;
+        gcs_get_fs(&fs);
+        if (is_parallel) {
+            open_file_outstream_gcs(fs_option, file_type, dirname + "/" + fname,
+                                    fs, out_stream);
+        } else {
+            open_file_outstream_gcs(fs_option, file_type, fname, fs,
+                                    out_stream);
+        }
+
+        Py_DECREF(f_mod);
+        Py_DECREF(gcs_func_obj);
+    } else {
+        throw std::runtime_error("open output stream: unrecognized filesystem");
     }
 }
 

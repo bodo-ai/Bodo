@@ -64,6 +64,9 @@ typedef void (*s3_opener_t)(const char*,
                             std::shared_ptr<::arrow::io::RandomAccessFile>*,
                             const char*);
 
+typedef void (*gcs_opener_t)(const char*,
+                            std::shared_ptr<::arrow::io::RandomAccessFile>*);
+
 typedef void (*hdfs_open_file_t)(
     const char*, std::shared_ptr<::arrow::io::HdfsReadableFile>*);
 
@@ -869,6 +872,29 @@ void pq_init_reader(const char* file_name,
             (s3_opener_t)PyNumber_AsSsize_t(func_obj, NULL);
         // open Parquet file
         s3_open_file(f_name.c_str(), &file, bucket_region);
+        // create Arrow reader
+        status = parquet::arrow::FileReader::Make(
+            pool, ParquetFileReader::Open(file), &arrow_reader);
+        CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
+        *a_reader = std::move(arrow_reader);
+        Py_DECREF(f_mod);
+        Py_DECREF(func_obj);
+    } else if (f_name.find("gcs://") == 0) {
+        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+        std::shared_ptr<::arrow::io::RandomAccessFile> file;
+        // remove gcs://
+        f_name = f_name.substr(strlen("gcs://"));
+
+        // get gcs opener function
+        import_fs_module(Bodo_Fs::gcs, "parquet", f_mod);
+        PyObject* func_obj = PyObject_GetAttrString(f_mod, "gcs_open_file");
+        CHECK(func_obj, "getting gcs_open_file func_obj failed");
+        gcs_opener_t gcs_open_file =
+            (gcs_opener_t)PyNumber_AsSsize_t(func_obj, NULL);
+
+        // open Parquet file
+        gcs_open_file(f_name.c_str(), &file);
+
         // create Arrow reader
         status = parquet::arrow::FileReader::Make(
             pool, ParquetFileReader::Open(file), &arrow_reader);

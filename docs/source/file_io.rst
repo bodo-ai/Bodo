@@ -358,6 +358,28 @@ These environment variables are used for File I/O with S3 credentials:
 
 Bodo uses `Apache Arrow <https://arrow.apache.org/>`_ internally for read and write of data on S3.
 
+.. _GCS:
+
+Google Cloud Storage
+~~~~~~~~~~~~~~~~~~~~
+Reading and writing :ref:`Parquet <aprquet-section>` files from and to Google Cloud is
+supported.
+
+The file path should start with ``gs://`` or ``gcs://``::
+
+    @bodo.jit
+    def example_gcs_parquet():
+        df = pd.read_parquet('gcs://bucket-name/file_name.parquet')
+
+These environment variables are used for File I/O with GCS credentials:
+  - ``GOOGLE_APPLICATION_CREDENTIALS``
+
+Details for ``GOOGLE_APPLICATION_CREDENTIALS`` can be seen in the Google docs `here
+<https://cloud.google.com/docs/authentication/getting-started#setting_the_environment_variable>`_.
+
+Bodo uses the fsspec-based `gcsfs <https://gcsfs.readthedocs.io/en/latest/>`_ library
+internally for read and write of data on GCS.
+
 .. _HDFS:
 
 Hadoop Distributed File System (HDFS) and Azure Data Lake Storage (ADLS) Gen2

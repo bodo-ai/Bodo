@@ -39,6 +39,8 @@ from bodo.io.fs_io import (
     abfs_is_directory,
     abfs_list_dir_fnames,
     directory_of_files_common_filter,
+    gcs_is_directory,
+    gcs_list_dir_fnames,
     get_hdfs_fs,
     get_s3_bucket_region_njit,
     get_s3_fs,
@@ -813,6 +815,8 @@ def is_directory_parallel(fpath):
         try:
             if fpath.startswith("s3://"):
                 isdir = s3_is_directory(get_s3_fs(), fpath)
+            elif fpath.startswith("gcs://"):
+                isdir = gcs_is_directory(fpath)
             elif fpath.startswith("hdfs://"):  # pragma: no cover
                 _, isdir = hdfs_is_directory(fpath)
             # TODO merge with hdfs when new pyarrow API works with abfs
@@ -854,6 +858,8 @@ def is_nested_parallel(fpath, file_names):
                     "abfss://"
                 ):  # pragma: no cover
                     is_dir_func = abfs_is_directory
+                elif fpath.startswith("gcs://"):
+                    is_dir_func = gcs_is_directory
                 else:
                     is_dir_func = os.path.isdir
                 for fname in file_names:
@@ -895,6 +901,8 @@ def get_filenames_parallel(path, filter_func):
                 "abfss://"
             ):  # pragma: no cover
                 _, file_names = abfs_list_dir_fnames(path)
+            elif path.startswith("gcs://"):
+                file_names = gcs_list_dir_fnames(path)
             else:
                 file_names = os.listdir(path)
             # pq.ParquetDataset() needs the full path for each file
@@ -985,6 +993,20 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
 
     comm = MPI.COMM_WORLD
 
+    if fpath.startswith("gs://"):
+        fpath = fpath[:1] + "c" + fpath[1:]
+
+    if fpath.startswith("gcs://"):
+        try:
+            import gcsfs
+        except ImportError:
+            message = (
+                "Couldn't import gcsfs, which is required for Google cloud access."
+                " gcsfs can be installed by calling"
+                " 'conda install -c conda-forge gcsfs.\n"
+            )
+            raise BodoError(message)
+
     fs = []
 
     def getfs():
@@ -992,6 +1014,9 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
             return fs[0]
         if fpath.startswith("s3://"):
             fs.append(get_s3_fs())
+        elif fpath.startswith("gcs://"):
+            google_fs = gcsfs.GCSFileSystem(token=None)
+            fs.append(google_fs)
         elif (
             fpath.startswith("hdfs://")
             or fpath.startswith("abfs://")

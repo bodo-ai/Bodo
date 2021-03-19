@@ -206,6 +206,7 @@ void file_write(char* file_name, void* buff, int64_t size) {
 
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
+    // TODO gcs
     } else {
         // posix
         FILE* fp = fopen(file_name, "wb");
@@ -341,6 +342,7 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
                                 elem_size, NULL, hdfs_fs);
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
+    // TODO gcs
     } else {
         // posix
         char err_string[MPI_MAX_ERROR_STRING];

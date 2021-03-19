@@ -9,14 +9,16 @@
 #include "arrow/filesystem/s3fs.h"
 
 struct Bodo_Fs {
-    enum FsEnum { posix = 0, s3 = 1, hdfs = 2 };
+    enum FsEnum { posix = 0, s3 = 1, hdfs = 2, gcs = 3 };
 };
 
+// TODO gcs reader
 typedef FileReader *(*s3_reader_init_t)(const char *, const char *, bool, bool);
 typedef FileReader *(*hdfs_reader_init_t)(const char *, const char *, bool,
                                           bool);
 typedef void (*s3_get_fs_t)(std::shared_ptr<::arrow::fs::S3FileSystem> *,
                             std::string);
+typedef void (*gcs_get_fs_t)(std::shared_ptr<::arrow::py::fs::PyFileSystem> *);
 typedef void (*hdfs_get_fs_t)(const std::string &,
                               std::shared_ptr<::arrow::fs::HadoopFileSystem> *);
 
@@ -52,7 +54,7 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
                          std::string *path_name);
 
 /*
- * Import file system python module: bodo.io.s3_reader, or bodo.io.hdfs_reader
+ * Import file system python module: bodo.io.s3_reader, bodo.io.hdfs_reader or bodo.io.gcs_reader
  * @param fs_option: file system to write to
  * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others
  * @param f_mod: reference to the python module
@@ -61,6 +63,7 @@ void import_fs_module(Bodo_Fs::FsEnum fs_option, const std::string &file_type,
                       PyObject *&f_mod);
 
 /*
+ * TODO init_gcs_reader
  * Get python attributes: init_s3_reader, or init_hdfs_reader
  * @param fs_option: file system to write to
  * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others
@@ -72,7 +75,7 @@ void get_fs_reader_pyobject(Bodo_Fs::FsEnum fs_option,
                             PyObject *&func_obj);
 
 /*
- * Get python attributes: s3_get_fs, or hdfs_get_fs
+ * Get python attributes: s3_get_fs, hdfs_get_fs or gcs_get_fs
  * @param fs_option: file system to write to
  * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others
  * @param f_mod: reference to the python module
@@ -83,6 +86,7 @@ void get_get_fs_pyobject(Bodo_Fs::FsEnum fs_option,
                          PyObject *&func_obj);
 
 /*
+ * TODO gcs
  * Open file output stream for posix & s3 & hdfs
  * @param fs_option: file system to write to
  * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others
@@ -98,6 +102,7 @@ void open_file_outstream(
     std::shared_ptr<::arrow::io::OutputStream> *out_stream);
 
 /*
+ * TODO gcs
  * Open file append output stream for hdfs
  * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others
  * @param fname: name of the file to open (exclude prefix, include path)
@@ -133,6 +138,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
                     const std::string &bucket_region);
 
 /*
+ * TODO gcs
  * Generic implementation for writing to s3 & hdfs,
  * where more than more processors write to the same file.
  * s3:

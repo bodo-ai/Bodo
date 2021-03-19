@@ -58,7 +58,7 @@ then
    $CONDA_INSTALL numba=0.53.0 -c conda-forge
    $CONDA_INSTALL cython -c conda-forge
    $CONDA_INSTALL mpi4py -c conda-forge
-   $CONDA_INSTALL scikit-learn -c conda-forge
+   $CONDA_INSTALL scikit-learn gcsfs -c conda-forge
    $CONDA_INSTALL hdf5=*=*mpich* -c conda-forge
    $CONDA_INSTALL xlrd xlsxwriter openpyxl -c conda-forge
    if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi

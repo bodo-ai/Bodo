@@ -2632,13 +2632,16 @@ def dist_permutation_array_index(
 ########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
 
 
-from bodo.io import hdfs_reader, s3_reader
+from bodo.io import hdfs_reader, s3_reader, gcs_reader
 
 ll.add_symbol("finalize", hdist.finalize)
 finalize = types.ExternalFunction("finalize", types.int32())
 
 ll.add_symbol("finalize_s3", s3_reader.finalize_s3)
 finalize_s3 = types.ExternalFunction("finalize_s3", types.int32())
+
+ll.add_symbol("finalize_gcs", gcs_reader.finalize_gcs)
+finalize_gcs = types.ExternalFunction("finalize_gcs", types.int32())
 
 ll.add_symbol("disconnect_hdfs", hdfs_reader.disconnect_hdfs)
 disconnect_hdfs = types.ExternalFunction("disconnect_hdfs", types.int32())
@@ -2648,6 +2651,7 @@ disconnect_hdfs = types.ExternalFunction("disconnect_hdfs", types.int32())
 def call_finalize():  # pragma: no cover
     finalize()
     finalize_s3()
+    finalize_gcs()
     check_and_propagate_cpp_exception()
     disconnect_hdfs()
 

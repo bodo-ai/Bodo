@@ -136,6 +136,24 @@ ext_s3 = Extension(
     language="c++",
 )
 
+
+gcs_reader_libraries = MPI_LIBS + ["arrow", "arrow_python"]
+if "setup_centos7" in os.environ:
+    gcs_reader_libraries += ["boost_system"]
+ext_gcs = Extension(
+    name="bodo.io.gcs_reader",
+    sources=["bodo/io/_gcs_reader.cpp"],
+    depends=["bodo/io/_bodo_file_reader.h"],
+    libraries=gcs_reader_libraries,
+    include_dirs=ind + np_compile_args["include_dirs"],
+    library_dirs=lid,
+    define_macros=[],
+    extra_compile_args=eca,
+    extra_link_args=ela,
+    language="c++",
+)
+
+
 hdfs_reader_libraries = MPI_LIBS + ["arrow"]
 if "setup_centos7" in os.environ:
     hdfs_reader_libraries += ["boost_system"]
@@ -397,6 +415,19 @@ ext_parquet = Extension(
     library_dirs=lid,
 )
 
+
+ext_pyfs = Extension(
+    name="bodo.io.pyfs",
+    sources=[
+        "bodo/io/pyfs.pyx",
+    ],
+    include_dirs=np_compile_args["include_dirs"] + ind,
+    define_macros=[],
+    extra_compile_args=eca,
+    extra_link_args=ela,
+    library_dirs=lid,
+)
+
 _ext_mods = [
     ext_hdist,
     ext_dict,
@@ -407,23 +438,33 @@ _ext_mods = [
     ext_io,
     ext_arr,
     ext_s3,
+    ext_gcs,
     ext_hdfs,
 ]
 
 
+# the bodo/io/pyfs.pyx file is always part of Bodo (not generated during build)
+pyfs_pyx_fpath = os.path.join("bodo", "io", "pyfs.pyx")
 if clean_mode:
     assert not development_mode
-    _cython_ext_mods = glob.glob("bodo/**/*.pyx", recursive=True)
+    _cython_ext_mods = [
+        f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f != pyfs_pyx_fpath
+    ]
 elif development_mode:
     _cython_ext_mods = []
     # make sure there are no .pyx files in development mode
-    assert len(glob.glob("bodo/**/*.pyx", recursive=True)) == 0
+    pyxs = [
+        f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f != pyfs_pyx_fpath
+    ]
+    assert len(pyxs) == 0
 else:
     import subprocess
 
     # rename select files to .pyx for cythonizing
     subprocess.run([sys.executable, "rename_to_pyx.py"])
-    _cython_ext_mods = glob.glob("bodo/**/*.pyx", recursive=True)
+    _cython_ext_mods = [
+        f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f != pyfs_pyx_fpath
+    ]
 
 
 if _has_h5py:
@@ -463,5 +504,7 @@ setup(
     extras_require={"HDF5": ["h5py"], "Parquet": ["pyarrow"]},
     cmdclass=versioneer.get_cmdclass(),
     ext_modules=_ext_mods
-    + cythonize(_cython_ext_mods, compiler_directives={"language_level": "3"}),
+    + cythonize(
+        _cython_ext_mods + [ext_pyfs], compiler_directives={"language_level": "3"}
+    ),
 )
