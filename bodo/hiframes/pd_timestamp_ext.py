@@ -1,4 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+
+import calendar
 import datetime
 import operator
 
@@ -1969,3 +1971,8 @@ class CmpOpEq(CompDT64):
 @infer_global(operator.ne)
 class CmpOpNe(CompDT64):
     key = operator.ne
+
+
+@typeof_impl.register(calendar._localized_month)
+def typeof_python_calendar(val, c):
+    return types.Tuple([types.StringLiteral(v) for v in val])

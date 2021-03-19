@@ -1,4 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+
+import calendar
 import datetime
 import operator
 import random
@@ -1944,6 +1946,15 @@ def test_datetime_timedelta_array_len(memory_leak_check):
         [datetime.timedelta(34), datetime.timedelta(microseconds=43000000)] * 3
     )
     check_func(test_impl, (A,))
+
+
+def test_calendar_month_abbbr():
+    def impl():
+        return calendar.month_abbr
+
+    bodo_impl = bodo.jit(impl)
+    abbrs = list(bodo_impl())
+    assert abbrs == list(calendar.month_abbr)
 
 
 @pytest.mark.parametrize(
