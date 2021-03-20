@@ -42,6 +42,7 @@ from bodo.utils.typing import (
     CONST_DICT_SENTINEL,
     BodoConstUpdatedError,
     BodoError,
+    is_const_func_type,
     is_list_like_index_type,
     is_literal_type,
 )
@@ -1429,7 +1430,7 @@ class TypingTransforms:
             # var is not used here anymore, add to _transformed_vars so it can
             # potentially be removed since some dictionaries (e.g. in agg) may not be
             # type stable
-            self._transformed_vars.add(var.name)
+            self._add_to_transformed_vars(var.name)
             self.changed = True
 
         rhs.kws = list(kws.items())
@@ -1793,6 +1794,24 @@ class TypingTransforms:
 
         return False
 
+    def _add_to_transformed_vars(self, varname):
+        """add variable 'varname' to the set of transformed variables to be removed
+        later to avoid typing errors.
+        If the variable is a constant dict, it looks at the values and removes
+        list of functions since they can fail in Numba's typing.
+        """
+        var_def = guard(get_definition, self.func_ir, varname)
+        if is_expr(var_def, "build_map"):
+            for v in var_def.items:
+                v_def = guard(get_definition, self.func_ir, v[1])
+                if is_expr(v_def, "build_list"):
+                    if any(
+                        is_const_func_type(self.typemap.get(a.name, None))
+                        for a in v_def.items
+                    ):
+                        self._transformed_vars.add(v[1].name)
+        self._transformed_vars.add(varname)
+
 
 def _create_const_var(val, name, scope, loc, nodes):
     """create a new variable that holds constant value 'val'. Generates constant
@@ -1809,9 +1828,17 @@ def _create_const_var(val, name, scope, loc, nodes):
             [_create_const_var(v, name, scope, loc, nodes) for v in val], loc
         )
     elif isinstance(val, list):
-        const_node = ir.Expr.build_list(
-            [_create_const_var(v, name, scope, loc, nodes) for v in val], loc
-        )
+        # list of functions cannot be typed properly in Numba yet, so we use tuple of
+        # functions instead. The only place list of functions can be used is in
+        # groupby.agg where list and tuple are equivalent.
+        if any(is_const_func_type(f) for f in val):
+            const_node = ir.Expr.build_tuple(
+                [_create_const_var(v, name, scope, loc, nodes) for v in val], loc
+            )
+        else:
+            const_node = ir.Expr.build_list(
+                [_create_const_var(v, name, scope, loc, nodes) for v in val], loc
+            )
     # create a tuple with sentinel for dict case since there is no dict literal
     elif isinstance(val, dict):
         # first tuple element is a sentinel specifying that this tuple is a const dict

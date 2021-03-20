@@ -2130,7 +2130,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     state.return_type = return_type
     numba.core.rewrites.rewrite_registry.apply("after-inference", state)
     parfor_pass = numba.parfors.parfor.ParforPass(
-        f_ir, typemap, calltypes, return_type, typingctx, options, flags
+        f_ir, typemap, calltypes, return_type, typingctx, options, flags, {}
     )
     parfor_pass.run()
     # TODO(ehsan): remove when this PR is merged and released in Numba:
@@ -2756,10 +2756,12 @@ def gen_all_eval_func(
 
 
 def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targetctx):
-
+    """Generates a Numba function for "eval" step of an agg operation.
+    The eval step computes the final result for each group.
+    """
     # eval func takes reduce vars and produces final result
     num_red_vars = len(var_types)
-    in_names = ["in{}".format(i) for i in range(num_red_vars)]
+    in_names = [f"in{i}" for i in range(num_red_vars)]
     return_typ = types.unliteral(pm.typemap[eval_nodes[-1].value.name])
 
     # TODO: non-numeric return
@@ -2788,6 +2790,11 @@ def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targe
     assign_nodes = []
     for i, v in enumerate(reduce_vars):
         assign_nodes.append(ir.Assign(block.body[i].target, v, v.loc))
+        # make sure all versions of the reduce variable have the right output
+        # SSA changes in Numba 0.53.0rc2 may create extra versions of the reduce
+        # variable
+        for v_ver in v.versioned_names:
+            assign_nodes.append(ir.Assign(v, ir.Var(v.scope, v_ver, v.loc), v.loc))
     block.body = block.body[:num_red_vars] + assign_nodes + eval_nodes
 
     # compile implementation to binary (Dispatcher)
@@ -2803,12 +2810,21 @@ def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targe
 def gen_combine_func(
     f_ir, parfor, redvars, var_to_redvar, var_types, arr_var, pm, typingctx, targetctx
 ):
+    """generates a Numba function for the "combine" step of an agg operation.
+    The combine step combines the received aggregated data from other processes.
+    Example for a basic sum reduce:
+        def agg_combine(v0, in0):
+            v0 += in0
+            return v0
+    """
+
+    # no need for combine if there is no parfor
     if not parfor:
         return numba.njit(lambda: ())
 
     num_red_vars = len(redvars)
-    redvar_in_names = ["v{}".format(i) for i in range(num_red_vars)]
-    in_names = ["in{}".format(i) for i in range(num_red_vars)]
+    redvar_in_names = [f"v{i}" for i in range(num_red_vars)]
+    in_names = [f"in{i}" for i in range(num_red_vars)]
 
     func_text = "def agg_combine({}):\n".format(", ".join(redvar_in_names + in_names))
 
@@ -2927,6 +2943,15 @@ def gen_update_func(
     typingctx,
     targetctx,
 ):
+    """generates a Numba function for the "update" step of an agg operation.
+    The update step performs the initial aggregation of local data before communication.
+    Example for 'lambda a: (a=="AA").sum()':
+        def agg_combine(v0, in0):
+            v0 += in0 == "AA"
+            return v0
+    """
+
+    # no need for update if there is no parfor
     if not parfor:
         return numba.njit(lambda A: ())
 
@@ -2938,7 +2963,7 @@ def gen_update_func(
     # create input value variable for each reduction variable
     in_vars = []
     for i in range(num_in_vars):
-        in_var = ir.Var(arr_var.scope, "$input{}".format(i), arr_var.loc)
+        in_var = ir.Var(arr_var.scope, f"$input{i}", arr_var.loc)
         in_vars.append(in_var)
 
     # replace X[i] with input value

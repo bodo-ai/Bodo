@@ -13,10 +13,12 @@ import pytest
 import bodo
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
+    DistTestPipeline,
     check_caching,
     check_func,
     check_parallel_coherency,
     convert_non_pandas_columns,
+    dist_IR_contains,
     gen_random_decimal_array,
     gen_random_list_string_array,
     get_start_end,
@@ -1440,6 +1442,37 @@ def test_groupby_agg_const_dict(memory_leak_check):
     check_func(impl18, (df,), sort_output=True, check_dtype=False)
 
 
+def test_groupby_agg_func_list(memory_leak_check):
+    """
+    Test groupy.agg with list of functions in const dict input
+    """
+
+    def impl(df):
+        return df.groupby("A").agg(
+            {
+                "C": [lambda x: (x >= 3).sum()],
+                "B": [lambda x: x.sum(), lambda x: (x < 6.1).sum()],
+            }
+        )
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "D": ["AA", "B", "BB", "B", "AA", "AA", "B"],
+            "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, 7.1],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        },
+        index=np.arange(10, 17),
+    )
+    check_func(impl, (df,), sort_output=True, check_dtype=False)
+    # make sure regular optimized UDF path is taken
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
+    bodo_func(df)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    # general UDF codegen adds call to cpp_cb_general as a global
+    assert not dist_IR_contains(f_ir, "global(cpp_cb_general:")
+
+
 def test_groupby_nunique(memory_leak_check):
     """
     Test nunique only and with groupy.agg (nunique_mode:0, 1,2)
@@ -1535,6 +1568,12 @@ def test_agg_global_func(memory_leak_check):
     )
 
     check_func(impl_str, (df_str,), sort_output=True)
+    # make sure regular optimized UDF path is taken
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl_str)
+    bodo_func(df_str)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    # general UDF codegen adds call to cpp_cb_general as a global
+    assert not dist_IR_contains(f_ir, "global(cpp_cb_general:")
 
 
 def test_count(memory_leak_check):
