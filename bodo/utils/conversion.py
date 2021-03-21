@@ -953,10 +953,20 @@ def overload_index_from_array(data, name=None):
 
     if isinstance(data.dtype, types.Integer):
         if not data.dtype.signed:
+            # NumericIndexType assumes Numpy data arrays
+            if isinstance(data, bodo.libs.int_arr_ext.IntegerArrayType):
+                return lambda data, name=None: pd.UInt64Index(
+                    data.astype(np.uint64, copy=False), name=name
+                )  # pragma: no cover
             return lambda data, name=None: pd.UInt64Index(
                 data, name=name
             )  # pragma: no cover
         else:
+            # NumericIndexType assumes Numpy data arrays
+            if isinstance(data, bodo.libs.int_arr_ext.IntegerArrayType):
+                return lambda data, name=None: pd.Int64Index(
+                    data.astype(np.int64, copy=False), name=name
+                )  # pragma: no cover
             return lambda data, name=None: pd.Int64Index(
                 data, name=name
             )  # pragma: no cover
@@ -967,7 +977,7 @@ def overload_index_from_array(data, name=None):
         )  # pragma: no cover
 
     # TODO: timedelta, period
-    raise TypeError("invalid index type {}".format(data))
+    raise BodoError(f"invalid index type {data}")
 
 
 def index_to_array(data):  # pragma: no cover
