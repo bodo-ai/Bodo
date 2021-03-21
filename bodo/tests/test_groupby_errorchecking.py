@@ -361,6 +361,33 @@ def test_groupby_aggregate_funcs_udf(memory_leak_check):
         bodo.jit(impl)(df)
 
 
+def test_groupby_apply_udf_non_numba_err(memory_leak_check):
+    """
+    Test Groupby.apply() with a UDF that raises a non-Numba error (i.e. no msg and loc
+    attributes)
+    """
+
+    @bodo.jit
+    def apply_func(df):
+        with bodo.objmode(
+            out='bodo.DataFrameType((bodo.float64[::1],), bodo.RangeIndexType(bodo.none), ("0",))'
+        ):
+            out = pd.Series([9, 8, 7, 6, 5])
+        return out
+
+    @bodo.jit(distributed=["df", "res"])
+    def main_func(df):
+        res = df.groupby("A").apply(apply_func)
+        return res
+
+    df = pd.DataFrame({"A": [1.0, 2, 3, 1.0, 5], "B": [4.0, 5, 6, 2, 1]})
+    with pytest.raises(
+        BodoError,
+        match=r"\'bodo\' is not defined",
+    ):
+        main_func(df)
+
+
 def test_groupby_built_in_col_type(memory_leak_check):
     """
     Test Groupby.prod()

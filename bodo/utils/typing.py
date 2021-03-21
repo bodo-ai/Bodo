@@ -117,13 +117,20 @@ def get_udf_error_msg(context_str, error):
     context_str: Context for UDF error, e.g. "Dataframe.apply()"
     error: UDF error
     """
-    return (
-        "{}: user-defined function not supported".format(context_str)
-        + ": "
-        + str(error.msg)
-        + "\n"
-        + (error.loc.strformat() if error.loc is not None else "")
-    )
+    # the error could be a Numba TypingError with 'msg' and 'loc' attributes, or just
+    # a regular Python Exception/Error with 'args' attribute
+    msg = ""
+    if hasattr(error, "msg"):
+        msg = str(error.msg)
+    if hasattr(error, "args") and error.args:
+        # TODO(ehsan): can Exception have more than one arg?
+        msg = str(error.args[0])
+
+    loc = ""
+    if hasattr(error, "loc") and error.loc is not None:
+        loc = error.loc.strformat()
+
+    return f"{context_str}: user-defined function not supported: {msg}\n{loc}"
 
 
 class FileInfo(object):
