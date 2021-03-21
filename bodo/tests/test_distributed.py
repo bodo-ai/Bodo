@@ -238,7 +238,7 @@ def test_jit_inside_prange(memory_leak_check):
         return df.sort_values("A")
 
     def impl(df, n):
-        s = 0
+        s = 3
         for i in bodo.prange(n):
             s += f(df).A.iloc[-1] + i
         return s
