@@ -266,6 +266,10 @@ For writing::
 
 See :ref:`to_sql() <pandas-f-in>` for supported arguments.
 
+.. note::
+
+  ``sqlalchemy`` must be installed in order to use ``pandas.read_sql``.
+
 .. _numpy-binary-section:
 
 Numpy binaries
@@ -388,7 +392,8 @@ Hadoop Distributed File System (HDFS) and Azure Data Lake Storage (ADLS) Gen2
 Reading and writing :ref:`CSV <csv-section>`, :ref:`Parquet <parquet-section>`, :ref:`JSON <json-section>`, and :ref:`Numpy binary <numpy-binary-section>` files from and to Hadoop Distributed File System (HDFS) is supported.
 Note that Azure Data Lake Storage Gen2 can be accessed through HDFS.
 
-The file path should start with ``hdfs://`` or ``abfs[s]://``::
+The ``openjdk`` version 8 package must be available, and the file path should start with
+``hdfs://`` or ``abfs[s]://``::
 
     @bodo.jit
     def example_hdfs_parquet():

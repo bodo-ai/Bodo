@@ -157,6 +157,24 @@ distributed_pass.distributed_run_extensions[SqlReader] = sql_distributed_run
 compiled_funcs = []
 
 
+@numba.njit
+def sqlalchemy_check():
+    with numba.objmode():
+        sqlalchemy_check_()
+
+
+def sqlalchemy_check_():  # pragma: no cover
+    try:
+        import sqlalchemy
+    except ImportError:
+        message = (
+            "Using URI string without sqlalchemy installed."
+            " sqlalchemy can be installed by calling"
+            " 'conda install -c conda-forge sqlalchemy'."
+        )
+        raise BodoError(message)
+
+
 def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, db_type, parallel):
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
     typ_strs = [
@@ -177,6 +195,7 @@ def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, db_type, paral
     #    (but the number will differ by at most 1 between MPI nodes)
     if bodo.sql_access_method == "multiple_access_by_block":
         func_text = "def sql_reader_py(sql_request,conn):\n"
+        func_text += "  sqlalchemy_check()\n"
         func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
         func_text += "    list_df_block = []\n"
         func_text += "    block_size = 50000\n"
@@ -218,6 +237,7 @@ def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, db_type, paral
     # usage.
     if bodo.sql_access_method == "multiple_access_nb_row_first":
         func_text = "def sql_reader_py(sql_request, conn):\n"
+        func_text += "  sqlalchemy_check()\n"
         if parallel:
             func_text += '  with objmode(nb_row="int64"):\n'
             if rank == MPI_ROOT:

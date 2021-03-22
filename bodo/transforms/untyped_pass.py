@@ -32,7 +32,7 @@ from numba.core.ir_utils import (
 
 
 import bodo
-from bodo import config
+from bodo import config, objmode
 import bodo.io
 from bodo.io import h5
 from bodo.utils.utils import is_call, is_expr, is_assign
@@ -64,6 +64,7 @@ from bodo.utils.transform import (
     set_call_expr_arg,
 )
 from bodo.utils.typing import BodoError, BodoWarning, to_nullable_type, FileInfo
+from bodo.utils.utils import check_java_installation
 
 
 # dummy sentinel singleton to designate constant value not found for variable
@@ -827,6 +828,15 @@ class UntypedPass:
         # schema: pd.read_sql(sql, con, index_col=None,
         # coerce_float=True, params=None, parse_dates=None,
         # columns=None, chunksize=None
+        try:
+            import sqlalchemy
+        except ImportError:  # pragma: no cover
+            message = (
+                "Using URI string without sqlalchemy installed."
+                " sqlalchemy can be installed by calling"
+                " 'conda install -c conda-forge sqlalchemy'."
+            )
+            raise BodoError(message)
         kws = dict(rhs.kws)
         sql_var = get_call_expr_arg("read_sql", rhs.args, kws, 0, "sql")
         # The sql request has to be constant
@@ -1680,6 +1690,8 @@ class UntypedPass:
         func_text = (
             ""
             "def fromfile_impl(fname, dtype, count, offset):\n"
+            # check_java_installation is a check for hdfs that java is installed
+            "    check_java_installation(fname)\n"
             "    dtype_size = get_dtype_size(dtype)\n"
             "    size = get_file_size(fname, count, offset, dtype_size)\n"
             "    A = np.empty(size // dtype_size, dtype=dtype)\n"
@@ -1696,6 +1708,7 @@ class UntypedPass:
                 "get_file_size": bodo.io.np_io.get_file_size,
                 "file_read": bodo.io.np_io.file_read,
                 "get_dtype_size": bodo.io.np_io.get_dtype_size,
+                "check_java_installation": check_java_installation,
             },
         ).blocks.popitem()[1]
         replace_arg_nodes(f_block, [_fname, _dtype, _count, _offset])

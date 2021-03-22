@@ -1,20 +1,21 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import bodo
-from bodo import objmode
 import numba
+import numpy as np
+import pandas as pd
 from numba.core import ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
-    visit_vars_inner,
-    replace_vars_inner,
     compile_to_numba_ir,
     replace_arg_nodes,
+    replace_vars_inner,
+    visit_vars_inner,
 )
-from bodo.transforms import distributed_pass, distributed_analysis
-from bodo.transforms.distributed_analysis import Distribution
+
+import bodo
+from bodo import objmode
 from bodo.libs.str_ext import string_type
-from bodo.utils.utils import sanitize_varname
-import pandas as pd
-import numpy as np
+from bodo.transforms import distributed_analysis, distributed_pass
+from bodo.transforms.distributed_analysis import Distribution
+from bodo.utils.utils import check_java_installation, sanitize_varname
 
 
 class JsonReader(ir.Stmt):
@@ -51,8 +52,9 @@ class JsonReader(ir.Stmt):
         )
 
 
-from bodo.io import json_cpp
 import llvmlite.binding as ll
+
+from bodo.io import json_cpp
 
 ll.add_symbol("json_file_chunk_reader", json_cpp.json_file_chunk_reader)
 
@@ -208,6 +210,8 @@ def _gen_json_reader_py(
         compression = "uncompressed"  # Arrow's representation
 
     func_text = "def json_reader_py(fname):\n"
+    # check_java_installation is a check for hdfs that java is installed
+    func_text += "  check_java_installation(fname)\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += "  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)\n"
     func_text += "  f_reader = bodo.ir.json_ext.json_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "

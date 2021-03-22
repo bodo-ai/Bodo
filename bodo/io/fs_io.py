@@ -18,6 +18,7 @@ from bodo.io import csv_cpp
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning
+from bodo.utils.utils import check_java_installation
 
 _csv_write = types.ExternalFunction(
     "csv_write",
@@ -213,6 +214,8 @@ def hdfs_is_directory(path):
     """
     # this HadoopFileSystem is the new file system of pyarrow
     from pyarrow.fs import FileType, HadoopFileSystem
+
+    check_java_installation(path)
 
     options = urlparse(path)
     hdfs_path = options.path  # path within hdfs(i.e. dir/file)

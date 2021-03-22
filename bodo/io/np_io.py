@@ -12,6 +12,7 @@ from numba.extending import intrinsic, overload, overload_method
 import bodo
 from bodo.libs import hio
 from bodo.libs.str_ext import string_type, unicode_to_utf8
+from bodo.utils.utils import check_java_installation
 
 ll.add_symbol("get_file_size", hio.get_file_size)
 ll.add_symbol("file_read", hio.file_read)
@@ -57,6 +58,9 @@ def tofile_overload(arr, fname):
     if fname == string_type or isinstance(fname, types.StringLiteral):
 
         def tofile_impl(arr, fname):  # pragma: no cover
+            # check_java_installation is a check for hdfs that java is installed
+            check_java_installation(fname)
+
             A = np.ascontiguousarray(arr)
             dtype_size = get_dtype_size(A.dtype)
             # TODO: unicode name

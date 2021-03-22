@@ -27,7 +27,11 @@ from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.utils import debug_prints, sanitize_varname
+from bodo.utils.utils import (
+    check_java_installation,
+    debug_prints,
+    sanitize_varname,
+)
 
 
 class CsvReader(ir.Stmt):
@@ -322,6 +326,8 @@ def _gen_csv_reader_py(
         compression = "uncompressed"  # Arrow's representation
 
     func_text = "def csv_reader_py(fname):\n"
+    # check_java_installation is a check for hdfs that java is installed
+    func_text += "  check_java_installation(fname)\n"
     func_text += "  skiprows = {}\n".format(skiprows)
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += "  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)\n"

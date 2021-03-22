@@ -45,8 +45,6 @@ requirements:
     - boost-cpp =1.74.0
     - libcurl
     - numba 0.53.0
-    - openjdk =8
-    - sqlalchemy
     - s3fs
     - mpich =3.3.2=h* # [not win]
     - mpi4py

@@ -1039,3 +1039,23 @@ def inlined_check_and_propagate_cpp_exception(context, builder):
 
     with builder.if_then(error_occured):
         builder.ret(numba.core.callconv.RETCODE_EXC)
+
+
+@numba.njit
+def check_java_installation(fname):
+    with numba.objmode():
+        check_java_installation_(fname)
+
+
+def check_java_installation_(fname):
+    if not fname.startswith("hdfs://"):
+        return
+    import shutil
+
+    if not shutil.which("java"):
+        message = (
+            "Java not found. Make sure openjdk is installed for hdfs."
+            " openjdk can be installed by calling"
+            " 'conda install openjdk=8 -c conda-forge'."
+        )
+        raise BodoError(message)
