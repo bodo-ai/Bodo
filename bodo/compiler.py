@@ -34,7 +34,6 @@ import bodo.libs.spark_extra
 import bodo.transforms
 import bodo.transforms.series_pass
 import bodo.transforms.untyped_pass
-from bodo import config
 from bodo.transforms.series_pass import SeriesPass
 from bodo.transforms.typing_pass import BodoTypeInference
 from bodo.transforms.untyped_pass import UntypedPass
@@ -64,7 +63,7 @@ import bodo.io
 import bodo.utils
 import bodo.utils.typing
 
-if config._has_h5py:
+if bodo.utils.utils.has_h5py():
     from bodo.io import h5  # noqa
 
 

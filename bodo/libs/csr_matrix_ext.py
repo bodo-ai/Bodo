@@ -97,7 +97,7 @@ def init_csr_matrix(typingctx, data_t, indices_t, indptr_t, shape_t=None):
     return sig, codegen
 
 
-if bodo.config._has_scipy:
+if bodo.utils.utils.has_scipy():
     import scipy.sparse
 
     @typeof_impl.register(scipy.sparse.csr_matrix)

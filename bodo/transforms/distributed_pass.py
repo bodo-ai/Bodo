@@ -1103,13 +1103,11 @@ class DistributedPass:
             return [ir.Assign(ir.Const(1, loc), one_var, loc), assign]
 
         if (
-            bodo.config._has_h5py
-            and (
-                func_mod == "bodo.io.h5_api"
-                and func_name in ("h5read", "h5write", "h5read_filter")
-            )
+            func_mod == "bodo.io.h5_api"
+            and func_name in ("h5read", "h5write", "h5read_filter")
             and self._is_1D_arr(rhs.args[5].name)
         ):
+            bodo.utils.utils.check_h5py()
             # TODO: make create_dataset/create_group collective
             arr = rhs.args[5]
             # dataset dimensions can be different than array due to integer selection
