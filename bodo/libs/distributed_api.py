@@ -18,7 +18,13 @@ from numba.core import cgutils, ir_utils, types
 from numba.core.typing import signature
 from numba.core.typing.builtins import IndexValueType
 from numba.core.typing.templates import AbstractTemplate, infer_global
-from numba.extending import intrinsic, models, overload, register_model
+from numba.extending import (
+    intrinsic,
+    models,
+    overload,
+    register_jitable,
+    register_model,
+)
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
@@ -2517,13 +2523,13 @@ def _get_local_range(start, stop, chunk_start, chunk_count):  # pragma: no cover
     return loc_start, loc_stop
 
 
-@numba.njit
+@register_jitable
 def _set_if_in_range(A, val, index, chunk_start):  # pragma: no cover
     if index >= chunk_start and index < chunk_start + len(A):
         A[index - chunk_start] = val
 
 
-@numba.njit
+@register_jitable
 def _root_rank_select(old_val, new_val):  # pragma: no cover
     if get_rank() == 0:
         return old_val
@@ -2632,7 +2638,7 @@ def dist_permutation_array_index(
 ########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
 
 
-from bodo.io import hdfs_reader, s3_reader, gcs_reader
+from bodo.io import gcs_reader, hdfs_reader, s3_reader
 
 ll.add_symbol("finalize", hdist.finalize)
 finalize = types.ExternalFunction("finalize", types.int32())

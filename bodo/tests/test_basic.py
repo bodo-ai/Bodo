@@ -10,9 +10,11 @@ import pytest
 import bodo
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
+    DistTestPipeline,
     check_func,
     count_array_OneDs,
     count_parfor_OneDs,
+    dist_IR_contains,
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_assign, is_expr
@@ -237,6 +239,21 @@ def test_reduce2(test_dtypes_input, test_funcs_input, memory_leak_check):
         np.random.seed(0)
         A = np.random.randint(0, 10, n).astype(dtype)
         check_func(test_impl, (A,))
+
+
+@pytest.mark.slow
+def test_reduce_init_val(memory_leak_check):
+    """make sure _root_rank_select is not generated for common reductions with neutral
+    init value.
+    """
+
+    def impl(n):
+        return np.ones(n).sum()
+
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
+    assert bodo_func(11) == 11.0
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert not dist_IR_contains(f_ir, "_root_rank_select")
 
 
 @pytest.mark.smoke

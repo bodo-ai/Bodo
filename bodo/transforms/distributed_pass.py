@@ -3358,6 +3358,8 @@ class DistributedPass:
     def _gen_init_reduce(self, reduce_var, reduce_op):
         """generate code to initialize reduction variables on non-root
         processors.
+        Avoids extra code generation if the user code-specified init value is the same
+        as the neutral value of the reduction (common case).
         """
         # TODO: support initialization for concat reductions
         if reduce_op in (Reduce_Type.Concat, Reduce_Type.No_Op):
@@ -3368,60 +3370,75 @@ class DistributedPass:
         if is_np_array_typ(self.typemap[reduce_var.name]):
             el_typ = red_var_typ.dtype
         init_val = None
+        user_init_val = self._get_reduce_user_init(reduce_var)
         pre_init_val = ""
 
         if reduce_op in [Reduce_Type.Sum, Reduce_Type.Or]:
             init_val = str(el_typ(0))
+            if user_init_val == el_typ(0):
+                return []
         if reduce_op == Reduce_Type.Prod:
             init_val = str(el_typ(1))
+            if user_init_val == el_typ(1):
+                return []
         if reduce_op == Reduce_Type.Min:
             if el_typ == types.bool_:
                 init_val = "True"
+                if user_init_val == True:
+                    return []
             elif el_typ == bodo.datetime_date_type:
                 init_val = "bodo.hiframes.series_kernels._get_date_max_value()"
             else:
-                init_val = "numba.cpython.builtins.get_type_max_value(np.ones(1,dtype=np.{}).dtype)".format(
-                    el_typ
-                )
+                init_val = f"numba.cpython.builtins.get_type_max_value(np.ones(1,dtype=np.{el_typ}).dtype)"
         if reduce_op == Reduce_Type.Max:
             if el_typ == types.bool_:
                 init_val = "False"
+                if user_init_val == False:
+                    return []
             elif el_typ == bodo.datetime_date_type:
                 init_val = "bodo.hiframes.series_kernels._get_date_min_value()"
             else:
-                init_val = "numba.cpython.builtins.get_type_min_value(np.ones(1,dtype=np.{}).dtype)".format(
-                    el_typ
-                )
+                init_val = f"numba.cpython.builtins.get_type_min_value(np.ones(1,dtype=np.{el_typ}).dtype)"
         if reduce_op in [Reduce_Type.Argmin, Reduce_Type.Argmax]:
             # don't generate initialization for argmin/argmax since they are not
             # initialized by user and correct initialization is already there
             return []
 
-        assert init_val is not None
+        assert init_val is not None, "Invalid distributed reduction"
 
         if is_np_array_typ(self.typemap[reduce_var.name]):
-            pre_init_val = "v = np.full_like(s, {}, s.dtype)".format(init_val)
+            pre_init_val = f"v = np.full_like(s, {init_val}, s.dtype)"
             init_val = "v"
 
-        f_text = "def f(s):\n  {}\n  s = bodo.libs.distributed_api._root_rank_select(s, {})".format(
-            pre_init_val, init_val
-        )
+        f_text = f"def f(s):\n  {pre_init_val}\n  return bodo.libs.distributed_api._root_rank_select(s, {init_val})"
         loc_vars = {}
         exec(f_text, {}, loc_vars)
         f = loc_vars["f"]
 
-        f_block = compile_to_numba_ir(
+        return compile_func_single_block(
             f,
-            {"bodo": bodo, "numba": numba, "np": np},
-            self.typingctx,
-            (red_var_typ,),
-            self.typemap,
-            self.calltypes,
-        ).blocks.popitem()[1]
-        replace_arg_nodes(f_block, [reduce_var])
-        nodes = f_block.body[:-3]
-        nodes[-1].target = reduce_var
-        return nodes
+            (reduce_var,),
+            reduce_var,
+            self,
+        )
+
+    def _get_reduce_user_init(self, reduce_var):
+        """get the initialization value provided by user code for the reduction
+        variable.
+        This assumes the reduce variable has two definitions, one being initialization
+        and the other update in the parfor loop.
+        """
+        reduce_var_defs = self.func_ir._definitions[reduce_var.name]
+        if len(reduce_var_defs) != 2:
+            return None
+
+        for var_def in reduce_var_defs:
+            if isinstance(var_def, ir.Var):
+                var_def = guard(get_definition, self.func_ir, var_def)
+            if isinstance(var_def, (ir.Const, ir.FreeVar, ir.Global)):
+                return var_def.value
+
+        return None  # init value not found
 
     def _gen_init_code(self, blocks):
         """generate get_rank() and get_size() calls and store the variables
