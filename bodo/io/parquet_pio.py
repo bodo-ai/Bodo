@@ -966,6 +966,9 @@ def get_parquet_filesnames_from_deltalake(delta_lake_path):
                 file_names = e
         file_names = comm.bcast(file_names)
 
+    else:
+        file_names = comm.bcast(None)
+
     # Restore AWS_DEFAULT_REGION env var if it was modified
     if aws_default_region_modified:
         if aws_default_region_set:
