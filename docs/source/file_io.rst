@@ -270,6 +270,28 @@ See :ref:`to_sql() <pandas-f-in>` for supported arguments.
 
   ``sqlalchemy`` must be installed in order to use ``pandas.read_sql``.
 
+.. _deltalake-section:
+
+Delta Lake
+~~~~~~~~~~
+
+Reading parquet files from Delta Lake is supported locally, from S3, and from Azure ADLS.
+  - The Delta Lake binding python packaged needs to be installed using pip:``pip install deltalake``.
+  - For S3, the ``AWS_DEFAULT_REGION`` environment variable should be set to the region of the bucket hosting the Delta Lake table.
+  - For ADLS, the ``AZURE_STORAGE_ACCOUNT`` and ``AZURE_STORAGE_KEY`` environment variables need to be set.
+
+Example code for reading::
+
+    @bodo.jit
+    def example_read_deltalake():
+        df = pd.read_parquet('path/to/deltalake')
+
+
+.. note::
+
+   
+   Writing is currently not supported.
+
 .. _numpy-binary-section:
 
 Numpy binaries
