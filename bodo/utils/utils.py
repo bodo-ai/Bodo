@@ -1013,7 +1013,7 @@ def has_h5py():
     try:
         import h5py  # noqa
 
-        from .io import _hdf5  # noqa
+        from bodo.io import _hdf5  # noqa
 
         # TODO: make sure h5py/hdf5 supports parallel
     except ImportError:

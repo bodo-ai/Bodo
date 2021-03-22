@@ -1732,7 +1732,7 @@ def test_np_io_sep_unsupported(datapath, memory_leak_check):
 
     bodo_func = bodo.jit(test_impl)
     with pytest.raises(
-        BodoError, match="np.fromfile\(\): sep argument is not supported"
+        BodoError, match=r"np.fromfile\(\): sep argument is not supported"
     ):
         # Test that we cannot swap the value of sep.
         bodo_func()
@@ -2275,7 +2275,7 @@ def test_csv_repeat_args(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match="read_csv\(\) got multiple values for argument 'filepath_or_buffer'",
+        match=r"read_csv\(\) got multiple values for argument 'filepath_or_buffer'",
     ):
         bodo.jit(test_impl)()
 
