@@ -56,6 +56,11 @@ from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import NativeValue, lower_builtin, typeof_impl
 from numba.parfors.parfor import get_expr_args
 
+# flag for checking whether the functions we are replacing have changed in a later Numba
+# release. Needs to be checked for every new Numba release so we update our changes.
+_check_numba_change = False
+
+
 # Make sure literals are tried first for typing Bodo's intrinsics, since output type
 # may depend on literals.
 # see test_join.py::test_merge_index_column_second"[df21-df10]"
@@ -109,13 +114,14 @@ def run_frontend(func, inline_closures=False, emit_dels=False):
     return func_ir
 
 
-# make sure run_frontend hasn't changed before replacing it
-lines = inspect.getsource(numba.core.compiler.run_frontend)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "53e6495bcf751f5fdd91ce6f9319cd7e06df8c3e2919fdf3f9fda976ff4c83ea"
-):  # pragma: no cover
-    warnings.warn("numba.core.compiler.run_frontend has changed")
+if _check_numba_change:
+    # make sure run_frontend hasn't changed before replacing it
+    lines = inspect.getsource(numba.core.compiler.run_frontend)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "53e6495bcf751f5fdd91ce6f9319cd7e06df8c3e2919fdf3f9fda976ff4c83ea"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.compiler.run_frontend has changed")
 
 
 numba.core.compiler.run_frontend = run_frontend
@@ -175,13 +181,14 @@ def visit_vars_stmt(stmt, callback, cbdata):
     return
 
 
-# make sure visit_vars_stmt hasn't changed before replacing it
-lines = inspect.getsource(numba.core.ir_utils.visit_vars_stmt)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "52b7b645ba65c35f3cf564f936e113261db16a2dff1e80fbee2459af58844117"
-):  # pragma: no cover
-    warnings.warn("numba.core.ir_utils.visit_vars_stmt has changed")
+if _check_numba_change:
+    # make sure visit_vars_stmt hasn't changed before replacing it
+    lines = inspect.getsource(numba.core.ir_utils.visit_vars_stmt)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "52b7b645ba65c35f3cf564f936e113261db16a2dff1e80fbee2459af58844117"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.ir_utils.visit_vars_stmt has changed")
 
 
 numba.core.ir_utils.visit_vars_stmt = visit_vars_stmt
@@ -320,25 +327,27 @@ def find_potential_aliases(
     return alias_map, arg_aliases
 
 
-# make sure find_potential_aliases hasn't changed before replacing it
-lines = inspect.getsource(ir_utils.find_potential_aliases)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "2b17b56512a6b9c95e7c6c072bb2e16f681fe2e8e4b8cb7b9fc7ac83133361a1"
-):  # pragma: no cover
-    warnings.warn("ir_utils.find_potential_aliases has changed")
+if _check_numba_change:
+    # make sure find_potential_aliases hasn't changed before replacing it
+    lines = inspect.getsource(ir_utils.find_potential_aliases)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "2b17b56512a6b9c95e7c6c072bb2e16f681fe2e8e4b8cb7b9fc7ac83133361a1"
+    ):  # pragma: no cover
+        warnings.warn("ir_utils.find_potential_aliases has changed")
 
 
 ir_utils.find_potential_aliases = find_potential_aliases
 
 
-# make sure dead_code_elimination hasn't changed before replacing it
-lines = inspect.getsource(ir_utils.dead_code_elimination)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "40a8626300a1a17523944ec7842b093c91258bbc60844bbd72191a35a4c366bf"
-):  # pragma: no cover
-    warnings.warn("ir_utils.dead_code_elimination has changed")
+if _check_numba_change:
+    # make sure dead_code_elimination hasn't changed before replacing it
+    lines = inspect.getsource(ir_utils.dead_code_elimination)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "40a8626300a1a17523944ec7842b093c91258bbc60844bbd72191a35a4c366bf"
+    ):  # pragma: no cover
+        warnings.warn("ir_utils.dead_code_elimination has changed")
 
 # replace dead_code_elimination function with a mini version since it is not safe for
 # Numba passes before our SeriesPass (currently InlineOverloads/InlineClosureCallPass)
@@ -458,13 +467,14 @@ def overload(
     return decorate
 
 
-# make sure overload hasn't changed before replacing it
-lines = inspect.getsource(numba.core.extending.overload)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "9a2e592c984bd1d2df462bc3f2724a155962f85a30dc468d67acbd78cb023cc5"
-):  # pragma: no cover
-    warnings.warn("numba.core.extending.overload has changed")
+if _check_numba_change:
+    # make sure overload hasn't changed before replacing it
+    lines = inspect.getsource(numba.core.extending.overload)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "9a2e592c984bd1d2df462bc3f2724a155962f85a30dc468d67acbd78cb023cc5"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.extending.overload has changed")
 
 
 numba.core.extending.overload = overload
@@ -494,13 +504,14 @@ def overload_method(typ, attr, **kwargs):
     return decorate
 
 
-# make sure overload_method hasn't changed before replacing it
-lines = inspect.getsource(numba.core.extending.overload_method)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "0d2663f1499836c32413f6a4dd8e4c1a407453320034b81b343e38fc34cf0658"
-):  # pragma: no cover
-    warnings.warn("numba.core.extending.overload_method has changed")
+if _check_numba_change:
+    # make sure overload_method hasn't changed before replacing it
+    lines = inspect.getsource(numba.core.extending.overload_method)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "0d2663f1499836c32413f6a4dd8e4c1a407453320034b81b343e38fc34cf0658"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.extending.overload_method has changed")
 
 
 numba.core.extending.overload_method = overload_method
@@ -543,13 +554,14 @@ def make_overload_template(
     return type(base)(name, (base,), dct)
 
 
-# make sure make_overload_template hasn't changed before replacing it
-lines = inspect.getsource(numba.core.typing.templates.make_overload_template)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "1d304a414a1bfb2d7185ddddabcf637790ef2357b4c7d90035970b4f60e2d058"
-):  # pragma: no cover
-    warnings.warn("numba.core.typing.templates.make_overload_template has changed")
+if _check_numba_change:
+    # make sure make_overload_template hasn't changed before replacing it
+    lines = inspect.getsource(numba.core.typing.templates.make_overload_template)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "1d304a414a1bfb2d7185ddddabcf637790ef2357b4c7d90035970b4f60e2d058"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.typing.templates.make_overload_template has changed")
 
 
 numba.core.typing.templates.make_overload_template = make_overload_template
@@ -583,15 +595,18 @@ def _resolve(self, typ, attr):
     return types.BoundFunction(MethodTemplate, typ)
 
 
-# make sure _resolve hasn't changed before replacing it
-lines = inspect.getsource(numba.core.typing.templates._OverloadMethodTemplate._resolve)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "ccfe9f8dec20f58cf61f95420e25abe5419faf2cfffde78f39118fe6f91949e3"
-):  # pragma: no cover
-    warnings.warn(
-        "numba.core.typing.templates._OverloadMethodTemplate._resolve has changed"
+if _check_numba_change:
+    # make sure _resolve hasn't changed before replacing it
+    lines = inspect.getsource(
+        numba.core.typing.templates._OverloadMethodTemplate._resolve
     )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "ccfe9f8dec20f58cf61f95420e25abe5419faf2cfffde78f39118fe6f91949e3"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.typing.templates._OverloadMethodTemplate._resolve has changed"
+        )
 
 
 numba.core.typing.templates._OverloadMethodTemplate._resolve = _resolve
@@ -629,15 +644,18 @@ def make_overload_attribute_template(
     return obj
 
 
-# make sure make_overload_attribute_template hasn't changed before replacing it
-lines = inspect.getsource(numba.core.typing.templates.make_overload_attribute_template)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "fced9b9ca8b1f94d3f6b5fd2377acc544df3be01dfd4adf7044d6e27473a357a"
-):  # pragma: no cover
-    warnings.warn(
-        "numba.core.typing.templates.make_overload_attribute_template has changed"
+if _check_numba_change:
+    # make sure make_overload_attribute_template hasn't changed before replacing it
+    lines = inspect.getsource(
+        numba.core.typing.templates.make_overload_attribute_template
     )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "fced9b9ca8b1f94d3f6b5fd2377acc544df3be01dfd4adf7044d6e27473a357a"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.typing.templates.make_overload_attribute_template has changed"
+        )
 
 
 numba.core.typing.templates.make_overload_attribute_template = (
@@ -665,15 +683,16 @@ def make_overload_method_template(
     )
 
 
-# make sure make_overload_method_template hasn't changed before replacing it
-lines = inspect.getsource(numba.core.typing.templates.make_overload_method_template)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "09157f571dec522776accc54e9ec9261300100cac107c0cc94b7d17fb51238a1"
-):  # pragma: no cover
-    warnings.warn(
-        "numba.core.typing.templates.make_overload_method_template has changed"
-    )
+if _check_numba_change:
+    # make sure make_overload_method_template hasn't changed before replacing it
+    lines = inspect.getsource(numba.core.typing.templates.make_overload_method_template)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "09157f571dec522776accc54e9ec9261300100cac107c0cc94b7d17fb51238a1"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.typing.templates.make_overload_method_template has changed"
+        )
 
 
 numba.core.typing.templates.make_overload_method_template = (
@@ -720,13 +739,14 @@ def bound_function(template_key, no_unliteral=False):
     return wrapper
 
 
-# make sure bound_function hasn't changed before replacing it
-lines = inspect.getsource(numba.core.typing.templates.bound_function)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "a2feefe64eae6a15c56affc47bf0c1d04461f9566913442d539452b397103322"
-):  # pragma: no cover
-    warnings.warn("numba.core.typing.templates.bound_function has changed")
+if _check_numba_change:
+    # make sure bound_function hasn't changed before replacing it
+    lines = inspect.getsource(numba.core.typing.templates.bound_function)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "a2feefe64eae6a15c56affc47bf0c1d04461f9566913442d539452b397103322"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.typing.templates.bound_function has changed")
 
 
 numba.core.typing.templates.bound_function = bound_function
@@ -779,13 +799,16 @@ def get_call_type(self, context, args, kws):
     failures.raise_error()
 
 
-# make sure get_call_type hasn't changed before replacing it
-lines = inspect.getsource(numba.core.types.functions.BaseFunction.get_call_type)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "eea3bba0b35522f006f451309e9155f1fbfd94448060e2c9763df8a37d105880"
-):  # pragma: no cover
-    warnings.warn("numba.core.types.functions.BaseFunction.get_call_type has changed")
+if _check_numba_change:
+    # make sure get_call_type hasn't changed before replacing it
+    lines = inspect.getsource(numba.core.types.functions.BaseFunction.get_call_type)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "eea3bba0b35522f006f451309e9155f1fbfd94448060e2c9763df8a37d105880"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.types.functions.BaseFunction.get_call_type has changed"
+        )
 
 
 numba.core.types.functions.BaseFunction.get_call_type = get_call_type
@@ -874,13 +897,16 @@ def get_call_type2(self, context, args, kws):
     return out
 
 
-# make sure get_call_type hasn't changed before replacing it
-lines = inspect.getsource(numba.core.types.functions.BoundFunction.get_call_type)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "5427d7ba522b97a4e34745587365b1eacb7b9641229649a02737f944e150bfba"
-):  # pragma: no cover
-    warnings.warn("numba.core.types.functions.BoundFunction.get_call_type has changed")
+if _check_numba_change:
+    # make sure get_call_type hasn't changed before replacing it
+    lines = inspect.getsource(numba.core.types.functions.BoundFunction.get_call_type)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "5427d7ba522b97a4e34745587365b1eacb7b9641229649a02737f944e150bfba"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.types.functions.BoundFunction.get_call_type has changed"
+        )
 
 
 numba.core.types.functions.BoundFunction.get_call_type = get_call_type2
@@ -1051,12 +1077,16 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
 # first we check that the hash of the Numba function that we are replacing
 # matches the one of the function that we copied from Numba
 
-lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "79466480839c6e16cf437dc054937deb639c85664df1fef673e8f34dfe9d41b6"
-):  # pragma: no cover
-    warnings.warn("numba.core.dispatcher._DispatcherBase._compile_for_args has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "79466480839c6e16cf437dc054937deb639c85664df1fef673e8f34dfe9d41b6"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.dispatcher._DispatcherBase._compile_for_args has changed"
+        )
+
 # now replace the function with our own
 numba.core.dispatcher._DispatcherBase._compile_for_args = _compile_for_args
 
@@ -1144,12 +1174,14 @@ def compile(self, sig):
             return cres.entry_point
 
 
-lines = inspect.getsource(numba.core.dispatcher.Dispatcher.compile)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "bab1d95438fe39d3e26e0ac0989ae3a3b54439ee0eda8507a693ea6ca4a4917b"
-):  # pragma: no cover
-    warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.dispatcher.Dispatcher.compile)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "bab1d95438fe39d3e26e0ac0989ae3a3b54439ee0eda8507a693ea6ca4a4917b"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
+
 numba.core.dispatcher.Dispatcher.compile = compile
 
 
@@ -1202,12 +1234,16 @@ def _get_module_for_linking(self):
     return mod
 
 
-lines = inspect.getsource(numba.core.codegen.CodeLibrary._get_module_for_linking)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "56dde0e0555b5ec85b93b97c81821bce60784515a1fbf99e4542e92d02ff0a73"
-):  # pragma: no cover
-    warnings.warn("numba.core.codegen.CodeLibrary._get_module_for_linking has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.codegen.CodeLibrary._get_module_for_linking)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "56dde0e0555b5ec85b93b97c81821bce60784515a1fbf99e4542e92d02ff0a73"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.codegen.CodeLibrary._get_module_for_linking has changed"
+        )
+
 numba.core.codegen.CodeLibrary._get_module_for_linking = _get_module_for_linking
 
 
@@ -1266,12 +1302,14 @@ def propagate(self, typeinfer):
     return errors
 
 
-lines = inspect.getsource(numba.core.typeinfer.ConstraintNetwork.propagate)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "2c204df4d8c58da7c86e0abbab48a7a7863ee3cbe8d2ba89f617d4f580b622e9"
-):  # pragma: no cover
-    warnings.warn("numba.core.typeinfer.ConstraintNetwork.propagate has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.typeinfer.ConstraintNetwork.propagate)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "2c204df4d8c58da7c86e0abbab48a7a7863ee3cbe8d2ba89f617d4f580b622e9"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.typeinfer.ConstraintNetwork.propagate has changed")
+
 numba.core.typeinfer.ConstraintNetwork.propagate = propagate
 
 
@@ -1288,14 +1326,18 @@ def raise_error(self):
     raise TypingError(self.format())
 
 
-lines = inspect.getsource(numba.core.types.functions._ResolutionFailures.raise_error)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "84b89430f5c8b46cfc684804e6037f00a0f170005cd128ad245551787b2568ea"
-):  # pragma: no cover
-    warnings.warn(
-        "numba.core.types.functions._ResolutionFailures.raise_error has changed"
+if _check_numba_change:
+    lines = inspect.getsource(
+        numba.core.types.functions._ResolutionFailures.raise_error
     )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "84b89430f5c8b46cfc684804e6037f00a0f170005cd128ad245551787b2568ea"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.types.functions._ResolutionFailures.raise_error has changed"
+        )
+
 numba.core.types.functions._ResolutionFailures.raise_error = raise_error
 
 
@@ -1499,12 +1541,13 @@ def ParforPassStates__init__(
         metadata["parfors"] = {}
 
 
-lines = inspect.getsource(numba.parfors.parfor.ParforPassStates.__init__)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "86614f7cf5b0ce442ac51d1ade9bc42fd5c238cae723c3b0ed3d8e4d9a33d7fb"
-):  # pragma: no cover
-    warnings.warn("numba.parfors.parfor.ParforPassStates.__init__ has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.parfors.parfor.ParforPassStates.__init__)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "86614f7cf5b0ce442ac51d1ade9bc42fd5c238cae723c3b0ed3d8e4d9a33d7fb"
+    ):  # pragma: no cover
+        warnings.warn("numba.parfors.parfor.ParforPassStates.__init__ has changed")
 
 numba.parfors.parfor.ParforPassStates.__init__ = ParforPassStates__init__
 
@@ -1531,12 +1574,13 @@ def maybe_literal(value):
         return
 
 
-lines = inspect.getsource(types.maybe_literal)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "8fb2fd93acf214b28e33e37d19dc2f7290a42792ec59b650553ac278854b5081"
-):  # pragma: no cover
-    warnings.warn("types.maybe_literal has changed")
+if _check_numba_change:
+    lines = inspect.getsource(types.maybe_literal)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "8fb2fd93acf214b28e33e37d19dc2f7290a42792ec59b650553ac278854b5081"
+    ):  # pragma: no cover
+        warnings.warn("types.maybe_literal has changed")
 
 types.maybe_literal = maybe_literal
 types.misc.maybe_literal = maybe_literal
@@ -1583,12 +1627,13 @@ def CacheImpl__init__(self, py_func):
     self._filename_base = self.get_filename_base(fullname, abiflags)
 
 
-lines = inspect.getsource(numba.core.caching._CacheImpl.__init__)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "b46d298146e3844e9eaeef29d36f5165ba4796c270ca50d2b35f9fcdc0fa032a"
-):  # pragma: no cover
-    warnings.warn("numba.core.caching._CacheImpl.__init__ has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.caching._CacheImpl.__init__)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "b46d298146e3844e9eaeef29d36f5165ba4796c270ca50d2b35f9fcdc0fa032a"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.caching._CacheImpl.__init__ has changed")
 
 numba.core.caching._CacheImpl.__init__ = CacheImpl__init__
 
@@ -1657,14 +1702,17 @@ def _analyze_broadcast(self, scope, equiv_set, loc, args, fn):
     return self._broadcast_assert_shapes(scope, equiv_set, loc, shapes, names)
 
 
-lines = inspect.getsource(numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "6c91fec038f56111338ea2b08f5f0e7f61ebdab1c81fb811fe26658cc354e40f"
-):  # pragma: no cover
-    warnings.warn(
-        "numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast has changed"
+if _check_numba_change:
+    lines = inspect.getsource(
+        numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast
     )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "6c91fec038f56111338ea2b08f5f0e7f61ebdab1c81fb811fe26658cc354e40f"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast has changed"
+        )
 
 numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast = _analyze_broadcast
 
@@ -1767,12 +1815,13 @@ def convert_code_obj_to_function(code_obj, caller_ir):
     return _create_function_from_code_obj(fcode, func_env, func_arg, func_clo, glbls)
 
 
-lines = inspect.getsource(numba.core.ir_utils.convert_code_obj_to_function)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "b6b51a980f1952532f128fc20653b836a3d45ceb93add91fa14acd54901444d7"
-):  # pragma: no cover
-    warnings.warn("numba.core.ir_utils.convert_code_obj_to_function has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.ir_utils.convert_code_obj_to_function)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "b6b51a980f1952532f128fc20653b836a3d45ceb93add91fa14acd54901444d7"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.ir_utils.convert_code_obj_to_function has changed")
 
 numba.core.ir_utils.convert_code_obj_to_function = convert_code_obj_to_function
 numba.core.untyped_passes.convert_code_obj_to_function = convert_code_obj_to_function
@@ -1815,21 +1864,24 @@ def passmanager_run(self, state):
             raise patched_exception
 
 
-lines = inspect.getsource(numba.core.compiler_machinery.PassManager.run)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "5d21271317cfa1bdcec1cc71973d80df0ffd7126c4608eeef4ad676bbff8f0d3"
-):  # pragma: no cover
-    warnings.warn("numba.core.compiler_machinery.PassManager.run has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.compiler_machinery.PassManager.run)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "5d21271317cfa1bdcec1cc71973d80df0ffd7126c4608eeef4ad676bbff8f0d3"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.compiler_machinery.PassManager.run has changed")
+
 numba.core.compiler_machinery.PassManager.run = passmanager_run
 
 
-lines = inspect.getsource(numba.np.ufunc.parallel._launch_threads)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "3d7e5889ad7dcd2b1ff0389cf37df400855e0b0b25b956927073b49015298736"
-):  # pragma: no cover
-    warnings.warn("numba.np.ufunc.parallel._launch_threads has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.np.ufunc.parallel._launch_threads)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "3d7e5889ad7dcd2b1ff0389cf37df400855e0b0b25b956927073b49015298736"
+    ):  # pragma: no cover
+        warnings.warn("numba.np.ufunc.parallel._launch_threads has changed")
 
 
 # avoid launching threads in Numba, which may throw "omp_set_nested routine deprecated"
@@ -1900,12 +1952,13 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
     return reduce_nodes
 
 
-lines = inspect.getsource(numba.parfors.parfor.get_reduce_nodes)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "a05b52aff9cb02e595a510cd34e973857303a71097fc5530567cb70ca183ef3b"
-):  # pragma: no cover
-    warnings.warn("numba.parfors.parfor.get_reduce_nodes has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.parfors.parfor.get_reduce_nodes)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "a05b52aff9cb02e595a510cd34e973857303a71097fc5530567cb70ca183ef3b"
+    ):  # pragma: no cover
+        warnings.warn("numba.parfors.parfor.get_reduce_nodes has changed")
 
 
 numba.parfors.parfor.get_reduce_nodes = get_reduce_nodes
@@ -1953,12 +2006,14 @@ def _can_reorder_stmts(stmt, next_stmt, func_ir, call_table, alias_map, arg_alia
     return False
 
 
-lines = inspect.getsource(numba.parfors.parfor._can_reorder_stmts)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "18caa9a01b21ab92b4f79f164cfdbc8574f15ea29deedf7bafdf9b0e755d777c"
-):  # pragma: no cover
-    warnings.warn("numba.parfors.parfor._can_reorder_stmts has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.parfors.parfor._can_reorder_stmts)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "18caa9a01b21ab92b4f79f164cfdbc8574f15ea29deedf7bafdf9b0e755d777c"
+    ):  # pragma: no cover
+        warnings.warn("numba.parfors.parfor._can_reorder_stmts has changed")
+
 numba.parfors.parfor._can_reorder_stmts = _can_reorder_stmts
 
 
@@ -1980,12 +2035,14 @@ def get_parfor_writes(parfor, func_ir):
     return writes
 
 
-lines = inspect.getsource(numba.parfors.parfor.get_parfor_writes)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "a7b29cd76832b6f6f1f2d2397ec0678c1409b57a6eab588bffd344b775b1546f"
-):  # pragma: no cover
-    warnings.warn("numba.parfors.parfor.get_parfor_writes has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.parfors.parfor.get_parfor_writes)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "a7b29cd76832b6f6f1f2d2397ec0678c1409b57a6eab588bffd344b775b1546f"
+    ):  # pragma: no cover
+        warnings.warn("numba.parfors.parfor.get_parfor_writes has changed")
+
 # only used locally here, no need to replace in Numba
 
 # Bodo change: add func_ir input
@@ -2028,12 +2085,14 @@ def get_stmt_writes(stmt, func_ir):
     return writes
 
 
-lines = inspect.getsource(numba.core.ir_utils.get_stmt_writes)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "1a7a80b64c9a0eb27e99dc8eaae187bde379d4da0b74c84fbf87296d87939974"
-):  # pragma: no cover
-    warnings.warn("numba.core.ir_utils.get_stmt_writes has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.ir_utils.get_stmt_writes)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "1a7a80b64c9a0eb27e99dc8eaae187bde379d4da0b74c84fbf87296d87939974"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.ir_utils.get_stmt_writes has changed")
+
 # only used locally here, no need to replace in Numba
 
 
@@ -2048,12 +2107,14 @@ def patch_message(self, new_message):
     self.args = (new_message,) + self.args[1:]
 
 
-lines = inspect.getsource(numba.core.errors.NumbaError.patch_message)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "ed189a428a7305837e76573596d767b6e840e99f75c05af6941192e0214fa899"
-):  # pragma: no cover
-    warnings.warn("numba.core.errors.NumbaError.patch_message has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.errors.NumbaError.patch_message)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "ed189a428a7305837e76573596d767b6e840e99f75c05af6941192e0214fa899"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.errors.NumbaError.patch_message has changed")
+
 numba.core.errors.NumbaError.patch_message = patch_message
 
 
@@ -2190,12 +2251,13 @@ def register_class_type(cls, spec, class_ctor, builder, **options):
     return cls
 
 
-lines = inspect.getsource(jitclass_base.register_class_type)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "005e6e2e89a47f77a19ba86305565050d4dbc2412fc4717395adf2da348671a9"
-):  # pragma: no cover
-    warnings.warn("jitclass_base.register_class_type has changed")
+if _check_numba_change:
+    lines = inspect.getsource(jitclass_base.register_class_type)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "005e6e2e89a47f77a19ba86305565050d4dbc2412fc4717395adf2da348671a9"
+    ):  # pragma: no cover
+        warnings.warn("jitclass_base.register_class_type has changed")
 
 
 jitclass_base.register_class_type = register_class_type
@@ -2230,12 +2292,13 @@ def ClassType__init__(
     super(types.misc.ClassType, self).__init__(name)
 
 
-lines = inspect.getsource(types.misc.ClassType.__init__)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "2b848ea82946c88f540e81f93ba95dfa7cd66045d944152a337fe2fc43451c30"
-):  # pragma: no cover
-    warnings.warn("types.misc.ClassType.__init__ has changed")
+if _check_numba_change:
+    lines = inspect.getsource(types.misc.ClassType.__init__)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "2b848ea82946c88f540e81f93ba95dfa7cd66045d944152a337fe2fc43451c30"
+    ):  # pragma: no cover
+        warnings.warn("types.misc.ClassType.__init__ has changed")
 
 types.misc.ClassType.__init__ = ClassType__init__
 
@@ -2320,12 +2383,13 @@ def jitclass(cls_or_spec=None, spec=None, **options):
         return wrap(cls_or_spec)
 
 
-lines = inspect.getsource(jitclass_decorators.jitclass)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "f6ad843b4d553d18f6f0028fa231e38b7861f23533d7f3a8274a18fc17423d9e"
-):  # pragma: no cover
-    warnings.warn("jitclass_decorators.jitclass has changed")
+if _check_numba_change:
+    lines = inspect.getsource(jitclass_decorators.jitclass)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "f6ad843b4d553d18f6f0028fa231e38b7861f23533d7f3a8274a18fc17423d9e"
+    ):  # pragma: no cover
+        warnings.warn("jitclass_decorators.jitclass has changed")
 
 
 # -------------------- ForceLiteralArg --------------------
@@ -2425,12 +2489,14 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
     self._add_refine_map(typeinfer, typevars, sig)
 
 
-lines = inspect.getsource(numba.core.typeinfer.CallConstraint.resolve)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "bef85735a781f8ce98211f23227052e3abb12cb9b8120dc2a59840421af8595b"
-):  # pragma: no cover
-    warnings.warn("numba.core.typeinfer.CallConstraint.resolve has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.typeinfer.CallConstraint.resolve)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "bef85735a781f8ce98211f23227052e3abb12cb9b8120dc2a59840421af8595b"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.typeinfer.CallConstraint.resolve has changed")
+
 numba.core.typeinfer.CallConstraint.resolve = CallConstraint_resolve
 
 
@@ -2463,12 +2529,14 @@ def ForceLiteralArg__init__(
         self.file_infos = file_infos
 
 
-lines = inspect.getsource(numba.core.errors.ForceLiteralArg.__init__)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "b241d5e36a4cf7f4c73a7ad3238693612926606c7a278cad1978070b82fb55ef"
-):  # pragma: no cover
-    warnings.warn("numba.core.errors.ForceLiteralArg.__init__ has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.errors.ForceLiteralArg.__init__)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "b241d5e36a4cf7f4c73a7ad3238693612926606c7a278cad1978070b82fb55ef"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.errors.ForceLiteralArg.__init__ has changed")
+
 numba.core.errors.ForceLiteralArg.__init__ = ForceLiteralArg__init__
 
 
@@ -2481,12 +2549,16 @@ def ForceLiteralArg_bind_fold_arguments(self, fold_arguments):
     return numba.core.utils.chain_exception(e, self)
 
 
-lines = inspect.getsource(numba.core.errors.ForceLiteralArg.bind_fold_arguments)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "1e93cca558f7c604a47214a8f2ec33ee994104cb3e5051166f16d7cc9315141d"
-):  # pragma: no cover
-    warnings.warn("numba.core.errors.ForceLiteralArg.bind_fold_arguments has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.errors.ForceLiteralArg.bind_fold_arguments)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "1e93cca558f7c604a47214a8f2ec33ee994104cb3e5051166f16d7cc9315141d"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.errors.ForceLiteralArg.bind_fold_arguments has changed"
+        )
+
 numba.core.errors.ForceLiteralArg.bind_fold_arguments = (
     ForceLiteralArg_bind_fold_arguments
 )
@@ -2505,12 +2577,14 @@ def ForceLiteralArg_combine(self, other):  # pragma: no cover
     )
 
 
-lines = inspect.getsource(numba.core.errors.ForceLiteralArg.combine)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "49bf06612776f5d755c1c7d1c5eb91831a57665a8fed88b5651935f3bf33e899"
-):  # pragma: no cover
-    warnings.warn("numba.core.errors.ForceLiteralArg.combine has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.errors.ForceLiteralArg.combine)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "49bf06612776f5d755c1c7d1c5eb91831a57665a8fed88b5651935f3bf33e899"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.errors.ForceLiteralArg.combine has changed")
+
 numba.core.errors.ForceLiteralArg.combine = ForceLiteralArg_combine
 
 
@@ -2528,12 +2602,16 @@ def _get_global_type(self, gv):
         return FunctionLiteral(gv)
 
 
-lines = inspect.getsource(numba.core.typing.context.BaseContext._get_global_type)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "8ffe6b81175d1eecd62a37639b5005514b4477d88f35f5b5395041ac8c945a4a"
-):  # pragma: no cover
-    warnings.warn("numba.core.typing.context.BaseContext._get_global_type has changed")
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.typing.context.BaseContext._get_global_type)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "8ffe6b81175d1eecd62a37639b5005514b4477d88f35f5b5395041ac8c945a4a"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.typing.context.BaseContext._get_global_type has changed"
+        )
+
 numba.core.typing.context.BaseContext._get_global_type = _get_global_type
 
 
@@ -2735,12 +2813,14 @@ def unbox_dicttype(typ, val, c):
     return NativeValue(dctobj_res, is_error=is_error_res)
 
 
-lines = inspect.getsource(
-    numba.core.pythonapi._unboxers.functions[numba.core.types.DictType]
-)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "5f6f183b94dc57838538c668a54c2476576c85d8553843f3219f5162c61e7816"
-):  # pragma: no cover
-    warnings.warn("unbox_dicttype has changed")
+if _check_numba_change:
+    lines = inspect.getsource(
+        numba.core.pythonapi._unboxers.functions[numba.core.types.DictType]
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "5f6f183b94dc57838538c668a54c2476576c85d8553843f3219f5162c61e7816"
+    ):  # pragma: no cover
+        warnings.warn("unbox_dicttype has changed")
+
 numba.core.pythonapi._unboxers.functions[types.DictType] = unbox_dicttype
