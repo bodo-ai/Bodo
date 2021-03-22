@@ -653,7 +653,9 @@ def _test_equal(
             py_out.categories = py_out.categories.sort_values()
         if isinstance(bodo_out, pd.Categorical):
             bodo_out.categories = bodo_out.categories.sort_values()
-        pd.testing.assert_extension_array_equal(bodo_out, py_out)
+        pd.testing.assert_extension_array_equal(
+            bodo_out, py_out, check_dtype=check_dtype
+        )
     elif isinstance(py_out, scipy.sparse.csr_matrix):
         # https://stackoverflow.com/questions/30685024/check-if-two-scipy-sparse-csr-matrix-are-equal
         assert (

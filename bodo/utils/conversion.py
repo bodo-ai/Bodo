@@ -967,7 +967,7 @@ def overload_index_from_array(data, name=None):
         )  # pragma: no cover
 
     # TODO: timedelta, period
-    raise TypeError("invalid index type {}".format(data))
+    raise BodoError(f"invalid index type {data}")
 
 
 def index_to_array(data):  # pragma: no cover

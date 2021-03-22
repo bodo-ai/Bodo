@@ -44,7 +44,7 @@ from bodo.utils.typing import (
 
 # type for pd.CategoricalDtype objects in Pandas
 class PDCategoricalDtype(types.Opaque):
-    def __init__(self, categories, elem_type, ordered):
+    def __init__(self, categories, elem_type, ordered, data=None):
         # categories can be None since may not be known (e.g. Series.astype("category"))
         self.categories = categories
         # element type is necessary since categories may not be known
@@ -52,9 +52,8 @@ class PDCategoricalDtype(types.Opaque):
         self.elem_type = elem_type
         # ordered may be None if unknown
         self.ordered = ordered
-        name = "PDCategoricalDtype({}, {}, {})".format(
-            self.categories, self.elem_type, self.ordered
-        )
+        self.data = _get_cat_index_type(elem_type) if data is None else data
+        name = f"PDCategoricalDtype({self.categories}, {self.elem_type}, {self.ordered}, {self.data})"
         super(PDCategoricalDtype, self).__init__(name=name)
 
 
@@ -92,16 +91,15 @@ def lower_constant_categorical_type(context, builder, typ, pyval):
 @register_model(PDCategoricalDtype)
 class PDCategoricalDtypeModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        index_type = _get_cat_index_type(fe_type.elem_type)
         members = [
+            ("categories", fe_type.data),
             ("ordered", types.bool_),
-            ("categories", index_type),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
 
-make_attribute_wrapper(PDCategoricalDtype, "ordered", "ordered")
 make_attribute_wrapper(PDCategoricalDtype, "categories", "categories")
+make_attribute_wrapper(PDCategoricalDtype, "ordered", "ordered")
 
 
 @intrinsic
@@ -120,7 +118,7 @@ def init_cat_dtype(typingctx, categories_typ, ordered_typ=None):
         return cat_dtype._getvalue()
 
     ret_type = PDCategoricalDtype(
-        None, categories_typ.dtype, is_overload_true(ordered_typ)
+        None, categories_typ.dtype, is_overload_true(ordered_typ), categories_typ
     )
     return ret_type(categories_typ, ordered_typ), codegen
 
@@ -139,10 +137,7 @@ def unbox_cat_dtype(typ, obj, c):
 
     # unbox obj.categories.values
     categories_index_obj = c.pyapi.object_getattr_string(obj, "categories")
-    index_type = _get_cat_index_type(typ.elem_type)
-    cat_dtype.categories = c.pyapi.to_native_value(
-        index_type, categories_index_obj
-    ).value
+    cat_dtype.categories = c.pyapi.to_native_value(typ.data, categories_index_obj).value
     c.pyapi.decref(categories_index_obj)
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
@@ -159,10 +154,9 @@ def box_cat_dtype(typ, val, c):
         types.bool_, cat_dtype.ordered, c.env_manager
     )
     # box categories data
-    index_type = _get_cat_index_type(typ.elem_type)
-    c.context.nrt.incref(c.builder, index_type, cat_dtype.categories)
+    c.context.nrt.incref(c.builder, typ.data, cat_dtype.categories)
     categories_obj = c.pyapi.from_native_value(
-        index_type, cat_dtype.categories, c.env_manager
+        typ.data, cat_dtype.categories, c.env_manager
     )
     # call pd.CategoricalDtype()
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")

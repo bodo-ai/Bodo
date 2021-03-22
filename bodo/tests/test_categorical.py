@@ -308,6 +308,8 @@ def test_pd_categorical(memory_leak_check):
     check_func(impl2, (A, [3, 1, 2, -1, 4, 12]))
     check_func(impl3, (A, [3, 1, 2, -1, 4, 12]))
     check_func(impl4, (A,))
+    check_func(impl4, (pd.array(A, "Int64"),), check_dtype=False)
+    check_func(impl4, (pd.array(np.abs(A), "UInt64"),), check_dtype=False)
 
 
 def test_astype(memory_leak_check):

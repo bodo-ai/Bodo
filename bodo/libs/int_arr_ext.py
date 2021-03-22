@@ -633,10 +633,10 @@ def overload_int_arr_astype(A, dtype, copy=True):
     if isinstance(dtype, IntDtype) and A.dtype == dtype.dtype:
         # copy=False
         if is_overload_false(copy):
-            return lambda A, dtype, copy=True: A
+            return lambda A, dtype, copy=True: A  # pragma: no cover
         # copy=True
         elif is_overload_true(copy):
-            return lambda A, dtype, copy=True: A.copy()
+            return lambda A, dtype, copy=True: A.copy()  # pragma: no cover
         # copy value is dynamic
         else:
 
