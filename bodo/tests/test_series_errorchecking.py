@@ -87,7 +87,7 @@ def test_series_take_errors(memory_leak_check):
         bodo.jit(impl2)(S)
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_series_map_runtime_categorical(memory_leak_check):
     """
     Tests that a UDF with categories that aren't known at
@@ -195,3 +195,27 @@ def test_series_groupby_by_arg_unsupported_types(memory_leak_check):
         bodo.jit(test_by_type)(S, byS)
         byS = pd.Series(pd.Categorical([1, 2, 5, 1, 2], ordered=True))
         bodo.jit(test_by_type)(S, byS)
+
+
+# TODO: Mark as slow after CI passes
+def test_series_idxmax_unordered_cat(memory_leak_check):
+    def impl(S):
+        return S.idxmax()
+
+    S = pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=False))
+
+    match = "Series.idxmax.*: only ordered categoricals are possible"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(impl)(S)
+
+
+# TODO: Mark as slow after CI passes
+def test_series_idxmin_unordered_cat(memory_leak_check):
+    def impl(S):
+        return S.idxmin()
+
+    S = pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=False))
+
+    match = "Series.idxmin.*: only ordered categoricals are possible"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(impl)(S)

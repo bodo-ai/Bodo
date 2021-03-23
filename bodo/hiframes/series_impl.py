@@ -1255,22 +1255,26 @@ def overload_series_idxmin(S, axis=0, skipna=True):
     # Only supported for numeric types with numpy arrays
     # - int, floats, bool, dt64, td64. (maybe complex)
     # Bodo restrictions:
-    # - td64 (TODO: support td64)
+    # - td64, dt64 (TODO: support td64)
     # - Pandas cannot support BooleanArray,
-    # so we may not support bool if we map it to BooleanArray
     if not (
         S.dtype == types.none
         or (
             bodo.utils.utils.is_np_array_typ(S.data)
             and (
-                S.dtype == bodo.datetime64ns
+                S.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
+        or isinstance(S.data, (bodo.IntegerArrayType, bodo.CategoricalArray))
+        or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.idxmin() only supported for non-nullable numeric array types. Array type: {S.data} not supported."
         )
+    if isinstance(S.data, bodo.CategoricalArray) and not S.dtype.ordered:
+        raise BodoError("Series.idxmin(): only ordered categoricals are possible")
+
     if S.dtype == types.none:
         return (
             lambda S, axis=0, skipna=True: bodo.hiframes.pd_series_ext.get_series_data(
@@ -1280,7 +1284,9 @@ def overload_series_idxmin(S, axis=0, skipna=True):
     else:
         # TODO: Make sure -1 is replaced with np.nan
         def impl(S, axis=0, skipna=True):  # pragma: no cover
-            i = bodo.hiframes.pd_series_ext.get_series_data(S).argmin()
+            i = bodo.libs.array_kernels._nan_argmin(
+                bodo.hiframes.pd_series_ext.get_series_data(S)
+            )
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             return index[i]
 
@@ -1301,22 +1307,26 @@ def overload_series_idxmax(S, axis=0, skipna=True):
     # Only supported for numeric types with numpy arrays
     # - int, floats, bool, dt64, td64. (maybe complex)
     # Bodo restrictions:
-    # - td64 (TODO: support td64)
+    # - td64, dt64 (TODO: support td64)
     # - Pandas cannot support BooleanArray,
-    # so we may not support bool if we map it to BooleanArray
     if not (
         S.dtype == types.none
         or (
             bodo.utils.utils.is_np_array_typ(S.data)
             and (
-                S.dtype == bodo.datetime64ns
+                S.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
+        or isinstance(S.data, (bodo.IntegerArrayType, bodo.CategoricalArray))
+        or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.idxmax() only supported for non-nullable numeric array types. Array type: {S.data} not supported."
         )
+    if isinstance(S.data, bodo.CategoricalArray) and not S.dtype.ordered:
+        raise BodoError("Series.idxmax(): only ordered categoricals are possible")
+
     # TODO: other types like strings
     if S.dtype == types.none:
         return (
@@ -1328,7 +1338,9 @@ def overload_series_idxmax(S, axis=0, skipna=True):
     else:
         # TODO: Make sure -1 is replaced with np.nan
         def impl(S, axis=0, skipna=True):  # pragma: no cover
-            i = bodo.hiframes.pd_series_ext.get_series_data(S).argmax()
+            i = bodo.libs.array_kernels._nan_argmax(
+                bodo.hiframes.pd_series_ext.get_series_data(S)
+            )
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             return index[i]
 

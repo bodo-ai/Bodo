@@ -92,21 +92,35 @@ def _get_type_max_value(dtype):  # pragma: no cover
 
 @overload(_get_type_max_value, inline="always", no_unliteral=True)
 def _get_type_max_value_overload(dtype):
-    # pd.Int64Dtype(), etc.
-    if isinstance(dtype, IntDtype):
+    # pd.Int64Dtype(), pd.IntegerArray, etc.
+    if isinstance(dtype, (bodo.IntegerArrayType, IntDtype)):
         _dtype = dtype.dtype
-        return lambda dtype: numba.cpython.builtins.get_type_max_value(_dtype)
+        return lambda dtype: numba.cpython.builtins.get_type_max_value(
+            _dtype
+        )  # pragma: no cover
 
-    # dt64/td64
-    if isinstance(dtype.dtype, (types.NPDatetime, types.NPTimedelta)):
+    # datetime.date array
+    if dtype == bodo.datetime_date_array_type:
+        return lambda dtype: _get_date_max_value()  # pragma: no cover
+
+    # dt64
+    if isinstance(dtype.dtype, types.NPDatetime):
         return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
             numba.cpython.builtins.get_type_max_value(numba.core.types.int64)
-        )
+        )  # pragma: no cover
+
+    # td64
+    if isinstance(dtype.dtype, types.NPTimedelta):
+        return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+            numba.cpython.builtins.get_type_max_value(numba.core.types.int64)
+        )  # pragma: no cover
 
     if dtype.dtype == types.bool_:
-        return lambda dtype: True
+        return lambda dtype: True  # pragma: no cover
 
-    return lambda dtype: numba.cpython.builtins.get_type_max_value(dtype)
+    return lambda dtype: numba.cpython.builtins.get_type_max_value(
+        dtype
+    )  # pragma: no cover
 
 
 @register_jitable
@@ -120,17 +134,29 @@ def _get_type_min_value(dtype):  # pragma: no cover
 
 @overload(_get_type_min_value, inline="always", no_unliteral=True)
 def _get_type_min_value_overload(dtype):
-    # pd.Int64Dtype(), etc.
-    if isinstance(dtype, IntDtype):
+
+    # pd.Int64Dtype(), pd.IntegerArray, etc.
+    if isinstance(dtype, (bodo.IntegerArrayType, IntDtype)):
         _dtype = dtype.dtype
         return lambda dtype: numba.cpython.builtins.get_type_min_value(
             _dtype
         )  # pragma: no cover
 
-    # dt64/td64
-    if isinstance(dtype.dtype, (types.NPDatetime, types.NPTimedelta)):
+    # datetime.date array
+    if dtype == bodo.datetime_date_array_type:
+        return lambda dtype: _get_date_min_value()  # pragma: no cover
+
+    # dt64
+    if isinstance(dtype.dtype, types.NPDatetime):
         return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
             numba.cpython.builtins.get_type_min_value(numba.core.types.int64)
+        )  # pragma: no cover
+
+    # td64
+    if isinstance(dtype.dtype, types.NPTimedelta):
+        # int64 seems to get converted to NAT, but uint64 isn't, so we use uint64
+        return lambda dtype: bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+            numba.cpython.builtins.get_type_min_value(numba.core.types.uint64)
         )  # pragma: no cover
 
     if dtype.dtype == types.bool_:

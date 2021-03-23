@@ -12,7 +12,7 @@ import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
-from numba.core import cgutils, types
+from numba.core import cgutils, types, typing
 from numba.core.imputils import lower_builtin
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
@@ -2294,3 +2294,113 @@ def _overload_validate_multivar_norm(cov):
             )
 
     return impl
+
+
+def _nan_argmin(arr):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(_nan_argmin, inline="always", no_unliteral=True)
+def _overload_nan_argmin(arr):
+    """
+    Argmin function used on Bodo Array types for idxmin
+    """
+    # We check just the dtype because the previous function ensures
+    # we are operating on 1D arrays
+
+    if (
+        isinstance(arr, IntegerArrayType)
+        or arr in [boolean_array, datetime_date_array_type]
+        or arr.dtype == bodo.timedelta64ns
+    ):
+
+        def impl_bodo_arr(arr):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            init_val = bodo.hiframes.series_kernels._get_type_max_value(arr)
+            ival = typing.builtins.IndexValue(-1, init_val)
+            for i in numba.parfors.parfor.internal_prange(len(arr)):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    continue
+                curr_ival = typing.builtins.IndexValue(i, arr[i])
+                ival = min(ival, curr_ival)
+            return ival.index
+
+        return impl_bodo_arr
+
+    if isinstance(arr, CategoricalArray):
+        assert (
+            arr.dtype.ordered
+        ), "Categorical Array must be ordered to select an argmin"
+        elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
+
+        def impl_cat_arr(arr):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(arr)
+            init_val = elem_width(len(arr.dtype.categories) + 1)
+            ival = typing.builtins.IndexValue(-1, init_val)
+            for i in numba.parfors.parfor.internal_prange(len(arr)):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    continue
+                curr_ival = typing.builtins.IndexValue(i, codes[i])
+                ival = min(ival, curr_ival)
+            return ival.index
+
+        return impl_cat_arr
+
+    return lambda arr: arr.argmin()  # pragma: no cover
+
+
+def _nan_argmax(arr):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(_nan_argmax, inline="always", no_unliteral=True)
+def _overload_nan_argmax(arr):
+    """
+    Argmax function used on Bodo Array types for idxmax
+    """
+    # We check just the dtype because the previous function ensures
+    # we are operating on 1D arrays
+
+    if (
+        isinstance(arr, IntegerArrayType)
+        or arr in [boolean_array, datetime_date_array_type]
+        or arr.dtype == bodo.timedelta64ns
+    ):
+
+        def impl_bodo_arr(arr):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            init_val = bodo.hiframes.series_kernels._get_type_min_value(arr)
+            ival = typing.builtins.IndexValue(-1, init_val)
+            for i in numba.parfors.parfor.internal_prange(len(arr)):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    continue
+                curr_ival = typing.builtins.IndexValue(i, arr[i])
+                ival = max(ival, curr_ival)
+            return ival.index
+
+        return impl_bodo_arr
+
+    if isinstance(arr, CategoricalArray):
+        assert (
+            arr.dtype.ordered
+        ), "Categorical Array must be ordered to select an argmin"
+        elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
+
+        def impl_cat_arr(arr):  # pragma: no cover
+            numba.parfors.parfor.init_prange()
+            codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(arr)
+            init_val = elem_width(-1)
+            ival = typing.builtins.IndexValue(-1, init_val)
+            for i in numba.parfors.parfor.internal_prange(len(arr)):
+                if bodo.libs.array_kernels.isna(arr, i):
+                    continue
+                curr_ival = typing.builtins.IndexValue(i, codes[i])
+                ival = max(ival, curr_ival)
+            return ival.index
+
+        return impl_cat_arr
+
+    return lambda arr: arr.argmax()  # pragma: no cover

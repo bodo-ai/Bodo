@@ -3134,22 +3134,8 @@ def test_series_idxmin(series_val, memory_leak_check):
 
     err_msg = "Series.idxmin\(\) only supported for non-nullable numeric array types."
 
-    # TODO: [BE-96]
-    # timedelta setitem not supported yet
-    if series_val.dtype == np.dtype("timedelta64[ns]"):
-        with pytest.raises(BodoError, match=err_msg):
-            bodo.jit(test_impl)(series_val)
-        return
-
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
-        with pytest.raises(BodoError, match=err_msg):
-            bodo.jit(test_impl)(series_val)
-        return
-
-    # not supported for Datetime.date yet, TODO: support and test
-    # This isn't supported in Pandas
-    if isinstance(series_val.values[0], datetime.date):
         with pytest.raises(BodoError, match=err_msg):
             bodo.jit(test_impl)(series_val)
         return
@@ -3161,41 +3147,32 @@ def test_series_idxmin(series_val, memory_leak_check):
             bodo.jit(test_impl)(series_val)
         return
 
-    # not supported for IntegerArray, TODO: support and test
-    # This isn't supported in Pandas
-    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        with pytest.raises(BodoError, match=err_msg):
-            bodo.jit(test_impl)(series_val)
-        return
-
     # not supported for Strings, TODO: support and test
     # This isn't supported in Pandas
-    if isinstance(series_val.values[0], str):
-        with pytest.raises(BodoError, match=err_msg):
-            bodo.jit(test_impl)(series_val)
-        return
-
-    # not supported for BooleanArray, TODO: support and test
-    # This isn't supported in Pandas
-    # bools in Numpy arrays are supported in Pandas.
-    if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
-        with pytest.raises(BodoError, match=err_msg):
-            bodo.jit(test_impl)(series_val)
-        return
-
-    # not supported for CategoricalArray, TODO: support and test [BE-79]
-    # This isn't supported in Pandas
-    if isinstance(series_val.dtype, pd.CategoricalDtype) and (
-        series_val.values.categories.dtype == np.dtype("timedelta64[ns]")
-        or pd.api.types.is_numeric_dtype(series_val.values.categories.dtype)
+    if not isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
+        series_val.values[0], str
     ):
         with pytest.raises(BodoError, match=err_msg):
             bodo.jit(test_impl)(series_val)
         return
 
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
-    # TODO: support more distribtued types and test
+    # Boolean Array, datetime.date, Categorical Array, and Nullable Integer not supported in Pandas
+    if series_val.dtype == object and is_bool_object_series(series_val):
+        py_output = test_impl(series_val.dropna().astype(np.bool_))
+    elif series_val.dtype == object and isinstance(series_val.iat[0], datetime.date):
+        py_output = test_impl(series_val.dropna().astype(np.dtype("datetime64[ns]")))
+    elif isinstance(series_val.dtype, pd.CategoricalDtype):
+        series_val = series_val.astype(
+            pd.CategoricalDtype(series_val.dtype.categories, ordered=True)
+        )
+        na_dropped = series_val.dropna()
+        py_output = na_dropped.index[na_dropped.values.codes.argmin()]
+    elif isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        py_output = test_impl(series_val.dropna().astype(series_val.dtype.numpy_dtype))
+    else:
+        py_output = None
+    # TODO [BE-408]: Support Distributed Reduce for more types
+    check_func(test_impl, (series_val,), dist_test=False, py_output=py_output)
 
 
 def test_series_idxmax(series_val, memory_leak_check):
@@ -3204,22 +3181,8 @@ def test_series_idxmax(series_val, memory_leak_check):
 
     err_msg = "Series.idxmax\(\) only supported for non-nullable numeric array types."
 
-    # TODO: [BE-96]
-    # timedelta setitem not supported yet
-    if series_val.dtype == np.dtype("timedelta64[ns]"):
-        with pytest.raises(BodoError, match=err_msg):
-            bodo.jit(test_impl)(series_val)
-        return
-
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
-        with pytest.raises(BodoError, match=err_msg):
-            bodo.jit(test_impl)(series_val)
-        return
-
-    # not supported for Datetime.date yet, TODO: support and test
-    # This isn't supported in Pandas
-    if isinstance(series_val.values[0], datetime.date):
         with pytest.raises(BodoError, match=err_msg):
             bodo.jit(test_impl)(series_val)
         return
@@ -3231,40 +3194,32 @@ def test_series_idxmax(series_val, memory_leak_check):
             bodo.jit(test_impl)(series_val)
         return
 
-    # not supported for IntegerArray, TODO: support and test
-    # This isn't supported in Pandas
-    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        with pytest.raises(BodoError, match=err_msg):
-            bodo.jit(test_impl)(series_val)
-        return
-
     # not supported for Strings, TODO: support and test
     # This isn't supported in Pandas
-    if isinstance(series_val.values[0], str):
-        with pytest.raises(BodoError, match=err_msg):
-            bodo.jit(test_impl)(series_val)
-        return
-
-    # not supported for BooleanArray, TODO: support and test
-    # This isn't supported in Pandas
-    # bools in Numpy arrays are supported in Pandas.
-    if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
-        with pytest.raises(BodoError, match=err_msg):
-            bodo.jit(test_impl)(series_val)
-        return
-
-    # not supported for CategoricalArray, TODO: support and test [BE-79]
-    # This isn't supported in Pandas
-    if isinstance(series_val.dtype, pd.CategoricalDtype) and (
-        series_val.values.categories.dtype == np.dtype("timedelta64[ns]")
-        or pd.api.types.is_numeric_dtype(series_val.values.categories.dtype)
+    if not isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
+        series_val.values[0], str
     ):
         with pytest.raises(BodoError, match=err_msg):
             bodo.jit(test_impl)(series_val)
         return
 
-    # TODO: support more distribtued types and test
-    check_func(test_impl, (series_val,), dist_test=False)
+    # Boolean Array, datetime.date, Categorical Array, and Nullable Integer not supported in Pandas
+    if series_val.dtype == object and is_bool_object_series(series_val):
+        py_output = test_impl(series_val.dropna().astype(np.bool_))
+    elif series_val.dtype == object and isinstance(series_val.iat[0], datetime.date):
+        py_output = test_impl(series_val.dropna().astype(np.dtype("datetime64[ns]")))
+    elif isinstance(series_val.dtype, pd.CategoricalDtype):
+        series_val = series_val.astype(
+            pd.CategoricalDtype(series_val.dtype.categories, ordered=True)
+        )
+        na_dropped = series_val.dropna()
+        py_output = na_dropped.index[na_dropped.values.codes.argmax()]
+    elif isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        py_output = test_impl(series_val.dropna().astype(series_val.dtype.numpy_dtype))
+    else:
+        py_output = None
+    # TODO [BE-408]: Support Distributed Reduce for more types
+    check_func(test_impl, (series_val,), dist_test=False, py_output=py_output)
 
 
 @pytest.mark.parametrize(
