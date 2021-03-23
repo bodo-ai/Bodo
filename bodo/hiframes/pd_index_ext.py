@@ -2246,7 +2246,7 @@ def array_typ_to_index(arr_typ, name_typ=None):
     assert (
         isinstance(arr_typ, (types.Array, IntegerArrayType))
         or arr_typ == bodo.datetime_date_array_type
-    )
+    ), f"Converting array type {arr_typ} to index not supported"
 
     # TODO: Pandas keeps datetime_date Index as a generic Index(, dtype=object)
     # Fix this implementation to match.

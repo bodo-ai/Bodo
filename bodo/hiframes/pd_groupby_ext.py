@@ -451,6 +451,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 )
             else:
                 ind = grp.df_type.columns.index(grp.keys[0])
+                # Bodo Limitation. Categorical Key not yet supported.
+                # TODO [BE-403]: Support Categorical Key
+                if isinstance(grp.df_type.data[ind], bodo.CategoricalArray):
+                    raise BodoError("Groupby with Categorical key not supported.")
                 index = bodo.hiframes.pd_index_ext.array_typ_to_index(
                     grp.df_type.data[ind], types.StringLiteral(grp.keys[0])
                 )
