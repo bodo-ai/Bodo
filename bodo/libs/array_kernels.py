@@ -1819,7 +1819,8 @@ def np_unique(A):
         return
 
     def impl(A):  # pragma: no cover
-        return bodo.libs.array_kernels.unique(A)
+        arr_q = bodo.libs.array_kernels.unique(A)
+        return bodo.allgatherv(arr_q, False)
 
     return impl
 

@@ -59,7 +59,7 @@ def test_np_unique(memory_leak_check):
     # Create an array here because np.unique fails on NA in pandas
     arr = pd.array(["AB", "", "ABC", "abcd", "ab", "AB"])
 
-    check_func(impl, (arr,), sort_output=True)
+    check_func(impl, (arr,), sort_output=True, is_out_distributed=False)
 
 
 @pytest.mark.slow
