@@ -262,36 +262,19 @@ def decimal128type_cmp(typingctx, val1, scale1, val2, scale2, func_name):
 def decimal_create_cmp_op_overload(op):
     """create overload function for comparison operators with datetime_date_array"""
 
-    def overload_cmp(val1, val2):
-        if isinstance(val1, Decimal128Type) and isinstance(val2, Decimal128Type):
+    def overload_cmp(lhs, rhs):
+        if isinstance(lhs, Decimal128Type) and isinstance(rhs, Decimal128Type):
             _func_name = "decimal_cmp_" + op.__name__
-            scale1 = val1.scale
-            scale2 = val2.scale
+            scale1 = lhs.scale
+            scale2 = rhs.scale
             # TODO: Make sure the precisions are compared correctly
 
-            def impl(val1, val2):  # pragma: no cover
-                return decimal128type_cmp(val1, scale1, val2, scale2, _func_name)
+            def impl(lhs, rhs):  # pragma: no cover
+                return decimal128type_cmp(lhs, scale1, rhs, scale2, _func_name)
 
             return impl
 
     return overload_cmp
-
-
-def _decimal_install_cmp_ops():
-    """install overloads for comparison operators with pd_timedelta_type"""
-    for op in (
-        operator.eq,
-        operator.ne,
-        operator.ge,
-        operator.gt,
-        operator.le,
-        operator.lt,
-    ):
-        overload_impl = decimal_create_cmp_op_overload(op)
-        overload(op, no_unliteral=True)(overload_impl)
-
-
-_decimal_install_cmp_ops()
 
 
 @lower_constant(Decimal128Type)

@@ -1011,7 +1011,7 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
         raise BodoError("Series.min(): axis argument not supported")
 
     # TODO: min/max of string dtype, etc.
-    if S.dtype == types.NPDatetime("ns"):
+    if S.dtype == bodo.datetime64ns:
 
         def impl_dt64(
             S, axis=None, skipna=None, level=None, numeric_only=None
@@ -1154,7 +1154,7 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
         raise BodoError("Series.max(): axis argument not supported")
 
     # datetime case
-    if S.dtype == types.NPDatetime("ns"):
+    if S.dtype == bodo.datetime64ns:
 
         def impl_dt64(
             S, axis=None, skipna=None, level=None, numeric_only=None
@@ -2768,7 +2768,7 @@ def create_explicit_binary_op_overload(op):
         # an incorrect ret_dtype for our always ns requirement,
         # so it fails in setitem
         if ret_dtype == types.Array(types.NPDatetime(""), 1, "C"):
-            ret_dtype = types.Array(types.NPDatetime("ns"), 1, "C")
+            ret_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
         def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -2944,40 +2944,40 @@ _install_explicit_binary_ops()
 
 
 def create_binary_op_overload(op):
-    def overload_series_binary_op(S, other):
+    def overload_series_binary_op(lhs, rhs):
         # sub for dt64 arrays fails in Numba, so we use our own function instead
         # TODO: fix it in Numba
         if (
-            isinstance(S, SeriesType)
-            and isinstance(other, SeriesType)
-            and S.dtype == types.NPDatetime("ns")
-            and other.dtype == types.NPDatetime("ns")
+            isinstance(lhs, SeriesType)
+            and isinstance(rhs, SeriesType)
+            and lhs.dtype == bodo.datetime64ns
+            and rhs.dtype == bodo.datetime64ns
             and op == operator.sub
         ):
 
-            def impl_dt64(S, other):  # pragma: no cover
-                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                name = bodo.hiframes.pd_series_ext.get_series_name(S)
-                other_arr = bodo.utils.conversion.get_array_if_series_or_index(other)
-                out_arr = dt64_arr_sub(arr, other_arr)
+            def impl_dt64(lhs, rhs):  # pragma: no cover
+                arr = bodo.hiframes.pd_series_ext.get_series_data(lhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
+                rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)
+                out_arr = dt64_arr_sub(arr, rhs_arr)
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return impl_dt64
 
         # Handle Offsets separation because addition is not defined on the array or scalar datetime64
         if (
-            isinstance(S, SeriesType)
-            and S.dtype == types.NPDatetime("ns")
-            and is_offsets_type(other)
+            isinstance(lhs, SeriesType)
+            and lhs.dtype == bodo.datetime64ns
+            and is_offsets_type(rhs)
         ):
 
-            def impl_offsets(S, other):  # pragma: no cover
-                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            def impl_offsets(lhs, rhs):  # pragma: no cover
+                arr = bodo.hiframes.pd_series_ext.get_series_data(lhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
                 numba.parfors.parfor.init_prange()
-                n = len(S)
+                n = len(lhs)
                 out_arr = np.empty(n, np.dtype("datetime64[ns]"))
                 for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(arr, i):
@@ -2987,7 +2987,7 @@ def create_binary_op_overload(op):
                             arr[i]
                         )
                     )
-                    new_timestamp = op(timestamp_val, other)
+                    new_timestamp = op(timestamp_val, rhs)
                     out_arr[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
                         new_timestamp.value
                     )
@@ -2997,41 +2997,42 @@ def create_binary_op_overload(op):
 
         if (
             op == operator.add
-            and is_offsets_type(S)
-            and isinstance(other, SeriesType)
-            and other.dtype == types.NPDatetime("ns")
+            and is_offsets_type(lhs)
+            and isinstance(rhs, SeriesType)
+            and rhs.dtype == bodo.datetime64ns
         ):
 
-            def impl(S, other):  # pragma: no cover
-                return op(other, S)
+            def impl(lhs, rhs):  # pragma: no cover
+                return op(rhs, lhs)
 
             return impl
 
-        # left arg is Series
-        if isinstance(S, SeriesType):
+        # left arg is series
+        if isinstance(lhs, SeriesType):
 
-            def impl2(S, other):  # pragma: no cover
-                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-                index = bodo.hiframes.pd_series_ext.get_series_index(S)
-                name = bodo.hiframes.pd_series_ext.get_series_name(S)
-                other_arr = bodo.utils.conversion.get_array_if_series_or_index(other)
-                out_arr = op(arr, other_arr)
+            def impl2(lhs, rhs):  # pragma: no cover
+                arr = bodo.hiframes.pd_series_ext.get_series_data(lhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
+                rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)
+                out_arr = op(arr, rhs_arr)
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return impl2
 
-        # right arg is Series
-        if isinstance(other, SeriesType):
+        # right arg is series
+        if isinstance(rhs, SeriesType):
 
-            def impl2(S, other):  # pragma: no cover
-                arr = bodo.hiframes.pd_series_ext.get_series_data(other)
-                index = bodo.hiframes.pd_series_ext.get_series_index(other)
-                name = bodo.hiframes.pd_series_ext.get_series_name(other)
-                other_arr = bodo.utils.conversion.get_array_if_series_or_index(S)
-                out_arr = op(other_arr, arr)
+            def impl2(lhs, rhs):  # pragma: no cover
+                arr = bodo.hiframes.pd_series_ext.get_series_data(rhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(rhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
+                rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
+                out_arr = op(rhs_arr, arr)
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return impl2
+        # raise BodoError(f"{op} operator not supported for data types {lhs} and {rhs}.")
 
     return overload_series_binary_op
 
@@ -3039,6 +3040,9 @@ def create_binary_op_overload(op):
 def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
     for op in bodo.hiframes.pd_series_ext.series_binary_ops:
+        # skip comparison operators
+        if op in explicit_binop_funcs_single:
+            continue
         overload_impl = create_binary_op_overload(op)
         # NOTE: cannot use inline="always". See test_pd_categorical
         overload(op, no_unliteral=True)(overload_impl)
@@ -3054,8 +3058,8 @@ def dt64_arr_sub(arg1, arg2):  # pragma: no cover
 
 @overload(dt64_arr_sub, no_unliteral=True)
 def overload_dt64_arr_sub(arg1, arg2):
-    assert arg1 == types.Array(types.NPDatetime("ns"), 1, "C") and arg2 == types.Array(
-        types.NPDatetime("ns"), 1, "C"
+    assert arg1 == types.Array(bodo.datetime64ns, 1, "C") and arg2 == types.Array(
+        bodo.datetime64ns, 1, "C"
     )
     td64_dtype = np.dtype("timedelta64[ns]")
 

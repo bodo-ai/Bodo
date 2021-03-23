@@ -1011,9 +1011,9 @@ class SeriesPass:
         ):
             # datetime_date_array operations
             if typ1 == datetime_date_array_type or typ2 == datetime_date_array_type:
-                impl = bodo.hiframes.datetime_date_ext.create_cmp_op_overload(rhs.fn)(
-                    typ1, typ2
-                )
+                impl = bodo.hiframes.datetime_date_ext.create_cmp_op_overload_arr(
+                    rhs.fn
+                )(typ1, typ2)
                 return replace_func(self, impl, [arg1, arg2])
 
             # datetime_timedelta_array operations
@@ -1021,7 +1021,7 @@ class SeriesPass:
                 typ1 == datetime_timedelta_array_type
                 or typ2 == datetime_timedelta_array_type
             ):
-                impl = bodo.hiframes.datetime_timedelta_ext.create_cmp_op_overload(
+                impl = bodo.hiframes.datetime_timedelta_ext.create_cmp_op_overload_arr(
                     rhs.fn
                 )(typ1, typ2)
                 return replace_func(self, impl, [arg1, arg2])

@@ -245,6 +245,7 @@ def overload_xgbclassifier_fit(
 ):  # pragma: no cover
 
     """ XGBClassifier fit overload """
+
     def _xgbclassifier_fit_impl(
         m,
         X,
@@ -261,23 +262,23 @@ def overload_xgbclassifier_fit(
         callbacks=None,
         _is_data_distributed=False,
     ):  # pragma: no cover
-            with numba.objmode():
-                m.n_jobs = 1
-                m.fit(
-                    X,
-                    y,
-                    sample_weight,
-                    base_margin,
-                    eval_set,
-                    eval_metric,
-                    early_stopping_rounds,
-                    verbose,
-                    xgb_model,
-                    sample_weight_eval_set,
-                    feature_weights,
-                    callbacks,
-                )
-            return m
+        with numba.objmode():
+            m.n_jobs = 1
+            m.fit(
+                X,
+                y,
+                sample_weight,
+                base_margin,
+                eval_set,
+                eval_metric,
+                early_stopping_rounds,
+                verbose,
+                xgb_model,
+                sample_weight_eval_set,
+                feature_weights,
+                callbacks,
+            )
+        return m
 
     return _xgbclassifier_fit_impl
 
@@ -449,6 +450,7 @@ def overload_xgbregressor_fit(
 ):  # pragma: no cover
 
     """ XGBRegressor fit overload """
+
     def _xgbregressor_fit_impl(
         m,
         X,

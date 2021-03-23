@@ -693,10 +693,12 @@ def create_op_overload(op, n_inputs):
         return overload_bool_arr_op_nin_1
     elif n_inputs == 2:
 
-        def overload_bool_arr_op_nin_2(A1, A2):
+        def overload_bool_arr_op_nin_2(lhs, rhs):
             # if any input is BooleanArray
-            if A1 == boolean_array or A2 == boolean_array:
-                return bodo.libs.int_arr_ext.get_nullable_array_binary_impl(op, A1, A2)
+            if lhs == boolean_array or rhs == boolean_array:
+                return bodo.libs.int_arr_ext.get_nullable_array_binary_impl(
+                    op, lhs, rhs
+                )
 
         return overload_bool_arr_op_nin_2
     else:  # pragma: no cover
@@ -718,10 +720,14 @@ _install_np_ufuncs()
 
 ####################### binary operators ###############################
 
+skips = [operator.lt, operator.le, operator.eq, operator.ne, operator.gt, operator.ge]
+
 
 def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
     for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys():
+        if op in skips:
+            continue
         overload_impl = create_op_overload(op, 2)
         overload(op, no_unliteral=True)(overload_impl)
 

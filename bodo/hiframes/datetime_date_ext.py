@@ -500,84 +500,6 @@ def date_sub(lhs, rhs):
         return impl
 
 
-@overload(operator.eq, no_unliteral=True)
-def date_eq(lhs, rhs):
-    if lhs == datetime_date_type and rhs == datetime_date_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            y, y2 = lhs.year, rhs.year
-            m, m2 = lhs.month, rhs.month
-            d, d2 = lhs.day, rhs.day
-            return _cmp((y, m, d), (y2, m2, d2)) == 0
-
-        return impl
-
-
-@overload(operator.ne, no_unliteral=True)
-def date_ne(lhs, rhs):
-    if lhs == datetime_date_type and rhs == datetime_date_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            y, y2 = lhs.year, rhs.year
-            m, m2 = lhs.month, rhs.month
-            d, d2 = lhs.day, rhs.day
-            return _cmp((y, m, d), (y2, m2, d2)) != 0
-
-        return impl
-
-
-@overload(operator.le, no_unliteral=True)
-def date_le(lhs, rhs):
-    if lhs == datetime_date_type and rhs == datetime_date_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            y, y2 = lhs.year, rhs.year
-            m, m2 = lhs.month, rhs.month
-            d, d2 = lhs.day, rhs.day
-            return _cmp((y, m, d), (y2, m2, d2)) <= 0
-
-        return impl
-
-
-@overload(operator.lt, no_unliteral=True)
-def date_lt(lhs, rhs):
-    if lhs == datetime_date_type and rhs == datetime_date_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            y, y2 = lhs.year, rhs.year
-            m, m2 = lhs.month, rhs.month
-            d, d2 = lhs.day, rhs.day
-            return _cmp((y, m, d), (y2, m2, d2)) < 0
-
-        return impl
-
-
-@overload(operator.ge, no_unliteral=True)
-def date_ge(lhs, rhs):
-    if lhs == datetime_date_type and rhs == datetime_date_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            y, y2 = lhs.year, rhs.year
-            m, m2 = lhs.month, rhs.month
-            d, d2 = lhs.day, rhs.day
-            return _cmp((y, m, d), (y2, m2, d2)) >= 0
-
-        return impl
-
-
-@overload(operator.gt, no_unliteral=True)
-def date_gt(lhs, rhs):
-    if lhs == datetime_date_type and rhs == datetime_date_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            y, y2 = lhs.year, rhs.year
-            m, m2 = lhs.month, rhs.month
-            d, d2 = lhs.day, rhs.day
-            return _cmp((y, m, d), (y2, m2, d2)) > 0
-
-        return impl
-
-
 @overload(min, no_unliteral=True)
 def date_min(lhs, rhs):
     if lhs == datetime_date_type and rhs == datetime_date_type:
@@ -986,81 +908,81 @@ def overload_datetime_date_arr_sub(arg1, arg2):
 
 
 def create_cmp_op_overload(op):
+    """ create overload function for comparison operators with datetime_date_type. """
+
+    def overload_date_cmp(lhs, rhs):
+        if lhs == datetime_date_type and rhs == datetime_date_type:
+
+            def impl(lhs, rhs):  # pragma: no cover
+                y, y2 = lhs.year, rhs.year
+                m, m2 = lhs.month, rhs.month
+                d, d2 = lhs.day, rhs.day
+                return op(_cmp((y, m, d), (y2, m2, d2)), 0)
+
+            return impl
+
+    return overload_date_cmp
+
+
+def create_cmp_op_overload_arr(op):
     """create overload function for comparison operators with datetime_date_array"""
 
-    def overload_date_arr_cmp(A1, A2):
+    def overload_date_arr_cmp(lhs, rhs):
         # both datetime_date_array_type
         if op == operator.ne:
             default_value = True
         else:
             default_value = False
-        if A1 == datetime_date_array_type and A2 == datetime_date_array_type:
+        if lhs == datetime_date_array_type and rhs == datetime_date_array_type:
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                n = len(A1)
+                n = len(lhs)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    bit1 = bodo.libs.array_kernels.isna(A1, i)
-                    bit2 = bodo.libs.array_kernels.isna(A2, i)
+                    bit1 = bodo.libs.array_kernels.isna(lhs, i)
+                    bit2 = bodo.libs.array_kernels.isna(rhs, i)
                     if bit1 or bit2:
                         ret_val = default_value
                     else:
-                        ret_val = op(A1[i], A2[i])
+                        ret_val = op(lhs[i], rhs[i])
                     out_arr[i] = ret_val
                 return out_arr
 
             return impl
         # 1st arg is array
-        elif A1 == datetime_date_array_type:
+        elif lhs == datetime_date_array_type:
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                n = len(A1)
+                n = len(lhs)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    bit = bodo.libs.array_kernels.isna(A1, i)
+                    bit = bodo.libs.array_kernels.isna(lhs, i)
                     if bit:
                         ret_val = default_value
                     else:
-                        ret_val = op(A1[i], A2)
+                        ret_val = op(lhs[i], rhs)
                     out_arr[i] = ret_val
                 return out_arr
 
             return impl
         # 2nd arg is array
-        elif A2 == datetime_date_array_type:
+        elif rhs == datetime_date_array_type:
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                n = len(A2)
+                n = len(rhs)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    bit = bodo.libs.array_kernels.isna(A2, i)
+                    bit = bodo.libs.array_kernels.isna(rhs, i)
                     if bit:
                         ret_val = default_value
                     else:
-                        ret_val = op(A1, A2[i])
+                        ret_val = op(lhs, rhs[i])
                     out_arr[i] = ret_val
                 return out_arr
 
             return impl
 
     return overload_date_arr_cmp
-
-
-def _install_cmp_ops():
-    """install overloads for comparison operators with datetime_date_array"""
-    for op in (
-        operator.eq,
-        operator.ne,
-        operator.ge,
-        operator.gt,
-        operator.le,
-        operator.lt,
-    ):
-        overload_impl = create_cmp_op_overload(op)
-        overload(op, no_unliteral=True)(overload_impl)
-
-
-_install_cmp_ops()

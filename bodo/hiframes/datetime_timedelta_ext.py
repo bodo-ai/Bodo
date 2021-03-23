@@ -634,45 +634,27 @@ def pd_timedelta_mod(lhs, rhs):
 def pd_create_cmp_op_overload(op):
     """create overload function for comparison operators with datetime_date_array"""
 
-    def overload_pd_timedelta_cmp(A1, A2):
-        # Timedelta/Timedelta
-        if A1 == pd_timedelta_type and A2 == pd_timedelta_type:
+    def overload_pd_timedelta_cmp(lhs, rhs):
+        if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
 
-            def impl(A1, A2):  # pragma: no cover
-                return op(A1.value, A2.value)
+            def impl(lhs, rhs):  # pragma: no cover
+                return op(lhs.value, rhs.value)
 
             return impl
 
         # Timedelta/td64
-        if A1 == pd_timedelta_type and A2 == bodo.timedelta64ns:
-            return lambda A1, A2: op(
-                bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(A1.value), A2
+        if lhs == pd_timedelta_type and rhs == bodo.timedelta64ns:
+            return lambda lhs, rhs: op(
+                bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(lhs.value), rhs
             )  # pragma: no cover
 
         # td64/Timedelta
-        if A1 == bodo.timedelta64ns and A2 == pd_timedelta_type:
-            return lambda A1, A2: op(
-                A1, bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(A2.value)
+        if lhs == bodo.timedelta64ns and rhs == pd_timedelta_type:
+            return lambda lhs, rhs: op(
+                lhs, bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(rhs.value)
             )  # pragma: no cover
 
     return overload_pd_timedelta_cmp
-
-
-def _pd_install_cmp_ops():
-    """install overloads for comparison operators with pd_timedelta_type"""
-    for op in (
-        operator.eq,
-        operator.ne,
-        operator.ge,
-        operator.gt,
-        operator.le,
-        operator.lt,
-    ):
-        overload_impl = pd_create_cmp_op_overload(op)
-        overload(op, no_unliteral=True)(overload_impl)
-
-
-_pd_install_cmp_ops()
 
 
 @overload(operator.neg, no_unliteral=True)
@@ -1039,70 +1021,19 @@ def timedelta_mod(lhs, rhs):
         return impl
 
 
-@overload(operator.eq, no_unliteral=True)
-def timedelta_eq(lhs, rhs):
-    if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
+def create_cmp_op_overload(op):
+    """ create overload function for comparison operators with datetime_timedelta_type. """
 
-        def impl(lhs, rhs):  # pragma: no cover
-            ret = _cmp(_getstate(lhs), _getstate(rhs))
-            return ret == 0
+    def overload_timedelta_cmp(lhs, rhs):
+        if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
-        return impl
+            def impl(lhs, rhs):  # pragma: no cover
+                ret = _cmp(_getstate(lhs), _getstate(rhs))
+                return op(ret, 0)
 
+            return impl
 
-@overload(operator.ne, no_unliteral=True)
-def timedelta_ne(lhs, rhs):
-    if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            ret = _cmp(_getstate(lhs), _getstate(rhs))
-            return ret != 0
-
-        return impl
-
-
-@overload(operator.le, no_unliteral=True)
-def timedelta_le(lhs, rhs):
-    if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            ret = _cmp(_getstate(lhs), _getstate(rhs))
-            return ret <= 0
-
-        return impl
-
-
-@overload(operator.lt, no_unliteral=True)
-def timedelta_lt(lhs, rhs):
-    if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            ret = _cmp(_getstate(lhs), _getstate(rhs))
-            return ret < 0
-
-        return impl
-
-
-@overload(operator.ge, no_unliteral=True)
-def timedelta_ge(lhs, rhs):
-    if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            ret = _cmp(_getstate(lhs), _getstate(rhs))
-            return ret >= 0
-
-        return impl
-
-
-@overload(operator.gt, no_unliteral=True)
-def timedelta_gt(lhs, rhs):
-    if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            ret = _cmp(_getstate(lhs), _getstate(rhs))
-            return ret > 0
-
-        return impl
+    return overload_timedelta_cmp
 
 
 @overload(operator.neg, no_unliteral=True)
@@ -1699,82 +1630,68 @@ def overload_datetime_timedelta_arr_sub(arg1, arg2):
         return impl
 
 
-def create_cmp_op_overload(op):
+def create_cmp_op_overload_arr(op):
     """create overload function for comparison operators with datetime_timedelta_array"""
 
-    def overload_date_arr_cmp(A1, A2):
+    def overload_date_arr_cmp(lhs, rhs):
         if op == operator.ne:
             default_value = True
         else:
             default_value = False
         # both datetime_timedelta_array_type
-        if A1 == datetime_timedelta_array_type and A2 == datetime_timedelta_array_type:
+        if (
+            lhs == datetime_timedelta_array_type
+            and rhs == datetime_timedelta_array_type
+        ):
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                n = len(A1)
+                n = len(lhs)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    bit1 = bodo.libs.array_kernels.isna(A1, i)
-                    bit2 = bodo.libs.array_kernels.isna(A2, i)
+                    bit1 = bodo.libs.array_kernels.isna(lhs, i)
+                    bit2 = bodo.libs.array_kernels.isna(rhs, i)
                     if bit1 or bit2:
                         ret_val = default_value
                     else:
-                        ret_val = op(A1[i], A2[i])
+                        ret_val = op(lhs[i], rhs[i])
                     out_arr[i] = ret_val
                 return out_arr
 
             return impl
         # 1st arg is array
-        elif A1 == datetime_timedelta_array_type:
+        elif lhs == datetime_timedelta_array_type:
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                n = len(A1)
+                n = len(lhs)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    bit = bodo.libs.array_kernels.isna(A1, i)
+                    bit = bodo.libs.array_kernels.isna(lhs, i)
                     if bit:
                         ret_val = default_value
                     else:
-                        ret_val = op(A1[i], A2)
+                        ret_val = op(lhs[i], rhs)
                     out_arr[i] = ret_val
                 return out_arr
 
             return impl
         # 2nd arg is array
-        elif A2 == datetime_timedelta_array_type:
+        elif rhs == datetime_timedelta_array_type:
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                n = len(A2)
+                n = len(rhs)
                 out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    bit = bodo.libs.array_kernels.isna(A2, i)
+                    bit = bodo.libs.array_kernels.isna(rhs, i)
                     if bit:
                         ret_val = default_value
                     else:
-                        ret_val = op(A1, A2[i])
+                        ret_val = op(lhs, rhs[i])
                     out_arr[i] = ret_val
                 return out_arr
 
             return impl
 
     return overload_date_arr_cmp
-
-
-def _install_cmp_ops():
-    """install overloads for comparison operators with datetime_timedelta_array"""
-    for op in (
-        operator.eq,
-        operator.ne,
-        operator.ge,
-        operator.gt,
-        operator.le,
-        operator.lt,
-    ):
-        overload_impl = create_cmp_op_overload(op)
-        overload(op, no_unliteral=True)(overload_impl)
-
-
-_install_cmp_ops()

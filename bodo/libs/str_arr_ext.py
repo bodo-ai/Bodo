@@ -168,21 +168,21 @@ lower_builtin(pd.StringDtype)(lambda c, b, s, a: c.get_dummy_value())
 def create_binary_op_overload(op):
     na_fill = op == operator.ne
 
-    def overload_string_array_binary_op(A, B):
+    def overload_string_array_binary_op(lhs, rhs):
         # both string array
-        if A == string_array_type and B == string_array_type:
+        if lhs == string_array_type and rhs == string_array_type:
 
-            def impl_both(A, B):  # pragma: no cover
+            def impl_both(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                n = len(A)
+                n = len(lhs)
                 out_arr = np.empty(n, np.bool_)
                 for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(
-                        A, i
-                    ) or bodo.libs.array_kernels.isna(B, i):
+                        lhs, i
+                    ) or bodo.libs.array_kernels.isna(rhs, i):
                         val = na_fill
                     else:
-                        val = op(A[i], B[i])
+                        val = op(lhs[i], rhs[i])
                     out_arr[i] = val
                     # XXX assigning to out_arr indirectly since parfor fusion
                     # cannot handle branching properly here and doesn't remove
@@ -193,17 +193,17 @@ def create_binary_op_overload(op):
             return impl_both
 
         # left arg is string array
-        if A == string_array_type and types.unliteral(B) == string_type:
+        if lhs == string_array_type and types.unliteral(rhs) == string_type:
 
-            def impl_left(A, B):  # pragma: no cover
+            def impl_left(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                n = len(A)
+                n = len(lhs)
                 out_arr = np.empty(n, np.bool_)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    if bodo.libs.array_kernels.isna(A, i):
+                    if bodo.libs.array_kernels.isna(lhs, i):
                         val = na_fill
                     else:
-                        val = op(A[i], B)
+                        val = op(lhs[i], rhs)
                     out_arr[i] = val
 
                 return out_arr
@@ -211,41 +211,26 @@ def create_binary_op_overload(op):
             return impl_left
 
         # right arg is string array
-        if types.unliteral(A) == string_type and B == string_array_type:
+        if types.unliteral(lhs) == string_type and rhs == string_array_type:
 
-            def impl_right(A, B):  # pragma: no cover
+            def impl_right(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                n = len(B)
+                n = len(rhs)
                 out_arr = np.empty(n, np.bool_)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    if bodo.libs.array_kernels.isna(B, i):
+                    if bodo.libs.array_kernels.isna(rhs, i):
                         val = na_fill
                     else:
-                        val = op(A, B[i])
+                        val = op(lhs, rhs[i])
                     out_arr[i] = val
 
                 return out_arr
 
             return impl_right
 
+        raise BodoError(f"{op} operator not supported for data types {lhs} and {rhs}.")
+
     return overload_string_array_binary_op
-
-
-def _install_binary_ops():
-    # install comparison binary ops
-    for op in (
-        operator.eq,
-        operator.ne,
-        operator.ge,
-        operator.gt,
-        operator.le,
-        operator.lt,
-    ):
-        overload_impl = create_binary_op_overload(op)
-        overload(op, no_unliteral=True)(overload_impl)
-
-
-_install_binary_ops()
 
 
 def overload_add_operator_string_array(lhs, rhs):

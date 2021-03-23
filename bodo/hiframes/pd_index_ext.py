@@ -509,15 +509,15 @@ def overload_datetime_index_sub(arg1, arg2):
 
 
 # bionp of DatetimeIndex and string
-def gen_dti_str_binop_impl(op, is_arg1_dti):
+def gen_dti_str_binop_impl(op, is_lhs_dti):
     # is_arg1_dti: is the first argument DatetimeIndex and second argument str
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-    func_text = "def impl(arg1, arg2):\n"
-    if is_arg1_dti:
-        func_text += "  dt_index, _str = arg1, arg2\n"
+    func_text = "def impl(lhs, rhs):\n"
+    if is_lhs_dti:
+        func_text += "  dt_index, _str = lhs, rhs\n"
         comp = "arr[i] {} other".format(op_str)
     else:
-        func_text += "  dt_index, _str = arg2, arg1\n"
+        func_text += "  dt_index, _str = rhs, lhs\n"
         comp = "other {} arr[i]".format(op_str)
     func_text += "  arr = bodo.hiframes.pd_index_ext.get_index_data(dt_index)\n"
     func_text += "  l = len(arr)\n"
@@ -534,28 +534,13 @@ def gen_dti_str_binop_impl(op, is_arg1_dti):
 
 
 def overload_binop_dti_str(op):
-    def overload_impl(arg1, arg2):
-        if isinstance(arg1, DatetimeIndexType) and types.unliteral(arg2) == string_type:
+    def overload_impl(lhs, rhs):
+        if isinstance(lhs, DatetimeIndexType) and types.unliteral(rhs) == string_type:
             return gen_dti_str_binop_impl(op, True)
-        if isinstance(arg2, DatetimeIndexType) and types.unliteral(arg1) == string_type:
+        if isinstance(rhs, DatetimeIndexType) and types.unliteral(lhs) == string_type:
             return gen_dti_str_binop_impl(op, False)
 
     return overload_impl
-
-
-def _install_dti_str_comp_ops():
-    for op in (
-        operator.eq,
-        operator.ne,
-        operator.ge,
-        operator.gt,
-        operator.le,
-        operator.lt,
-    ):
-        overload(op, no_unliteral=True)(overload_binop_dti_str(op))
-
-
-_install_dti_str_comp_ops()
 
 
 @overload(pd.Index, inline="always", no_unliteral=True)

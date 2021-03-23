@@ -786,9 +786,9 @@ def create_op_overload(op, n_inputs):
         return overload_int_arr_op_nin_1
     elif n_inputs == 2:
 
-        def overload_series_op_nin_2(A1, A2):
-            if isinstance(A1, IntegerArrayType) or isinstance(A2, IntegerArrayType):
-                return get_nullable_array_binary_impl(op, A1, A2)
+        def overload_series_op_nin_2(lhs, rhs):
+            if isinstance(lhs, IntegerArrayType) or isinstance(rhs, IntegerArrayType):
+                return get_nullable_array_binary_impl(op, lhs, rhs)
 
         return overload_series_op_nin_2
     else:
@@ -810,10 +810,14 @@ _install_np_ufuncs()
 
 ####################### binary operators ###############################
 
+skips = [operator.lt, operator.le, operator.eq, operator.ne, operator.gt, operator.ge]
+
 
 def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
     for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys():
+        if op in skips:
+            continue
         overload_impl = create_op_overload(op, 2)
         overload(op)(overload_impl)
 
@@ -962,20 +966,20 @@ def get_nullable_array_unary_impl(op, A):
     return impl
 
 
-def get_nullable_array_binary_impl(op, A1, A2):
+def get_nullable_array_binary_impl(op, lhs, rhs):
     """generate implementation for binary operation on nullable integer or boolean array"""
     # TODO: 1 ** np.nan is 1. So we have to unmask those.
     inplace = (
         op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
     )
-    is_A1_scalar = isinstance(A1, (types.Number, types.Boolean))
-    is_A2_scalar = isinstance(A2, (types.Number, types.Boolean))
+    is_lhs_scalar = isinstance(lhs, (types.Number, types.Boolean))
+    is_rhs_scalar = isinstance(rhs, (types.Number, types.Boolean))
     # use type inference to get output dtype
     # NOTE: using Numpy array instead of scalar dtypes since output dtype can be
     # different for arrays. For example, int32 + int32 is int64 for scalar but int32 for
     # arrays. see test_series_add.
-    dtype1 = types.Array(getattr(A1, "dtype", A1), 1, "C")
-    dtype2 = types.Array(getattr(A2, "dtype", A2), 1, "C")
+    dtype1 = types.Array(getattr(lhs, "dtype", lhs), 1, "C")
+    dtype2 = types.Array(getattr(rhs, "dtype", rhs), 1, "C")
     typing_context = numba.core.registry.cpu_target.typing_context
     ret_dtype = typing_context.resolve_function_type(
         op, (dtype1, dtype2), {}
@@ -989,24 +993,24 @@ def get_nullable_array_binary_impl(op, A1, A2):
         op = np.floor_divide
 
     # generate implementation function. Example:
-    # def impl(A1, A2):
-    #   n = len(A1)
+    # def impl(lhs, rhs):
+    #   n = len(lhs)
     #   out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)
     #   for i in numba.parfors.parfor.internal_prange(n):
-    #     if (bodo.libs.array_kernels.isna(A1, i)
-    #         or bodo.libs.array_kernels.isna(A2, i)):
+    #     if (bodo.libs.array_kernels.isna(lhs, i)
+    #         or bodo.libs.array_kernels.isna(rhs, i)):
     #       bodo.libs.array_kernels.setna(out_arr, i)
     #       continue
-    #     out_arr[i] = op(A1[i], A2[i])
+    #     out_arr[i] = op(lhs[i], rhs[i])
     #   return out_arr
-    access_str1 = "A1" if is_A1_scalar else "A1[i]"
-    access_str2 = "A2" if is_A2_scalar else "A2[i]"
-    na_str1 = "False" if is_A1_scalar else "bodo.libs.array_kernels.isna(A1, i)"
-    na_str2 = "False" if is_A2_scalar else "bodo.libs.array_kernels.isna(A2, i)"
-    func_text = "def impl(A1, A2):\n"
-    func_text += "  n = len({})\n".format("A1" if not is_A1_scalar else "A2")
+    access_str1 = "lhs" if is_lhs_scalar else "lhs[i]"
+    access_str2 = "rhs" if is_rhs_scalar else "rhs[i]"
+    na_str1 = "False" if is_lhs_scalar else "bodo.libs.array_kernels.isna(lhs, i)"
+    na_str2 = "False" if is_rhs_scalar else "bodo.libs.array_kernels.isna(rhs, i)"
+    func_text = "def impl(lhs, rhs):\n"
+    func_text += "  n = len({})\n".format("lhs" if not is_lhs_scalar else "rhs")
     if inplace:
-        func_text += "  out_arr = A1\n"
+        func_text += "  out_arr = lhs\n"
     else:
         func_text += "  out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)\n"
     func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"

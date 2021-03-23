@@ -1608,65 +1608,48 @@ def create_timestamp_cmp_op_overload(op):
     create overloads for comparison operators with datetime.date and Timestamp
     """
 
-    def overload_date_timestamp_cmp(A1, A2):
+    def overload_date_timestamp_cmp(lhs, rhs):
         # Timestamp, datetime.date
         if (
-            A1 == pandas_timestamp_type
-            and A2 == bodo.hiframes.datetime_date_ext.datetime_date_type
+            lhs == pandas_timestamp_type
+            and rhs == bodo.hiframes.datetime_date_ext.datetime_date_type
         ):
-            return lambda A1, A2: op(
-                A1.value,
+            return lambda lhs, rhs: op(
+                lhs.value,
                 bodo.hiframes.pd_timestamp_ext.npy_datetimestruct_to_datetime(
-                    A2.year, A2.month, A2.day, 0, 0, 0, 0
+                    rhs.year, rhs.month, rhs.day, 0, 0, 0, 0
                 ),
             )
 
         # datetime.date, Timestamp
         if (
-            A1 == bodo.hiframes.datetime_date_ext.datetime_date_type
-            and A2 == pandas_timestamp_type
+            lhs == bodo.hiframes.datetime_date_ext.datetime_date_type
+            and rhs == pandas_timestamp_type
         ):
-            return lambda A1, A2: op(
+            return lambda lhs, rhs: op(
                 bodo.hiframes.pd_timestamp_ext.npy_datetimestruct_to_datetime(
-                    A1.year, A1.month, A1.day, 0, 0, 0, 0
+                    lhs.year, lhs.month, lhs.day, 0, 0, 0, 0
                 ),
-                A2.value,
+                rhs.value,
             )
 
         # Timestamp/Timestamp
-        if A1 == pandas_timestamp_type and A2 == pandas_timestamp_type:
-            return lambda A1, A2: op(A1.value, A2.value)
+        if lhs == pandas_timestamp_type and rhs == pandas_timestamp_type:
+            return lambda lhs, rhs: op(lhs.value, rhs.value)
 
         # Timestamp/dt64
-        if A1 == pandas_timestamp_type and A2 == bodo.datetime64ns:
-            return lambda A1, A2: op(
-                bodo.hiframes.pd_timestamp_ext.integer_to_dt64(A1.value), A2
+        if lhs == pandas_timestamp_type and rhs == bodo.datetime64ns:
+            return lambda lhs, rhs: op(
+                bodo.hiframes.pd_timestamp_ext.integer_to_dt64(lhs.value), rhs
             )  # pragma: no cover
 
         # dt64/Timestamp
-        if A1 == bodo.datetime64ns and A2 == pandas_timestamp_type:
-            return lambda A1, A2: op(
-                A1, bodo.hiframes.pd_timestamp_ext.integer_to_dt64(A2.value)
+        if lhs == bodo.datetime64ns and rhs == pandas_timestamp_type:
+            return lambda lhs, rhs: op(
+                lhs, bodo.hiframes.pd_timestamp_ext.integer_to_dt64(rhs.value)
             )  # pragma: no cover
 
     return overload_date_timestamp_cmp
-
-
-def _install_timestamp_cmp_ops():
-    """install overloads for comparison operators with datetime.date and datetime64"""
-    for op in (
-        operator.eq,
-        operator.ne,
-        operator.ge,
-        operator.gt,
-        operator.le,
-        operator.lt,
-    ):
-        overload_impl = create_timestamp_cmp_op_overload(op)
-        overload(op, no_unliteral=True)(overload_impl)
-
-
-_install_timestamp_cmp_ops()
 
 
 @overload_method(PandasTimestampType, "toordinal", no_unliteral=True)

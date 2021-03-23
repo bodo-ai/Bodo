@@ -280,106 +280,27 @@ def _cmp(x, y):  # pragma: no cover
     return 0 if x == y else 1 if x > y else -1
 
 
-@overload(operator.eq, no_unliteral=True)
-def datetime_eq(lhs, rhs):
-    if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
+def create_cmp_op_overload(op):
+    """ create overload function for comparison operators with datetime_datetime_type. """
 
-        def impl(lhs, rhs):  # pragma: no cover
-            y, y2 = lhs.year, rhs.year
-            m, m2 = lhs.month, rhs.month
-            d, d2 = lhs.day, rhs.day
-            h, h2 = lhs.hour, rhs.hour
-            m, m2 = lhs.minute, rhs.minute
-            s, s2 = lhs.second, rhs.second
-            us, us2 = lhs.microsecond, rhs.microsecond
-            return _cmp((y, m, d, h, m, s, us), (y2, m2, d2, h2, m2, s2, us2)) == 0
+    def overload_datetime_cmp(lhs, rhs):
+        if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
 
-        return impl
+            def impl(lhs, rhs):  # pragma: no cover
+                y, y2 = lhs.year, rhs.year
+                m, m2 = lhs.month, rhs.month
+                d, d2 = lhs.day, rhs.day
+                h, h2 = lhs.hour, rhs.hour
+                mi, mi2 = lhs.minute, rhs.minute
+                s, s2 = lhs.second, rhs.second
+                us, us2 = lhs.microsecond, rhs.microsecond
+                return op(
+                    _cmp((y, m, d, h, mi, s, us), (y2, m2, d2, h2, mi2, s2, us2)), 0
+                )
 
+            return impl
 
-@overload(operator.ne, no_unliteral=True)
-def datetime_ne(lhs, rhs):
-    if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            y, y2 = lhs.year, rhs.year
-            m, m2 = lhs.month, rhs.month
-            d, d2 = lhs.day, rhs.day
-            h, h2 = lhs.hour, rhs.hour
-            m, m2 = lhs.minute, rhs.minute
-            s, s2 = lhs.second, rhs.second
-            us, us2 = lhs.microsecond, rhs.microsecond
-            return _cmp((y, m, d, h, m, s, us), (y2, m2, d2, h2, m2, s2, us2)) != 0
-
-        return impl
-
-
-@overload(operator.le, no_unliteral=True)
-def datetime_le(lhs, rhs):
-    if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            y, y2 = lhs.year, rhs.year
-            m, m2 = lhs.month, rhs.month
-            d, d2 = lhs.day, rhs.day
-            h, h2 = lhs.hour, rhs.hour
-            mi, mi2 = lhs.minute, rhs.minute
-            s, s2 = lhs.second, rhs.second
-            us, us2 = lhs.microsecond, rhs.microsecond
-            return _cmp((y, m, d, h, mi, s, us), (y2, m2, d2, h2, mi2, s2, us2)) <= 0
-
-        return impl
-
-
-@overload(operator.lt, no_unliteral=True)
-def datetime_lt(lhs, rhs):
-    if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            y, y2 = lhs.year, rhs.year
-            m, m2 = lhs.month, rhs.month
-            d, d2 = lhs.day, rhs.day
-            h, h2 = lhs.hour, rhs.hour
-            mi, mi2 = lhs.minute, rhs.minute
-            s, s2 = lhs.second, rhs.second
-            us, us2 = lhs.microsecond, rhs.microsecond
-            return _cmp((y, m, d, h, mi, s, us), (y2, m2, d2, h2, mi2, s2, us2)) < 0
-
-        return impl
-
-
-@overload(operator.ge, no_unliteral=True)
-def datetime_ge(lhs, rhs):
-    if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            y, y2 = lhs.year, rhs.year
-            m, m2 = lhs.month, rhs.month
-            d, d2 = lhs.day, rhs.day
-            h, h2 = lhs.hour, rhs.hour
-            mi, mi2 = lhs.minute, rhs.minute
-            s, s2 = lhs.second, rhs.second
-            us, us2 = lhs.microsecond, rhs.microsecond
-            return _cmp((y, m, d, h, mi, s, us), (y2, m2, d2, h2, mi2, s2, us2)) >= 0
-
-        return impl
-
-
-@overload(operator.gt, no_unliteral=True)
-def datetime_gt(lhs, rhs):
-    if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            y, y2 = lhs.year, rhs.year
-            m, m2 = lhs.month, rhs.month
-            d, d2 = lhs.day, rhs.day
-            h, h2 = lhs.hour, rhs.hour
-            mi, mi2 = lhs.minute, rhs.minute
-            s, s2 = lhs.second, rhs.second
-            us, us2 = lhs.microsecond, rhs.microsecond
-            return _cmp((y, m, d, h, mi, s, us), (y2, m2, d2, h2, mi2, s2, us2)) > 0
-
-        return impl
+    return overload_datetime_cmp
 
 
 @overload(operator.sub, no_unliteral=True)
