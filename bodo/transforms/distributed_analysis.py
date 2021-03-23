@@ -778,7 +778,7 @@ class DistributedAnalysis:
 
             return
 
-        if func_mod == "sklearn.metrics._classification":
+        if func_mod in ("sklearn.metrics._classification", "sklearn.metrics"):
             if func_name in {"precision_score", "recall_score", "f1_score"}:
                 # output is always replicated, and the output can be an array
                 # if average=None so we have to set it
@@ -810,7 +810,7 @@ class DistributedAnalysis:
 
             return
 
-        if func_mod == "sklearn.metrics._regression":
+        if func_mod in ("sklearn.metrics._regression", "sklearn.metrics"):
 
             if func_name in {"mean_squared_error", "mean_absolute_error", "r2_score"}:
 
@@ -820,7 +820,7 @@ class DistributedAnalysis:
                 )
 
             return
-        if func_mod == "sklearn.model_selection._split":
+        if func_mod in ("sklearn.model_selection._split", "sklearn.model_selection"):
             if func_name == "train_test_split":
                 arg0 = rhs.args[0].name
                 if lhs not in array_dists:

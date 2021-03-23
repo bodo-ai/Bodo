@@ -321,9 +321,16 @@ def test_score(data, average):
     def test_f1(y_true, y_pred, average):
         return f1_score(y_true, y_pred, average=average)
 
+    from sklearn import metrics
+
+    def test_metrics_f1(y_true, y_pred, average):
+        """ Test to verify that both import styles work for classification metrics"""
+        return metrics.f1_score(y_true, y_pred, average=average)
+
     check_func(test_precision, tuple(data + [average]), is_out_distributed=False)
     check_func(test_recall, tuple(data + [average]), is_out_distributed=False)
     check_func(test_f1, tuple(data + [average]), is_out_distributed=False)
+    check_func(test_metrics_f1, tuple(data + [average]), is_out_distributed=False)
 
 
 @pytest.mark.parametrize(
@@ -487,6 +494,17 @@ def test_r2_score(data, multioutput, memory_leak_check):
             multioutput=multioutput,
         )
 
+    from sklearn import metrics
+
+    def test_metrics_r2_1(y_true, y_pred, sample_weight_):
+        """ Test to verify that both import styles work for regression metrics"""
+        return metrics.r2_score(
+            y_true,
+            y_pred,
+            sample_weight=sample_weight_,
+            multioutput=multioutput,
+        )
+
     # To check that Bodo fails in compilation when an unsupported value is passed
     # in for multioutput
     if multioutput == "some_unsupported_val":
@@ -498,6 +516,7 @@ def test_r2_score(data, multioutput, memory_leak_check):
 
     check_func(test_r2_0, tuple(data[0:2]), is_out_distributed=False)
     check_func(test_r2_1, tuple(data), is_out_distributed=False)
+    check_func(test_metrics_r2_1, tuple(data), is_out_distributed=False)
 
     # Check that appropriate error is raised when number of samples in
     # y_true and y_pred are inconsistent
@@ -1694,6 +1713,30 @@ def test_train_test_split_df(memory_leak_check):
     X_train, X_test, y_train, y_test = bodo.jit(
         distributed=["X", "y", "X_train", "X_test", "y_train", "y_test"]
     )(impl_shuffle)(
+        _get_dist_arg(train),
+        _get_dist_arg(train_labels),
+    )
+    assert_array_equal(X_train.iloc[:, 0], y_train)
+    assert_array_equal(X_test.iloc[:, 0], y_test)
+    bodo_X_train = bodo.allgatherv(X_train)
+    bodo_X_test = bodo.allgatherv(X_test)
+    bodo_X = np.sort(np.concatenate((bodo_X_train, bodo_X_test), axis=0), axis=0)
+    assert_array_equal(bodo_X, train)
+
+    from sklearn import model_selection
+
+    def impl_shuffle_import(X, y):
+        """ Test to verify that both import styles work for model_selection"""
+        # simple test
+        X_train, X_test, y_train, y_test = model_selection.train_test_split(X, y)
+        return X_train, X_test, y_train, y_test
+
+    # Test with change in import
+    train = pd.DataFrame({"A": range(20), "B": range(100, 120)})
+    train_labels = pd.Series(range(20))
+    X_train, X_test, y_train, y_test = bodo.jit(
+        distributed=["X", "y", "X_train", "X_test", "y_train", "y_test"]
+    )(impl_shuffle_import)(
         _get_dist_arg(train),
         _get_dist_arg(train_labels),
     )

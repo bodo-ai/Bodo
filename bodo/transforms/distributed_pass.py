@@ -467,7 +467,7 @@ class DistributedPass:
                 return [assign]
 
         if (
-            func_mod == "sklearn.metrics._classification"
+            func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
             and func_name == "precision_score"
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
@@ -511,7 +511,7 @@ class DistributedPass:
                 )
 
         if (
-            func_mod == "sklearn.metrics._classification"
+            func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
             and func_name == "recall_score"
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
@@ -552,7 +552,10 @@ class DistributedPass:
                     extra_globals={"sklearn": sklearn},
                 )
 
-        if func_mod == "sklearn.metrics._classification" and func_name == "f1_score":
+        if (
+            func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
+            and func_name == "f1_score"
+        ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 rhs = assign.value
                 kws = dict(rhs.kws)
@@ -592,7 +595,7 @@ class DistributedPass:
                 )
 
         if (
-            func_mod == "sklearn.metrics._classification"
+            func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
             and func_name == "accuracy_score"
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
@@ -658,7 +661,7 @@ class DistributedPass:
                 )
 
         if (
-            func_mod == "sklearn.metrics._regression"
+            func_mod in ("sklearn.metrics._regression", "sklearn.metrics")
             and func_name == "mean_squared_error"
         ):
 
@@ -747,7 +750,7 @@ class DistributedPass:
                 )
 
         if (
-            func_mod == "sklearn.metrics._regression"
+            func_mod in ("sklearn.metrics._regression", "sklearn.metrics")
             and func_name == "mean_absolute_error"
         ):
 
@@ -822,7 +825,7 @@ class DistributedPass:
                     extra_globals={"sklearn": sklearn},
                 )
         if (
-            func_mod == "sklearn.model_selection._split"
+            func_mod in ("sklearn.model_selection._split", "sklearn.model_selection")
             and func_name == "train_test_split"
         ):
 
@@ -902,7 +905,10 @@ class DistributedPass:
                     extra_globals={"sklearn": sklearn},
                 )
 
-        if func_mod == "sklearn.metrics._regression" and func_name == "r2_score":
+        if (
+            func_mod in ("sklearn.metrics._regression", "sklearn.metrics")
+            and func_name == "r2_score"
+        ):
 
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
                 rhs = assign.value
