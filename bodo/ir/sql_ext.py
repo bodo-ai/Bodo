@@ -165,7 +165,7 @@ def sqlalchemy_check():
 
 def sqlalchemy_check_():  # pragma: no cover
     try:
-        import sqlalchemy
+        import sqlalchemy  # noqa
     except ImportError:
         message = (
             "Using URI string without sqlalchemy installed."

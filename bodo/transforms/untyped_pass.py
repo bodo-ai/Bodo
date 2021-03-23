@@ -828,7 +828,7 @@ class UntypedPass:
         # coerce_float=True, params=None, parse_dates=None,
         # columns=None, chunksize=None
         try:
-            pass
+            import sqlalchemy  # noqa
         except ImportError:  # pragma: no cover
             message = (
                 "Using URI string without sqlalchemy installed."
