@@ -473,3 +473,32 @@ def test_df_duplicated_errors(memory_leak_check):
         bodo.jit(impl1)()
     with pytest.raises(BodoError, match=unsupported_arg_err_msg):
         bodo.jit(impl2)()
+
+
+@pytest.mark.slow
+def test_df_apply_all_args(memory_leak_check):
+    """ Test DataFrame.apply with unsupported and wrong arguments """
+
+    def test_axis(df):
+        return df.apply(lambda r: r.A)
+
+    def test_result_type(df):
+        return df.apply(lambda r: r.A, result_type="expand", axis=1)
+
+    def test_raw(df):
+        return df.apply(lambda r: r.A, raw=True, axis=1)
+
+    def test_np_func(df):
+        return df.apply(np.abs, axis=1)
+
+    df = pd.DataFrame({"A": [1, 2, -1, -3, -4, 0]})
+
+    with pytest.raises(BodoError, match="with axis=1 supported"):
+        bodo.jit(test_axis)(df)
+
+    with pytest.raises(BodoError, match="parameter only supports default"):
+        bodo.jit(test_result_type)(df)
+        bodo.jit(test_raw)(df)
+
+    with pytest.raises(BodoError, match="does not support built-in functions"):
+        bodo.jit(test_np_func)(df)

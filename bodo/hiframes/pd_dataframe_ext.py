@@ -263,11 +263,11 @@ class DataFrameAttribute(AttributeTemplate):
 
         # check axis
         if not (is_overload_constant_int(axis) and get_overload_const_int(axis) == 1):
-            raise BodoError("only apply() with axis=1 supported")
+            raise BodoError("only Dataframe.apply() with axis=1 supported")
 
         unsupported_args = dict(raw=raw, result_type=result_type)
         merge_defaults = dict(raw=False, result_type=None)
-        check_unsupported_args("apply", unsupported_args, merge_defaults)
+        check_unsupported_args("Dataframe.apply", unsupported_args, merge_defaults)
 
         # the data elements come from getitem of Series to perform conversion
         # e.g. dt64 to timestamp in TestDate.test_ts_map_date2

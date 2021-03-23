@@ -2988,6 +2988,136 @@ def test_df_apply_udf_inline(memory_leak_check):
     assert not has_udf_call(fir)
 
 
+@pytest.mark.slow
+def test_df_apply_supported_types(df_value, memory_leak_check):
+    """ Test DataFrame.apply with all Bodo supported Types """
+
+    def test_impl(df):
+        return df.apply(lambda r: None if pd.isna(r.A) else r.A, axis=1)
+
+    # Increase data size to pass testing with 3 ranks.
+    df = df_value.apply(lambda row: row.repeat(2), axis=0)
+
+    # Rename 1st column to A (if not already A)
+    if not "A" in df.columns:
+        df.rename(columns={df.columns[0]: "A"}, inplace=True)
+
+    check_func(test_impl, (df,), check_dtype=False)
+
+
+@pytest.mark.slow
+def test_df_apply_datetime(memory_leak_check):
+    def test_impl(df):
+        return df.apply(lambda r: r.A, axis=1)
+
+    # timedelta
+    df = pd.DataFrame({"A": pd.Series(pd.timedelta_range(start="1 day", periods=6))})
+    check_func(test_impl, (df,))
+
+    # datetime
+    df = pd.DataFrame(
+        {"A": pd.Series(pd.date_range(start="1/1/2018", end="1/4/2018", periods=6))}
+    )
+    check_func(test_impl, (df,))
+
+    # boolean array
+    df = pd.DataFrame({"A": [True, False, False, True, True, False]})
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "data",
+    [
+        # int
+        pd.DataFrame(
+            {"A": ["aa", "bb", "aa", "cc", "aa", "bb"], "B": [1, 2, 3, 5, 3, 1]}
+        ),
+        # float64
+        pd.DataFrame(
+            {
+                "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
+                "B": [1.5, 2.2, 2.2, 5.3, 3.4, 1.5],
+            }
+        ),
+        # Categorical
+        pd.DataFrame(
+            {
+                "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
+                "B": pd.Series(pd.Categorical([1, 2, 5, None, 2, 5], ordered=True)),
+            }
+        ),
+        # uint8
+        pd.DataFrame(
+            {
+                "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
+                "B": np.array([1, 8, 0, 0, 1, 1], dtype=np.uint8),
+            }
+        ),
+        # float32
+        pd.DataFrame(
+            {
+                "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
+                "B": np.array([1.1, np.nan, 0.5, 1.1, -1.1, 0.5], dtype=np.float32),
+            }
+        ),
+        # String
+        pd.DataFrame(
+            {
+                "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
+                "B": ["abc", "xyz", "cc", "o", "cc", "abc"],
+            }
+        ),
+        # timedelta
+        pd.DataFrame(
+            {
+                "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=6)),
+            }
+        ),
+        # datetime
+        pd.DataFrame(
+            {
+                "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
+                "B": pd.Series(
+                    pd.date_range(start="1/1/2018", end="1/4/2018", periods=6)
+                ),
+            }
+        ),
+        # boolean array
+        pd.DataFrame(
+            {
+                "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
+                "B": [True, False, False, True, True, False],
+            }
+        ),
+    ],
+)
+# memory_leak_check doesn't work with Categorical
+def test_df_groupby_supported_types(data):
+    """ Test DataFrame.groupby with all Bodo supported Types """
+
+    # Testing different type of columns for max operation
+    def test_impl(df):
+        return df.groupby("A").max()
+
+    check_func(test_impl, (data,), sort_output=True, reset_index=True)
+
+    # [BE-358] Categorical, uint, and boolean array don't work with next check.
+    if isinstance(data.dtypes.loc["B"], pd.CategoricalDtype):
+        return
+    if isinstance(data["B"].iat[0], (np.bool_, np.uint8)):
+        return
+
+    # Testing different type of column used for grouping
+    def test_impl2(df):
+        return df.groupby("B").max()
+
+    check_func(
+        test_impl2, (data,), sort_output=True, reset_index=True, check_dtype=False
+    )
+
+
 def test_df_drop_inplace_branch(memory_leak_check):
     def test_impl(cond):
         if cond:
@@ -3341,7 +3471,7 @@ def test_df_setitem_multi(memory_leak_check):
     )
     check_func(impl1, (df,), copy_input=True)
     check_func(impl2, (df,), copy_input=True)
-    with pytest.raises(BodoError, match=r"only apply\(\) with axis"):
+    with pytest.raises(BodoError, match=r"only Dataframe.apply\(\) with axis"):
         bodo.jit(impl3)()
 
 

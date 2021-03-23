@@ -57,6 +57,7 @@ from bodo.utils.transform import (
 )
 from bodo.utils.typing import (
     BodoError,
+    check_unsupported_args,
     create_unsupported_overload,
     get_index_data_arr_types,
     get_index_name_types,
@@ -73,7 +74,6 @@ from bodo.utils.typing import (
     is_overload_constant_dict,
     is_overload_constant_list,
     is_overload_constant_str,
-    is_overload_false,
     is_overload_none,
     is_overload_true,
     is_overload_zero,
@@ -126,10 +126,11 @@ def df_groupby_overload(
     group_keys=True,
     squeeze=False,
     observed=False,
+    dropna=True,
 ):
 
     validate_groupby_spec(
-        df, by, axis, level, as_index, sort, group_keys, squeeze, observed
+        df, by, axis, level, as_index, sort, group_keys, squeeze, observed, dropna
     )
 
     def _impl(
@@ -142,6 +143,7 @@ def df_groupby_overload(
         group_keys=True,
         squeeze=False,
         observed=False,
+        dropna=True,
     ):  # pragma: no cover
         return bodo.hiframes.pd_groupby_ext.groupby_dummy(df, by, as_index)
 
@@ -149,7 +151,7 @@ def df_groupby_overload(
 
 
 def validate_groupby_spec(
-    df, by, axis, level, as_index, sort, group_keys, squeeze, observed
+    df, by, axis, level, as_index, sort, group_keys, squeeze, observed, dropna
 ):
     """
     validate df.groupby() specifications: In addition to consistent error checking
@@ -194,27 +196,19 @@ def validate_groupby_spec(
             ),
         )
 
-    # make sure sort is the default value, sort=True not supported
-    if not is_overload_false(sort):
-        raise BodoError("groupby(): 'sort' parameter only supports default value False")
+    # NOTE: sort default value is True in pandas. We opt to set it to False by default for performance
+    unsupported_args = dict(
+        sort=sort,
+        group_keys=group_keys,
+        squeeze=squeeze,
+        observed=observed,
+        dropna=dropna,
+    )
+    args_defaults = dict(
+        sort=False, group_keys=True, squeeze=False, observed=False, dropna=True
+    )
 
-    # make sure group_keys has default value True
-    if not is_overload_true(group_keys):
-        raise BodoError(
-            "groupby(): 'group_keys' parameter only supports default value True."
-        )
-
-    # make sure squeeze has default value False
-    if not is_overload_false(squeeze):
-        raise BodoError(
-            "groupby(): 'squeeze' parameter only supports default value False."
-        )
-
-    # make sure observed has default value False
-    if not is_overload_false(observed):
-        raise BodoError(
-            "groupby(): 'observed' parameter only supports default value False."
-        )
+    check_unsupported_args("Dataframe.groupby", unsupported_args, args_defaults)
 
 
 def validate_udf(func_name, func):

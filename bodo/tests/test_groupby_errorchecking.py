@@ -117,11 +117,11 @@ def test_groupby_sort_default(memory_leak_check):
 
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
     with pytest.raises(
-        BodoError, match="'sort' parameter only supports default value False"
+        BodoError, match="sort parameter only supports default value False"
     ):
         bodo.jit(impl1)(df)
     with pytest.raises(
-        BodoError, match="'sort' parameter only supports default value False"
+        BodoError, match="sort parameter only supports default value False"
     ):
         bodo.jit(impl2)(df)
 
@@ -139,12 +139,12 @@ def test_groupby_group_keys_true(memory_leak_check):
 
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
     with pytest.raises(
-        BodoError, match="'group_keys' parameter only supports default value True"
+        BodoError, match="group_keys parameter only supports default value True"
     ):
         bodo.jit(impl1)(df)
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
     with pytest.raises(
-        BodoError, match="'group_keys' parameter only supports default value True"
+        BodoError, match="group_keys parameter only supports default value True"
     ):
         bodo.jit(impl2)(df)
 
@@ -155,18 +155,18 @@ def test_groupby_squeeze_false(memory_leak_check):
     """
 
     def impl1(df):
-        return df.groupby(by=["A", "C"], squeeze=0)
+        return df.groupby(by=["A", "C"], squeeze=1)
 
     def impl2(df):
         return df.groupby(by=["A", "C"], squeeze=True)
 
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
     with pytest.raises(
-        BodoError, match="'squeeze' parameter only supports default value False"
+        BodoError, match="squeeze parameter only supports default value False"
     ):
         bodo.jit(impl1)(df)
     with pytest.raises(
-        BodoError, match="'squeeze' parameter only supports default value False"
+        BodoError, match="squeeze parameter only supports default value False"
     ):
         bodo.jit(impl2)(df)
 
@@ -177,18 +177,41 @@ def test_groupby_observed_false(memory_leak_check):
     """
 
     def impl1(df):
-        return df.groupby(by=["A", "C"], observed=0)
+        return df.groupby(by=["A", "C"], observed=1)
 
     def impl2(df):
         return df.groupby(by=["A", "C"], observed=True)
 
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
     with pytest.raises(
-        BodoError, match="'observed' parameter only supports default value False"
+        BodoError, match="observed parameter only supports default value False"
     ):
         bodo.jit(impl1)(df)
     with pytest.raises(
-        BodoError, match="'observed' parameter only supports default value False"
+        BodoError, match="observed parameter only supports default value False"
+    ):
+        bodo.jit(impl2)(df)
+
+
+def test_groupby_dropna_true(memory_leak_check):
+    """
+    Test groupby(): 'dropna' cannot have values other than boolean value True
+    """
+
+    def impl1(df):
+        return df.groupby(by=["A", "C"], dropna=2)
+
+    def impl2(df):
+        return df.groupby(by=["A", "C"], dropna=False)
+
+    df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
+    with pytest.raises(
+        BodoError, match="dropna parameter only supports default value True"
+    ):
+        bodo.jit(impl1)(df)
+    df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
+    with pytest.raises(
+        BodoError, match="dropna parameter only supports default value True"
     ):
         bodo.jit(impl2)(df)
 
