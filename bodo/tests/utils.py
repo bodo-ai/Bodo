@@ -576,6 +576,7 @@ def _test_equal(
             bodo_out,
             py_out,
             check_names=check_names,
+            check_categorical=check_categorical,
             check_dtype=check_dtype,
             check_freq=False,
             atol=atol,

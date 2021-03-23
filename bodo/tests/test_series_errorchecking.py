@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -120,3 +122,76 @@ def test_series_dropna_inplace_error(memory_leak_check):
     match = "inplace parameter only supports default value False"
     with pytest.raises(BodoError, match=match):
         bodo.jit(lambda: S.dropna(inplace=True))()
+
+
+@pytest.mark.slow
+def test_series_groupby_args(memory_leak_check):
+    """ Test Series.groupby with all unsupported and wrong arguments"""
+
+    def test_impl_by_level(S):
+        return S.groupby(by=["a", "b", "a", "b"], level=0).mean()
+
+    def test_impl_no_by_no_level(S):
+        return S.groupby().mean()
+
+    def test_axis(S):
+        return S.groupby(axis=1).mean()
+
+    def test_as_index(S):
+        return S.groupby(as_index=False).mean()
+
+    def test_group_keys(S):
+        return S.groupby(group_keys=False).mean()
+
+    def test_observed(S):
+        return S.groupby(observed=True).mean()
+
+    def test_dropna(S):
+        return S.groupby(dropna=False).mean()
+
+    # deprecated since 1.1.0
+    def test_squeeze(S):
+        return S.groupby(squeeze=True).mean()
+
+    S = pd.Series([390.0, 350.0, 30.0, 20.0])
+
+    with pytest.raises(BodoError, match="Series.groupby.* argument should be None if"):
+        bodo.jit(test_impl_by_level)(S)
+
+    with pytest.raises(BodoError, match="You have to supply one of 'by' and 'level'"):
+        bodo.jit(test_impl_no_by_no_level)(S)
+
+    with pytest.raises(BodoError, match="only valid with DataFrame"):
+        bodo.jit(test_as_index)(S)
+
+    with pytest.raises(BodoError, match="parameter only supports default"):
+        bodo.jit(test_axis)(S)
+        bodo.jit(test_group_keys)(S)
+        bodo.jit(test_observed)(S)
+        bodo.jit(test_dropna)(S)
+        bodo.jit(test_squeeze)(S)
+
+
+@pytest.mark.slow
+def test_series_groupby_by_arg_unsupported_types(memory_leak_check):
+    """ Test Series.groupby by argument with Bodo Types that it doesn't currently support"""
+
+    def test_by_type(S, byS):
+        return S.groupby(byS).max()
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        S = pd.Series([390.0, 350.0, 30.0, 20.0, 5.5])
+        byS = pd.Series(
+            [
+                Decimal("1.6"),
+                Decimal("-0.2"),
+                Decimal("44.2"),
+                np.nan,
+                Decimal("0"),
+            ]
+        )
+        bodo.jit(test_by_type)(S, byS)
+        byS = pd.Series([1, 8, 4, 10, 3], dtype="Int32")
+        bodo.jit(test_by_type)(S, byS)
+        byS = pd.Series(pd.Categorical([1, 2, 5, 1, 2], ordered=True))
+        bodo.jit(test_by_type)(S, byS)

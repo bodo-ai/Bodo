@@ -28,7 +28,7 @@ from bodo.hiframes.pd_series_ext import (
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
-from bodo.libs.decimal_arr_ext import Decimal128Type
+from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
@@ -1655,6 +1655,10 @@ def overload_series_groupby(
     if is_overload_none(by) and is_overload_none(level):  # pragma: no cover
         raise BodoError("You have to supply one of 'by' and 'level'")
 
+    if not is_overload_none(by) and not is_overload_none(level):  # pragma: no cover
+        raise BodoError(
+            "Series.groupby(): 'level' argument should be None if 'by' is not None"
+        )
     if not is_overload_none(level):
         # NOTE: pandas seems to ignore the 'by' argument if level is provided
 
@@ -1693,9 +1697,20 @@ def overload_series_groupby(
 
         return impl_index
 
-    if not is_overload_none(level):  # pragma: no cover
+    # TODO: probably move to dataframe.groupby
+    # TODO: [BE-347] support by argument type to be array/series of nullable int/decimal
+    by_dtype = by
+    if isinstance(by, SeriesType):
+        by_dtype = by.data
+    if isinstance(by_dtype, (IntegerArrayType, DecimalArrayType)):
         raise BodoError(
-            "Series.groupby(): 'level' argument should be None if 'by' is not None"
+            "Series.groupby(): by argument with nullable integer type is not supported yet."
+        )
+
+    # TODO: [BE-347] support by argument type to be categorical
+    if isinstance(by, bodo.hiframes.pd_categorical_ext.CategoricalArray):
+        raise BodoError(
+            "Series.groupby(): by argument with categorical type is not supported yet."
         )
 
     def impl(

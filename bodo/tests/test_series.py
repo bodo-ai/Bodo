@@ -2322,6 +2322,77 @@ def test_series_map_args(memory_leak_check):
         bodo.jit(test_wrong_func)(S)
 
 
+# TODO: add memory_leak_check after fix its failure with Categorical
+@pytest.mark.slow
+def test_series_groupby_supported_types(series_val):
+    """ Test Series.groupby with all Bodo supported Types """
+
+    def test_impl(S):
+        return S.groupby(level=0).max()
+
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        series_val = series_val.cat.as_ordered()
+
+    # TODO: [BE-346] Gives nan with array of lists.
+    # series_val16: bodo_output: [nan, nan, nan, nan, nan]
+    if isinstance(series_val.values[0], list):
+        return
+
+    check_func(
+        test_impl,
+        (series_val,),
+        check_names=False,
+        sort_output=True,
+        reset_index=True,
+        check_categorical=False,  # Bodo keeps categorical type, Pandas changes series type
+        check_dtype=False,
+    )
+
+
+@pytest.mark.slow
+def test_series_groupby_by_arg_supported_types(series_val, memory_leak_check):
+    """ Test Series.groupby by argument with all Bodo supported Types """
+
+    def test_impl_by(S, byS):
+        return S.groupby(byS).mean()
+
+    # TODO: [BE-347]
+    if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
+        return
+
+    if isinstance(series_val.values[0], list):
+        return
+
+    if isinstance(series_val.dtype, pd.CategoricalDtype):
+        return
+
+    # not supported for Decimal yet, TODO: support and test
+    if isinstance(series_val.values[0], Decimal):
+        return
+
+    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        return
+
+    # matches length for both series_val and by argument
+    if len(series_val) > 5:
+        series_val = series_val[:5]
+
+    S = pd.Series([390.0, 350.0, 30.0, 20.0, 5.5])
+    check_func(
+        test_impl_by,
+        (S, series_val.values),
+        check_names=False,
+        sort_output=True,
+        reset_index=True,
+    )
+
+    # TODO: [BE-347] support boolean arrays for `by` argument
+    # def test_impl_by_types(S):
+    #    return S.groupby(S>100).mean()
+    # S = pd.Series([390., 350., 30., 20.])
+    # check_func(test_impl_by_types, (S, ))
+
+
 @pytest.mark.parametrize(
     "S",
     [
