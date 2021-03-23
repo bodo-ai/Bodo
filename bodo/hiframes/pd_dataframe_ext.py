@@ -3637,7 +3637,6 @@ dataframe_unsupported = {
     "from_dict",
     "reindex_like",
     "pivot",
-    "notnull",
     "clip",
     "slice_shift",
     "tz_convert",

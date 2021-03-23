@@ -551,7 +551,7 @@ Conversion:
 * :meth:`pandas.DataFrame.isna`
 * :meth:`pandas.DataFrame.isnull`
 * :meth:`pandas.DataFrame.notna`
-
+* :meth:`pandas.DataFrame.notnull`
 
 Indexing, iteration:
 

@@ -405,6 +405,7 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
 
 
 @overload_method(DataFrameType, "notna", inline="always", no_unliteral=True)
+@overload_method(DataFrameType, "notnull", inline="always", no_unliteral=True)
 def overload_dataframe_notna(df):
     # call notna() on column Series
     data_args = ", ".join(
