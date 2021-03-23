@@ -37,7 +37,7 @@ def test_np_unique(memory_leak_check):
         pd.date_range("2017-01-03", "2017-01-17").date,
         [datetime.date(2019, 3, 3)] * 10,
     )
-    check_func(impl, (arr,), sort_output=True)
+    check_func(impl, (arr,), sort_output=True, is_out_distributed=False)
 
 
 # TODO: fix memory leak and add memory_leak_check

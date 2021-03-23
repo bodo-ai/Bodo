@@ -95,7 +95,7 @@ def test_np_unique(memory_leak_check):
 
     # Create an array here because np.unique fails on NA in pandas
     arr = pd.array(np.array([1, 4, 2, 3, 10, -4, 4], np.uint8))
-    check_func(impl, (arr,), sort_output=True)
+    check_func(impl, (arr,), sort_output=True, is_out_distributed=False)
 
 
 def test_np_sort(memory_leak_check):

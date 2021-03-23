@@ -98,7 +98,7 @@ def test_np_unique(memory_leak_check):
             Decimal("1.113"),
         ]
     )
-    check_func(impl, (arr,), sort_output=True)
+    check_func(impl, (arr,), sort_output=True, is_out_distributed=False)
 
 
 @pytest.mark.slow

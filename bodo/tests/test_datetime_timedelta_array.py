@@ -43,7 +43,7 @@ def test_np_unique(memory_leak_check):
         datetime.timedelta(days=5, seconds=4, weeks=4),
         [datetime.timedelta(microseconds=100000001213131, hours=5)] * 5,
     )
-    check_func(impl, (arr,), sort_output=True)
+    check_func(impl, (arr,), sort_output=True, is_out_distributed=False)
 
 
 # TODO: fix memory leak and add memory_leak_check

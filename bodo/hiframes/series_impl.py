@@ -1827,7 +1827,8 @@ def overload_series_unique(S):
     # TODO: refactor, support dt64
     def impl(S):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        return bodo.libs.array_kernels.unique(arr)
+        arr_q = bodo.libs.array_kernels.unique(arr)
+        return bodo.allgatherv(arr_q, False)
 
     return impl
 

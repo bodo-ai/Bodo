@@ -3605,7 +3605,7 @@ def test_series_unique(series_val, memory_leak_check):
         return A.unique()
 
     # sorting since output order is not consistent
-    check_func(test_impl, (series_val,), sort_output=True)
+    check_func(test_impl, (series_val,), sort_output=True, is_out_distributed=False)
 
 
 def test_series_describe(numeric_series_val, memory_leak_check):

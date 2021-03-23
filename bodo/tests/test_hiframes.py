@@ -288,13 +288,13 @@ class TestHiFrames(unittest.TestCase):
         S[2] = 0
         self.assertEqual(set(bodo_func(S)), set(test_impl(S)))
 
-    def test_unique_parallel(self):
+    def test_drop_duplicates_parallel(self):
         # TODO: test without file
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
             df = pd.read_parquet(fname)
-            return (df.four.unique() == 3.0).sum()
+            return (df.four.drop_duplicates() == 3.0).sum()
 
         bodo_func = bodo.jit(test_impl)
         self.assertEqual(bodo_func(), test_impl())
@@ -309,13 +309,13 @@ class TestHiFrames(unittest.TestCase):
         n = 1001
         self.assertEqual(set(bodo_func(n)), set(test_impl(n)))
 
-    def test_unique_str_parallel(self):
+    def test_drop_duplicates_str_parallel(self):
         # TODO: test without file
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
 
         def test_impl():
             df = pd.read_parquet(fname)
-            return (df.two.unique() == "foo").sum()
+            return (df.two.drop_duplicates() == "foo").sum()
 
         bodo_func = bodo.jit(test_impl)
         self.assertEqual(bodo_func(), test_impl())

@@ -107,7 +107,8 @@ and parallelize.
 #. Numpy array manipulation functions:
 
     * :func:`numpy.sort`
-    * :func:`numpy.unique` see :ref:`unique-parallelization`
+    * :func:`numpy.unique` the output is assumed to be "small" relative to input and is replicated.
+    Use Series.drop_duplicates() if the output should remain distributed.
     * :func:`numpy.where` (1 and 3 arguments)
     * :func:`numpy.union1d`
     * :func:`numpy.intersect1d` (no distributed support yet)
