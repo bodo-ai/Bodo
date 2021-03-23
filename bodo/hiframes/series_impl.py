@@ -2041,10 +2041,11 @@ def overload_series_fillna(
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):
         raise BodoError("Series.min(): axis argument not supported")
-
+    elif is_iterable_type(value) and not isinstance(value, SeriesType):
+        raise BodoError('Series.fillna(): "value" parameter cannot be a list')
     # Pandas doesn't support fillna for non-scalar values as of 1.1.0
     # TODO(ehsan): revisit when supported in Pandas
-    if is_var_size_item_array_type(S.data) and not S.dtype == bodo.string_type:
+    elif is_var_size_item_array_type(S.data) and not S.dtype == bodo.string_type:
         raise BodoError(
             f"Series.fillna() with inplace=True not supported for {S.dtype} values yet"
         )
@@ -2095,9 +2096,11 @@ def overload_series_fillna(
                         bodo.libs.array_kernels.setna(out_arr, i)
                         continue
                     if bodo.libs.array_kernels.isna(in_arr, i):
-                        out_arr[i] = fill_arr[i]
+                        out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(
+                            fill_arr[i]
+                        )
                         continue
-                    out_arr[i] = in_arr[i]
+                    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(in_arr[i])
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return fillna_series_impl
@@ -2111,13 +2114,14 @@ def overload_series_fillna(
             limit=None,
             downcast=None,
         ):  # pragma: no cover
+            value = bodo.utils.conversion.unbox_if_timestamp(value)
             in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             n = len(in_arr)
             out_arr = bodo.utils.utils.alloc_type(n, _dtype, (-1,))
             for i in numba.parfors.parfor.internal_prange(n):
-                s = in_arr[i]
+                s = bodo.utils.conversion.unbox_if_timestamp(in_arr[i])
                 if bodo.libs.array_kernels.isna(in_arr, i):
                     s = value
                 out_arr[i] = s

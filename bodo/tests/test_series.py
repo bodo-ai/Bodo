@@ -189,44 +189,83 @@ def test_series_cov_ddof(memory_leak_check):
 # TODO: other possible Series types like Categorical, dt64, td64, ...
 @pytest.fixture(
     params=[
-        pd.Series(
-            [
-                Decimal("1.6"),
-                Decimal("-0.2"),
-                Decimal("44.2"),
-                np.nan,
-                Decimal("0"),
-            ]
-        ),
-        pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow),
         pytest.param(
-            pd.Series([True, False, False, True, True]), marks=pytest.mark.slow
+            pd.Series(
+                [
+                    Decimal("1.6"),
+                    Decimal("-0.2"),
+                    Decimal("44.2"),
+                    np.nan,
+                    Decimal("0"),
+                ]
+            ),
+            id="series_val0",
+        ),
+        pytest.param(
+            pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow, id="series_val1"
+        ),
+        pytest.param(
+            pd.Series([True, False, False, True, True]),
+            marks=pytest.mark.slow,
+            id="series_val2",
         ),  # bool array without NA
-        pd.Series([True, False, False, np.nan, True]),  # bool array with NA
         pytest.param(
-            pd.Series([1, 8, 4, 0, 3], dtype=np.uint8), marks=pytest.mark.slow
+            pd.Series([True, False, False, np.nan, True]), id="series_val3"
+        ),  # bool array with NA
+        pytest.param(
+            pd.Series([1, 8, 4, 0, 3], dtype=np.uint8),
+            marks=pytest.mark.slow,
+            id="series_val4",
         ),
-        pd.Series([1, 8, 4, 10, 3], dtype="Int32"),
-        pytest.param(pd.Series([1, 8, 4, -1, 2], name="ACD"), marks=pytest.mark.slow),
+        pytest.param(pd.Series([1, 8, 4, 10, 3], dtype="Int32"), id="series_val5"),
         pytest.param(
-            pd.Series([1, 8, 4, 1, -3], [3, 7, 9, 2, 1]), marks=pytest.mark.slow
+            pd.Series([1, 8, 4, -1, 2], name="ACD"),
+            marks=pytest.mark.slow,
+            id="series_val6",
         ),
-        pd.Series([1.1, np.nan, 4.2, 3.1, -3.5], [3, 7, 9, 2, 1], name="AAC"),
-        pd.Series([1, 2, 3, -1, 6], ["A", "BA", "", "DD", "GGG"]),
         pytest.param(
-            pd.Series(["A", "B", "CDD", "AA", "GGG"]), marks=pytest.mark.slow
+            pd.Series([1, 8, 4, 1, -3], [3, 7, 9, 2, 1]),
+            marks=pytest.mark.slow,
+            id="series_val7",
+        ),
+        pytest.param(
+            pd.Series(
+                [1.1, np.nan, 4.2, 3.1, -3.5], [3, 7, 9, 2, 1], name="series_val8"
+            ),
+        ),
+        pytest.param(
+            pd.Series([1, 2, 3, -1, 6], ["A", "BA", "", "DD", "GGG"]), id="series_val9"
+        ),
+        pytest.param(
+            pd.Series(["A", "B", "CDD", "AA", "GGG"]),
+            marks=pytest.mark.slow,
+            id="series_val10",
         ),  # TODO: string with Null (np.testing fails)
-        pd.Series(["A", "B", "CG", "ACDE", "C"], [4, 7, 0, 1, -2]),
-        pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
-        pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date),
-        pd.Series(
-            [
-                datetime.timedelta(3, 3, 3),
-                datetime.timedelta(2, 2, 2),
-                datetime.timedelta(1, 1, 1),
-                np.nan,
-                datetime.timedelta(5, 5, 5),
-            ]
+        pytest.param(
+            pd.Series(["A", "B", "CG", "ACDE", "C"], [4, 7, 0, 1, -2]),
+            id="series_val11",
+        ),
+        pytest.param(
+            pd.Series(pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)),
+            id="series_val12",
+        ),
+        pytest.param(
+            pd.Series(
+                pd.date_range(start="2018-04-24", end="2018-04-29", periods=5).date
+            ),
+            id="series_val13",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    datetime.timedelta(3, 3, 3),
+                    datetime.timedelta(2, 2, 2),
+                    datetime.timedelta(1, 1, 1),
+                    None,
+                    datetime.timedelta(5, 5, 5),
+                ]
+            ),
+            id="series_val14",
         ),
         pytest.param(
             pd.Series(
@@ -234,21 +273,55 @@ def test_series_cov_ddof(memory_leak_check):
                 pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
             ),
             marks=pytest.mark.slow,
+            id="series_val15",
         ),
-        pd.Series([["a", "bc"], ["a"], ["aaa", "b", "cc"], None, ["xx", "yy"]]),
-        pd.Series([[1, 2], [3], [5, 4, 6], None, [-1, 3, 4]]),
-        pd.Series(["AA", "BB", "", "AA", None, "AA"], dtype="category"),
-        pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=True)),
-        pd.Series(pd.date_range(start="1/1/2018", end="1/4/2018", periods=4))
-        .append(pd.Series([None]))
-        .astype("category"),
-        pd.Series(pd.timedelta_range(start="1 day", periods=4))
-        .append(pd.Series([None]))
-        .astype(pd.CategoricalDtype(ordered=True)),
+        pytest.param(
+            pd.Series([["a", "bc"], ["a"], ["aaa", "b", "cc"], None, ["xx", "yy"]]),
+            id="series_val16",
+        ),
+        pytest.param(
+            pd.Series([[1, 2], [3], [5, 4, 6], None, [-1, 3, 4]]),
+            id="series_val17",
+        ),
+        pytest.param(
+            pd.Series(["AA", "BB", "", "AA", None, "AA"], dtype="category"),
+            id="series_val18",
+        ),
+        pytest.param(
+            pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=True)),
+            id="series_val19",
+        ),
+        pytest.param(
+            pd.Series(pd.date_range(start="1/1/2018", end="1/4/2018", periods=4))
+            .append(pd.Series([None]))
+            .astype("category"),
+            id="series_val20",
+        ),
+        pytest.param(
+            pd.Series(pd.timedelta_range(start="1 day", periods=4))
+            .append(pd.Series([None]))
+            .astype(pd.CategoricalDtype(ordered=True)),
+            id="series_val21",
+        ),
     ]
 )
 def series_val(request):
     return request.param
+
+
+def test_series_fillna_series_val(series_val):
+    def impl(S):
+        val = S.iat[0]
+        return S.fillna(val)
+
+    if isinstance(series_val.iat[0], list):
+        message = '"value" parameter cannot be a list'
+        with pytest.raises(BodoError, match=message):
+            bodo.jit(impl)(series_val)
+    else:
+        # TODO: Set dist_test=True once distributed getitem is supported
+        # for Nullable and Categorical
+        check_func(impl, (series_val,), dist_test=False, check_dtype=False)
 
 
 def test_series_concat(series_val, memory_leak_check):
