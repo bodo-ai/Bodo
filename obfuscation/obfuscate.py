@@ -71,7 +71,9 @@ import sys
 
 import astor
 
-list_reserved_keywords = {
+reserved_keywords = {
+    "async",
+    "await",
     "False",
     "class",
     "finally",
@@ -300,14 +302,14 @@ class Obfuscator(ast.NodeTransformer):
             newname = random_string(3, 10)
             if (
                 not newname in self.replacement_vars
-                and not newname in list_reserved_keywords
+                and not newname in reserved_keywords
             ):
                 self.replacement_vars.add(newname)
                 return newname
 
     def mapping_var(self, insert_as_replaceable, name):
         if self.processing_pass == 0:
-            if insert_as_replaceable and not name in list_reserved_keywords:
+            if insert_as_replaceable and not name in reserved_keywords:
                 if not name in self.replace_vars:
                     newname = self.obfuscate_local(name)
                     self.replace_vars[name] = newname
