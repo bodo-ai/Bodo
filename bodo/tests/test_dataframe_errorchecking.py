@@ -40,7 +40,7 @@ def test_df_iat_getitem_str(memory_leak_check):
         bodo.jit(test_impl)()
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_df_iat_setitem_nonconstant(memory_leak_check):
     """
     Tests DataFrame.iat setitem when the column index isn't a constant.
@@ -58,7 +58,7 @@ def test_df_iat_setitem_nonconstant(memory_leak_check):
         bodo.jit(test_impl)([0])
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_df_iat_setitem_str(memory_leak_check):
     """
     Tests DataFrame.iat setitem when the row index isn't an integer.
@@ -76,7 +76,7 @@ def test_df_iat_setitem_str(memory_leak_check):
         bodo.jit(test_impl)()
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_df_iat_setitem_immutable_array(memory_leak_check):
     """
     Tests DataFrame.iat setitem with an immutable array.

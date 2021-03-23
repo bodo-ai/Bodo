@@ -197,7 +197,7 @@ def test_series_groupby_by_arg_unsupported_types(memory_leak_check):
         bodo.jit(test_by_type)(S, byS)
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_series_idxmax_unordered_cat(memory_leak_check):
     def impl(S):
         return S.idxmax()
@@ -209,7 +209,7 @@ def test_series_idxmax_unordered_cat(memory_leak_check):
         bodo.jit(impl)(S)
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_series_idxmin_unordered_cat(memory_leak_check):
     def impl(S):
         return S.idxmin()
@@ -219,3 +219,23 @@ def test_series_idxmin_unordered_cat(memory_leak_check):
     match = "Series.idxmin.*: only ordered categoricals are possible"
     with pytest.raises(BodoError, match=match):
         bodo.jit(impl)(S)
+
+
+def test_series_groupby_max_min_cat_unordered(memory_leak_check):
+    def test_impl1(S):
+        return S.groupby(level=0).max()
+
+    def test_impl2(S):
+        return S.groupby(level=0).min()
+
+    S = pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=False))
+    with pytest.raises(
+        BodoError,
+        match="categorical column must be ordered in groupby built-in function",
+    ):
+        bodo.jit(test_impl1)(S)
+    with pytest.raises(
+        BodoError,
+        match="categorical column must be ordered in groupby built-in function",
+    ):
+        bodo.jit(test_impl2)(S)

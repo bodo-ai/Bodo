@@ -1722,7 +1722,7 @@ def test_np_io14(datapath, memory_leak_check):
 
 
 # TODO(Nick): Add a test for Parallel version with both offset and count.
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_np_io_sep_unsupported(datapath, memory_leak_check):
     fname = datapath("np_file1.dat")
 

@@ -158,7 +158,7 @@ def test_setitem_cat_array_compile_time_err(cat_arr_value):
 
 
 # TODO: Add memory leak check when constant lowering memory leak is fixed.
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_setitem_cat_array_runtime(cat_arr_value):
     """
     Tests setitem for Categorical Arrays with Categorical

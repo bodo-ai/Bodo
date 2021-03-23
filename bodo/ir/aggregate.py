@@ -1692,15 +1692,15 @@ def gen_top_level_agg_func(
     for i in range(len(out_names)):
         out_name = out_names[i] + "_dummy"
         out_col_typ = out_col_typs[i]
-        # Shift maintains the same output and input type
-        # We handle shift separately with Categorical data because if a
+        # Shift, Min, and Max maintain the same output and input type
+        # We handle these separately with Categorical data because if a
         # CategoricalArray doesn't have types known at compile time then
         # we must associate it with another DType that has it's categories
         # set at runtime. The existing approach for other types just uses
         # Typerefs and those can't be resolved.
         if (
             isinstance(agg_func, pytypes.SimpleNamespace)
-            and agg_func.fname == "shift"
+            and agg_func.fname in ["min", "max", "shift"]
             and isinstance(out_col_typ, bodo.CategoricalArray)
         ):
             func_text += "    {} = {}\n".format(out_name, in_names[i])

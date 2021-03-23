@@ -1196,6 +1196,64 @@ def test_agg_multi_udf(memory_leak_check):
     check_func(impl4, (df,), sort_output=True)
 
 
+def test_series_groupby_max_min_cat(memory_leak_check):
+    """
+    Tests support for GroupBy.max/min on Ordered Categorical Data. This tests
+    both categories known and unknown at compile time.
+    """
+
+    def test_impl1(S):
+        return S.groupby(level=0).max()
+
+    def test_impl2(S):
+        return S.groupby(level=0).min()
+
+    def test_impl3(S):
+        # Generate categories at runtime
+        cats = np.sort(bodo.allgatherv(S.dropna().unique()))
+        S = pd.Series(pd.Categorical(S, cats, ordered=True))
+        return S.groupby(level=0).max()
+
+    def test_impl4(S):
+        # Generate categories at runtime
+        cats = np.sort(bodo.allgatherv(S.dropna().unique()))
+        S = pd.Series(pd.Categorical(S, cats, ordered=True))
+        return S.groupby(level=0).min()
+
+    S1 = pd.Series(pd.Categorical([1, 2, 5, None, 2] * 4, ordered=True))
+    S2 = pd.Series(pd.array([1, 2, 5, None, 2] * 4))
+    check_func(
+        test_impl1,
+        (S1,),
+        sort_output=True,
+        py_output=test_impl1(S1).astype(S1.dtype),
+        check_names=False,
+    )
+    check_func(
+        test_impl2,
+        (S1,),
+        sort_output=True,
+        py_output=test_impl2(S1).astype(S1.dtype),
+        check_names=False,
+    )
+    check_func(
+        test_impl3,
+        (S2,),
+        sort_output=True,
+        reset_index=True,
+        py_output=test_impl1(S1).astype(S1.dtype),
+        check_names=False,
+    )
+    check_func(
+        test_impl4,
+        (S2,),
+        sort_output=True,
+        reset_index=True,
+        py_output=test_impl2(S1).astype(S1.dtype),
+        check_names=False,
+    )
+
+
 @pytest.mark.slow
 def test_aggregate(memory_leak_check):
     """

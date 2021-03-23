@@ -1008,7 +1008,7 @@ def test_bad_setitem(mutable_bodo_arr):
             bodo.jit(test_impl_list_like)(mutable_bodo_arr, ind)
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_numpy_contains_inline(memory_leak_check):
     """Checks that we inline the in operator if a valid impl exists
     supported by Bodo (not Numba)."""

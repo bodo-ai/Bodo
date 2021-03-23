@@ -1156,7 +1156,7 @@ def test_df_head(df_value, memory_leak_check):
     check_func(impl, (df_value,), is_out_distributed=False)
 
 
-# TODO: Mark as slow
+@pytest.mark.slow
 def test_df_head_no_args(memory_leak_check):
     """
     Test that df.head() works with the default args.
@@ -1176,7 +1176,7 @@ def test_df_tail(df_value, memory_leak_check):
     check_func(impl, (df_value,), is_out_distributed=False)
 
 
-# TODO: Mark as slow
+@pytest.mark.slow
 def test_df_tail_no_args(memory_leak_check):
     """
     Test that df.tail() works with the default args.
@@ -2102,7 +2102,7 @@ def test_dataframe_binary_op(op, memory_leak_check):
     check_func(test_impl, (2, df))
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 @pytest.mark.parametrize("op", (operator.eq, operator.ne))
 def test_dataframe_binary_comp_op_diff_types(op, memory_leak_check):
     """
@@ -2670,7 +2670,7 @@ def test_df_apply_name_homogeneous(memory_leak_check):
     check_func(test_impl, (df,))
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_df_apply_name_datetime_index(memory_leak_check):
     """
     Check that you can get name information from DataFrame.apply with
@@ -2687,7 +2687,7 @@ def test_df_apply_name_datetime_index(memory_leak_check):
     check_func(test_impl, (df,))
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_df_apply_name_timedelta_index(memory_leak_check):
     """
     Check that you can get name information from DataFrame.apply with

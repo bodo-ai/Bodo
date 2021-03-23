@@ -348,6 +348,14 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
                     ),
                 )
         else:
+            if isinstance(in_dtype, bodo.PDCategoricalDtype):
+                if func_name in ("min", "max") and not in_dtype.ordered:
+                    return (
+                        None,
+                        "categorical column must be ordered in groupby built-in function {}".format(
+                            func_name
+                        ),
+                    )
             if func_name not in {
                 "count",
                 "nunique",
@@ -521,7 +529,6 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     for x, y in zip(out_columns, out_column_type)
                     if y != ColumnType.NonNumericalColumn.value
                 ]
-
         nb_drop = len(list_err_msg)
         if len(out_data) == 0:
             if nb_drop == 0:

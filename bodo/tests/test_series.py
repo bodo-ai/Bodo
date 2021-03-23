@@ -917,7 +917,7 @@ def test_series_iat_setitem(series_val, memory_leak_check):
     check_func(test_impl, (series_val, val), copy_input=True, dist_test=False)
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_series_iat_setitem_datetime(memory_leak_check):
     """
     Test that series.iat supports datetime.date, datetime.datetime, and datetime.timedelta
@@ -1034,7 +1034,7 @@ def test_series_loc_getitem_int_range(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
     """Tests that setitem with Series.loc works with a Boolean List index"""
 
@@ -1108,7 +1108,7 @@ def test_series_diff(numeric_series_val, memory_leak_check):
         check_func(impl, (numeric_series_val,))
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_series_iloc_setitem_datetime_scalar(memory_leak_check):
     """
     Test that series.iloc supports datetime.date, datetime.datetime, and datetime.timedelta
@@ -2346,8 +2346,8 @@ def test_series_apply_args(memory_leak_check):
         bodo.jit(test_wrong_func)(S)
 
 
-# TODO: Mark as slow after CI passes
 # TODO: Add memory leak check once constant lowering memory leak is fixed
+@pytest.mark.slow
 def test_series_map_supported_types(series_val):
     """ Test Series.map with all Bodo supported Types """
 
@@ -3348,7 +3348,7 @@ def test_series_tail(series_val, memory_leak_check):
     check_func(test_impl, (series_val,), False)
 
 
-# TODO: Mark as slow
+@pytest.mark.slow
 def test_series_tail_default_args(memory_leak_check):
     """
     Test that series.tail() works with the default args.
@@ -4033,7 +4033,7 @@ def test_series_to_dict(memory_leak_check):
     check_func(impl, (S_index,), only_seq=True)
 
 
-# TODO: Mark as slow after Sonar passes.
+@pytest.mark.slow
 def test_series_replace_dict_float(memory_leak_check):
     """
     Specific test for replace_dict with floats. This isn't setup using pytest
