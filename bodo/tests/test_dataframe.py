@@ -3325,15 +3325,25 @@ def test_df_dropna_df_value(df_value):
     def impl(df):
         return df.dropna()
 
-    if any(
-        isinstance(col, pd.core.dtypes.dtypes.CategoricalDtype)
-        for col in df_value.dtypes
-    ):
-        match = "Categorical columns are currently not supported"
-        with pytest.raises(BodoError, match=match):
-            bodo.jit(impl)(df_value)
-    else:
-        check_func(impl, (df_value,))
+    check_func(impl, (df_value,))
+
+
+@pytest.mark.slow
+def test_df_dropna_cat_unknown():
+    """Test df.dropna() with a categorical column not known at compile time."""
+
+    def impl(df):
+        df["B"] = df["B"].astype("category")
+        return df.dropna()
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 1, 1, 4, 5],
+            "B": ["LB1", "LB2", "LB1", None, "LB2"],
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5],
+        }
+    )
+    check_func(impl, (df,), copy_input=True)
 
 
 def test_df_dropna(memory_leak_check):

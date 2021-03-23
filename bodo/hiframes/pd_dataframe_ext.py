@@ -2663,14 +2663,6 @@ def dropna_overload(df, axis=0, how="any", thresh=None, subset=None, inplace=Fal
                 )
             subset_ints.append(df.columns.index(s))
 
-    if any(
-        isinstance(col_type.dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype)
-        for col_type in df.data
-    ):
-        raise_bodo_error(
-            "DataFrame.dropna(): Categorical columns are currently not supported"
-        )
-
     n_cols = len(df.columns)
     data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
 

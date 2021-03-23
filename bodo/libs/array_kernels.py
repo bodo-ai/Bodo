@@ -814,21 +814,22 @@ def overload_dropna(data, how, thresh, subset):
     func_text = "def _dropna_imp(data, how, thresh, subset):\n"
     func_text += "  old_len = len(data[0])\n"
     func_text += "  new_len = 0\n"
-    for i in range(n_data_arrs):
-        func_text += "  nested_counts_{0} = init_nested_counts(d{0})\n".format(i)
     func_text += "  for i in range(old_len):\n"
     func_text += "    if {}:\n".format(isna_check)
-    for i in range(n_data_arrs):
-        func_text += "      if not isna(data[{}], i):\n".format(i)
-        func_text += "        nested_counts_{0} = add_nested_counts(nested_counts_{0}, data[{0}][i])\n".format(
-            i
-        )
     func_text += "      new_len += 1\n"
     # allocate new arrays
     for i, out in enumerate(out_names):
-        func_text += "  {0} = bodo.utils.utils.alloc_type(new_len, t{1}, nested_counts_{1})\n".format(
-            out, i
-        )
+        # Add a check for categorical, if so use data[{i}].dtype
+        if isinstance(data[i], bodo.CategoricalArray):
+            func_text += "  {0} = bodo.utils.utils.alloc_type(new_len, data[{1}], (-1,))\n".format(
+                out, i
+            )
+        else:
+            func_text += (
+                "  {0} = bodo.utils.utils.alloc_type(new_len, t{1}, (-1,))\n".format(
+                    out, i
+                )
+            )
     func_text += "  curr_ind = 0\n"
     func_text += "  for i in range(old_len):\n"
     func_text += "    if {}:\n".format(isna_check)
@@ -842,7 +843,6 @@ def overload_dropna(data, how, thresh, subset):
     loc_vars = {}
     # pass data types to generated code
     _globals = {"t{}".format(i): t for i, t in enumerate(data.types)}
-    _globals.update({"d{}".format(i): t.dtype for i, t in enumerate(data.types)})
     _globals.update(
         {
             "isna": isna,
