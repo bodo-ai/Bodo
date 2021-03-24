@@ -228,6 +228,16 @@ def test_df_select_dtypes_str_include(select_dtypes_df):
     check_func(test_impl2, (df,))
 
 
+def test_df_select_dtypes_bool_include():
+    def test_impl():
+        df = pd.DataFrame(
+            {"a": [1, 2] * 20, "b": [True, False] * 20, "c": [1.0, 2.0] * 20}
+        )
+        return df.select_dtypes(["bool"])
+
+    check_func(test_impl, (), only_seq=True)
+
+
 def test_df_select_dtypes_str_exclude(select_dtypes_df):
     df = select_dtypes_df
 
@@ -1141,6 +1151,7 @@ def test_df_notna(df_value, memory_leak_check):
 
     check_func(impl, (df_value,))
 
+
 @pytest.mark.smoke
 def test_df_notnull(df_value, memory_leak_check):
     # TODO: test dt64 NAT, categorical, etc.
@@ -1148,6 +1159,7 @@ def test_df_notnull(df_value, memory_leak_check):
         return df.notnull()
 
     check_func(impl, (df_value,))
+
 
 def test_df_head(df_value, memory_leak_check):
     def impl(df):
@@ -2239,6 +2251,7 @@ def test_pd_notna(na_test_obj, memory_leak_check):
     is_out_distributed = bodo.utils.utils.is_distributable_typ(bodo.typeof(obj))
     check_func(impl, (obj,), is_out_distributed)
 
+
 @pytest.mark.slow
 def test_pd_notnull(null_test_obj, memory_leak_check):
     obj = null_test_obj
@@ -2248,6 +2261,7 @@ def test_pd_notnull(null_test_obj, memory_leak_check):
 
     is_out_distributed = bodo.utils.utils.is_distributable_typ(bodo.typeof(obj))
     check_func(impl, (obj,), is_out_distributed)
+
 
 def test_pd_isna_getitem(memory_leak_check):
     """test support for NA check for array values, e.g. pd.isna(A[i]) pattern matching

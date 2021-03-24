@@ -225,9 +225,6 @@ def _get_series_array_type(dtype):
     if isinstance(dtype, IntDtype):
         return IntegerArrayType(dtype.dtype)
 
-    if dtype == types.bool_:
-        return boolean_array
-
     if dtype == datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type
 
