@@ -1789,8 +1789,7 @@ def compute_pd_timestamp(totmicrosec, nanosecond):  # pragma: no cover
     )
 
 
-@overload(operator.sub, no_unliteral=True)
-def timestamp_sub(lhs, rhs):
+def overload_sub_operator_timestamp(lhs, rhs):
     if lhs == pandas_timestamp_type and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover

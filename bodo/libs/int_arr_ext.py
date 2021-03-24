@@ -810,7 +810,15 @@ _install_np_ufuncs()
 
 ####################### binary operators ###############################
 
-skips = [operator.lt, operator.le, operator.eq, operator.ne, operator.gt, operator.ge]
+skips = [
+    operator.lt,
+    operator.le,
+    operator.eq,
+    operator.ne,
+    operator.gt,
+    operator.ge,
+    operator.sub,
+]
 
 
 def _install_binary_ops():

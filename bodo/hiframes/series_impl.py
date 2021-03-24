@@ -3069,11 +3069,13 @@ def create_binary_op_overload(op):
     return overload_series_binary_op
 
 
+skips = [operator.sub, operator.add] + list(explicit_binop_funcs_single.keys())
+
+
 def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
     for op in bodo.hiframes.pd_series_ext.series_binary_ops:
-        # skip comparison operators
-        if op in explicit_binop_funcs_single:
+        if op in skips:
             continue
         overload_impl = create_binary_op_overload(op)
         # NOTE: cannot use inline="always". See test_pd_categorical

@@ -461,22 +461,21 @@ def pd_datetimeindex_overload(
     return f
 
 
-@overload(operator.sub, no_unliteral=True)
-def overload_datetime_index_sub(arg1, arg2):
+def overload_sub_operator_datetime_index(lhs, rhs):
     # DatetimeIndex - Timestamp
     if (
-        isinstance(arg1, DatetimeIndexType)
-        and arg2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+        isinstance(lhs, DatetimeIndexType)
+        and rhs == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
     ):
         timedelta64_dtype = np.dtype("timedelta64[ns]")
 
-        def impl(arg1, arg2):  # pragma: no cover
+        def impl(lhs, rhs):  # pragma: no cover
             numba.parfors.parfor.init_prange()
-            in_arr = bodo.hiframes.pd_index_ext.get_index_data(arg1)
-            name = bodo.hiframes.pd_index_ext.get_index_name(arg1)
+            in_arr = bodo.hiframes.pd_index_ext.get_index_data(lhs)
+            name = bodo.hiframes.pd_index_ext.get_index_name(lhs)
             n = len(in_arr)
             S = np.empty(n, timedelta64_dtype)
-            tsint = arg2.value
+            tsint = rhs.value
             for i in numba.parfors.parfor.internal_prange(n):
                 S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
                     bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i]) - tsint
@@ -487,18 +486,18 @@ def overload_datetime_index_sub(arg1, arg2):
 
     # Timestamp - DatetimeIndex
     if (
-        isinstance(arg2, DatetimeIndexType)
-        and arg1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+        isinstance(rhs, DatetimeIndexType)
+        and lhs == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
     ):
         timedelta64_dtype = np.dtype("timedelta64[ns]")
 
-        def impl(arg1, arg2):  # pragma: no cover
+        def impl(lhs, rhs):  # pragma: no cover
             numba.parfors.parfor.init_prange()
-            in_arr = bodo.hiframes.pd_index_ext.get_index_data(arg2)
-            name = bodo.hiframes.pd_index_ext.get_index_name(arg2)
+            in_arr = bodo.hiframes.pd_index_ext.get_index_data(rhs)
+            name = bodo.hiframes.pd_index_ext.get_index_name(rhs)
             n = len(in_arr)
             S = np.empty(n, timedelta64_dtype)
-            tsint = arg1.value
+            tsint = lhs.value
             for i in numba.parfors.parfor.internal_prange(n):
                 S[i] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
                     tsint - bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
