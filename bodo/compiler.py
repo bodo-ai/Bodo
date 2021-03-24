@@ -4,6 +4,7 @@ Defines Bodo's compiler pipeline.
 """
 import os
 import warnings
+from collections import namedtuple
 
 import numba
 from numba.core import ir, ir_utils
@@ -14,7 +15,7 @@ from numba.core.compiler_machinery import (
     register_pass,
 )
 from numba.core.inline_closurecall import inline_closure_call
-from numba.core.ir_utils import find_callname, get_definition, guard
+from numba.core.ir_utils import find_callname, get_definition, guard, build_definitions
 from numba.core.registry import CPUDispatcher
 from numba.core.typed_passes import (
     DumpParforDiagnostics,
@@ -37,7 +38,7 @@ import bodo.transforms.untyped_pass
 from bodo.transforms.series_pass import SeriesPass
 from bodo.transforms.typing_pass import BodoTypeInference
 from bodo.transforms.untyped_pass import UntypedPass
-from bodo.utils.utils import is_call_assign
+from bodo.utils.utils import is_assign, is_call_assign, is_expr
 
 try:
     import sklearn  # noqa
@@ -263,6 +264,59 @@ class BodoUntypedPass(FunctionPass):
         )
         untyped_pass.run()
         return True
+
+
+def _update_definitions(func_ir, node_list):
+    """update variable definition lists in IR for new list of statements"""
+    loc = ir.Loc("", 0)
+    dumm_block = ir.Block(ir.Scope(None, loc), loc)
+    dumm_block.body = node_list
+    build_definitions({0: dumm_block}, func_ir._definitions)
+
+
+_series_inline_attrs = {"values", "shape", "size", "empty", "name", "index", "dtype"}
+
+
+def bodo_overload_inline_pass(func_ir, typingctx, typemap, calltypes):
+    """inline Bodo overloads to make compilation time faster than with Numba's inliner.
+    Single block functions for example can be inlined faster here.
+
+    Adding all Bodo overloads here is not necessary for correctness, but adding the
+    common functions is important for faster compilation time.
+    """
+    from bodo.hiframes.pd_series_ext import SeriesType
+    from bodo.utils.transform import compile_func_single_block
+
+    TypingInfo = namedtuple(
+        "TypingInfo", ["typingctx", "typemap", "calltypes", "curr_loc"]
+    )
+
+    for block in func_ir.blocks.values():
+        new_body = []
+        for stmt in block.body:
+            if is_assign(stmt) and is_expr(stmt.value, "getattr"):
+                rhs = stmt.value
+                rhs_type = typemap[rhs.value.name]
+                if (
+                    isinstance(rhs_type, SeriesType)
+                    and rhs.attr in _series_inline_attrs
+                ):
+                    func_ir._definitions[stmt.target.name].remove(rhs)
+                    overload_name = "overload_series_" + rhs.attr
+                    overload_func = getattr(bodo.hiframes.series_impl, overload_name)
+                    impl = overload_func(rhs_type)
+                    typing_info = TypingInfo(typingctx, typemap, calltypes, stmt.loc)
+                    nodes = compile_func_single_block(
+                        impl,
+                        (rhs.value,),
+                        stmt.target,
+                        typing_info,
+                    )
+                    _update_definitions(func_ir, nodes)
+                    new_body += nodes
+                    continue
+            new_body.append(stmt)
+        block.body = new_body
 
 
 @register_pass(mutates_CFG=True, analysis_only=False)
