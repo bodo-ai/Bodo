@@ -43,7 +43,7 @@ from bodo.io.fs_io import (
     gcs_list_dir_fnames,
     get_hdfs_fs,
     get_s3_bucket_region_njit,
-    get_s3_fs,
+    get_s3_fs_from_path,
     hdfs_is_directory,
     hdfs_list_dir_fnames,
     s3_is_directory,
@@ -814,7 +814,9 @@ def is_directory_parallel(fpath):
     if bodo.get_rank() == 0:
         try:
             if fpath.startswith("s3://"):
-                isdir = s3_is_directory(get_s3_fs(), fpath)
+                isdir = s3_is_directory(
+                    get_s3_fs_from_path(fpath, parallel=False), fpath
+                )
             elif fpath.startswith("gcs://"):
                 isdir = gcs_is_directory(fpath)
             elif fpath.startswith("hdfs://"):  # pragma: no cover
@@ -845,7 +847,7 @@ def is_nested_parallel(fpath, file_names):
     if bodo.get_rank() == 0:
         try:
             if fpath.startswith("s3://"):
-                fs = get_s3_fs()
+                fs = get_s3_fs_from_path(fpath, parallel=False)
                 for fname in file_names:
                     if fname == os.path.join(fpath, "_delta_log"):
                         continue
@@ -897,7 +899,9 @@ def get_filenames_parallel(path, filter_func):
     if bodo.get_rank() == 0:
         try:
             if path.startswith("s3://"):
-                file_names = s3_list_dir_fnames(get_s3_fs(), path)
+                file_names = s3_list_dir_fnames(
+                    get_s3_fs_from_path(path, parallel=False), path
+                )
             elif path.startswith("hdfs://"):  # pragma: no cover
                 _, file_names = hdfs_list_dir_fnames(path)
             # TODO merge with hdfs when new pyarrow API works with abfs
@@ -1020,7 +1024,7 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
         if len(fs) == 1:
             return fs[0]
         if fpath.startswith("s3://"):
-            fs.append(get_s3_fs())
+            fs.append(get_s3_fs_from_path(fpath, parallel=False))
         elif fpath.startswith("gcs://"):
             google_fs = gcsfs.GCSFileSystem(token=None)
             fs.append(google_fs)
@@ -1051,7 +1055,13 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
             # Note: ParquetDataset has metadata_nthreads parameter but it
             # seems to use Python threads and not make a difference
             if bodo.get_rank() == 0:
-                dataset = pq.ParquetDataset(fpath, filesystem=getfs(), filters=filters)
+                dataset = pq.ParquetDataset(
+                    fpath,
+                    filesystem=getfs(),
+                    filters=filters,
+                    use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
+                )
+  
                 if is_deltalake:
                     # apply the deltalake filter too
                     dataset.pieces = [p for p in dataset.pieces if p.path in file_names]
@@ -1082,14 +1092,22 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
                 myfiles = []
                 for fname in file_names[start:end]:
                     try:
-                        pq.ParquetDataset(fname, filesystem=getfs())
+                        pq.ParquetDataset(
+                            fname,
+                            filesystem=getfs(),
+                            use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
+                        )
                         myfiles.append(fname)
                     except:
                         # this is not a valid parquet file
                         pass
                 subdataset = None
                 if len(myfiles) > 0:
-                    subdataset = pq.ParquetDataset(myfiles, filesystem=getfs())
+                    subdataset = pq.ParquetDataset(
+                        myfiles,
+                        filesystem=getfs(),
+                        use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
+                    )
                     if get_row_counts:
                         for piece in subdataset.pieces:
                             piece._bodo_num_rows = piece.get_metadata().num_rows
@@ -1102,7 +1120,12 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
     else:
         if bodo.get_rank() == 0:
             try:
-                dataset = pq.ParquetDataset(fpath, filesystem=getfs(), filters=filters)
+                dataset = pq.ParquetDataset(
+                    fpath,
+                    filesystem=getfs(),
+                    filters=filters,
+                    use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
+                )
                 if get_row_counts:
                     dataset._bodo_total_rows = 0
                     for piece in dataset.pieces:

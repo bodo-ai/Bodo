@@ -23,7 +23,6 @@ requirements:
     - numba 0.53.0
     - numpy
     - cython
-    - s3fs
     - pandas 1.2.*
     - pyarrow =3.0.0
     - boost-cpp =1.74.0
@@ -45,7 +44,6 @@ requirements:
     - boost-cpp =1.74.0
     - libcurl
     - numba 0.53.0
-    - s3fs
     - mpich =3.3.2=h* # [not win]
     - mpi4py
     - impi_rt # [win]

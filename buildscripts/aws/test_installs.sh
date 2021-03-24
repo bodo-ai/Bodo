@@ -10,7 +10,6 @@ export PATH=$HOME/miniconda3/bin:$PATH
 source activate $CONDA_ENV
 
 
-conda install -y -c conda-forge boto3 botocore s3fs
 conda install -y -c conda-forge pymysql sqlalchemy
 conda install -y -c conda-forge scikit-learn gcsfs
 conda install -y flake8

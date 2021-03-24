@@ -34,22 +34,18 @@ _csv_write = types.ExternalFunction(
 ll.add_symbol("csv_write", csv_cpp.csv_write)
 
 
-def get_s3_fs():
+def get_s3_fs(region=None):
     """
     initialize S3FileSystem with credentials
     """
-    try:
-        import s3fs
-    except:  # pragma: no cover
-        raise BodoError("Reading from s3 requires s3fs currently.")
+    from bodo.io.pyarrow_s3fs_fsspec_wrapper import PyArrowS3FS
 
     custom_endpoint = os.environ.get("AWS_S3_ENDPOINT", None)
     aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
     aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
+    if not region:
+        region = os.environ.get("AWS_DEFAULT_REGION", None)
 
-    # always use s3fs.S3FileSystem.clear_instance_cache()
-    # before initializing S3FileSystem due to inconsistent file system
-    # between to_parquet to read_parquet
     if custom_endpoint is not None and (
         aws_access_key_id is None or aws_secret_access_key is None
     ):  # pragma: no cover
@@ -60,14 +56,31 @@ def get_s3_fs():
                 "AWS_SECRET_ACCESS_KEY is not set."
             )
         )
-    s3fs.core.S3FileSystem.clear_instance_cache()
-    fs = s3fs.core.S3FileSystem(
-        key=aws_access_key_id,
-        secret=aws_secret_access_key,
-        client_kwargs={"endpoint_url": custom_endpoint},
+
+    PyArrowS3FS.clear_instance_cache()
+    fs = PyArrowS3FS(
+        region=region,
+        access_key=aws_access_key_id,
+        secret_key=aws_secret_access_key,
+        endpoint_override=custom_endpoint,
     )
 
     return fs
+
+
+def get_s3_fs_from_path(path, parallel=False):
+    """
+    Get a pyarrow.fs.S3FileSystem object from an S3
+    path, i.e. determine the region and
+    create a FS for that region.
+    The parallel option is passed on to the region detection code.
+    This function is usually called on just rank 0 during compilation,
+    hence parallel=False by default.
+    """
+    region = get_s3_bucket_region_njit(path, parallel=parallel)
+    if region == "":
+        region = None
+    return get_s3_fs(region)
 
 
 # hdfs related functions(hdfs_list_dir_fnames) should be included in
@@ -131,29 +144,36 @@ def s3_is_directory(fs, path):
     """
     Return whether s3 path is a directory or not
     """
-    import botocore
-    import s3fs
+    from pyarrow import fs as pa_fs
 
     try:
-        path_info = fs.info(path)
-        return path_info["Size"] == 0 and path_info["type"].lower() == "directory"
-    except botocore.exceptions.NoCredentialsError as e:
-        raise BodoError(
-            f"S3 NoCredentialsError: {e}.\n"
-            "Most likely cause: you haven't provided S3 credentials, "
-            "neither through environment variables, nor through a local "
-            "AWS setup that makes the credentials available at $HOME/.aws/credentials"
-        )
-    except s3fs.errors.ERROR_CODE_TO_EXCEPTION["AccessDenied"] as e:
-        raise BodoError(
-            f"S3 PermissionError: {e}. \n"
-            "Most likely cause: your S3 credentials are incorrect or do not have the "
-            "correct permissions."
-        )
+        options = urlparse(path)
+        # Remove the s3:// prefix if it exists (and other path sanitization)
+        path_ = (options.netloc + options.path).rstrip("/")
+        path_info = fs.get_file_info(path_)
+        if path_info.type in (pa_fs.FileType.NotFound, pa_fs.FileType.Unknown):
+            raise FileNotFoundError(
+                "{} is a non-existing or unreachable file".format(path)
+            )
+        if (not path_info.size) and path_info.type == pa_fs.FileType.Directory:
+            return True
+        return False
     except BodoError:  # pragma: no cover
         raise
     except Exception as e:  # pragma: no cover
-        raise BodoError(f"error from s3fs: {type(e).__name__}: {str(e)}")
+        # There doesn't seem to be a way to get special errors for
+        # credential issues, region issues, etc. in pyarrow (unlike s3fs).
+        # So we include a blanket message to verify these details.
+        raise BodoError(
+            f"error from pyarrow S3FileSystem: {type(e).__name__}: {str(e)}\n"
+            "Some possible causes:\n"
+            "  (1) Incorrect path: Specified file/directory doesn't exist or is unreachable.\n"
+            "  (2) Missing credentials: You haven't provided S3 credentials, neither through "
+            "environment variables, nor through a local AWS setup "
+            "that makes the credentials available at ~/.aws/credentials.\n"
+            "  (3) Incorrect credentials: Your S3 credentials are incorrect or do not have "
+            "the correct permissions."
+        )
 
 
 def s3_list_dir_fnames(fs, path):
@@ -163,8 +183,8 @@ def s3_list_dir_fnames(fs, path):
     ["file_name1", "file_name2", ...]
     If path is a file, return None
     """
-    import botocore
-    import s3fs
+
+    from pyarrow import fs as pa_fs
 
     file_names = None
     try:
@@ -173,37 +193,42 @@ def s3_list_dir_fnames(fs, path):
         # because pq.ParquetDataset will throw Invalid Parquet file size is 0
         # bytes
         if s3_is_directory(fs, path):
-            files = fs.ls(path)  # this is "s3://bucket/path-to-dir"
+            options = urlparse(path)
+            # Remove the s3:// prefix if it exists (and other path sanitization)
+            path_ = (options.netloc + options.path).rstrip("/")
+            file_selector = pa_fs.FileSelector(path_, recursive=False)
+            file_stats = fs.get_file_info(
+                file_selector
+            )  # this is "s3://bucket/path-to-dir"
+
             if (
-                files
-                and (files[0] == path[5:] or files[0] == path[5:] + "/")
-                and fs.info("s3://" + files[0])["Size"] == 0
+                file_stats
+                and file_stats[0].path in [path_, f"{path_}/"]
+                and int(file_stats[0].size or 0)
+                == 0  # FileInfo.size is None for directories, so convert to 0 before comparison
             ):  # pragma: no cover
                 # excluded from coverage because haven't found a reliable way
                 # to create 0 size object that is a directory. For example:
-                # fs.mkdir(path)  sometimes doesn't do anything at all
+                # fs.mkdir(path) sometimes doesn't do anything at all
                 # get actual names of objects inside the dir
-                file_names = [fname[fname.rindex("/") + 1 :] for fname in files[1:]]
-            else:
-                file_names = [fname[fname.rindex("/") + 1 :] for fname in files]
-
-    except botocore.exceptions.NoCredentialsError as e:
-        raise BodoError(
-            f"S3 NoCredentialsError: {e}.\n"
-            "Most likely cause: you haven't provided S3 credentials, "
-            "neither through environment variables, nor through a local "
-            "AWS setup that makes the credentials available at $HOME/.aws/credentials"
-        )
-    except s3fs.errors.ERROR_CODE_TO_EXCEPTION["AccessDenied"] as e:
-        raise BodoError(
-            f"S3 PermissionError: {e}. \n"
-            "Most likely cause: your S3 credentials are incorrect or do not have the "
-            "correct permissions."
-        )
+                file_stats = file_stats[1:]
+            file_names = [file_stat.base_name for file_stat in file_stats]
     except BodoError:  # pragma: no cover
         raise
     except Exception as e:  # pragma: no cover
-        raise BodoError(f"error from s3fs: {type(e).__name__}: {str(e)}")
+        # There doesn't seem to be a way to get special errors for
+        # credential issues, region issues, etc. in pyarrow (unlike s3fs).
+        # So we include a blanket message to verify these details.
+        raise BodoError(
+            f"error from pyarrow S3FileSystem: {type(e).__name__}: {str(e)}\n"
+            "Some possible causes:\n"
+            "  (1) Incorrect path: Specified file/directory doesn't exist or is unreachable.\n"
+            "  (2) Missing credentials: You haven't provided S3 credentials, neither through "
+            "environment variables, nor through a local AWS setup "
+            "that makes the credentials available at ~/.aws/credentials.\n"
+            "  (3) Incorrect credentials: Your S3 credentials are incorrect or do not have "
+            "the correct permissions."
+        )
 
     return file_names
 
@@ -358,24 +383,30 @@ def find_file_name_or_handler(path, ftype):
 
     if parsed_url.scheme == "s3":
         is_handler = True
-        fs = get_s3_fs()
+        fs = get_s3_fs_from_path(path)
         all_files = s3_list_dir_fnames(fs, path)  # can return None if not dir
-        f_size = fs.info(fname)["size"]
+        path_ = (parsed_url.netloc + parsed_url.path).rstrip("/")
+        fname = path_
 
         if all_files:
-            path = path.rstrip("/")
             all_files = [
-                (path + "/" + f) for f in sorted(filter(filter_func, all_files))
+                (path_ + "/" + f) for f in sorted(filter(filter_func, all_files))
             ]
-            all_csv_files = [f for f in all_files if fs.info(f)["size"] > 0]
+            # FileInfo.size is None for directories, so we convert None to 0
+            # before comparison with 0
+            all_csv_files = [
+                f for f in all_files if int(fs.get_file_info(f).size or 0) > 0
+            ]
+
             if len(all_csv_files) == 0:  # pragma: no cover
                 # TODO: test
                 raise BodoError(err_msg)
             fname = all_csv_files[0]
-            f_size = fs.info(fname)["size"]
-            fname = fname[5:]  # strip off s3://
 
-        file_name_or_handler = fs.open(fname, "rb")
+        f_size = int(
+            fs.get_file_info(fname).size or 0
+        )  # will be None for directories, so convert to 0 if that's the case
+        file_name_or_handler = fs.open_input_file(fname)
     elif parsed_url.scheme == "hdfs":  # pragma: no cover
         is_handler = True
         (fs, all_files) = hdfs_list_dir_fnames(path)
@@ -438,7 +469,7 @@ def find_file_name_or_handler(path, ftype):
     return is_handler, file_name_or_handler, f_size, fs
 
 
-def get_s3_bucket_region(s3_filepath):
+def get_s3_bucket_region(s3_filepath, parallel=True):
     """
     Get the region of the s3 bucket from a s3 url of type s3://<BUCKET_NAME>/<FILEPATH>.
     PyArrow's region detection only works for actual S3 buckets.
@@ -455,7 +486,7 @@ def get_s3_bucket_region(s3_filepath):
     comm = MPI.COMM_WORLD
 
     bucket_loc = None
-    if bodo.get_rank() == 0:
+    if (parallel and bodo.get_rank() == 0) or not parallel:
         try:
             temp_fs, _ = pa_fs.S3FileSystem.from_uri(s3_filepath)
             bucket_loc = temp_fs.region
@@ -467,20 +498,24 @@ def get_s3_bucket_region(s3_filepath):
                     )
                 )
             bucket_loc = ""
-    bucket_loc = comm.bcast(bucket_loc)
+    if parallel:
+        bucket_loc = comm.bcast(bucket_loc)
 
     return bucket_loc
 
 
 @numba.njit()
-def get_s3_bucket_region_njit(s3_filepath):  # pragma: no cover
+def get_s3_bucket_region_njit(s3_filepath, parallel=True):  # pragma: no cover
     """
     njit wrapper around get_s3_bucket_region
+    parallel: True when called on all processes (usually runtime),
+    False when called on just one process independent of the others
+    (usually compile-time).
     """
     with numba.objmode(bucket_loc="unicode_type"):
         bucket_loc = ""
         if s3_filepath.startswith("s3://"):
-            bucket_loc = get_s3_bucket_region(s3_filepath)
+            bucket_loc = get_s3_bucket_region(s3_filepath, parallel)
     return bucket_loc
 
 
