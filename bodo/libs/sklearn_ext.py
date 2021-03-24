@@ -3431,12 +3431,16 @@ def get_data_slice_parallel(data, labels, len_train):  # pragma: no cover
 @numba.njit
 def get_train_test_size(train_size, test_size):  # pragma: no cover
     """Set train_size and test_size values"""
-    if train_size is None and test_size is None:
+    if train_size is None:
+        train_size = -1.0
+    if test_size is None:
+        test_size = -1.0
+    if train_size == -1.0 and test_size == -1.0:
         return 0.75, 0.25
-    elif train_size is not None and test_size is None:
+    elif test_size == -1.0:
         return train_size, 1.0 - train_size
-    elif train_size is None and test_size is not None:
-        return 1.0 - test_size, train_size
+    elif train_size == -1.0:
+        return 1.0 - test_size, test_size
     elif train_size + test_size > 1:
         raise ValueError(
             "The sum of test_size and train_size, should be in the (0, 1) range. Reduce test_size and/or train_size."
