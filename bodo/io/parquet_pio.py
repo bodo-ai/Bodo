@@ -847,6 +847,8 @@ def is_nested_parallel(fpath, file_names):
             if fpath.startswith("s3://"):
                 fs = get_s3_fs()
                 for fname in file_names:
+                    if fname == os.path.join(fpath, "_delta_log"):
+                        continue
                     if s3_is_directory(fs, fname):
                         is_nested = True
                         break
@@ -863,6 +865,8 @@ def is_nested_parallel(fpath, file_names):
                 else:
                     is_dir_func = os.path.isdir
                 for fname in file_names:
+                    if fname == os.path.join(fpath, "_delta_log"):
+                        continue
                     is_dir = is_dir_func(fname)
                     # TODO improve
                     if not isinstance(is_dir, bool):
@@ -1032,11 +1036,14 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
 
     if is_directory_parallel(fpath):
         file_names = get_filenames_parallel(fpath, directory_of_files_common_filter)
+        is_nested = is_nested_parallel(fpath, file_names)
         # if deltalake, then get the list of parquet files from metadata
+        is_deltalake = False
         delta_log = os.path.join(fpath, "_delta_log")
         if delta_log in file_names:
+            is_deltalake = True
             file_names = get_parquet_filesnames_from_deltalake(fpath)
-        if filters is not None or is_nested_parallel(fpath, file_names):
+        if filters is not None or is_nested:
             # For now, for nested directories (for example partitioned datasets using
             # hive scheme) we let pyarrow.parquet.ParquetDataset
             # extract all the information by passing it the top-level directory.
@@ -1045,6 +1052,9 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
             # seems to use Python threads and not make a difference
             if bodo.get_rank() == 0:
                 dataset = pq.ParquetDataset(fpath, filesystem=getfs(), filters=filters)
+                if is_deltalake:
+                    # apply the deltalake filter too
+                    dataset.pieces = [p for p in dataset.pieces if p.path in file_names]
                 dataset._bodo_total_rows = 0
                 if get_row_counts:
                     for piece in dataset.pieces:
