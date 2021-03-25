@@ -3295,7 +3295,7 @@ def test_series_equals_true(series_val, memory_leak_check):
     if isinstance(series_val.values[0], list):
         with pytest.raises(
             BodoError,
-            match="Series.equals\(\) not supported for Series where each element is an array or list",
+            match=r"Series.equals\(\) not supported for Series where each element is an array or list",
         ):
             bodo.jit(test_impl)(series_val, series_val)
         return
@@ -3318,7 +3318,7 @@ def test_series_equals_false(series_val, memory_leak_check):
     if isinstance(series_val.values[0], list):
         with pytest.raises(
             BodoError,
-            match="Series.equals\(\) not supported for Series where each element is an array or list",
+            match=r"Series.equals\(\) not supported for Series where each element is an array or list",
         ):
             bodo.jit(test_impl)(series_val, other)
         return
@@ -4058,7 +4058,7 @@ def test_series_shift(numeric_series_val, periods, memory_leak_check):
 
     # TODO: support nullable int
     if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        with pytest.raises(BodoError, match="Series.shift\(\) Series input type"):
+        with pytest.raises(BodoError, match=r"Series.shift\(\) Series input type"):
             bodo.jit(test_impl)(numeric_series_val, periods)
     else:
         check_func(test_impl, (numeric_series_val, periods))
@@ -4078,7 +4078,7 @@ def test_series_shift_unsupported(series_val, memory_leak_check):
     def test_impl(A):
         return A.shift(1)
 
-    with pytest.raises(BodoError, match="Series.shift\(\) Series input type"):
+    with pytest.raises(BodoError, match=r"Series.shift\(\) Series input type"):
         bodo.jit(test_impl)(series_val)
 
 
@@ -4564,6 +4564,19 @@ def test_series_mask_arr(memory_leak_check):
     cond = np.random.ranf(len(S)) < 0.5
     check_func(test_impl, (S, cond, other_series))
     check_func(test_impl, (S, cond, other_arr))
+
+
+def test_series_mask_cat_literal(memory_leak_check):
+    """Make sure string literal works for setitem of categorical data through mask()"""
+
+    def test_impl(S, cond):
+        return S.mask(cond, "AB")
+
+    S = pd.Series(
+        ["AB", "AA", "AB", np.nan, "A", "AA", "AB"], [5, 1, 2, 0, 3, 4, 9], name="AA"
+    ).astype("category")
+    cond = S == "AA"
+    check_func(test_impl, (S, cond))
 
 
 @pytest.mark.parametrize(

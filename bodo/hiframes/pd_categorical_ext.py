@@ -886,7 +886,7 @@ def categorical_array_setitem(arr, ind, val):
     # val is scalar RHS that can be assigned.
     is_scalar_match = (
         is_scalar_type(val)
-        and is_common_scalar_dtype([val, arr.dtype.elem_type])
+        and is_common_scalar_dtype([types.unliteral(val), arr.dtype.elem_type])
         # Make sure we don't try insert a float into an int. This
         # will pass is_common_scalar_dtype but is incorrect
         and not (
