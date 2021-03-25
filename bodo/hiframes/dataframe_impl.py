@@ -834,21 +834,22 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
     # Pandas restrictions:
     # Only supported for numeric types with numpy arrays
     # - int, floats, bool, dt64, td64. (maybe complex)
-    # Bodo restrictions:
-    # - td64 (TODO: support td64)
-    # - Pandas cannot support BooleanArray,
-    # so we may not support bool if we map it to BooleanArray
+    # We also support categorical and nullable arrays
     for coltype in df.data:
         if not (
             bodo.utils.utils.is_np_array_typ(coltype)
             and (
-                coltype.dtype == bodo.datetime64ns
+                coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
+            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArray))
+            or coltype in [bodo.boolean_array, bodo.datetime_date_array_type]
         ):
             raise BodoError(
-                f"DataFrame.idxmax() only supported for non-nullable numeric column types. Column type: {coltype} not supported."
+                f"DataFrame.idxmax() only supported for numeric column types. Column type: {coltype} not supported."
             )
+        if isinstance(coltype, bodo.CategoricalArray) and not coltype.dtype.ordered:
+            raise BodoError("DataFrame.idxmax(): categorical columns must be ordered")
 
     return _gen_reduce_impl(df, "idxmax", axis=axis)
 
@@ -864,21 +865,22 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
     # Pandas restrictions:
     # Only supported for numeric types with numpy arrays
     # - int, floats, bool, dt64, td64. (maybe complex)
-    # Bodo restrictions:
-    # - td64 (TODO: support td64)
-    # - Pandas cannot support BooleanArray,
-    # so we may not support bool if we map it to BooleanArray
+    # We also support categorical and nullable arrays
     for coltype in df.data:
         if not (
             bodo.utils.utils.is_np_array_typ(coltype)
             and (
-                coltype.dtype == bodo.datetime64ns
+                coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
+            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArray))
+            or coltype in [bodo.boolean_array, bodo.datetime_date_array_type]
         ):
             raise BodoError(
-                f"DataFrame.idxmin() only supported for non-nullable numeric column types. Column type: {coltype} not supported."
+                f"DataFrame.idxmin() only supported for numeric column types. Column type: {coltype} not supported."
             )
+        if isinstance(coltype, bodo.CategoricalArray) and not coltype.dtype.ordered:
+            raise BodoError("DataFrame.idxmin(): categorical columns must be ordered")
 
     return _gen_reduce_impl(df, "idxmin", axis=axis)
 
@@ -912,12 +914,17 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
     # be handled by the individual functions.
     try:
         # TODO: Only generate common types when necessary to prevent errors.
-        dtypes = [
-            numba.np.numpy_support.as_dtype(df.data[df.columns.index(c)].dtype)
-            for c in out_colnames
-        ]
-        # TODO: Determine what possible exceptions this might raise.
-        comm_dtype = numba.np.numpy_support.from_dtype(np.find_common_type(dtypes, []))
+        if func_name in ("idxmax", "idxmin") and axis == 0:
+            comm_dtype = None
+        else:
+            dtypes = [
+                numba.np.numpy_support.as_dtype(df.data[df.columns.index(c)].dtype)
+                for c in out_colnames
+            ]
+            # TODO: Determine what possible exceptions this might raise.
+            comm_dtype = numba.np.numpy_support.from_dtype(
+                np.find_common_type(dtypes, [])
+            )
     except NotImplementedError:
         raise BodoError(
             f"Dataframe.{func_name}() with column types: {df.data} could not be merged to a common type."

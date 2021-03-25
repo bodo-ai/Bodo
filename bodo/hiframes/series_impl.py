@@ -1254,9 +1254,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
     # Pandas restrictions:
     # Only supported for numeric types with numpy arrays
     # - int, floats, bool, dt64, td64. (maybe complex)
-    # Bodo restrictions:
-    # - td64, dt64 (TODO: support td64)
-    # - Pandas cannot support BooleanArray,
+    # We also support categorical and nullable arrays
     if not (
         S.dtype == types.none
         or (
@@ -1270,7 +1268,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
         or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
     ):
         raise BodoError(
-            f"Series.idxmin() only supported for non-nullable numeric array types. Array type: {S.data} not supported."
+            f"Series.idxmin() only supported for numeric array types. Array type: {S.data} not supported."
         )
     if isinstance(S.data, bodo.CategoricalArray) and not S.dtype.ordered:
         raise BodoError("Series.idxmin(): only ordered categoricals are possible")
@@ -1306,9 +1304,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
     # Pandas restrictions:
     # Only supported for numeric types with numpy arrays
     # - int, floats, bool, dt64, td64. (maybe complex)
-    # Bodo restrictions:
-    # - td64, dt64 (TODO: support td64)
-    # - Pandas cannot support BooleanArray,
+    # We also support categorical and nullable arrays
     if not (
         S.dtype == types.none
         or (
@@ -1322,7 +1318,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
         or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
     ):
         raise BodoError(
-            f"Series.idxmax() only supported for non-nullable numeric array types. Array type: {S.data} not supported."
+            f"Series.idxmax() only supported for numeric array types. Array type: {S.data} not supported."
         )
     if isinstance(S.data, bodo.CategoricalArray) and not S.dtype.ordered:
         raise BodoError("Series.idxmax(): only ordered categoricals are possible")

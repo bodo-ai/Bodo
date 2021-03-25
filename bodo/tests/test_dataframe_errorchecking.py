@@ -502,3 +502,33 @@ def test_df_apply_all_args(memory_leak_check):
 
     with pytest.raises(BodoError, match="does not support built-in functions"):
         bodo.jit(test_np_func)(df)
+
+
+# TODO: Mark as slow when CI passes
+def test_dataframe_idxmax_unordered_cat(memory_leak_check):
+    """Test that DataFrame.idxmax throws an appropriate error with an unordered
+    Categorical Column"""
+
+    def impl(df):
+        return df.idxmax()
+
+    df = pd.DataFrame({"A": pd.Categorical([1, 2, 5, None, 2], ordered=False)})
+
+    match = "DataFrame.idxmax.*: categorical columns must be ordered"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(impl)(df)
+
+
+# TODO: Mark as slow when CI passes
+def test_dataframe_idxmin_unordered_cat(memory_leak_check):
+    """Test that DataFrame.idxmin throws an appropriate error with an unordered
+    Categorical Column"""
+
+    def impl(df):
+        return df.idxmin()
+
+    df = pd.DataFrame({"A": pd.Categorical([1, 2, 5, None, 2], ordered=False)})
+
+    match = "DataFrame.idxmin.*: categorical columns must be ordered"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(impl)(df)
