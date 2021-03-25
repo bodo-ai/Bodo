@@ -32,7 +32,6 @@ from numba.core.ir_utils import (
 
 
 import bodo
-from bodo import config, objmode
 import bodo.io
 from bodo.io import h5
 from bodo.utils.utils import is_call, is_expr, is_assign
@@ -320,7 +319,7 @@ class UntypedPass:
 
     def _run_getitem(self, assign, rhs, label):
         # fix type for f['A'][:] dset reads
-        if config._has_h5py:
+        if bodo.utils.utils.has_h5py():
             lhs = assign.target.name
             h5_nodes = self.h5_handler.handle_possible_h5_read(assign, lhs, rhs)
             if h5_nodes is not None:
@@ -829,7 +828,7 @@ class UntypedPass:
         # coerce_float=True, params=None, parse_dates=None,
         # columns=None, chunksize=None
         try:
-            import sqlalchemy
+            import sqlalchemy  # noqa
         except ImportError:  # pragma: no cover
             message = (
                 "Using URI string without sqlalchemy installed."
@@ -1570,7 +1569,7 @@ class UntypedPass:
 
     def _gen_parquet_read(self, fname, lhs, columns=None):
         # make sure pyarrow is available
-        if not config._has_pyarrow:
+        if not bodo.utils.utils.has_pyarrow():
             raise RuntimeError("pyarrow is required for Parquet support")
 
         (

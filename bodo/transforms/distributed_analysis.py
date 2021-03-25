@@ -972,15 +972,16 @@ class DistributedAnalysis:
                     self._meet_array_dists(lhs, func_mod.name, array_dists)
                     return
 
-        if bodo.config._has_h5py and (
-            func_mod == "bodo.io.h5_api"
-            and func_name in ("h5read", "h5write", "h5read_filter")
+        if func_mod == "bodo.io.h5_api" and func_name in (
+            "h5read",
+            "h5write",
+            "h5read_filter",
         ):
+            bodo.utils.utils.check_h5py()
             return
 
-        if bodo.config._has_h5py and (
-            func_mod == "bodo.io.h5_api" and func_name == "get_filter_read_indices"
-        ):
+        if func_mod == "bodo.io.h5_api" and func_name == "get_filter_read_indices":
+            bodo.utils.utils.check_h5py()
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
             return

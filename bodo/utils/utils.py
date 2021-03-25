@@ -1008,6 +1008,49 @@ def nanstd_ddof1(a):  # pragma: no cover
     return np.sqrt(nanvar_ddof1(a))
 
 
+def has_h5py():
+    """returns True if h5py and hdf5 support are installed"""
+    try:
+        import h5py  # noqa
+
+        from bodo.io import _hdf5  # noqa
+
+        # TODO: make sure h5py/hdf5 supports parallel
+    except ImportError:
+        _has_h5py = False
+    else:
+        _has_h5py = True
+    return _has_h5py
+
+
+def check_h5py():
+    """raise error if h5py/hdf5 is not installed"""
+    if not has_h5py():
+        raise BodoError("install 'h5py' package to enable hdf5 support")
+
+
+def has_pyarrow():
+    """returns True if pyarrow is installed"""
+    try:
+        import pyarrow  # noqa
+    except ImportError:
+        _has_pyarrow = False
+    else:
+        _has_pyarrow = True
+    return _has_pyarrow
+
+
+def has_scipy():
+    """returns True if scipy is installed"""
+    try:
+        import scipy  # noqa
+    except ImportError:
+        _has_scipy = False
+    else:
+        _has_scipy = True
+    return _has_scipy
+
+
 @intrinsic
 def check_and_propagate_cpp_exception(typingctx):
     """

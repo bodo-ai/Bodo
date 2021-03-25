@@ -1395,9 +1395,7 @@ from numba.core import cgutils
 from numba.core.imputils import lower_builtin
 from numba.np.arrayobj import make_array
 
-from bodo.config import _has_pyarrow
-
-if _has_pyarrow:
+if bodo.utils.utils.has_pyarrow():
     from bodo.io import parquet_cpp
 
     ll.add_symbol("get_dataset_reader", parquet_cpp.get_dataset_reader)
