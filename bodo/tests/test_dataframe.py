@@ -2254,8 +2254,8 @@ def test_pd_notna(na_test_obj, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_pd_notnull(null_test_obj, memory_leak_check):
-    obj = null_test_obj
+def test_pd_notnull(na_test_obj, memory_leak_check):
+    obj = na_test_obj
 
     def impl(obj):
         return pd.notnull(obj)
