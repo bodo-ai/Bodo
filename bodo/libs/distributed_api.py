@@ -2241,7 +2241,18 @@ def alltoallv(
             send_disp.ctypes,
             recv_disp.ctypes,
             typ_enum,
-        )
+        )  # pragma: no cover
+
+    if isinstance(send_data, bodo.CategoricalArray):
+        return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(
+            send_data.codes.ctypes,
+            out_data.codes.ctypes,
+            send_counts.ctypes,
+            recv_counts.ctypes,
+            send_disp.ctypes,
+            recv_disp.ctypes,
+            typ_enum,
+        )  # pragma: no cover
 
     return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(
         send_data.ctypes,
@@ -2251,7 +2262,7 @@ def alltoallv(
         send_disp.ctypes,
         recv_disp.ctypes,
         typ_enum,
-    )
+    )  # pragma: no cover
 
 
 def alltoallv_tup(

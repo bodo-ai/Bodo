@@ -1299,13 +1299,6 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
 
     check_unsupported_args("DataFrame.duplicated", args_dict, args_default_dict)
 
-    # Bodo Limitation: duplicated doesn't work for Categorical Columns.
-    for dtype in df.data:
-        if isinstance(dtype, bodo.CategoricalArray):
-            raise BodoError(
-                "DataFrame.duplicated() not supported for DataFrames with Categorical Columns"
-            )
-
     n_cols = len(df.columns)
 
     func_text = "def impl(df, subset=None, keep='first'):\n"

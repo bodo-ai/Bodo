@@ -1141,6 +1141,7 @@ def test_df_notna(df_value, memory_leak_check):
 
     check_func(impl, (df_value,))
 
+
 @pytest.mark.smoke
 def test_df_notnull(df_value, memory_leak_check):
     # TODO: test dt64 NAT, categorical, etc.
@@ -1148,6 +1149,7 @@ def test_df_notnull(df_value, memory_leak_check):
         return df.notnull()
 
     check_func(impl, (df_value,))
+
 
 def test_df_head(df_value, memory_leak_check):
     def impl(df):
@@ -2050,21 +2052,32 @@ def test_duplicated_all_types(df_value):
     def test_impl(df):
         return df.duplicated()
 
-    is_categorical = False
-    for dtype in df_value.dtypes:
-        if isinstance(dtype, pd.CategoricalDtype):
-            is_categorical = True
-            break
-    if is_categorical:
-        # TODO: [BE-267] Support Categorical DataFrames
-        with pytest.raises(
-            BodoError,
-            match="DataFrame.duplicated.* not supported for DataFrames with Categorical Columns",
-        ):
-            bodo.jit(test_impl)(df_value)
-    else:
-        # Index and order doesn't match in distributed case.
-        check_func(test_impl, (df_value,), sort_output=True, reset_index=True)
+    # TODO [BE-414]: Properly support NA
+
+    # Index and order doesn't match in distributed case.
+    check_func(test_impl, (df_value,), sort_output=True, reset_index=True)
+
+
+# TODO: [BE-266] Fix memory leak in duplicated
+@pytest.mark.slow
+def test_duplicated_cat_runtime():
+    """
+    Test that duplicated works on df types with Categories only
+    known at runtime.
+    """
+
+    def test_impl(df):
+        df["A"] = df["A"].astype("category")
+        return df.duplicated()
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(["AA", "BB", "", "AA"] * 4),
+        }
+    )
+
+    # Index and order doesn't match in distributed case.
+    check_func(test_impl, (df,), copy_input=True, sort_output=True, reset_index=True)
 
 
 ##################### binary ops ###############################
@@ -2239,6 +2252,7 @@ def test_pd_notna(na_test_obj, memory_leak_check):
     is_out_distributed = bodo.utils.utils.is_distributable_typ(bodo.typeof(obj))
     check_func(impl, (obj,), is_out_distributed)
 
+
 @pytest.mark.slow
 def test_pd_notnull(null_test_obj, memory_leak_check):
     obj = null_test_obj
@@ -2248,6 +2262,7 @@ def test_pd_notnull(null_test_obj, memory_leak_check):
 
     is_out_distributed = bodo.utils.utils.is_distributable_typ(bodo.typeof(obj))
     check_func(impl, (obj,), is_out_distributed)
+
 
 def test_pd_isna_getitem(memory_leak_check):
     """test support for NA check for array values, e.g. pd.isna(A[i]) pattern matching
