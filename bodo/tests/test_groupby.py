@@ -2967,6 +2967,91 @@ def test_first_last(test_df, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_first_last_supported_types(memory_leak_check):
+    """ Test Groupby.first()/last() with other types not in df_test"""
+
+    def impl1(df):
+        A = df.groupby("A").first()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").last()
+        return A
+
+    # Empty
+    df = pd.DataFrame({"A": [], "B": []})
+    check_func(impl1, (df,), sort_output=True)
+
+    # Zero columns
+    df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl1)(df_empty)
+        bodo.jit(impl2)(df_empty)
+
+    # timedelta
+    df_td = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 2, 1],
+            "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+        }
+    )
+    check_func(impl1, (df_td,), sort_output=True)
+    check_func(impl2, (df_td,), sort_output=True)
+
+    # nullable bool
+    df_n_bool = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": pd.Series(
+                [False, True, True, None, True, True, False], dtype="boolean"
+            ),
+        }
+    )
+    check_func(impl1, (df_n_bool,), sort_output=True)
+    check_func(impl2, (df_n_bool,), sort_output=True)
+
+    # Decimal
+    from decimal import Decimal
+
+    df_decimal = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 2, 2],
+            "B": pd.Series(
+                [Decimal("1.6"), Decimal("-0.2"), Decimal("44.2"), np.nan, Decimal("0")]
+            ),
+        }
+    )
+    check_func(impl1, (df_decimal,), sort_output=True)
+    check_func(impl2, (df_decimal,), sort_output=True)
+
+    # timedelta with NaT
+    df_td = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 2, 1],
+            "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                pd.Series(data=[np.timedelta64("nat")], index=[4])
+            ),
+        }
+    )
+    check_func(impl1, (df_td,), sort_output=True)
+    check_func(impl2, (df_td,), sort_output=True)
+
+    # Test different column types in same dataframe
+    def impl_mix(df):
+        A = df.groupby("A")["B", "C"].first()
+        return A
+
+    df_mix = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 2, 3],
+            "B": [1.1, 2.2, 3.3, 4.4, 1.1],
+            "C": ["ab", "cd", "ef", "gh", "ijk"],
+        }
+    )
+    check_func(impl_mix, (df_mix,), sort_output=True)
+
+
+@pytest.mark.slow
 def test_first_last_one_col(test_df, memory_leak_check):
     """
     Test Groupby.first() and Groupby.last() with one column selected

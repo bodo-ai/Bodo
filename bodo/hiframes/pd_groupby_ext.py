@@ -319,6 +319,15 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
     """
     is_list_string = arr_type == ArrayItemArrayType(string_array_type)
     in_dtype = arr_type.dtype
+    # Bodo don't support DatetimeTimeDeltaType. use (timedelta64 instead)
+    if isinstance(in_dtype, bodo.hiframes.datetime_timedelta_ext.DatetimeTimeDeltaType):
+        raise BodoError(
+            "column type of {} is not supported in groupby built-in function {}.\n \
+            If you are trying to set NULL values for timedelta64 in regular Python, \
+            consider using np.timedelta64('nat') instead of None".format(
+                in_dtype, func_name
+            )
+        )
     if func_name == "median" and not isinstance(
         in_dtype, (Decimal128Type, types.Float, types.Integer)
     ):
@@ -326,6 +335,15 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             None,
             "For median, only column of integer, float or Decimal type are allowed",
         )
+    # [BE-416] Support with list
+    if func_name in ("first", "last") and isinstance(arr_type, ArrayItemArrayType):
+        return (
+            None,
+            "column type of list of {} is not supported in groupby built-in function {}".format(
+                in_dtype, func_name
+            ),
+        )
+
     if (func_name in {"median", "mean", "var", "std"}) and isinstance(
         in_dtype, (Decimal128Type, types.Integer, types.Float)
     ):
@@ -441,7 +459,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
             out_data.append(data)
             out_column_type.append(ColumnType.KeyColumn.value)
 
-    def _get_agg_typ(self, grp, args, func_name, func=None):
+    def _get_agg_typ(self, grp, args, func_name, func=None, kws=None):
         index = RangeIndexType(types.none)
         out_data = []
         out_columns = []
@@ -499,6 +517,21 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         )
                     )
             else:
+                if func_name in ("first", "last"):
+                    kws = dict(kws)
+                    # pop arguments from kws
+                    numeric_only = (
+                        args[0] if len(args) > 0 else kws.pop("numeric_only", False)
+                    )
+                    min_count = args[1] if len(args) > 1 else kws.pop("min_count", -1)
+                    unsupported_args = dict(
+                        numeric_only=numeric_only, min_count=min_count
+                    )
+                    arg_defaults = dict(numeric_only=False, min_count=-1)
+                    check_unsupported_args(
+                        f"Groupby.{func_name}", unsupported_args, arg_defaults
+                    )
+
                 out_dtype, err_msg = get_groupby_output_dtype(
                     data, func_name, grp.df_type.index
                 )
@@ -801,11 +834,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.first", no_unliteral=True)
     def resolve_first(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "first")
+        return self._get_agg_typ(grp, args, "first", kws=kws)
 
     @bound_function("groupby.last", no_unliteral=True)
     def resolve_last(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "last")
+        return self._get_agg_typ(grp, args, "last", kws=kws)
 
     @bound_function("groupby.idxmin", no_unliteral=True)
     def resolve_idxmin(self, grp, args, kws):
