@@ -370,7 +370,7 @@ Amazon S3
 
 Reading and writing :ref:`CSV <csv-section>`, :ref:`Parquet <parquet-section>`, :ref:`JSON <json-section>`, and :ref:`Numpy binary <numpy-binary-section>` files from and to Amazon S3 is supported. 
 
-The ``pyarrow`` package must be available, and the file path should start with :code:`s3://`::
+The ``fsspec`` package must be available, and the file path should start with :code:`s3://`::
 
     @bodo.jit
     def example_s3_parquet():

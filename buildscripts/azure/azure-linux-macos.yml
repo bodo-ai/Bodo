@@ -34,7 +34,14 @@ jobs:
   - script: |
       buildscripts/setup_minio.sh
     displayName: 'Setup minio'
- 
+  
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
+      conda install -y -c conda-forge fsspec
+    displayName: 'Setup s3_testing'
+
   - script: |
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH

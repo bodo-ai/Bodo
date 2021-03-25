@@ -24,6 +24,7 @@ requirements:
     - numpy
     - cython
     - pandas 1.2.*
+    - fsspec
     - pyarrow =3.0.0
     - boost-cpp =1.74.0
     - libcurl
@@ -40,6 +41,7 @@ requirements:
     - python
     - {{ pin_compatible('numpy') }}
     - pandas 1.2.*
+    - fsspec
     - pyarrow =3.0.0
     - boost-cpp =1.74.0
     - libcurl

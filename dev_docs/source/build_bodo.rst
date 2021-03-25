@@ -32,6 +32,8 @@ such as Numba on Ubuntu Linux::
     # END OF BUILD NUMBA FROM SOURCE
     conda install mpi4py pytest cython -c conda-forge
     conda install -c conda-forge hdf5='*=*mpich*' pyarrow=3.0.0 pymysql sqlalchemy
+    # Required for IO with S3
+    conda install -c conda-forge fsspec
     # The following is required for IO with gcs
     # conda install -c conda-forge gcsfs
     git clone https://github.com/Bodo-inc/Bodo.git
@@ -75,6 +77,7 @@ On Windows
     conda install vc vs2015_runtime vs2015_win-64
     conda install -c defaults -c intel impi_rt impi-devel
     conda install -c conda-forge pyarrow=3.0.0
+    conda install -c conda-forge fsspec
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo

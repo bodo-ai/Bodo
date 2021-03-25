@@ -1004,6 +1004,7 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
 
     comm = MPI.COMM_WORLD
 
+    fpath = fpath.rstrip("/")
     if fpath.startswith("gs://"):
         fpath = fpath[:1] + "c" + fpath[1:]
 
@@ -1061,7 +1062,7 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
                     filters=filters,
                     use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
                 )
-  
+
                 if is_deltalake:
                     # apply the deltalake filter too
                     dataset.pieces = [p for p in dataset.pieces if p.path in file_names]
