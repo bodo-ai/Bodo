@@ -5,10 +5,12 @@ from decimal import Decimal
 import numpy as np
 import pandas as pd
 import pytest
+from numba.core.ir_utils import find_callname, guard
 
 import bodo
 from bodo.tests.utils import (
     DistTestPipeline,
+    SeqTestPipeline,
     _get_dist_arg,
     _test_equal,
     _test_equal_guard,
@@ -23,6 +25,7 @@ from bodo.tests.utils import (
     reduce_sum,
 )
 from bodo.utils.typing import BodoError, BodoWarning
+from bodo.utils.utils import is_call_assign
 
 random.seed(4)
 np.random.seed(1)
@@ -1278,6 +1281,26 @@ def test_dist_objmode(memory_leak_check):
         return s
 
     np.testing.assert_allclose(bodo.jit(objmode_test)(10), objmode_test(10))
+
+
+@pytest.mark.slow
+def test_unique_allgatherv(memory_leak_check):
+    """make sure allgatherv of unique is removed in sequential compiler pipline"""
+
+    def impl(S):
+        return S.unique()
+
+    bodo_func = bodo.jit(pipeline_class=SeqTestPipeline)(impl)
+    bodo_func(pd.Series([1, 2, 3, 1]))
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    # check for gatherv call in the IR
+    block = next(iter(f_ir.blocks.values()))
+    for stmt in block.body:
+        assert not (
+            is_call_assign(stmt)
+            and guard(find_callname, f_ir, stmt.value)
+            in (("gatherv", "bodo"), ("allgatherv", "bodo"))
+        )
 
 
 def test_dist_objmode_dist(memory_leak_check):

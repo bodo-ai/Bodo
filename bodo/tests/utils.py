@@ -904,6 +904,22 @@ class DistTestPipeline(bodo.compiler.BodoCompiler):
         return [pipeline]
 
 
+class SeqTestPipeline(bodo.compiler.BodoCompiler):
+    """
+    Bodo sequential pipeline with an additional PreserveIR pass
+    after LowerBodoIRExtSeq
+    """
+
+    def define_pipelines(self):
+        [pipeline] = self._create_bodo_pipeline(
+            distributed=False, inline_calls_pass=False
+        )
+        pipeline._finalized = False
+        pipeline.add_pass_after(PreserveIR, bodo.compiler.LowerBodoIRExtSeq)
+        pipeline.finalize()
+        return [pipeline]
+
+
 @register_pass(analysis_only=False, mutates_CFG=True)
 class ArrayAnalysisPass(FunctionPass):
     _name = "array_analysis_pass"
