@@ -14,7 +14,7 @@ from numba.core.compiler_machinery import (
     register_pass,
 )
 from numba.core.inline_closurecall import inline_closure_call
-from numba.core.ir_utils import get_definition, guard
+from numba.core.ir_utils import find_callname, get_definition, guard
 from numba.core.registry import CPUDispatcher
 from numba.core.typed_passes import (
     DumpParforDiagnostics,
@@ -429,6 +429,13 @@ class LowerBodoIRExtSeq(FunctionPass):
                         state.targetctx,
                     )
                     new_body += out_nodes
+                elif is_call_assign(inst):
+                    rhs = inst.value
+                    fdef = guard(find_callname, state.func_ir, rhs)
+                    # remove gatherv() in sequential mode to avoid hang
+                    if fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo"):
+                        inst.value = rhs.args[0]
+                    new_body.append(inst)
                 else:
                     new_body.append(inst)
 
