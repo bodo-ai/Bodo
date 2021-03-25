@@ -450,7 +450,8 @@ def find_file_name_or_handler(path, ftype):
 
         file_name_or_handler = fs.open(fname, "rb")
     else:
-        assert parsed_url.scheme == ""
+        if parsed_url.scheme != "":
+            raise BodoError(f"Unrecognized scheme {parsed_url.scheme}. Please refer to https://docs.bodo.ai/latest/source/file_io.html")
         is_handler = False
 
         if os.path.isdir(path):
