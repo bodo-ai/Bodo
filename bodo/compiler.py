@@ -15,7 +15,12 @@ from numba.core.compiler_machinery import (
     register_pass,
 )
 from numba.core.inline_closurecall import inline_closure_call
-from numba.core.ir_utils import find_callname, get_definition, guard, build_definitions
+from numba.core.ir_utils import (
+    build_definitions,
+    find_callname,
+    get_definition,
+    guard,
+)
 from numba.core.registry import CPUDispatcher
 from numba.core.typed_passes import (
     DumpParforDiagnostics,
@@ -275,6 +280,88 @@ def _update_definitions(func_ir, node_list):
 
 
 _series_inline_attrs = {"values", "shape", "size", "empty", "name", "index", "dtype"}
+# Series methods that are not inlined currently (may be able to inline later)
+_series_no_inline_methods = {
+    "to_list",
+    "tolist",
+    "rolling",
+    "to_csv",
+    "count",
+    "astype",
+    "fillna",
+}
+# Series methods that are just aliases of another method
+_series_method_alias = {
+    "isnull": "isna",
+    "product": "prod",
+    "kurtosis": "kurt",
+    "is_monotonic": "is_monotonic_increasing",
+    "notnull": "notna",
+}
+
+
+def _inline_bodo_call(
+    rhs,
+    i,
+    func_mod,
+    func_name,
+    pass_info,
+    new_body,
+    block,
+    typingctx,
+    calltypes,
+    work_list,
+):
+    """Inline Bodo calls if possible (e.g. Series method calls)"""
+    from bodo.hiframes.pd_series_ext import SeriesType
+    from bodo.utils.transform import replace_func, update_locs
+
+    func_ir = pass_info.func_ir
+    typemap = pass_info.typemap
+
+    # Series method call
+    if (
+        isinstance(func_mod, ir.Var)
+        and isinstance(typemap[func_mod.name], SeriesType)
+        and func_name not in _series_no_inline_methods
+    ):
+        if func_name in _series_method_alias:
+            func_name = _series_method_alias[func_name]
+        rhs.args.insert(0, func_mod)
+        arg_typs = tuple(typemap[v.name] for v in rhs.args)
+        kw_typs = {name: typemap[v.name] for name, v in dict(rhs.kws).items()}
+        impl = getattr(bodo.hiframes.series_impl, "overload_series_" + func_name)(
+            *arg_typs, **kw_typs
+        )
+    else:
+        return False
+
+    rp_func = replace_func(
+        pass_info,
+        impl,
+        rhs.args,
+        pysig=numba.core.utils.pysignature(impl),
+        kws=dict(rhs.kws),
+    )
+    block.body = new_body + block.body[i:]
+    callee_blocks, _ = inline_closure_call(
+        func_ir,
+        rp_func.glbls,
+        block,
+        len(new_body),
+        rp_func.func,
+        typingctx,
+        rp_func.arg_types,
+        typemap,
+        calltypes,
+        work_list,
+    )
+    # update Loc objects
+    for c_block in callee_blocks.values():
+        c_block.loc = rhs.loc
+        update_locs(c_block.body, rhs.loc)
+
+    return True
 
 
 def bodo_overload_inline_pass(func_ir, typingctx, typemap, calltypes):
@@ -290,10 +377,17 @@ def bodo_overload_inline_pass(func_ir, typingctx, typemap, calltypes):
     TypingInfo = namedtuple(
         "TypingInfo", ["typingctx", "typemap", "calltypes", "curr_loc"]
     )
+    PassInfo = namedtuple("PassInfo", ["func_ir", "typemap"])
+    pass_info = PassInfo(func_ir, typemap)
 
-    for block in func_ir.blocks.values():
+    blocks = func_ir.blocks
+    work_list = list((l, blocks[l]) for l in reversed(blocks.keys()))
+    while work_list:
+        label, block = work_list.pop()
         new_body = []
-        for stmt in block.body:
+        replaced = False
+
+        for i, stmt in enumerate(block.body):
             if is_assign(stmt) and is_expr(stmt.value, "getattr"):
                 rhs = stmt.value
                 rhs_type = typemap[rhs.value.name]
@@ -315,8 +409,36 @@ def bodo_overload_inline_pass(func_ir, typingctx, typemap, calltypes):
                     _update_definitions(func_ir, nodes)
                     new_body += nodes
                     continue
+            if is_call_assign(stmt):
+                rhs = stmt.value
+                fdef = guard(find_callname, func_ir, rhs, typemap)
+                if fdef is None:
+                    new_body.append(stmt)
+                    continue
+                func_name, func_mod = fdef
+                if _inline_bodo_call(
+                    rhs,
+                    i,
+                    func_mod,
+                    func_name,
+                    pass_info,
+                    new_body,
+                    block,
+                    typingctx,
+                    calltypes,
+                    work_list,
+                ):
+                    replaced = True
+                    break
+                else:
+                    new_body.append(stmt)
+                    continue
             new_body.append(stmt)
-        block.body = new_body
+
+        if not replaced:
+            blocks[label].body = new_body
+
+    func_ir.blocks = ir_utils.simplify_CFG(func_ir.blocks)
 
 
 @register_pass(mutates_CFG=True, analysis_only=False)

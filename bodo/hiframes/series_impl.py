@@ -439,7 +439,7 @@ def overload_series_any(S, axis=0, bool_only=None, skipna=True, level=None):
 
 
 @overload_method(SeriesType, "equals", inline="always", no_unliteral=True)
-def overload_series_any(S, other):
+def overload_series_equals(S, other):
     if not isinstance(other, SeriesType):
         raise BodoError("Series.equals() 'other' must be a Series")
 
@@ -774,7 +774,7 @@ def overload_series_std(
 
 
 @overload_method(SeriesType, "dot", inline="always", no_unliteral=True)
-def overload_series_var(S, other):
+def overload_series_dot(S, other):
     def impl(S, other):  # pragma: no cover
         A1 = bodo.hiframes.pd_series_ext.get_series_data(S)
         A2 = bodo.hiframes.pd_series_ext.get_series_data(other)
@@ -1134,7 +1134,7 @@ def overload_series_builtins_sum(S):
 
 
 @overload(np.prod, inline="always", no_unliteral=True)
-def overload_series_prod(S):
+def overload_series_np_prod(S):
     if isinstance(S, SeriesType):
 
         def impl(S):  # pragma: no cover
