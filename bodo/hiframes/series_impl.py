@@ -3606,7 +3606,7 @@ def overload_series_repeat(S, repeats, axis=None):
     return impl_arr
 
 
-@overload_method(SeriesType, "to_dict", inline="always", no_unliteral=True)
+@overload_method(SeriesType, "to_dict", no_unliteral=True)
 def overload_to_dict(S, into=None):
     """ Support Series.to_dict(). """
 

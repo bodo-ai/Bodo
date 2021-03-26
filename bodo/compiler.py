@@ -289,6 +289,10 @@ _series_no_inline_methods = {
     "count",
     "astype",
     "fillna",
+    "to_dict",
+    "map",
+    "apply",
+    "combine",
 }
 # Series methods that are just aliases of another method
 _series_method_alias = {
