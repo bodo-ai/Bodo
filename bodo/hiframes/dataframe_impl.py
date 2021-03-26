@@ -69,7 +69,9 @@ from bodo.utils.utils import is_array_typ
 
 @overload_attribute(DataFrameType, "index", inline="always")
 def overload_dataframe_index(df):
-    return lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)
+    return lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_index(
+        df
+    )  # pragma: no cover
 
 
 @overload_attribute(DataFrameType, "columns", inline="always")
@@ -142,27 +144,27 @@ def overload_dataframe_to_numpy(df, dtype=None, copy=False):
 
 @overload_attribute(DataFrameType, "ndim", inline="always")
 def overload_dataframe_ndim(df):
-    return lambda df: 2
+    return lambda df: 2  # pragma: no cover
 
 
 @overload_attribute(DataFrameType, "size")
 def overload_dataframe_size(df):
     ncols = len(df.columns)
-    return lambda df: ncols * len(df)
+    return lambda df: ncols * len(df)  # pragma: no cover
 
 
 @overload_attribute(DataFrameType, "shape")
 def overload_dataframe_shape(df):
     ncols = len(df.columns)
     # using types.int64 due to lowering error (a Numba tuple handling bug)
-    return lambda df: (len(df), types.int64(ncols))
+    return lambda df: (len(df), types.int64(ncols))  # pragma: no cover
 
 
 @overload_attribute(DataFrameType, "empty")
 def overload_dataframe_empty(df):
     if len(df.columns) == 0:
-        return lambda df: True
-    return lambda df: len(df) == 0
+        return lambda df: True  # pragma: no cover
+    return lambda df: len(df) == 0  # pragma: no cover
 
 
 @overload_method(DataFrameType, "assign", no_unliteral=True)

@@ -310,12 +310,16 @@ def _inline_bodo_getattr(
     stmt, rhs, rhs_type, new_body, func_ir, typingctx, typemap, calltypes
 ):
     """Inline getattr nodes for Bodo types like Series"""
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
     from bodo.hiframes.pd_series_ext import SeriesType
     from bodo.utils.transform import compile_func_single_block
 
     if isinstance(rhs_type, SeriesType) and rhs.attr in _series_inline_attrs:
         overload_name = "overload_series_" + rhs.attr
         overload_func = getattr(bodo.hiframes.series_impl, overload_name)
+    if isinstance(rhs_type, DataFrameType) and rhs.attr in ("index", "columns"):
+        overload_name = "overload_dataframe_" + rhs.attr
+        overload_func = getattr(bodo.hiframes.dataframe_impl, overload_name)
     else:
         return False
 
