@@ -4247,6 +4247,19 @@ def test_dataframe_columns_name():
     check_func(f, (df,), dist_test=False)
 
 
+@pytest.mark.slow
+def test_dataframe_empty_with_index():
+    """Make sure dataframe boxing works when dataframe has no columns but has a
+    non-empty Index.
+    """
+
+    def impl(A):
+        return bodo.hiframes.pd_dataframe_ext.init_dataframe((), A, ())
+
+    A = pd.Int64Index([1, 3, 4, 11, 16, 19])
+    check_func(impl, (A,), py_output=pd.DataFrame(index=A), only_seq=True)
+
+
 def test_dataframe_columns_list():
     """Make sure loop unrolling can handle container updates inside list comprehension
     properly and handles binop of containers (#2473)
