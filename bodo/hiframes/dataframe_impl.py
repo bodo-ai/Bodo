@@ -1369,6 +1369,10 @@ def overload_dataframe_drop_duplicates(
 
 def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
     if index is None:
+        # if there is no data, create an empty index
+        # if len(columns) == 0:
+        #     index = "pd.RangeIndex(start=0, stop=0, step=1)"
+        # else:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
 
     if extra_globals is None:

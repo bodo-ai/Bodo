@@ -415,7 +415,7 @@ def replace_overload(date, year=None, month=None, day=None):
     elif not is_overload_none(day) and not is_overload_int(day):
         raise BodoError("date.replace(): day must be an integer")
 
-    def impl(date, year=None, month=None, day=None): # pragma: no cover
+    def impl(date, year=None, month=None, day=None):  # pragma: no cover
         year_val = date.year if year is None else year
         month_val = date.month if month is None else month
         day_val = date.day if day is None else day

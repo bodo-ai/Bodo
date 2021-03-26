@@ -534,11 +534,9 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
         dataframe_val = construct_dataframe(
             context, builder, df_type, data_tup, index_val, unboxed_tup
         )
-
         # increase refcount of stored values
         context.nrt.incref(builder, data_tup_typ, data_tup)
         context.nrt.incref(builder, index_typ, index_val)
-
         return dataframe_val
 
     ret_typ = DataFrameType(data_tup_typ.types, index_typ, column_names)
