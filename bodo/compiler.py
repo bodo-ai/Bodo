@@ -299,6 +299,36 @@ _series_method_alias = {
     "notnull": "notna",
 }
 
+TypingInfo = namedtuple("TypingInfo", ["typingctx", "typemap", "calltypes", "curr_loc"])
+
+
+def _inline_bodo_getattr(
+    stmt, rhs, rhs_type, new_body, func_ir, typingctx, typemap, calltypes
+):
+    """Inline getattr nodes for Bodo types like Series"""
+    from bodo.hiframes.pd_series_ext import SeriesType
+    from bodo.utils.transform import compile_func_single_block
+
+    if isinstance(rhs_type, SeriesType) and rhs.attr in _series_inline_attrs:
+        overload_name = "overload_series_" + rhs.attr
+        overload_func = getattr(bodo.hiframes.series_impl, overload_name)
+    else:
+        return False
+
+    func_ir._definitions[stmt.target.name].remove(rhs)
+    impl = overload_func(rhs_type)
+    typing_info = TypingInfo(typingctx, typemap, calltypes, stmt.loc)
+    nodes = compile_func_single_block(
+        impl,
+        (rhs.value,),
+        stmt.target,
+        typing_info,
+    )
+    _update_definitions(func_ir, nodes)
+    new_body += nodes
+
+    return True
+
 
 def _inline_bodo_call(
     rhs,
@@ -371,12 +401,7 @@ def bodo_overload_inline_pass(func_ir, typingctx, typemap, calltypes):
     Adding all Bodo overloads here is not necessary for correctness, but adding the
     common functions is important for faster compilation time.
     """
-    from bodo.hiframes.pd_series_ext import SeriesType
-    from bodo.utils.transform import compile_func_single_block
 
-    TypingInfo = namedtuple(
-        "TypingInfo", ["typingctx", "typemap", "calltypes", "curr_loc"]
-    )
     PassInfo = namedtuple("PassInfo", ["func_ir", "typemap"])
     pass_info = PassInfo(func_ir, typemap)
 
@@ -388,27 +413,22 @@ def bodo_overload_inline_pass(func_ir, typingctx, typemap, calltypes):
         replaced = False
 
         for i, stmt in enumerate(block.body):
+            # inline getattr if possible
             if is_assign(stmt) and is_expr(stmt.value, "getattr"):
                 rhs = stmt.value
                 rhs_type = typemap[rhs.value.name]
-                if (
-                    isinstance(rhs_type, SeriesType)
-                    and rhs.attr in _series_inline_attrs
+                if _inline_bodo_getattr(
+                    stmt,
+                    rhs,
+                    rhs_type,
+                    new_body,
+                    func_ir,
+                    typingctx,
+                    typemap,
+                    calltypes,
                 ):
-                    func_ir._definitions[stmt.target.name].remove(rhs)
-                    overload_name = "overload_series_" + rhs.attr
-                    overload_func = getattr(bodo.hiframes.series_impl, overload_name)
-                    impl = overload_func(rhs_type)
-                    typing_info = TypingInfo(typingctx, typemap, calltypes, stmt.loc)
-                    nodes = compile_func_single_block(
-                        impl,
-                        (rhs.value,),
-                        stmt.target,
-                        typing_info,
-                    )
-                    _update_definitions(func_ir, nodes)
-                    new_body += nodes
                     continue
+            # inline call if possible
             if is_call_assign(stmt):
                 rhs = stmt.value
                 fdef = guard(find_callname, func_ir, rhs, typemap)
@@ -430,9 +450,6 @@ def bodo_overload_inline_pass(func_ir, typingctx, typemap, calltypes):
                 ):
                     replaced = True
                     break
-                else:
-                    new_body.append(stmt)
-                    continue
             new_body.append(stmt)
 
         if not replaced:
