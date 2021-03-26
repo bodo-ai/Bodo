@@ -99,6 +99,13 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
+      conda install -y -c conda-forge boto3 botocore fsspec
+    displayName: 'Setup s3_testing'
+
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
       conda install -y -c conda-forge gcsfs
     displayName: 'Setup gcs_testing'
 

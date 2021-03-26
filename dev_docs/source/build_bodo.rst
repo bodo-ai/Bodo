@@ -34,6 +34,8 @@ such as Numba on Ubuntu Linux::
     conda install -c conda-forge hdf5='*=*mpich*' pyarrow=3.0.0 pymysql sqlalchemy
     # Required for IO with S3
     conda install -c conda-forge fsspec
+    # The following is required for s3 related development and tests
+    # conda install -c conda-forge boto3 botocore
     # The following is required for IO with gcs
     # conda install -c conda-forge gcsfs
     git clone https://github.com/Bodo-inc/Bodo.git
