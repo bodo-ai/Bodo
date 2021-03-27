@@ -376,6 +376,10 @@ def overload_series_prod(
         raise BodoError("Series.product(): axis argument not supported")
 
     val_one = S.dtype(1)
+    # Using True fails for some reason in test_dataframe.py::test_df_prod"[df_value2]"
+    # with Bodo inliner
+    if S.dtype == types.bool_:
+        val_one = 1
 
     # For integer array we cannot handle the missing values because
     # we cannot mix np.nan with integers
