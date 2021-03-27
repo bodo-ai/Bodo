@@ -4,7 +4,6 @@ Implement pd.DataFrame typing and data model handling.
 """
 import json
 import operator
-import warnings
 
 import llvmlite.binding as ll
 import numba
@@ -67,36 +66,26 @@ from bodo.utils.transform import (
 )
 from bodo.utils.typing import (
     BodoError,
-    BodoWarning,
     check_unsupported_args,
     create_unsupported_overload,
-    ensure_constant_values,
     get_index_data_arr_types,
-    get_index_names,
     get_literal_value,
     get_overload_const,
     get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
-    get_overload_const_tuple,
     get_udf_error_msg,
     get_udf_out_arr_type,
     is_heterogeneous_tuple_type,
     is_iterable_type,
     is_literal_type,
-    is_overload_bool,
-    is_overload_bool_list,
     is_overload_constant_bool,
     is_overload_constant_int,
-    is_overload_constant_list,
     is_overload_constant_str,
-    is_overload_constant_tuple,
     is_overload_false,
     is_overload_none,
     is_overload_true,
-    is_overload_zero,
     raise_bodo_error,
-    raise_const_error,
     to_nullable_type,
 )
 
@@ -1348,111 +1337,6 @@ def lower_join_dummy(context, builder, sig, args):
     return dataframe._getvalue()
 
 
-@overload_method(DataFrameType, "pivot_table", no_unliteral=True)
-def pivot_table_overload(
-    df,
-    values=None,
-    index=None,
-    columns=None,
-    aggfunc="mean",
-    fill_value=None,
-    margins=False,
-    dropna=True,
-    margins_name="All",
-    observed=False,
-    _pivot_values=None,  # bodo argument
-):
-    unsupported_args = dict(
-        fill_value=fill_value,
-        margins=margins,
-        dropna=dropna,
-        margins_name=margins_name,
-        observed=observed,
-    )
-    arg_defaults = dict(
-        fill_value=None, margins=False, dropna=True, margins_name="All", observed=False
-    )
-    check_unsupported_args("DataFrame.pivot_table", unsupported_args, arg_defaults)
-
-    if aggfunc == "mean":
-
-        def _impl(
-            df,
-            values=None,
-            index=None,
-            columns=None,
-            aggfunc="mean",
-            fill_value=None,
-            margins=False,
-            dropna=True,
-            margins_name="All",
-            observed=False,
-            _pivot_values=None,
-        ):  # pragma: no cover
-
-            return bodo.hiframes.pd_groupby_ext.pivot_table_dummy(
-                df, values, index, columns, "mean", _pivot_values
-            )
-
-        return _impl
-
-    def _impl(
-        df,
-        values=None,
-        index=None,
-        columns=None,
-        aggfunc="mean",
-        fill_value=None,
-        margins=False,
-        dropna=True,
-        margins_name="All",
-        observed=False,
-        _pivot_values=None,
-    ):  # pragma: no cover
-
-        return bodo.hiframes.pd_groupby_ext.pivot_table_dummy(
-            df, values, index, columns, aggfunc, _pivot_values
-        )
-
-    return _impl
-
-
-@overload(pd.crosstab, inline="always", no_unliteral=True)
-def crosstab_overload(
-    index,
-    columns,
-    values=None,
-    rownames=None,
-    colnames=None,
-    aggfunc=None,
-    margins=False,
-    margins_name="All",
-    dropna=True,
-    normalize=False,
-    _pivot_values=None,
-):
-    # TODO: handle multiple keys (index args).
-    # TODO: handle values and aggfunc options
-    def _impl(
-        index,
-        columns,
-        values=None,
-        rownames=None,
-        colnames=None,
-        aggfunc=None,
-        margins=False,
-        margins_name="All",
-        dropna=True,
-        normalize=False,
-        _pivot_values=None,
-    ):  # pragma: no cover
-        return bodo.hiframes.pd_groupby_ext.crosstab_dummy(
-            index, columns, _pivot_values
-        )
-
-    return _impl
-
-
 @overload(pd.concat, inline="always", no_unliteral=True)
 def concat_overload(
     objs,
@@ -1662,117 +1546,6 @@ def concat_overload(
     raise BodoError("pd.concat(): input type {} not supported yet".format(objs))
 
 
-@overload_method(DataFrameType, "sort_values", inline="always", no_unliteral=True)
-def sort_values_overload(
-    df,
-    by,
-    axis=0,
-    ascending=True,
-    inplace=False,
-    kind="quicksort",
-    na_position="last",
-    ignore_index=False,
-    key=None,
-    _bodo_transformed=False,
-):
-    unsupported_args = dict(ignore_index=ignore_index, key=key)
-    arg_defaults = dict(ignore_index=False, key=None)
-    check_unsupported_args("DataFrame.sort_values", unsupported_args, arg_defaults)
-
-    # df type can change if inplace is set (e.g. RangeIndex to Int64Index)
-    handle_inplace_df_type_change(inplace, _bodo_transformed, "sort_values")
-
-    validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
-
-    def _impl(
-        df,
-        by,
-        axis=0,
-        ascending=True,
-        inplace=False,
-        kind="quicksort",
-        na_position="last",
-        ignore_index=False,
-        key=None,
-        _bodo_transformed=False,
-    ):  # pragma: no cover
-
-        return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, by, ascending, inplace, na_position
-        )
-
-    return _impl
-
-
-def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position):
-    """validates sort_values spec
-    Note that some checks are due to unsupported functionalities
-    """
-
-    # whether 'by' is supplied is checked by numba
-    # make sure 'by' is a const str or str list
-    if is_overload_none(by) or (
-        not is_literal_type(by) and not is_overload_constant_list(by)
-    ):
-        raise_const_error(
-            "sort_values(): 'by' parameter only supports "
-            "a constant column label or column labels. by={}".format(by)
-        )
-    # make sure by has valid label(s)
-    valid_keys_set = set(df.columns)
-    if is_overload_constant_str(df.index.name_typ):
-        valid_keys_set.add(get_overload_const_str(df.index.name_typ))
-    if is_overload_constant_tuple(by):
-        key_names = [get_overload_const_tuple(by)]
-    else:
-        key_names = get_overload_const_list(by)
-    # "A" is equivalent to ("A", "")
-    key_names = set((k, "") if (k, "") in valid_keys_set else k for k in key_names)
-    if len(key_names.difference(valid_keys_set)) > 0:
-        invalid_keys = list(set(get_overload_const_list(by)).difference(valid_keys_set))
-        raise_bodo_error(f"sort_values(): invalid keys {invalid_keys} for by.")
-
-    # make sure axis has default value 0
-    if not is_overload_zero(axis):
-        raise_bodo_error(
-            "sort_values(): 'axis' parameter only " "supports integer value 0."
-        )
-
-    # make sure 'ascending' is of type bool
-    if not is_overload_bool(ascending) and not is_overload_bool_list(ascending):
-        raise_bodo_error(
-            "sort_values(): 'ascending' parameter must be of type bool or list of bool, "
-            "not {}.".format(ascending)
-        )
-
-    # make sure 'inplace' is of type bool
-    if not is_overload_bool(inplace):
-        raise_bodo_error(
-            "sort_values(): 'inplace' parameter must be of type bool, "
-            "not {}.".format(inplace)
-        )
-
-    # make sure 'kind' is not specified
-    if kind != "quicksort" and not isinstance(kind, types.Omitted):
-        warnings.warn(
-            BodoWarning(
-                "sort_values(): specifying sorting algorithm "
-                "is not supported in Bodo. Bodo uses stable sort."
-            )
-        )
-
-    # make sure 'na_position' is correctly specified
-    if not is_overload_constant_str(na_position):
-        raise_const_error(
-            "sort_values(): na_position parameter must be a literal constant of type str, not "
-            "{na_position}".format(na_position=na_position)
-        )
-
-    na_position = get_overload_const_str(na_position)
-    if na_position not in ["first", "last"]:
-        raise BodoError("sort_values(): na_position should either be 'first' or 'last'")
-
-
 def sort_values_dummy(df, by, ascending, inplace, na_position):  # pragma: no cover
     return df.sort_values(
         by, ascending=ascending, inplace=inplace, na_position=na_position
@@ -1804,59 +1577,6 @@ def lower_sort_values_dummy(context, builder, sig, args):
 
     out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
     return out_obj._getvalue()
-
-
-@overload_method(DataFrameType, "sort_index", inline="always", no_unliteral=True)
-def sort_index_overload(
-    df,
-    axis=0,
-    level=None,
-    ascending=True,
-    inplace=False,
-    kind="quicksort",
-    na_position="last",
-    sort_remaining=True,
-    ignore_index=False,
-    key=None,
-    by=None,
-):
-    unsupported_args = dict(
-        axis=axis,
-        level=level,
-        kind=kind,
-        sort_remaining=sort_remaining,
-        ignore_index=ignore_index,
-        key=key,
-    )
-    arg_defaults = dict(
-        axis=0,
-        level=None,
-        kind="quicksort",
-        sort_remaining=True,
-        ignore_index=False,
-        key=None,
-    )
-    check_unsupported_args("DataFrame.sort_index", unsupported_args, arg_defaults)
-
-    def _impl(
-        df,
-        axis=0,
-        level=None,
-        ascending=True,
-        inplace=False,
-        kind="quicksort",
-        na_position="last",
-        sort_remaining=True,
-        ignore_index=False,
-        key=None,
-        by=None,
-    ):  # pragma: no cover
-
-        return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, "$_bodo_index_", ascending, inplace, na_position
-        )
-
-    return _impl
 
 
 # dummy function to change the df type to have set_parent=True
@@ -1919,272 +1639,6 @@ def lower_itertuples_dummy(context, builder, sig, args):
     return out_obj._getvalue()
 
 
-@overload_method(DataFrameType, "fillna", inline="always", no_unliteral=True)
-def fillna_overload(
-    df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None
-):
-    unsupported_args = dict(method=method, limit=limit, downcast=downcast)
-    arg_defaults = dict(method=None, limit=None, downcast=None)
-    check_unsupported_args("DataFrame.fillna", unsupported_args, arg_defaults)
-
-    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
-        raise BodoError("DataFrame.fillna: axis argument not supported")
-
-    # TODO: handle possible **kwargs options?
-
-    # TODO: inplace of df with parent that has a string column (reflection)
-
-    data_args = [
-        "df['{}'].fillna(value, inplace=inplace)".format(c) for c in df.columns
-    ]
-    func_text = "def impl(df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None):\n"
-    if is_overload_true(inplace):
-        func_text += "  " + "  \n".join(data_args) + "\n"
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        impl = loc_vars["impl"]
-        return impl
-    else:
-        return bodo.hiframes.dataframe_impl._gen_init_df(
-            func_text, df.columns, ", ".join(d + ".values" for d in data_args)
-        )
-
-
-@overload_method(DataFrameType, "reset_index", inline="always", no_unliteral=True)
-def reset_index_overload(
-    df,
-    level=None,
-    drop=False,
-    inplace=False,
-    col_level=0,
-    col_fill="",
-    _bodo_transformed=False,
-):
-
-    unsupported_args = dict(col_level=col_level, col_fill=col_fill)
-    arg_defaults = dict(col_level=0, col_fill="")
-    check_unsupported_args("DataFrame.reset_index", unsupported_args, arg_defaults)
-
-    handle_inplace_df_type_change(inplace, _bodo_transformed, "reset_index")
-
-    # we only support dropping all levels currently
-    if not _is_all_levels(df, level):  # pragma: no cover
-        raise_bodo_error(
-            "DataFrame.reset_index(): only dropping all index levels supported"
-        )
-
-    # make sure 'drop' is a constant bool
-    if not is_overload_constant_bool(drop):  # pragma: no cover
-        raise BodoError(
-            "DataFrame.reset_index(): 'drop' parameter should be a constant boolean value"
-        )
-
-    # make sure 'inplace' is a constant bool
-    if not is_overload_constant_bool(inplace):
-        raise BodoError(
-            "DataFrame.reset_index(): 'inplace' parameter should be a constant boolean value"
-        )
-
-    # impl: for each column, copy data and create a new dataframe
-    func_text = "def impl(df, level=None, drop=False, inplace=False, col_level=0, col_fill='', _bodo_transformed=False,):\n"
-    func_text += (
-        "  index = bodo.hiframes.pd_index_ext.init_range_index(0, len(df), 1, None)\n"
-    )
-
-    drop = is_overload_true(drop)
-    inplace = is_overload_true(inplace)
-    columns = df.columns
-    data_args = [
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}\n".format(
-            i, "" if inplace else ".copy()"
-        )
-        for i in range(len(df.columns))
-    ]
-    # add index array arguments if not dropping index
-    if not drop:
-        # pandas assigns "level_0" if "index" is already used as a column name
-        # https://github.com/pandas-dev/pandas/blob/08b70d837dd017d49d2c18e02369a15272b662b2/pandas/core/frame.py#L4547
-        default_name = "index" if "index" not in columns else "level_0"
-        index_names = get_index_names(df.index, "DataFrame.reset_index()", default_name)
-        columns = index_names + columns
-        if isinstance(df.index, MultiIndexType):
-            # MultiIndex case takes multiple arrays from MultiIndex._data
-            func_text += (
-                "  m_index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
-            )
-            ind_arrs = ["m_index._data[{}]".format(i) for i in range(df.index.nlevels)]
-            data_args = ind_arrs + data_args
-        else:
-            ind_arr = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
-            data_args = [ind_arr] + data_args
-
-    # TODO: inplace of df with parent (reflection)
-    # return new df even for inplace case, since typing pass replaces input variable
-    # using output of the call
-    return bodo.hiframes.dataframe_impl._gen_init_df(
-        func_text, columns, ", ".join(data_args), "index"
-    )
-
-
-def _is_all_levels(df, level):
-    """return True if 'level' argument selects all Index levels in dataframe 'df'"""
-    n_levels = len(get_index_data_arr_types(df.index))
-    return (
-        is_overload_none(level)
-        or (
-            is_overload_constant_int(level)
-            and get_overload_const_int(level) == 0
-            and n_levels == 1
-        )
-        or (
-            is_overload_constant_list(level)
-            and list(get_overload_const_list(level)) == list(range(n_levels))
-        )
-    )
-
-
-@overload_method(DataFrameType, "dropna", inline="always", no_unliteral=True)
-def dropna_overload(df, axis=0, how="any", thresh=None, subset=None, inplace=False):
-
-    # error-checking for inplace=True
-    if not is_overload_constant_bool(inplace) or is_overload_true(inplace):
-        raise BodoError("DataFrame.dropna(): inplace=True is not supported")
-
-    # check axis=0
-    if not is_overload_zero(axis):
-        raise_bodo_error(f"df.dropna(): only axis=0 supported")
-
-    ensure_constant_values("dropna", "how", how, ("any", "all"))
-
-    # get the index of columns to consider for NA check
-    if is_overload_none(subset):
-        subset_ints = list(range(len(df.columns)))
-    elif not is_overload_constant_list(subset):
-        raise_bodo_error(
-            f"df.dropna(): subset argument should a constant list, not {subset}"
-        )
-    else:
-        subset_vals = get_overload_const_list(subset)
-        subset_ints = []
-        for s in subset_vals:
-            if s not in df.columns:
-                raise_bodo_error(
-                    f"df.dropna(): column '{s}' not in data frame columns {df}"
-                )
-            subset_ints.append(df.columns.index(s))
-
-    n_cols = len(df.columns)
-    data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
-
-    func_text = (
-        "def impl(df, axis=0, how='any', thresh=None, subset=None, inplace=False):\n"
-    )
-    for i in range(n_cols):
-        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
-            i
-        )
-    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
-    func_text += "  ({0}, index_arr) = bodo.libs.array_kernels.dropna(({0}, {1}), how, thresh, ({2},))\n".format(
-        data_args, index, ", ".join(str(a) for a in subset_ints)
-    )
-    func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
-    return bodo.hiframes.dataframe_impl._gen_init_df(
-        func_text, df.columns, data_args, "index"
-    )
-
-
-@overload_method(DataFrameType, "drop", inline="always", no_unliteral=True)
-def drop_overload(
-    df,
-    labels=None,
-    axis=0,
-    index=None,
-    columns=None,
-    level=None,
-    inplace=False,
-    errors="raise",
-    _bodo_transformed=False,
-):
-    unsupported_args = dict(index=index, level=level, errors=errors)
-    arg_defaults = dict(index=None, level=None, errors="raise")
-    check_unsupported_args("DataFrame.drop", unsupported_args, arg_defaults)
-
-    handle_inplace_df_type_change(inplace, _bodo_transformed, "drop")
-
-    if not is_overload_constant_bool(inplace):  # pragma: no cover
-        raise_bodo_error(
-            "DataFrame.drop(): 'inplace' parameter should be a constant bool"
-        )
-
-    if not is_overload_none(labels):
-        if not is_overload_none(columns):
-            raise BodoError(
-                "Dataframe.drop(): Cannot specify both 'labels' and 'columns'"
-            )
-
-        # make sure axis=1
-        if (
-            not is_overload_constant_int(axis) or get_overload_const_int(axis) != 1
-        ):  # pragma: no cover
-            raise_bodo_error("DataFrame.drop(): only axis=1 supported")
-        # get 'labels' column list
-        if is_overload_constant_str(labels):
-            drop_cols = (get_overload_const_str(labels),)
-        elif is_overload_constant_list(labels):  # pragma: no cover
-            drop_cols = get_overload_const_list(labels)
-        else:  # pragma: no cover
-            raise_bodo_error(
-                "constant list of columns expected for labels in DataFrame.drop()"
-            )
-    else:
-        if is_overload_none(columns):
-            raise BodoError(
-                "DataFrame.drop(): Need to specify at least one of 'labels' or 'columns'"
-            )
-
-        if is_overload_constant_str(columns):  # pragma: no cover
-            drop_cols = (get_overload_const_str(columns),)
-        elif is_overload_constant_list(columns):
-            drop_cols = get_overload_const_list(columns)
-        else:  # pragma: no cover
-            raise_bodo_error(
-                "constant list of columns expected for labels in DataFrame.drop()"
-            )
-
-    # check drop columns to be in df schema
-    for c in drop_cols:
-        if c not in df.columns:
-            raise_bodo_error(
-                "DataFrame.drop(): column {} not in DataFrame columns {}".format(
-                    c, df.columns
-                )
-            )
-    if len(set(drop_cols)) == len(df.columns):
-        raise BodoError("DataFrame.drop(): Dropping all columns not supported.")
-
-    inplace = is_overload_true(inplace)
-    # TODO: inplace of df with parent (reflection)
-
-    new_cols = tuple(c for c in df.columns if c not in drop_cols)
-    data_args = ", ".join(
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}".format(
-            df.columns.index(c), ".copy()" if not inplace else ""
-        )
-        for c in new_cols
-    )
-
-    func_text = "def impl(df, labels=None, axis=0, index=None, columns=None,\n"
-    func_text += (
-        "     level=None, inplace=False, errors='raise', _bodo_transformed=False):\n"
-    )
-    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
-    # return new df even for inplace case, since typing pass replaces input variable
-    # using output of the call
-    return bodo.hiframes.dataframe_impl._gen_init_df(
-        func_text, new_cols, data_args, index
-    )
-
-
 def query_dummy(df, expr):  # pragma: no cover
     return df.eval(expr)
 
@@ -2225,29 +1679,6 @@ class ValIsinTyper(AbstractTemplate):
 def lower_val_isin_dummy(context, builder, sig, args):
     out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
     return out_obj._getvalue()
-
-
-@overload_method(DataFrameType, "append", inline="always", no_unliteral=True)
-def append_overload(df, other, ignore_index=False, verify_integrity=False, sort=None):
-    if isinstance(other, DataFrameType):
-        return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
-            (df, other), ignore_index=ignore_index, verify_integrity=verify_integrity
-        )  # pragma: no cover
-
-    if isinstance(other, types.BaseTuple):
-        return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
-            (df,) + other, ignore_index=ignore_index, verify_integrity=verify_integrity
-        )  # pragma: no cover
-
-    # TODO: non-homogenous build_list case
-    if isinstance(other, types.List) and isinstance(other.dtype, DataFrameType):
-        return lambda df, other, ignore_index=False, verify_integrity=False, sort=None: pd.concat(
-            [df] + other, ignore_index=ignore_index, verify_integrity=verify_integrity
-        )  # pragma: no cover
-
-    raise BodoError(
-        "invalid df.append() input. Only dataframe and list/tuple of dataframes supported"
-    )
 
 
 def gen_pandas_parquet_metadata(
@@ -2604,45 +2035,6 @@ def to_sql_overload(
             raise ValueError("error in to_sql() operation")
 
     return _impl
-
-
-@overload_method(DataFrameType, "sample", inline="always", no_unliteral=True)
-def sample_overload(
-    df, n=None, frac=None, replace=False, weights=None, random_state=None, axis=None
-):
-    """Implementation of the sample functionality from
-    https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.sample.html
-    """
-    unsupported_args = dict(random_state=random_state, weights=weights, axis=axis)
-    sample_defaults = dict(random_state=None, weights=None, axis=None)
-    check_unsupported_args("sample", unsupported_args, sample_defaults)
-    if not is_overload_none(n) and not is_overload_none(frac):
-        raise BodoError("sample(): only one of n and frac option can be selected")
-
-    n_cols = len(df.columns)
-    data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
-
-    func_text = "def impl(df, n=None, frac=None, replace=False, weights=None, random_state=None, axis=None):\n"
-    for i in range(n_cols):
-        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
-            i
-        )
-    func_text += "  if frac is None:\n"
-    func_text += "    frac_d = -1.0\n"
-    func_text += "  else:\n"
-    func_text += "    frac_d = frac\n"
-    func_text += "  if n is None:\n"
-    func_text += "    n_i = 0\n"
-    func_text += "  else:\n"
-    func_text += "    n_i = n\n"
-    index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
-    func_text += "  ({0},), index_arr = bodo.libs.array_kernels.sample_table_operation(({0},), {1}, n_i, frac_d, replace)\n".format(
-        data_args, index
-    )
-    func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
-    return bodo.hiframes.dataframe_impl._gen_init_df(
-        func_text, df.columns, data_args, "index"
-    )
 
 
 # TODO: other Pandas versions (0.24 defaults are different than 0.23)
