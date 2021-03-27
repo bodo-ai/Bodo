@@ -398,6 +398,31 @@ def get_overload_const(val):
     return NOT_CONSTANT
 
 
+def element_type(val):
+    """Return the element type of a scalar or array"""
+    if isinstance(val, (types.List, types.ArrayCompatible)):
+        if isinstance(val.dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
+            return val.dtype.elem_type
+        return val.dtype
+    return val
+
+
+def can_replace(to_replace, value):
+    """Return whether value can replace to_replace"""
+    return (
+        is_common_scalar_dtype([to_replace, value])
+        # Float cannot replace integer
+        and not (
+            isinstance(to_replace, types.Integer) and isinstance(value, types.Float)
+        )
+        # Integer and Float cannot replace Boolean
+        and not (
+            isinstance(to_replace, types.Boolean)
+            and (isinstance(value, (types.Integer, types.Float)))
+        )
+    )
+
+
 # string representation of basic types for printing
 _const_type_repr = {str: "string", bool: "boolean", int: "integer"}
 

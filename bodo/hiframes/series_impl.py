@@ -14,7 +14,10 @@ from numba.extending import overload, overload_attribute, overload_method
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
+from bodo.hiframes.datetime_timedelta_ext import (
+    PDTimeDeltaType,
+    datetime_timedelta_type,
+)
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArray,
     PDCategoricalDtype,
@@ -25,7 +28,10 @@ from bodo.hiframes.pd_series_ext import (
     SeriesType,
     if_series_to_array_type,
 )
-from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import (
+    PandasTimestampType,
+    pandas_timestamp_type,
+)
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
@@ -35,7 +41,9 @@ from bodo.libs.str_ext import string_type
 from bodo.utils.transform import gen_const_tup, is_var_size_item_array_type
 from bodo.utils.typing import (
     BodoError,
+    can_replace,
     check_unsupported_args,
+    element_type,
     get_literal_value,
     get_overload_const_int,
     get_overload_const_str,
@@ -2138,6 +2146,55 @@ def overload_series_fillna(
         return fillna_impl
 
 
+def check_unsupported_types(S, to_replace, value):
+    """Raise errors for types Series.replace() does not support"""
+    # TODO: Support array types, [BE-429]
+    if any(
+        bodo.utils.utils.is_array_typ(x, True) for x in [S.dtype, to_replace, value]
+    ):
+        message = "Series.replace(): only support with Scalar, List, or Dictionary"
+        raise BodoError(message)
+    elif isinstance(to_replace, types.DictType) and not is_overload_none(value):
+        message = (
+            "Series.replace(): 'value' must be None when 'to_replace' is a dictionary"
+        )
+        raise BodoError(message)
+    elif any(
+        isinstance(x, (PandasTimestampType, PDTimeDeltaType))
+        for x in [to_replace, value]
+    ):
+        message = f"Series.replace(): Not supported for types {to_replace} and {value}"
+        raise BodoError(message)
+
+
+def check_unsupported_replaces(S, to_replace, value):
+    """Raise an error when a type in Series.replace() cannot be replaced
+    by another type"""
+    series_type = element_type(S.data)
+    if isinstance(to_replace, types.DictType):
+        to_replace_type = element_type(to_replace.key_type)
+        value_type = element_type(to_replace.value_type)
+    else:
+        to_replace_type = element_type(to_replace)
+        value_type = element_type(value)
+
+    if series_type != to_replace_type:
+        raise BodoError("Series.replace(): 'to_replace' type must match series type")
+    elif not can_replace(to_replace_type, value_type):
+        raise BodoError(
+            f"Series.replace(): cannot replace type {to_replace_type} with type {value_type}"
+        )
+
+
+def series_replace_error_checking(S, to_replace, value, inplace, limit, regex, method):
+    """Carry out error checking for Series.replace()"""
+    unsupported_args = dict(inplace=inplace, limit=limit, regex=regex, method=method)
+    replace_defaults = dict(inplace=False, limit=None, regex=False, method="pad")
+    check_unsupported_args("Series.replace", unsupported_args, replace_defaults)
+    check_unsupported_types(S, to_replace, types.unliteral(value))
+    check_unsupported_replaces(S, to_replace, types.unliteral(value))
+
+
 @overload_method(SeriesType, "replace", inline="always", no_unliteral=True)
 def overload_series_replace(
     S,
@@ -2148,11 +2205,7 @@ def overload_series_replace(
     regex=False,
     method="pad",
 ):
-
-    unsupported_args = dict(inplace=inplace, limit=limit, regex=regex, method=method)
-    merge_defaults = dict(inplace=False, limit=None, regex=False, method="pad")
-    check_unsupported_args("Series.replace", unsupported_args, merge_defaults)
-
+    series_replace_error_checking(S, to_replace, value, inplace, limit, regex, method)
     ret_dtype = S.data
     if isinstance(ret_dtype, CategoricalArray):
 

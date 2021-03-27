@@ -108,20 +108,90 @@ def test_series_map_runtime_categorical(memory_leak_check):
         bodo.jit(impl)(S)
 
 
-def test_series_dropna_axis_error(memory_leak_check):
+@pytest.mark.slow
+def test_dropna_axis_error(memory_leak_check):
+    """test axis argument error checking in Series.dropna()"""
     S = pd.Series([0, np.nan, 1])
-
     match = "axis parameter only supports default value 0"
     with pytest.raises(BodoError, match=match):
         bodo.jit(lambda: S.dropna(axis=1))()
 
 
-def test_series_dropna_inplace_error(memory_leak_check):
+@pytest.mark.slow
+def test_dropna_inplace_error(memory_leak_check):
+    """test inplace argument error checking in Series.dropna()"""
     S = pd.Series([0, np.nan, 1])
-
     match = "inplace parameter only supports default value False"
     with pytest.raises(BodoError, match=match):
         bodo.jit(lambda: S.dropna(inplace=True))()
+
+
+@pytest.mark.slow
+def test_replace_inplace_error(memory_leak_check):
+    """test inplace argument error checking in Series.replace()"""
+    S = pd.Series([1, 2, 3])
+    message = "inplace parameter only supports default value False"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: S.replace(1, 10, inplace=True))()
+
+
+@pytest.mark.slow
+def test_replace_limit_error(memory_leak_check):
+    """test limit argument error checking in Series.replace()"""
+    S = pd.Series([1, 2, 3])
+    message = "limit parameter only supports default value None"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: S.replace(1, 10, limit=3))()
+
+
+@pytest.mark.slow
+def test_replace_regex_error(memory_leak_check):
+    """test regex argument error checking in Series.replace()"""
+    S = pd.Series([1, 2, 3])
+    message = "regex parameter only supports default value False"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: S.replace(1, 10, regex=True))()
+
+
+@pytest.mark.slow
+def test_replace_method_error(memory_leak_check):
+    """test method argument error checking in Series.replace()"""
+    S = pd.Series([1, 2, 3])
+    message = "method parameter only supports default value pad"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: S.replace(1, 10, method=None))()
+
+
+@pytest.mark.slow
+def test_replace_dict_error():
+    """test 'value' is None when 'to_replace' is a dictionary in
+    Series.replace()"""
+
+    def impl(series, to_replace, value):
+        return series.replace(to_replace, value)
+
+    series = pd.Series(np.arange(10))
+    to_replace = dict(zip(np.arange(10), np.arange(10) * 10))
+    value = 10
+    message = "'value' must be None when 'to_replace' is a dictionary"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(impl)(series, to_replace, value)
+
+
+@pytest.mark.slow
+def test_replace_unequal_list_lengths():
+    """test Series.replace() fails at runtime when 'to_replace' and
+    'value' are lists of differing lengths"""
+
+    def impl(series, to_replace, value):
+        return series.replace(to_replace, value)
+
+    series = pd.Series([1, 2, 3, 4] * 4)
+    to_replace = [1, 2, 3]
+    value = [9]
+    message = "lengths must be the same"
+    with pytest.raises(AssertionError, match=message):
+        bodo.jit(impl)(series, to_replace, value)
 
 
 @pytest.mark.slow
