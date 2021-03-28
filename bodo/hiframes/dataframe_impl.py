@@ -2380,7 +2380,7 @@ def overload_dataframe_merge_asof(
     return _impl
 
 
-@overload_method(DataFrameType, "pivot_table", no_unliteral=True)
+@overload_method(DataFrameType, "pivot_table", inline="always", no_unliteral=True)
 def overload_dataframe_pivot_table(
     df,
     values=None,

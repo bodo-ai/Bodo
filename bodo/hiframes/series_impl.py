@@ -196,7 +196,7 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
     check_unsupported_args("Series.reset_index", unsupported_args, arg_defaults)
 
     # we only support dropping all levels currently
-    if not bodo.hiframes.pd_dataframe_ext._is_all_levels(S, level):  # pragma: no cover
+    if not bodo.hiframes.dataframe_impl._is_all_levels(S, level):  # pragma: no cover
         raise_bodo_error(
             "Series.reset_index(): only dropping all index levels supported"
         )

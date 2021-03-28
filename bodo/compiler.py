@@ -302,6 +302,19 @@ _series_method_alias = {
     "is_monotonic": "is_monotonic_increasing",
     "notnull": "notna",
 }
+_dataframe_no_inline_methods = {
+    "apply",
+    "itertuples",
+    "to_parquet",
+    "to_sql",
+    "to_csv",
+    "to_json",
+    "assign",
+    "to_string",
+    "query",
+    "groupby",
+    "rolling",
+}
 
 TypingInfo = namedtuple("TypingInfo", ["typingctx", "typemap", "calltypes", "curr_loc"])
 
@@ -351,6 +364,7 @@ def _inline_bodo_call(
     work_list,
 ):
     """Inline Bodo calls if possible (e.g. Series method calls)"""
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
     from bodo.hiframes.pd_series_ext import SeriesType
     from bodo.utils.transform import replace_func, update_locs
 
@@ -365,10 +379,31 @@ def _inline_bodo_call(
     ):
         if func_name in _series_method_alias:
             func_name = _series_method_alias[func_name]
+        # Series.add/... are implemented by overload generation
+        if func_name in bodo.hiframes.series_impl.explicit_binop_funcs or (
+            func_name.startswith("r")
+            and func_name[1:] in bodo.hiframes.series_impl.explicit_binop_funcs
+        ):
+            return False
         rhs.args.insert(0, func_mod)
         arg_typs = tuple(typemap[v.name] for v in rhs.args)
         kw_typs = {name: typemap[v.name] for name, v in dict(rhs.kws).items()}
         impl = getattr(bodo.hiframes.series_impl, "overload_series_" + func_name)(
+            *arg_typs, **kw_typs
+        )
+    # DataFrame method call
+    elif (
+        isinstance(func_mod, ir.Var)
+        and isinstance(typemap[func_mod.name], DataFrameType)
+        and func_name not in _dataframe_no_inline_methods
+    ):
+        # dataframe method aliases are the same as Series
+        if func_name in _series_method_alias:
+            func_name = _series_method_alias[func_name]
+        rhs.args.insert(0, func_mod)
+        arg_typs = tuple(typemap[v.name] for v in rhs.args)
+        kw_typs = {name: typemap[v.name] for name, v in dict(rhs.kws).items()}
+        impl = getattr(bodo.hiframes.dataframe_impl, "overload_dataframe_" + func_name)(
             *arg_typs, **kw_typs
         )
     else:
