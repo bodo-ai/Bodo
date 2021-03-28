@@ -2664,12 +2664,24 @@ ll.add_symbol("disconnect_hdfs", hdfs_reader.disconnect_hdfs)
 disconnect_hdfs = types.ExternalFunction("disconnect_hdfs", types.int32())
 
 
+def _check_for_cpp_errors():
+    pass
+
+
+@overload(_check_for_cpp_errors)
+def overload_check_for_cpp_errors():
+    """wrapper to call check_and_propagate_cpp_exception()
+    Avoids errors when JIT is disabled since intrinsics throw errors in non-JIT mode.
+    """
+    return lambda: check_and_propagate_cpp_exception()  # pragma: no cover
+
+
 @numba.njit
 def call_finalize():  # pragma: no cover
     finalize()
     finalize_s3()
     finalize_gcs()
-    check_and_propagate_cpp_exception()
+    _check_for_cpp_errors()
     disconnect_hdfs()
 
 
