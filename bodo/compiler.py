@@ -302,6 +302,8 @@ _series_method_alias = {
     "is_monotonic": "is_monotonic_increasing",
     "notnull": "notna",
 }
+# DataFrame methods that are not inlined currently, but some may be possible to inline
+# in the future
 _dataframe_no_inline_methods = {
     "apply",
     "itertuples",
