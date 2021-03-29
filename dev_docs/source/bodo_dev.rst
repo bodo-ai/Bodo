@@ -475,6 +475,16 @@ which can be checked by looking at the IR after transformation::
 In addition, many operations are implemented in Bodo's MPI/C++ runtime, which would require debugging
 similar to other MPI/C++ codes. See :ref:`dev_debugging`.
 
+.. _llvm_code_debug:
+
+Debugging LLVM Code
+--------------------------------
+Debugging LLVM code written in Python can be tricky especially when dealing with memory issues. Adding a simple statement as such::
+
+  cgutils.printf(builder, "here")
+
+could help in knowing where the program has reached in healthy execution, and pinpoint the buggy statement.
+
 .. _resources:
 
 Resources
