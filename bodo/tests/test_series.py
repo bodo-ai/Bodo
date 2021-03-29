@@ -3334,7 +3334,7 @@ def test_series_idxmin(series_val, memory_leak_check):
     def test_impl(A):
         return A.idxmin()
 
-    err_msg = "Series.idxmin\(\) only supported for numeric array types."
+    err_msg = r"Series.idxmin\(\) only supported for numeric array types."
 
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
@@ -3381,7 +3381,7 @@ def test_series_idxmax(series_val, memory_leak_check):
     def test_impl(A):
         return A.idxmax()
 
-    err_msg = "Series.idxmax\(\) only supported for numeric array types."
+    err_msg = r"Series.idxmax\(\) only supported for numeric array types."
 
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):

@@ -219,9 +219,7 @@ def roll_fixed_linear_generic(
                 calc_out,
             )
 
-        comm_data = _border_icomm(
-            in_arr, rank, n_pes, halo_size, in_arr.dtype, True, center
-        )
+        comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, True, center)
         (
             l_recv_buff,
             r_recv_buff,
@@ -345,9 +343,7 @@ def roll_fixed_apply_impl(
                 in_arr, index_arr, win, minp, center, rank, n_pes, kernel_func, raw
             )
 
-        comm_data = _border_icomm(
-            in_arr, rank, n_pes, halo_size, in_arr.dtype, True, center
-        )
+        comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, True, center)
         (
             l_recv_buff,
             r_recv_buff,
@@ -359,7 +355,7 @@ def roll_fixed_apply_impl(
 
         if raw == False:
             comm_data_idx = _border_icomm(
-                index_arr, rank, n_pes, halo_size, index_arr.dtype, True, center
+                index_arr, rank, n_pes, halo_size, True, center
             )
             (
                 l_recv_buff_idx,
@@ -723,7 +719,7 @@ def roll_var_linear_generic(
                 calc_out,
             )
 
-        comm_data = _border_icomm_var(in_arr, on_arr, rank, n_pes, win, in_arr.dtype)
+        comm_data = _border_icomm_var(in_arr, on_arr, rank, n_pes, win)
         (
             l_recv_buff,
             l_recv_t_buff,
@@ -891,7 +887,7 @@ def roll_variable_apply_impl(
                 in_arr, on_arr, index_arr, win, minp, rank, n_pes, kernel_func, raw
             )
 
-        comm_data = _border_icomm_var(in_arr, on_arr, rank, n_pes, win, in_arr.dtype)
+        comm_data = _border_icomm_var(in_arr, on_arr, rank, n_pes, win)
         (
             l_recv_buff,
             l_recv_t_buff,
@@ -901,9 +897,7 @@ def roll_variable_apply_impl(
             l_recv_t_req,
         ) = comm_data
         if raw == False:
-            comm_data_idx = _border_icomm_var(
-                index_arr, on_arr, rank, n_pes, win, index_arr.dtype
-            )
+            comm_data_idx = _border_icomm_var(index_arr, on_arr, rank, n_pes, win)
             (
                 l_recv_buff_idx,
                 l_recv_t_buff_idx,
@@ -1354,9 +1348,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
         if _is_small_for_parallel(N, halo_size):
             return _handle_small_data_shift(in_arr, shift, rank, n_pes)
 
-        comm_data = _border_icomm(
-            in_arr, rank, n_pes, halo_size, in_arr.dtype, send_right, send_left
-        )
+        comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, send_right, send_left)
         (
             l_recv_buff,
             r_recv_buff,
@@ -1439,9 +1431,7 @@ def pct_change_impl(in_arr, shift, parallel):  # pragma: no cover
         if _is_small_for_parallel(N, halo_size):
             return _handle_small_data_pct_change(in_arr, shift, rank, n_pes)
 
-        comm_data = _border_icomm(
-            in_arr, rank, n_pes, halo_size, in_arr.dtype, send_right, send_left
-        )
+        comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, send_right, send_left)
         (
             l_recv_buff,
             r_recv_buff,
@@ -1588,11 +1578,12 @@ def pct_change_seq(in_arr, shift):  # pragma: no cover
 
 @register_jitable(cache=True)
 def _border_icomm(
-    in_arr, rank, n_pes, halo_size, dtype, send_right=True, send_left=False
+    in_arr, rank, n_pes, halo_size, send_right=True, send_left=False
 ):  # pragma: no cover
+    """post isend/irecv for halo data (fixed window case)"""
     comm_tag = np.int32(comm_border_tag)
-    l_recv_buff = np.empty(halo_size, dtype)
-    r_recv_buff = np.empty(halo_size, dtype)
+    l_recv_buff = np.empty(halo_size, in_arr.dtype)
+    r_recv_buff = np.empty(halo_size, in_arr.dtype)
     # send right
     if send_right and rank != n_pes - 1:
         r_send_req = bodo.libs.distributed_api.isend(
@@ -1619,7 +1610,7 @@ def _border_icomm(
 
 
 @register_jitable(cache=True)
-def _border_icomm_var(in_arr, on_arr, rank, n_pes, win_size, dtype):  # pragma: no cover
+def _border_icomm_var(in_arr, on_arr, rank, n_pes, win_size):  # pragma: no cover
     comm_tag = np.int32(comm_border_tag)
     # find halo size from time array
     N = len(on_arr)
@@ -1645,7 +1636,7 @@ def _border_icomm_var(in_arr, on_arr, rank, n_pes, win_size, dtype):  # pragma: 
         halo_size = bodo.libs.distributed_api.recv(
             np.int64, np.int32(rank - 1), comm_tag
         )
-        l_recv_buff = np.empty(halo_size, dtype)
+        l_recv_buff = np.empty(halo_size, in_arr.dtype)
         l_recv_req = bodo.libs.distributed_api.irecv(
             l_recv_buff, np.int32(halo_size), np.int32(rank - 1), comm_tag, True
         )
