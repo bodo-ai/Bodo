@@ -1369,6 +1369,9 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
                 bodo.libs.distributed_api.wait(l_recv_req, True)
 
                 for i in range(0, halo_size):
+                    if bodo.libs.array_kernels.isna(l_recv_buff, i):
+                        bodo.libs.array_kernels.setna(output, i)
+                        continue
                     output[i] = l_recv_buff[i]
         else:
             _border_send_wait(r_send_req, l_send_req, rank, n_pes, False, True)
@@ -1378,6 +1381,9 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
                 bodo.libs.distributed_api.wait(r_recv_req, True)
 
                 for i in range(0, halo_size):
+                    if bodo.libs.array_kernels.isna(r_recv_buff, i):
+                        bodo.libs.array_kernels.setna(output, N - halo_size + i)
+                        continue
                     output[N - halo_size + i] = r_recv_buff[i]
 
     return output
@@ -1401,6 +1407,9 @@ def shift_seq(in_arr, shift):  # pragma: no cover
     end = min(N, N + shift)
 
     for i in range(start, end):
+        if bodo.libs.array_kernels.isna(in_arr, i - shift):
+            bodo.libs.array_kernels.setna(output, i)
+            continue
         output[i] = in_arr[i - shift]
 
     return output

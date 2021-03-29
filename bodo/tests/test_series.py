@@ -4258,29 +4258,32 @@ def test_series_shift(numeric_series_val, periods, memory_leak_check):
     def test_impl(A, periods):
         return A.shift(periods)
 
-    # TODO: support nullable int
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        with pytest.raises(BodoError, match=r"Series.shift\(\) Series input type"):
-            bodo.jit(test_impl)(numeric_series_val, periods)
-    else:
-        check_func(test_impl, (numeric_series_val, periods))
+    check_func(test_impl, (numeric_series_val, periods))
 
 
 @pytest.mark.slow
-def test_series_shift_unsupported(series_val, memory_leak_check):
+def test_series_shift_type_check(series_val, memory_leak_check):
     """
-    Test for the Series.shift inputs that are expected to be unsupported.
+    Make sure Series.shift() works for supported data types but throws error for
+    unsupported ones.
     """
-    # Series.shift supports non-nullable ints, floats, and dt64
-    if pd.api.types.is_numeric_dtype(series_val) or series_val.dtype == np.dtype(
-        "datetime64[ns]"
-    ):
-        return
 
     def test_impl(A):
         return A.shift(1)
 
-    with pytest.raises(BodoError, match=r"Series.shift\(\) Series input type"):
+    # Series.shift supports ints, floats, dt64, nullable nullable int/bool/decimal/date
+    if (
+        pd.api.types.is_numeric_dtype(series_val)
+        or series_val.dtype == np.dtype("datetime64[ns]")
+        or isinstance(series_val.values[0], Decimal)
+        or series_val.dtype == np.bool_
+        or is_bool_object_series(series_val)
+        or isinstance(series_val.values[0], datetime.date)
+    ) and not isinstance(series_val.dtype, pd.CategoricalDtype):
+        check_func(test_impl, (series_val,))
+        return
+
+    with pytest.raises(BodoError, match=r"Series.shift\(\): Series input type"):
         bodo.jit(test_impl)(series_val)
 
 

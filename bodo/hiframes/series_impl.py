@@ -2521,17 +2521,22 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
     check_unsupported_args("Series.shift", unsupported_args, arg_defaults)
 
     # Bodo specific limitations for supported types
-    # Currently only float (not nullable), int (not nullable), and dt64 are supported
+    # Currently only float (not nullable), int, dt64, and nullable int/bool/decimal/date
+    # arrays are supported
     if not (
-        isinstance(S.data, types.Array)
-        and (
-            isinstance(S.data.dtype, (types.Number))
-            or S.data.dtype == bodo.datetime64ns
+        (
+            isinstance(S.data, types.Array)
+            and (
+                isinstance(S.data.dtype, (types.Number))
+                or S.data.dtype == bodo.datetime64ns
+            )
         )
+        or isinstance(S.data, (IntegerArrayType, DecimalArrayType))
+        or S.data in (boolean_array, bodo.datetime_date_array_type)
     ):
         # TODO: Link to supported Series input types.
         raise BodoError(
-            f"Series.shift() Series input type {S.data.dtype} not supported."
+            f"Series.shift(): Series input type '{S.data.dtype}' not supported yet."
         )
 
     # Ensure period is int
