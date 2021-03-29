@@ -2,6 +2,7 @@
 Numba monkey patches to fix issues related to Bodo. Should be imported before any
 other module in bodo package.
 """
+import copy
 import functools
 import hashlib
 import inspect
@@ -197,7 +198,27 @@ if _check_numba_change:
 numba.core.ir_utils.visit_vars_stmt = visit_vars_stmt
 
 
-import copy
+old_run_pass = numba.core.typed_passes.InlineOverloads.run_pass
+
+
+def InlineOverloads_run_pass(self, state):
+    """plug in Bodo's overload inliner in Numba overload inliner to accelerate
+    compilation time (e.g. single block functions are faster to inline).
+
+    Plugging in existing inliner instead of a new pass since Numba overload
+    implementations are compiled recursively, so our inliner should be part of regular
+    Numba pipeline.
+    """
+    import bodo
+
+    bodo.compiler.bodo_overload_inline_pass(
+        state.func_ir, state.typingctx, state.typemap, state.calltypes
+    )
+    return old_run_pass(self, state)
+
+
+numba.core.typed_passes.InlineOverloads.run_pass = InlineOverloads_run_pass
+
 
 # The code below is copied from Numba and modified to handle aliases with tuple values.
 # https://github.com/numba/numba/blob/cc7e7c7cfa6389b54d3b5c2c95751c97eb531a96/numba/ir_utils.py#L725

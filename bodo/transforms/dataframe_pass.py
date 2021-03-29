@@ -430,7 +430,7 @@ class DataFramePass:
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
 
-            impl = bodo.hiframes.pd_dataframe_ext.sort_values_overload(
+            impl = bodo.hiframes.dataframe_impl.overload_dataframe_sort_values(
                 *arg_typs, **kw_typs
             )
             return replace_func(
@@ -445,7 +445,7 @@ class DataFramePass:
             rhs.args.insert(0, df_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            impl = bodo.hiframes.pd_dataframe_ext.pivot_table_overload(
+            impl = bodo.hiframes.dataframe_impl.overload_dataframe_pivot_table(
                 *arg_typs, **kw_typs
             )
             stub = eval(

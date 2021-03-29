@@ -204,7 +204,7 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
     check_unsupported_args("Series.reset_index", unsupported_args, arg_defaults)
 
     # we only support dropping all levels currently
-    if not bodo.hiframes.pd_dataframe_ext._is_all_levels(S, level):  # pragma: no cover
+    if not bodo.hiframes.dataframe_impl._is_all_levels(S, level):  # pragma: no cover
         raise_bodo_error(
             "Series.reset_index(): only dropping all index levels supported"
         )
@@ -384,6 +384,10 @@ def overload_series_prod(
         raise BodoError("Series.product(): axis argument not supported")
 
     val_one = S.dtype(1)
+    # Using True fails for some reason in test_dataframe.py::test_df_prod"[df_value2]"
+    # with Bodo inliner
+    if S.dtype == types.bool_:
+        val_one = 1
 
     # For integer array we cannot handle the missing values because
     # we cannot mix np.nan with integers
@@ -447,7 +451,7 @@ def overload_series_any(S, axis=0, bool_only=None, skipna=True, level=None):
 
 
 @overload_method(SeriesType, "equals", inline="always", no_unliteral=True)
-def overload_series_any(S, other):
+def overload_series_equals(S, other):
     if not isinstance(other, SeriesType):
         raise BodoError("Series.equals() 'other' must be a Series")
 
@@ -782,7 +786,7 @@ def overload_series_std(
 
 
 @overload_method(SeriesType, "dot", inline="always", no_unliteral=True)
-def overload_series_var(S, other):
+def overload_series_dot(S, other):
     def impl(S, other):  # pragma: no cover
         A1 = bodo.hiframes.pd_series_ext.get_series_data(S)
         A2 = bodo.hiframes.pd_series_ext.get_series_data(other)
@@ -1142,7 +1146,7 @@ def overload_series_builtins_sum(S):
 
 
 @overload(np.prod, inline="always", no_unliteral=True)
-def overload_series_prod(S):
+def overload_series_np_prod(S):
     if isinstance(S, SeriesType):
 
         def impl(S):  # pragma: no cover
@@ -3659,7 +3663,7 @@ def overload_series_repeat(S, repeats, axis=None):
     return impl_arr
 
 
-@overload_method(SeriesType, "to_dict", inline="always", no_unliteral=True)
+@overload_method(SeriesType, "to_dict", no_unliteral=True)
 def overload_to_dict(S, into=None):
     """ Support Series.to_dict(). """
 
