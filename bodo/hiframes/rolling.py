@@ -1392,9 +1392,9 @@ def shift_seq(in_arr, shift):  # pragma: no cover
     shift = sign_shift * min(abs(shift), N)
     # set border values to NA
     if shift > 0:
-        output[:shift] = bodo.utils.conversion.get_NA_val_for_arr(output)
+        bodo.libs.array_kernels.setna_slice(output, slice(None, shift))
     else:
-        output[shift:] = bodo.utils.conversion.get_NA_val_for_arr(output)
+        bodo.libs.array_kernels.setna_slice(output, slice(shift, None))
 
     # range is shift..N for positive shift, 0..N+shift for negative shift
     start = max(shift, 0)
@@ -1538,9 +1538,9 @@ def pct_change_seq(in_arr, shift):  # pragma: no cover
     shift = sign_shift * min(abs(shift), N)
     # set border values to NA
     if shift > 0:
-        output[:shift] = bodo.utils.conversion.get_NA_val_for_arr(output)
+        bodo.libs.array_kernels.setna_slice(output, slice(None, shift))
     else:
-        output[shift:] = bodo.utils.conversion.get_NA_val_for_arr(output)
+        bodo.libs.array_kernels.setna_slice(output, slice(shift, None))
 
     # using 'pad' method for handling NAs, TODO: support bfill
     if shift > 0:
