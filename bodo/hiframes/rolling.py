@@ -219,9 +219,7 @@ def roll_fixed_linear_generic(
                 calc_out,
             )
 
-        comm_data = _border_icomm(
-            in_arr, rank, n_pes, halo_size, in_arr.dtype, True, center
-        )
+        comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, True, center)
         (
             l_recv_buff,
             r_recv_buff,
@@ -345,9 +343,7 @@ def roll_fixed_apply_impl(
                 in_arr, index_arr, win, minp, center, rank, n_pes, kernel_func, raw
             )
 
-        comm_data = _border_icomm(
-            in_arr, rank, n_pes, halo_size, in_arr.dtype, True, center
-        )
+        comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, True, center)
         (
             l_recv_buff,
             r_recv_buff,
@@ -359,7 +355,7 @@ def roll_fixed_apply_impl(
 
         if raw == False:
             comm_data_idx = _border_icomm(
-                index_arr, rank, n_pes, halo_size, index_arr.dtype, True, center
+                index_arr, rank, n_pes, halo_size, True, center
             )
             (
                 l_recv_buff_idx,
@@ -723,7 +719,7 @@ def roll_var_linear_generic(
                 calc_out,
             )
 
-        comm_data = _border_icomm_var(in_arr, on_arr, rank, n_pes, win, in_arr.dtype)
+        comm_data = _border_icomm_var(in_arr, on_arr, rank, n_pes, win)
         (
             l_recv_buff,
             l_recv_t_buff,
@@ -891,7 +887,7 @@ def roll_variable_apply_impl(
                 in_arr, on_arr, index_arr, win, minp, rank, n_pes, kernel_func, raw
             )
 
-        comm_data = _border_icomm_var(in_arr, on_arr, rank, n_pes, win, in_arr.dtype)
+        comm_data = _border_icomm_var(in_arr, on_arr, rank, n_pes, win)
         (
             l_recv_buff,
             l_recv_t_buff,
@@ -901,9 +897,7 @@ def roll_variable_apply_impl(
             l_recv_t_req,
         ) = comm_data
         if raw == False:
-            comm_data_idx = _border_icomm_var(
-                index_arr, on_arr, rank, n_pes, win, index_arr.dtype
-            )
+            comm_data_idx = _border_icomm_var(index_arr, on_arr, rank, n_pes, win)
             (
                 l_recv_buff_idx,
                 l_recv_t_buff_idx,
@@ -1354,9 +1348,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
         if _is_small_for_parallel(N, halo_size):
             return _handle_small_data_shift(in_arr, shift, rank, n_pes)
 
-        comm_data = _border_icomm(
-            in_arr, rank, n_pes, halo_size, in_arr.dtype, send_right, send_left
-        )
+        comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, send_right, send_left)
         (
             l_recv_buff,
             r_recv_buff,
@@ -1377,6 +1369,9 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
                 bodo.libs.distributed_api.wait(l_recv_req, True)
 
                 for i in range(0, halo_size):
+                    if bodo.libs.array_kernels.isna(l_recv_buff, i):
+                        bodo.libs.array_kernels.setna(output, i)
+                        continue
                     output[i] = l_recv_buff[i]
         else:
             _border_send_wait(r_send_req, l_send_req, rank, n_pes, False, True)
@@ -1386,6 +1381,9 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
                 bodo.libs.distributed_api.wait(r_recv_req, True)
 
                 for i in range(0, halo_size):
+                    if bodo.libs.array_kernels.isna(r_recv_buff, i):
+                        bodo.libs.array_kernels.setna(output, N - halo_size + i)
+                        continue
                     output[N - halo_size + i] = r_recv_buff[i]
 
     return output
@@ -1394,21 +1392,24 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
 @register_jitable(cache=True)
 def shift_seq(in_arr, shift):  # pragma: no cover
     N = len(in_arr)
-    output = alloc_shift(in_arr)
+    output = alloc_shift(N, in_arr)
     # maximum shift size is N
     sign_shift = 1 if shift > 0 else -1
     shift = sign_shift * min(abs(shift), N)
     # set border values to NA
     if shift > 0:
-        output[:shift] = bodo.utils.conversion.get_NA_val_for_arr(output)
+        bodo.libs.array_kernels.setna_slice(output, slice(None, shift))
     else:
-        output[shift:] = bodo.utils.conversion.get_NA_val_for_arr(output)
+        bodo.libs.array_kernels.setna_slice(output, slice(shift, None))
 
     # range is shift..N for positive shift, 0..N+shift for negative shift
     start = max(shift, 0)
     end = min(N, N + shift)
 
     for i in range(start, end):
+        if bodo.libs.array_kernels.isna(in_arr, i - shift):
+            bodo.libs.array_kernels.setna(output, i)
+            continue
         output[i] = in_arr[i - shift]
 
     return output
@@ -1439,9 +1440,7 @@ def pct_change_impl(in_arr, shift, parallel):  # pragma: no cover
         if _is_small_for_parallel(N, halo_size):
             return _handle_small_data_pct_change(in_arr, shift, rank, n_pes)
 
-        comm_data = _border_icomm(
-            in_arr, rank, n_pes, halo_size, in_arr.dtype, send_right, send_left
-        )
+        comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, send_right, send_left)
         (
             l_recv_buff,
             r_recv_buff,
@@ -1542,15 +1541,15 @@ def get_one_from_arr_dtype(arr):
 def pct_change_seq(in_arr, shift):  # pragma: no cover
     # TODO: parallel 'pad' fill
     N = len(in_arr)
-    output = alloc_shift(in_arr)
+    output = alloc_pct_change(N, in_arr)
     # maximum shift size is N
     sign_shift = 1 if shift > 0 else -1
     shift = sign_shift * min(abs(shift), N)
     # set border values to NA
     if shift > 0:
-        output[:shift] = bodo.utils.conversion.get_NA_val_for_arr(output)
+        bodo.libs.array_kernels.setna_slice(output, slice(None, shift))
     else:
-        output[shift:] = bodo.utils.conversion.get_NA_val_for_arr(output)
+        bodo.libs.array_kernels.setna_slice(output, slice(shift, None))
 
     # using 'pad' method for handling NAs, TODO: support bfill
     if shift > 0:
@@ -1588,11 +1587,12 @@ def pct_change_seq(in_arr, shift):  # pragma: no cover
 
 @register_jitable(cache=True)
 def _border_icomm(
-    in_arr, rank, n_pes, halo_size, dtype, send_right=True, send_left=False
+    in_arr, rank, n_pes, halo_size, send_right=True, send_left=False
 ):  # pragma: no cover
+    """post isend/irecv for halo data (fixed window case)"""
     comm_tag = np.int32(comm_border_tag)
-    l_recv_buff = np.empty(halo_size, dtype)
-    r_recv_buff = np.empty(halo_size, dtype)
+    l_recv_buff = bodo.utils.utils.alloc_type(halo_size, in_arr)
+    r_recv_buff = bodo.utils.utils.alloc_type(halo_size, in_arr)
     # send right
     if send_right and rank != n_pes - 1:
         r_send_req = bodo.libs.distributed_api.isend(
@@ -1619,7 +1619,7 @@ def _border_icomm(
 
 
 @register_jitable(cache=True)
-def _border_icomm_var(in_arr, on_arr, rank, n_pes, win_size, dtype):  # pragma: no cover
+def _border_icomm_var(in_arr, on_arr, rank, n_pes, win_size):  # pragma: no cover
     comm_tag = np.int32(comm_border_tag)
     # find halo size from time array
     N = len(on_arr)
@@ -1645,7 +1645,7 @@ def _border_icomm_var(in_arr, on_arr, rank, n_pes, win_size, dtype):  # pragma: 
         halo_size = bodo.libs.distributed_api.recv(
             np.int64, np.int32(rank - 1), comm_tag
         )
-        l_recv_buff = np.empty(halo_size, dtype)
+        l_recv_buff = bodo.utils.utils.alloc_type(halo_size, in_arr)
         l_recv_req = bodo.libs.distributed_api.irecv(
             l_recv_buff, np.int32(halo_size), np.int32(rank - 1), comm_tag, True
         )
@@ -1751,7 +1751,7 @@ def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
     if rank == 0:
         all_out = shift_seq(all_in_arr, shift)
     else:
-        all_out = np.empty(all_N, shift_dtype(in_arr.dtype))
+        all_out = alloc_shift(all_N, in_arr)
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
@@ -1769,7 +1769,7 @@ def _handle_small_data_pct_change(in_arr, shift, rank, n_pes):  # pragma: no cov
     if rank == 0:
         all_out = pct_change_seq(all_in_arr, shift)
     else:
-        all_out = np.empty(all_N, shift_dtype(in_arr.dtype))
+        all_out = alloc_pct_change(all_N, in_arr)
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
@@ -1901,27 +1901,40 @@ def _dropna(arr):  # pragma: no cover
     return A
 
 
-def alloc_shift(A):  # pragma: no cover
-    return np.empty_like(A)
+def alloc_shift(n, A):  # pragma: no cover
+    return np.empty(n, A.dtype)
 
 
 @overload(alloc_shift, no_unliteral=True)
-def alloc_shift_overload(A):
+def alloc_shift_overload(n, A):
+    """allocate output array for shift(). It is the same type as input, except for
+    non-nullable int case which requires float (to store nulls).
+    """
+
+    # non-Numpy case is same as input
+    if not isinstance(A, types.Array):
+        return lambda n, A: bodo.utils.utils.alloc_type(n, A)  # pragma: no cover
+
+    # output of non-nullable int is float64 to be able to store nulls
     if isinstance(A.dtype, types.Integer):
-        return lambda A: np.empty(len(A), np.float64)  # pragma: no cover
-    return lambda A: np.empty(len(A), A.dtype)  # pragma: no cover
+        return lambda n, A: np.empty(n, np.float64)  # pragma: no cover
+
+    return lambda n, A: np.empty(n, A.dtype)  # pragma: no cover
 
 
-def shift_dtype(d):  # pragma: no cover
-    return d
+def alloc_pct_change(n, A):  # pragma: no cover
+    return np.empty(n, A.dtype)
 
 
-@overload(shift_dtype, no_unliteral=True)
-def shift_dtype_overload(a):
-    if isinstance(a.dtype, types.Integer):
-        return lambda a: np.float64  # pragma: no cover
-    else:
-        return lambda a: a  # pragma: no cover
+@overload(alloc_pct_change, no_unliteral=True)
+def alloc_pct_change_overload(n, A):
+    """allocate output array for pct_change(). The output is float for int input."""
+
+    # output of int is float
+    if isinstance(A.dtype, types.Integer):
+        return lambda n, A: np.empty(n, np.float64)  # pragma: no cover
+
+    return lambda n, A: np.empty(n, A.dtype)  # pragma: no cover
 
 
 def prep_values(A):  # pragma: no cover
