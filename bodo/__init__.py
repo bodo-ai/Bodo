@@ -55,7 +55,6 @@ from bodo.libs.distributed_api import (
     random_shuffle,
     scatterv,
 )
-import bodo.config
 import bodo.hiframes.boxing
 import bodo.hiframes.pd_timestamp_ext
 from bodo.libs.str_arr_ext import string_array_type

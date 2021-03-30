@@ -193,6 +193,8 @@ _isend = types.ExternalFunction(
 
 @numba.generated_jit(nopython=True)
 def isend(arr, size, pe, tag, cond=True):
+    """call MPI isend with input data"""
+    # Numpy array
     if isinstance(arr, types.Array):
 
         def impl(arr, size, pe, tag, cond=True):  # pragma: no cover
@@ -200,6 +202,25 @@ def isend(arr, size, pe, tag, cond=True):
             return _isend(arr.ctypes, size, type_enum, pe, tag, cond)
 
         return impl
+
+    # nullable arrays
+    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
+        boolean_array,
+        datetime_date_array_type,
+    ):
+        # return a tuple of requests for data and null arrays
+        type_enum = np.int32(numba_to_c_type(arr.dtype))
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def impl_nullable(arr, size, pe, tag, cond=True):  # pragma: no cover
+            n_bytes = (size + 7) >> 3
+            data_req = _isend(arr._data.ctypes, size, type_enum, pe, tag, cond)
+            null_req = _isend(
+                arr._null_bitmap.ctypes, n_bytes, char_typ_enum, pe, tag, cond
+            )
+            return (data_req, null_req)
+
+        return impl_nullable
 
     # voidptr input, pointer to bytes
     typ_enum = numba_to_c_type(types.uint8)
@@ -218,10 +239,39 @@ _irecv = types.ExternalFunction(
 )
 
 
-@numba.njit
+@numba.generated_jit(nopython=True)
 def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
-    type_enum = get_type_enum(arr)
-    return _irecv(arr.ctypes, size, type_enum, pe, tag, cond)
+    """post MPI irecv for array and return the request"""
+
+    # Numpy array
+    if isinstance(arr, types.Array):
+
+        def impl(arr, size, pe, tag, cond=True):  # pragma: no cover
+            type_enum = get_type_enum(arr)
+            return _irecv(arr.ctypes, size, type_enum, pe, tag, cond)
+
+        return impl
+
+    # nullable arrays
+    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
+        boolean_array,
+        datetime_date_array_type,
+    ):
+        # return a tuple of requests for data and null arrays
+        type_enum = np.int32(numba_to_c_type(arr.dtype))
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        def impl_nullable(arr, size, pe, tag, cond=True):  # pragma: no cover
+            n_bytes = (size + 7) >> 3
+            data_req = _irecv(arr._data.ctypes, size, type_enum, pe, tag, cond)
+            null_req = _irecv(
+                arr._null_bitmap.ctypes, n_bytes, char_typ_enum, pe, tag, cond
+            )
+            return (data_req, null_req)
+
+        return impl_nullable
+
+    raise BodoError(f"irecv(): array type {arr} not supported yet")
 
 
 _alltoall = types.ExternalFunction(
@@ -576,7 +626,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
                     recv_counts_nulls[i] = (recv_counts[i] + 7) >> 3
                 displs_nulls = bodo.ir.join.calc_disp(recv_counts_nulls)
                 tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)
-            #  print(rank, n_loc, n_total, recv_counts, displs)
+
             c_gatherv(
                 data._data.ctypes,
                 np.int32(n_loc),
@@ -2241,7 +2291,18 @@ def alltoallv(
             send_disp.ctypes,
             recv_disp.ctypes,
             typ_enum,
-        )
+        )  # pragma: no cover
+
+    if isinstance(send_data, bodo.CategoricalArray):
+        return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(
+            send_data.codes.ctypes,
+            out_data.codes.ctypes,
+            send_counts.ctypes,
+            recv_counts.ctypes,
+            send_disp.ctypes,
+            recv_disp.ctypes,
+            typ_enum,
+        )  # pragma: no cover
 
     return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(
         send_data.ctypes,
@@ -2251,7 +2312,7 @@ def alltoallv(
         send_disp.ctypes,
         recv_disp.ctypes,
         typ_enum,
-    )
+    )  # pragma: no cover
 
 
 def alltoallv_tup(
@@ -2478,7 +2539,24 @@ def single_print(*args):  # pragma: no cover
         print(*args)
 
 
-wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
+_wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))
+
+
+@numba.generated_jit(nopython=True)
+def wait(req, cond=True):
+    """wait on MPI request"""
+    # Tuple of requests (e.g. nullable arrays)
+    if isinstance(req, types.BaseTuple):
+        count = len(req.types)
+        tup_call = ",".join(f"_wait(req[{i}], cond)" for i in range(count))
+        func_text = "def f(req, cond=True):\n"
+        func_text += f"  return {tup_call}\n"
+        loc_vars = {}
+        exec(func_text, {"_wait": _wait}, loc_vars)
+        impl = loc_vars["f"]
+        return impl
+
+    return lambda req, cond=True: _wait(req, cond)  # pragma: no cover
 
 
 class ReqArrayType(types.Type):
@@ -2653,12 +2731,24 @@ ll.add_symbol("disconnect_hdfs", hdfs_reader.disconnect_hdfs)
 disconnect_hdfs = types.ExternalFunction("disconnect_hdfs", types.int32())
 
 
+def _check_for_cpp_errors():
+    pass
+
+
+@overload(_check_for_cpp_errors)
+def overload_check_for_cpp_errors():
+    """wrapper to call check_and_propagate_cpp_exception()
+    Avoids errors when JIT is disabled since intrinsics throw errors in non-JIT mode.
+    """
+    return lambda: check_and_propagate_cpp_exception()  # pragma: no cover
+
+
 @numba.njit
 def call_finalize():  # pragma: no cover
     finalize()
     finalize_s3()
     finalize_gcs()
-    check_and_propagate_cpp_exception()
+    _check_for_cpp_errors()
     disconnect_hdfs()
 
 

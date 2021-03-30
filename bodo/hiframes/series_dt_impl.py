@@ -25,6 +25,7 @@ from bodo.utils.typing import (
     check_unsupported_args,
     create_unsupported_overload,
     raise_bodo_error,
+    BodoError,
 )
 
 # global dtypes to use in allocations throughout this file
@@ -522,20 +523,20 @@ def create_bin_op_overload(op):
     with series(dt64)/series(timedelta) type
     """
 
-    def overload_series_dt_binop(A1, A2):
+    def overload_series_dt_binop(lhs, rhs):
 
-        # A1 is series(dt64) and A2 is series(dt64)
+        # lhs is series(dt64) and rhs is series(dt64)
         if bodo.hiframes.pd_series_ext.is_dt64_series_typ(
-            A1
-        ) and bodo.hiframes.pd_series_ext.is_dt64_series_typ(A2):
-            nat = A1.dtype("NaT")
+            lhs
+        ) and bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs):
+            nat = lhs.dtype("NaT")
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                arr1 = bodo.hiframes.pd_series_ext.get_series_data(A1)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A1)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A1)
-                arr2 = bodo.hiframes.pd_series_ext.get_series_data(A2)
+                arr1 = bodo.hiframes.pd_series_ext.get_series_data(lhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
+                arr2 = bodo.hiframes.pd_series_ext.get_series_data(rhs)
                 n = len(arr1)
                 S = np.empty(n, timedelta64_dtype)
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
@@ -554,18 +555,18 @@ def create_bin_op_overload(op):
 
             return impl
 
-        # A1 is series(dt64) and A2 is series(timedelta64)
+        # lhs is series(dt64) and rhs is series(timedelta64)
         if bodo.hiframes.pd_series_ext.is_dt64_series_typ(
-            A1
-        ) and bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(A2):
-            nat = A1.dtype("NaT")
+            lhs
+        ) and bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(rhs):
+            nat = lhs.dtype("NaT")
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A1)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A1)
-                arr2 = bodo.hiframes.pd_series_ext.get_series_data(A2)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(lhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
+                arr2 = bodo.hiframes.pd_series_ext.get_series_data(rhs)
                 n = len(arr)
                 S = np.empty(n, dt64_dtype)
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
@@ -584,18 +585,18 @@ def create_bin_op_overload(op):
 
             return impl
 
-        # A1 is series(timedelta64) and A2 is series(dt64)
+        # lhs is series(timedelta64) and rhs is series(dt64)
         if bodo.hiframes.pd_series_ext.is_dt64_series_typ(
-            A2
-        ) and bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(A1):
-            nat = A2.dtype("NaT")
+            rhs
+        ) and bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(lhs):
+            nat = rhs.dtype("NaT")
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                arr = bodo.hiframes.pd_series_ext.get_series_data(A2)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A2)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A2)
-                arr2 = bodo.hiframes.pd_series_ext.get_series_data(A1)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(rhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(rhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
+                arr2 = bodo.hiframes.pd_series_ext.get_series_data(lhs)
                 n = len(arr)
                 S = np.empty(n, dt64_dtype)
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
@@ -614,22 +615,22 @@ def create_bin_op_overload(op):
 
             return impl
 
-        # A1 is series(dt64) and A2 is timestamp
+        # lhs is series(dt64) and rhs is timestamp
         if (
-            bodo.hiframes.pd_series_ext.is_dt64_series_typ(A1)
-            and A2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+            bodo.hiframes.pd_series_ext.is_dt64_series_typ(lhs)
+            and rhs == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
         ):
-            nat = A1.dtype("NaT")
+            nat = lhs.dtype("NaT")
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A1)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A1)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(lhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
                 n = len(arr)
                 S = np.empty(n, timedelta64_dtype)
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
-                tsint = A2.value
+                tsint = rhs.value
                 for i in numba.parfors.parfor.internal_prange(n):
                     int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
                     if int_dt64 == nat_int or tsint == nat_int:
@@ -643,22 +644,22 @@ def create_bin_op_overload(op):
 
             return impl
 
-        # A1 is timestamp and A2 is series(dt64)
+        # lhs is timestamp and rhs is series(dt64)
         if (
-            bodo.hiframes.pd_series_ext.is_dt64_series_typ(A2)
-            and A1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+            bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs)
+            and lhs == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
         ):
-            nat = A2.dtype("NaT")
+            nat = rhs.dtype("NaT")
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                arr = bodo.hiframes.pd_series_ext.get_series_data(A2)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A2)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A2)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(rhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(rhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
                 n = len(arr)
                 S = np.empty(n, timedelta64_dtype)
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
-                tsint = A1.value
+                tsint = lhs.value
                 for i in numba.parfors.parfor.internal_prange(n):
                     int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
                     if tsint == nat_int or int_dt64 == nat_int:
@@ -672,23 +673,23 @@ def create_bin_op_overload(op):
 
             return impl
 
-        # A1 is series(dt64) and A2 is datetime.timedelta
+        # lhs is series(dt64) and rhs is datetime.timedelta
         if (
-            bodo.hiframes.pd_series_ext.is_dt64_series_typ(A1)
-            and A2 == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
+            bodo.hiframes.pd_series_ext.is_dt64_series_typ(lhs)
+            and rhs == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
         ):
-            nat = A1.dtype("NaT")
+            nat = lhs.dtype("NaT")
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A1)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A1)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(lhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
                 n = len(arr)
                 S = np.empty(n, dt64_dtype)
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
                 td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
-                    A2
+                    rhs
                 )
                 int_td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(td64)
                 for i in numba.parfors.parfor.internal_prange(n):
@@ -702,23 +703,23 @@ def create_bin_op_overload(op):
 
             return impl
 
-        # A1 is datetime.timedelta and A2 is series(dt64)
+        # lhs is datetime.timedelta and rhs is series(dt64)
         if (
-            bodo.hiframes.pd_series_ext.is_dt64_series_typ(A2)
-            and A1 == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
+            bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs)
+            and lhs == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
         ):
-            nat = A2.dtype("NaT")
+            nat = rhs.dtype("NaT")
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                arr = bodo.hiframes.pd_series_ext.get_series_data(A2)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A2)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A2)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(rhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(rhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
                 n = len(arr)
                 S = np.empty(n, dt64_dtype)
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
                 td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
-                    A1
+                    lhs
                 )
                 int_td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(td64)
                 for i in numba.parfors.parfor.internal_prange(n):
@@ -732,22 +733,22 @@ def create_bin_op_overload(op):
 
             return impl
 
-        # A1 is series(dt64) and A2 is datetime.datetime
+        # lhs is series(dt64) and rhs is datetime.datetime
         if (
-            bodo.hiframes.pd_series_ext.is_dt64_series_typ(A1)
-            and A2 == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type
+            bodo.hiframes.pd_series_ext.is_dt64_series_typ(lhs)
+            and rhs == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type
         ):
-            nat = A1.dtype("NaT")
+            nat = lhs.dtype("NaT")
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A1)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A1)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(lhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
                 n = len(arr)
                 S = np.empty(n, timedelta64_dtype)
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
-                dt64 = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(A2)
+                dt64 = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(rhs)
                 int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dt64)
                 for i in numba.parfors.parfor.internal_prange(n):
                     int_dt64_2 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
@@ -762,22 +763,22 @@ def create_bin_op_overload(op):
 
             return impl
 
-        # A1 is datetime.datetime and A2 is series(dt64)
+        # lhs is datetime.datetime and rhs is series(dt64)
         if (
-            bodo.hiframes.pd_series_ext.is_dt64_series_typ(A2)
-            and A1 == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type
+            bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs)
+            and lhs == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type
         ):
-            nat = A2.dtype("NaT")
+            nat = rhs.dtype("NaT")
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                arr = bodo.hiframes.pd_series_ext.get_series_data(A2)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A2)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A2)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(rhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(rhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
                 n = len(arr)
                 S = np.empty(n, timedelta64_dtype)
                 nat_int = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(nat)
-                dt64 = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(A1)
+                dt64 = bodo.hiframes.pd_timestamp_ext.datetime_datetime_to_dt64(lhs)
                 int_dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dt64)
                 for i in numba.parfors.parfor.internal_prange(n):
                     int_dt64_2 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
@@ -792,23 +793,23 @@ def create_bin_op_overload(op):
 
             return impl
 
-        # A1 is series(timedelta64) and A2 is datetime.timedelta
+        # lhs is series(timedelta64) and rhs is datetime.timedelta
         if (
-            bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(A1)
-            and A2 == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
+            bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(lhs)
+            and rhs == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
         ):
-            nat = A1.dtype("NaT")
+            nat = lhs.dtype("NaT")
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                arr = bodo.hiframes.pd_series_ext.get_series_data(A1)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A1)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A1)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(lhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
                 n = len(arr)
                 S = np.empty(n, timedelta64_dtype)
                 nat_int = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(nat)
                 td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
-                    A2
+                    rhs
                 )
                 int_td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(td64)
                 for i in numba.parfors.parfor.internal_prange(n):
@@ -826,23 +827,23 @@ def create_bin_op_overload(op):
 
             return impl
 
-        # A1 is datetime.timedelta and A2 is series(timedelta64)
+        # lhs is datetime.timedelta and rhs is series(timedelta64)
         if (
-            bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(A2)
-            and A1 == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
+            bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(rhs)
+            and lhs == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type
         ):
-            nat = A2.dtype("NaT")
+            nat = rhs.dtype("NaT")
 
-            def impl(A1, A2):  # pragma: no cover
+            def impl(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
-                arr = bodo.hiframes.pd_series_ext.get_series_data(A2)
-                index = bodo.hiframes.pd_series_ext.get_series_index(A2)
-                name = bodo.hiframes.pd_series_ext.get_series_name(A2)
+                arr = bodo.hiframes.pd_series_ext.get_series_data(rhs)
+                index = bodo.hiframes.pd_series_ext.get_series_index(rhs)
+                name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
                 n = len(arr)
                 S = np.empty(n, timedelta64_dtype)
                 nat_int = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(nat)
                 td64 = bodo.hiframes.pd_timestamp_ext.datetime_timedelta_to_timedelta64(
-                    A1
+                    lhs
                 )
                 int_td64 = bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(td64)
                 for i in numba.parfors.parfor.internal_prange(n):
@@ -859,6 +860,8 @@ def create_bin_op_overload(op):
                 return bodo.hiframes.pd_series_ext.init_series(S, index, name)
 
             return impl
+
+        raise BodoError(f"{op} not supported for data types {lhs} and {rhs}.")
 
     return overload_series_dt_binop
 
@@ -1056,15 +1059,6 @@ def create_cmp_op_overload(op):
 
     return overload_series_dt64_cmp
 
-
-def _install_bin_ops():
-    """install overloads for operators with series(dt64) type"""
-    for op in (operator.add, operator.sub):
-        overload_impl = create_bin_op_overload(op)
-        overload(op, no_unliteral=True)(overload_impl)
-
-
-_install_bin_ops()
 
 series_dt_unsupported_methods = {
     "asfreq",

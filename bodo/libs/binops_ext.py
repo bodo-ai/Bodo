@@ -1,6 +1,6 @@
 # Copyright (C) 2021 Bodo Inc. All rights reserved.
 """ Implementation of binary operators for the different types. 
-    Currently implemented operators: add
+    Currently implemented operators: add, sub
 """
 
 import operator
@@ -21,6 +21,7 @@ from bodo.hiframes.datetime_timedelta_ext import (
     datetime_timedelta_array_type,
 )
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
+from bodo.libs import hdatetime_ext
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.decimal_arr_ext import Decimal128Type
@@ -30,12 +31,24 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from numba.extending import overload
 from numba.core import types
 
-
+### Operator.add
 @overload(operator.add, no_unliteral=True)
 def overload_add_operator(lhs, rhs):
     """Overload the add operator. Note that the order is important.
     Please don't change unless it's intentional.
     """
+
+    # Time series
+    if time_series_operation(lhs, rhs):
+        overload_impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(
+            operator.add
+        )
+        return overload_impl(lhs, rhs)
+
+    if isinstance(lhs, SeriesType) or isinstance(rhs, SeriesType):
+        return bodo.hiframes.series_impl.create_binary_op_overload(operator.add)(
+            lhs, rhs
+        )
 
     # Offsets
     if lhs == week_type or rhs == week_type:
@@ -70,9 +83,79 @@ def overload_add_operator(lhs, rhs):
     if lhs == string_array_type or types.unliteral(lhs) == string_type:
         return bodo.libs.str_arr_ext.overload_add_operator_string_array(lhs, rhs)
 
+    # if supported by Numba, pass
+    if add_and_sub_supported_by_numba(lhs, rhs) or add_only_supported_by_numba(
+        lhs, rhs
+    ):
+        return
+
     raise BodoError(f"add operator not supported for data types {lhs} and {rhs}.")
 
 
+### Operator.sub
+@overload(operator.sub, no_unliteral=True)
+def overload_sub_operator(lhs, rhs):
+    """Overload the sub operator. Note that the order is important.
+    Please don't change unless it's intentional.
+    """
+
+    # Offsets
+    if subtracting_offset_to_datetime_or_timestamp(lhs, rhs):
+        return bodo.hiframes.pd_offsets_ext.overload_sub_operator_offsets(lhs, rhs)
+
+    # The order matters here: make sure offset types are before datetime types
+    # Datetime types
+    if lhs == pandas_timestamp_type and rhs in [
+        pandas_timestamp_type,
+        datetime_timedelta_type,
+        pd_timedelta_type,
+    ]:
+        return bodo.hiframes.pd_timestamp_ext.overload_sub_operator_timestamp(lhs, rhs)
+
+    if substracting_dt_or_td(lhs, rhs):
+        return bodo.hiframes.datetime_date_ext.overload_sub_operator_datetime_date(
+            lhs, rhs
+        )
+
+    if subtracting_datetime_and_timedeltas(lhs, rhs):
+        return bodo.hiframes.datetime_timedelta_ext.overload_sub_operator_datetime_timedelta(
+            lhs, rhs
+        )
+
+    if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
+        return (
+            bodo.hiframes.datetime_datetime_ext.overload_sub_operator_datetime_datetime(
+                lhs, rhs
+            )
+        )
+
+    if subtracting_dt_index_and_timestamp(lhs, rhs):
+        return bodo.hiframes.pd_index_ext.overload_sub_operator_datetime_index(lhs, rhs)
+
+    # Time Series
+    if time_series_operation(lhs, rhs):
+        overload_impl = bodo.hiframes.series_dt_impl.create_bin_op_overload(
+            operator.sub
+        )
+        return overload_impl(lhs, rhs)
+
+    if isinstance(lhs, SeriesType) or isinstance(rhs, SeriesType):
+        return bodo.hiframes.series_impl.create_binary_op_overload(operator.sub)(
+            lhs, rhs
+        )
+
+    # int array
+    if isinstance(lhs, IntegerArrayType) or isinstance(rhs, IntegerArrayType):
+        return bodo.libs.int_arr_ext.create_op_overload(operator.sub, 2)(lhs, rhs)
+
+    # if supported by Numba, pass
+    if add_and_sub_supported_by_numba(lhs, rhs):
+        return
+
+    raise BodoError(f"sub operator not supported for data types {lhs} and {rhs}.")
+
+
+### Helper Functions For Checking Types
 def adding_dt_td_and_dt_date(lhs, rhs):
     """ Helper function to check types supported in datetime_date_ext overload. """
 
@@ -101,6 +184,86 @@ def adding_datetime_and_timedeltas(lhs, rhs):
     )
 
     return deltas or dt
+
+
+def subtracting_offset_to_datetime_or_timestamp(lhs, rhs):
+    """ Helper function to check types supported in pd_offsets_ext add op overload. """
+
+    dt_types = [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
+    offset_types = [date_offset_type, month_end_type, week_type]
+    lhs_offset = lhs in offset_types and rhs in dt_types
+    rhs_offset = rhs in offset_types and lhs in dt_types
+
+    return lhs_offset or rhs_offset
+
+
+def subtracting_dt_index_and_timestamp(lhs, rhs):
+    """ Helper function to check types supported in pd_index_ext sub op overload. """
+
+    lhs_index = isinstance(lhs, DatetimeIndexType) and rhs == pandas_timestamp_type
+    rhs_index = isinstance(rhs, DatetimeIndexType) and lhs == pandas_timestamp_type
+
+    return lhs_index or rhs_index
+
+
+def substracting_dt_or_td(lhs, rhs):
+    """ Helper function to check types supported in datetime_date_ext sub op overload. """
+
+    date_and_timedelta = lhs == datetime_date_type and rhs == datetime_timedelta_type
+    date_and_date = lhs == datetime_date_type and rhs == datetime_date_type
+    date_array_and_timedelta = (
+        lhs == datetime_date_array_type and rhs == datetime_timedelta_type
+    )
+
+    return date_and_timedelta or date_and_date or date_array_and_timedelta
+
+
+def subtracting_datetime_and_timedeltas(lhs, rhs):
+    """ Helper function to check types supported in datetime_timedelta_ext sub op overload. """
+
+    td_cond = (is_timedelta_type(lhs) or lhs == datetime_datetime_type) and (
+        is_timedelta_type(rhs)
+    )
+    array_cond = lhs == datetime_timedelta_array_type and rhs == datetime_timedelta_type
+
+    return td_cond or array_cond
+
+
+def helper_time_series_checks(operand):
+    """Helper function that checks whether the operand
+    type is supported with the dt64_series add/sub ops in series_dt_impl."""
+    ret = (
+        bodo.hiframes.pd_series_ext.is_dt64_series_typ(operand)
+        or bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(operand)
+        or operand
+        in [datetime_timedelta_type, datetime_datetime_type, pandas_timestamp_type]
+    )
+    return ret
+
+
+def time_series_operation(lhs, rhs):
+    """ Helper function to check types supported in series_dt_impl by add/sub op overload. """
+    td64series_and_timedelta = (
+        bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(lhs)
+        and rhs == datetime_timedelta_type
+    )
+    timedelta_and_td64series = (
+        bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(rhs)
+        and lhs == datetime_timedelta_type
+    )
+    dt64series_lhs = bodo.hiframes.pd_series_ext.is_dt64_series_typ(
+        lhs
+    ) and helper_time_series_checks(rhs)
+    dt64series_rhs = bodo.hiframes.pd_series_ext.is_dt64_series_typ(
+        rhs
+    ) and helper_time_series_checks(lhs)
+
+    return (
+        td64series_and_timedelta
+        or timedelta_and_td64series
+        or dt64series_lhs
+        or dt64series_rhs
+    )
 
 
 def create_overload_cmp_operator(op):
@@ -250,6 +413,74 @@ def comparing_timedeltas(lhs, rhs):
 
     deltas = [pd_timedelta_type, bodo.timedelta64ns]
     return lhs in deltas and rhs in deltas
+
+
+def add_and_sub_supported_by_numba(lhs, rhs):
+    """ Signatures supported by Numba for operator.add and operator.sub. """
+
+    # timedelta
+    timedeltas = isinstance(lhs, types.NPTimedelta) and isinstance(
+        rhs, types.NPTimedelta
+    )
+
+    # NPDatetimes
+    np_dt = isinstance(lhs, types.NPDatetime) and isinstance(rhs, types.NPDatetime)
+
+    # NPDatetime and NPTimedelta
+    dt_td = isinstance(lhs, types.NPDatetime) and isinstance(rhs, types.NPTimedelta)
+
+    # Sets
+    sets = isinstance(lhs, types.Set) and isinstance(rhs, types.Set)
+
+    # Numbers
+    ints = isinstance(lhs, types.Integer) and isinstance(rhs, types.Integer)
+    reals = isinstance(lhs, types.Float) and isinstance(rhs, types.Float)
+    cmplx = isinstance(lhs, types.Complex) and isinstance(rhs, types.Complex)
+    numbers = ints or reals or cmplx
+
+    # Arrays
+    arrs = isinstance(lhs, types.Array) or isinstance(rhs, types.Array)
+
+    return timedeltas or np_dt or dt_td or sets or numbers or arrs
+
+
+def add_only_supported_by_numba(lhs, rhs):
+    """ Signatures supported by Numba for operator.add. """
+
+    # Tuples
+    tuples = isinstance(lhs, types.BaseTuple) and isinstance(rhs, types.BaseTuple)
+
+    # Lists
+    lists = isinstance(lhs, types.List) and isinstance(rhs, types.List)
+
+    # Chars
+    char_seq_char = isinstance(lhs, types.UnicodeCharSeq) and isinstance(
+        rhs, types.UnicodeType
+    )
+    char_char_seq = isinstance(rhs, types.UnicodeCharSeq) and isinstance(
+        lhs, types.UnicodeType
+    )
+    char_seq_char_seq = isinstance(lhs, types.UnicodeCharSeq) and isinstance(
+        rhs, types.UnicodeCharSeq
+    )
+    char_seq_bytes = isinstance(lhs, (types.CharSeq, types.Bytes)) and isinstance(
+        rhs, (types.CharSeq, types.Bytes)
+    )
+
+    char_add = char_seq_char or char_char_seq or char_seq_char_seq or char_seq_bytes
+
+    # Strings
+    unicodes = isinstance(lhs, types.UnicodeType) and isinstance(rhs, types.UnicodeType)
+    char_seq_unicode = isinstance(lhs, types.UnicodeType) and isinstance(
+        rhs, types.UnicodeCharSeq
+    )
+
+    string_add = unicodes or char_seq_unicode
+
+    # NPTimedelta and NPDatetime
+    np_dt = lhs == types.NPTimedelta and rhs == types.NPDatetime
+
+    return tuples or lists or char_add or string_add or np_dt
 
 
 def cmp_op_supported_by_numba(lhs, rhs):

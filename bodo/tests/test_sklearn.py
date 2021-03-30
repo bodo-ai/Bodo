@@ -1671,16 +1671,24 @@ def test_train_test_split(memory_leak_check):
     assert_array_equal(X_test[:, 0], y_test * 10)
 
 
-def test_train_test_split_df(memory_leak_check):
-    def impl_shuffle(X, y):
-        # simple test
-        X_train, X_test, y_train, y_test = train_test_split(X, y)
+@pytest.mark.parametrize(
+    "train_size, test_size", [(0.6, None), (None, 0.3), (None, None), (0.7, 0.3)]
+)
+def test_train_test_split_df(train_size, test_size, memory_leak_check):
+    """ Test train_test_split with DataFrame dataset and train_size/test_size variation"""
+
+    def impl_shuffle(X, y, train_size, test_size):
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, train_size=train_size, test_size=test_size
+        )
         return X_train, X_test, y_train, y_test
 
     # Test replicated shuffle with DataFrame
     train = pd.DataFrame({"A": range(20), "B": range(100, 120)})
     train_labels = pd.Series(range(20))
-    X_train, X_test, y_train, y_test = bodo.jit(impl_shuffle)(train, train_labels)
+    X_train, X_test, y_train, y_test = bodo.jit(impl_shuffle)(
+        train, train_labels, train_size, test_size
+    )
     assert_array_equal(X_train.iloc[:, 0], y_train)
     assert_array_equal(X_test.iloc[:, 0], y_test)
 
@@ -1689,7 +1697,9 @@ def test_train_test_split_df(memory_leak_check):
     train_labels = pd.Series(range(10))
 
     # Replicated
-    X_train, X_test, y_train, y_test = bodo.jit(impl_shuffle)(train, train_labels)
+    X_train, X_test, y_train, y_test = bodo.jit(impl_shuffle)(
+        train, train_labels, train_size, test_size
+    )
     assert_array_equal(X_train[:, 0], y_train * 10)
     assert_array_equal(X_test[:, 0], y_test * 10)
 
@@ -1697,8 +1707,7 @@ def test_train_test_split_df(memory_leak_check):
     X_train, X_test, y_train, y_test = bodo.jit(
         distributed=["X", "y", "X_train", "X_test", "y_train", "y_test"], cache=True
     )(impl_shuffle)(
-        _get_dist_arg(train),
-        _get_dist_arg(train_labels),
+        _get_dist_arg(train), _get_dist_arg(train_labels), train_size, test_size
     )
     assert_array_equal(X_train[:, 0], y_train * 10)
     assert_array_equal(X_test[:, 0], y_test * 10)
@@ -1713,8 +1722,7 @@ def test_train_test_split_df(memory_leak_check):
     X_train, X_test, y_train, y_test = bodo.jit(
         distributed=["X", "y", "X_train", "X_test", "y_train", "y_test"]
     )(impl_shuffle)(
-        _get_dist_arg(train),
-        _get_dist_arg(train_labels),
+        _get_dist_arg(train), _get_dist_arg(train_labels), train_size, test_size
     )
     assert_array_equal(X_train.iloc[:, 0], y_train)
     assert_array_equal(X_test.iloc[:, 0], y_test)

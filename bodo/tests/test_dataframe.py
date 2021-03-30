@@ -1625,40 +1625,69 @@ def test_df_idxmax_all_types_axis0(df_value, memory_leak_check):
     def test_impl(df):
         return df.idxmax()
 
-    err_msg = "DataFrame.idxmax.* only supported for non-nullable numeric column types. Column type: .* not supported."
+    err_msg = "DataFrame.idxmax.* only supported for numeric column types. Column type: .* not supported."
 
     skip = False
+    gen_output = False
+    # If any of the columns isn't directly supported in Pandas, we need to compute
+    # the py_output to match what Pandas should support. If a column isn't supported
+    # in either Pandas or Bodo, we need to check the error message.
     for i, dtype in enumerate(df_value.dtypes):
-        # not supported for BooleanArray, TODO: support and test
-        # This isn't supported in Pandas
-        # bools in Numpy arrays are supported in Pandas.
-        if dtype == np.bool_:
-            skip = True
-            break
+        # This isn't supported in Pandas with BooleanArrays
+        if dtype == object and is_bool_object_series(df_value[df_value.columns[i]]):
+            gen_output = True
 
-        # not supported for CategoricalArray, TODO: support and test [BE-79]
         # This isn't supported in Pandas
         if isinstance(dtype, pd.CategoricalDtype):
-            skip = True
-            break
+            gen_output = True
 
-        # not supported for CategoricalArray, TODO: support and test [BE-79]
         # This isn't supported in Pandas
         if isinstance(dtype, pd.core.arrays.integer._IntegerDtype):
-            skip = True
-            break
+            gen_output = True
 
-        # not supported for Strings, TODO: support and test
-        # This isn't supported in Pandas
-        if isinstance(df_value[df_value.columns[i]].iat[0], str):
+        # not supported for Strings, This isn't supported in Pandas
+        if not isinstance(dtype, pd.CategoricalDtype) and isinstance(
+            df_value[df_value.columns[i]].iat[0], str
+        ):
             skip = True
             break
 
     if skip:
+        # Check for an appropriate error message
         with pytest.raises(BodoError, match=err_msg):
             bodo.jit(test_impl)(df_value)
     else:
-        check_func(test_impl, (df_value,), dist_test=False)
+        if gen_output:
+            # Generate the py_output
+            outputs = []
+            for colname in df_value.columns:
+                column = df_value[colname]
+                if column.dtype == object and is_bool_object_series(column):
+                    series_val = test_impl(column.dropna().astype(np.bool_))
+                elif column.dtype == object and isinstance(
+                    column.iat[0], datetime.date
+                ):
+                    series_val = test_impl(
+                        column.dropna().astype(np.dtype("datetime64[ns]"))
+                    )
+                elif isinstance(column.dtype, pd.CategoricalDtype):
+                    column = column.astype(
+                        pd.CategoricalDtype(column.dtype.categories, ordered=True)
+                    )
+                    df_value[colname] = column
+                    na_dropped = column.dropna()
+                    series_val = na_dropped.index[na_dropped.values.codes.argmax()]
+                elif isinstance(column.dtype, pd.core.arrays.integer._IntegerDtype):
+                    series_val = test_impl(
+                        column.dropna().astype(column.dtype.numpy_dtype)
+                    )
+                else:
+                    series_val = test_impl(column)
+                outputs.append(series_val)
+            py_output = pd.Series(outputs, index=df_value.columns)
+        else:
+            py_output = None
+        check_func(test_impl, (df_value,), dist_test=False, py_output=py_output)
 
 
 def test_df_idxmax_all_types_axis1(df_value, memory_leak_check):
@@ -1682,40 +1711,69 @@ def test_df_idxmin_all_types_axis0(df_value, memory_leak_check):
     def test_impl(df):
         return df.idxmin()
 
-    err_msg = "DataFrame.idxmin.* only supported for non-nullable numeric column types. Column type: .* not supported."
+    err_msg = "DataFrame.idxmin.* only supported for numeric column types. Column type: .* not supported."
 
     skip = False
+    gen_output = False
+    # If any of the columns isn't directly supported in Pandas, we need to compute
+    # the py_output to match what Pandas should support. If a column isn't supported
+    # in either Pandas or Bodo, we need to check the error message.
     for i, dtype in enumerate(df_value.dtypes):
-        # not supported for BooleanArray, TODO: support and test
-        # This isn't supported in Pandas
-        # bools in Numpy arrays are supported in Pandas.
-        if dtype == np.bool_:
-            skip = True
-            break
+        # This isn't supported in Pandas with BooleanArrays
+        if dtype == object and is_bool_object_series(df_value[df_value.columns[i]]):
+            gen_output = True
 
-        # not supported for CategoricalArray, TODO: support and test [BE-79]
         # This isn't supported in Pandas
         if isinstance(dtype, pd.CategoricalDtype):
-            skip = True
-            break
+            gen_output = True
 
-        # not supported for CategoricalArray, TODO: support and test [BE-79]
         # This isn't supported in Pandas
         if isinstance(dtype, pd.core.arrays.integer._IntegerDtype):
-            skip = True
-            break
+            gen_output = True
 
-        # not supported for Strings, TODO: support and test
-        # This isn't supported in Pandas
-        if isinstance(df_value[df_value.columns[i]].iat[0], str):
+        # not supported for Strings, This isn't supported in Pandas
+        if not isinstance(dtype, pd.CategoricalDtype) and isinstance(
+            df_value[df_value.columns[i]].iat[0], str
+        ):
             skip = True
             break
 
     if skip:
+        # Check for an appropriate error message
         with pytest.raises(BodoError, match=err_msg):
             bodo.jit(test_impl)(df_value)
     else:
-        check_func(test_impl, (df_value,), dist_test=False)
+        if gen_output:
+            # Generate the py_output
+            outputs = []
+            for colname in df_value.columns:
+                column = df_value[colname]
+                if column.dtype == object and is_bool_object_series(column):
+                    series_val = test_impl(column.dropna().astype(np.bool_))
+                elif column.dtype == object and isinstance(
+                    column.iat[0], datetime.date
+                ):
+                    series_val = test_impl(
+                        column.dropna().astype(np.dtype("datetime64[ns]"))
+                    )
+                elif isinstance(column.dtype, pd.CategoricalDtype):
+                    column = column.astype(
+                        pd.CategoricalDtype(column.dtype.categories, ordered=True)
+                    )
+                    df_value[colname] = column
+                    na_dropped = column.dropna()
+                    series_val = na_dropped.index[na_dropped.values.codes.argmin()]
+                elif isinstance(column.dtype, pd.core.arrays.integer._IntegerDtype):
+                    series_val = test_impl(
+                        column.dropna().astype(column.dtype.numpy_dtype)
+                    )
+                else:
+                    series_val = test_impl(column)
+                outputs.append(series_val)
+            py_output = pd.Series(outputs, index=df_value.columns)
+        else:
+            py_output = None
+        check_func(test_impl, (df_value,), dist_test=False, py_output=py_output)
 
 
 def test_df_idxmin_all_types_axis1(df_value, memory_leak_check):
@@ -2062,21 +2120,32 @@ def test_duplicated_all_types(df_value):
     def test_impl(df):
         return df.duplicated()
 
-    is_categorical = False
-    for dtype in df_value.dtypes:
-        if isinstance(dtype, pd.CategoricalDtype):
-            is_categorical = True
-            break
-    if is_categorical:
-        # TODO: [BE-267] Support Categorical DataFrames
-        with pytest.raises(
-            BodoError,
-            match="DataFrame.duplicated.* not supported for DataFrames with Categorical Columns",
-        ):
-            bodo.jit(test_impl)(df_value)
-    else:
-        # Index and order doesn't match in distributed case.
-        check_func(test_impl, (df_value,), sort_output=True, reset_index=True)
+    # TODO [BE-414]: Properly support NA
+
+    # Index and order doesn't match in distributed case.
+    check_func(test_impl, (df_value,), sort_output=True, reset_index=True)
+
+
+# TODO: [BE-266] Fix memory leak in duplicated
+@pytest.mark.slow
+def test_duplicated_cat_runtime():
+    """
+    Test that duplicated works on df types with Categories only
+    known at runtime.
+    """
+
+    def test_impl(df):
+        df["A"] = df["A"].astype("category")
+        return df.duplicated()
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(["AA", "BB", "", "AA"] * 4),
+        }
+    )
+
+    # Index and order doesn't match in distributed case.
+    check_func(test_impl, (df,), copy_input=True, sort_output=True, reset_index=True)
 
 
 ##################### binary ops ###############################
@@ -2253,8 +2322,8 @@ def test_pd_notna(na_test_obj, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_pd_notnull(null_test_obj, memory_leak_check):
-    obj = null_test_obj
+def test_pd_notnull(na_test_obj, memory_leak_check):
+    obj = na_test_obj
 
     def impl(obj):
         return pd.notnull(obj)
@@ -4186,6 +4255,19 @@ def test_dataframe_columns_name():
     df.columns.name = "D"
     df.index.name = "A"
     check_func(f, (df,), dist_test=False)
+
+
+@pytest.mark.slow
+def test_dataframe_empty_with_index():
+    """Make sure dataframe boxing works when dataframe has no columns but has a
+    non-empty Index.
+    """
+
+    def impl(A):
+        return bodo.hiframes.pd_dataframe_ext.init_dataframe((), A, ())
+
+    A = pd.Int64Index([1, 3, 4, 11, 16, 19])
+    check_func(impl, (A,), py_output=pd.DataFrame(index=A), only_seq=True)
 
 
 def test_dataframe_columns_list():

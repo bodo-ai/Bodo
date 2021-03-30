@@ -6,15 +6,8 @@ import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.typing import signature
-from numba.core.typing.templates import (
-    AbstractTemplate,
-    AttributeTemplate,
-    bound_function,
-    infer_global,
-)
+from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import (
-    infer,
-    infer_getattr,
     intrinsic,
     models,
     overload,
@@ -33,7 +26,7 @@ from bodo.libs.str_ext import (
 from bodo.utils.typing import is_overload_none, parse_dtype
 from bodo.utils.utils import numba_to_c_type
 
-if bodo.config._has_h5py:
+if bodo.utils.utils.has_h5py():
     import h5py
 
     assert h5py.version.hdf5_version_tuple[1] == 10, "only hdf5 1.10 supported"
@@ -91,7 +84,7 @@ h5dataset_or_group_type = H5DatasetOrGroupType()
 
 h5file_data_type = types.int64
 
-if bodo.config._has_h5py:
+if bodo.utils.utils.has_h5py():
     # hid_t is 32bit in 1.8 but 64bit in 1.10
     if h5py.version.hdf5_version_tuple[1] == 8:
         h5file_data_type = types.int32
@@ -143,7 +136,7 @@ h5_open = types.ExternalFunction(
 )
 
 
-if bodo.config._has_h5py:
+if bodo.utils.utils.has_h5py():
 
     @overload(h5py.File)
     def overload_h5py_file(

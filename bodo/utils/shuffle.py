@@ -13,13 +13,6 @@ from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.libs.array import (
-    arr_info_list_to_table,
-    array_to_info,
-    delete_table,
-    info_from_table,
-    info_to_array,
-)
 from bodo.libs.array_item_arr_ext import offset_type
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -36,7 +29,6 @@ from bodo.libs.str_arr_ext import (
     print_str_arr,
     set_bit_to,
     string_array_type,
-    to_string_list,
 )
 from bodo.libs.str_ext import string_type
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
@@ -325,7 +317,15 @@ def finalize_shuffle_meta_overload(
                 i, i
             )
         else:
-            assert isinstance(typ, (types.Array, IntegerArrayType, BooleanArrayType))
+            assert isinstance(
+                typ,
+                (
+                    types.Array,
+                    IntegerArrayType,
+                    BooleanArrayType,
+                    bodo.CategoricalArray,
+                ),
+            )
             func_text += (
                 "  out_arr_{} = bodo.utils.utils.alloc_type(n_out, arr)\n".format(i)
             )
@@ -448,7 +448,10 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
 
     func_text += "  lens = np.empty(meta.n_out, np.uint32)\n"
     for i, typ in enumerate(arrs.types):
-        if isinstance(typ, (types.Array, IntegerArrayType, BooleanArrayType)):
+        if isinstance(
+            typ,
+            (types.Array, IntegerArrayType, BooleanArrayType, bodo.CategoricalArray),
+        ):
             func_text += (
                 "  bodo.libs.distributed_api.alltoallv("
                 "meta.send_buff_tup[{}], meta.out_arr_tup[{}], meta.send_counts,"

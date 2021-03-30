@@ -536,8 +536,7 @@ def overload_add_operator_datetime_timedelta(lhs, rhs):
         return impl
 
 
-@overload(operator.sub, no_unliteral=True)
-def pd_timedelta_sub(lhs, rhs):
+def overload_sub_operator_datetime_timedelta(lhs, rhs):
     if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -564,6 +563,37 @@ def pd_timedelta_sub(lhs, rhs):
 
         def impl(lhs, rhs):  # pragma: no cover
             return lhs + -rhs
+
+        return impl
+
+    if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            d = lhs.days - rhs.days
+            s = lhs.seconds - rhs.seconds
+            us = lhs.microseconds - rhs.microseconds
+            return datetime.timedelta(d, s, us)
+
+        return impl
+
+    if lhs == datetime_datetime_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs + -rhs
+
+        return impl
+
+    # datetime_timedelta_array - timedelta
+    if lhs == datetime_timedelta_array_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            in_arr = lhs
+            numba.parfors.parfor.init_prange()
+            n = len(in_arr)
+            A = alloc_datetime_timedelta_array(n)
+            for i in numba.parfors.parfor.internal_prange(n):
+                A[i] = in_arr[i] - rhs
+            return A
 
         return impl
 
@@ -925,26 +955,6 @@ def _divide_and_round(a, b):  # pragma: no cover
 
 
 _MAXORDINAL = 3652059
-
-
-@overload(operator.sub, no_unliteral=True)
-def timedelta_sub(lhs, rhs):
-    if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            d = lhs.days - rhs.days
-            s = lhs.seconds - rhs.seconds
-            us = lhs.microseconds - rhs.microseconds
-            return datetime.timedelta(d, s, us)
-
-        return impl
-
-    if lhs == datetime_datetime_type and rhs == datetime_timedelta_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            return lhs + -rhs
-
-        return impl
 
 
 @overload(operator.mul, no_unliteral=True)
@@ -1612,7 +1622,6 @@ def overload_datetime_timedelta_arr_shape(A):
     return lambda A: (len(A._days_data),)
 
 
-@overload(operator.sub, no_unliteral=True)
 def overload_datetime_timedelta_arr_sub(arg1, arg2):
 
     # datetime_timedelta_array - timedelta

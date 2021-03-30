@@ -4,6 +4,7 @@ import operator
 import os
 import random
 import unittest
+from dataclasses import dataclass
 from decimal import Decimal
 
 import numba
@@ -27,6 +28,14 @@ from bodo.tests.utils import (
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_call_assign
+
+
+@dataclass
+class SeriesReplace:
+    series: pd.Series
+    to_replace: (int, str)
+    value: (int, str)
+
 
 _cov_corr_series = [
     (pd.Series(x), pd.Series(y))
@@ -322,6 +331,199 @@ def test_series_fillna_series_val(series_val):
         # TODO: Set dist_test=True once distributed getitem is supported
         # for Nullable and Categorical
         check_func(impl, (series_val,), dist_test=False, check_dtype=False)
+
+
+def series_replace_impl(series, to_replace, value):
+    series.replace(to_replace, value)
+
+
+def test_replace_series_val(series_val):
+    """Run series.replace on the types in the series_val fixture. Catch
+    expected failures from lack of coverage.
+    """
+    series = series_val.dropna()
+    to_replace = series.iat[0]
+    value = series.iat[1]
+
+    message = ""
+    if any(
+        isinstance(x, (datetime.date, pd.Timedelta, pd.Timestamp))
+        for x in [to_replace, value]
+    ):
+        message = "Not supported for types"
+    elif any(isinstance(x, pd.Categorical) for x in [to_replace, value]) or any(
+        isinstance(x, list) for x in series
+    ):
+        message = "only support with Scalar"
+
+    if message:
+        with pytest.raises(BodoError, match=message):
+            bodo.jit(series_replace_impl)(series, to_replace, value)
+    else:
+        check_func(series_replace_impl, (series, to_replace, value))
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "series_replace",
+    [
+        # Int
+        pytest.param(
+            SeriesReplace(series=pd.Series([1, 8, 4, 11, -3]), to_replace=1, value=10),
+        ),
+        # Float
+        pytest.param(
+            SeriesReplace(
+                series=pd.Series([1.1, 8.2, 4.3, 11.4, -3.5]),
+                to_replace=11.4,
+                value=4.11,
+            ),
+        ),
+        # String
+        pytest.param(
+            SeriesReplace(
+                series=pd.Series(["A", "B", "CG", "ACDE"] * 4),
+                to_replace="A",
+                value="B",
+            ),
+        ),
+        # Bool
+        pytest.param(
+            SeriesReplace(
+                series=pd.Series([False, True, True, False, False]),
+                to_replace=True,
+                value=False,
+            ),
+        ),
+        # List of strings
+        pytest.param(
+            SeriesReplace(
+                pd.Series(["abc", "def"] * 4),
+                to_replace=["abc"],
+                value=["ghi"],
+            ),
+        ),
+        # pd.Categorical pass
+        pytest.param(
+            SeriesReplace(
+                pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=True)),
+                to_replace=5,
+                value=15,
+            ),
+        ),
+        # to_replace=dictionary success
+        pytest.param(
+            SeriesReplace(
+                pd.Series([1, 2, 3, 4] * 4),
+                to_replace={1: 10, 2: 20, 3: 30},
+                value=None,
+            ),
+        ),
+    ],
+)
+def test_replace_types_supported(series_replace):
+    """Run series.replace on particular types that all pass."""
+    series = series_replace.series
+    to_replace = series_replace.to_replace
+    value = series_replace.value
+    check_func(series_replace_impl, (series, to_replace, value))
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "series_replace",
+    [
+        # Timestamp
+        pytest.param(
+            SeriesReplace(
+                series=pd.Series(
+                    pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)
+                ),
+                to_replace=pd.Timestamp("2018-04-24 00:00:00"),
+                value=pd.Timestamp("2020-01-01 01:01:01"),
+            ),
+        ),
+        # List of list of ints
+        pytest.param(
+            SeriesReplace(
+                pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]]),
+                to_replace=[3],
+                value=[1],
+            ),
+        ),
+        # pd.Categorical expected fail to_replace
+        pytest.param(
+            SeriesReplace(
+                pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=True)),
+                to_replace=pd.Categorical(5),
+                value=pd.Categorical(15),
+            ),
+        ),
+        # pd.Categorical expected fail value
+        pytest.param(
+            SeriesReplace(
+                pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=True)),
+                to_replace=5,
+                value=pd.Categorical(15),
+            ),
+        ),
+        # Int/Float fail
+        pytest.param(
+            SeriesReplace(
+                pd.Series([1, 2, 5, 2] * 4),
+                to_replace=1,
+                value=1.1,
+            ),
+        ),
+        # Bool/Int fail
+        pytest.param(
+            SeriesReplace(
+                pd.Series([True, False, True, False] * 4),
+                to_replace=True,
+                value=10,
+            ),
+        ),
+        # Bool/Float fail
+        pytest.param(
+            SeriesReplace(
+                pd.Series([True, False, True, False] * 4),
+                to_replace=True,
+                value=3.25,
+            ),
+        ),
+        # Series type differs from to_replace type fail
+        pytest.param(
+            SeriesReplace(
+                pd.Series([1, 2, 3, 4] * 4),
+                to_replace=1.1,
+                value=5.5,
+            ),
+        ),
+    ],
+)
+def test_replace_types_unsupported(series_replace):
+    """Run series.replace on particular types that all fail."""
+    series = series_replace.series
+    to_replace = series_replace.to_replace
+    value = series_replace.value
+
+    if any(isinstance(x, pd.Timestamp) for x in [to_replace, value]):
+        message = "Not supported for types"
+    elif any(isinstance(x, (pd.Categorical)) for x in [to_replace, value]) or any(
+        isinstance(x, list) for x in series
+    ):
+        message = "only support with Scalar"
+    elif (
+        (isinstance(to_replace, int) and isinstance(value, float))
+        or isinstance(to_replace, bool)
+        and (isinstance(value, (int, float)) and not isinstance(value, bool))
+    ):
+        message = "cannot replace type"
+    elif series.dtype is np.dtype("int64") and isinstance(to_replace, float):
+        message = "'to_replace' type must match series type"
+
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(series_replace_impl)(series, to_replace, value)
 
 
 def test_series_concat(series_val, memory_leak_check):
@@ -3132,7 +3334,7 @@ def test_series_idxmin(series_val, memory_leak_check):
     def test_impl(A):
         return A.idxmin()
 
-    err_msg = "Series.idxmin\(\) only supported for non-nullable numeric array types."
+    err_msg = r"Series.idxmin\(\) only supported for numeric array types."
 
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
@@ -3179,7 +3381,7 @@ def test_series_idxmax(series_val, memory_leak_check):
     def test_impl(A):
         return A.idxmax()
 
-    err_msg = "Series.idxmax\(\) only supported for non-nullable numeric array types."
+    err_msg = r"Series.idxmax\(\) only supported for numeric array types."
 
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
@@ -3295,7 +3497,7 @@ def test_series_equals_true(series_val, memory_leak_check):
     if isinstance(series_val.values[0], list):
         with pytest.raises(
             BodoError,
-            match="Series.equals\(\) not supported for Series where each element is an array or list",
+            match=r"Series.equals\(\) not supported for Series where each element is an array or list",
         ):
             bodo.jit(test_impl)(series_val, series_val)
         return
@@ -3318,7 +3520,7 @@ def test_series_equals_false(series_val, memory_leak_check):
     if isinstance(series_val.values[0], list):
         with pytest.raises(
             BodoError,
-            match="Series.equals\(\) not supported for Series where each element is an array or list",
+            match=r"Series.equals\(\) not supported for Series where each element is an array or list",
         ):
             bodo.jit(test_impl)(series_val, other)
         return
@@ -4056,29 +4258,32 @@ def test_series_shift(numeric_series_val, periods, memory_leak_check):
     def test_impl(A, periods):
         return A.shift(periods)
 
-    # TODO: support nullable int
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        with pytest.raises(BodoError, match="Series.shift\(\) Series input type"):
-            bodo.jit(test_impl)(numeric_series_val, periods)
-    else:
-        check_func(test_impl, (numeric_series_val, periods))
+    check_func(test_impl, (numeric_series_val, periods))
 
 
 @pytest.mark.slow
-def test_series_shift_unsupported(series_val, memory_leak_check):
+def test_series_shift_type_check(series_val, memory_leak_check):
     """
-    Test for the Series.shift inputs that are expected to be unsupported.
+    Make sure Series.shift() works for supported data types but throws error for
+    unsupported ones.
     """
-    # Series.shift supports non-nullable ints, floats, and dt64
-    if pd.api.types.is_numeric_dtype(series_val) or series_val.dtype == np.dtype(
-        "datetime64[ns]"
-    ):
-        return
 
     def test_impl(A):
         return A.shift(1)
 
-    with pytest.raises(BodoError, match="Series.shift\(\) Series input type"):
+    # Series.shift supports ints, floats, dt64, nullable nullable int/bool/decimal/date
+    if (
+        pd.api.types.is_numeric_dtype(series_val)
+        or series_val.dtype == np.dtype("datetime64[ns]")
+        or isinstance(series_val.values[0], Decimal)
+        or series_val.dtype == np.bool_
+        or is_bool_object_series(series_val)
+        or isinstance(series_val.values[0], datetime.date)
+    ) and not isinstance(series_val.dtype, pd.CategoricalDtype):
+        check_func(test_impl, (series_val,))
+        return
+
+    with pytest.raises(BodoError, match=r"Series.shift\(\): Series input type"):
         bodo.jit(test_impl)(series_val)
 
 
@@ -4564,6 +4769,19 @@ def test_series_mask_arr(memory_leak_check):
     cond = np.random.ranf(len(S)) < 0.5
     check_func(test_impl, (S, cond, other_series))
     check_func(test_impl, (S, cond, other_arr))
+
+
+def test_series_mask_cat_literal(memory_leak_check):
+    """Make sure string literal works for setitem of categorical data through mask()"""
+
+    def test_impl(S, cond):
+        return S.mask(cond, "AB")
+
+    S = pd.Series(
+        ["AB", "AA", "AB", np.nan, "A", "AA", "AB"], [5, 1, 2, 0, 3, 4, 9], name="AA"
+    ).astype("category")
+    cond = S == "AA"
+    check_func(test_impl, (S, cond))
 
 
 @pytest.mark.parametrize(

@@ -896,14 +896,16 @@ class SeriesPass:
                 isinstance(typ2, DatetimeIndexType)
                 and typ1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
             ):
-                impl = bodo.hiframes.pd_index_ext.overload_datetime_index_sub(
+                impl = bodo.hiframes.pd_index_ext.overload_sub_operator_datetime_index(
                     typ1, typ2
                 )
                 return replace_func(self, impl, [arg1, arg2])
 
             if typ1 == datetime_date_array_type and typ2 == datetime_timedelta_type:
-                impl = bodo.hiframes.datetime_date_ext.overload_datetime_date_arr_sub(
-                    typ1, typ2
+                impl = (
+                    bodo.hiframes.datetime_date_ext.overload_sub_operator_datetime_date(
+                        typ1, typ2
+                    )
                 )
                 return replace_func(self, impl, [arg1, arg2])
 
@@ -911,10 +913,8 @@ class SeriesPass:
                 typ1 == datetime_timedelta_array_type
                 and typ2 == datetime_timedelta_type
             ):
-                impl = (
-                    bodo.hiframes.datetime_timedelta_ext.overload_datetime_date_arr_sub(
-                        typ1, typ2
-                    )
+                impl = bodo.hiframes.datetime_timedelta_ext.overload_sub_operator_datetime_timedelta(
+                    typ1, typ2
                 )
                 return replace_func(self, impl, [arg1, arg2])
 

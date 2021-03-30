@@ -14,7 +14,10 @@ from numba.extending import overload, overload_attribute, overload_method
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
-from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
+from bodo.hiframes.datetime_timedelta_ext import (
+    PDTimeDeltaType,
+    datetime_timedelta_type,
+)
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArray,
     PDCategoricalDtype,
@@ -25,7 +28,10 @@ from bodo.hiframes.pd_series_ext import (
     SeriesType,
     if_series_to_array_type,
 )
-from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import (
+    PandasTimestampType,
+    pandas_timestamp_type,
+)
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
@@ -35,7 +41,9 @@ from bodo.libs.str_ext import string_type
 from bodo.utils.transform import gen_const_tup, is_var_size_item_array_type
 from bodo.utils.typing import (
     BodoError,
+    can_replace,
     check_unsupported_args,
+    element_type,
     get_literal_value,
     get_overload_const_int,
     get_overload_const_str,
@@ -196,7 +204,7 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
     check_unsupported_args("Series.reset_index", unsupported_args, arg_defaults)
 
     # we only support dropping all levels currently
-    if not bodo.hiframes.pd_dataframe_ext._is_all_levels(S, level):  # pragma: no cover
+    if not bodo.hiframes.dataframe_impl._is_all_levels(S, level):  # pragma: no cover
         raise_bodo_error(
             "Series.reset_index(): only dropping all index levels supported"
         )
@@ -376,6 +384,10 @@ def overload_series_prod(
         raise BodoError("Series.product(): axis argument not supported")
 
     val_one = S.dtype(1)
+    # Using True fails for some reason in test_dataframe.py::test_df_prod"[df_value2]"
+    # with Bodo inliner
+    if S.dtype == types.bool_:
+        val_one = 1
 
     # For integer array we cannot handle the missing values because
     # we cannot mix np.nan with integers
@@ -439,7 +451,7 @@ def overload_series_any(S, axis=0, bool_only=None, skipna=True, level=None):
 
 
 @overload_method(SeriesType, "equals", inline="always", no_unliteral=True)
-def overload_series_any(S, other):
+def overload_series_equals(S, other):
     if not isinstance(other, SeriesType):
         raise BodoError("Series.equals() 'other' must be a Series")
 
@@ -774,7 +786,7 @@ def overload_series_std(
 
 
 @overload_method(SeriesType, "dot", inline="always", no_unliteral=True)
-def overload_series_var(S, other):
+def overload_series_dot(S, other):
     def impl(S, other):  # pragma: no cover
         A1 = bodo.hiframes.pd_series_ext.get_series_data(S)
         A2 = bodo.hiframes.pd_series_ext.get_series_data(other)
@@ -1134,7 +1146,7 @@ def overload_series_builtins_sum(S):
 
 
 @overload(np.prod, inline="always", no_unliteral=True)
-def overload_series_prod(S):
+def overload_series_np_prod(S):
     if isinstance(S, SeriesType):
 
         def impl(S):  # pragma: no cover
@@ -1254,9 +1266,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
     # Pandas restrictions:
     # Only supported for numeric types with numpy arrays
     # - int, floats, bool, dt64, td64. (maybe complex)
-    # Bodo restrictions:
-    # - td64, dt64 (TODO: support td64)
-    # - Pandas cannot support BooleanArray,
+    # We also support categorical and nullable arrays
     if not (
         S.dtype == types.none
         or (
@@ -1270,7 +1280,7 @@ def overload_series_idxmin(S, axis=0, skipna=True):
         or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
     ):
         raise BodoError(
-            f"Series.idxmin() only supported for non-nullable numeric array types. Array type: {S.data} not supported."
+            f"Series.idxmin() only supported for numeric array types. Array type: {S.data} not supported."
         )
     if isinstance(S.data, bodo.CategoricalArray) and not S.dtype.ordered:
         raise BodoError("Series.idxmin(): only ordered categoricals are possible")
@@ -1306,9 +1316,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
     # Pandas restrictions:
     # Only supported for numeric types with numpy arrays
     # - int, floats, bool, dt64, td64. (maybe complex)
-    # Bodo restrictions:
-    # - td64, dt64 (TODO: support td64)
-    # - Pandas cannot support BooleanArray,
+    # We also support categorical and nullable arrays
     if not (
         S.dtype == types.none
         or (
@@ -1322,7 +1330,7 @@ def overload_series_idxmax(S, axis=0, skipna=True):
         or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
     ):
         raise BodoError(
-            f"Series.idxmax() only supported for non-nullable numeric array types. Array type: {S.data} not supported."
+            f"Series.idxmax() only supported for numeric array types. Array type: {S.data} not supported."
         )
     if isinstance(S.data, bodo.CategoricalArray) and not S.dtype.ordered:
         raise BodoError("Series.idxmax(): only ordered categoricals are possible")
@@ -2142,6 +2150,55 @@ def overload_series_fillna(
         return fillna_impl
 
 
+def check_unsupported_types(S, to_replace, value):
+    """Raise errors for types Series.replace() does not support"""
+    # TODO: Support array types, [BE-429]
+    if any(
+        bodo.utils.utils.is_array_typ(x, True) for x in [S.dtype, to_replace, value]
+    ):
+        message = "Series.replace(): only support with Scalar, List, or Dictionary"
+        raise BodoError(message)
+    elif isinstance(to_replace, types.DictType) and not is_overload_none(value):
+        message = (
+            "Series.replace(): 'value' must be None when 'to_replace' is a dictionary"
+        )
+        raise BodoError(message)
+    elif any(
+        isinstance(x, (PandasTimestampType, PDTimeDeltaType))
+        for x in [to_replace, value]
+    ):
+        message = f"Series.replace(): Not supported for types {to_replace} and {value}"
+        raise BodoError(message)
+
+
+def check_unsupported_replaces(S, to_replace, value):
+    """Raise an error when a type in Series.replace() cannot be replaced
+    by another type"""
+    series_type = element_type(S.data)
+    if isinstance(to_replace, types.DictType):
+        to_replace_type = element_type(to_replace.key_type)
+        value_type = element_type(to_replace.value_type)
+    else:
+        to_replace_type = element_type(to_replace)
+        value_type = element_type(value)
+
+    if series_type != to_replace_type:
+        raise BodoError("Series.replace(): 'to_replace' type must match series type")
+    elif not can_replace(to_replace_type, value_type):
+        raise BodoError(
+            f"Series.replace(): cannot replace type {to_replace_type} with type {value_type}"
+        )
+
+
+def series_replace_error_checking(S, to_replace, value, inplace, limit, regex, method):
+    """Carry out error checking for Series.replace()"""
+    unsupported_args = dict(inplace=inplace, limit=limit, regex=regex, method=method)
+    replace_defaults = dict(inplace=False, limit=None, regex=False, method="pad")
+    check_unsupported_args("Series.replace", unsupported_args, replace_defaults)
+    check_unsupported_types(S, to_replace, types.unliteral(value))
+    check_unsupported_replaces(S, to_replace, types.unliteral(value))
+
+
 @overload_method(SeriesType, "replace", inline="always", no_unliteral=True)
 def overload_series_replace(
     S,
@@ -2152,11 +2209,7 @@ def overload_series_replace(
     regex=False,
     method="pad",
 ):
-
-    unsupported_args = dict(inplace=inplace, limit=limit, regex=regex, method=method)
-    merge_defaults = dict(inplace=False, limit=None, regex=False, method="pad")
-    check_unsupported_args("Series.replace", unsupported_args, merge_defaults)
-
+    series_replace_error_checking(S, to_replace, value, inplace, limit, regex, method)
     ret_dtype = S.data
     if isinstance(ret_dtype, CategoricalArray):
 
@@ -2468,17 +2521,22 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
     check_unsupported_args("Series.shift", unsupported_args, arg_defaults)
 
     # Bodo specific limitations for supported types
-    # Currently only float (not nullable), int (not nullable), and dt64 are supported
+    # Currently only float (not nullable), int, dt64, and nullable int/bool/decimal/date
+    # arrays are supported
     if not (
-        isinstance(S.data, types.Array)
-        and (
-            isinstance(S.data.dtype, (types.Number))
-            or S.data.dtype == bodo.datetime64ns
+        (
+            isinstance(S.data, types.Array)
+            and (
+                isinstance(S.data.dtype, (types.Number))
+                or S.data.dtype == bodo.datetime64ns
+            )
         )
+        or isinstance(S.data, (IntegerArrayType, DecimalArrayType))
+        or S.data in (boolean_array, bodo.datetime_date_array_type)
     ):
         # TODO: Link to supported Series input types.
         raise BodoError(
-            f"Series.shift() Series input type {S.data.dtype} not supported."
+            f"Series.shift(): Series input type '{S.data.dtype}' not supported yet."
         )
 
     # Ensure period is int
@@ -3069,11 +3127,13 @@ def create_binary_op_overload(op):
     return overload_series_binary_op
 
 
+skips = [operator.sub, operator.add] + list(explicit_binop_funcs_single.keys())
+
+
 def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
     for op in bodo.hiframes.pd_series_ext.series_binary_ops:
-        # skip comparison operators
-        if op in explicit_binop_funcs_single:
+        if op in skips:
             continue
         overload_impl = create_binary_op_overload(op)
         # NOTE: cannot use inline="always". See test_pd_categorical
@@ -3608,7 +3668,7 @@ def overload_series_repeat(S, repeats, axis=None):
     return impl_arr
 
 
-@overload_method(SeriesType, "to_dict", inline="always", no_unliteral=True)
+@overload_method(SeriesType, "to_dict", no_unliteral=True)
 def overload_to_dict(S, into=None):
     """ Support Series.to_dict(). """
 

@@ -480,8 +480,7 @@ def overload_add_operator_datetime_date(lhs, rhs):
         return impl
 
 
-@overload(operator.sub, no_unliteral=True)
-def date_sub(lhs, rhs):
+def overload_sub_operator_datetime_date(lhs, rhs):
 
     if lhs == datetime_date_type and rhs == datetime_timedelta_type:
 
@@ -496,6 +495,20 @@ def date_sub(lhs, rhs):
             days1 = lhs.toordinal()
             days2 = rhs.toordinal()
             return datetime.timedelta(days1 - days2)
+
+        return impl
+
+    # datetime_date_array - timedelta
+    if lhs == datetime_date_array_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            in_arr = lhs
+            numba.parfors.parfor.init_prange()
+            n = len(in_arr)
+            A = alloc_datetime_date_array(n)
+            for i in numba.parfors.parfor.internal_prange(n):
+                A[i] = in_arr[i] - rhs
+            return A
 
         return impl
 
@@ -886,25 +899,6 @@ def overload_len_datetime_date_arr(A):
 @overload_attribute(DatetimeDateArrayType, "shape")
 def overload_datetime_date_arr_shape(A):
     return lambda A: (len(A._data),)
-
-
-@overload(operator.sub, no_unliteral=True)
-def overload_datetime_date_arr_sub(arg1, arg2):
-    from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_type
-
-    # datetime_date_array - timedelta
-    if arg1 == datetime_date_array_type and arg2 == datetime_timedelta_type:
-
-        def impl(arg1, arg2):  # pragma: no cover
-            in_arr = arg1
-            numba.parfors.parfor.init_prange()
-            n = len(in_arr)
-            A = alloc_datetime_date_array(n)
-            for i in numba.parfors.parfor.internal_prange(n):
-                A[i] = in_arr[i] - arg2
-            return A
-
-        return impl
 
 
 def create_cmp_op_overload(op):

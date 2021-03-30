@@ -269,6 +269,22 @@ def overload_setna_tup(arr_tup, ind, int_nan_const=0):
     return impl
 
 
+def setna_slice(arr, s):  # pragma: no cover
+    arr[s] = np.nan
+
+
+@overload(setna_slice, no_unliteral=True)
+def overload_setna_slice(arr, s):
+    """set all elements of array slice to NA"""
+
+    def impl(arr, s):  # pragma: no cover
+        arr_slice = numba.cpython.unicode._normalize_slice(s, len(arr))
+        for i in range(arr_slice.start, arr_slice.stop, arr_slice.step):
+            setna(arr, i)
+
+    return impl
+
+
 ################################ median ####################################
 
 
@@ -650,6 +666,7 @@ def nancorr(mat, cov=0, minpv=1, parallel=False):  # pragma: no cover
 
 @numba.njit(no_cpython_wrapper=True)
 def duplicated(data, ind_arr, parallel=False):  # pragma: no cover
+    # TODO [BE-414]: Move to C++ and handle NA in each val
     # TODO: inline for optimization?
     # TODO: handle NAs better?
 

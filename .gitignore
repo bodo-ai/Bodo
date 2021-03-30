@@ -52,3 +52,5 @@ coverage.xml
 # Logs
 algebra.log
 *.log
+bodo/io/pyfs.h
+bodo/io/pyfs.cpp

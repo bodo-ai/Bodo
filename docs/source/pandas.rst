@@ -376,7 +376,7 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.cummin`
 * :meth:`pandas.Series.cummax`
 * :meth:`pandas.Series.describe`
-* :meth:`pandas.Series.diff` (suports `periods` argument)
+* :meth:`pandas.Series.diff` (Implemented for Numpy Array data types. Supports `periods` argument.)
 * :meth:`pandas.Series.max`
 * :meth:`pandas.Series.mean`
 * :meth:`pandas.Series.autocorr` (supports `lag` argument)
@@ -408,8 +408,8 @@ Reindexing / Selection / Label manipulation:
 
 
 * :meth:`pandas.Series.head` (`n` argument is supported)
-* :meth:`pandas.Series.idxmax`
-* :meth:`pandas.Series.idxmin`
+* :meth:`pandas.Series.idxmax` (Parallel support for Numpy Array data, Sequential support for Nullable and Categorical data)
+* :meth:`pandas.Series.idxmin` (Parallel support for Numpy Array data, Sequential support for Nullable and Categorical data)
 * :meth:`pandas.Series.isin`
   `values` argument supports both distributed array/Series and replicated list/array/Series
 * :meth:`pandas.Series.rename` (only set a new name using a string value)
@@ -418,8 +418,8 @@ Reindexing / Selection / Label manipulation:
 * :meth:`pandas.Series.tail` (`n` argument is supported)
 * :meth:`pandas.Series.take`
 * :meth:`pandas.Series.equals` (series and `other` should contain scalar values in each row)
-* :meth:`pandas.Series.where` (`cond` and `other` arguments supported for 1d numpy data arrays)
-* :meth:`pandas.Series.mask` (`cond` and `other` arguments supported for 1d numpy data arrays)
+* :meth:`pandas.Series.where` (`cond` and `other` arguments supported for 1d numpy data arrays. Categorical data supported for scalar 'other'.)
+* :meth:`pandas.Series.mask` (`cond` and `other` arguments supported for 1d numpy data arrays. Categorical data supported for scalar 'other'.)
 
 Missing data handling:
 
@@ -441,7 +441,7 @@ Reshaping, sorting:
 
 Time series-related:
 
-* :meth:`pandas.Series.shift` (supports non-nullable numeric types and
+* :meth:`pandas.Series.shift` (supports numeric, boolean and datetime.date types, and
   only the `periods` argument supported)
 
 Datetime properties:
@@ -593,7 +593,7 @@ Computations / Descriptive Stats:
 * :meth:`pandas.DataFrame.cumprod`
 * :meth:`pandas.DataFrame.cumsum`
 * :meth:`pandas.DataFrame.describe`
-* :meth:`pandas.DataFrame.diff` (suports `periods` argument)
+* :meth:`pandas.DataFrame.diff` (Implemented for Numpy Array data types. Supports `periods` argument.)
 * :meth:`pandas.DataFrame.max`
 * :meth:`pandas.DataFrame.mean`
 * :meth:`pandas.DataFrame.median`
@@ -617,8 +617,8 @@ Reindexing / Selection / Label manipulation:
 * :meth:`pandas.DataFrame.drop_duplicates`
 * :meth:`pandas.DataFrame.duplicated`
 * :meth:`pandas.DataFrame.head` (including `n` argument)
-* :meth:`pandas.DataFrame.idxmax`
-* :meth:`pandas.DataFrame.idxmin`
+* :meth:`pandas.DataFrame.idxmax` (Parallel support for Numpy Array data, Sequential support for Nullable and Categorical data)
+* :meth:`pandas.DataFrame.idxmin` (Parallel support for Numpy Array data, Sequential support for Nullable and Categorical data)
 * :meth:`pandas.DataFrame.rename` (can only rename columns with a constant dictionary, either through `columns` or `mapper` and `axis=1`)
 * :meth:`pandas.DataFrame.reset_index` (only dropping all levels supported. `drop` and `inplace` also supported)
 * :meth:`pandas.DataFrame.set_index` (`keys` must be a constant string column label)
@@ -665,7 +665,7 @@ Combining / joining / merging:
 
 Time series-related:
 
-* :meth:`pandas.DataFrame.shift` (supports non-nullable numeric types and
+* :meth:`pandas.DataFrame.shift` (supports numeric, boolean and datetime.date types, and
   only the `periods` argument supported)
 
 .. _pandas-f-out:

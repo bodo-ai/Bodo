@@ -303,8 +303,7 @@ def create_cmp_op_overload(op):
     return overload_datetime_cmp
 
 
-@overload(operator.sub, no_unliteral=True)
-def date_sub(lhs, rhs):
+def overload_sub_operator_datetime_datetime(lhs, rhs):
 
     if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
 

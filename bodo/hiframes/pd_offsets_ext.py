@@ -808,8 +808,7 @@ def overload_add_perator_date_offset_type(lhs, rhs):
     raise BodoError(f"add operator not supported for data types {lhs} and {rhs}.")
 
 
-@overload(operator.sub, no_unliteral=True)
-def overload_sub(lhs, rhs):
+def overload_sub_operator_offsets(lhs, rhs):
     """Implement all of the relevant scalar types subtractions.
     These will be reused to implement arrays.
     """

@@ -182,11 +182,19 @@ def box_dataframe(typ, val, c):
             pyapi.decref(col_nums_arr_obj)
             pyapi.decref(n_cols_obj)
         with otherwise:
-            # df_obj = pd.DataFrame()
+            # df_obj = pd.DataFrame(index=index)
+            context.nrt.incref(builder, typ.index, dataframe_payload.index)
+            index_obj = c.pyapi.from_native_value(
+                typ.index, dataframe_payload.index, c.env_manager
+            )
+
             mod_name = context.insert_const_string(c.builder.module, "pandas")
             class_obj = pyapi.import_module_noblock(mod_name)
-            df_obj = pyapi.call_method(class_obj, "DataFrame", ())
+            df_obj = pyapi.call_method(
+                class_obj, "DataFrame", (pyapi.borrow_none(), index_obj)
+            )
             pyapi.decref(class_obj)
+            pyapi.decref(index_obj)
             builder.store(df_obj, res)
 
     # get data arrays and box them
@@ -212,17 +220,6 @@ def box_dataframe(typ, val, c):
             pyapi.object_setitem(df_obj, c_ind_obj, arr_obj)
             pyapi.decref(arr_obj)
             pyapi.decref(c_ind_obj)
-
-    # set index if doesn't have parent
-    with builder.if_then(builder.not_(has_parent)):
-        # set df.index
-        context.nrt.incref(builder, typ.index, dataframe_payload.index)
-        arr_obj = c.pyapi.from_native_value(
-            typ.index, dataframe_payload.index, c.env_manager
-        )
-        df_obj = builder.load(res)
-        pyapi.object_setattr_string(df_obj, "index", arr_obj)
-        pyapi.decref(arr_obj)
 
     df_obj = builder.load(res)
     # set df columns separately to support repeated names and fix potential multi-index

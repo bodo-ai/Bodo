@@ -5,3 +5,6 @@ echo "Removing the __pycache__"
 find . -name "__pycache__" | xargs rm -rf
 echo "Removing the build directory"
 rm -rf build
+echo "Removing bodo/io/pyfs.h and bodo/io/pyfs.cpp"
+find . -name "pyfs.cpp" | xargs rm -f
+find . -name "pyfs.h" | xargs rm -f

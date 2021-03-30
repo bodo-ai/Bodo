@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import gc
 import glob
+import hashlib
 import json
 import os
 import subprocess
@@ -98,27 +99,29 @@ def pytest_collection_modifyitems(items):
 
         for item in items:
             # Gives filename + function name
-            filename = item.module.__name__.split(".")[-1] + ".py" + "::" + item.name
-            if filename in marker_groups:
-                group_marker = marker_groups[filename]
+            testname = item.module.__name__.split(".")[-1] + ".py" + "::" + item.name
+            if testname in marker_groups:
+                group_marker = marker_groups[testname]
             else:
-                group_marker = group_from_hash(filename, num_groups)
+                group_marker = group_from_hash(testname, num_groups)
             item.add_marker(getattr(pytest.mark, group_marker))
 
 
-"""
+def group_from_hash(testname, num_groups):
+    """
     Hash function to randomly distribute tests not found in the log.
     Keeps all s3 tests together in group 0.
-"""
-
-
-def group_from_hash(filename, num_groups):
-    if "test_s3.py" in filename:
+    """
+    if "test_s3.py" in testname:
         return "0"
-    # TODO(Nick): Replace with a deterministic function.
+    # TODO(Nick): Replace with a cheaper function.
     # Python's builtin hash fails on mpiexec -n 2 because
-    # it has randomness.
-    return "0"
+    # it has randomness. Instead we use a cryptographic hash,
+    # but we don't need that level of support.
+    hash_val = hashlib.sha1(testname.encode("utf-8")).hexdigest()
+    # Hash val is a hex-string
+    int_hash = int(hash_val, base=16) % num_groups
+    return str(int_hash)
 
 
 @pytest.fixture(scope="session")
@@ -227,10 +230,12 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
             s3.meta.client.upload_file(path, bucket_name, fname)
 
         path = datapath("example_deltalake")
-        for root,dirs,files in os.walk(path):
+        for root, dirs, files in os.walk(path):
             for fname in files:
                 full_path = os.path.join(root, fname)
-                rel_path = os.path.join("example_deltalake", os.path.relpath(full_path, path))
+                rel_path = os.path.join(
+                    "example_deltalake", os.path.relpath(full_path, path)
+                )
                 s3.meta.client.upload_file(full_path, bucket_name, rel_path)
 
         prefix = datapath("example multi.csv")

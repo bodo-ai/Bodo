@@ -64,8 +64,6 @@ void set_string_array_range(offset_t* out_offsets, char* out_data,
                             int64_t num_strs, int64_t num_chars);
 void convert_len_arr_to_offset32(uint32_t* offsets, int64_t num_strs);
 void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets, int64_t num_strs);
-char* getitem_string_array(offset_t* offsets, char* data, int64_t index);
-void* getitem_string_array_std(offset_t* offsets, char* data, int64_t index);
 
 int str_arr_to_int64(int64_t* out, offset_t* offsets, char* data,
                      int64_t index);
@@ -77,7 +75,6 @@ void str_from_float64(char* s, double in);
 void inplace_int64_to_str(char* str, int64_t l, int64_t value);
 
 void del_str(std::string* in_str);
-int64_t hash_str(std::string* in_str);
 npy_intp array_size(PyArrayObject* arr);
 void* array_getptr1(PyArrayObject* arr, npy_intp ind);
 void array_setitem(PyArrayObject* arr, char* p, PyObject* s);
@@ -152,11 +149,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(
         m, "convert_len_arr_to_offset",
         PyLong_FromVoidPtr((void*)(&convert_len_arr_to_offset)));
-    PyObject_SetAttrString(m, "getitem_string_array",
-                           PyLong_FromVoidPtr((void*)(&getitem_string_array)));
-    PyObject_SetAttrString(
-        m, "getitem_string_array_std",
-        PyLong_FromVoidPtr((void*)(&getitem_string_array_std)));
     PyObject_SetAttrString(m, "print_str_arr",
                            PyLong_FromVoidPtr((void*)(&print_str_arr)));
     PyObject_SetAttrString(m, "str_arr_to_int64",
@@ -171,8 +163,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&inplace_int64_to_str)));
     PyObject_SetAttrString(m, "is_na", PyLong_FromVoidPtr((void*)(&is_na)));
     PyObject_SetAttrString(m, "del_str", PyLong_FromVoidPtr((void*)(&del_str)));
-    PyObject_SetAttrString(m, "hash_str",
-                           PyLong_FromVoidPtr((void*)(&hash_str)));
     PyObject_SetAttrString(m, "array_size",
                            PyLong_FromVoidPtr((void*)(&array_size)));
     PyObject_SetAttrString(m, "unicode_to_utf8",
@@ -205,10 +195,6 @@ void del_str(std::string* in_str) {
     return;
 }
 
-int64_t hash_str(std::string* in_str) {
-    std::size_t h1 = std::hash<std::string>{}(*in_str);
-    return (int64_t)h1;
-}
 
 void dtor_str_arr_split_view(str_arr_split_view_payload* in_str_arr,
                              int64_t size, void* in) {
@@ -376,25 +362,6 @@ void convert_len_arr_to_offset(uint32_t* lens, uint64_t* offsets, int64_t num_st
     offsets[num_strs] = curr_offset;
 }
 
-char* getitem_string_array(offset_t* offsets, char* data, int64_t index) {
-    // printf("getitem string arr index: %d offsets: %d %d", index,
-    //                                  offsets[index], offsets[index+1]);
-    offset_t size = offsets[index + 1] - offsets[index] + 1;
-    offset_t start = offsets[index];
-    char* res = new char[size];
-    res[size - 1] = '\0';
-    memcpy(res, &data[start], size - 1);
-    // printf(" res %s\n", res);
-    return res;
-}
-
-void* getitem_string_array_std(offset_t* offsets, char* data, int64_t index) {
-    // printf("getitem string arr index: %d offsets: %d %d", index,
-    //                                  offsets[index], offsets[index+1]);
-    offset_t size = offsets[index + 1] - offsets[index];
-    offset_t start = offsets[index];
-    return new std::string(&data[start], size);
-}
 
 int str_arr_to_int64(int64_t* out, offset_t* offsets, char* data,
                      int64_t index) {

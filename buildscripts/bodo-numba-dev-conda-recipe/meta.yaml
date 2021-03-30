@@ -22,8 +22,8 @@ requirements:
     - numba
     - numpy
     - cython
-    - s3fs
     - pandas 1.2.0
+    - fsspec
     - pyarrow =3.0.0
     - boost-cpp =1.74.0
     - hdf5 * mpi_mpich_* # [not win]
@@ -39,12 +39,12 @@ requirements:
     - python
     - {{ pin_compatible('numpy') }}
     - pandas 1.2.0
+    - fsspec
     - pyarrow =3.0.0
     - boost-cpp =1.74.0
     - numba
     - openjdk =8
     - sqlalchemy
-    - s3fs
     - mpich =3.3.2=h* # [not win]
     - mpi4py
     - impi_rt # [win]

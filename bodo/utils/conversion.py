@@ -190,7 +190,7 @@ def overload_coerce_to_ndarray(
         if not is_overload_none(use_nullable_array) and data.dtype == types.bool_:
             return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.init_bool_array(
                 np.asarray(data), np.full((len(data) + 7) >> 3, 255, np.uint8)
-            )
+            )  # pragma: no cover
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: np.asarray(
             data
         )  # pragma: no cover
@@ -772,7 +772,7 @@ def overload_dtype_to_array_type(dtype):
     arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(
         bodo.utils.typing.parse_dtype(dtype)
     )
-    return lambda dtype: arr_type
+    return lambda dtype: arr_type  # pragma: no cover
 
 
 @numba.jit
@@ -852,10 +852,12 @@ def overload_convert_to_td64ns(data):
     # see pd.core.arrays.timedeltas.sequence_to_td64ns for constructor types
     # TODO: support datetime.timedelta
     if data == types.Array(types.int64, 1, "C"):
-        return lambda data: data.view(bodo.utils.conversion.TD_DTYPE)
+        return lambda data: data.view(
+            bodo.utils.conversion.TD_DTYPE
+        )  # pragma: no cover
 
     if data == types.Array(types.NPTimedelta("ns"), 1, "C"):
-        return lambda data: data
+        return lambda data: data  # pragma: no cover
 
     if data == bodo.string_array_type:
         # TODO: support
@@ -1213,27 +1215,7 @@ def overload_extract_index_array(A):
 
         return impl
 
-    return lambda A: np.arange(len(A))
-
-
-# return the NA value for array type (dtypes that support sentinel NA)
-def get_NA_val_for_arr(arr):  # pragma: no cover
-    return np.nan
-
-
-@overload(get_NA_val_for_arr, no_unliteral=True)
-def overload_get_NA_val_for_arr(arr):
-    if isinstance(arr.dtype, (types.NPDatetime, types.NPTimedelta)):
-        nat = arr.dtype("NaT")
-        return lambda arr: nat  # pragma: no cover
-
-    if isinstance(arr.dtype, types.Float):
-        return lambda arr: np.nan  # pragma: no cover
-
-    # TODO: other types?
-    raise BodoError(
-        "Array {} does not support sentinel NA".format(arr)
-    )  # pragma: no cover
+    return lambda A: np.arange(len(A))  # pragma: no cover
 
 
 def ensure_contig_if_np(arr):  # pragma: no cover
