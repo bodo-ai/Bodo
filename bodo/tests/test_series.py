@@ -207,6 +207,7 @@ def test_series_cov_ddof(memory_leak_check):
                     np.nan,
                     Decimal("0"),
                 ]
+                * 2
             ),
             id="series_val0",
         ),
@@ -219,7 +220,7 @@ def test_series_cov_ddof(memory_leak_check):
             id="series_val2",
         ),  # bool array without NA
         pytest.param(
-            pd.Series([True, False, False, np.nan, True]), id="series_val3"
+            pd.Series([True, False, False, np.nan, True] * 2), id="series_val3"
         ),  # bool array with NA
         pytest.param(
             pd.Series([1, 8, 4, 0, 3], dtype=np.uint8),
@@ -334,7 +335,7 @@ def test_series_fillna_series_val(series_val):
 
 
 def series_replace_impl(series, to_replace, value):
-    series.replace(to_replace, value)
+    return series.replace(to_replace, value)
 
 
 def test_replace_series_val(series_val):
@@ -350,6 +351,7 @@ def test_replace_series_val(series_val):
         isinstance(x, (datetime.date, pd.Timedelta, pd.Timestamp))
         for x in [to_replace, value]
     ):
+        # TODO: [BE-469]
         message = "Not supported for types"
     elif any(isinstance(x, pd.Categorical) for x in [to_replace, value]) or any(
         isinstance(x, list) for x in series
@@ -361,6 +363,39 @@ def test_replace_series_val(series_val):
             bodo.jit(series_replace_impl)(series, to_replace, value)
     else:
         check_func(series_replace_impl, (series, to_replace, value))
+
+
+def test_series_replace_bitwidth(memory_leak_check):
+    """Checks that series.replace succeeds on integers with
+    different bitwidths."""
+
+    def impl(S):
+        return S.replace(np.int8(3), np.int64(24))
+
+    S = pd.Series([1, 2, 3, 4, 5] * 4, dtype=np.int16)
+    # Bodo dtype won't match because pandas casts everything to int64
+    check_func(impl, (S,), check_dtype=False)
+
+
+def test_series_float_literal(memory_leak_check):
+    """Checks that series.replace with an integer and a float
+    that can never be equal will return a copy."""
+    # Tests for [BE-468]
+    def impl(S):
+        return S.replace(np.inf, np.nan)
+
+    S = pd.Series([1, 2, 3, 4, 5] * 4, dtype=np.int16)
+    check_func(impl, (S,))
+
+
+def test_series_str_literal(memory_leak_check):
+    """Checks that series.replace works with str literals"""
+
+    def impl(S):
+        return S.replace("a", "A")
+
+    S = pd.Series(["a", "BB", "32e", "Ewrew"] * 4)
+    check_func(impl, (S,))
 
 
 @pytest.mark.slow
@@ -467,38 +502,6 @@ def test_replace_types_supported(series_replace):
                 value=pd.Categorical(15),
             ),
         ),
-        # Int/Float fail
-        pytest.param(
-            SeriesReplace(
-                pd.Series([1, 2, 5, 2] * 4),
-                to_replace=1,
-                value=1.1,
-            ),
-        ),
-        # Bool/Int fail
-        pytest.param(
-            SeriesReplace(
-                pd.Series([True, False, True, False] * 4),
-                to_replace=True,
-                value=10,
-            ),
-        ),
-        # Bool/Float fail
-        pytest.param(
-            SeriesReplace(
-                pd.Series([True, False, True, False] * 4),
-                to_replace=True,
-                value=3.25,
-            ),
-        ),
-        # Series type differs from to_replace type fail
-        pytest.param(
-            SeriesReplace(
-                pd.Series([1, 2, 3, 4] * 4),
-                to_replace=1.1,
-                value=5.5,
-            ),
-        ),
     ],
 )
 def test_replace_types_unsupported(series_replace):
@@ -524,6 +527,30 @@ def test_replace_types_unsupported(series_replace):
 
     with pytest.raises(BodoError, match=message):
         bodo.jit(series_replace_impl)(series, to_replace, value)
+
+
+@pytest.mark.slow
+def test_replace_float_int():
+    series = pd.Series([1.0, 2.0, 3.0] * 4)
+    to_replace = 1
+    value = 2.0
+    check_func(series_replace_impl, (series, to_replace, value))
+
+
+@pytest.mark.slow
+def test_replace_string_int():
+    series = pd.Series(["AZ", "BY", "CX"] * 4)
+    to_replace = 1
+    value = "DW"
+    check_func(series_replace_impl, (series, to_replace, value))
+
+
+@pytest.mark.slow
+def test_replace_inf_nan():
+    series = pd.Series([0, 1, 2, 3] * 4)
+    to_replace = [np.inf, -np.inf]
+    value = np.nan
+    check_func(series_replace_impl, (series, to_replace, value))
 
 
 def test_series_concat(series_val, memory_leak_check):
