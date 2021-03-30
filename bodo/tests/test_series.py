@@ -4998,6 +4998,24 @@ def test_series_sem(memory_leak_check):
     check_func(f_ddof, (S,))
 
 
+def test_np_pd_timedelta_truediv(memory_leak_check):
+    """
+    Test that Series.truediv works between a Series of td64
+    and a pd.Timedelta type.
+    """
+
+    def test_impl(S, val):
+        return S / val
+
+    S = pd.Series(pd.timedelta_range(start="1 day", periods=10))
+    val1 = pd.Timedelta(days=3)
+    val2 = pd.Timedelta(nanoseconds=3)
+    val3 = pd.Timedelta(days=-2, seconds=53, minutes=2)
+    check_func(test_impl, (S, val1))
+    check_func(test_impl, (S, val2))
+    check_func(test_impl, (S, val3))
+
+
 def test_series_std(memory_leak_check):
     def f(S):
         return S.std()

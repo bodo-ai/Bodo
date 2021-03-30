@@ -2848,7 +2848,7 @@ def create_explicit_binary_op_overload(op):
 
         typing_context = numba.core.registry.cpu_target.typing_context
         # scalar case
-        if isinstance(other, types.Number) or is_str_scalar_other:
+        if is_scalar_type(other):
             args = (S.data, other)
             ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
             # Pandas 1.0 returns nullable bool array for nullable int array
@@ -2864,7 +2864,8 @@ def create_explicit_binary_op_overload(op):
                 index = bodo.hiframes.pd_series_ext.get_series_index(S)
                 name = bodo.hiframes.pd_series_ext.get_series_name(S)
                 numba.parfors.parfor.init_prange()
-                # other could be tuple, list, array, Index, or Series
+                # Unbox other if necessary.
+                other = bodo.utils.conversion.unbox_if_timestamp(other)
                 n = len(arr)
                 out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, (-1,))
                 for i in numba.parfors.parfor.internal_prange(n):
@@ -3140,7 +3141,8 @@ def create_binary_op_overload(op):
                 index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
                 name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
                 rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)
-                out_arr = op(arr, rhs_arr)
+                # Unbox the other value in case its a scalar
+                out_arr = op(arr, bodo.utils.conversion.unbox_if_timestamp(rhs_arr))
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return impl2
@@ -3152,8 +3154,9 @@ def create_binary_op_overload(op):
                 arr = bodo.hiframes.pd_series_ext.get_series_data(rhs)
                 index = bodo.hiframes.pd_series_ext.get_series_index(rhs)
                 name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
-                rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
-                out_arr = op(rhs_arr, arr)
+                lhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
+                # Unbox the other value in case its a scalar
+                out_arr = op(bodo.utils.conversion.unbox_if_timestamp(lhs_arr), arr)
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return impl2
