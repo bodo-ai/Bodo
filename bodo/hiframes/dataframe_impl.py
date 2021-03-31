@@ -2665,7 +2665,10 @@ def overload_dataframe_fillna(
     # TODO: inplace of df with parent that has a string column (reflection)
 
     data_args = [
-        "df['{}'].fillna(value, inplace=inplace)".format(c) for c in df.columns
+        f"df['{c}'].fillna(value, inplace=inplace)"
+        if isinstance(c, str)
+        else f"df[{c}].fillna(value, inplace=inplace)"
+        for c in df.columns
     ]
     func_text = "def impl(df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None):\n"
     if is_overload_true(inplace):

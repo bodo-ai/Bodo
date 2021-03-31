@@ -632,6 +632,9 @@ Missing data handling:
   * Arguments ``how``, ``thresh`` and ``subset`` are supported.
 
 * :meth:`pandas.DataFrame.fillna`
+
+  * Arguments ``value`` and ``inplace`` are supported.
+
 * :meth:`pandas.DataFrame.replace`
 
 Reshaping, sorting, transposing:

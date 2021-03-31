@@ -3402,6 +3402,26 @@ def test_df_dropna_df_value(df_value):
 
 
 @pytest.mark.slow
+def test_df_fillna_df_value(df_value):
+    def impl(df, value):
+        return df.fillna(value)
+
+    col = df_value.columns[0]
+    df = df_value[[df_value.columns[0]]]
+    value = df.dropna().iat[0, 0]
+    check_func(impl, (df, value))
+
+
+@pytest.mark.slow
+def test_df_fillna_type_mismatch_failure():
+    df = pd.DataFrame({"A": [1.2, np.nan, 242.1] * 5})
+    value = "A"
+    message = "Cannot use value type"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda df, value: df.fillna(value))(df, value)
+
+
+@pytest.mark.slow
 def test_df_dropna_cat_unknown():
     """Test df.dropna() with a categorical column not known at compile time."""
 

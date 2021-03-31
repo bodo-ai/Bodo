@@ -2070,6 +2070,12 @@ def overload_series_fillna(
             f"Series.fillna() with inplace=True not supported for {S.dtype} values yet"
         )
 
+    series_type = element_type(S.data)
+    value_type = element_type(types.unliteral(value))
+    if not can_replace(series_type, value_type):
+        raise BodoError(f"Series.fillna(): Cannot use value type {value_type}"
+                        f" with series type {series_type}")
+
     if is_overload_true(inplace):
         if S.dtype == bodo.string_type:
             # optimization: just set null bit if fill is empty
