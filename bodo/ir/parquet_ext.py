@@ -5,6 +5,7 @@ import numba
 from numba.core import ir, ir_utils, typeinfer
 
 import bodo
+import bodo.ir.connector
 from bodo.transforms import distributed_analysis
 
 

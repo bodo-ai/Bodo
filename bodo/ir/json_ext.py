@@ -1,21 +1,13 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import numba
-import numpy as np
-import pandas as pd
 from numba.core import ir, ir_utils, typeinfer, types
-from numba.core.ir_utils import (
-    compile_to_numba_ir,
-    replace_arg_nodes,
-    replace_vars_inner,
-    visit_vars_inner,
-)
+from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
 import bodo
-from bodo import objmode
+import bodo.ir.connector
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
-from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.utils import check_java_installation, sanitize_varname
+from bodo.utils.utils import sanitize_varname
 
 
 class JsonReader(ir.Stmt):

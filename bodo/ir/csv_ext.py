@@ -5,6 +5,7 @@ from numba.core import ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
 import bodo
+import bodo.ir.connector
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
