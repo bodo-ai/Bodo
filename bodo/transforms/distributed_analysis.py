@@ -2062,8 +2062,8 @@ class DistributedAnalysis:
                     ],
                 )
             # check distributions of tuple elements for errors
-            for i, dist in enumerate(array_dists[lhs]):
-                if is_REP(dist) and is_return_distributed[i]:
+            for i, is_dist in enumerate(is_return_distributed):
+                if is_dist and is_REP(array_dists[lhs][i]):
                     raise BodoError(
                         err_msg.format(
                             lhs,
