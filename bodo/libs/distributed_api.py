@@ -1030,15 +1030,14 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
     func_text += "            random = 2\n"
     func_text += "    if random_seed is None:\n"
     func_text += "        random_seed = -1\n"
+    # dataframe case, create a table and pass to C++
     if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         df = data
         n_cols = len(df.columns)
         for i in range(n_cols):
-            func_text += "    data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {0})\n".format(
-                i
-            )
+            func_text += f"    data_{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i})\n"
         func_text += "    ind_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data))\n"
-        data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
+        data_args = ", ".join(f"data_{i}" for i in range(n_cols))
         func_text += "    info_list_total = [{}, array_to_info(ind_arr)]\n".format(
             ", ".join("array_to_info(data_{})".format(x) for x in range(n_cols))
         )
@@ -1063,6 +1062,7 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
         func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
             data_args, index, col_var
         )
+    # Series case, create a table and pass to C++
     elif isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
         func_text += "    data_0 = bodo.hiframes.pd_series_ext.get_series_data(data)\n"
         func_text += "    ind_arr = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(data))\n"
@@ -1080,9 +1080,8 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
         func_text += "    if parallel:\n"
         func_text += "        delete_table(table_total)\n"
         index = "bodo.utils.conversion.index_from_array(out_arr_index)"
-        func_text += "    return bodo.hiframes.pd_series_ext.init_series(out_arr_0, {}, name)\n".format(
-            index
-        )
+        func_text += f"    return bodo.hiframes.pd_series_ext.init_series(out_arr_0, {index}, name)\n"
+    # Numpy arrays, using dist_oneD_reshape_shuffle since numpy arrays can be multi-dim
     elif isinstance(data, types.Array):
         assert is_overload_false(random), "Call random_shuffle instead of rebalance"
         func_text += "    if not parallel:\n"
@@ -1097,8 +1096,22 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
         func_text += "    out = np.empty((dim0_local_size,) + tuple(data.shape[1:]), dtype=data.dtype)\n"
         func_text += "    bodo.libs.distributed_api.dist_oneD_reshape_shuffle(out, data, dim0_global_size, dests)\n"
         func_text += "    return out\n"
+    # other array types, create a table and pass to C++
+    elif bodo.utils.utils.is_array_typ(data, False):
+        func_text += "    table_total = arr_info_list_to_table([array_to_info(data)])\n"
+        func_text += "    if dests is None:\n"
+        func_text += "        out_table = shuffle_renormalization(table_total, random, random_seed, parallel)\n"
+        func_text += "    else:\n"
+        func_text += "        out_table = shuffle_renormalization_group(table_total, random, random_seed, parallel, len(dests), np.array(dests, dtype=np.int32).ctypes)\n"
+        func_text += (
+            "    out_arr = info_to_array(info_from_table(out_table, 0), data)\n"
+        )
+        func_text += "    delete_table(out_table)\n"
+        func_text += "    if parallel:\n"
+        func_text += "        delete_table(table_total)\n"
+        func_text += "    return out_arr\n"
     else:
-        raise BodoError("Type {} not supported for bodo.rebalance".format(data))
+        raise BodoError(f"Type {data} not supported for bodo.rebalance")
     loc_vars = {}
     exec(
         func_text,

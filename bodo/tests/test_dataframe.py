@@ -673,7 +673,13 @@ def test_df_multi_get_level(memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "data", [pd.DataFrame({"A": range(10)}), np.arange(10), pd.Series(np.arange(10))]
+    "data",
+    [
+        pd.DataFrame({"A": range(10)}),
+        np.arange(10),
+        pd.Series(np.arange(10)),
+        pd.array([1, 4, 1, 5, 11, 1, 3, 1, -1, 6]),
+    ],
 )
 def test_rebalance_simple(data, memory_leak_check):
     def impl(data):
