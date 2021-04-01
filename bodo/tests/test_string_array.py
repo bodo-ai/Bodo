@@ -105,37 +105,73 @@ def test_string_dtype(memory_leak_check):
 
 @pytest.mark.smoke
 def test_getitem_int(str_arr_value, memory_leak_check):
+    """
+    Test operator.getitem on String array with a integer ind
+    """
+
     def test_impl(A, i):
         return A[i]
 
-    bodo_func = bodo.jit(test_impl)
-    i = 1
-    assert bodo_func(str_arr_value, i) == test_impl(str_arr_value, i)
+    check_func(test_impl, (str_arr_value, 4))
 
 
-def test_getitem_bool(str_arr_value, memory_leak_check):
+def test_getitem_int_arr(str_arr_value, memory_leak_check):
+    """
+    Test operator.getitem on String array with an integer list ind
+    """
+
     def test_impl(A, ind):
         return A[ind]
 
-    bodo_func = bodo.jit(test_impl)
+    ind = np.array([0, 2, 3])
+    # Pandas outputs differs (object vs string)
+    # TODO [BE-483]: Fix distributed
+    check_func(test_impl, (str_arr_value, ind), check_dtype=False, dist_test=False)
+    check_func(
+        test_impl,
+        (str_arr_value, list(ind)),
+        check_dtype=False,
+        dist_test=False,
+    )
+
+
+def test_getitem_bool(str_arr_value, memory_leak_check):
+    """
+    Test operator.getitem on String array with a boolean ind
+    """
+
+    def test_impl(A, ind):
+        return A[ind]
+
     np.random.seed(0)
-    ind = np.random.ranf(len(str_arr_value)) < 0.2
-    # TODO: parallel test
-    pd.util.testing.assert_extension_array_equal(
-        pd.array(bodo_func(str_arr_value, ind), "string"), test_impl(str_arr_value, ind)
+    ind = np.random.ranf(len(str_arr_value)) < 0.5
+    # Pandas outputs differs (object vs string)
+    # TODO [BE-483]: Fix distributed
+    check_func(test_impl, (str_arr_value, ind), check_dtype=False, dist_test=False)
+    check_func(
+        test_impl,
+        (str_arr_value, list(ind)),
+        check_dtype=False,
+        dist_test=False,
     )
 
 
 def test_getitem_slice(str_arr_value, memory_leak_check):
+    """
+    Test operator.getitem on String array with a slice ind
+    """
+
     def test_impl(A, ind):
         return A[ind]
 
-    bodo_func = bodo.jit(test_impl)
     ind = slice(1, 4)
-    # TODO: parallel test
-    pd.util.testing.assert_extension_array_equal(
-        pd.array(bodo_func(str_arr_value, ind), "string"), test_impl(str_arr_value, ind)
-    )
+    # Pandas outputs differs (object vs string)
+    # TODO [BE-483]: Fix distributed
+    check_func(test_impl, (str_arr_value, ind), check_dtype=False, dist_test=False)
+    # Test with a slice with non step > 1
+    # TODO [BE-483]: Fix distributed
+    ind = slice(1, 4, 2)
+    check_func(test_impl, (str_arr_value, ind), check_dtype=False, dist_test=False)
 
 
 @pytest.mark.smoke

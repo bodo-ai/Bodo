@@ -1686,6 +1686,12 @@ def str_arr_getitem_int(A, ind):
 
         return str_arr_slice_impl
 
+    # This should be the only StringArray implementation.
+    # We only expect to reach this case if more ind options are added.
+    raise BodoError(
+        f"getitem for StringArray with indexing type {ind} not supported."
+    )  # pragma: no cover
+
 
 dummy_use = numba.njit(lambda a: None)
 

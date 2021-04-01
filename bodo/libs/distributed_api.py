@@ -2200,6 +2200,10 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
             if ind >= total_len:
                 raise IndexError("index out of bounds")
 
+            # Share the array contents by sending the raw bytes.
+            # Match unicode support by only performing the decode at
+            # the end after the data has been broadcast.
+
             # normalize negative slice
             ind = ind % total_len
             # TODO: avoid sending to root in case of 1D since position can be
@@ -2212,10 +2216,14 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
             send_size = np.zeros(1, np.int64)
             send_val = ""
             if arr_start <= ind < (arr_start + len(arr)):
-                send_val = arr[ind - arr_start]
-                send_size[0] = len(send_val)
+                ind = ind - arr_start
+                start_offset = bodo.libs.str_arr_ext.getitem_str_offset(arr, ind)
+                end_offset = bodo.libs.str_arr_ext.getitem_str_offset(arr, ind + 1)
+                length = end_offset - start_offset
+                ptr = bodo.libs.str_arr_ext.get_data_ptr_ind(arr, start_offset)
+                send_size[0] = length
                 isend(send_size, np.int32(1), root, size_tag, True)
-                isend(send_val._data, np.int32(len(send_val)), root, tag, True)
+                isend(ptr, np.int32(length), root, tag, True)
 
             rank = bodo.libs.distributed_api.get_rank()
             val = ""
@@ -2230,8 +2238,8 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
             l = bcast_scalar(l)
             if rank != root:
                 val = numba.cpython.unicode._empty_string(kind, l, 1)
-            # TODO: unicode fix?
             c_bcast(val._data, np.int32(l), char_typ_enum, np.array([-1]).ctypes, 0)
+            val = bodo.libs.str_arr_ext.decode_utf8(val._data, l)
             return val
 
         return str_getitem_impl
