@@ -809,7 +809,6 @@ _install_np_ufuncs()
 
 
 ####################### binary operators ###############################
-
 skips = [
     operator.lt,
     operator.le,
@@ -817,7 +816,13 @@ skips = [
     operator.ne,
     operator.gt,
     operator.ge,
+    operator.add,
     operator.sub,
+    operator.mul,
+    operator.truediv,
+    operator.floordiv,
+    operator.pow,
+    operator.mod,
 ]
 
 

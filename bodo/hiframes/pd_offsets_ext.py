@@ -767,7 +767,7 @@ def relative_delta_addition(dateoffset, ts):  # pragma: no cover
         return pd.Timedelta(days=dateoffset.n) + ts
 
 
-def overload_add_perator_date_offset_type(lhs, rhs):
+def overload_add_operator_date_offset_type(lhs, rhs):
     """Implement all of the relevant scalar types additions.
     These will be reused to implement arrays.
     """

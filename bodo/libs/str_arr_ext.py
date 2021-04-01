@@ -307,32 +307,31 @@ def overload_add_operator_string_array(lhs, rhs):
     # TODO: raise bodo error
 
 
-@overload(operator.mul, no_unliteral=True)
-def overload_string_array_mul(A, B):
-    # B is an integer
-    if A == string_array_type and isinstance(B, types.Integer):
+def overload_mul_operator_str_arr(lhs, rhs):
+    # rhs is an integer
+    if lhs == string_array_type and isinstance(rhs, types.Integer):
 
-        def impl(A, B):  # pragma: no cover
+        def impl(lhs, rhs):  # pragma: no cover
             numba.parfors.parfor.init_prange()
-            l = len(A)
+            l = len(lhs)
 
             out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)
             for j in numba.parfors.parfor.internal_prange(l):
-                if bodo.libs.array_kernels.isna(A, j):
+                if bodo.libs.array_kernels.isna(lhs, j):
                     out_arr[j] = ""
                     bodo.libs.array_kernels.setna(out_arr, j)
                 else:
-                    out_arr[j] = A[j] * B
+                    out_arr[j] = lhs[j] * rhs
 
             return out_arr
 
         return impl
 
-    # A is an integer
-    if isinstance(A, types.Integer) and B == string_array_type:
+    # lhs is an integer
+    if isinstance(lhs, types.Integer) and rhs == string_array_type:
 
-        def impl(A, B):  # pragma: no cover
-            return B * A
+        def impl(lhs, rhs):  # pragma: no cover
+            return rhs * lhs
 
         return impl
 

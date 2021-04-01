@@ -3153,7 +3153,7 @@ def create_binary_op_overload(op):
 
             return impl2
 
-        # right arg is series
+        # right arg is Series
         if isinstance(rhs, SeriesType):
 
             def impl2(lhs, rhs):  # pragma: no cover
@@ -3171,11 +3171,12 @@ def create_binary_op_overload(op):
     return overload_series_binary_op
 
 
-skips = [operator.sub, operator.add] + list(explicit_binop_funcs_single.keys())
+# overloads taken care of in libs/binops_ext.py
+skips = list(explicit_binop_funcs_two_ways) + list(explicit_binop_funcs_single.keys())
 
 
 def _install_binary_ops():
-    # install binary ops such as add, sub, pow, eq, ...
+    # install binary ops. What's left now is and,or,xor only
     for op in bodo.hiframes.pd_series_ext.series_binary_ops:
         if op in skips:
             continue
