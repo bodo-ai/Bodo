@@ -283,7 +283,7 @@ class DataFrameAttribute(AttributeTemplate):
         data_type = types.BaseTuple.from_types(dtypes)
         name_dtype = df.index.dtype
         if name_dtype == types.NPDatetime("ns"):
-            name_dtype = bodo.pandas_timestamp_type
+            name_dtype = bodo.pd_timestamp_type
         if name_dtype == types.NPTimedelta("ns"):
             name_dtype = bodo.pd_timedelta_type
         if is_heterogeneous_tuple_type(data_type):

@@ -117,12 +117,12 @@ class PandasTimestampType(types.Type):
         super(PandasTimestampType, self).__init__(name="PandasTimestampType()")
 
 
-pandas_timestamp_type = PandasTimestampType()
+pd_timestamp_type = PandasTimestampType()
 
 
 @typeof_impl.register(pd.Timestamp)
 def typeof_pd_timestamp(val, c):
-    return pandas_timestamp_type
+    return pd_timestamp_type
 
 
 ts_field_typ = types.int64
@@ -247,7 +247,7 @@ def init_timestamp(
 
     def codegen(context, builder, sig, args):
         year, month, day, hour, minute, second, us, ns, value = args
-        ts = cgutils.create_struct_proxy(pandas_timestamp_type)(context, builder)
+        ts = cgutils.create_struct_proxy(pd_timestamp_type)(context, builder)
         ts.year = year
         ts.month = month
         ts.day = day
@@ -260,7 +260,7 @@ def init_timestamp(
         return ts._getvalue()
 
     return (
-        pandas_timestamp_type(
+        pd_timestamp_type(
             types.int64,
             types.int64,
             types.int64,
@@ -488,7 +488,7 @@ def overload_pd_timestamp(
     if ts_input == bodo.string_type or is_overload_constant_str(ts_input):
         # just call Pandas in this case since the string parsing code is complex and
         # handles several possible cases
-        types.pandas_timestamp_type = pandas_timestamp_type
+        types.pd_timestamp_type = pd_timestamp_type
 
         def impl_str(
             ts_input=_no_input,
@@ -505,14 +505,14 @@ def overload_pd_timestamp(
             nanosecond=None,
             tzinfo=None,
         ):  # pragma: no cover
-            with numba.objmode(res="pandas_timestamp_type"):
+            with numba.objmode(res="pd_timestamp_type"):
                 res = pd.Timestamp(ts_input)
             return res
 
         return impl_str
 
     # for pd.Timestamp(), just return input
-    if ts_input == pandas_timestamp_type:
+    if ts_input == pd_timestamp_type:
         return (
             lambda ts_input=_no_input, freq=None, tz=None, unit=None, year=None, month=None, day=None, hour=None, minute=None, second=None, microsecond=None, nanosecond=None, tzinfo=None: ts_input
         )
@@ -827,7 +827,7 @@ def str_2d(a):  # pragma: no cover
 
 @overload(str, no_unliteral=True)
 def ts_str_overload(a):
-    if a == pandas_timestamp_type:
+    if a == pd_timestamp_type:
         return lambda a: a.isoformat(" ")
 
 
@@ -1112,7 +1112,7 @@ def datetime_date_arr_to_dt64_arr(arr):  # pragma: no cover
     return res
 
 
-types.pandas_timestamp_type = pandas_timestamp_type
+types.pd_timestamp_type = pd_timestamp_type
 
 
 @register_jitable
@@ -1132,7 +1132,7 @@ def to_datetime_scalar(
     """call pd.to_datetime() with scalar value 'a'
     separate call to avoid adding extra basic blocks to user function for simplicity
     """
-    with numba.objmode(t="pandas_timestamp_type"):
+    with numba.objmode(t="pd_timestamp_type"):
         t = pd.to_datetime(
             a,
             errors=errors,
@@ -1611,7 +1611,7 @@ def create_timestamp_cmp_op_overload(op):
     def overload_date_timestamp_cmp(lhs, rhs):
         # Timestamp, datetime.date
         if (
-            lhs == pandas_timestamp_type
+            lhs == pd_timestamp_type
             and rhs == bodo.hiframes.datetime_date_ext.datetime_date_type
         ):
             return lambda lhs, rhs: op(
@@ -1624,7 +1624,7 @@ def create_timestamp_cmp_op_overload(op):
         # datetime.date, Timestamp
         if (
             lhs == bodo.hiframes.datetime_date_ext.datetime_date_type
-            and rhs == pandas_timestamp_type
+            and rhs == pd_timestamp_type
         ):
             return lambda lhs, rhs: op(
                 bodo.hiframes.pd_timestamp_ext.npy_datetimestruct_to_datetime(
@@ -1634,17 +1634,17 @@ def create_timestamp_cmp_op_overload(op):
             )
 
         # Timestamp/Timestamp
-        if lhs == pandas_timestamp_type and rhs == pandas_timestamp_type:
+        if lhs == pd_timestamp_type and rhs == pd_timestamp_type:
             return lambda lhs, rhs: op(lhs.value, rhs.value)
 
         # Timestamp/dt64
-        if lhs == pandas_timestamp_type and rhs == bodo.datetime64ns:
+        if lhs == pd_timestamp_type and rhs == bodo.datetime64ns:
             return lambda lhs, rhs: op(
                 bodo.hiframes.pd_timestamp_ext.integer_to_dt64(lhs.value), rhs
             )  # pragma: no cover
 
         # dt64/Timestamp
-        if lhs == bodo.datetime64ns and rhs == pandas_timestamp_type:
+        if lhs == bodo.datetime64ns and rhs == pd_timestamp_type:
             return lambda lhs, rhs: op(
                 lhs, bodo.hiframes.pd_timestamp_ext.integer_to_dt64(rhs.value)
             )  # pragma: no cover
@@ -1701,7 +1701,7 @@ def overload_freq_methods(method):
             func_text += "    return pd.Timedelta(unit_value * np.int64(np.{}(td.value / unit_value)))\n".format(
                 method
             )
-        elif td == pandas_timestamp_type:
+        elif td == pd_timestamp_type:
             if method == "ceil":
                 func_text += (
                     "    value = td.value + np.remainder(-td.value, unit_value)\n"
@@ -1790,7 +1790,7 @@ def compute_pd_timestamp(totmicrosec, nanosecond):  # pragma: no cover
 
 
 def overload_sub_operator_timestamp(lhs, rhs):
-    if lhs == pandas_timestamp_type and rhs == datetime_timedelta_type:
+    if lhs == pd_timestamp_type and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             # The time itself
@@ -1814,14 +1814,14 @@ def overload_sub_operator_timestamp(lhs, rhs):
 
         return impl
 
-    if lhs == pandas_timestamp_type and rhs == pandas_timestamp_type:
+    if lhs == pd_timestamp_type and rhs == pd_timestamp_type:
 
         def impl_timestamp(lhs, rhs):  # pragma: no cover
             return convert_numpy_timedelta64_to_pd_timedelta(lhs.value - rhs.value)
 
         return impl_timestamp
 
-    if lhs == pandas_timestamp_type and rhs == pd_timedelta_type:
+    if lhs == pd_timestamp_type and rhs == pd_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return lhs + -rhs
@@ -1830,7 +1830,7 @@ def overload_sub_operator_timestamp(lhs, rhs):
 
 
 def overload_add_operator_timestamp(lhs, rhs):
-    if lhs == pandas_timestamp_type and rhs == datetime_timedelta_type:
+    if lhs == pd_timestamp_type and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             # The time itself
@@ -1854,7 +1854,7 @@ def overload_add_operator_timestamp(lhs, rhs):
 
         return impl
 
-    if lhs == pandas_timestamp_type and rhs == pd_timedelta_type:
+    if lhs == pd_timestamp_type and rhs == pd_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             # The time itself
@@ -1876,8 +1876,8 @@ def overload_add_operator_timestamp(lhs, rhs):
         return impl
 
     # if lhs and rhs flipped, flip args and call add again
-    if (lhs == pd_timedelta_type and rhs == pandas_timestamp_type) or (
-        lhs == datetime_timedelta_type and rhs == pandas_timestamp_type
+    if (lhs == pd_timedelta_type and rhs == pd_timestamp_type) or (
+        lhs == datetime_timedelta_type and rhs == pd_timestamp_type
     ):
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -1888,7 +1888,7 @@ def overload_add_operator_timestamp(lhs, rhs):
 
 @overload(min, no_unliteral=True)
 def timestamp_min(lhs, rhs):
-    if lhs == pandas_timestamp_type and rhs == pandas_timestamp_type:
+    if lhs == pd_timestamp_type and rhs == pd_timestamp_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return lhs if lhs < rhs else rhs
@@ -1898,7 +1898,7 @@ def timestamp_min(lhs, rhs):
 
 @overload(max, no_unliteral=True)
 def timestamp_max(lhs, rhs):
-    if lhs == pandas_timestamp_type and rhs == pandas_timestamp_type:
+    if lhs == pd_timestamp_type and rhs == pd_timestamp_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return lhs if lhs > rhs else rhs

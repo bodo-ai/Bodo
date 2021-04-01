@@ -30,7 +30,7 @@ from bodo.hiframes.pd_series_ext import (
 )
 from bodo.hiframes.pd_timestamp_ext import (
     PandasTimestampType,
-    pandas_timestamp_type,
+    pd_timestamp_type,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
@@ -2073,8 +2073,10 @@ def overload_series_fillna(
     series_type = element_type(S.data)
     value_type = element_type(types.unliteral(value))
     if not can_replace(series_type, value_type):
-        raise BodoError(f"Series.fillna(): Cannot use value type {value_type}"
-                        f" with series type {series_type}")
+        raise BodoError(
+            f"Series.fillna(): Cannot use value type {value_type}"
+            f" with series type {series_type}"
+        )
 
     if is_overload_true(inplace):
         if S.dtype == bodo.string_type:
@@ -2746,7 +2748,7 @@ def _validate_arguments_mask_where(
             not in [
                 bodo.datetime64ns,
                 bodo.timedelta64ns,
-                bodo.pandas_timestamp_type,
+                bodo.pd_timestamp_type,
                 bodo.pd_timedelta_type,
             ]
         )
@@ -2835,7 +2837,7 @@ def create_explicit_binary_op_overload(op):
         )
         is_other_datetime_iter = is_iterable_type(other) and (
             other.dtype == datetime_datetime_type
-            or other.dtype == pandas_timestamp_type
+            or other.dtype == pd_timestamp_type
             or other.dtype == bodo.datetime64ns
         )
 

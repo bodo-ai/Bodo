@@ -5,7 +5,6 @@ Implement support for the various classes in pd.tseries.offsets.
 import operator
 
 import llvmlite.binding as ll
-import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
@@ -18,24 +17,17 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
-    overload_attribute,
     register_jitable,
     register_model,
     typeof_impl,
     unbox,
 )
 
-import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
-from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.pd_timestamp_ext import (
-    convert_datetime64_to_timestamp,
-    get_days_in_month,
-    pandas_timestamp_type,
-)
+from bodo.hiframes.pd_timestamp_ext import get_days_in_month, pd_timestamp_type
 from bodo.libs import hdatetime_ext
-from bodo.utils.typing import is_overload_none, BodoError
+from bodo.utils.typing import BodoError, is_overload_none
 
 ll.add_symbol("box_date_offset", hdatetime_ext.box_date_offset)
 ll.add_symbol("unbox_date_offset", hdatetime_ext.unbox_date_offset)
@@ -208,7 +200,7 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
         return impl
 
     # rhs is a timestamp
-    if lhs == month_end_type and rhs == pandas_timestamp_type:
+    if lhs == month_end_type and rhs == pd_timestamp_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             year, month, day = calculate_month_end_date(
@@ -243,7 +235,7 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
 
     # rhs is the offset
     if (
-        lhs in [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
+        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
         and rhs == month_end_type
     ):
 
@@ -772,7 +764,7 @@ def overload_add_operator_date_offset_type(lhs, rhs):
     These will be reused to implement arrays.
     """
     # rhs is a timestamp
-    if lhs == date_offset_type and rhs == pandas_timestamp_type:
+    if lhs == date_offset_type and rhs == pd_timestamp_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             ts = relative_delta_addition(lhs, rhs)
@@ -795,7 +787,7 @@ def overload_add_operator_date_offset_type(lhs, rhs):
 
     # offset is the rhs
     if (
-        lhs in [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
+        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
         and rhs == date_offset_type
     ):
 
@@ -814,7 +806,7 @@ def overload_sub_operator_offsets(lhs, rhs):
     """
     # lhs date/datetime/timestamp and rhs date_offset/month_end_type/week_type
     if (
-        lhs in [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
+        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
     ) and rhs in [date_offset_type, month_end_type, week_type]:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -1054,7 +1046,7 @@ def overload_add_operator_week_offset_type(lhs, rhs):
     These will be reused to implement arrays.
     """
     # rhs is a datetime, date or a timestamp
-    if lhs == week_type and rhs == pandas_timestamp_type:
+    if lhs == week_type and rhs == pd_timestamp_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             time_delta = calculate_week_date(lhs.n, lhs.weekday, rhs.weekday())
@@ -1100,7 +1092,7 @@ def overload_add_operator_week_offset_type(lhs, rhs):
 
     # rhs is the offset
     if (
-        lhs in [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
+        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
         and rhs == week_type
     ):
 

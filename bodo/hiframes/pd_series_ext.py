@@ -35,7 +35,7 @@ from bodo.hiframes.pd_categorical_ext import (
     CategoricalArray,
     PDCategoricalDtype,
 )
-from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.io import csv_cpp
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -249,7 +249,7 @@ def _get_series_array_type(dtype):
         )
 
     # PandasTimestamp becomes dt64 array
-    if dtype == bodo.pandas_timestamp_type:
+    if dtype == bodo.pd_timestamp_type:
         return types.Array(bodo.datetime64ns, 1, "C")
 
     if dtype == bodo.pd_timedelta_type:
@@ -608,7 +608,7 @@ class SeriesAttribute(AttributeTemplate):
         # TODO(ehsan): use getitem resolve similar to df.apply?
         # getitem returns Timestamp for dt_index and series(dt64)
         if dtype == types.NPDatetime("ns"):
-            dtype = pandas_timestamp_type
+            dtype = pd_timestamp_type
         # getitem returns Timedelta for td_index and series(td64)
         # TODO(ehsan): simpler to use timedelta64ns instead of types.NPTimedelta("ns")
         if dtype == types.NPTimedelta("ns"):
@@ -735,10 +735,10 @@ class SeriesAttribute(AttributeTemplate):
         dtype1 = ary.dtype
         # getitem returns Timestamp for dt_index and series(dt64)
         if dtype1 == types.NPDatetime("ns"):
-            dtype1 = pandas_timestamp_type
+            dtype1 = pd_timestamp_type
         dtype2 = other.dtype
         if dtype2 == types.NPDatetime("ns"):
-            dtype2 = pandas_timestamp_type
+            dtype2 = pd_timestamp_type
 
         f_return_type = get_const_func_output_type(
             func, (dtype1, dtype2), {}, self.context

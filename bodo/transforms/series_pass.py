@@ -895,10 +895,10 @@ class SeriesPass:
 
             if (
                 isinstance(typ1, DatetimeIndexType)
-                and typ2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+                and typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
             ) or (
                 isinstance(typ2, DatetimeIndexType)
-                and typ1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+                and typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
             ):
                 impl = bodo.hiframes.pd_index_ext.overload_sub_operator_datetime_index(
                     typ1, typ2
@@ -934,7 +934,7 @@ class SeriesPass:
             if (
                 is_dt64_series_typ(typ1)
                 and (
-                    typ2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+                    typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
                     or typ2 == datetime_timedelta_type
                     or typ2 == datetime_datetime_type
                     or is_timedelta64_series_typ(typ2)
@@ -942,7 +942,7 @@ class SeriesPass:
             ) or (
                 is_dt64_series_typ(typ2)
                 and (
-                    typ1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
                     or typ1 == datetime_datetime_type
                 )
             ):
@@ -1046,10 +1046,10 @@ class SeriesPass:
             # series(dt64) comp ops with pandas.Timestamp type
             if (
                 is_dt64_series_typ(typ1)
-                and typ2 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+                and typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
             ) or (
                 is_dt64_series_typ(typ2)
-                and typ1 == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+                and typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
             ):
                 impl = bodo.hiframes.series_dt_impl.create_cmp_op_overload(rhs.fn)(
                     typ1, typ2
