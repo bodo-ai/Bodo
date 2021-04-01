@@ -3,6 +3,7 @@
 Helper functions to enable typing.
 """
 import itertools
+import operator
 import types as pytypes
 from inspect import getfullargspec
 
@@ -411,14 +412,14 @@ def can_replace(to_replace, value):
     """Return whether value can replace to_replace"""
     return (
         is_common_scalar_dtype([to_replace, value])
-        # Float cannot replace integer
+        # Float cannot replace Integer
         and not (
             isinstance(to_replace, types.Integer) and isinstance(value, types.Float)
         )
         # Integer and Float cannot replace Boolean
         and not (
             isinstance(to_replace, types.Boolean)
-            and (isinstance(value, (types.Integer, types.Float)))
+            and isinstance(value, (types.Integer, types.Float))
         )
     )
 
@@ -996,6 +997,22 @@ def get_udf_out_arr_type(f_return_type, return_nullable=False):
     out_arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(f_return_type)
     out_arr_type = to_nullable_type(out_arr_type) if return_nullable else out_arr_type
     return out_arr_type
+
+
+def types_equality_exists(t1, t2):
+    """Determines if operator.eq is implemented between types
+    t1 and t2. For efficient compilation time, you should first
+    check if types are equal directly before calling this function.
+    """
+    typing_context = numba.core.registry.cpu_target.typing_context
+    try:
+        # Check if there is a valid equality between Series_type and
+        # to_replace_type. If there isn't, we return a copy because we
+        # know it is a no-op.
+        typing_context.resolve_function_type(operator.eq, (t1, t2), {})
+        return True
+    except:
+        return False
 
 
 def to_nullable_type(t):

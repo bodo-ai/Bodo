@@ -2618,52 +2618,50 @@ def range_index_is(context, builder, sig, args):
 
 
 def create_binary_op_overload(op):
-    def overload_index_binary_op(S, other):
+    def overload_index_binary_op(lhs, rhs):
 
         # left arg is Index
-        if is_index_type(S):
+        if is_index_type(lhs):
 
-            def impl(S, other):  # pragma: no cover
-                arr = bodo.utils.conversion.coerce_to_array(S)
-                other_arr = bodo.utils.conversion.get_array_if_series_or_index(other)
-                out_arr = op(arr, other_arr)
+            def impl(lhs, rhs):  # pragma: no cover
+                arr = bodo.utils.conversion.coerce_to_array(lhs)
+                rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)
+                out_arr = op(arr, rhs_arr)
                 return out_arr
 
             return impl
 
         # right arg is Index
-        if is_index_type(other):
+        if is_index_type(rhs):
 
-            def impl2(S, other):  # pragma: no cover
-                arr = bodo.utils.conversion.coerce_to_array(other)
-                other_arr = bodo.utils.conversion.get_array_if_series_or_index(S)
-                out_arr = op(other_arr, arr)
+            def impl2(lhs, rhs):  # pragma: no cover
+                arr = bodo.utils.conversion.coerce_to_array(rhs)
+                rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
+                out_arr = op(rhs_arr, arr)
                 return out_arr
 
             return impl2
 
-        if isinstance(S, HeterogeneousIndexType):
+        if isinstance(lhs, HeterogeneousIndexType):
             # handle as regular array data if not actually heterogeneous
-            if not is_heterogeneous_tuple_type(S.data):
+            if not is_heterogeneous_tuple_type(lhs.data):
 
-                def impl3(S, other):  # pragma: no cover
-                    data = bodo.utils.conversion.coerce_to_array(S)
+                def impl3(lhs, rhs):  # pragma: no cover
+                    data = bodo.utils.conversion.coerce_to_array(lhs)
                     arr = bodo.utils.conversion.coerce_to_array(data)
-                    other_arr = bodo.utils.conversion.get_array_if_series_or_index(
-                        other
-                    )
-                    out_arr = op(arr, other_arr)
+                    rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)
+                    out_arr = op(arr, rhs_arr)
                     return out_arr
 
                 return impl3
 
-            count = len(S.data.types)
+            count = len(lhs.data.types)
             # TODO(ehsan): return Numpy array (fix Numba errors)
-            func_text = "def f(S, other):\n"
+            func_text = "def f(lhs, rhs):\n"
             func_text += "  return [{}]\n".format(
                 ",".join(
-                    "op(S[{}], other{})".format(
-                        i, f"[{i}]" if is_iterable_type(other) else ""
+                    "op(lhs[{}], rhs{})".format(
+                        i, f"[{i}]" if is_iterable_type(rhs) else ""
                     )
                     for i in range(count)
                 ),
@@ -2673,26 +2671,26 @@ def create_binary_op_overload(op):
             impl = loc_vars["f"]
             return impl
 
-        if isinstance(other, HeterogeneousIndexType):
+        if isinstance(rhs, HeterogeneousIndexType):
             # handle as regular array data if not actually heterogeneous
-            if not is_heterogeneous_tuple_type(other.data):
+            if not is_heterogeneous_tuple_type(rhs.data):
 
-                def impl4(S, other):  # pragma: no cover
-                    data = bodo.hiframes.pd_index_ext.get_index_data(other)
+                def impl4(lhs, rhs):  # pragma: no cover
+                    data = bodo.hiframes.pd_index_ext.get_index_data(rhs)
                     arr = bodo.utils.conversion.coerce_to_array(data)
-                    other_arr = bodo.utils.conversion.get_array_if_series_or_index(S)
-                    out_arr = op(other_arr, arr)
+                    rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
+                    out_arr = op(rhs_arr, arr)
                     return out_arr
 
                 return impl4
 
-            count = len(other.data.types)
+            count = len(rhs.data.types)
             # TODO(ehsan): return Numpy array (fix Numba errors)
-            func_text = "def f(S, other):\n"
+            func_text = "def f(lhs, rhs):\n"
             func_text += "  return [{}]\n".format(
                 ",".join(
-                    "op(S{}, other[{}])".format(
-                        f"[{i}]" if is_iterable_type(S) else "", i
+                    "op(lhs{}, rhs[{}])".format(
+                        f"[{i}]" if is_iterable_type(lhs) else "", i
                     )
                     for i in range(count)
                 ),
@@ -2705,9 +2703,29 @@ def create_binary_op_overload(op):
     return overload_index_binary_op
 
 
+# operators taken care of in binops_ext.py
+skips = [
+    operator.lt,
+    operator.le,
+    operator.eq,
+    operator.ne,
+    operator.gt,
+    operator.ge,
+    operator.add,
+    operator.sub,
+    operator.mul,
+    operator.truediv,
+    operator.floordiv,
+    operator.pow,
+    operator.mod,
+]
+
+
 def _install_binary_ops():
     # install binary ops such as add, sub, pow, eq, ...
     for op in bodo.hiframes.pd_series_ext.series_binary_ops:
+        if op in skips:
+            continue
         overload_impl = create_binary_op_overload(op)
         overload(op, inline="always", no_unliteral=True)(overload_impl)
 

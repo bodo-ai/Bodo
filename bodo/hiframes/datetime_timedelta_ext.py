@@ -598,8 +598,7 @@ def overload_sub_operator_datetime_timedelta(lhs, rhs):
         return impl
 
 
-@overload(operator.mul, no_unliteral=True)
-def pd_timedelta_mul(lhs, rhs):
+def overload_mul_operator_timedelta(lhs, rhs):
     if lhs == pd_timedelta_type and rhs == types.int64:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -614,9 +613,28 @@ def pd_timedelta_mul(lhs, rhs):
 
         return impl
 
+    if lhs == datetime_timedelta_type and rhs == types.int64:
 
-@overload(operator.floordiv, no_unliteral=True)
-def pd_timedelta_floordiv(lhs, rhs):
+        def impl(lhs, rhs):  # pragma: no cover
+            d = lhs.days * rhs
+            s = lhs.seconds * rhs
+            us = lhs.microseconds * rhs
+            return datetime.timedelta(d, s, us)
+
+        return impl
+
+    elif lhs == types.int64 and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            d = lhs * rhs.days
+            s = lhs * rhs.seconds
+            us = lhs * rhs.microseconds
+            return datetime.timedelta(d, s, us)
+
+        return impl
+
+
+def overload_floordiv_operator_pd_timedelta(lhs, rhs):
     if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -632,8 +650,7 @@ def pd_timedelta_floordiv(lhs, rhs):
         return impl
 
 
-@overload(operator.truediv, no_unliteral=True)
-def pd_timedelta_truediv(lhs, rhs):
+def overload_truediv_operator_pd_timedelta(lhs, rhs):
     if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -651,12 +668,19 @@ def pd_timedelta_truediv(lhs, rhs):
         return impl
 
 
-@overload(operator.mod, no_unliteral=True)
-def pd_timedelta_mod(lhs, rhs):
+def overload_mod_operator_timedeltas(lhs, rhs):
     if lhs == pd_timedelta_type and rhs == pd_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return pd.Timedelta(lhs.value % rhs.value)
+
+        return impl
+
+    if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            r = _to_microseconds(lhs) % _to_microseconds(rhs)
+            return datetime.timedelta(0, 0, r)
 
         return impl
 
@@ -957,31 +981,7 @@ def _divide_and_round(a, b):  # pragma: no cover
 _MAXORDINAL = 3652059
 
 
-@overload(operator.mul, no_unliteral=True)
-def timedelta_mul(lhs, rhs):
-    if lhs == datetime_timedelta_type and rhs == types.int64:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            d = lhs.days * rhs
-            s = lhs.seconds * rhs
-            us = lhs.microseconds * rhs
-            return datetime.timedelta(d, s, us)
-
-        return impl
-
-    elif lhs == types.int64 and rhs == datetime_timedelta_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            d = lhs * rhs.days
-            s = lhs * rhs.seconds
-            us = lhs * rhs.microseconds
-            return datetime.timedelta(d, s, us)
-
-        return impl
-
-
-@overload(operator.floordiv, no_unliteral=True)
-def timedelta_floordiv(lhs, rhs):
+def overload_floordiv_operator_dt_timedelta(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -999,8 +999,7 @@ def timedelta_floordiv(lhs, rhs):
         return impl
 
 
-@overload(operator.truediv, no_unliteral=True)
-def timedelta_truediv(lhs, rhs):
+def overload_truediv_operator_dt_timedelta(lhs, rhs):
     if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -1016,17 +1015,6 @@ def timedelta_truediv(lhs, rhs):
             return datetime.timedelta(0, 0, _divide_and_round(us, rhs))
 
         # TODO: float division: rhs=float64 type
-
-        return impl
-
-
-@overload(operator.mod, no_unliteral=True)
-def timedelta_mod(lhs, rhs):
-    if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
-
-        def impl(lhs, rhs):  # pragma: no cover
-            r = _to_microseconds(lhs) % _to_microseconds(rhs)
-            return datetime.timedelta(0, 0, r)
 
         return impl
 

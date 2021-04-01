@@ -95,6 +95,80 @@ def test_df_iat_setitem_immutable_array(memory_leak_check):
         bodo.jit(test_impl)(df)
 
 
+@pytest.fixture
+def df_fillna():
+    return pd.DataFrame({"A": [1, np.nan, 2]})
+
+
+@pytest.mark.slow
+def test_df_fillna_method_error(df_fillna, memory_leak_check):
+    match = "method parameter only supports default value None"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(lambda: df_fillna.fillna(method="pad"))()
+
+
+@pytest.mark.slow
+def test_df_fillna_limit_error(df_fillna, memory_leak_check):
+    match = "limit parameter only supports default value None"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(lambda: df_fillna.fillna(0, limit=2))()
+
+
+@pytest.mark.slow
+def test_df_fillna_downcast_error(df_fillna, memory_leak_check):
+    df_fillna["A"] = df_fillna["A"].astype(np.float64)
+    match = "downcast parameter only supports default value None"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(lambda: df_fillna.fillna(0, downcast="infer"))()
+
+
+@pytest.mark.slow
+def test_df_fillna_axis_error(df_fillna, memory_leak_check):
+    match = "axis argument not supported"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(lambda: df_fillna.fillna(0, axis=1))()
+
+
+@pytest.mark.slow
+def test_df_fillna_dict_value_error(df_fillna, memory_leak_check):
+    message = "Cannot use value type DictType"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: df_fillna.fillna({"A": 3}))()
+
+
+@pytest.fixture
+def df_replace():
+    return pd.DataFrame({"A": np.arange(12)})
+
+
+@pytest.mark.slow
+def test_df_replace_inplace_error(df_replace):
+    message = "inplace parameter only supports default value False"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: df_replace.replace(1, 100, inplace=True))()
+
+
+@pytest.mark.slow
+def test_df_replace_limit_error(df_replace):
+    message = "limit parameter only supports default value None"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: df_replace.replace(1, 100, limit=1))()
+
+
+@pytest.mark.slow
+def test_df_replace_regex_error(df_replace):
+    message = "regex parameter only supports default value False"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: df_replace.replace(1, 100, regex=True))()
+
+
+@pytest.mark.slow
+def test_df_replace_pad_error(df_replace):
+    message = "method parameter only supports default value pad"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: df_replace.replace(1, 100, method=None))()
+
+
 @pytest.mark.slow
 def test_df_rename_errors(memory_leak_check):
     """

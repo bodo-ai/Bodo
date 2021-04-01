@@ -15,7 +15,7 @@ import numba
 import numpy as np
 import pandas as pd
 from mpi4py import MPI
-from numba.core import ir
+from numba.core import ir, types
 from numba.core.compiler_machinery import FunctionPass, register_pass
 from numba.core.typed_passes import NopythonRewrites
 from numba.core.untyped_passes import PreserveIR
@@ -210,6 +210,28 @@ def check_func(
             atol,
             rtol,
         )
+        # test string arguments as StringLiteral type also (since StringLiteral is not a
+        # subtype of UnicodeType)
+        if any(isinstance(a, str) for a in args):
+            check_func_seq(
+                func,
+                args,
+                py_output,
+                copy_input,
+                sort_output,
+                check_names,
+                check_dtype,
+                reset_index,
+                convert_columns_to_pandas,
+                additional_compiler_arguments,
+                set_columns_name_to_none,
+                reorder_columns,
+                n_pes,
+                check_categorical,
+                atol,
+                rtol,
+                True,
+            )
 
     # distributed test is not needed
     if not dist_test:
@@ -296,6 +318,7 @@ def check_func_seq(
     check_categorical,
     atol,
     rtol,
+    test_str_literal=False,
 ):
     """check function output against Python without manually setting inputs/outputs
     distributions (keep the function sequential)
@@ -304,6 +327,21 @@ def check_func_seq(
     if additional_compiler_arguments != None:
         kwargs = additional_compiler_arguments
     bodo_func = bodo.jit(func, **kwargs)
+
+    # type string inputs as literal
+    if test_str_literal:
+        # create a wrapper around function and call numba.literally() on str args
+        args_str = ", ".join(f"a{i}" for i in range(len(args)))
+        func_text = f"def wrapper({args_str}):\n"
+        for i in range(len(args)):
+            if isinstance(args[i], str):
+                func_text += f"  numba.literally(a{i})\n"
+        func_text += f"  return bodo_func({args_str})\n"
+        loc_vars = {}
+        exec(func_text, {"bodo_func": bodo_func, "numba": numba}, loc_vars)
+        wrapper = loc_vars["wrapper"]
+        bodo_func = bodo.jit(wrapper)
+
     call_args = tuple(_get_arg(a, copy_input) for a in args)
     # try to catch BodoWarning if no parallelism found
     with warnings.catch_warnings(record=True) as w:

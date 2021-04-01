@@ -760,3 +760,118 @@ def test_first_last_unsupported_types(memory_leak_check):
         bodo.jit(impl1)(df_list_bool)
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl2)(df_list_bool)
+
+
+# ------------------------------ df.groupby().min()/max()------------------------------ #
+
+
+@pytest.mark.slow
+def test_min_args(memory_leak_check):
+    """ Test Groupby.min with arguments """
+
+    # wrong keyword value test
+    def impl_numeric_only(df):
+        A = df.groupby("A").min(numeric_only=True)
+        return A
+
+    def impl_min_count(df):
+        A = df.groupby("A").min(min_count=10)
+        return A
+
+    # wrong arg value test
+    def impl_numeric_only_arg(df):
+        A = df.groupby("A").min(True)
+        return A
+
+    df_bool = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, True, False, True, True, False, False, False],
+        }
+    )
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_numeric_only)(df_bool)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_min_count)(df_bool)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_numeric_only_arg)(df_bool)
+
+
+@pytest.mark.slow
+def test_max_args(memory_leak_check):
+    """ Test Groupby.max with arguments """
+
+    # wrong keyword value test
+    def impl_numeric_only(df):
+        A = df.groupby("A").max(numeric_only=True)
+        return A
+
+    def impl_min_count(df):
+        A = df.groupby("A").max(min_count=10)
+        return A
+
+    # wrong arg value test
+    def impl_numeric_only_arg(df):
+        A = df.groupby("A").max(True)
+        return A
+
+    df_bool = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, True, False, True, True, False, False, False],
+        }
+    )
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_numeric_only)(df_bool)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_min_count)(df_bool)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_numeric_only_arg)(df_bool)
+
+
+@pytest.mark.slow
+def test_min_max_unsupported_types(memory_leak_check):
+    """ Test min/max with unsupported Bodo types"""
+
+    def impl1(df):
+        A = df.groupby("A").min()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").max()
+        return A
+
+    # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
+    df_td = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 2, 1],
+            "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                pd.Series(data=[None], index=[4])
+            ),
+        }
+    )
+    with pytest.raises(BodoError, match="consider using np.timedelta64"):
+        bodo.jit(impl1)(df_td)
+    with pytest.raises(BodoError, match="consider using np.timedelta64"):
+        bodo.jit(impl2)(df_td)
+
+    # [BE-416] Support with list
+    df_list_int = pd.DataFrame(
+        {"A": [2, 1, 1, 2], "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]])}
+    )
+    err_msg = "not supported in groupby"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(df_list_int)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl2)(df_list_int)
+
+    # [BE-416] Support with tuples
+    df_tuples = pd.DataFrame(
+        {"A": [2, 1, 1, 2], "B": pd.Series([(1, 2), (3,), (5, 4, 6), (-1, 3, 4)])}
+    )
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(df_tuples)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl2)(df_tuples)

@@ -85,6 +85,9 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
     if (strncmp(_path_name, "s3://", 5) == 0) {
         *fs_option = Bodo_Fs::s3;
         *path_name = std::string(_path_name + 5);  // remove s3://
+    } else if (strncmp(_path_name, "abfs://", 7) == 0 ||
+               strncmp(_path_name, "abfss://", 8) == 0) {
+        *fs_option = Bodo_Fs::hdfs;
     } else if (strncmp(_path_name, "hdfs://", 7) == 0) {
         *fs_option = Bodo_Fs::hdfs;
         arrow::Result<std::shared_ptr<arrow::fs::FileSystem>> tempRes =
@@ -92,8 +95,8 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
         if (!(tempRes.status().ok())) {
             std::cerr << "Error in arrow hdfs: FileSystemFromUri" << std::endl;
         }
-    } else if ((strncmp(_path_name, "gcs://", 6) == 0)
-               || (strncmp(_path_name, "gs://", 5) == 0)) {
+    } else if ((strncmp(_path_name, "gcs://", 6) == 0) ||
+               (strncmp(_path_name, "gs://", 5) == 0)) {
         *fs_option = Bodo_Fs::gcs;
     } else {  // posix
         *fs_option = Bodo_Fs::posix;

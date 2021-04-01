@@ -50,6 +50,7 @@ from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
+from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.transform import (
     gen_const_tup,
     get_call_expr_arg,
@@ -336,7 +337,10 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             "For median, only column of integer, float or Decimal type are allowed",
         )
     # [BE-416] Support with list
-    if func_name in ("first", "last") and isinstance(arr_type, ArrayItemArrayType):
+    # [BE-433] Support with tuples
+    if func_name in ("first", "last", "min", "max") and isinstance(
+        arr_type, (TupleArrayType, ArrayItemArrayType)
+    ):
         return (
             None,
             "column type of list of {} is not supported in groupby built-in function {}".format(
@@ -517,9 +521,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         )
                     )
             else:
-                if func_name in ("first", "last"):
+                if func_name in ("first", "last", "min", "max"):
                     kws = dict(kws) if kws else {}
                     # pop arguments from kws
+                    # or from args or assign default values
+                    # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
                     numeric_only = (
                         args[0] if len(args) > 0 else kws.pop("numeric_only", False)
                     )
@@ -814,11 +820,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.min", no_unliteral=True)
     def resolve_min(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "min")
+        return self._get_agg_typ(grp, args, "min", kws=kws)
 
     @bound_function("groupby.max", no_unliteral=True)
     def resolve_max(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "max")
+        return self._get_agg_typ(grp, args, "max", kws=kws)
 
     @bound_function("groupby.prod", no_unliteral=True)
     def resolve_prod(self, grp, args, kws):

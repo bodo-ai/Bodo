@@ -88,8 +88,8 @@ from bodo.utils.typing import BodoError, BodoWarning
         # string and int columns, float index
         pytest.param(
             pd.DataFrame(
-                {"A": ["AA", np.nan, "", "D", "GG"], "B": [1, 8, 4, -1, 2]},
-                [-2.1, 0.1, 1.1, 7.1, 9.0],
+                {"A": ["AA", np.nan, "", "D", "GG", "FF"], "B": [1, 8, 4, -1, 2, 10]},
+                [-2.1, 0.1, 1.1, 7.1, 9.0, 7.7],
             ),
             marks=pytest.mark.slow,
         ),
@@ -3411,6 +3411,43 @@ def test_df_dropna_df_value(df_value):
         return df.dropna()
 
     check_func(impl, (df_value,))
+
+
+@pytest.mark.slow
+def test_df_fillna_df_value(df_value):
+    def impl(df, value):
+        return df.fillna(value)
+
+    col = df_value.columns[0]
+    df = df_value[[df_value.columns[0]]]
+    value = df.dropna().iat[0, 0]
+    check_func(impl, (df, value))
+
+
+@pytest.mark.slow
+def test_df_fillna_type_mismatch_failure():
+    df = pd.DataFrame({"A": [1.2, np.nan, 242.1] * 5})
+    value = "A"
+    message = "Cannot use value type"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda df, value: df.fillna(value))(df, value)
+
+
+@pytest.mark.slow
+def test_df_replace_df_value(df_value):
+    def impl(df, to_replace, value):
+        return df.replace(to_replace, value)
+
+    df = df_value.dropna()
+    df = df[[df.columns[0]]]
+    to_replace = df.iat[0, 0]
+    value = df.iat[1, 0]
+    if any(isinstance(x, pd.Timestamp) for x in [to_replace, value]):
+        message = "Not supported for types PandasTimestampType"
+        with pytest.raises(BodoError, match=message):
+            bodo.jit(impl)(df, to_replace, value)
+    else:
+        check_func(impl, (df, to_replace, value))
 
 
 @pytest.mark.slow

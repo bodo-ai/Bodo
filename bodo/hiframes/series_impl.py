@@ -2070,6 +2070,12 @@ def overload_series_fillna(
             f"Series.fillna() with inplace=True not supported for {S.dtype} values yet"
         )
 
+    series_type = element_type(S.data)
+    value_type = element_type(types.unliteral(value))
+    if not can_replace(series_type, value_type):
+        raise BodoError(f"Series.fillna(): Cannot use value type {value_type}"
+                        f" with series type {series_type}")
+
     if is_overload_true(inplace):
         if S.dtype == bodo.string_type:
             # optimization: just set null bit if fill is empty
@@ -2171,32 +2177,12 @@ def check_unsupported_types(S, to_replace, value):
         raise BodoError(message)
 
 
-def check_unsupported_replaces(S, to_replace, value):
-    """Raise an error when a type in Series.replace() cannot be replaced
-    by another type"""
-    series_type = element_type(S.data)
-    if isinstance(to_replace, types.DictType):
-        to_replace_type = element_type(to_replace.key_type)
-        value_type = element_type(to_replace.value_type)
-    else:
-        to_replace_type = element_type(to_replace)
-        value_type = element_type(value)
-
-    if series_type != to_replace_type:
-        raise BodoError("Series.replace(): 'to_replace' type must match series type")
-    elif not can_replace(to_replace_type, value_type):
-        raise BodoError(
-            f"Series.replace(): cannot replace type {to_replace_type} with type {value_type}"
-        )
-
-
 def series_replace_error_checking(S, to_replace, value, inplace, limit, regex, method):
     """Carry out error checking for Series.replace()"""
     unsupported_args = dict(inplace=inplace, limit=limit, regex=regex, method=method)
     replace_defaults = dict(inplace=False, limit=None, regex=False, method="pad")
     check_unsupported_args("Series.replace", unsupported_args, replace_defaults)
-    check_unsupported_types(S, to_replace, types.unliteral(value))
-    check_unsupported_replaces(S, to_replace, types.unliteral(value))
+    check_unsupported_types(S, to_replace, value)
 
 
 @overload_method(SeriesType, "replace", inline="always", no_unliteral=True)
@@ -2210,6 +2196,61 @@ def overload_series_replace(
     method="pad",
 ):
     series_replace_error_checking(S, to_replace, value, inplace, limit, regex, method)
+    series_type = element_type(S.data)
+    if isinstance(to_replace, types.DictType):
+        to_replace_type = element_type(to_replace.key_type)
+        value_type = element_type(to_replace.value_type)
+    else:
+        to_replace_type = element_type(to_replace)
+        value_type = element_type(value)
+    # Check if type equality exists. For shorter compilation time, first check
+    # if types are equal (common case) and then check if the equality operator exists
+    # if that fails.
+    if series_type != types.unliteral(to_replace_type):
+        # Technically this check isn't complete because equality may exist but always return false,
+        # which cause in to fail (i.e. int and str).
+        if not bodo.utils.typing.types_equality_exists(series_type, to_replace_type):
+
+            def impl(
+                S,
+                to_replace=None,
+                value=None,
+                inplace=False,
+                limit=None,
+                regex=False,
+                method="pad",
+            ):  # pragma: no cover
+                return S.copy()
+
+            return impl
+
+    # TODO [BE-468]: Check if we know the equality will never be equality
+    # at compile time. For example, np.inf vs int once we have float literal.
+    if not can_replace(series_type, types.unliteral(value_type)):
+        # If we cannot insert value_type into series_type, but the equality may
+        # succeed, we should raise an error. However, :
+        # pd.Series([1, 2, 3]).replace(np.inf, np.nan) fails and this seems to be
+        # a common pattern. Until we can support float literal, we will just return a
+        # a copy as the most common case is applying this operation over a whole dataframe
+        # and only intending to modify columns with a matching type.
+
+        # TODO [BE-467]: Uncomment when we have FloatLiteral support
+        # raise BodoError(
+        #     f"Series.replace(): cannot replace type {to_replace_type} with type {value_type}"
+        # )
+        def impl(
+            S,
+            to_replace=None,
+            value=None,
+            inplace=False,
+            limit=None,
+            regex=False,
+            method="pad",
+        ):  # pragma: no cover
+            return S.copy()
+
+        return impl
+
     ret_dtype = S.data
     if isinstance(ret_dtype, CategoricalArray):
 
@@ -2813,7 +2854,7 @@ def create_explicit_binary_op_overload(op):
 
         typing_context = numba.core.registry.cpu_target.typing_context
         # scalar case
-        if isinstance(other, types.Number) or is_str_scalar_other:
+        if is_scalar_type(other):
             args = (S.data, other)
             ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
             # Pandas 1.0 returns nullable bool array for nullable int array
@@ -2829,7 +2870,8 @@ def create_explicit_binary_op_overload(op):
                 index = bodo.hiframes.pd_series_ext.get_series_index(S)
                 name = bodo.hiframes.pd_series_ext.get_series_name(S)
                 numba.parfors.parfor.init_prange()
-                # other could be tuple, list, array, Index, or Series
+                # Unbox other if necessary.
+                other = bodo.utils.conversion.unbox_if_timestamp(other)
                 n = len(arr)
                 out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, (-1,))
                 for i in numba.parfors.parfor.internal_prange(n):
@@ -3105,20 +3147,22 @@ def create_binary_op_overload(op):
                 index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
                 name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
                 rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)
-                out_arr = op(arr, rhs_arr)
+                # Unbox the other value in case its a scalar
+                out_arr = op(arr, bodo.utils.conversion.unbox_if_timestamp(rhs_arr))
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return impl2
 
-        # right arg is series
+        # right arg is Series
         if isinstance(rhs, SeriesType):
 
             def impl2(lhs, rhs):  # pragma: no cover
                 arr = bodo.hiframes.pd_series_ext.get_series_data(rhs)
                 index = bodo.hiframes.pd_series_ext.get_series_index(rhs)
                 name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
-                rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
-                out_arr = op(rhs_arr, arr)
+                lhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
+                # Unbox the other value in case its a scalar
+                out_arr = op(bodo.utils.conversion.unbox_if_timestamp(lhs_arr), arr)
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return impl2
@@ -3127,11 +3171,12 @@ def create_binary_op_overload(op):
     return overload_series_binary_op
 
 
-skips = [operator.sub, operator.add] + list(explicit_binop_funcs_single.keys())
+# overloads taken care of in libs/binops_ext.py
+skips = list(explicit_binop_funcs_two_ways) + list(explicit_binop_funcs_single.keys())
 
 
 def _install_binary_ops():
-    # install binary ops such as add, sub, pow, eq, ...
+    # install binary ops. What's left now is and,or,xor only
     for op in bodo.hiframes.pd_series_ext.series_binary_ops:
         if op in skips:
             continue
