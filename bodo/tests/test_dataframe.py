@@ -229,7 +229,7 @@ def test_df_select_dtypes_str_include(select_dtypes_df):
 
 
 def test_df_select_dtypes_bool_include():
-    """Test when the include type is nullable and the data type is non nullable."""
+    """Make sure non-nullable array types are selected properly in df.select_dtypes()."""
 
     def test_impl():
         df = pd.DataFrame(
