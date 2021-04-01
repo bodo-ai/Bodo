@@ -2720,6 +2720,11 @@ class SeriesPass:
             exec(func_text, globals(), loc_vars)
             return replace_func(self, loc_vars["rolling_cov_impl"], rhs.args)
 
+        if func_name == "alloc_shift":
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            impl = bodo.hiframes.rolling.alloc_shift_overload(*arg_typs)
+            return replace_func(self, impl, rhs.args)
+
         return [assign]
 
     def _handle_series_combine(self, assign, lhs, rhs, series_var):
