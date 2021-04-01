@@ -387,13 +387,24 @@ def dist_reduce(value, reduce_op):
     target_typ = types.unliteral(value)
     if isinstance(target_typ, IndexValueType):
         target_typ = target_typ.val_typ
-        supported_typs = [types.int32, types.float32, types.float64]
-        import sys
-
+        supported_typs = [
+            types.bool_,
+            types.uint8,
+            types.int8,
+            types.uint16,
+            types.int16,
+            types.uint32,
+            types.int32,
+            types.float32,
+            types.float64,
+        ]
+        # TODO: Support uint64
         if not sys.platform.startswith("win"):
             # long is 4 byte on Windows
             supported_typs.append(types.int64)
-            supported_typs.append(types.NPDatetime("ns"))
+            supported_typs.append(bodo.datetime64ns)
+            supported_typs.append(bodo.timedelta64ns)
+            supported_typs.append(bodo.datetime_date_type)
         if target_typ not in supported_typs:  # pragma: no cover
             raise TypeError(
                 "argmin/argmax not supported for type {}".format(target_typ)

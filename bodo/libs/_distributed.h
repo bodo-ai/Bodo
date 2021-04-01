@@ -225,30 +225,70 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
         // allreduce struct is value + integer
         int value_size;
         MPI_Type_size(mpi_typ, &value_size);
+        // TODO: support int64_int value on Windows
+        MPI_Datatype val_rank_mpi_typ = get_val_rank_MPI_typ(type_enum);
         // copy input index_value to output
         memcpy(out_ptr, in_ptr, value_size + sizeof(int64_t));
         // printf("rank:%d index:%lld value:%lf value_size:%d\n", rank,
         //     *(int64_t*)in_ptr, *(double*)(in_ptr+sizeof(int64_t)),
         //     value_size);
 
+        // Determine the size of the pointer to allocate.
+        // argmin/argmax in MPI communicates a struct of 2 values:
+        // the actual value and a 32-bit index.
+        int val_idx_struct_size;
+        MPI_Type_size(val_rank_mpi_typ, &val_idx_struct_size);
+
         // format: value + int (input format is int64+value)
-        char* in_val_rank = (char*)malloc(value_size + sizeof(int));
+        char* in_val_rank = (char*)malloc(val_idx_struct_size);
         if (in_val_rank == NULL) return;
-        char* out_val_rank = (char*)malloc(value_size + sizeof(int));
+        char* out_val_rank = (char*)malloc(val_idx_struct_size);
         if (out_val_rank == NULL) {
             free(in_val_rank);
             return;
         }
 
         char* in_val_ptr = in_ptr + sizeof(int64_t);
-        memcpy(in_val_rank, in_val_ptr, value_size);
-        memcpy(in_val_rank + value_size, &rank, sizeof(int));
-        // TODO: support int64_int value on Windows
-        MPI_Datatype val_rank_mpi_typ = get_val_rank_MPI_typ(type_enum);
+
+        // MPI doesn't support values smaller than int and unsigned values, so cast
+        // values when they don't fit originally.
+        // TODO: Add support value_size > struct_val_size (int64 and long on Windows)
+        // and equal size but unsigned uint64 and long on Linux
+        int struct_val_size = val_idx_struct_size - sizeof(MPI_INT);
+        if (struct_val_size > value_size) {
+            // Case 1: uint32 and long on Linux
+            if (struct_val_size == sizeof(int64_t)) {
+                uint32_t orig_val = *((uint32_t *) in_val_ptr);
+                int64_t value = (int64_t) orig_val;
+                memcpy(in_val_rank, (char *) &value, struct_val_size);
+            // Case 2: Values smaller than int32_t (int8, uint8, int16, uint16)
+            // TODO: Can int be smaller on Windows?
+            } else if (struct_val_size == sizeof(int32_t)) {
+                int32_t value = 0;
+                switch (type_enum) {
+                    case Bodo_CTypes::INT8:
+                        value = (int32_t) *((int8_t *) in_val_ptr);
+                        break;
+                    case Bodo_CTypes::UINT8:
+                        value = (int32_t) *((uint8_t *) in_val_ptr);
+                        break;
+                    case Bodo_CTypes::INT16:
+                        value = (int32_t) *((int16_t *) in_val_ptr);
+                        break;
+                    case Bodo_CTypes::UINT16:
+                        value = (int32_t) *((uint16_t *) in_val_ptr);
+                        break;
+                }
+                memcpy(in_val_rank, &value, struct_val_size);
+            }
+        } else {
+            memcpy(in_val_rank, in_val_ptr, struct_val_size);
+        }
+        memcpy(in_val_rank + struct_val_size, &rank, sizeof(int));
         MPI_Allreduce(in_val_rank, out_val_rank, 1, val_rank_mpi_typ, mpi_op,
                       MPI_COMM_WORLD);
 
-        int target_rank = *((int*)(out_val_rank + value_size));
+        int target_rank = *((int*)(out_val_rank + struct_val_size));
         // printf("rank:%d allreduce rank:%d val:%lf\n", rank, target_rank,
         // *(double*)out_val_rank);
         MPI_Bcast(out_ptr, value_size + sizeof(int64_t), MPI_BYTE, target_rank,
@@ -395,18 +435,24 @@ static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) {
     // printf("h5 type enum:%d\n", typ_enum);
     // XXX: LONG is used for int64, which doesn't work on Windows
     // XXX: LONG is used for uint64
+    // XXX: INT is used for sizes <= int32_t. The data is cast to an
+    // int type at runtime
     if (typ_enum == Bodo_CTypes::DATE || typ_enum == Bodo_CTypes::DATETIME ||
         typ_enum == Bodo_CTypes::TIMEDELTA)
         // treat date 64-bit values as int64
         typ_enum = Bodo_CTypes::INT64;
-    if (typ_enum < 0 || typ_enum > 7) {
+    if (typ_enum == Bodo_CTypes::_BOOL) {
+        typ_enum = Bodo_CTypes::INT8;
+    }
+    if (typ_enum < 0 || typ_enum > 9) {
         std::cerr << "Invalid MPI_Type"
                   << "\n";
         return MPI_DATATYPE_NULL;
     }
     MPI_Datatype types_list[] = {
-        MPI_DATATYPE_NULL, MPI_DATATYPE_NULL, MPI_2INT,       MPI_DATATYPE_NULL,
-        MPI_LONG_INT,      MPI_FLOAT_INT,     MPI_DOUBLE_INT, MPI_LONG_INT};
+        MPI_2INT, MPI_2INT, MPI_2INT, MPI_2INT,
+        MPI_LONG_INT,      MPI_FLOAT_INT,     MPI_DOUBLE_INT, MPI_LONG_INT,
+        MPI_2INT, MPI_2INT};
     return types_list[typ_enum];
 }
 

@@ -1683,7 +1683,9 @@ def test_df_idxmax_all_types_axis0(df_value, memory_leak_check):
             py_output = pd.Series(outputs, index=df_value.columns)
         else:
             py_output = None
-        check_func(test_impl, (df_value,), dist_test=False, py_output=py_output)
+        check_func(
+            test_impl, (df_value,), is_out_distributed=False, py_output=py_output
+        )
 
 
 def test_df_idxmax_all_types_axis1(df_value, memory_leak_check):
@@ -1769,7 +1771,9 @@ def test_df_idxmin_all_types_axis0(df_value, memory_leak_check):
             py_output = pd.Series(outputs, index=df_value.columns)
         else:
             py_output = None
-        check_func(test_impl, (df_value,), dist_test=False, py_output=py_output)
+        check_func(
+            test_impl, (df_value,), is_out_distributed=False, py_output=py_output
+        )
 
 
 def test_df_idxmin_all_types_axis1(df_value, memory_leak_check):

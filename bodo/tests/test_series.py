@@ -294,21 +294,21 @@ def test_series_cov_ddof(memory_leak_check):
             id="series_val17",
         ),
         pytest.param(
-            pd.Series(["AA", "BB", "", "AA", None, "AA"], dtype="category"),
+            pd.Series(["AA", "BB", "", "AA", None, "AA"] * 2, dtype="category"),
             id="series_val18",
         ),
         pytest.param(
-            pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=True)),
+            pd.Series(pd.Categorical([1, 2, 5, None, 2] * 2, ordered=True)),
             id="series_val19",
         ),
         pytest.param(
-            pd.Series(pd.date_range(start="1/1/2018", end="1/4/2018", periods=4))
+            pd.Series(pd.date_range(start="1/1/2018", end="1/10/2018", periods=9))
             .append(pd.Series([None]))
             .astype("category"),
             id="series_val20",
         ),
         pytest.param(
-            pd.Series(pd.timedelta_range(start="1 day", periods=4))
+            pd.Series(pd.timedelta_range(start="1 day", periods=9))
             .append(pd.Series([None]))
             .astype(pd.CategoricalDtype(ordered=True)),
             id="series_val21",
@@ -3400,8 +3400,7 @@ def test_series_idxmin(series_val, memory_leak_check):
         py_output = test_impl(series_val.dropna().astype(series_val.dtype.numpy_dtype))
     else:
         py_output = None
-    # TODO [BE-408]: Support Distributed Reduce for more types
-    check_func(test_impl, (series_val,), dist_test=False, py_output=py_output)
+    check_func(test_impl, (series_val,), py_output=py_output)
 
 
 def test_series_idxmax(series_val, memory_leak_check):
@@ -3447,8 +3446,7 @@ def test_series_idxmax(series_val, memory_leak_check):
         py_output = test_impl(series_val.dropna().astype(series_val.dtype.numpy_dtype))
     else:
         py_output = None
-    # TODO [BE-408]: Support Distributed Reduce for more types
-    check_func(test_impl, (series_val,), dist_test=False, py_output=py_output)
+    check_func(test_impl, (series_val,), py_output=py_output)
 
 
 @pytest.mark.parametrize(

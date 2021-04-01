@@ -2887,7 +2887,13 @@ class DistributedPass:
         ind_varnames = set((ind_varname,))
         ind_used = False
 
-        for block in parfor.loop_body.values():
+        # traverse parfor body in topo order to find parfor index copies in ind_varnames
+        # before their use
+        with numba.parfors.parfor.dummy_return_in_loop_body(parfor.loop_body):
+            body_labels = find_topo_order(parfor.loop_body)
+
+        for l in body_labels:
+            block = parfor.loop_body[l]
             for stmt in block.body:
                 # assignment of parfor tuple index for multi-dim cases
                 if is_assign(stmt) and stmt.target.name == parfor.index_var.name:
@@ -3349,7 +3355,6 @@ class DistributedPass:
         self.typemap[local_reduce_var.name] = self.typemap[reduce_var.name]
         local_assign = ir.Assign(reduce_var, local_reduce_var, loc)
         self._local_reduce_vars[reduce_var.name] = local_reduce_var
-
         dist_reduce_nodes = [local_assign, op_assign] + compile_func_single_block(
             eval("lambda val, op: bodo.libs.distributed_api.dist_reduce(val, op)"),
             [reduce_var, op_var],

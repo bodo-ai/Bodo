@@ -2352,8 +2352,8 @@ def _overload_nan_argmin(arr):
         elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
 
         def impl_cat_arr(arr):  # pragma: no cover
-            numba.parfors.parfor.init_prange()
             codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(arr)
+            numba.parfors.parfor.init_prange()
             init_val = elem_width(len(arr.dtype.categories) + 1)
             ival = typing.builtins.IndexValue(-1, init_val)
             for i in numba.parfors.parfor.internal_prange(len(arr)):
@@ -2373,7 +2373,8 @@ def _nan_argmax(arr):  # pragma: no cover
     return
 
 
-@overload(_nan_argmax, inline="always", no_unliteral=True)
+# TODO: Figure out how if this should be inlined.
+@overload(_nan_argmax, no_unliteral=True, inline="always")
 def _overload_nan_argmax(arr):
     """
     Argmax function used on Bodo Array types for idxmax
@@ -2388,10 +2389,11 @@ def _overload_nan_argmax(arr):
     ):
 
         def impl_bodo_arr(arr):  # pragma: no cover
+            n = len(arr)
             numba.parfors.parfor.init_prange()
             init_val = bodo.hiframes.series_kernels._get_type_min_value(arr)
             ival = typing.builtins.IndexValue(-1, init_val)
-            for i in numba.parfors.parfor.internal_prange(len(arr)):
+            for i in numba.parfors.parfor.internal_prange(n):
                 if bodo.libs.array_kernels.isna(arr, i):
                     continue
                 curr_ival = typing.builtins.IndexValue(i, arr[i])
@@ -2407,11 +2409,12 @@ def _overload_nan_argmax(arr):
         elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
 
         def impl_cat_arr(arr):  # pragma: no cover
-            numba.parfors.parfor.init_prange()
+            n = len(arr)
             codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(arr)
+            numba.parfors.parfor.init_prange()
             init_val = elem_width(-1)
             ival = typing.builtins.IndexValue(-1, init_val)
-            for i in numba.parfors.parfor.internal_prange(len(arr)):
+            for i in numba.parfors.parfor.internal_prange(n):
                 if bodo.libs.array_kernels.isna(arr, i):
                     continue
                 curr_ival = typing.builtins.IndexValue(i, codes[i])
@@ -2420,4 +2423,5 @@ def _overload_nan_argmax(arr):
 
         return impl_cat_arr
 
+    # TODO: Does this need a parallel implementation?
     return lambda arr: arr.argmax()  # pragma: no cover

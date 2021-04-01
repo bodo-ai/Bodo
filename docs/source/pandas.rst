@@ -408,8 +408,8 @@ Reindexing / Selection / Label manipulation:
 
 
 * :meth:`pandas.Series.head` (`n` argument is supported)
-* :meth:`pandas.Series.idxmax` (Parallel support for Numpy Array data, Sequential support for Nullable and Categorical data)
-* :meth:`pandas.Series.idxmin` (Parallel support for Numpy Array data, Sequential support for Nullable and Categorical data)
+* :meth:`pandas.Series.idxmax`
+* :meth:`pandas.Series.idxmin`
 * :meth:`pandas.Series.isin`
   `values` argument supports both distributed array/Series and replicated list/array/Series
 * :meth:`pandas.Series.rename` (only set a new name using a string value)
@@ -617,8 +617,8 @@ Reindexing / Selection / Label manipulation:
 * :meth:`pandas.DataFrame.drop_duplicates`
 * :meth:`pandas.DataFrame.duplicated`
 * :meth:`pandas.DataFrame.head` (including `n` argument)
-* :meth:`pandas.DataFrame.idxmax` (Parallel support for Numpy Array data, Sequential support for Nullable and Categorical data)
-* :meth:`pandas.DataFrame.idxmin` (Parallel support for Numpy Array data, Sequential support for Nullable and Categorical data)
+* :meth:`pandas.DataFrame.idxmax`
+* :meth:`pandas.DataFrame.idxmin`
 * :meth:`pandas.DataFrame.rename` (can only rename columns with a constant dictionary, either through `columns` or `mapper` and `axis=1`)
 * :meth:`pandas.DataFrame.reset_index` (only dropping all levels supported. `drop` and `inplace` also supported)
 * :meth:`pandas.DataFrame.set_index` (`keys` must be a constant string column label)
