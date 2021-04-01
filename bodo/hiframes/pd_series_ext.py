@@ -260,6 +260,27 @@ def _get_series_array_type(dtype):
     return types.Array(dtype, 1, "C")
 
 
+def _get_nullable_and_non_nullable_types(array_of_types):
+    """For each type in the input list, add the nullable/non nullable
+    types to the list and return it. This helps checks for types to
+    be robust against such variations."""
+
+    all_types = []
+    bool_types = [boolean_array, types.Array(types.bool_, 1, "C")]
+    int_types = [IntegerArrayType, types.Array(types.int32, 1, "C")]
+
+    for typ in array_of_types:
+        if typ in bool_types:
+            all_types += bool_types
+
+        elif typ in int_types:
+            all_types += int_types
+        else:
+            all_types += [typ]
+
+    return all_types
+
+
 def is_str_series_typ(t):
     return isinstance(t, SeriesType) and t.dtype == string_type
 

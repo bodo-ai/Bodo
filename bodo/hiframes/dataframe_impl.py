@@ -40,6 +40,7 @@ from bodo.hiframes.pd_series_ext import (
     SeriesType,
     _get_series_array_type,
     if_series_to_array_type,
+    _get_nullable_and_non_nullable_types,
 )
 from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
 from bodo.libs.bool_arr_ext import boolean_array
@@ -382,6 +383,8 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
             raise_bodo_error(
                 "DataFrame.select_dtypes() only supports constant strings or types as arguments"
             )
+
+        include_types = _get_nullable_and_non_nullable_types(include_types)
         # Filter columns to those with a matching datatype
         # TODO(Nick): Add more general support for type rules:
         # ex. np.number for all numeric types, np.object for all obj types,
@@ -405,6 +408,7 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
             raise_bodo_error(
                 "DataFrame.select_dtypes() only supports constant strings or types as arguments"
             )
+        exclude_types = _get_nullable_and_non_nullable_types(exclude_types)
         # Filter columns to those without a matching datatype
         # TODO(Nick): Add more general support for type rules:
         # ex. np.number for all numeric types, np.object for all obj types,
@@ -1387,10 +1391,6 @@ def overload_dataframe_drop_duplicates(
 
 def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
     if index is None:
-        # if there is no data, create an empty index
-        # if len(columns) == 0:
-        #     index = "pd.RangeIndex(start=0, stop=0, step=1)"
-        # else:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
 
     if extra_globals is None:
