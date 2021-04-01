@@ -2716,6 +2716,76 @@ def test_min(test_df, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_min_max_other_supported_types(memory_leak_check):
+    """ Test Groupby.min()/max() with other types not in df_test"""
+    # TODO: [BE-435] HA: Once all these groupby functions are done, merge the dataframe examples with df_test
+    def impl1(df):
+        A = df.groupby("A").min()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").max()
+        return A
+
+    # Empty
+    df = pd.DataFrame({"A": [], "B": []})
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+
+    # Zero columns
+    df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl1)(df_empty)
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl2)(df_empty)
+
+    # timedelta
+    df_td = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 2, 1],
+            "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+        }
+    )
+    check_func(impl1, (df_td,), sort_output=True)
+    check_func(impl2, (df_td,), sort_output=True)
+
+    # nullable bool
+    df_n_bool = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": pd.Series(
+                [False, True, True, None, True, True, False], dtype="boolean"
+            ),
+        }
+    )
+    check_func(impl1, (df_n_bool,), sort_output=True)
+    check_func(impl2, (df_n_bool,), sort_output=True)
+
+    # timedelta with NaT
+    df_td = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 2, 1],
+            "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                pd.Series(data=[np.timedelta64("nat")], index=[4])
+            ),
+        }
+    )
+    check_func(impl1, (df_td,), sort_output=True)
+    check_func(impl2, (df_td,), sort_output=True)
+
+    # Test different column types in same dataframe
+    df_mix = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 2, 3],
+            "B": [1.1, 2.2, 3.3, 4.4, 1.1],
+            "C": ["ab", "cd", "ef", "gh", "ijk"],
+        }
+    )
+    check_func(impl1, (df_mix,), sort_output=True)
+    check_func(impl2, (df_mix,), sort_output=True)
+
+
+@pytest.mark.slow
 def test_min_one_col(test_df, memory_leak_check):
     """
     Test Groupby.min() with one column selected
