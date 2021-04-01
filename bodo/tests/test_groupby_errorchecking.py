@@ -1,5 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -762,6 +764,170 @@ def test_first_last_unsupported_types(memory_leak_check):
         bodo.jit(impl2)(df_list_bool)
 
 
+# ------------------------------ df.groupby().sum()/prod()------------------------------ #
+
+
+@pytest.mark.slow
+def test_sum_args(memory_leak_check):
+    """ Test Groupby.sum with arguments """
+
+    # wrong keyword value test
+    def impl_numeric_only(df):
+        A = df.groupby("A").sum(numeric_only=False)
+        return A
+
+    def impl_min_count(df):
+        A = df.groupby("A").sum(min_count=10)
+        return A
+
+    # wrong args value test
+    def impl_numeric_only_args(df):
+        A = df.groupby("A").sum(False)
+        return A
+
+    df_bool = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, True, False, True, True, False, False, False],
+        }
+    )
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_numeric_only)(df_bool)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_min_count)(df_bool)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_numeric_only_args)(df_bool)
+
+
+@pytest.mark.slow
+def test_prod_args(memory_leak_check):
+    """ Test Groupby.prod with arguments """
+
+    # wrong keyword value
+    def impl_numeric_only(df):
+        A = df.groupby("A").prod(numeric_only=False)
+        return A
+
+    def impl_min_count(df):
+        A = df.groupby("A").prod(min_count=10)
+        return A
+
+    # wrong args value test
+    def impl_numeric_only_args(df):
+        A = df.groupby("A").prod(False)
+        return A
+
+    df_bool = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [True, np.nan, False, True, np.nan, False, False, True],
+            "C": [True, True, False, True, True, False, False, False],
+        }
+    )
+
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_numeric_only)(df_bool)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_min_count)(df_bool)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_numeric_only_args)(df_bool)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "df",
+    [
+        # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3, 2, 1],
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                    pd.Series(data=[None], index=[4])
+                ),
+            }
+        ),
+        # Decimal
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 2, 2],
+                "B": pd.Series(
+                    [
+                        Decimal("1.6"),
+                        Decimal("-0.2"),
+                        Decimal("44.2"),
+                        np.nan,
+                        Decimal("0"),
+                    ]
+                ),
+            }
+        ),
+        # timedelta
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3, 2, 1],
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+            }
+        ),
+        # [BE-416] Support with list
+        pd.DataFrame(
+            {"A": [2, 1, 1, 2], "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]])}
+        ),
+        # Categorical
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16, 16],
+                "B": pd.Categorical([1, 2, 5, 5, 3, 3], ordered=True),
+            }
+        ),
+        # Timestamp
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16],
+                "B": [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+            }
+        ),
+        # boolean Array
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16, 16, 1, 40],
+                "B": [True, np.nan, False, True, np.nan, False, False, True],
+                "C": [True, True, False, True, True, False, False, True],
+            }
+        ),
+    ],
+)
+def test_sum_prod_unsupported_types(df, memory_leak_check):
+    """ Test sum/prod with their unsupported Bodo types"""
+
+    def impl1(df):
+        A = df.groupby("A").sum()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").prod()
+        return A
+
+    err_msg = "not supported in groupby"
+    skip_prod = False  # Skip prod test with boolean array since it's supported
+    if isinstance(df["B"][0], bool):
+        err_msg = "sum does not support boolean column"
+        skip_prod = True
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(df)
+
+    if not skip_prod:
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(impl2)(df)
+
+
 # ------------------------------ df.groupby().min()/max()------------------------------ #
 
 
@@ -790,6 +956,7 @@ def test_min_args(memory_leak_check):
             "C": [True, True, False, True, True, False, False, False],
         }
     )
+
     with pytest.raises(BodoError, match="parameter only supports default value"):
         bodo.jit(impl_numeric_only)(df_bool)
     with pytest.raises(BodoError, match="parameter only supports default value"):

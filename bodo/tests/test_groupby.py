@@ -2174,16 +2174,14 @@ def test_single_col_reset_index(test_df, memory_leak_check):
         A = df.groupby("A")["B"].sum().reset_index()
         return A
 
-    # Categorical doesn't implement sum in Pandas, but it should
-    # have a reasonable error.
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
-        test_df["B"].dtype, pd.CategoricalDtype
-    ):
-        # TODO: [BE-53] Add a check that Bodo gracefully errors
-        # with a clear error message
-        return
-
-    check_func(impl1, (test_df,), sort_output=True, reset_index=True)
+    # TODO [BE-403]: Support Categorical Key
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
+        with pytest.raises(
+            BodoError, match="Groupby with Categorical key not supported."
+        ):
+            bodo.jit(impl1)(test_df)
+    else:
+        check_func(impl1, (test_df,), sort_output=True, reset_index=True)
 
 
 @pytest.mark.slow
@@ -2912,13 +2910,6 @@ def test_prod_one_col(test_df, memory_leak_check):
     Test Groupby.prod() with one column selected
     """
 
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
-        test_df["B"].dtype, pd.CategoricalDtype
-    ):
-        # TODO: [BE-53] Add a check that Bodo gracefully errors
-        # with a clear error message
-        return
-
     def impl1(df):
         A = df.groupby("A")["B"].prod()
         return A
@@ -2927,6 +2918,14 @@ def test_prod_one_col(test_df, memory_leak_check):
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
         A = df.groupby("A")["B"].prod()
         return A
+
+    # TODO [BE-403]: Support Categorical Key
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
+        with pytest.raises(
+            BodoError, match="Groupby with Categorical key not supported."
+        ):
+            bodo.jit(impl1)(test_df)
+        return
 
     df_bool = pd.DataFrame(
         {
@@ -2966,6 +2965,42 @@ def test_groupby_as_index_prod(memory_leak_check):
 
     check_func(impl1, (11,), sort_output=True, reset_index=True)
     check_func(impl2, (11,), sort_output=True, reset_index=True)
+
+
+@pytest.mark.slow
+def test_sum_prod_empty_mix(memory_leak_check):
+    """ Test Groupby.sum()/prod() with cases not in test_df"""
+
+    def impl1(df):
+        A = df.groupby("A").sum()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").prod()
+        return A
+
+    # Empty
+    df = pd.DataFrame({"A": [], "B": []})
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+
+    # Zero columns
+    df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl1)(df_empty)
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl2)(df_empty)
+
+    # Test different column types in same dataframe
+    df_mix = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 2, 3],
+            "B": [1.1, 2.2, 3.3, 4.4, 1.1],
+            "C": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+        }
+    )
+    check_func(impl1, (df_mix,), sort_output=True)
+    check_func(impl2, (df_mix,), sort_output=True)
 
 
 def test_first_last(test_df, memory_leak_check):
@@ -3350,14 +3385,15 @@ def test_sum_one_col(test_df, memory_leak_check):
         return A
 
     # Pandas doesn't support sum on Categorical
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
-        test_df["B"].dtype, pd.CategoricalDtype
-    ):
-        # TODO: [BE-53] Add a check that Bodo gracefully errors
-        # with a clear error message
-        return
+    # TODO [BE-403]: Support Categorical Key
+    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
+        with pytest.raises(
+            BodoError, match="Groupby with Categorical key not supported."
+        ):
+            bodo.jit(impl1)(test_df)
+    else:
+        check_func(impl1, (test_df,), sort_output=True)
 
-    check_func(impl1, (test_df,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
 

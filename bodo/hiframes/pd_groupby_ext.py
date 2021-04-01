@@ -338,7 +338,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
         )
     # [BE-416] Support with list
     # [BE-433] Support with tuples
-    if func_name in ("first", "last", "min", "max") and isinstance(
+    if func_name in ("first", "last", "sum", "prod", "min", "max") and isinstance(
         arr_type, (TupleArrayType, ArrayItemArrayType)
     ):
         return (
@@ -534,6 +534,22 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         numeric_only=numeric_only, min_count=min_count
                     )
                     arg_defaults = dict(numeric_only=False, min_count=-1)
+                    check_unsupported_args(
+                        f"Groupby.{func_name}", unsupported_args, arg_defaults
+                    )
+
+                if func_name in ("sum", "prod"):
+                    kws = dict(kws) if kws else {}
+                    # pop arguments from kws or args if any
+                    # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
+                    numeric_only = (
+                        args[0] if len(args) > 0 else kws.pop("numeric_only", True)
+                    )
+                    min_count = args[1] if len(args) > 1 else kws.pop("min_count", 0)
+                    unsupported_args = dict(
+                        numeric_only=numeric_only, min_count=min_count
+                    )
+                    arg_defaults = dict(numeric_only=True, min_count=0)
                     check_unsupported_args(
                         f"Groupby.{func_name}", unsupported_args, arg_defaults
                     )
@@ -800,7 +816,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.sum", no_unliteral=True)
     def resolve_sum(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "sum")
+        return self._get_agg_typ(grp, args, "sum", kws=kws)
 
     @bound_function("groupby.count", no_unliteral=True)
     def resolve_count(self, grp, args, kws):
@@ -828,7 +844,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.prod", no_unliteral=True)
     def resolve_prod(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "prod")
+        return self._get_agg_typ(grp, args, "prod", kws=kws)
 
     @bound_function("groupby.var", no_unliteral=True)
     def resolve_var(self, grp, args, kws):
