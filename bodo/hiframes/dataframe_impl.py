@@ -860,13 +860,13 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
                 coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
-            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArray))
+            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
             or coltype in [bodo.boolean_array, bodo.datetime_date_array_type]
         ):
             raise BodoError(
                 f"DataFrame.idxmax() only supported for numeric column types. Column type: {coltype} not supported."
             )
-        if isinstance(coltype, bodo.CategoricalArray) and not coltype.dtype.ordered:
+        if isinstance(coltype, bodo.CategoricalArrayType) and not coltype.dtype.ordered:
             raise BodoError("DataFrame.idxmax(): categorical columns must be ordered")
 
     return _gen_reduce_impl(df, "idxmax", axis=axis)
@@ -891,13 +891,13 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
                 coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
-            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArray))
+            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
             or coltype in [bodo.boolean_array, bodo.datetime_date_array_type]
         ):
             raise BodoError(
                 f"DataFrame.idxmin() only supported for numeric column types. Column type: {coltype} not supported."
             )
-        if isinstance(coltype, bodo.CategoricalArray) and not coltype.dtype.ordered:
+        if isinstance(coltype, bodo.CategoricalArrayType) and not coltype.dtype.ordered:
             raise BodoError("DataFrame.idxmin(): categorical columns must be ordered")
 
     return _gen_reduce_impl(df, "idxmin", axis=axis)
@@ -1259,7 +1259,7 @@ def overload_dataframe_set_index(
         raise_bodo_error("DataFrame.set_index(): 'keys' must be a constant string")
     col_name = get_overload_const_str(keys)
     col_ind = df.columns.index(col_name)
-    if isinstance(df.data[col_ind], bodo.CategoricalArray):
+    if isinstance(df.data[col_ind], bodo.CategoricalArrayType):
         raise BodoError("DataFrame.set_index(): Not supported for categorical columns.")
     if len(df.columns) == 1:
         raise BodoError(

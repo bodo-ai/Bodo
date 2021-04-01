@@ -32,7 +32,7 @@ import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_categorical_ext import (
-    CategoricalArray,
+    CategoricalArrayType,
     PDCategoricalDtype,
 )
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
@@ -220,7 +220,7 @@ def _get_series_array_type(dtype):
 
     # categorical
     if isinstance(dtype, PDCategoricalDtype):
-        return CategoricalArray(dtype)
+        return CategoricalArrayType(dtype)
 
     if isinstance(dtype, IntDtype):
         return IntegerArrayType(dtype.dtype)

@@ -9,7 +9,7 @@ from numba.extending import intrinsic, models, register_model
 
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_categorical_ext import (
-    CategoricalArray,
+    CategoricalArrayType,
     get_categories_int_type,
 )
 from bodo.libs import array_ext
@@ -434,10 +434,10 @@ def array_to_info(typingctx, arr_type_t=None):
                 ],
             )
 
-        # get codes array from CategoricalArray to be handled similar to other Numpy
+        # get codes array from CategoricalArrayType to be handled similar to other Numpy
         # arrays.
         is_categorical = False
-        if isinstance(arr_type, CategoricalArray):
+        if isinstance(arr_type, CategoricalArrayType):
             # undo the initial incref since the original array is not fully passed to
             # C++ (e.g. dtype value is not passed)
             context.nrt.decref(builder, arr_type, in_arr)
@@ -1044,7 +1044,7 @@ def info_to_array(typingctx, info_type, array_type):
             string_array.data = array_item_array._getvalue()
             return string_array._getvalue()
 
-        if isinstance(arr_type, CategoricalArray):
+        if isinstance(arr_type, CategoricalArrayType):
             out_arr = cgutils.create_struct_proxy(arr_type)(context, builder)
             int_dtype = get_categories_int_type(arr_type.dtype)
             int_arr_type = types.Array(int_dtype, 1, "C")

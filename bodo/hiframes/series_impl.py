@@ -19,7 +19,7 @@ from bodo.hiframes.datetime_timedelta_ext import (
     datetime_timedelta_type,
 )
 from bodo.hiframes.pd_categorical_ext import (
-    CategoricalArray,
+    CategoricalArrayType,
     PDCategoricalDtype,
 )
 from bodo.hiframes.pd_offsets_ext import is_offsets_type
@@ -1276,13 +1276,13 @@ def overload_series_idxmin(S, axis=0, skipna=True):
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
-        or isinstance(S.data, (bodo.IntegerArrayType, bodo.CategoricalArray))
+        or isinstance(S.data, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
         or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.idxmin() only supported for numeric array types. Array type: {S.data} not supported."
         )
-    if isinstance(S.data, bodo.CategoricalArray) and not S.dtype.ordered:
+    if isinstance(S.data, bodo.CategoricalArrayType) and not S.dtype.ordered:
         raise BodoError("Series.idxmin(): only ordered categoricals are possible")
 
     if S.dtype == types.none:
@@ -1326,13 +1326,13 @@ def overload_series_idxmax(S, axis=0, skipna=True):
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
-        or isinstance(S.data, (bodo.IntegerArrayType, bodo.CategoricalArray))
+        or isinstance(S.data, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
         or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
     ):
         raise BodoError(
             f"Series.idxmax() only supported for numeric array types. Array type: {S.data} not supported."
         )
-    if isinstance(S.data, bodo.CategoricalArray) and not S.dtype.ordered:
+    if isinstance(S.data, bodo.CategoricalArrayType) and not S.dtype.ordered:
         raise BodoError("Series.idxmax(): only ordered categoricals are possible")
 
     # TODO: other types like strings
@@ -1728,7 +1728,7 @@ def overload_series_groupby(
         )
 
     # TODO: [BE-347] support by argument type to be categorical
-    if isinstance(by, bodo.hiframes.pd_categorical_ext.CategoricalArray):
+    if isinstance(by, bodo.hiframes.pd_categorical_ext.CategoricalArrayType):
         raise BodoError(
             "Series.groupby(): by argument with categorical type is not supported yet."
         )
@@ -2254,7 +2254,7 @@ def overload_series_replace(
         return impl
 
     ret_dtype = S.data
-    if isinstance(ret_dtype, CategoricalArray):
+    if isinstance(ret_dtype, CategoricalArrayType):
 
         def cat_impl(
             S,
@@ -2743,7 +2743,7 @@ def _validate_arguments_mask_where(
         )
         # TODO: Support categorical of Timestamp/Timedelta
         or (
-            isinstance(S.data, bodo.CategoricalArray)
+            isinstance(S.data, bodo.CategoricalArrayType)
             and S.dtype.elem_type
             not in [
                 bodo.datetime64ns,

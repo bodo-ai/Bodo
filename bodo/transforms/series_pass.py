@@ -38,7 +38,7 @@ from bodo.hiframes.datetime_timedelta_ext import (
     datetime_timedelta_array_type,
     datetime_timedelta_type,
 )
-from bodo.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 from bodo.hiframes.pd_index_ext import (
@@ -851,7 +851,9 @@ class SeriesPass:
         typ1, typ2 = self.typemap[arg1.name], self.typemap[arg2.name]
 
         # categorical array comparison
-        if rhs.fn in (operator.eq, operator.ne) and isinstance(typ1, CategoricalArray):
+        if rhs.fn in (operator.eq, operator.ne) and isinstance(
+            typ1, CategoricalArrayType
+        ):
             impl = bodo.hiframes.pd_categorical_ext.create_cmp_op_overload(rhs.fn)(
                 typ1, typ2
             )
@@ -1408,11 +1410,11 @@ class SeriesPass:
                 kws=dict(rhs.kws),
             )
 
-        # inline CategoricalArray.astype()
+        # inline CategoricalArrayType.astype()
         # TODO(ehsan): inline Series.astype() using inline="always" and avoid this
         if (
             isinstance(func_mod, ir.Var)
-            and isinstance(self.typemap[func_mod.name], CategoricalArray)
+            and isinstance(self.typemap[func_mod.name], CategoricalArrayType)
             and func_name == "astype"
         ):
             rhs.args.insert(0, func_mod)
@@ -1430,7 +1432,7 @@ class SeriesPass:
                 kws=dict(rhs.kws),
             )
 
-        # inline pd.CategoricalArray()
+        # inline pd.CategoricalArrayType()
         if fdef == ("Categorical", "pandas"):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
@@ -1958,7 +1960,7 @@ class SeriesPass:
                 impl = eval(
                     "lambda n, t, s=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(n, s, _dtype)"
                 )
-            elif isinstance(typ, CategoricalArray):
+            elif isinstance(typ, CategoricalArrayType):
                 if isinstance(self.typemap[rhs.args[1].name], types.TypeRef):
                     # If we have a type ref we must have types that are compile time constants
                     if typ.dtype.categories is None:
@@ -3174,7 +3176,7 @@ def _fix_typ_undefs(new_typ, old_typ):
                 ArrayItemArrayType,
                 StructArrayType,
                 TupleArrayType,
-                bodo.hiframes.pd_categorical_ext.CategoricalArray,
+                bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
                 types.List,
                 StringArraySplitViewType,
             ),

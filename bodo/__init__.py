@@ -94,7 +94,7 @@ from bodo.hiframes.pd_offsets_ext import (
 )
 from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
-    CategoricalArray,
+    CategoricalArrayType,
 )
 
 

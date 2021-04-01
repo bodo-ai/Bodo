@@ -1,37 +1,21 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-from collections import defaultdict
 
 import numba
-import numpy as np
-import pandas as pd
 from numba.core import ir, ir_utils, typeinfer, types
-from numba.core.ir_utils import (
-    compile_to_numba_ir,
-    replace_arg_nodes,
-    replace_vars_inner,
-    visit_vars_inner,
-)
-from numba.extending import box, intrinsic, models, register_model
+from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
 import bodo
-from bodo import objmode
-from bodo.hiframes.datetime_date_ext import DatetimeDateType, datetime_date_type
+from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.pd_categorical_ext import (
-    CategoricalArray,
+    CategoricalArrayType,
     PDCategoricalDtype,
 )
-from bodo.ir import connector
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
-from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.utils import (
-    check_java_installation,
-    debug_prints,
-    sanitize_varname,
-)
+from bodo.utils.utils import sanitize_varname
 
 
 class CsvReader(ir.Stmt):
@@ -194,10 +178,10 @@ distributed_pass.distributed_run_extensions[CsvReader] = csv_distributed_run
 def _get_dtype_str(t):
     dtype = t.dtype
     if isinstance(dtype, PDCategoricalDtype):
-        cat_arr = CategoricalArray(dtype)
+        cat_arr = CategoricalArrayType(dtype)
         # HACK: add cat type to numba.core.types
         # FIXME: fix after Numba #3372 is resolved
-        cat_arr_name = "CategoricalArray" + str(ir_utils.next_label())
+        cat_arr_name = "CategoricalArrayType" + str(ir_utils.next_label())
         setattr(types, cat_arr_name, cat_arr)
         return cat_arr_name
 

@@ -34,7 +34,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_index_ext import (
     HeterogeneousIndexType,
     NumericIndexType,
@@ -2415,9 +2415,9 @@ def categorical_can_construct_dataframe(val):
     """Helper function that returns if a datatype is categorical and has constant
     values that can be used as column names for dataframes
     """
-    if isinstance(val, CategoricalArray):
+    if isinstance(val, CategoricalArrayType):
         return val.dtype.categories is not None
-    elif isinstance(val, SeriesType) and isinstance(val.data, CategoricalArray):
+    elif isinstance(val, SeriesType) and isinstance(val.data, CategoricalArrayType):
         return val.data.dtype.categories is not None
     return False
 

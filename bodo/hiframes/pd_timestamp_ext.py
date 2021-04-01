@@ -46,7 +46,7 @@ from bodo.hiframes.datetime_timedelta_ext import (
     datetime_timedelta_type,
     pd_timedelta_type,
 )
-from bodo.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.libs import hdatetime_ext
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import (
@@ -1391,7 +1391,7 @@ def overload_to_datetime(
 
     # Categorical array with string values
     if (
-        isinstance(arg_a, CategoricalArray)
+        isinstance(arg_a, CategoricalArrayType)
         and arg_a.dtype.elem_type == bodo.string_type
     ):
         dt64_dtype = np.dtype("datetime64[ns]")

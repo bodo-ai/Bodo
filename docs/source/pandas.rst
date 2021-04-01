@@ -101,9 +101,9 @@ The following table can be used to select the necessary Bodo Type based upon the
   * - ``bodo.PDCategoricalDtype(cat_tuple, cat_elem_type, is_ordered_cat)``
     - | Pandas categorical type with the possible categories, each category's type, and if the categories are ordered.
       | e.g. ``bodo.PDCategoricalDtype(("A", "B", "AA"), bodo.string_type, True)``
-  * - ``bodo.CategoricalArray(categorical_type)``
+  * - ``bodo.CategoricalArrayType(categorical_type)``
     - | Array of Pandas categorical values.
-      | e.g. ``bodo.CategoricalArray(bodo.PDCategoricalDtype(("A", "B", "AA"), bodo.string_type, True))``
+      | e.g. ``bodo.CategoricalArrayType(bodo.PDCategoricalDtype(("A", "B", "AA"), bodo.string_type, True))``
   * - ``bodo.DatetimeIndexType(name_type)``
     - | Index of datetime64 values with a given name type.
       | e.g. ``bodo.DatetimeIndexType(bodo.string_type)``

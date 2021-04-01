@@ -85,7 +85,7 @@ def lower_constant_categorical_type(context, builder, typ, pyval):
 
 # store data and nulls as regular arrays without payload machineray
 # since this struct is immutable (also immutable in Pandas).
-# CategoricalArray dtype is mutable in pandas. For example,
+# CategoricalArrayType dtype is mutable in pandas. For example,
 # Series.cat.categories = [...] can set values, but we can transform it to
 # rename_categories() to avoid mutations
 @register_model(PDCategoricalDtype)
@@ -173,11 +173,11 @@ def box_cat_dtype(typ, val, c):
 
 
 # Array of categorical data (similar to Pandas Categorical array)
-class CategoricalArray(types.ArrayCompatible):
+class CategoricalArrayType(types.ArrayCompatible):
     def __init__(self, dtype):
         self.dtype = dtype
-        super(CategoricalArray, self).__init__(
-            name="CategoricalArray({})".format(dtype)
+        super(CategoricalArrayType, self).__init__(
+            name="CategoricalArrayType({})".format(dtype)
         )
 
     @property
@@ -185,16 +185,16 @@ class CategoricalArray(types.ArrayCompatible):
         return types.Array(types.undefined, 1, "C")
 
     def copy(self):
-        return CategoricalArray(self.dtype)
+        return CategoricalArrayType(self.dtype)
 
 
 @typeof_impl.register(pd.Categorical)
 def _typeof_pd_cat(val, c):
-    return CategoricalArray(bodo.typeof(val.dtype))
+    return CategoricalArrayType(bodo.typeof(val.dtype))
 
 
 # TODO: use payload to enable mutability?
-@register_model(CategoricalArray)
+@register_model(CategoricalArrayType)
 class CategoricalArrayModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         int_dtype = get_categories_int_type(fe_type.dtype)
@@ -202,11 +202,11 @@ class CategoricalArrayModel(models.StructModel):
         super(CategoricalArrayModel, self).__init__(dmm, fe_type, members)
 
 
-make_attribute_wrapper(CategoricalArray, "codes", "codes")
-make_attribute_wrapper(CategoricalArray, "dtype", "dtype")
+make_attribute_wrapper(CategoricalArrayType, "codes", "codes")
+make_attribute_wrapper(CategoricalArrayType, "dtype", "dtype")
 
 
-@unbox(CategoricalArray)
+@unbox(CategoricalArrayType)
 def unbox_categorical_array(typ, val, c):
     """unbox pd.Categorical array to native value"""
     arr_obj = c.pyapi.object_getattr_string(val, "codes")
@@ -218,7 +218,7 @@ def unbox_categorical_array(typ, val, c):
     dtype_val = c.pyapi.to_native_value(typ.dtype, dtype_obj).value
     c.pyapi.decref(dtype_obj)
 
-    # create CategoricalArray
+    # create CategoricalArrayType
     cat_arr_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     cat_arr_val.codes = codes
     cat_arr_val.dtype = dtype_val
@@ -240,9 +240,9 @@ def get_categories_int_type(cat_dtype):
     return dtype
 
 
-@box(CategoricalArray)
+@box(CategoricalArrayType)
 def box_categorical_array(typ, val, c):
-    """box native CategoricalArray to pd.Categorical array object"""
+    """box native CategoricalArrayType to pd.Categorical array object"""
     dtype = typ.dtype
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     pd_class_obj = c.pyapi.import_module_noblock(mod_name)
@@ -275,7 +275,7 @@ def create_cmp_op_overload(op):
     """generate overload for a comparison operator"""
 
     def overload_cat_arr_cmp(A, other):
-        if not isinstance(A, CategoricalArray):
+        if not isinstance(A, CategoricalArrayType):
             return
 
         # TODO(ehsan): proper error checking for invalid comparison
@@ -336,7 +336,7 @@ def get_code_for_value(cat_dtype, val):
     return -2
 
 
-@overload_method(CategoricalArray, "astype", inline="always", no_unliteral=True)
+@overload_method(CategoricalArrayType, "astype", inline="always", no_unliteral=True)
 def overload_cat_arr_astype(A, dtype, copy=True):
     nb_dtype = bodo.utils.typing.parse_dtype(dtype)
     # only supports converting back to original data currently
@@ -372,7 +372,7 @@ def cat_overload_dummy(val_list):
 
 @intrinsic
 def init_categorical_array(typingctx, codes, cat_dtype=None):
-    """Create a CategoricalArray with codes array (integers) and categories dtype"""
+    """Create a CategoricalArrayType with codes array (integers) and categories dtype"""
     assert isinstance(codes, types.Array) and isinstance(codes.dtype, types.Integer)
 
     def codegen(context, builder, signature, args):
@@ -388,7 +388,7 @@ def init_categorical_array(typingctx, codes, cat_dtype=None):
 
         return cat_arr._getvalue()
 
-    ret_typ = CategoricalArray(cat_dtype)
+    ret_typ = CategoricalArrayType(cat_dtype)
     sig = ret_typ(codes, cat_dtype)
     return sig, codegen
 
@@ -458,7 +458,7 @@ numba.core.ir_utils.alias_func_extensions[
 ] = alias_ext_dummy_func
 
 
-@overload_method(CategoricalArray, "copy", no_unliteral=True)
+@overload_method(CategoricalArrayType, "copy", no_unliteral=True)
 def cat_arr_copy_overload(arr):
     return lambda arr: init_categorical_array(
         arr.codes.copy(), arr.dtype
@@ -560,7 +560,7 @@ def reassign_codes(new_codes_arr, old_codes_arr, codes_map_arr):  # pragma: no c
         new_codes_arr[i] = codes_map_arr[old_codes_arr[i] + 1]
 
 
-@overload_method(CategoricalArray, "replace", inline="always", no_unliteral=True)
+@overload_method(CategoricalArrayType, "replace", inline="always", no_unliteral=True)
 def overload_replace(arr, to_replace, value):
     def impl(arr, to_replace, value):  # pragma: no cover
         return bodo.hiframes.pd_categorical_ext.cat_replace(arr, to_replace, value)
@@ -704,16 +704,16 @@ def cat_replace_overload(arr, to_replace, value):
 
 @overload(len, no_unliteral=True)
 def overload_cat_arr_len(A):
-    if isinstance(A, CategoricalArray):
+    if isinstance(A, CategoricalArrayType):
         return lambda A: len(A.codes)  # pragma: no cover
 
 
-@overload_attribute(CategoricalArray, "shape")
+@overload_attribute(CategoricalArrayType, "shape")
 def overload_cat_arr_shape(A):
     return lambda A: (len(A.codes),)  # pragma: no cover
 
 
-@overload_attribute(CategoricalArray, "ndim")
+@overload_attribute(CategoricalArrayType, "ndim")
 def overload_cat_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
@@ -811,7 +811,7 @@ def pd_categorical_overload(
 
 @overload(operator.getitem, no_unliteral=True)
 def categorical_array_getitem(arr, ind):
-    if not isinstance(arr, CategoricalArray):
+    if not isinstance(arr, CategoricalArrayType):
         return
 
     # scalar int
@@ -833,10 +833,10 @@ def categorical_array_getitem(arr, ind):
 
         return impl_bool
 
-    # This should be the only CategoricalArray implementation.
+    # This should be the only CategoricalArrayType implementation.
     # We only expect to reach this case if more idx options are added.
     raise BodoError(
-        f"getitem for CategoricalArray with indexing type {ind} not supported."
+        f"getitem for CategoricalArrayType with indexing type {ind} not supported."
     )  # pragma: no cover
 
 
@@ -846,7 +846,7 @@ class CategoricalMatchingValues(enum.Enum):
     MAY_MATCH means the two values may match at runtime,
     but we can't tell at compile time.
 
-    DIFFERENT_TYPES is used if a type examined is not a CategoricalArray,
+    DIFFERENT_TYPES is used if a type examined is not a CategoricalArrayType,
     which should produce a different error message.
     """
 
@@ -862,7 +862,10 @@ def categorical_arrs_match(arr1, arr2):
     categorical arrays. If either category is None, the types
     can match at runtime (need a runtime check).
     """
-    if not (isinstance(arr1, CategoricalArray) and isinstance(arr2, CategoricalArray)):
+    if not (
+        isinstance(arr1, CategoricalArrayType)
+        and isinstance(arr2, CategoricalArrayType)
+    ):
         return CategoricalMatchingValues.DIFFERENT_TYPES
     if arr1.dtype.categories is None or arr2.dtype.categories is None:
         return CategoricalMatchingValues.MAY_MATCH
@@ -876,7 +879,7 @@ def categorical_arrs_match(arr1, arr2):
 
 @overload(operator.setitem, no_unliteral=True)
 def categorical_array_setitem(arr, ind, val):
-    if not isinstance(arr, CategoricalArray):
+    if not isinstance(arr, CategoricalArrayType):
         return
 
     if val == types.none or isinstance(val, types.optional):  # pragma: no cover
@@ -896,7 +899,7 @@ def categorical_array_setitem(arr, ind, val):
     )
     # val is an array RHS that can be assigned
     is_arr_rhs = (
-        not isinstance(val, CategoricalArray)
+        not isinstance(val, CategoricalArrayType)
         and is_iterable_type(val)
         and is_common_scalar_dtype([val.dtype, arr.dtype.elem_type])
         # Make sure we don't try insert a float into an int. This
@@ -910,7 +913,7 @@ def categorical_array_setitem(arr, ind, val):
     # if they can match we check at compile time.
     cats_match = categorical_arrs_match(arr, val)
 
-    typ_err_msg = f"setitem for CategoricalArray of dtype {arr.dtype} with indexing type {ind} received an incorrect 'value' type {val}."
+    typ_err_msg = f"setitem for CategoricalArrayType of dtype {arr.dtype} with indexing type {ind} received an incorrect 'value' type {val}."
     categories_err_msg = (
         "Cannot set a Categorical with another, without identical categories"
     )
@@ -1148,8 +1151,8 @@ def categorical_array_setitem(arr, ind, val):
 
             return impl_slice_cat_values
 
-    # This should be the only CategoricalArray implementation.
+    # This should be the only CategoricalArrayType implementation.
     # We only expect to reach this case if more idx options are added.
     raise BodoError(
-        f"setitem for CategoricalArray with indexing type {ind} not supported."
+        f"setitem for CategoricalArrayType with indexing type {ind} not supported."
     )  # pragma: no cover

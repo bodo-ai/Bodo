@@ -48,7 +48,7 @@ from bodo.ir import sql_ext
 from bodo.ir import json_ext
 from bodo.io.parquet_pio import ParquetHandler
 
-from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArray
+from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArrayType
 import bodo.hiframes.pd_dataframe_ext
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.transforms.typing_pass import _create_const_var
@@ -2006,7 +2006,7 @@ def _dtype_val_to_arr_type(t):
         cats = tuple(t.categories)
         elem_typ = bodo.string_type if len(cats) == 0 else bodo.typeof(cats[0])
         typ = PDCategoricalDtype(cats, elem_typ, t.ordered)
-        return CategoricalArray(typ)
+        return CategoricalArrayType(typ)
 
     # nullable int types
     if isinstance(t, pd.core.arrays.integer._IntegerDtype):

@@ -455,7 +455,7 @@ def overload_coerce_to_array(
             DecimalArrayType,
             bodo.libs.tuple_arr_ext.TupleArrayType,
             bodo.libs.struct_arr_ext.StructArrayType,
-            bodo.hiframes.pd_categorical_ext.CategoricalArray,
+            bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
             bodo.libs.csr_matrix_ext.CSRMatrixType,
         ),
     ):

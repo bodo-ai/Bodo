@@ -25,7 +25,7 @@ import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import (
-    CategoricalArray,
+    CategoricalArrayType,
     init_categorical_array,
 )
 from bodo.hiframes.split_impl import string_array_split_view_type
@@ -117,7 +117,7 @@ def overload_isna(arr, i):
         )  # pragma: no cover
 
     # Categorical Array
-    if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArray):
+    if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArrayType):
         return lambda arr, i: arr.codes[i] == -1
 
     # TODO: extend to other types (which ones are missing?)
@@ -208,7 +208,7 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         return b_set
 
-    if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArray):
+    if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArrayType):
 
         def setna_cat(arr, ind, int_nan_const=0):  # pragma: no cover
             arr.codes[ind] = -1
@@ -837,7 +837,7 @@ def overload_dropna(data, how, thresh, subset):
     # allocate new arrays
     for i, out in enumerate(out_names):
         # Add a check for categorical, if so use data[{i}].dtype
-        if isinstance(data[i], bodo.CategoricalArray):
+        if isinstance(data[i], bodo.CategoricalArrayType):
             func_text += "  {0} = bodo.utils.utils.alloc_type(new_len, data[{1}], (-1,))\n".format(
                 out, i
             )
@@ -1147,7 +1147,7 @@ def concat_overload(arr_list):
 
     # categorical arrays
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
-        arr_list.dtype, CategoricalArray
+        arr_list.dtype, CategoricalArrayType
     ):
 
         def cat_array_concat_impl(arr_list):  # pragma: no cover
@@ -2345,7 +2345,7 @@ def _overload_nan_argmin(arr):
 
         return impl_bodo_arr
 
-    if isinstance(arr, CategoricalArray):
+    if isinstance(arr, CategoricalArrayType):
         assert (
             arr.dtype.ordered
         ), "Categorical Array must be ordered to select an argmin"
@@ -2402,7 +2402,7 @@ def _overload_nan_argmax(arr):
 
         return impl_bodo_arr
 
-    if isinstance(arr, CategoricalArray):
+    if isinstance(arr, CategoricalArrayType):
         assert (
             arr.dtype.ordered
         ), "Categorical Array must be ordered to select an argmin"

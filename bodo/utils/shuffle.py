@@ -323,7 +323,7 @@ def finalize_shuffle_meta_overload(
                     types.Array,
                     IntegerArrayType,
                     BooleanArrayType,
-                    bodo.CategoricalArray,
+                    bodo.CategoricalArrayType,
                 ),
             )
             func_text += (
@@ -450,7 +450,12 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
     for i, typ in enumerate(arrs.types):
         if isinstance(
             typ,
-            (types.Array, IntegerArrayType, BooleanArrayType, bodo.CategoricalArray),
+            (
+                types.Array,
+                IntegerArrayType,
+                BooleanArrayType,
+                bodo.CategoricalArrayType,
+            ),
         ):
             func_text += (
                 "  bodo.libs.distributed_api.alltoallv("
