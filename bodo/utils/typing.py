@@ -1155,7 +1155,7 @@ def get_nullable_and_non_nullable_types(array_of_types):
         if typ == bodo.libs.bool_arr_ext.boolean_array:
             all_types.append(types.Array(types.bool_, 1, "C"))
 
-        elif typ == bodo.libs.int_arr_ext.IntegerArrayType:
+        elif isinstance(typ, bodo.libs.int_arr_ext.IntegerArrayType):
             all_types.append(types.Array(typ.dtype, 1, "C"))
 
         all_types.append(typ)
