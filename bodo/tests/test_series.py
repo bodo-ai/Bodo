@@ -4304,6 +4304,7 @@ def test_series_shift_type_check(series_val, memory_leak_check):
         return A.shift(3)
 
     # Series.shift supports ints, floats, dt64, nullable nullable int/bool/decimal/date
+    # and strings
     if (
         pd.api.types.is_numeric_dtype(series_val)
         or series_val.dtype == np.dtype("datetime64[ns]")

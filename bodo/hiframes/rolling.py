@@ -1463,6 +1463,22 @@ def overload_is_str_array(arr):
     return lambda arr: False  # pragma: no cover
 
 
+def is_supported_shift_array_type(arr_type):
+    """return True if array type is supported for shift() operation"""
+    return (
+        (
+            isinstance(arr_type, types.Array)
+            and (
+                isinstance(arr_type.dtype, types.Number)
+                or arr_type.dtype == bodo.datetime64ns
+            )
+        )
+        or isinstance(arr_type, (bodo.IntegerArrayType, bodo.DecimalArrayType))
+        or arr_type
+        in (bodo.boolean_array, bodo.datetime_date_array_type, bodo.string_array_type)
+    )
+
+
 # pct_change -------------
 
 # dummy
