@@ -228,16 +228,23 @@ def test_df_select_dtypes_str_include(select_dtypes_df):
     check_func(test_impl2, (df,))
 
 
-def test_df_select_dtypes_bool_include():
+def test_df_select_dtypes_include():
     """Make sure non-nullable array types are selected properly in df.select_dtypes()."""
 
-    def test_impl():
+    def test_impl_bool():
         df = pd.DataFrame(
             {"a": [1, 2] * 20, "b": [True, False] * 20, "c": [1.0, 2.0] * 20}
         )
         return df.select_dtypes(["bool"])
 
-    check_func(test_impl, (), only_seq=True)
+    def test_impl_int():
+        df = pd.DataFrame(
+            {"a": [1, 2] * 20, "b": [True, False] * 20, "c": [1.0, 2.0] * 20}
+        )
+        return df.select_dtypes(["int"])
+
+    check_func(test_impl_bool, (), only_seq=True)
+    check_func(test_impl_int, (), only_seq=True)
 
 
 def test_df_select_dtypes_str_exclude(select_dtypes_df):
