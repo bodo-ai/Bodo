@@ -1339,6 +1339,7 @@ def shift_overload(in_arr, shift, parallel):
 
 def shift_impl(in_arr, shift, parallel):  # pragma: no cover
     N = len(in_arr)
+    output = alloc_shift(N, in_arr, (-1,))
     send_right = shift > 0
     send_left = shift <= 0
     if parallel:
@@ -1358,21 +1359,36 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
             r_recv_req,
         ) = comm_data
 
-    output = shift_seq(in_arr, shift)
+        # update start of output array (from left recv buff) early for string arrays
+        # since they are immutable and should be written in order
+        if send_right and is_str_array(in_arr):
+            shift_left_recv(
+                r_send_req,
+                l_send_req,
+                rank,
+                n_pes,
+                halo_size,
+                l_recv_req,
+                l_recv_buff,
+                output,
+            )
+
+    shift_seq(in_arr, shift, output)
 
     if parallel:
         if send_right:
-            _border_send_wait(r_send_req, l_send_req, rank, n_pes, True, False)
+            if not is_str_array(in_arr):
+                shift_left_recv(
+                    r_send_req,
+                    l_send_req,
+                    rank,
+                    n_pes,
+                    halo_size,
+                    l_recv_req,
+                    l_recv_buff,
+                    output,
+                )
 
-            # recv left
-            if rank != 0:
-                bodo.libs.distributed_api.wait(l_recv_req, True)
-
-                for i in range(0, halo_size):
-                    if bodo.libs.array_kernels.isna(l_recv_buff, i):
-                        bodo.libs.array_kernels.setna(output, i)
-                        continue
-                    output[i] = l_recv_buff[i]
         else:
             _border_send_wait(r_send_req, l_send_req, rank, n_pes, False, True)
 
@@ -1390,17 +1406,14 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
 
 
 @register_jitable(cache=True)
-def shift_seq(in_arr, shift):  # pragma: no cover
+def shift_seq(in_arr, shift, output):  # pragma: no cover
     N = len(in_arr)
-    output = alloc_shift(N, in_arr)
     # maximum shift size is N
     sign_shift = 1 if shift > 0 else -1
     shift = sign_shift * min(abs(shift), N)
     # set border values to NA
     if shift > 0:
         bodo.libs.array_kernels.setna_slice(output, slice(None, shift))
-    else:
-        bodo.libs.array_kernels.setna_slice(output, slice(shift, None))
 
     # range is shift..N for positive shift, 0..N+shift for negative shift
     start = max(shift, 0)
@@ -1412,7 +1425,42 @@ def shift_seq(in_arr, shift):  # pragma: no cover
             continue
         output[i] = in_arr[i - shift]
 
+    # NOTE: updating end of array later since string arrays require in order setitem
+    if shift < 0:
+        bodo.libs.array_kernels.setna_slice(output, slice(shift, None))
+
     return output
+
+
+@register_jitable
+def shift_left_recv(
+    r_send_req, l_send_req, rank, n_pes, halo_size, l_recv_req, l_recv_buff, output
+):  # pragma: no cover
+    """wait for send/recv comm calls and update output using left recv buff for shift()"""
+    _border_send_wait(r_send_req, l_send_req, rank, n_pes, True, False)
+
+    # recv left
+    if rank != 0:
+        bodo.libs.distributed_api.wait(l_recv_req, True)
+
+        for i in range(0, halo_size):
+            if bodo.libs.array_kernels.isna(l_recv_buff, i):
+                bodo.libs.array_kernels.setna(output, i)
+                continue
+            output[i] = l_recv_buff[i]
+
+
+def is_str_array(arr):  # pragma: no cover
+    return False
+
+
+@overload(is_str_array)
+def overload_is_str_array(arr):
+    """return True if 'arr' is a string array"""
+    if arr == bodo.string_array_type:
+        return lambda arr: True  # pragma: no cover
+
+    return lambda arr: False  # pragma: no cover
 
 
 # pct_change -------------
@@ -1591,8 +1639,9 @@ def _border_icomm(
 ):  # pragma: no cover
     """post isend/irecv for halo data (fixed window case)"""
     comm_tag = np.int32(comm_border_tag)
-    l_recv_buff = bodo.utils.utils.alloc_type(halo_size, in_arr)
-    r_recv_buff = bodo.utils.utils.alloc_type(halo_size, in_arr)
+    l_recv_buff = bodo.utils.utils.alloc_type(halo_size, in_arr, (-1,))
+    r_recv_buff = bodo.utils.utils.alloc_type(halo_size, in_arr, (-1,))
+
     # send right
     if send_right and rank != n_pes - 1:
         r_send_req = bodo.libs.distributed_api.isend(
@@ -1741,6 +1790,25 @@ def _handle_small_data_apply(
     return all_out[start:end]
 
 
+def bcast_n_chars_if_str_arr(arr):
+    pass
+
+
+@overload(bcast_n_chars_if_str_arr)
+def overload_bcast_n_chars_if_str_arr(arr):
+    """broadcast number of characters if 'arr' is a string array"""
+    if arr == bodo.string_array_type:
+
+        def impl(arr):  # pragma: no cover
+            return bodo.libs.distributed_api.bcast_scalar(
+                np.int64(bodo.libs.str_arr_ext.num_total_chars(arr))
+            )
+
+        return impl
+
+    return lambda arr: -1  # pragma: no cover
+
+
 @register_jitable
 def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
     N = len(in_arr)
@@ -1749,9 +1817,13 @@ def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
     )
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
     if rank == 0:
-        all_out = shift_seq(all_in_arr, shift)
+        all_out = alloc_shift(len(all_in_arr), all_in_arr, (-1,))
+        shift_seq(all_in_arr, shift, all_out)
+        n_chars = bcast_n_chars_if_str_arr(all_out)
     else:
-        all_out = alloc_shift(all_N, in_arr)
+        n_chars = bcast_n_chars_if_str_arr(in_arr)
+        all_out = alloc_shift(all_N, in_arr, (n_chars,))
+
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
     start = bodo.libs.distributed_api.dist_exscan(N, np.int32(Reduce_Type.Sum.value))
@@ -1901,25 +1973,27 @@ def _dropna(arr):  # pragma: no cover
     return A
 
 
-def alloc_shift(n, A):  # pragma: no cover
+def alloc_shift(n, A, s=None):  # pragma: no cover
     return np.empty(n, A.dtype)
 
 
 @overload(alloc_shift, no_unliteral=True)
-def alloc_shift_overload(n, A):
+def alloc_shift_overload(n, A, s=None):
     """allocate output array for shift(). It is the same type as input, except for
     non-nullable int case which requires float (to store nulls).
     """
 
     # non-Numpy case is same as input
     if not isinstance(A, types.Array):
-        return lambda n, A: bodo.utils.utils.alloc_type(n, A)  # pragma: no cover
+        return lambda n, A, s=None: bodo.utils.utils.alloc_type(
+            n, A, s
+        )  # pragma: no cover
 
     # output of non-nullable int is float64 to be able to store nulls
     if isinstance(A.dtype, types.Integer):
-        return lambda n, A: np.empty(n, np.float64)  # pragma: no cover
+        return lambda n, A, s=None: np.empty(n, np.float64)  # pragma: no cover
 
-    return lambda n, A: np.empty(n, A.dtype)  # pragma: no cover
+    return lambda n, A, s=None: np.empty(n, A.dtype)  # pragma: no cover
 
 
 def alloc_pct_change(n, A):  # pragma: no cover

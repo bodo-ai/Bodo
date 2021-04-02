@@ -1190,9 +1190,7 @@ def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
         raise BodoError("DataFrame.shift(): 'periods' input must be an integer.")
 
     data_args = ", ".join(
-        "bodo.hiframes.rolling.shift(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), periods, False)".format(
-            i
-        )
+        f"bodo.hiframes.rolling.shift(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), periods, False)"
         for i in range(len(df.columns))
     )
     header = "def impl(df, periods=1, freq=None, axis=0, fill_value=None):\n"

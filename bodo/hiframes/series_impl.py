@@ -2073,8 +2073,10 @@ def overload_series_fillna(
     series_type = element_type(S.data)
     value_type = element_type(types.unliteral(value))
     if not can_replace(series_type, value_type):
-        raise BodoError(f"Series.fillna(): Cannot use value type {value_type}"
-                        f" with series type {series_type}")
+        raise BodoError(
+            f"Series.fillna(): Cannot use value type {value_type}"
+            f" with series type {series_type}"
+        )
 
     if is_overload_true(inplace):
         if S.dtype == bodo.string_type:
@@ -2573,7 +2575,7 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
             )
         )
         or isinstance(S.data, (IntegerArrayType, DecimalArrayType))
-        or S.data in (boolean_array, bodo.datetime_date_array_type)
+        or S.data in (boolean_array, bodo.datetime_date_array_type, string_array_type)
     ):
         # TODO: Link to supported Series input types.
         raise BodoError(

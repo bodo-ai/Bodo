@@ -441,7 +441,7 @@ Reshaping, sorting:
 
 Time series-related:
 
-* :meth:`pandas.Series.shift` (supports numeric, boolean and datetime.date types, and
+* :meth:`pandas.Series.shift` (supports numeric, boolean, datetime.date, and string types, and
   only the `periods` argument supported)
 
 Datetime properties:
@@ -668,7 +668,7 @@ Combining / joining / merging:
 
 Time series-related:
 
-* :meth:`pandas.DataFrame.shift` (supports numeric, boolean and datetime.date types, and
+* :meth:`pandas.DataFrame.shift` (supports numeric, boolean, datetime.date and string types, and
   only the `periods` argument supported)
 
 .. _pandas-f-out:
