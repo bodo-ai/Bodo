@@ -88,6 +88,31 @@ On macOS::
     export PATH=$HOME/miniconda3/bin:$PATH
 
 
+Optional Dependencies
+---------------------
+
+Some Bodo functionality may require other dependencies as the table
+below summarizes. All optional dependencies except Hadoop can be
+installed using the commands ``conda install gcsfs sqlalchemy
+hdf5='*=*mpich*' openjdk -c conda-forge`` and ``pip install
+deltalake``.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Functionality
+     - Dependency
+   * - ``pd.read_sql / df.to_sql``
+     - ``sqlalchemy``
+   * - ``HDF5``
+     - ``hdf5 (MPI version)``
+   * - ``GCS I/O``
+     - ``gcsfs``
+   * - ``Delta Lake``
+     - ``deltalake``
+   * - ``HDFS or ADLS Gen2``
+     - `hadoop <http://hadoop.apache.org/docs/stable/>`_ (only the Hadoop client is needed)
+
 
 .. _enterprise:
 
