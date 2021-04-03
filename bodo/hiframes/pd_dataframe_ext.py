@@ -1904,7 +1904,7 @@ def to_parquet_overload(
         categories_args = ", ".join(
             f"array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}).dtype.categories.values)"
             for i in range(len(df.columns))
-            if isinstance(df.data[i], CategoricalArray) and (i in part_col_idxs)
+            if isinstance(df.data[i], CategoricalArrayType) and (i in part_col_idxs)
         )
         if categories_args:
             func_text += "    cat_info_list = [{}]\n".format(categories_args)

@@ -1,11 +1,14 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 
 import numba
+import numpy as np  # noqa
+import pandas as pd  # noqa
 from numba.core import ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
 import bodo
 import bodo.ir.connector
+from bodo import objmode  # noqa
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
@@ -16,6 +19,7 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
+from bodo.utils.utils import check_java_installation  # noqa
 from bodo.utils.utils import sanitize_varname
 
 
@@ -119,7 +123,6 @@ def csv_distributed_run(
     arg_names = ", ".join("arr" + str(i) for i in range(n_cols))
     func_text = "def csv_impl(fname):\n"
     func_text += "    ({},) = _csv_reader_py(fname)\n".format(arg_names)
-    # print(func_text)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -340,7 +343,6 @@ def _gen_csv_reader_py(
     func_text += "    df = df.astype({{{}}}, copy=False)\n".format(df_astype_dtype_strs)
     for col_idx, s_cname in zip(usecols, sanitized_cnames):
         func_text += "    {} = df[{}].values\n".format(s_cname, col_idx)
-        # func_text += "    print({})\n".format(s_cname)
     func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
     # {'objmode': objmode, 'csv_file_chunk_reader': csv_file_chunk_reader,

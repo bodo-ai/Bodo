@@ -1,12 +1,16 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import numba
+import numpy as np  # noqa
+import pandas as pd  # noqa
 from numba.core import ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
 import bodo
 import bodo.ir.connector
+from bodo import objmode  # noqa
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
+from bodo.utils.utils import check_java_installation  # noqa
 from bodo.utils.utils import sanitize_varname
 
 
