@@ -400,19 +400,24 @@ ext_parquet = Extension(
         "bodo/io/_parquet.cpp",
         "bodo/io/_parquet_reader.cpp",
         "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_decimal_ext.cpp",
+        "bodo/libs/_array_utils.cpp",
+        "bodo/libs/_array_hash.cpp",
+        "bodo/libs/_murmurhash3.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",
         "bodo/io/_fs_io.h",
         "bodo/io/_parquet_reader.h",
+        "bodo/libs/_murmurhash3.h",
     ],
-    libraries=pq_libs,
-    include_dirs=["."] + ind,
+    libraries=pq_libs + np_compile_args["libraries"],
+    include_dirs=["."] + np_compile_args["include_dirs"] + ind + extra_hash_ind,
     define_macros=[],
     extra_compile_args=eca,
     extra_link_args=ela,
-    library_dirs=lid,
+    library_dirs=np_compile_args["library_dirs"] + lid,
 )
 
 

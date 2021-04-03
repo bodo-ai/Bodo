@@ -14,6 +14,7 @@
 
 #include "../libs/_bodo_common.h"
 #include "../libs/_datetime_ext.h"
+#include "../libs/_array_hash.h"
 #include "_fs_io.h"
 #include "_parquet_reader.h"
 
@@ -83,12 +84,20 @@ void pack_null_bitmap(uint8_t *out_nulls, std::vector<bool> &null_vec,
  */
 void pq_gen_partition_column(DatasetReader *ds_reader, int64_t part_col_idx,
                              void *out_data, int32_t cat_dtype);
+
 void pq_write(const char *filename, const table_info *table,
               const array_info *col_names, const array_info *index,
               bool write_index, const char *metadata, const char *compression,
               bool parallel, bool write_rangeindex_to_metadata, const int start,
               const int stop, const int step, const char *name,
               const char *bucket_region);
+
+void pq_write_partitioned(const char *_path_name, table_info *table,
+                          const array_info *col_names_arr,
+                          const array_info *col_names_arr_no_partitions,
+                          table_info *categories_table, int *partition_cols_idx,
+                          int num_partition_cols, const char *compression,
+                          bool is_parallel, const char *bucket_region);
 
 // if expr is not true (or NULL), form an err msg and raise a
 // runtime_error with it
@@ -144,6 +153,8 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
                            PyLong_FromVoidPtr((void *)(&pq_gen_partition_column)));
     PyObject_SetAttrString(m, "pq_write",
                            PyLong_FromVoidPtr((void *)(&pq_write)));
+    PyObject_SetAttrString(m, "pq_write_partitioned",
+                           PyLong_FromVoidPtr((void *)(&pq_write_partitioned)));
     PyObject_SetAttrString(m, "get_stats_alloc",
                            PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
     PyObject_SetAttrString(m, "get_stats_free",
@@ -864,6 +875,135 @@ void bodo_array_to_arrow(
     }
 }
 
+/**
+ * Struct used during pq_write_partitioned to store the information for a
+ * partition that this process is going to write: the file path of the parquet
+ * file for this partition (e.g. sales_date=2020-01-01/part-00.parquet), and
+ * the rows in the table that correspond to this partition.
+ */
+struct partition_write_info {
+    std::string fpath;          // path and filename
+    std::vector<int64_t> rows;  // rows in this partition
+};
+
+/*
+ * Write the Bodo table (this process' chunk) to a partitioned directory of
+ * parquet files. This process will write N files if it has N partitions in its
+ * local data.
+ * @param _path_name path of base output directory for partitioned dataset
+ * @param table table to write to parquet files
+ * @param col_names_arr array containing the table's column names (index not
+ * included)
+ * @param col_names_arr_no_partitions array containing the table's column names
+ * (index and partition columns not included)
+ * @param categories_table table containing categories arrays for each partition
+ * column that is a categorical array. Categories could be (for example) strings
+ * like "2020-01-01", "2020-01-02", etc.
+ * @param partition_cols_idx indices of partition columns in table
+ * @param num_partition_cols number of partition columns
+ * @param is_parallel true if the table is part of a distributed table
+ */
+void pq_write_partitioned(const char *_path_name, table_info *table,
+                          const array_info *col_names_arr,
+                          const array_info *col_names_arr_no_partitions,
+                          table_info *categories_table, int *partition_cols_idx,
+                          int num_partition_cols, const char *compression,
+                          bool is_parallel, const char *bucket_region) {
+    // TODOs
+    // - Do is parallel here?
+    // - sequential (only rank 0 writes, or all write with same name -which?-)
+    // - create directories
+    //     - what if directories already have files?
+    // - write index
+    // - write metadata?
+    // - convert values to strings for other dtypes like datetime, decimal, etc
+    // (see array_info::val_to_str)
+
+    if (!is_parallel)
+        throw std::runtime_error("to_parquet partitioned not implemented in sequential mode");
+
+    // new_table will have partition columns at the beginning and the rest after
+    // (to use multi_col_key for hashing which assumes that keys are at the
+    // beginning), and we will then drop the partition columns from it for
+    // writing
+    table_info* new_table = new table_info();
+    std::vector<bool> is_part_col(table->ncols(), false);
+    std::vector<array_info*> partition_cols;
+    std::vector<std::string> part_col_names;
+    offset_t *offsets = (offset_t *)col_names_arr->data2;
+    for (int i = 0; i < num_partition_cols; i++) {
+        int j = partition_cols_idx[i];
+        is_part_col[j] = true;
+        partition_cols.push_back(table->columns[j]);
+        new_table->columns.push_back(table->columns[j]);
+        char *cur_str = col_names_arr->data1 + offsets[j];
+        size_t len = offsets[j + 1] - offsets[j];
+        part_col_names.emplace_back(cur_str, len);
+    }
+    for (int64_t i = 0; i < table->ncols(); i++) {
+        if (!is_part_col[i]) new_table->columns.push_back(table->columns[i]);
+    }
+
+    const uint32_t seed = SEED_HASH_PARTITION;
+    uint32_t* hashes = hash_keys(partition_cols, seed);
+    UNORD_MAP_CONTAINER<multi_col_key, partition_write_info, multi_col_key_hash>
+        key_to_partition;
+
+    // TODO nullable partition cols?
+
+    std::string fname =
+        gen_pieces_file_name(dist_get_rank(), dist_get_size(), ".parquet");
+
+    new_table->num_keys = num_partition_cols;
+    for (int64_t i = 0; i < new_table->nrows(); i++) {
+        multi_col_key key(hashes[i], new_table, i);
+        partition_write_info& p = key_to_partition[key];
+        if (p.rows.size() == 0) {
+            // generate output file name
+            p.fpath = std::string(_path_name) + "/";
+            int64_t cat_col_idx = 0;
+            for (int j = 0; j < num_partition_cols; j++) {
+                auto part_col = partition_cols[j];
+                // convert partition col value to string
+                std::string value_str;
+                if (part_col->arr_type == bodo_array_type::CATEGORICAL) {
+                    int64_t code = part_col->get_code_as_int64(i);
+                    // TODO can code be -1 (NA) for partition columns?
+                    value_str =
+                        categories_table->columns[cat_col_idx++]->val_to_str(
+                            code);
+                } else {
+                    value_str = part_col->val_to_str(i);
+                }
+                p.fpath += part_col_names[j] + "=" + value_str + "/";
+            }
+            p.fpath += fname;
+        }
+        p.rows.push_back(i);
+    }
+    delete[] hashes;
+
+    // drop partition columns from new_table (they are not written to parquet)
+    new_table->columns.erase(new_table->columns.begin(),
+                             new_table->columns.begin() + num_partition_cols);
+
+    for (auto it = key_to_partition.begin(); it != key_to_partition.end();
+         it++) {
+        const partition_write_info& p = it->second;
+        // RetrieveTable steals the reference but we still need them
+        for (auto a : new_table->columns) incref_array(a);
+        table_info* part_table =
+            RetrieveTable(new_table, p.rows, new_table->ncols());
+        // NOTE: we pass is_parallel=False because we already took care of
+        // is_parallel here
+        pq_write(p.fpath.c_str(), part_table, col_names_arr_no_partitions,
+                 nullptr, /*TODO*/ false, /*TODO*/ "", compression, false,
+                 false, -1, -1, -1, /*TODO*/ "", bucket_region);
+        delete_table_decref_arrays(part_table);
+    }
+    delete new_table;
+}
+
 /*
  * Write the Bodo table (the chunk in this process) to a parquet file.
  * @param _path_name path of output file or directory
@@ -889,9 +1029,6 @@ void pq_write(const char *_path_name, const table_info *table,
               bool is_parallel, bool write_rangeindex_to_metadata,
               const int ri_start, const int ri_stop, const int ri_step,
               const char *idx_name, const char *bucket_region) {
-#ifdef DEBUG_NESTED_PARQUET
-    std::cout << "pq_write, step 1\n";
-#endif
     try {
         // Write actual values of start, stop, step to the metadata which is a
         // string that contains %d
@@ -902,19 +1039,15 @@ void pq_write(const char *_path_name, const table_info *table,
             check = sprintf(new_metadata.data(), metadata, idx_name, ri_start,
                             ri_stop, ri_step);
         } else {
-            new_metadata.resize((strlen(metadata) + strlen(idx_name) * 4));
+            new_metadata.resize(
+                (strlen(metadata) + 1 + (strlen(idx_name) * 4)));
             check = sprintf(new_metadata.data(), metadata, idx_name, idx_name,
                             idx_name, idx_name);
         }
         if (size_t(check + 1) > new_metadata.size())
-            std::cerr << "Fatal error: number of written char for metadata is "
-                         "greater than new_metadata size"
-                      << std::endl;
-#ifdef DEBUG_NESTED_PARQUET
-        std::string str(new_metadata.data());
-        std::cout << "pq_write, str=" << str << "\n";
-        std::cout << "pq_write, step 2\n";
-#endif
+            throw std::runtime_error(
+                "Fatal error: number of written char for metadata is greater "
+                "than new_metadata size");
 
         int myrank, num_ranks;
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -929,21 +1062,12 @@ void pq_write(const char *_path_name, const table_info *table,
         std::shared_ptr<::arrow::io::OutputStream> out_stream;
         Bodo_Fs::FsEnum fs_option;
 
-#ifdef DEBUG_NESTED_PARQUET
-        std::cout << "pq_write, step 3\n";
-#endif
         extract_fs_dir_path(_path_name, is_parallel, ".parquet", myrank,
                             num_ranks, &fs_option, &dirname, &fname, &orig_path,
                             &path_name);
 
-#ifdef DEBUG_NESTED_PARQUET
-        std::cout << "pq_write, step 4\n";
-#endif
         open_outstream(fs_option, is_parallel, myrank, "parquet", dirname,
                        fname, orig_path, path_name, &out_stream, bucket_region);
-#ifdef DEBUG_NESTED_PARQUET
-        std::cout << "pq_write, step 5\n";
-#endif
 
         // copy column names to a std::vector<string>
         std::vector<std::string> col_names;
@@ -956,9 +1080,6 @@ void pq_write(const char *_path_name, const table_info *table,
         }
 
         auto pool = ::arrow::default_memory_pool();
-#ifdef DEBUG_NESTED_PARQUET
-        std::cout << "pq_write, step 6\n";
-#endif
 
         // convert Bodo table to Arrow: construct Arrow Schema and ChunkedArray
         // columns
@@ -970,12 +1091,6 @@ void pq_write(const char *_path_name, const table_info *table,
             bodo_array_to_arrow(pool, col, col_names[i], schema_vector,
                                 &columns[i]);
         }
-#ifdef DEBUG_NESTED_PARQUET
-        std::cout << "pq_write, |schema_vector|=" << schema_vector.size()
-                  << "\n";
-        std::cout << "pq_write, step 7\n";
-        std::cout << "pq_write, write_index=" << write_index << "\n";
-#endif
 
         if (write_index) {
             // if there is an index, construct ChunkedArray index column and add
@@ -989,38 +1104,20 @@ void pq_write(const char *_path_name, const table_info *table,
                                     schema_vector, &chunked_arr);
             columns.push_back(chunked_arr);
         }
-#ifdef DEBUG_NESTED_PARQUET
-        std::cout << "pq_write, step 8\n";
-#endif
 
-        std::shared_ptr<arrow::KeyValueMetadata> schema_metadata =
-            ::arrow::key_value_metadata({{"pandas", new_metadata.data()}});
+        std::shared_ptr<arrow::KeyValueMetadata> schema_metadata;
+        if (new_metadata.size() > 0 && new_metadata[0] != 0)
+            schema_metadata =
+                ::arrow::key_value_metadata({{"pandas", new_metadata.data()}});
 
-#ifdef DEBUG_NESTED_PARQUET
-        std::unordered_map<std::string, std::string> unord_map;
-        schema_metadata->ToUnorderedMap(&unord_map);
-        for (auto &e_pair : unord_map)
-            std::cout << "key=" << e_pair.first << " val=" << e_pair.second
-                      << "\n";
-        std::cout << "pq_write, step 9\n";
-#endif
         // make Arrow Schema object
         std::shared_ptr<arrow::Schema> schema =
             std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
-#ifdef DEBUG_NESTED_PARQUET
-        std::vector<std::string> l_names = schema->field_names();
-        for (int i = 0; i < l_names.size(); i++)
-            std::cout << "i=" << i << " name=" << l_names[i] << "\n";
-#endif
 
         // make Arrow table from Schema and ChunkedArray columns
         int64_t row_group_size = table->nrows();
         std::shared_ptr<arrow::Table> arrow_table =
             arrow::Table::Make(schema, columns, row_group_size);
-#ifdef DEBUG_NESTED_PARQUET
-        std::cout << "row_group_size=" << row_group_size << "\n";
-        std::cout << "pq_write, step 10\n";
-#endif
 
         // set compression option
         ::arrow::Compression::type codec_type;
@@ -1037,9 +1134,6 @@ void pq_write(const char *_path_name, const table_info *table,
         prop_builder.compression(codec_type);
         std::shared_ptr<parquet::WriterProperties> writer_properties =
             prop_builder.build();
-#ifdef DEBUG_NESTED_PARQUET
-        std::cout << "pq_write, step 11\n";
-#endif
 
         // open file and write table
         arrow::Status status = parquet::arrow::WriteTable(
@@ -1053,9 +1147,6 @@ void pq_write(const char *_path_name, const table_info *table,
                 ->allow_truncated_timestamps()
                 ->store_schema()
                 ->build());
-#ifdef DEBUG_NESTED_PARQUET
-        std::cout << "pq_write, step 12\n";
-#endif
         CHECK_ARROW(status, "parquet::arrow::WriteTable");
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

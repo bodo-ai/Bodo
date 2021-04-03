@@ -942,6 +942,7 @@ class TypingTransforms:
             ],
             "select_dtypes": [(0, "include"), (1, "exclude")],
             "apply": [(0, "func"), (1, "axis")],
+            "to_parquet": [(4, "partition_cols")],
         }
 
         if func_name in df_call_const_args:

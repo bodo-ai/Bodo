@@ -261,6 +261,80 @@ struct array_info {
         return GetBit((uint8_t*)null_bitmask, idx);
     }
 
+    /**
+     * Return code in position `idx` of categorical array as int64
+     */
+    int64_t get_code_as_int64(size_t idx) {
+        if (arr_type != bodo_array_type::CATEGORICAL)
+            throw std::runtime_error("get_code: not a categorical array");
+        switch (dtype) {
+            case Bodo_CTypes::INT8:
+                return (int64_t)(this->at<int8_t>(idx));
+            case Bodo_CTypes::INT16:
+                return (int64_t)(this->at<int16_t>(idx));
+            case Bodo_CTypes::INT32:
+                return (int64_t)(this->at<int32_t>(idx));
+            case Bodo_CTypes::INT64:
+                return this->at<int64_t>(idx);
+            default:
+                throw std::runtime_error("get_code: codes have unrecognized dtype");
+        }
+    }
+
+    /**
+     * Return string representation of value in position `idx` of this array.
+     */
+    std::string val_to_str(size_t idx) {
+        switch (dtype) {
+            case Bodo_CTypes::INT8:
+                return std::to_string(this->at<int8_t>(idx));
+            case Bodo_CTypes::UINT8:
+                return std::to_string(this->at<uint8_t>(idx));
+            case Bodo_CTypes::INT32:
+                return std::to_string(this->at<int32_t>(idx));
+            case Bodo_CTypes::UINT32:
+                return std::to_string(this->at<uint32_t>(idx));
+            case Bodo_CTypes::INT64:
+                return std::to_string(this->at<int64_t>(idx));
+            case Bodo_CTypes::UINT64:
+                return std::to_string(this->at<uint64_t>(idx));
+            case Bodo_CTypes::FLOAT32:
+                return std::to_string(this->at<float>(idx));
+            case Bodo_CTypes::FLOAT64:
+                return std::to_string(this->at<double>(idx));
+            case Bodo_CTypes::INT16:
+                return std::to_string(this->at<int16_t>(idx));
+            case Bodo_CTypes::UINT16:
+                return std::to_string(this->at<uint16_t>(idx));
+            case Bodo_CTypes::STRING: {
+                offset_t* offsets = (offset_t*)data2;
+                return std::string(data1 + offsets[idx], offsets[idx + 1] - offsets[idx]);
+            }
+            case Bodo_CTypes::DATE: {
+                int64_t val = this->at<int64_t>(idx);
+                int year = val >> 32;
+                int month = (val >> 16) & 0xFFFF;
+                int day = val & 0xFFFF;
+                std::string date_str;
+                date_str.reserve(10);
+                date_str += std::to_string(year) + "-";
+                if (month < 10) date_str += "0";
+                date_str += std::to_string(month) + "-";
+                if (day < 10) date_str += "0";
+                date_str += std::to_string(day);
+                return date_str;
+            }
+            case Bodo_CTypes::_BOOL:
+                if (this->at<bool>(idx)) return "True";
+                return "False";
+            default: {
+                std::vector<char> error_msg(100);
+                sprintf(error_msg.data(), "val_to_str not implemented for dtype %d", dtype);
+                throw std::runtime_error(error_msg.data());
+            }
+        }
+    }
+
     void set_null_bit(size_t idx, bool bit) {
         SetBitTo((uint8_t*)null_bitmask, idx, bit);
     }

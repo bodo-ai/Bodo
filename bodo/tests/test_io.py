@@ -886,9 +886,6 @@ def test_read_write_parquet():
         finally:
             clean_pq_files("none", "_test_io___.pq", "_test_io___.pq")
 
-    def error_check1(df):
-        df.to_parquet("out.parquet", partition_cols=["col1"])
-
     def error_check2(df):
         df.to_parquet("out.parquet", compression="wrong")
 
@@ -897,16 +894,100 @@ def test_read_write_parquet():
 
     df = pd.DataFrame({"A": range(5)})
 
-    with pytest.raises(
-        BodoError, match="partition_cols parameter only supports default value None"
-    ):
-        bodo.jit(error_check1)(df)
-
     with pytest.raises(BodoError, match="Unsupported compression"):
         bodo.jit(error_check2)(df)
 
     with pytest.raises(BodoError, match="index must be a constant bool or None"):
         bodo.jit(error_check3)(df)
+
+
+def test_partition_cols():
+
+    TEST_DIR = "test_part_tmp"
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, part_cols):
+        df.to_parquet(TEST_DIR, partition_cols=part_cols)
+
+    datetime_series = pd.Series(
+        pd.date_range(start="2/1/2021", end="2/8/2021", periods=8)
+    )
+    date_series_str = datetime_series.astype(str)
+    date_series = datetime_series.dt.date
+    df = pd.DataFrame(
+        {
+            "A": [0, 0, 0, 0, 1, 1, 1, 1],
+            "B": ["A", "A", "B", "B", "A", "A", "B", "B"],
+            "C": [True, True, False, False, True, True, False, False],
+            "D": pd.Categorical(date_series_str),
+            "E": date_series,
+            "F": datetime_series,
+            # TODO test following F column as partition column
+            # for some reason, Bodo throws
+            # "bodo.utils.typing.BodoError: Cannot convert dtype DatetimeDateType() to index type"
+            # in _get_dist_arg with this:
+            #"F": pd.Categorical(date_series),
+            "G": range(8),
+        }
+    )
+
+    import glob
+
+    import pyarrow.parquet as pq
+
+    try:
+        to_test = [["A"], ["A", "B"], ["A", "B", "C"], ["D"], ["E"], ["D", "B"]]
+        for part_cols in to_test:
+            df_in = df.copy()
+            if "D" not in part_cols:
+                # TODO. can't write categorical to parquet currently because of metadata issue
+                del df_in["D"]
+            if bodo.get_rank() == 0:
+                # use pandas to create all the required directories since we don't
+                # create them yet
+                df_in.to_parquet(TEST_DIR, partition_cols=part_cols)
+                for f in glob.glob(TEST_DIR + "/**/*.parquet", recursive=True):
+                    os.remove(f)
+            bodo.barrier()
+            impl(_get_dist_arg(df_in, False), part_cols)
+            bodo.barrier()
+            if bodo.get_rank() == 0:
+                # verify partitions are there
+                ds = pq.ParquetDataset(TEST_DIR)
+                assert [
+                    ds.partitions.levels[i].name
+                    for i in range(len(ds.partitions.levels))
+                ] == part_cols
+                # read bodo output with pandas
+                df_test = pd.read_parquet(TEST_DIR)
+                # pandas reads the partition columns as categorical, but they
+                # are not categorical in input dataframe, so we do some dtype
+                # conversions to be able to compare the dataframes
+                for part_col in part_cols:
+                    if part_col == "E":
+                        # convert categorical back to date
+                        df_test[part_col] = (
+                            df_test[part_col].astype("datetime64").dt.date
+                        )
+                    elif part_col == "C":
+                        # convert the bool input column to categorical of strings
+                        df_in[part_col] = (
+                            df_in[part_col].astype(str).astype(df_test[part_col].dtype)
+                        )
+                    else:
+                        # convert the categorical to same input dtype
+                        df_test[part_col] = df_test[part_col].astype(
+                            df_in[part_col].dtype
+                        )
+                # use check_like=True because the order of columns has changed
+                # (partition columns appear at the end after reading)
+                pd.testing.assert_frame_equal(df_test, df_in, check_like=True)
+                shutil.rmtree(TEST_DIR)
+            bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree(TEST_DIR, ignore_errors=True)
+        bodo.barrier()
 
 
 def test_read_dask_parquet(datapath):

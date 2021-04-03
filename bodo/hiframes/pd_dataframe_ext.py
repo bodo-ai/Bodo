@@ -1682,7 +1682,10 @@ def lower_val_isin_dummy(context, builder, sig, args):
 
 
 def gen_pandas_parquet_metadata(
-    df, write_non_range_index_to_metadata, write_rangeindex_to_metadata
+    df,
+    write_non_range_index_to_metadata,
+    write_rangeindex_to_metadata,
+    partition_cols=None,
 ):
     # returns dict with pandas dataframe metadata for parquet storage.
     # For more information, see:
@@ -1692,7 +1695,13 @@ def gen_pandas_parquet_metadata(
 
     pandas_metadata["columns"] = []
 
+    if partition_cols is None:
+        partition_cols = []
     for col_name, col_type in zip(df.columns, df.data):
+        if col_name in partition_cols:
+            # TODO: partition columns are not written to parquet files, but are they part of
+            # pandas metadata?
+            continue
         if isinstance(col_type, types.Array) or col_type == boolean_array:
             pandas_type = numpy_type = col_type.dtype.name
             if numpy_type.startswith("datetime"):
@@ -1724,6 +1733,7 @@ def gen_pandas_parquet_metadata(
             # can occur
             pandas_type = "object"
             numpy_type = "object"
+        # TODO: metadata for categorical arrays
         else:  # pragma: no cover
             raise BodoError(
                 "to_parquet(): unsupported column type for metadata generation : {} {}".format(
@@ -1784,10 +1794,6 @@ def to_parquet_overload(
     # TODO handle possible **kwargs options?
     _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    unsupported_args = dict(partition_cols=partition_cols)
-    arg_defaults = dict(partition_cols=None)
-    check_unsupported_args("to_parquet", unsupported_args, arg_defaults)
-
     if not is_overload_none(compression) and get_overload_const_str(
         compression
     ) not in {"snappy", "gzip", "brotli"}:
@@ -1796,10 +1802,25 @@ def to_parquet_overload(
             + str(get_overload_const_str(compression))
         )
 
+    if not is_overload_none(partition_cols):
+        partition_cols = get_overload_const_list(partition_cols)
+        part_col_idxs = []
+        for part_col_name in partition_cols:
+            try:
+                idx = df.columns.index(part_col_name)
+            except ValueError:
+                raise BodoError(f"Partition column {part_col_name} is not in dataframe")
+            part_col_idxs.append(idx)
+    else:
+        partition_cols = None
+
     if not is_overload_none(index) and not is_overload_constant_bool(index):
         raise BodoError("to_parquet(): index must be a constant bool or None")
 
-    from bodo.io.parquet_pio import parquet_write_table_cpp
+    from bodo.io.parquet_pio import (
+        parquet_write_table_cpp,
+        parquet_write_table_partitioned_cpp,
+    )
 
     # if index=False, we don't write index to the parquet file
     # if index=True we write index to the parquet file even if the index is trivial RangeIndex.
@@ -1830,7 +1851,10 @@ def to_parquet_overload(
     # write pandas metadata for the parquet file
     pandas_metadata_str = json.dumps(
         gen_pandas_parquet_metadata(
-            df, write_non_range_index_to_metadata, write_rangeindex_to_metadata
+            df,
+            write_non_range_index_to_metadata,
+            write_rangeindex_to_metadata,
+            partition_cols=partition_cols,
         )
     )
     if not is_overload_true(_is_parallel) and is_range_index:
@@ -1873,7 +1897,38 @@ def to_parquet_overload(
     func_text += "        name_ptr = 'null'\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)\n"
-    if write_rangeindex_to_metadata:
+    if partition_cols:
+        # We need the values of the categories for any partition columns that
+        # are categorical arrays, because they are used to generate the
+        # output directory name
+        categories_args = ", ".join(
+            f"array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}).dtype.categories.values)"
+            for i in range(len(df.columns))
+            if isinstance(df.data[i], CategoricalArray) and (i in part_col_idxs)
+        )
+        if categories_args:
+            func_text += "    cat_info_list = [{}]\n".format(categories_args)
+            func_text += "    cat_table = arr_info_list_to_table(cat_info_list)\n"
+        else:
+            func_text += "    cat_table = table\n"  # hack to avoid typing issue
+        col_names_no_partitions_text = ", ".join(
+            '"{}"'.format(col_name)
+            for col_name in df.columns
+            if col_name not in partition_cols
+        )
+        func_text += "    col_names_no_partitions = array_to_info(str_arr_from_sequence([{}]))\n".format(
+            col_names_no_partitions_text
+        )
+        func_text += f"    part_cols_idxs = np.array({part_col_idxs}, dtype=np.int32)\n"
+        func_text += "    parquet_write_table_partitioned_cpp(unicode_to_utf8(fname),\n"
+        func_text += "                            table, col_names, col_names_no_partitions, cat_table,\n"
+        func_text += (
+            "                            part_cols_idxs.ctypes, len(part_cols_idxs),\n"
+        )
+        func_text += "                            unicode_to_utf8(compression),\n"
+        func_text += "                            _is_parallel,\n"
+        func_text += "                            unicode_to_utf8(bucket_region))\n"
+    elif write_rangeindex_to_metadata:
         func_text += "    parquet_write_table_cpp(unicode_to_utf8(fname),\n"
         func_text += "                            table, col_names, index_col,\n"
         func_text += "                            " + str(write_index) + ",\n"
@@ -1904,6 +1959,7 @@ def to_parquet_overload(
             "arr_info_list_to_table": arr_info_list_to_table,
             "str_arr_from_sequence": str_arr_from_sequence,
             "parquet_write_table_cpp": parquet_write_table_cpp,
+            "parquet_write_table_partitioned_cpp": parquet_write_table_partitioned_cpp,
             "index_to_array": index_to_array,
         },
         loc_vars,

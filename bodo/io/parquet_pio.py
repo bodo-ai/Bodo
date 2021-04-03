@@ -1408,6 +1408,7 @@ if bodo.utils.utils.has_pyarrow():
     ll.add_symbol("pq_read_array_item", parquet_cpp.pq_read_array_item)
     ll.add_symbol("pq_read_arrow_array", parquet_cpp.pq_read_arrow_array)
     ll.add_symbol("pq_write", parquet_cpp.pq_write)
+    ll.add_symbol("pq_write_partitioned", parquet_cpp.pq_write_partitioned)
 
 
 @lower_builtin(get_column_size_parquet, types.Opaque("arrow_reader"), types.intp)
@@ -1870,6 +1871,61 @@ def parquet_write_table_cpp(
             types.int32,
             types.int32,
             types.voidptr,
+            types.voidptr,
+        ),
+        codegen,
+    )
+
+
+@intrinsic
+def parquet_write_table_partitioned_cpp(
+    typingctx,
+    filename_t,
+    data_table_t,
+    col_names_t,
+    col_names_no_partitions_t,
+    cat_table_t,
+    part_col_idxs_t,
+    num_part_col_t,
+    compression_t,
+    is_parallel_t,
+    bucket_region,
+):
+    """
+    Call C++ parquet write partitioned function
+    """
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.VoidType(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = builder.module.get_or_insert_function(fnty, name="pq_write_partitioned")
+        builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+
+    return (
+        types.void(
+            types.voidptr,
+            data_table_t,
+            col_names_t,
+            col_names_no_partitions_t,
+            cat_table_t,
+            types.voidptr,
+            types.int32,
+            types.voidptr,
+            types.boolean,
             types.voidptr,
         ),
         codegen,
