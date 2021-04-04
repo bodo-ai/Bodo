@@ -165,7 +165,9 @@ def create_overload_arith_op(op):
         # DataFrames
         if isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType):
             return bodo.hiframes.dataframe_impl.create_binary_op_overload(op)(lhs, rhs)
+
         # --------- end of common operators
+
         # add operator
         if op == operator.add:
             return overload_add_operator(lhs, rhs)
@@ -290,6 +292,10 @@ def create_overload_cmp_operator(op):
         # series
         if isinstance(lhs, SeriesType) or isinstance(rhs, SeriesType):
             return bodo.hiframes.series_impl.create_binary_op_overload(op)(lhs, rhs)
+
+        # DataFrames
+        if isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType):
+            return bodo.hiframes.dataframe_impl.create_binary_op_overload(op)(lhs, rhs)
 
         # str_arr
         if lhs == string_array_type or rhs == string_array_type:
