@@ -1567,6 +1567,36 @@ def test_df_describe(numeric_df_value, memory_leak_check):
     check_func(test_impl, (numeric_df_value,), is_out_distributed=False)
 
 
+def test_df_describe_dt64_stack_trace(memory_leak_check):
+    # TODO: Change it after fixing [BE-360]
+
+    def test_impl(df):
+        return df.describe()
+
+    df = pd.DataFrame(
+        {
+            "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
+            "B": pd.Series(pd.date_range(start="1/1/2018", end="1/4/2018", periods=6)),
+        }
+    )
+
+    # Save default developer mode value
+    default_mode = numba.core.config.DEVELOPER_MODE
+
+    # Test as a user
+    numba.core.config.DEVELOPER_MODE = 0
+    with pytest.raises(numba.TypingError, match="use of unsupported features"):
+        bodo.jit(test_impl)(df)
+
+    # Test as a developer
+    numba.core.config.DEVELOPER_MODE = 1
+    with pytest.raises(numba.TypingError, match="- Resolution failure "):
+        bodo.jit(test_impl)(df)
+
+    # Reset back to original setting
+    numba.core.config.DEVELOPER_MODE = default_mode
+
+
 def test_df_cumprod(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:

@@ -957,6 +957,11 @@ if _check_numba_change:
 
 numba.core.types.functions.BaseFunction.get_call_type = get_call_type
 
+bodo_typing_error_info = """
+This is often caused by the use of unsupported features or typing issues.
+See https://docs.bodo.ai/
+"""
+
 
 def get_call_type2(self, context, args, kws):
     template = self.template(context)
@@ -1035,9 +1040,24 @@ def get_call_type2(self, context, args, kws):
 
         if isinstance(literal_e, bodo.utils.typing.BodoError):
             raise literal_e
-        raise errors.TypingError(
-            nested_msg("literal", literal_e) + nested_msg("non-literal", nonliteral_e)
-        )
+        # TODO: [BE-486] use environment variable
+        if numba.core.config.DEVELOPER_MODE:
+            raise errors.TypingError(
+                nested_msg("literal", literal_e)
+                + nested_msg("non-literal", nonliteral_e)
+            )
+        else:
+            # Suppress numba stack trace and use our simplified error message
+            # TODO: Disable Python traceback.
+            # Message
+            msg = "Compilation error for "
+            # TODO add other data types
+            if isinstance(self.this, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+                msg += "DataFrame."
+            elif isinstance(self.this, bodo.hiframes.pd_series_ext.SeriesType):
+                msg += "Series."
+            msg += f"{self.typing_key[1]}().{bodo_typing_error_info}"
+            raise errors.TypingError(msg)
     return out
 
 
@@ -2000,12 +2020,17 @@ def passmanager_run(self, state):
         except bodo.utils.typing.BodoError as e:
             raise
         except Exception as e:
-            msg = "Failed in %s mode pipeline (step: %s)" % (
-                self.pipeline_name,
-                pass_desc,
-            )
-            patched_exception = self._patch_error(msg, e)
-            raise patched_exception
+            # TODO: [BE-486] environment variable developer_mode?
+            if numba.core.config.DEVELOPER_MODE:
+                msg = "Failed in %s mode pipeline (step: %s)" % (
+                    self.pipeline_name,
+                    pass_desc,
+                )
+                patched_exception = self._patch_error(msg, e)
+                raise patched_exception
+            else:
+                # Remove `Failed in ... pipeline` message
+                raise e
 
 
 if _check_numba_change:
@@ -2261,6 +2286,36 @@ if _check_numba_change:
 
 numba.core.errors.NumbaError.patch_message = patch_message
 
+# --------------------- add_context ------------------------------
+def add_context(self, msg):
+    """
+    Add contextual info.  The exception message is expanded with the new
+    contextual information.
+    Bodo: avoid adding During resolve call message.
+    """
+    # TODO:  [BE-486] development_mode environment variable?
+    if numba.core.config.DEVELOPER_MODE:
+        self.contexts.append(msg)
+        f = _termcolor.errmsg("{0}") + _termcolor.filename("During: {1}")
+        newmsg = f.format(self, msg)
+        self.args = (newmsg,)
+    else:
+        # Bodo change: remove `During resolve call` message
+        f = _termcolor.errmsg("{0}")
+        newmsg = f.format(self)
+        self.args = (newmsg,)
+    return self
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.errors.NumbaError.add_context)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "6a388d87788f8432c2152ac55ca9acaa94dbc3b55be973b2cf22dd4ee7179ab8"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.errors.NumbaError.add_context has changed")
+
+numba.core.errors.NumbaError.add_context = add_context
 
 # --------------------- jitclass support --------------------------
 
