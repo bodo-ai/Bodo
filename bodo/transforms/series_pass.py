@@ -49,6 +49,7 @@ from bodo.hiframes.pd_index_ext import (
     RangeIndexType,
     StringIndexType,
     TimedeltaIndexType,
+    is_index_type,
 )
 from bodo.hiframes.pd_series_ext import (
     HeterogeneousSeriesType,
@@ -1090,6 +1091,7 @@ class SeriesPass:
                 )
                 return replace_func(self, impl, [arg1, arg2])
 
+        # inline Integer array ops
         if (
             rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
             and any(isinstance(t, IntegerArrayType) for t in (typ1, typ2))
@@ -1107,6 +1109,7 @@ class SeriesPass:
             impl = overload_func(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
+        # inline Boolean array ops
         if (
             rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
             and any(t == boolean_array for t in (typ1, typ2))
@@ -1157,6 +1160,15 @@ class SeriesPass:
             return [assign]
 
         if not (isinstance(typ1, SeriesType) or isinstance(typ2, SeriesType)):
+            # inline Index ops if no input is Series (handled below)
+            if (
+                is_index_type(typ1) or is_index_type(typ2)
+            ) and rhs.fn in bodo.hiframes.pd_series_ext.series_binary_ops:
+                overload_func = bodo.hiframes.pd_index_ext.create_binary_op_overload(
+                    rhs.fn
+                )
+                impl = overload_func(typ1, typ2)
+                return replace_func(self, impl, [arg1, arg2])
             return [assign]
 
         if rhs.fn in bodo.hiframes.pd_series_ext.series_inplace_binary_ops:
