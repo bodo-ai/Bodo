@@ -607,7 +607,7 @@ def _test_equal(
             bodo_out.reset_index(inplace=True, drop=True)
         # we return typed extension arrays like StringArray for all APIs but Pandas
         # doesn't return them by default in all APIs yet.
-        if py_out.dtype in (np.object, np.bool_):
+        if py_out.dtype in (object, np.bool_):
             check_dtype = False
         # TODO: support freq attribute of DatetimeIndex/TimedeltaIndex
         pd.testing.assert_series_equal(

@@ -32,6 +32,7 @@ from bodo.hiframes.pd_timestamp_ext import (
     PandasTimestampType,
     pandas_timestamp_type,
 )
+from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
@@ -2073,8 +2074,10 @@ def overload_series_fillna(
     series_type = element_type(S.data)
     value_type = element_type(types.unliteral(value))
     if not can_replace(series_type, value_type):
-        raise BodoError(f"Series.fillna(): Cannot use value type {value_type}"
-                        f" with series type {series_type}")
+        raise BodoError(
+            f"Series.fillna(): Cannot use value type {value_type}"
+            f" with series type {series_type}"
+        )
 
     if is_overload_true(inplace):
         if S.dtype == bodo.string_type:
@@ -2564,17 +2567,7 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int, dt64, and nullable int/bool/decimal/date
     # arrays are supported
-    if not (
-        (
-            isinstance(S.data, types.Array)
-            and (
-                isinstance(S.data.dtype, (types.Number))
-                or S.data.dtype == bodo.datetime64ns
-            )
-        )
-        or isinstance(S.data, (IntegerArrayType, DecimalArrayType))
-        or S.data in (boolean_array, bodo.datetime_date_array_type)
-    ):
+    if not is_supported_shift_array_type(S.data):
         # TODO: Link to supported Series input types.
         raise BodoError(
             f"Series.shift(): Series input type '{S.data.dtype}' not supported yet."
