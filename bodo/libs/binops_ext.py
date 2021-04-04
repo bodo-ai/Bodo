@@ -6,35 +6,41 @@
 """
 
 import operator
-import bodo
 
-from bodo.utils.typing import BodoError, is_timedelta_type
-from bodo.hiframes.pd_index_ext import DatetimeIndexType
-from bodo.hiframes.pd_offsets_ext import week_type, month_end_type, date_offset_type
-from bodo.hiframes.series_impl import SeriesType
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.hiframes.pd_index_ext import is_index_type, HeterogeneousIndexType
-from bodo.hiframes.datetime_date_ext import (
-    datetime_date_type,
-    datetime_timedelta_type,
-    datetime_date_array_type,
-)
-from bodo.hiframes.datetime_timedelta_ext import (
-    pd_timedelta_type,
-    datetime_datetime_type,
-    datetime_timedelta_array_type,
-)
-from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
-from bodo.libs import hdatetime_ext
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.str_ext import string_type
-from bodo.libs.decimal_arr_ext import Decimal128Type
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.int_arr_ext import IntegerArrayType
-
-from numba.extending import overload
 from numba.core import types
 from numba.core.typing.builtins import machine_ints
+from numba.extending import overload
+
+import bodo
+from bodo.hiframes.datetime_date_ext import (
+    datetime_date_array_type,
+    datetime_date_type,
+    datetime_timedelta_type,
+)
+from bodo.hiframes.datetime_timedelta_ext import (
+    datetime_datetime_type,
+    datetime_timedelta_array_type,
+    pd_timedelta_type,
+)
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_index_ext import (
+    DatetimeIndexType,
+    HeterogeneousIndexType,
+    is_index_type,
+)
+from bodo.hiframes.pd_offsets_ext import (
+    date_offset_type,
+    month_end_type,
+    week_type,
+)
+from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
+from bodo.hiframes.series_impl import SeriesType
+from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import Decimal128Type
+from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_ext import string_type
+from bodo.utils.typing import BodoError, is_timedelta_type
 
 
 ### Operator.add
@@ -93,8 +99,8 @@ def overload_sub_operator(lhs, rhs):
 
     # The order matters here: make sure offset types are before datetime types
     # Datetime types
-    if lhs == pandas_timestamp_type and rhs in [
-        pandas_timestamp_type,
+    if lhs == pd_timestamp_type and rhs in [
+        pd_timestamp_type,
         datetime_timedelta_type,
         pd_timedelta_type,
     ]:
@@ -326,8 +332,8 @@ def add_dt_td_and_dt_date(lhs, rhs):
 def add_timestamp(lhs, rhs):
     """ Helper function to check types supported in pd_timestamp_ext overload. """
 
-    ts_and_td = lhs == pandas_timestamp_type and is_timedelta_type(rhs)
-    td_and_ts = is_timedelta_type(lhs) and rhs == pandas_timestamp_type
+    ts_and_td = lhs == pd_timestamp_type and is_timedelta_type(rhs)
+    td_and_ts = is_timedelta_type(lhs) and rhs == pd_timestamp_type
 
     return ts_and_td or td_and_ts
 
@@ -364,7 +370,7 @@ def mul_timedelta_and_int(lhs, rhs):
 def sub_offset_to_datetime_or_timestamp(lhs, rhs):
     """ Helper function to check types supported in pd_offsets_ext add op overload. """
 
-    dt_types = [datetime_datetime_type, pandas_timestamp_type, datetime_date_type]
+    dt_types = [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
     offset_types = [date_offset_type, month_end_type, week_type]
 
     return rhs in offset_types and lhs in dt_types
@@ -373,8 +379,8 @@ def sub_offset_to_datetime_or_timestamp(lhs, rhs):
 def sub_dt_index_and_timestamp(lhs, rhs):
     """ Helper function to check types supported in pd_index_ext sub op overload. """
 
-    lhs_index = isinstance(lhs, DatetimeIndexType) and rhs == pandas_timestamp_type
-    rhs_index = isinstance(rhs, DatetimeIndexType) and lhs == pandas_timestamp_type
+    lhs_index = isinstance(lhs, DatetimeIndexType) and rhs == pd_timestamp_type
+    rhs_index = isinstance(rhs, DatetimeIndexType) and lhs == pd_timestamp_type
 
     return lhs_index or rhs_index
 
@@ -446,17 +452,17 @@ def cmp_timestamp_or_date(lhs, rhs):
     """ Helper function to check types supported in pd_timestamp_ext by cmp op overload. """
 
     ts_and_date = (
-        lhs == pandas_timestamp_type
+        lhs == pd_timestamp_type
         and rhs == bodo.hiframes.datetime_date_ext.datetime_date_type
     )
     date_and_ts = (
         lhs == bodo.hiframes.datetime_date_ext.datetime_date_type
-        and rhs == pandas_timestamp_type
+        and rhs == pd_timestamp_type
     )
-    ts_and_ts = lhs == pandas_timestamp_type and rhs == pandas_timestamp_type
+    ts_and_ts = lhs == pd_timestamp_type and rhs == pd_timestamp_type
 
-    ts_and_dt64 = lhs == pandas_timestamp_type and rhs == bodo.datetime64ns
-    dt64_and_ts = rhs == pandas_timestamp_type and lhs == bodo.datetime64ns
+    ts_and_dt64 = lhs == pd_timestamp_type and rhs == bodo.datetime64ns
+    dt64_and_ts = rhs == pd_timestamp_type and lhs == bodo.datetime64ns
 
     return ts_and_date or date_and_ts or ts_and_ts or ts_and_dt64 or dt64_and_ts
 
@@ -467,12 +473,12 @@ def cmp_timeseries(lhs, rhs):
     dt64s_with_string_or_ts = bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs) and (
         bodo.utils.typing.is_overload_constant_str(lhs)
         or lhs == bodo.libs.str_ext.string_type
-        or lhs == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+        or lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
     )
     string_or_ts_with_dt64s = bodo.hiframes.pd_series_ext.is_dt64_series_typ(lhs) and (
         bodo.utils.typing.is_overload_constant_str(rhs)
         or rhs == bodo.libs.str_ext.string_type
-        or rhs == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+        or rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
     )
     dt64_series_ops = dt64s_with_string_or_ts or string_or_ts_with_dt64s
 
@@ -508,7 +514,7 @@ def helper_time_series_checks(operand):
         bodo.hiframes.pd_series_ext.is_dt64_series_typ(operand)
         or bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(operand)
         or operand
-        in [datetime_timedelta_type, datetime_datetime_type, pandas_timestamp_type]
+        in [datetime_timedelta_type, datetime_datetime_type, pd_timestamp_type]
     )
     return ret
 

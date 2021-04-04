@@ -4643,7 +4643,7 @@ def test_series_where_true(series_val, memory_leak_check):
             bodo.jit(test_impl)(series_val, cond, val)
         return
 
-    # not supported for CategoricalArray yet, TODO: support and test
+    # not supported for CategoricalArrayType yet, TODO: support and test
     if isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
         series_val.dtype.categories[0], (pd.Timestamp, pd.Timedelta)
     ):

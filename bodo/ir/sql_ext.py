@@ -11,6 +11,7 @@ from numba.core import ir, ir_utils, typeinfer
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
 import bodo
+import bodo.ir.connector
 from bodo import objmode  # noqa
 from bodo.ir.csv_ext import _get_dtype_str
 from bodo.libs.distributed_api import bcast, bcast_scalar

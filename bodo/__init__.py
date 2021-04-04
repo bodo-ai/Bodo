@@ -68,7 +68,7 @@ from bodo.hiframes.datetime_timedelta_ext import (
     pd_timedelta_type,
 )
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
-from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
@@ -94,7 +94,7 @@ from bodo.hiframes.pd_offsets_ext import (
 )
 from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
-    CategoricalArray,
+    CategoricalArrayType,
 )
 
 

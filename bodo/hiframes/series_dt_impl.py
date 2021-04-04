@@ -12,7 +12,6 @@ from numba.extending import (
     intrinsic,
     make_attribute_wrapper,
     models,
-    overload,
     overload_attribute,
     overload_method,
     register_model,
@@ -25,7 +24,6 @@ from bodo.utils.typing import (
     check_unsupported_args,
     create_unsupported_overload,
     raise_bodo_error,
-    BodoError,
 )
 
 # global dtypes to use in allocations throughout this file
@@ -618,7 +616,7 @@ def create_bin_op_overload(op):
         # lhs is series(dt64) and rhs is timestamp
         if (
             bodo.hiframes.pd_series_ext.is_dt64_series_typ(lhs)
-            and rhs == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+            and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
         ):
             nat = lhs.dtype("NaT")
 
@@ -647,7 +645,7 @@ def create_bin_op_overload(op):
         # lhs is timestamp and rhs is series(dt64)
         if (
             bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs)
-            and lhs == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+            and lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
         ):
             nat = rhs.dtype("NaT")
 
@@ -950,7 +948,7 @@ def create_cmp_op_overload(op):
         # lhs is series(dt64) and rhs is timestamp
         if (
             bodo.hiframes.pd_series_ext.is_dt64_series_typ(lhs)
-            and rhs == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+            and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
         ):
             nat = lhs.dtype("NaT")
 
@@ -975,7 +973,7 @@ def create_cmp_op_overload(op):
 
         # lhs is timestamp and rhs is series(dt64)
         if (
-            lhs == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+            lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
             and bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs)
         ):
             nat = rhs.dtype("NaT")

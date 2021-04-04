@@ -41,7 +41,7 @@ from bodo.hiframes.pd_series_ext import (
     _get_series_array_type,
     if_series_to_array_type,
 )
-from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -861,13 +861,13 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
                 coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
-            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArray))
+            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
             or coltype in [bodo.boolean_array, bodo.datetime_date_array_type]
         ):
             raise BodoError(
                 f"DataFrame.idxmax() only supported for numeric column types. Column type: {coltype} not supported."
             )
-        if isinstance(coltype, bodo.CategoricalArray) and not coltype.dtype.ordered:
+        if isinstance(coltype, bodo.CategoricalArrayType) and not coltype.dtype.ordered:
             raise BodoError("DataFrame.idxmax(): categorical columns must be ordered")
 
     return _gen_reduce_impl(df, "idxmax", axis=axis)
@@ -892,13 +892,13 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
                 coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
-            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArray))
+            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
             or coltype in [bodo.boolean_array, bodo.datetime_date_array_type]
         ):
             raise BodoError(
                 f"DataFrame.idxmin() only supported for numeric column types. Column type: {coltype} not supported."
             )
-        if isinstance(coltype, bodo.CategoricalArray) and not coltype.dtype.ordered:
+        if isinstance(coltype, bodo.CategoricalArrayType) and not coltype.dtype.ordered:
             raise BodoError("DataFrame.idxmin(): categorical columns must be ordered")
 
     return _gen_reduce_impl(df, "idxmin", axis=axis)
@@ -1252,7 +1252,7 @@ def overload_dataframe_set_index(
         raise_bodo_error("DataFrame.set_index(): 'keys' must be a constant string")
     col_name = get_overload_const_str(keys)
     col_ind = df.columns.index(col_name)
-    if isinstance(df.data[col_ind], bodo.CategoricalArray):
+    if isinstance(df.data[col_ind], bodo.CategoricalArrayType):
         raise BodoError("DataFrame.set_index(): Not supported for categorical columns.")
     if len(df.columns) == 1:
         raise BodoError(
@@ -1707,7 +1707,7 @@ def overload_isna_scalar(obj):
         return lambda obj: np.isnat(obj)  # pragma: no cover
     if obj == types.none:
         return lambda obj: unliteral_val(True)
-    if obj == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+    if obj == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
         return lambda obj: np.isnat(
             bodo.hiframes.pd_timestamp_ext.integer_to_dt64(obj.value)
         )  # pragma: no cover
@@ -3175,7 +3175,7 @@ class DataFrameTupleIterator(types.SimpleIteratorType):
 def _get_series_dtype(arr_typ):
     # values of datetimeindex are extracted as Timestamp
     if arr_typ == types.Array(types.NPDatetime("ns"), 1, "C"):
-        return pandas_timestamp_type
+        return pd_timestamp_type
     return arr_typ.dtype
 
 
@@ -3275,7 +3275,7 @@ def iternext_itertuples(context, builder, sig, args, result):
             arr_ptr = getattr(iterobj, "array{}".format(i))
 
             if arr_typ == types.Array(types.NPDatetime("ns"), 1, "C"):
-                getitem_sig = signature(pandas_timestamp_type, arr_typ, types.intp)
+                getitem_sig = signature(pd_timestamp_type, arr_typ, types.intp)
                 val = context.compile_internal(
                     builder,
                     lambda a, i: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(

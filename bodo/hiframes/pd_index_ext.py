@@ -33,7 +33,7 @@ import bodo.hiframes
 import bodo.utils.conversion
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_series_ext import SeriesType, string_array_type
-from bodo.hiframes.pd_timestamp_ext import pandas_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_ext import string_type
 from bodo.utils.transform import get_const_func_output_type
@@ -465,7 +465,7 @@ def overload_sub_operator_datetime_index(lhs, rhs):
     # DatetimeIndex - Timestamp
     if (
         isinstance(lhs, DatetimeIndexType)
-        and rhs == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+        and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
     ):
         timedelta64_dtype = np.dtype("timedelta64[ns]")
 
@@ -487,7 +487,7 @@ def overload_sub_operator_datetime_index(lhs, rhs):
     # Timestamp - DatetimeIndex
     if (
         isinstance(rhs, DatetimeIndexType)
-        and lhs == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type
+        and lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
     ):
         timedelta64_dtype = np.dtype("timedelta64[ns]")
 
@@ -1174,12 +1174,12 @@ class TimedeltaIndexAttribute(AttributeTemplate):
     # @bound_function("timedelta_index.max", no_unliteral=True)
     # def resolve_max(self, ary, args, kws):
     #     assert not kws
-    #     return signature(pandas_timestamp_type, *args)
+    #     return signature(pd_timestamp_type, *args)
 
     # @bound_function("timedelta_index.min", no_unliteral=True)
     # def resolve_min(self, ary, args, kws):
     #     assert not kws
-    #     return signature(pandas_timestamp_type, *args)
+    #     return signature(pd_timestamp_type, *args)
 
 
 make_attribute_wrapper(TimedeltaIndexType, "data", "_data")
@@ -2357,7 +2357,7 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
 
     # Timestamp/Timedelta types are handled the same as datetime64/timedelta64
     key = types.unliteral(key)
-    if key == pandas_timestamp_type:
+    if key == pd_timestamp_type:
         key = bodo.datetime64ns
     if key == pd_timedelta_type:
         key = bodo.timedelta64ns
@@ -2531,7 +2531,7 @@ def overload_index_map(I, mapper, na_action=None):
     dtype = I.dtype
     # getitem returns Timestamp for dt_index (TODO: pd.Timedelta when available)
     if dtype == types.NPDatetime("ns"):
-        dtype = pandas_timestamp_type
+        dtype = pd_timestamp_type
     if dtype == types.NPTimedelta("ns"):
         dtype = pd_timedelta_type
 

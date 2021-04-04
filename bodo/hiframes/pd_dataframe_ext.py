@@ -34,7 +34,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_index_ext import (
     HeterogeneousIndexType,
     NumericIndexType,
@@ -283,7 +283,7 @@ class DataFrameAttribute(AttributeTemplate):
         data_type = types.BaseTuple.from_types(dtypes)
         name_dtype = df.index.dtype
         if name_dtype == types.NPDatetime("ns"):
-            name_dtype = bodo.pandas_timestamp_type
+            name_dtype = bodo.pd_timestamp_type
         if name_dtype == types.NPTimedelta("ns"):
             name_dtype = bodo.pd_timedelta_type
         if is_heterogeneous_tuple_type(data_type):
@@ -1904,7 +1904,7 @@ def to_parquet_overload(
         categories_args = ", ".join(
             f"array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}).dtype.categories.values)"
             for i in range(len(df.columns))
-            if isinstance(df.data[i], CategoricalArray) and (i in part_col_idxs)
+            if isinstance(df.data[i], CategoricalArrayType) and (i in part_col_idxs)
         )
         if categories_args:
             func_text += "    cat_info_list = [{}]\n".format(categories_args)
@@ -2415,9 +2415,9 @@ def categorical_can_construct_dataframe(val):
     """Helper function that returns if a datatype is categorical and has constant
     values that can be used as column names for dataframes
     """
-    if isinstance(val, CategoricalArray):
+    if isinstance(val, CategoricalArrayType):
         return val.dtype.categories is not None
-    elif isinstance(val, SeriesType) and isinstance(val.data, CategoricalArray):
+    elif isinstance(val, SeriesType) and isinstance(val.data, CategoricalArrayType):
         return val.data.dtype.categories is not None
     return False
 

@@ -1010,7 +1010,7 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
 };
 
 /** This function is used to determine if the value in a Categorical pointer
- * (pointer to a single value in a CategoricalArray) isnan.
+ * (pointer to a single value in a CategoricalArrayType) isnan.
  * @param the data type for the codes.
  * @param the Categorical Pointer
  * @returns if the value stored at the ptr is nan
@@ -1033,7 +1033,7 @@ inline bool isnan_categorical_ptr(int dtype, char* ptr) {
         default:
             throw std::runtime_error(
                 "_array_utils.h::NumericComparison: Invalid dtype put on "
-                "CategoricalArray.");
+                "CategoricalArrayType.");
     }
 }
 

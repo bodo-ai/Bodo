@@ -763,7 +763,7 @@ def get_index_type_from_dtype(t):
         TimedeltaIndexType,
     )
 
-    if t in [bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type, bodo.datetime64ns]:
+    if t in [bodo.hiframes.pd_timestamp_ext.pd_timestamp_type, bodo.datetime64ns]:
         return DatetimeIndexType(types.none)
 
     if t in [
@@ -969,7 +969,7 @@ def scalar_to_array_type(t):
         return types.Array(types.NPDatetime("ns"), 1, "C")
 
     # Timestamp values are stored as dt64 arrays
-    if t == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+    if t == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
         return types.Array(types.NPDatetime("ns"), 1, "C")
 
     # TODO: make sure t is a Numpy dtype
@@ -987,7 +987,7 @@ def get_udf_out_arr_type(f_return_type, return_nullable=False):
         return_nullable = True
 
     # unbox Timestamp to dt64 in Series
-    if f_return_type == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+    if f_return_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
         f_return_type = types.NPDatetime("ns")
 
     # unbox Timedelta to timedelta64 in Series
@@ -1072,7 +1072,7 @@ def is_scalar_type(t):
         bodo.datetime_date_type,
         bodo.datetime_datetime_type,
         bodo.datetime_timedelta_type,
-        bodo.pandas_timestamp_type,
+        bodo.pd_timestamp_type,
         bodo.pd_timedelta_type,
         bodo.month_end_type,
         bodo.week_type,
@@ -1102,9 +1102,9 @@ def is_common_scalar_dtype(scalar_types):
 
     # Timestamp/dt64 can be used interchangably
     # TODO: Should datetime.datetime also be included?
-    if scalar_types[0] in (bodo.datetime64ns, bodo.pandas_timestamp_type):
+    if scalar_types[0] in (bodo.datetime64ns, bodo.pd_timestamp_type):
         for typ in scalar_types[1:]:
-            if typ not in (bodo.datetime64ns, bodo.pandas_timestamp_type):
+            if typ not in (bodo.datetime64ns, bodo.pd_timestamp_type):
                 return False
         return True
 

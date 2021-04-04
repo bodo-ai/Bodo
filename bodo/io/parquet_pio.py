@@ -1311,7 +1311,7 @@ def _get_partition_cat_dtype(part_set):
     cat_dtype = bodo.hiframes.pd_categorical_ext.PDCategoricalDtype(
         tuple(S), elem_type, False
     )
-    return bodo.hiframes.pd_categorical_ext.CategoricalArray(cat_dtype)
+    return bodo.hiframes.pd_categorical_ext.CategoricalArrayType(cat_dtype)
 
 
 _get_dataset_reader = types.ExternalFunction(

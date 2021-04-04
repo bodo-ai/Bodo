@@ -287,7 +287,7 @@ isnan_categorical(T const& val) {
 }
 
 /** This function is used to determine if the value in a Categorical pointer
- * (pointer to a single value in a CategoricalArray) isnan.
+ * (pointer to a single value in a CategoricalArrayType) isnan.
  * @param the data type for the codes.
  * @param the Categorical Pointer
  * @returns if the value stored at the ptr is nan

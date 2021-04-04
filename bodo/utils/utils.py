@@ -318,7 +318,7 @@ def is_array_typ(var_typ, include_index_series=True):
             (
                 IntegerArrayType,
                 bodo.libs.decimal_arr_ext.DecimalArrayType,
-                bodo.hiframes.pd_categorical_ext.CategoricalArray,
+                bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
                 bodo.libs.array_item_arr_ext.ArrayItemArrayType,
                 bodo.libs.struct_arr_ext.StructArrayType,
                 bodo.libs.tuple_arr_ext.TupleArrayType,
@@ -470,7 +470,7 @@ def empty_like_type(n, arr):  # pragma: no cover
 @overload(empty_like_type, no_unliteral=True)
 def empty_like_type_overload(n, arr):
     # categorical
-    if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArray):
+    if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArrayType):
         return lambda n, arr: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
             n, arr.dtype
         )  # pragma: no cover
@@ -697,7 +697,7 @@ def overload_alloc_type(n, t, s=None):
             n, s, dtypes
         )  # pragma: no cover
 
-    if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArray):
+    if isinstance(typ, bodo.hiframes.pd_categorical_ext.CategoricalArrayType):
         if isinstance(t, types.TypeRef):
             if typ.dtype.categories is None:
                 # TODO: Fix error message if there are other usages?

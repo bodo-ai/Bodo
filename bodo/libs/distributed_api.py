@@ -30,7 +30,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
-from bodo.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.libs import hdist
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
@@ -546,7 +546,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
     """
     from bodo.libs.csr_matrix_ext import CSRMatrixType
 
-    if isinstance(data, CategoricalArray):
+    if isinstance(data, CategoricalArrayType):
 
         def impl_cat(
             data, allgather=False, warn_if_rep=True, root=MPI_ROOT
@@ -1457,7 +1457,7 @@ def get_value_for_type(dtype):  # pragma: no cover
             {name: arr for name, arr in zip(dtype.columns, arrs)}, index
         )
 
-    if isinstance(dtype, CategoricalArray):
+    if isinstance(dtype, CategoricalArrayType):
         return pd.Categorical.from_codes([0], dtype.dtype.categories)
 
     if isinstance(dtype, types.BaseTuple):
@@ -1865,7 +1865,7 @@ def scatterv_impl(data, send_counts=None):
         impl_df = loc_vars["impl_df"]
         return impl_df
 
-    if isinstance(data, CategoricalArray):
+    if isinstance(data, CategoricalArrayType):
 
         def impl_cat(data, send_counts=None):  # pragma: no cover
             codes = bodo.libs.distributed_api.scatterv_impl(data.codes, send_counts)
@@ -2384,7 +2384,7 @@ def alltoallv(
             typ_enum,
         )  # pragma: no cover
 
-    if isinstance(send_data, bodo.CategoricalArray):
+    if isinstance(send_data, bodo.CategoricalArrayType):
         return lambda send_data, out_data, send_counts, recv_counts, send_disp, recv_disp: c_alltoallv(
             send_data.codes.ctypes,
             out_data.codes.ctypes,

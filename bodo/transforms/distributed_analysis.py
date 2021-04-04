@@ -35,7 +35,7 @@ from numba.parfors.parfor import (
 import bodo
 import bodo.io
 import bodo.io.np_io
-from bodo.hiframes.pd_categorical_ext import CategoricalArray
+from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
@@ -463,7 +463,7 @@ class DistributedAnalysis:
             self._set_var_dist(lhs, array_dists, new_dist)
             self._set_var_dist(rhs.value.name, array_dists, new_dist)
             return
-        elif isinstance(rhs_typ, CategoricalArray) and attr == "codes":
+        elif isinstance(rhs_typ, CategoricalArrayType) and attr == "codes":
             # categorical array and its underlying codes array have same distributions
             arr = rhs.value.name
             self._meet_array_dists(lhs, arr, array_dists)

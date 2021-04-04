@@ -118,7 +118,7 @@ def overload_coerce_to_ndarray(
                     np.asarray(data), np.full((len(data) + 7) >> 3, 255, np.uint8)
                 )  # pragma: no cover
         # convert Timestamp() back to dt64
-        if data.dtype == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+        if data.dtype == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
 
             def impl(
                 data,
@@ -298,7 +298,7 @@ def overload_coerce_to_ndarray(
             return impl_ts
 
         # Timestamp values are stored as dt64 arrays
-        if data == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+        if data == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
             dt64_dtype = np.dtype("datetime64[ns]")
 
             def impl_ts(
@@ -455,7 +455,7 @@ def overload_coerce_to_array(
             DecimalArrayType,
             bodo.libs.tuple_arr_ext.TupleArrayType,
             bodo.libs.struct_arr_ext.StructArrayType,
-            bodo.hiframes.pd_categorical_ext.CategoricalArray,
+            bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
             bodo.libs.csr_matrix_ext.CSRMatrixType,
         ),
     ):
@@ -549,7 +549,7 @@ def overload_coerce_to_array(
         return impl_str
 
     # Convert list of Timestamps to dt64 array
-    if isinstance(data, types.List) and data.dtype == bodo.pandas_timestamp_type:
+    if isinstance(data, types.List) and data.dtype == bodo.pd_timestamp_type:
 
         def impl_list_timestamp(
             data,
@@ -1090,7 +1090,7 @@ def unbox_if_timestamp(val):  # pragma: no cover
 def overload_unbox_if_timestamp(val):
     """If 'val' is Timestamp, "unbox" it to dt64 otherwise just return 'val'"""
     # unbox Timestamp to dt64
-    if val == bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type:
+    if val == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
         return lambda val: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
             val.value
         )  # pragma: no cover
@@ -1102,7 +1102,7 @@ def overload_unbox_if_timestamp(val):
         )  # pragma: no cover
 
     # Optional(timestamp)
-    if val == types.Optional(bodo.hiframes.pd_timestamp_ext.pandas_timestamp_type):
+    if val == types.Optional(bodo.hiframes.pd_timestamp_ext.pd_timestamp_type):
 
         def impl_optional(val):  # pragma: no cover
             if val is None:

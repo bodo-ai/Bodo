@@ -1006,11 +1006,11 @@ def agg_distributed_run(
     }
     # TODO: Support for Categories not known at compile time
     for i, in_col_typ in enumerate(in_col_typs):
-        if isinstance(in_col_typ, bodo.CategoricalArray):
+        if isinstance(in_col_typ, bodo.CategoricalArrayType):
             glbs.update({f"in_cat_dtype_{i}": in_col_typ})
 
     for i, out_col_typ in enumerate(out_col_typs):
-        if isinstance(out_col_typ, bodo.CategoricalArray):
+        if isinstance(out_col_typ, bodo.CategoricalArrayType):
             glbs.update({f"out_cat_dtype_{i}": out_col_typ})
 
     has_pivot_value = agg_node.pivot_arr is not None
@@ -1205,7 +1205,7 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
         return "alloc_decimal_array(1, {}, {})".format(t.precision, t.scale)
     elif isinstance(t, DatetimeDateArrayType):
         return "bodo.hiframes.datetime_date_ext.init_datetime_date_array(np.empty(1, np.int64), np.empty(1, np.uint8))"
-    elif isinstance(t, bodo.CategoricalArray):
+    elif isinstance(t, bodo.CategoricalArrayType):
         if t.dtype.categories is None:
             raise BodoError(
                 "Groupby agg operations on Categorical types require constant categories"
@@ -1694,14 +1694,14 @@ def gen_top_level_agg_func(
         out_col_typ = out_col_typs[i]
         # Shift, Min, and Max maintain the same output and input type
         # We handle these separately with Categorical data because if a
-        # CategoricalArray doesn't have types known at compile time then
+        # CategoricalArrayType doesn't have types known at compile time then
         # we must associate it with another DType that has it's categories
         # set at runtime. The existing approach for other types just uses
         # Typerefs and those can't be resolved.
         if (
             isinstance(agg_func, pytypes.SimpleNamespace)
             and agg_func.fname in ["min", "max", "shift"]
-            and isinstance(out_col_typ, bodo.CategoricalArray)
+            and isinstance(out_col_typ, bodo.CategoricalArrayType)
         ):
             func_text += "    {} = {}\n".format(out_name, in_names[i])
         else:
