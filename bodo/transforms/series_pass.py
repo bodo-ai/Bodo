@@ -203,13 +203,15 @@ class SeriesPass:
     def run(self):
         """run series/dataframe transformations"""
         blocks = self.func_ir.blocks
-        # find the potentially updated dataframes to avoid optimizing out
-        # get_dataframe_data() calls incorrectly
-        self.dataframe_pass._updated_dataframes = self._get_updated_dataframes(blocks)
-
         # topo_order necessary so Series data replacement optimization can be
         # performed in one pass
         topo_order = find_topo_order(blocks)
+        # find the potentially updated dataframes to avoid optimizing out
+        # get_dataframe_data() calls incorrectly
+        self.dataframe_pass._updated_dataframes = self._get_updated_dataframes(
+            blocks, topo_order
+        )
+
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         while work_list:
             label, block = work_list.pop()
@@ -320,7 +322,9 @@ class SeriesPass:
                             # detect if the newly inlined function updates dataframe
                             # columns inplace, see test_set_column_detect_update3
                             self._get_updated_dataframes(
-                                {0: blocks[l]}, self.dataframe_pass._updated_dataframes
+                                {0: blocks[l]},
+                                [0],
+                                self.dataframe_pass._updated_dataframes,
                             )
                             work_list.append((l, blocks[l]))
                     # Loc objects are not updated for user Bodo functions to keep source
@@ -3028,7 +3032,7 @@ class SeriesPass:
         )
         return nodes[-1].target
 
-    def _get_updated_dataframes(self, blocks, updated_dfs=None):
+    def _get_updated_dataframes(self, blocks, topo_order, updated_dfs=None):
         """find the potentially updated dataframes to avoid optimizing out
         get_dataframe_data() calls incorrectly.
         Looks for dataframe column set calls, dataframe args to JIT calls and UDFs.
@@ -3037,14 +3041,15 @@ class SeriesPass:
         """
         if updated_dfs is None:
             updated_dfs = set()
-        for block in blocks.values():
-            for stmt in block.body:
+        for label in reversed(topo_order):
+            block = blocks[label]
+            for stmt in reversed(block.body):
                 if (
                     is_assign(stmt)
                     and isinstance(stmt.value, ir.Var)
-                    and stmt.value.name in updated_dfs
+                    and stmt.target.name in updated_dfs
                 ):
-                    updated_dfs.add(stmt.target.name)
+                    updated_dfs.add(stmt.value.name)
                 if is_call_assign(stmt):
                     rhs = stmt.value
                     func_type = self.typemap[rhs.func.name]
@@ -3055,11 +3060,14 @@ class SeriesPass:
                             "bodo.hiframes.pd_dataframe_ext",
                         ),
                         ("set_dataframe_data", "bodo.hiframes.pd_dataframe_ext"),
-                        ("set_df_col", "bodo.hiframes.pd_dataframe_ext"),
+                        ("set_df_col", "bodo.hiframes.dataframe_impl"),
                     ):
                         updated_dfs.add(rhs.args[0].name)
-                    if isinstance(func_type, numba.core.types.Dispatcher):
-                        for arg in rhs.args:
+                    # If a user called a function with a bodo.jit and the input is a dataframe,
+                    # the user may modify the bodo function in place
+                    # TODO: Determine if we should internally switch to a whitelist of functions.
+                    if bodo.compiler.is_user_dispatcher(func_type):
+                        for arg in rhs.args + list(dict(rhs.kws).values()):
                             self._set_add_if_df(updated_dfs, arg.name)
                     # apply calls take both positional and kw args
                     if (
@@ -3073,7 +3081,19 @@ class SeriesPass:
                     ):
                         for arg in rhs.args + list(dict(rhs.kws).values()):
                             self._set_add_if_df(updated_dfs, arg.name)
-
+        # Iterate over statements again in Forward order to catches copies that
+        # come after the update triggering df in the IR.
+        # TODO: Add a test where this is necessary/remove this if it
+        # isn't necessary.
+        for label in topo_order:
+            block = blocks[label]
+            for stmt in block.body:
+                if (
+                    is_assign(stmt)
+                    and isinstance(stmt.value, ir.Var)
+                    and stmt.value.name in updated_dfs
+                ):
+                    updated_dfs.add(stmt.target.name)
         return updated_dfs
 
     def _set_add_if_df(self, updated_dfs, varname):

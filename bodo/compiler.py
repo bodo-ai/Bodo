@@ -783,6 +783,17 @@ def is_udf_call(func_type):
     )
 
 
+def is_user_dispatcher(func_type):
+    """determines if function type is a Bodo function written by
+    a user rather than an internally written function."""
+    # Func_type is a user function component if it is either from objmode or a
+    # dispatcher with the BodoCompiler
+    return isinstance(func_type, numba.core.types.functions.ObjModeDispatcher) or (
+        isinstance(func_type, numba.core.types.Dispatcher)
+        and issubclass(func_type.dispatcher._compiler.pipeline_class, BodoCompiler)
+    )
+
+
 @register_pass(mutates_CFG=False, analysis_only=True)
 class DummyCR(FunctionPass):
     """Dummy pass to add "cr" to compiler state to avoid errors in TyperCompiler since

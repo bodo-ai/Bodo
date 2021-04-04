@@ -13,6 +13,7 @@ import numba
 import numpy as np
 import pandas as pd
 import pytest
+from numba.core.ir_utils import find_callname, guard
 
 import bodo
 from bodo.tests.utils import (
@@ -34,6 +35,7 @@ from bodo.tests.utils import (
     is_bool_object_series,
 )
 from bodo.utils.typing import BodoError, BodoWarning
+from bodo.utils.utils import is_call_assign
 
 
 # TODO: other possible df types like dt64, td64, ...
@@ -275,6 +277,38 @@ def test_df_select_dtypes_type_exclude(select_dtypes_df):
 
     check_func(test_impl1, (df,))
     check_func(test_impl2, (df,))
+
+
+def test_dataframe_rename_dropped_col():
+    """Tests that DataFrame.rename removes any unused columns
+    even if renamed."""
+
+    def test_impl():
+        df = pd.DataFrame({"A": [1, 2] * 20, "B": ["a, werqwer", "erwr"] * 20})
+        df = df.rename({"A": "C", "B": "D"}, axis=1)
+        return df["D"]
+
+    check_func(test_impl, (), dist_test=False)
+    _check_IR_no_get_dataframe_data(test_impl, ())
+
+
+def _check_IR_no_get_dataframe_data(test_impl, args):
+    """ensures there is get_dataframe_data after optimizations"""
+    bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
+        test_impl
+    )
+    bodo_func(*args)  # calling the function to get function IR
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    # make sure there is no const call in IR
+    for block in fir.blocks.values():
+        for stmt in block.body:
+            assert not (
+                is_call_assign(stmt)
+                and (
+                    guard(find_callname, fir, stmt.value)
+                    in (("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext"),)
+                )
+            )
 
 
 @pytest.mark.skip(reason="Numba issue with np.number")
