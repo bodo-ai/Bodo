@@ -1879,19 +1879,28 @@ def test_df_shift_unsupported(df_value, memory_leak_check):
     """
     Test for the Dataframe.shift inputs that are expected to be unsupported.
     """
-    # Dataframe.shift supports non-nullable ints, floats, and dt64
-    skip = True
-    for dtype in df_value.dtypes:
-        if not pd.api.types.is_numeric_dtype(dtype) and dtype != np.dtype(
-            "datetime64[ns]"
-        ):
-            skip = False
-
-    if skip:
-        return
+    # Dataframe.shift supports supports ints, floats, dt64, nullable nullable
+    # int/bool/decimal/date and strings
+    is_unsupported = False
+    for i in range(len(df_value.columns)):
+        series_val = df_value.iloc[:, i]
+        if not (
+            pd.api.types.is_numeric_dtype(series_val)
+            or series_val.dtype == np.dtype("datetime64[ns]")
+            or isinstance(series_val.values[0], Decimal)
+            or series_val.dtype == np.bool_
+            or is_bool_object_series(series_val)
+            or isinstance(series_val.values[0], datetime.date)
+            or isinstance(series_val.values[0], str)
+        ) or isinstance(series_val.dtype, pd.CategoricalDtype):
+            is_unsupported = True
 
     def impl(df):
         return df.shift(2)
+
+    if not is_unsupported:
+        check_func(impl, (df_value,))
+        return
 
     with pytest.raises(BodoError, match=r"Dataframe.shift\(\) column input type"):
         bodo.jit(impl)(df_value)

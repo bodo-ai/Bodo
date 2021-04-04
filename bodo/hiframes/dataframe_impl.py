@@ -42,6 +42,7 @@ from bodo.hiframes.pd_series_ext import (
     if_series_to_array_type,
 )
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
+from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_ext import string_type
@@ -1173,16 +1174,10 @@ def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int (not nullable), and dt64 are supported
     for column_type in df.data:
-        if not (
-            isinstance(column_type, types.Array)
-            and (
-                isinstance(column_type.dtype, (types.Number))
-                or column_type.dtype == bodo.datetime64ns
-            )
-        ):
+        if not is_supported_shift_array_type(column_type):
             # TODO: Link to supported Column input types.
             raise BodoError(
-                f"Dataframe.shift() column input type {column_type.dtype} not supported."
+                f"Dataframe.shift() column input type {column_type.dtype} not supported yet."
             )
 
     # Ensure period is int
@@ -1190,9 +1185,7 @@ def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
         raise BodoError("DataFrame.shift(): 'periods' input must be an integer.")
 
     data_args = ", ".join(
-        "bodo.hiframes.rolling.shift(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}), periods, False)".format(
-            i
-        )
+        f"bodo.hiframes.rolling.shift(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), periods, False)"
         for i in range(len(df.columns))
     )
     header = "def impl(df, periods=1, freq=None, axis=0, fill_value=None):\n"

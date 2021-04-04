@@ -4296,7 +4296,15 @@ def test_series_shift_type_check(series_val, memory_leak_check):
     def test_impl(A):
         return A.shift(1)
 
+    def test_impl2(A):
+        return A.shift(-1)
+
+    # test larger shift window to trigger small relative data code path
+    def test_impl3(A):
+        return A.shift(3)
+
     # Series.shift supports ints, floats, dt64, nullable nullable int/bool/decimal/date
+    # and strings
     if (
         pd.api.types.is_numeric_dtype(series_val)
         or series_val.dtype == np.dtype("datetime64[ns]")
@@ -4304,8 +4312,11 @@ def test_series_shift_type_check(series_val, memory_leak_check):
         or series_val.dtype == np.bool_
         or is_bool_object_series(series_val)
         or isinstance(series_val.values[0], datetime.date)
+        or isinstance(series_val.values[0], str)
     ) and not isinstance(series_val.dtype, pd.CategoricalDtype):
         check_func(test_impl, (series_val,))
+        check_func(test_impl2, (series_val,))
+        check_func(test_impl3, (series_val,))
         return
 
     with pytest.raises(BodoError, match=r"Series.shift\(\): Series input type"):

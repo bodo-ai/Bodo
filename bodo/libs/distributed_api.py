@@ -32,14 +32,17 @@ from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.libs import hdist
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType, np_offset_type
+from bodo.libs.array_item_arr_ext import (
+    ArrayItemArrayType,
+    np_offset_type,
+    offset_type,
+)
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import (
     convert_len_arr_to_offset,
-    convert_len_arr_to_offset32,
     get_bit_bitmap,
     get_data_ptr,
     get_null_bitmap_ptr,
@@ -222,6 +225,40 @@ def isend(arr, size, pe, tag, cond=True):
 
         return impl_nullable
 
+    # string arrays
+    if arr == string_array_type:
+        offset_typ_enum = np.int32(numba_to_c_type(offset_type))
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        # using blocking communication for string arrays instead since the array
+        # slice passed in shift() may not stay alive (not a view of the original array)
+        def impl_str_arr(arr, size, pe, tag, cond=True):  # pragma: no cover
+            # send number of characters first
+            n_chars = np.int64(bodo.libs.str_arr_ext.num_total_chars(arr))
+            send(n_chars, pe, tag - 1)
+
+            n_bytes = (size + 7) >> 3
+            _send(
+                bodo.libs.str_arr_ext.get_offset_ptr(arr),
+                size + 1,
+                offset_typ_enum,
+                pe,
+                tag,
+            )
+            _send(
+                bodo.libs.str_arr_ext.get_data_ptr(arr), n_chars, char_typ_enum, pe, tag
+            )
+            _send(
+                bodo.libs.str_arr_ext.get_null_bitmap_ptr(arr),
+                n_bytes,
+                char_typ_enum,
+                pe,
+                tag,
+            )
+            return None
+
+        return impl_str_arr
+
     # voidptr input, pointer to bytes
     typ_enum = numba_to_c_type(types.uint8)
 
@@ -270,6 +307,41 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
             return (data_req, null_req)
 
         return impl_nullable
+
+    # string arrays
+    if arr == string_array_type:
+        offset_typ_enum = np.int32(numba_to_c_type(offset_type))
+        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+
+        # using blocking communication for string arrays instead since the array
+        # slice passed in shift() may not stay alive (not a view of the original array)
+        def impl_str_arr(arr, size, pe, tag, cond=True):  # pragma: no cover
+            # recv the number of string characters and resize buffer to proper size
+            n_chars = recv(np.int64, pe, tag - 1)
+            new_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(size, n_chars)
+            bodo.libs.str_arr_ext.move_str_arr_payload(arr, new_arr)
+
+            n_bytes = (size + 7) >> 3
+            _recv(
+                bodo.libs.str_arr_ext.get_offset_ptr(arr),
+                size + 1,
+                offset_typ_enum,
+                pe,
+                tag,
+            )
+            _recv(
+                bodo.libs.str_arr_ext.get_data_ptr(arr), n_chars, char_typ_enum, pe, tag
+            )
+            _recv(
+                bodo.libs.str_arr_ext.get_null_bitmap_ptr(arr),
+                n_bytes,
+                char_typ_enum,
+                pe,
+                tag,
+            )
+            return None
+
+        return impl_str_arr
 
     raise BodoError(f"irecv(): array type {arr} not supported yet")
 
@@ -1844,6 +1916,10 @@ def bcast(data):  # pragma: no cover
 
 @overload(bcast, no_unliteral=True)
 def bcast_overload(data):
+    """broadcast array from rank 0. 'data' array is assumed to be pre-allocated in
+    non-zero ranks.
+    """
+    # numpy arrays
     if isinstance(data, types.Array):
 
         def bcast_impl(data):  # pragma: no cover
@@ -1855,6 +1931,7 @@ def bcast_overload(data):
 
         return bcast_impl
 
+    # Decimal arrays
     if isinstance(data, DecimalArrayType):
 
         def bcast_decimal_arr(data):  # pragma: no cover
@@ -1872,6 +1949,7 @@ def bcast_overload(data):
 
         return bcast_decimal_arr
 
+    # nullable int/bool/date arrays
     if isinstance(data, IntegerArrayType) or data in (
         boolean_array,
         datetime_date_array_type,
@@ -1884,12 +1962,12 @@ def bcast_overload(data):
 
         return bcast_impl_int_arr
 
+    # string arrays
     if data == string_array_type:
-        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
+        offset_typ_enum = np.int32(numba_to_c_type(offset_type))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def bcast_str_impl(data):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
             n_loc = len(data)
             n_all_chars = num_total_chars(data)
             assert n_loc < INT_MAX
@@ -1900,29 +1978,13 @@ def bcast_overload(data):
             null_bitmap_ptr = get_null_bitmap_ptr(data)
             n_bytes = (n_loc + 7) >> 3
 
-            if rank == MPI_ROOT:
-                send_arr_lens = np.empty(n_loc, np.uint32)  # XXX offset type is uint32
-                for i in range(n_loc):
-                    send_arr_lens[i] = bodo.libs.str_arr_ext.get_str_arr_item_length(
-                        data, i
-                    )
-
-                c_bcast(
-                    send_arr_lens.ctypes,
-                    np.int32(n_loc),
-                    int32_typ_enum,
-                    np.array([-1]).ctypes,
-                    0,
-                )
-            else:
-                c_bcast(
-                    offset_ptr,
-                    np.int32(n_loc),
-                    int32_typ_enum,
-                    np.array([-1]).ctypes,
-                    0,
-                )
-
+            c_bcast(
+                offset_ptr,
+                np.int32(n_loc + 1),
+                offset_typ_enum,
+                np.array([-1]).ctypes,
+                0,
+            )
             c_bcast(
                 data_ptr, np.int32(n_all_chars), char_typ_enum, np.array([-1]).ctypes, 0
             )
@@ -1933,9 +1995,6 @@ def bcast_overload(data):
                 np.array([-1]).ctypes,
                 0,
             )
-            if rank != MPI_ROOT:
-                # XXX why is this needed?
-                convert_len_arr_to_offset32(offset_ptr, n_loc)
 
         return bcast_str_impl
 
@@ -2587,6 +2646,11 @@ def wait(req, cond=True):
         exec(func_text, {"_wait": _wait}, loc_vars)
         impl = loc_vars["f"]
         return impl
+
+    # None passed means no request to wait on (no-op), happens for shift() for string
+    # arrays since we use blocking communication instead
+    if is_overload_none(req):
+        return lambda req, cond=True: None  # pragma: no cover
 
     return lambda req, cond=True: _wait(req, cond)  # pragma: no cover
 
