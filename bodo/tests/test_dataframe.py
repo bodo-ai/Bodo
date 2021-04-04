@@ -1847,7 +1847,7 @@ def test_df_shift_unsupported(df_value, memory_leak_check):
     """
     # Dataframe.shift supports supports ints, floats, dt64, nullable nullable
     # int/bool/decimal/date and strings
-    skip = True
+    is_unsupported = False
     for i in range(len(df_value.columns)):
         series_val = df_value.iloc[:, i]
         if not (
@@ -1859,12 +1859,12 @@ def test_df_shift_unsupported(df_value, memory_leak_check):
             or isinstance(series_val.values[0], datetime.date)
             or isinstance(series_val.values[0], str)
         ) or isinstance(series_val.dtype, pd.CategoricalDtype):
-            skip = False
+            is_unsupported = True
 
     def impl(df):
         return df.shift(2)
 
-    if skip:
+    if not is_unsupported:
         check_func(impl, (df_value,))
         return
 

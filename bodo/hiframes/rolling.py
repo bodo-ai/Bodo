@@ -1761,6 +1761,11 @@ def _is_small_for_parallel(N, halo_size):  # pragma: no cover
 def _handle_small_data(
     in_arr, win, minp, center, rank, n_pes, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
+    """Gather data and run rolling window computation (fixed window case) on rank 0,
+    then broadcast the result.
+    This is used when input data is too small compared to window size for efficient
+    parallelism.
+    """
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value)
@@ -1785,6 +1790,11 @@ def _handle_small_data(
 def _handle_small_data_apply(
     in_arr, index_arr, win, minp, center, rank, n_pes, kernel_func, raw=True
 ):  # pragma: no cover
+    """Gather data and run rolling window computation (fixed window apply case) on rank
+    0, then broadcast the result.
+    This is used when input data is too small compared to window size for efficient
+    parallelism.
+    """
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value)
@@ -1827,6 +1837,11 @@ def overload_bcast_n_chars_if_str_arr(arr):
 
 @register_jitable
 def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
+    """Gather data and run shift computation on rank 0,
+    then broadcast the result.
+    This is used when input data is too small compared to window size for efficient
+    parallelism.
+    """
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(
         len(in_arr), np.int32(Reduce_Type.Sum.value)
@@ -1851,6 +1866,11 @@ def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
 
 @register_jitable
 def _handle_small_data_pct_change(in_arr, shift, rank, n_pes):  # pragma: no cover
+    """Gather data and run pct_change computation on rank 0,
+    then broadcast the result.
+    This is used when input data is too small compared to window size for efficient
+    parallelism.
+    """
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(N, np.int32(Reduce_Type.Sum.value))
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
@@ -1912,6 +1932,11 @@ def _is_small_for_parallel_variable(on_arr, win_size):  # pragma: no cover
 def _handle_small_data_variable(
     in_arr, on_arr, win, minp, rank, n_pes, init_data, add_obs, remove_obs, calc_out
 ):  # pragma: no cover
+    """Gather data and run rolling window computation (variable window case) on rank 0,
+    then broadcast the result.
+    This is used when input data is too small compared to window size for efficient
+    parallelism.
+    """
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(N, np.int32(Reduce_Type.Sum.value))
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
@@ -1945,6 +1970,11 @@ def _handle_small_data_variable(
 def _handle_small_data_variable_apply(
     in_arr, on_arr, index_arr, win, minp, rank, n_pes, kernel_func, raw
 ):  # pragma: no cover
+    """Gather data and run rolling window computation (variable window apply case) on,
+    rank 0 then broadcast the result.
+    This is used when input data is too small compared to window size for efficient
+    parallelism.
+    """
     N = len(in_arr)
     all_N = bodo.libs.distributed_api.dist_reduce(N, np.int32(Reduce_Type.Sum.value))
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
