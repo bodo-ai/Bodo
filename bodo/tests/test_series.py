@@ -37,6 +37,16 @@ class SeriesReplace:
     value: (int, str)
 
 
+@dataclass
+class WhereNullable:
+    series: pd.Series
+    cond: pd.array
+    other: pd.Series
+
+    def __iter__(self):
+        return iter([self.series, self.cond, self.other])
+
+
 _cov_corr_series = [
     (pd.Series(x), pd.Series(y))
     for x, y in [
@@ -4631,18 +4641,6 @@ def test_series_where_true(series_val, memory_leak_check):
             bodo.jit(test_impl)(series_val, cond, val)
         return
 
-    # not supported for IntegerArray yet, TODO: support and test
-    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        with pytest.raises(BodoError, match=series_err_msg):
-            bodo.jit(test_impl)(series_val, cond, val)
-        return
-
-    # not supported for BooleanArray yet, TODO: support and test
-    if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
-        with pytest.raises(BodoError, match=series_err_msg):
-            bodo.jit(test_impl)(series_val, cond, val)
-        return
-
     # not supported for CategoricalArrayType yet, TODO: support and test
     if isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
         series_val.dtype.categories[0], (pd.Timestamp, pd.Timedelta)
@@ -4675,6 +4673,53 @@ def test_series_where(memory_leak_check):
     )
     cond = S == 2.0
     check_func(test_impl, (S, cond, 12))
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "where_nullable",
+    [
+        # Bool nullable
+        pytest.param(
+            WhereNullable(
+                series=pd.Series(pd.array([True, True, True, True])),
+                cond=pd.array([True, True, True, True]),
+                other=pd.Series(pd.array([True, True, True, True])),
+            ),
+            id="a",
+        ),
+        # Int64 Series & int64 other
+        pytest.param(
+            WhereNullable(
+                series=pd.Series(pd.array([1, 2, 3, 4]), dtype="Int64"),
+                cond=pd.array([True, True, True, True]),
+                other=pd.Series([1, 2, 3, 4], dtype="int64"),
+            ),
+            id="b",
+        ),
+        # Int64 Series & int32 other
+        pytest.param(
+            WhereNullable(
+                series=pd.Series(pd.array([1, 2, 3, 4]), dtype="Int64"),
+                cond=pd.array([True, True, True, True]),
+                other=pd.Series([1, 2, 3, 4], dtype="int32"),
+            ),
+            id="c",
+        ),
+        # Int8 Series & Int64 other
+        pytest.param(
+            WhereNullable(
+                series=pd.Series(pd.array([1, 2, 3, 4]), dtype="Int8"),
+                cond=pd.array([True, True, True, True]),
+                other=pd.Series([1, 2, 3, 4], dtype="Int64"),
+            ),
+            id="d",
+        ),
+    ],
+)
+def test_series_where_nullable(where_nullable):
+    f = lambda S, cond, other: S.where(cond, other)
+    check_func(f, where_nullable, check_dtype=False)
 
 
 def test_series_where_arr(memory_leak_check):
@@ -4738,18 +4783,6 @@ def test_series_mask_false(series_val, memory_leak_check):
 
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
-        with pytest.raises(BodoError, match=series_err_msg):
-            bodo.jit(test_impl)(series_val, cond, val)
-        return
-
-    # not supported for IntegerArray yet, TODO: support and test
-    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        with pytest.raises(BodoError, match=series_err_msg):
-            bodo.jit(test_impl)(series_val, cond, val)
-        return
-
-    # not supported for BooleanArray yet, TODO: support and test
-    if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
         with pytest.raises(BodoError, match=series_err_msg):
             bodo.jit(test_impl)(series_val, cond, val)
         return

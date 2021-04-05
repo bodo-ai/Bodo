@@ -47,6 +47,12 @@ def is_dtype_nullable(in_dtype):
     return isinstance(in_dtype, (types.Float, types.NPDatetime, types.NPTimedelta))
 
 
+def is_nullable(typ):
+    return bodo.utils.utils.is_array_typ(typ, False) and (
+        not isinstance(typ, types.Array) or is_dtype_nullable(typ.dtype)
+    )
+
+
 class BodoError(NumbaError):
     """Bodo error that is a regular exception to allow typing pass to catch it.
     Numba will handle it in a special way to remove any context information
@@ -405,7 +411,7 @@ def element_type(val):
         if isinstance(val.dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
             return val.dtype.elem_type
         return val.dtype
-    return val
+    return types.unliteral(val)
 
 
 def can_replace(to_replace, value):

@@ -2725,10 +2725,10 @@ def _validate_arguments_mask_where(
         raise BodoError(f"{func_name}(): axis argument not supported")
 
     # Bodo Limitation. Where/Mask is only supported for string arrays, categorical + scalar, and numpy arrays
-    # Nullable int/bool arrays can be used, but they may have the wrong type or
-    # drop NaN values.
     if not (
         isinstance(S.data, types.Array)
+        or isinstance(S.data, BooleanArrayType)
+        or isinstance(S.data, IntegerArrayType)
         or (
             bodo.utils.utils.is_array_typ(S.data, False) and S.dtype == bodo.string_type
         )
@@ -2777,6 +2777,14 @@ def _validate_arguments_mask_where(
         or (
             isinstance(other, SeriesType)
             and (isinstance(S.data, types.Array) or S.dtype == bodo.string_type)
+        )
+        or (
+            # Use type to handle different bitwidths
+            type(S.data.dtype) == type(other.data.dtype)
+            and (
+                isinstance(S.data, BooleanArrayType)
+                or isinstance(S.data, IntegerArrayType)
+            )
         )
     ):
         raise BodoError(
@@ -3523,7 +3531,23 @@ def overload_np_where(condition, x, y):
     x_dtype = x.dtype if is_x_arr else types.unliteral(x)
     y_dtype = y.dtype if is_y_arr else types.unliteral(y)
 
-    if x_dtype == y_dtype:
+    # Don't call element_type on CategoricalArrayType because we don't
+    # use out_dtype for CategoricalArrayType
+    if not isinstance(x, CategoricalArrayType):
+        x_dtype = element_type(x)
+    if not isinstance(y, CategoricalArrayType):
+        y_dtype = element_type(y)
+    def get_data(x):
+        if isinstance(x, SeriesType):
+            return x.data
+        elif isinstance(x, types.Array):
+            return x
+        return types.unliteral(x)
+
+    x_data = get_data(x)
+    y_data = get_data(y)
+    is_nullable = any(bodo.utils.typing.is_nullable(data) for data in [x_data, y_data])
+    if x_data == y_data and not is_nullable:
         out_dtype = bodo.hiframes.pd_series_ext._get_series_array_type(x_dtype)
     # output is string if any input is string
     elif x_dtype == string_type or y_dtype == string_type:
@@ -3547,6 +3571,8 @@ def overload_np_where(condition, x, y):
             )
         )
         out_dtype = types.Array(out_dtype, 1, "C")
+        if is_nullable:
+            out_dtype = bodo.utils.typing.to_nullable_type(out_dtype)
     # If x_dtype is Categorical is_x_arr must be a true
     # (Categorical Array or Series)
     if isinstance(x_dtype, bodo.PDCategoricalDtype):
