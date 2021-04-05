@@ -2556,6 +2556,9 @@ def test_series_apply_args(memory_leak_check):
     def test_wrong_func(S):
         return S.apply("XX")
 
+    def test_wrong_arg(S):
+        return S.apply(lambda x: x, axis=1)
+
     S = pd.Series([2, 1, 3])
     with pytest.raises(
         BodoError, match="Series.apply.* only supports default value True"
@@ -2573,6 +2576,12 @@ def test_series_apply_args(memory_leak_check):
         BodoError, match="Series.apply.*: user-defined function not supported"
     ):
         bodo.jit(test_wrong_func)(S)
+
+    with pytest.raises(
+        BodoError,
+        match=r"Series.apply.*: user-defined function not supported: got an unexpected keyword argument",
+    ):
+        bodo.jit(test_wrong_arg)(S)
 
 
 # TODO: Add memory leak check once constant lowering memory leak is fixed

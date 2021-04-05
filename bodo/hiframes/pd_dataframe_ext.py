@@ -298,7 +298,7 @@ class DataFrameAttribute(AttributeTemplate):
                 func, arg_typs, kws, self.context
             )
         except Exception as e:
-            raise_bodo_error(get_udf_error_msg("DataFrame.apply()", e), e.loc)
+            raise_bodo_error(get_udf_error_msg("DataFrame.apply()", e))
 
         if (
             isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
