@@ -243,6 +243,7 @@ def test_df_select_dtypes_include():
                 "a": pd.Series([1, 2] * 20, dtype="Int64"),
                 "b": [True, False] * 20,
                 "c": [1.0, 2.0] * 20,
+                "d": [1, 2] * 20,
             }
         )
         return df.select_dtypes(["int"])
