@@ -632,9 +632,7 @@ class SeriesAttribute(AttributeTemplate):
                     func, in_types, kws, self.context
                 )
             except Exception as e:
-                raise BodoError(
-                    get_udf_error_msg(f"Series.{fname}()", e), locs_in_msg=[e.loc]
-                )
+                raise BodoError(get_udf_error_msg(f"Series.{fname}()", e))
 
         if (
             isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
