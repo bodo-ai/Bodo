@@ -719,7 +719,7 @@ def _test_equal(
             reset_index,
         )
     else:
-        assert bodo_out == py_out
+        np.testing.assert_equal(bodo_out, py_out)
 
 
 def _test_equal_struct(

@@ -4002,6 +4002,11 @@ def test_loc_setitem_str(memory_leak_check):
 def test_iat_getitem(df_value, memory_leak_check):
     """test df.iat[] getitem (single value)"""
 
+    series = df_value[df_value.columns[0]]
+    if series.dtype == np.dtype("datetime64[ns]"):
+        # Unskip after [BE-497] is resolved
+        pytest.skip()
+
     def impl(df, n):
         return df.iat[n - 1, 0]
 

@@ -780,8 +780,15 @@ def test_init_string_index_array_analysis(memory_leak_check):
         pd.RangeIndex(-4, 8, 4),
         pd.RangeIndex(-10, -1, -3),
         pd.RangeIndex(-4, 8, -4),
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
-        pd.timedelta_range(start="1D", end="3D", name="A"),
+        # Unskip after [BE-497] is resolved
+        pytest.param(
+            pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+            marks=pytest.mark.skip,
+        ),
+        # Unskip after [BE-497] is resolved
+        pytest.param(
+            pd.timedelta_range(start="1D", end="3D", name="A"), marks=pytest.mark.skip
+        ),
     ],
 )
 def test_index_iter(index, memory_leak_check):
