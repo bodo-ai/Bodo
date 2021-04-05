@@ -877,6 +877,26 @@ def categorical_arrs_match(arr1, arr2):
     )
 
 
+@register_jitable
+def cat_dtype_equal(dtype1, dtype2):  # pragma: no cover
+    """return True if categorical dtypes are equal
+    (checks ordered flag and category values)
+    """
+    if dtype1.ordered != dtype2.ordered or len(dtype1.categories) != len(
+        dtype2.categories
+    ):
+        return False
+
+    # NOTE: not using (dtype1.categories != dtype1.categories).any() due to bug in
+    # Numba's array expr handling (TODO fix)
+    arr1 = dtype1.categories.values
+    arr2 = dtype2.categories.values
+    for i in range(len(arr1)):
+        if arr1[i] != arr2[i]:
+            return False
+    return True
+
+
 @overload(operator.setitem, no_unliteral=True)
 def categorical_array_setitem(arr, ind, val):
     if not isinstance(arr, CategoricalArrayType):
@@ -973,11 +993,7 @@ def categorical_array_setitem(arr, ind, val):
         if cats_match == CategoricalMatchingValues.MAY_MATCH:
 
             def impl_arr_ind_mask(arr, ind, val):  # pragma: no cover
-                if (
-                    arr.dtype.ordered != val.dtype.ordered
-                    or len(arr.dtype.categories) != len(val.dtype.categories)
-                    or (arr.dtype.categories != val.dtype.categories).any()
-                ):
+                if not cat_dtype_equal(arr.dtype, val.dtype):
                     raise ValueError(categories_err_msg)
                 n = len(val.codes)
                 for i in range(n):
@@ -1047,11 +1063,7 @@ def categorical_array_setitem(arr, ind, val):
         if cats_match == CategoricalMatchingValues.MAY_MATCH:
 
             def impl_bool_ind_mask(arr, ind, val):  # pragma: no cover
-                if (
-                    arr.dtype.ordered != val.dtype.ordered
-                    or len(arr.dtype.categories) != len(val.dtype.categories)
-                    or (arr.dtype.categories != val.dtype.categories).any()
-                ):
+                if not cat_dtype_equal(arr.dtype, val.dtype):
                     raise ValueError(categories_err_msg)
                 n = len(ind)
                 val_ind = 0
@@ -1120,11 +1132,7 @@ def categorical_array_setitem(arr, ind, val):
         if cats_match == CategoricalMatchingValues.MAY_MATCH:
 
             def impl_arr(arr, ind, val):  # pragma: no cover
-                if (
-                    arr.dtype.ordered != val.dtype.ordered
-                    or len(arr.dtype.categories) != len(val.dtype.categories)
-                    or (arr.dtype.categories != val.dtype.categories).any()
-                ):
+                if not cat_dtype_equal(arr.dtype, val.dtype):
                     raise ValueError(categories_err_msg)
                 arr.codes[ind] = val.codes
 
