@@ -1699,8 +1699,8 @@ def gen_pandas_parquet_metadata(
         partition_cols = []
     for col_name, col_type in zip(df.columns, df.data):
         if col_name in partition_cols:
-            # TODO: partition columns are not written to parquet files, but are they part of
-            # pandas metadata?
+            # partition columns are not written to parquet files, and don't appear
+            # in pandas metadata
             continue
         if isinstance(col_type, types.Array) or col_type == boolean_array:
             pandas_type = numpy_type = col_type.dtype.name
