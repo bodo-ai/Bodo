@@ -393,7 +393,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
                     ),
                 )
 
-    if isinstance(in_dtype, types.Boolean) and func_name in {"cumsum", "sum"}:
+    if isinstance(in_dtype, types.Boolean) and func_name in {"cumsum", "sum", "mean"}:
         return (
             None,
             "groupby built-in functions {} does not support boolean column".format(
@@ -538,7 +538,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                         f"Groupby.{func_name}", unsupported_args, arg_defaults
                     )
 
-                if func_name in ("sum", "prod"):
+                elif func_name in ("sum", "prod"):
                     kws = dict(kws) if kws else {}
                     # pop arguments from kws or args if any
                     # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
@@ -553,7 +553,18 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     check_unsupported_args(
                         f"Groupby.{func_name}", unsupported_args, arg_defaults
                     )
-
+                elif func_name in ("mean", "median"):
+                    kws = dict(kws) if kws else {}
+                    # pop arguments from kws or args
+                    # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
+                    numeric_only = (
+                        args[0] if len(args) > 0 else kws.pop("numeric_only", True)
+                    )
+                    unsupported_args = dict(numeric_only=numeric_only)
+                    arg_defaults = dict(numeric_only=True)
+                    check_unsupported_args(
+                        f"Groupby.{func_name}", unsupported_args, arg_defaults
+                    )
                 out_dtype, err_msg = get_groupby_output_dtype(
                     data, func_name, grp.df_type.index
                 )
@@ -828,11 +839,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.median", no_unliteral=True)
     def resolve_median(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "median")
+        return self._get_agg_typ(grp, args, "median", kws=kws)
 
     @bound_function("groupby.mean", no_unliteral=True)
     def resolve_mean(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "mean")
+        return self._get_agg_typ(grp, args, "mean", kws=kws)
 
     @bound_function("groupby.min", no_unliteral=True)
     def resolve_min(self, grp, args, kws):

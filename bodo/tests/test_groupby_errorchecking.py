@@ -764,6 +764,63 @@ def test_first_last_unsupported_types(memory_leak_check):
         bodo.jit(impl2)(df_list_bool)
 
 
+# ------------------------------ df.groupby().mean()/median()------------------------------ #
+
+
+@pytest.mark.slow
+def test_mean_args(memory_leak_check):
+    """ Test Groupby.mean with wrong arguments values"""
+
+    # wrong keyword value test
+    def impl_numeric_only(df):
+        A = df.groupby("A").mean(numeric_only=False)
+        return A
+
+    # wrong arg value test
+    def impl_numeric_only_arg(df):
+        A = df.groupby("A").mean(False)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16],
+            "B": [3, 5, 6, 5, 4, 4],
+            "C": [3.4, 2.5, 9.6, 1.5, -4.3, 4.3],
+        }
+    )
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_numeric_only)(df)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_numeric_only_arg)(df)
+
+
+@pytest.mark.slow
+def test_median_args(memory_leak_check):
+    """ Test Groupby.median with wrong arguments values"""
+
+    # wrong keyword value test
+    def impl_numeric_only(df):
+        A = df.groupby("A").median(numeric_only=False)
+        return A
+
+    # wrong arg value test
+    def impl_numeric_only_arg(df):
+        A = df.groupby("A").median(False)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16],
+            "B": [3, 5, 6, 5, 4, 4],
+            "C": [3.4, 2.5, 9.6, 1.5, -4.3, 4.3],
+        }
+    )
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_numeric_only)(df)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_numeric_only_arg)(df)
+
+
 # ------------------------------ df.groupby().sum()/prod()------------------------------ #
 
 
@@ -832,6 +889,97 @@ def test_prod_args(memory_leak_check):
         bodo.jit(impl_min_count)(df_bool)
     with pytest.raises(BodoError, match="parameter only supports default value"):
         bodo.jit(impl_numeric_only_args)(df_bool)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "df",
+    [
+        # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3, 2, 1],
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                    pd.Series(data=[None], index=[4])
+                ),
+            }
+        ),
+        # timedelta
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3, 2, 1],
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+            }
+        ),
+        # [BE-416] Support with list
+        pd.DataFrame(
+            {"A": [2, 1, 1, 2], "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]])}
+        ),
+        # Categorical
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16, 16],
+                "B": pd.Categorical([1, 2, 5, 5, 3, 3], ordered=True),
+            }
+        ),
+        # Timestamp
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16],
+                "B": [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+            }
+        ),
+        # boolean Array
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16, 16, 1, 40],
+                "B": [True, np.nan, False, True, np.nan, False, False, True],
+                "C": [True, True, False, True, True, False, False, True],
+            }
+        ),
+        # datetime
+        pd.DataFrame(
+            {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
+        ),
+        # string
+        pd.DataFrame(
+            {
+                "A": [3, 3, 5, 5, 4, 4, 3],
+                "B": ["ccc", "a", "a", "aa", "ccc", "ggg", "a"],
+            }
+        ),
+    ],
+)
+def test_mean_median_unsupported_types(df, memory_leak_check):
+    """ Test mean/median with their unsupported Bodo types"""
+
+    def impl1(df):
+        A = df.groupby("A").mean()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").median()
+        return A
+
+    err_msg = "not supported in groupby"
+    if isinstance(df["B"][0], bool):
+        err_msg = "does not support boolean column"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(df)
+
+    # median has specific message but not for DatetimeTimeDeltaType
+    err_msg_median = (
+        "For median, only column of integer, float or Decimal type are allowed"
+    )
+    with pytest.raises(BodoError) as excinfo:
+        bodo.jit(impl2)(df)
+    assert err_msg in str(excinfo.value) or err_msg_median in str(excinfo.value)
 
 
 @pytest.mark.slow

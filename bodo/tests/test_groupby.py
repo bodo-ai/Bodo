@@ -4,6 +4,7 @@ import random
 import re
 import string
 import sys
+from decimal import Decimal
 
 import numba
 import numpy as np
@@ -2625,11 +2626,12 @@ def test_mean(test_df, memory_leak_check):
 
     # Categorical isn't numeric so this should fail in Pandas.
     if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        # TODO: [BE-53] Add a check that Bodo gracefully errors
-        # with a clear error message
-        return
-
-    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+        with pytest.raises(
+            BodoError, match="Groupby with Categorical key not supported."
+        ):
+            bodo.jit(impl1)(test_df)
+    else:
+        check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -2650,11 +2652,12 @@ def test_mean_one_col(test_df, memory_leak_check):
 
     # Categorical isn't numeric so this should fail in Pandas.
     if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        # TODO: [BE-53] Add a check that Bodo gracefully errors
-        # with a clear error message
-        return
-
-    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+        with pytest.raises(
+            BodoError, match="Groupby with Categorical key not supported."
+        ):
+            bodo.jit(impl1)(test_df)
+    else:
+        check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -2677,6 +2680,73 @@ def test_groupby_as_index_mean(memory_leak_check):
 
     check_func(impl1, (11,), sort_output=True, check_dtype=False, reset_index=True)
     check_func(impl2, (11,), sort_output=True, check_dtype=False, reset_index=True)
+
+
+@pytest.mark.slow
+def test_mean_median_other_supported_types(memory_leak_check):
+    """ Test Groupby.mean()/median() with cases not in test_df"""
+
+    def impl1(df):
+        A = df.groupby("A").mean()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").median()
+        return A
+
+    # Empty
+    df = pd.DataFrame({"A": [], "B": []})
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+
+    # Zero columns
+    df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl1)(df_empty)
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl2)(df_empty)
+
+    # Test different column types in same dataframe
+    df_mix = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 2, 3],
+            "B": [1.1, 2.2, 3.3, 4.4, 1.1],
+            "C": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+        }
+    )
+    check_func(impl1, (df_mix,), sort_output=True, check_dtype=False)
+    check_func(impl2, (df_mix,), sort_output=True, check_dtype=False)
+    # Decimal
+    # Pandas with Decimal throws: DataError: No numeric types to aggregate
+    df_decimal = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 2, 2],
+            "B": pd.Series(
+                [
+                    Decimal("1.6"),
+                    Decimal("-0.2"),
+                    Decimal("44.2"),
+                    np.nan,
+                    Decimal("0"),
+                ]
+            ),
+        }
+    )
+    # Change type to float64 for py_output
+    check_func(
+        impl1,
+        (df_decimal,),
+        sort_output=True,
+        reset_index=True,
+        py_output=impl1(df_decimal.astype({"B": "float64"})),
+    )
+    check_func(
+        impl2,
+        (df_decimal,),
+        sort_output=True,
+        reset_index=True,
+        py_output=impl2(df_decimal.astype({"B": "float64"})),
+    )
 
 
 def test_min(test_df, memory_leak_check):
@@ -3073,7 +3143,7 @@ def test_first_last(test_df, memory_leak_check):
 
 @pytest.mark.slow
 def test_first_last_supported_types(memory_leak_check):
-    """ Test Groupby.first()/last() with other types not in df_test"""
+    """ Test Groupby.first()/last() with other types not in test_df"""
 
     def impl1(df):
         A = df.groupby("A").first()
