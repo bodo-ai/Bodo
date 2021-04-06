@@ -2794,8 +2794,15 @@ def _validate_arguments_mask_where(
             and (isinstance(S.data, types.Array) or S.dtype == bodo.string_type)
         )
         or (
-            # Use type to handle different bitwidths
-            type(S.data.dtype) == type(other.data.dtype)
+            (
+                (
+                    isinstance(S.data.dtype, types.Integer)
+                    and isinstance(other.data.dtype, types.Integer)
+                )
+                or (
+                    S.data.dtype == other.data.dtype
+                )
+            )
             and (
                 isinstance(S.data, BooleanArrayType)
                 or isinstance(S.data, IntegerArrayType)
