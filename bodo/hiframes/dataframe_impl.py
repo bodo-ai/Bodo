@@ -385,8 +385,6 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
             )
 
         include_types = get_nullable_and_non_nullable_types(include_types)
-        print("list of types: " + str(include_types))
-        print("the dataframe: " + str(df))
         # Filter columns to those with a matching datatype
         # TODO(Nick): Add more general support for type rules:
         # ex. np.number for all numeric types, np.object for all obj types,
