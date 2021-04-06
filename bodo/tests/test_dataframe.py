@@ -3970,6 +3970,11 @@ def test_loc_setitem(memory_leak_check):
         df.loc[cond, ["AB", "EF"]] = 11
         return df
 
+    # set columns using a 2D array
+    def impl10(df, A):
+        df.loc[:, ["D", "E"]] = A
+        return df
+
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     check_func(impl1, (df,), copy_input=True)
@@ -3981,6 +3986,8 @@ def test_loc_setitem(memory_leak_check):
     check_func(impl7, (df,), copy_input=True)
     check_func(impl8, (df,), copy_input=True)
     check_func(impl9, (n,))
+    A = np.arange(2 * n).reshape(n, 2)
+    check_func(impl10, (df, A))
 
 
 def test_loc_setitem_str(memory_leak_check):
