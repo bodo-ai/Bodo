@@ -170,9 +170,24 @@ def overload_series_copy(S, deep=True):
 @overload_method(SeriesType, "tolist", no_unliteral=True)
 def overload_series_to_list(S):
     # TODO: test all Series data types
+    if isinstance(S.dtype, types.Float):
+
+        def impl_float(S):  # pragma: no cover
+            l = list()
+            for i in range(len(S)):
+                l.append(S.iat[i])
+            return l
+
+        return impl_float
+
     def impl(S):  # pragma: no cover
         l = list()
         for i in range(len(S)):
+            if bodo.libs.array_kernels.isna(S.values, i):
+                # TODO: [BE-498] Correctly convert nan
+                raise ValueError(
+                    "Series.to_list(): Not supported for NA values with non-float dtypes"
+                )
             # using iat directly on S to box Timestamp/... properly
             l.append(S.iat[i])
         return l
@@ -3537,6 +3552,7 @@ def overload_np_where(condition, x, y):
         x_dtype = element_type(x)
     if not isinstance(y, CategoricalArrayType):
         y_dtype = element_type(y)
+
     def get_data(x):
         if isinstance(x, SeriesType):
             return x.data

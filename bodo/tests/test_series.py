@@ -1071,16 +1071,14 @@ def test_series_copy(series_val, memory_leak_check):
 
 
 def test_series_to_list(series_val, memory_leak_check):
-
-    # XXX can't compare nans here, TODO: fix
-    if series_val.hasnans:
-        return
-
-    def test_impl(S):
-        return S.to_list()
-
-    bodo_func = bodo.jit(test_impl)
-    assert bodo_func(series_val) == test_impl(series_val)
+    # TODO: [BE-498] Correctly convert nan
+    f = lambda S: S.to_list()
+    if series_val.hasnans and not isinstance(series_val.iat[0], np.floating):
+        message = "Not supported for NA values"
+        with pytest.raises(ValueError, match=message):
+            bodo.jit(f)(series_val)
+    else:
+        check_func(f, (series_val,))
 
 
 def test_series_to_numpy(numeric_series_val, memory_leak_check):
