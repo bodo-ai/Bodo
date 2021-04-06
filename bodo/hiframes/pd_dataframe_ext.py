@@ -71,6 +71,7 @@ from bodo.utils.typing import (
     get_index_data_arr_types,
     get_literal_value,
     get_overload_const,
+    get_overload_const_bool,
     get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
@@ -1230,7 +1231,15 @@ def getitem_tuple_lower(context, builder, sig, args):
 
 # a dummy join function that will be replace in dataframe_pass
 def join_dummy(
-    left_df, right_df, left_on, right_on, how, suffix_x, suffix_y, is_join
+    left_df,
+    right_df,
+    left_on,
+    right_on,
+    how,
+    suffix_x,
+    suffix_y,
+    is_join,
+    indicator,
 ):  # pragma: no cover
     return left_df
 
@@ -1251,6 +1260,7 @@ class JoinTyper(AbstractTemplate):
             suffix_x,
             suffix_y,
             is_join,
+            indicator,
         ) = args
 
         left_on = get_overload_const_list(left_on)
@@ -1306,6 +1316,19 @@ class JoinTyper(AbstractTemplate):
                     str(col) + suffix_y.literal_value if col in add_suffix else col
                 )
                 data.append(to_nullable_type(in_type) if is_left else in_type)
+
+        # If indicator=True, add a column called "_merge", which is categorical
+        # with Categories: ['left_only', 'right_only', 'both']
+        indicator_value = get_overload_const_bool(indicator)
+        if indicator_value:
+            columns.append("_merge")
+            data.append(
+                bodo.CategoricalArrayType(
+                    bodo.PDCategoricalDtype(
+                        ("left_only", "right_only", "both"), bodo.string_type, False
+                    )
+                )
+            )
         # In the case of merging with left_index=True or right_index=True then
         # the index is coming from the other index. And so we need to set it adequately.
         index_typ = RangeIndexType(types.none)

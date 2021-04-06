@@ -1337,6 +1337,7 @@ def hash_join_table(
     is_right_t,
     is_join_t,
     optional_col_t,
+    indicator,
 ):
     """
     Interface to the hash join of two tables.
@@ -1361,6 +1362,7 @@ def hash_join_table(
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),
+                lir.IntType(1),
             ],
         )
         fn_tp = builder.module.get_or_insert_function(fnty, name="hash_join_table")
@@ -1381,6 +1383,7 @@ def hash_join_table(
             types.int64,
             types.voidptr,
             types.voidptr,
+            types.boolean,
             types.boolean,
             types.boolean,
             types.boolean,

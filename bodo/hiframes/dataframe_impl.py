@@ -55,6 +55,7 @@ from bodo.utils.typing import (
     ensure_constant_values,
     get_index_data_arr_types,
     get_index_names,
+    get_overload_const_bool,
     get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
@@ -1820,10 +1821,8 @@ def overload_dataframe_merge(
     indicator=False,
     validate=None,
 ):
-    unsupported_args = dict(
-        sort=sort, copy=copy, indicator=indicator, validate=validate
-    )
-    arg_defaults = dict(sort=False, copy=True, indicator=False, validate=None)
+    unsupported_args = dict(sort=sort, copy=copy, validate=validate)
+    arg_defaults = dict(sort=False, copy=True, validate=None)
     check_unsupported_args("DataFrame.merge", unsupported_args, arg_defaults)
 
     validate_merge_spec(
@@ -1874,6 +1873,9 @@ def overload_dataframe_merge(
             right_keys = get_overload_const_list(right_on)
             # make sure all right_keys is a valid column in right
             validate_keys(right_keys, right.columns)
+    if not is_overload_bool(indicator):
+        raise_bodo_error("DataFrame.merge(): indicator must be a constant boolean")
+    indicator_val = get_overload_const_bool(indicator)
 
     validate_keys_length(
         left_on, right_on, left_index, right_index, left_keys, right_keys
@@ -1891,7 +1893,13 @@ def overload_dataframe_merge(
     suffix_x = suffixes_val[0]
     suffix_y = suffixes_val[1]
     validate_unicity_output_column_names(
-        suffix_x, suffix_y, left_keys, right_keys, left.columns, right.columns
+        suffix_x,
+        suffix_y,
+        left_keys,
+        right_keys,
+        left.columns,
+        right.columns,
+        indicator_val,
     )
 
     left_keys = gen_const_tup(left_keys)
@@ -1903,8 +1911,8 @@ def overload_dataframe_merge(
     func_text += (
         "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):\n"
     )
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}', '{}', '{}', False)\n".format(
-        left_keys, right_keys, how, suffix_x, suffix_y
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}', '{}', '{}', False, {})\n".format(
+        left_keys, right_keys, how, suffix_x, suffix_y, indicator_val
     )
 
     loc_vars = {}
@@ -1997,13 +2005,6 @@ def validate_merge_spec(
     common_validate_merge_merge_asof_spec(
         "merge", left, right, on, left_on, right_on, left_index, right_index, suffixes
     )
-
-    unsupported_args = dict(
-        sort=sort, copy=copy, indicator=indicator, validate=validate
-    )
-    merge_defaults = dict(sort=False, copy=True, indicator=False, validate=None)
-    check_unsupported_args("merge", unsupported_args, merge_defaults)
-
     # make sure how is constant and one of ("left", "right", "outer", "inner")
     ensure_constant_values("merge", "how", how, ("left", "right", "outer", "inner"))
 
@@ -2212,7 +2213,7 @@ def overload_dataframe_join(
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, other, on=None, how='left',\n"
     func_text += "    lsuffix='', rsuffix='', sort=False):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', '{}', '{}', True)\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', '{}', '{}', True, False)\n".format(
         left_keys, right_keys, how, lsuffix, rsuffix
     )
 
@@ -2252,7 +2253,13 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
 
 
 def validate_unicity_output_column_names(
-    suffix_x, suffix_y, left_keys, right_keys, left_columns, right_columns
+    suffix_x,
+    suffix_y,
+    left_keys,
+    right_keys,
+    left_columns,
+    right_columns,
+    indicator_val,
 ):
     """Raise a BodoError if the column in output of the join operation collide """
     comm_keys = set(left_keys) & set(right_keys)
@@ -2284,6 +2291,10 @@ def validate_unicity_output_column_names(
 
     for eVar in other_right:
         insertOutColumn(eVar)
+
+    # If indicator=True, it creates a column called _merge.
+    if indicator_val:
+        insertOutColumn("_merge")
 
 
 @overload(pd.merge_asof, inline="always", no_unliteral=True)
@@ -2383,7 +2394,7 @@ def overload_dataframe_merge_asof(
     func_text += "    allow_exact_matches=True, direction='backward'):\n"
     func_text += "  suffix_x = suffixes[0]\n"
     func_text += "  suffix_y = suffixes[1]\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof', '{}', '{}', False)\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof', '{}', '{}', False, False)\n".format(
         left_keys, right_keys, suffix_x, suffix_y
     )
 

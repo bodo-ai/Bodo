@@ -222,7 +222,7 @@ Data manipulations:
 
   * Arguments ``left``, ``right`` should be dataframes.
   * ``how``, ``on``, ``left_on``, ``right_on``, ``left_index``,
-    and ``right_index`` are supported but should be constant values.
+    ``right_index``, and ``indicator`` are supported but should be constant values.
   * The output dataframe is not sorted by default for better parallel performance (Pandas may preserve key order depending on `how`).
     One can use explicit sort if needed.
 
@@ -661,7 +661,7 @@ Combining / joining / merging:
 * :meth:`pandas.DataFrame.join` only dataframes. The output dataframe is not sorted by default for better parallel performance (Pandas may preserve key order depending on `how`).
   One can use explicit sort if needed.
 * :meth:`pandas.DataFrame.merge` only dataframes. `how`, `on`, `left_on`,
-  `right_on`, `left_index`, and `right_index` are supported but
+  `right_on`, `left_index`, `right_index`, and `indicator` are supported but
   should be constant values.
 
 

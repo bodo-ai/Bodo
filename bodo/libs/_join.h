@@ -45,6 +45,9 @@
  * @param is_join ;: whether the call is a join or not.
  * @param optional_col : When doing a merge on column and index, the key
  *    is put also in output, so we need one additional column in that case.
+ * @param indicator: When doing a merge, if indicator=True outputs an additional
+ *    Categorical column with name _merge that says if the data source is from
+ * left_only, right_only, or both.
  * @return the returned table used in the code.
  */
 table_info* hash_join_table(table_info* left_table, table_info* right_table,
@@ -52,5 +55,6 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                             int64_t n_key_t, int64_t n_data_left_t,
                             int64_t n_data_right_t, int64_t* vect_same_key,
                             int64_t* vect_need_typechange, bool is_left,
-                            bool is_right, bool is_join, bool optional_col);
+                            bool is_right, bool is_join, bool optional_col,
+                            bool indicator);
 #endif  // _JOIN_H_INCLUDED

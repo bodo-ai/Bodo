@@ -1246,6 +1246,84 @@ def test_merge_non_unique_index(df1, df2, memory_leak_check):
     check_func(impl, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
+# TODO: Add memory leak check when constant lowering memory leak is fixed
+def test_indicator_true():
+    """
+    test merge(): indicator=True
+    """
+
+    def impl1(df1, df2):
+        return df1.merge(df2, how="inner", on="join_keys", indicator=True)
+
+    def impl2(df1, df2):
+        return df1.merge(df2, how="left", on="join_keys", indicator=True)
+
+    def impl3(df1, df2):
+        return df1.merge(df2, how="right", on="join_keys", indicator=True)
+
+    def impl4(df1, df2):
+        return df1.merge(df2, how="outer", on="join_keys", indicator=True)
+
+    df1 = pd.DataFrame(
+        {
+            "join_keys": ["a", "b", "c", "d"] * 3,
+            "value_x": np.array([98, 45, 45, 63, 13, 53, 48, 13, 49, 19, 82, 88]),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "join_keys": ["b", "d", "e", "f"] * 3,
+            "value_y": np.array([49, 46, 28, 13, 86, 65, 71, 64, 14, 28, 41, 78]),
+        }
+    )
+    check_func(impl1, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl2, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl3, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl4, (df1, df2), sort_output=True, reset_index=True)
+
+
+# TODO: Add memory leak check when constant lowering memory leak is fixed
+def test_indicator_true_deadcol():
+    """
+    test merge(): indicator=True where the indicator column can be optimized out
+    as a dead column.
+    """
+
+    def test_impl(df1, df2):
+        merged_df = df1.merge(df2, how="outer", on="join_keys", indicator=True)
+        return merged_df["value_x"]
+
+    df1 = pd.DataFrame(
+        {
+            "join_keys": ["a", "b", "c", "d"] * 3,
+            "value_x": np.array([98, 45, 45, 63, 13, 53, 48, 13, 49, 19, 82, 88]),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "join_keys": ["b", "d", "e", "f"] * 3,
+            "value_y": np.array([49, 46, 28, 13, 86, 65, 71, 64, 14, 28, 41, 78]),
+        }
+    )
+    merge_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(
+        test_impl
+    )
+
+    merge_func(df1, df2)  # calling the function to get function IR
+    fir = merge_func.overloads[merge_func.signatures[0]].metadata["preserved_ir"]
+
+    for block in fir.blocks.values():
+        for statement in block.body:
+            if isinstance(statement, bodo.ir.join.Join):
+                output_vars = statement.out_data_vars
+                # Ensure that the output df has only two columns (join_keys and value_x)
+                assert (
+                    len(output_vars) == 2
+                    and "join_keys" in output_vars
+                    and "value_x" in output_vars
+                ), "Output columns don't match expectations after dead code elimination"
+
+
 def test_merge_all_nan_cols(memory_leak_check):
     """
     test merge(): all columns to merge on are null

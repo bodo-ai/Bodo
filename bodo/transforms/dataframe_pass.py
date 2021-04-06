@@ -1277,6 +1277,7 @@ class DataFramePass:
             suffix_x_var,
             suffix_y_var,
             is_join_var,
+            is_indicator_var,
         ) = rhs.args
 
         left_keys = self._get_const_or_list(left_on_var)
@@ -1285,6 +1286,7 @@ class DataFramePass:
         suffix_x = guard(find_const, self.func_ir, suffix_x_var)
         suffix_y = guard(find_const, self.func_ir, suffix_y_var)
         is_join = guard(find_const, self.func_ir, is_join_var)
+        is_indicator = guard(find_const, self.func_ir, is_indicator_var)
         out_typ = self.typemap[lhs.name]
         # convert right join to left join
         is_left = how in {"left", "outer"}
@@ -1360,6 +1362,7 @@ class DataFramePass:
                 is_join,
                 left_index,
                 right_index,
+                is_indicator,
             )
         )
 

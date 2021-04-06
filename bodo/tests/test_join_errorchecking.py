@@ -380,24 +380,13 @@ def test_merge_indicator_bool(memory_leak_check):
         return df1.merge(df2, indicator="break")
 
     with pytest.raises(
-        BodoError, match="indicator parameter only supports default value False"
-    ):
-        bodo.jit(impl)(df1, df2)
-
-
-# tests indicator has default False
-def test_merge_indicator(memory_leak_check):
-    def impl(df1, df2):
-        return df1.merge(df2, indicator=True)
-
-    with pytest.raises(
-        BodoError, match="indicator parameter only supports default value False"
+        BodoError, match="DataFrame.merge.*: indicator must be a constant boolean"
     ):
         bodo.jit(impl)(df1, df2)
 
 
 # tests validate has default None
-def test_merge_indicator_bool(memory_leak_check):
+def test_merge_validate_none(memory_leak_check):
     def impl(df1, df2):
         return df1.merge(df2, validate=["one_to_one"])
 

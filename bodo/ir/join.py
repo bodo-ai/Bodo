@@ -88,6 +88,7 @@ class Join(ir.Stmt):
         is_join,
         left_index,
         right_index,
+        indicator,
     ):
         self.df_out = df_out
         self.left_df = left_df
@@ -106,6 +107,7 @@ class Join(ir.Stmt):
         self.is_join = is_join
         self.left_index = left_index
         self.right_index = right_index
+        self.indicator = indicator
         # keep the origin of output columns to enable proper dead code elimination
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_keys) & set(right_keys)
@@ -260,6 +262,8 @@ def join_typeinfer(join_node, typeinferer):
     add_suffix = comm_data - comm_keys
     for out_col_name, out_col_var in join_node.out_data_vars.items():
         # left suffix
+        if self.indicator and out_col_name == "_merge":
+            continue
         if not out_col_name in join_node.column_origins:
             raise BodoError(
                 "join(): The variable " + out_col_name + " is absent from the output"
@@ -321,6 +325,13 @@ def remove_dead_join(
             continue
         # avoid index sentinel (that is not in column_origins)
         if col_name == "$_bodo_index_":
+            continue
+        # avoid indicator (that is not in column_origins)
+        if join_node.indicator and col_name == "_merge":
+            dead_cols.append("_merge")
+            # If _merge is removed, switch indicator to False so we don't expect
+            # to generate indicator code.
+            join_node.indicator = False
             continue
         orig, orig_name = join_node.column_origins[col_name]
         if orig == "left" and orig_name not in join_node.left_keys:
@@ -428,6 +439,8 @@ def join_distributed_run(
 
     left_columns = tuple(join_node.left_vars.keys())
     right_columns = tuple(join_node.right_vars.keys())
+    # Optional column refer: When doing a merge on column and index, the key
+    # is put also in output, so we need one additional column in that case.
     optional_col_var = ()
     optional_key_tuple = ()
     optional_column = False
@@ -565,6 +578,8 @@ def join_distributed_run(
         for (n, v) in sorted(join_node.right_vars.items(), key=lambda a: str(a[0]))
         if n not in join_node.right_keys
     )
+    if join_node.indicator:
+        merge_out += (_get_out_col_var("_merge", False),)
     out_names = ["t3_c" + str(i) for i in range(len(merge_out))]
 
     if join_node.how == "asof":
@@ -596,6 +611,7 @@ def join_distributed_run(
             glbs,
             [typemap[v.name] for v in merge_out],
             join_node.loc,
+            join_node.indicator,
         )
     if join_node.how == "asof":
         for i in range(len(left_other_names)):
@@ -624,6 +640,9 @@ def join_distributed_run(
     for i in range(len(right_other_names)):
         func_text += f"    {out_names[idx]} = right_{i}\n"
         idx += 1
+    if join_node.indicator:
+        func_text += f"    {out_names[idx]} = indicator_col\n"
+        idx += 1
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     join_impl = loc_vars["f"]
@@ -646,7 +665,6 @@ def join_distributed_run(
             "delete_table_decref_arrays": delete_table_decref_arrays,
         }
     )
-
     f_block = compile_to_numba_ir(
         join_impl, glbs, typingctx, arg_typs, typemap, calltypes
     ).blocks.popitem()[1]
@@ -655,7 +673,6 @@ def join_distributed_run(
     nodes = f_block.body[:-3]
     for i in range(len(merge_out)):
         nodes[-len(merge_out) + i].target = merge_out[i]
-
     return nodes
 
 
@@ -729,6 +746,7 @@ def _gen_local_hash_join(
     glbs,
     out_types,
     loc,
+    indicator,
 ):
     # In some case the column in output has a type different from the one in input.
     # TODO: Unify those type changes between all cases.
@@ -825,7 +843,7 @@ def _gen_local_hash_join(
     func_text += "    vect_need_typechange = np.array([{}])\n".format(
         ",".join("1" if x else "0" for x in vect_need_typechange)
     )
-    func_text += "    out_table = hash_join_table(table_left, table_right, {}, {}, {}, {}, {}, vect_same_key.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {})\n".format(
+    func_text += "    out_table = hash_join_table(table_left, table_right, {}, {}, {}, {}, {}, vect_same_key.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {}, {})\n".format(
         left_parallel,
         right_parallel,
         n_keys,
@@ -835,6 +853,7 @@ def _gen_local_hash_join(
         is_right,
         is_join,
         optional_column,
+        indicator,
     )
     func_text += "    delete_table(table_left)\n"
     func_text += "    delete_table(table_right)\n"
@@ -888,6 +907,10 @@ def _gen_local_hash_join(
                 i, idx, rec_typ[1]
             )
         )
+        idx += 1
+    if indicator:
+        func_text += f"    typ_{idx} = pd.Categorical(values=['both'], categories=('left_only', 'right_only', 'both'))\n"
+        func_text += f"    indicator_col = info_to_array(info_from_table(out_table, {idx}), typ_{idx})\n"
         idx += 1
 
     func_text += "    delete_table(out_table)\n"
