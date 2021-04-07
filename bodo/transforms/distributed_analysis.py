@@ -287,6 +287,19 @@ class DistributedAnalysis:
             array_dists, parfor_dists, self._concat_reduce_vars
         )
 
+    def _check_user_distributed_args(self, array_dists, name):
+        """check that no arguments in the originally compiled
+        function is specified as distributed but marked as REP"""
+        err_msg = "Variable '{}' has distributed flag in function '{}', but it's not possible to distribute it.\nDistributed diagnostics:\n{}"
+        if name in array_dists and is_REP(array_dists[name]):
+            raise BodoError(
+                err_msg.format(
+                    name,
+                    self.func_ir.func_id.func_name,
+                    "\n".join(self.diag_info),
+                )
+            )
+
     def _run_analysis(self, blocks, topo_order, array_dists, parfor_dists):
         """run a pass of distributed analysis (fixed-point iteration algorithm)"""
         save_array_dists = {}
@@ -1973,7 +1986,9 @@ class DistributedAnalysis:
             if is_REP(array_dists[arr_name]):
                 raise BodoError(
                     "distributed return of array {} not valid"
-                    " since it is replicated".format(arr_name)
+                    " since it is replicated.\nDistributed Diagnostics: {}".format(
+                        arr_name, "\n".join(self.diag_info)
+                    )
                 )
             array_dists[lhs] = array_dists[arr_name]
             return
@@ -2497,12 +2512,20 @@ class DistributedAnalysis:
         ):
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD)
+            # Check if a user specified argument is indicated distributed
+            # but transitions to REP. Fixed point iteration dictates that we will
+            # eventually fail this check if an argument is ever changed to REP.
+            self._check_user_distributed_args(array_dists, lhs)
         elif (
             rhs.name in self.metadata["distributed"]
             or self.flags.all_args_distributed_varlength
         ):
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+            # Check if a user specified argument is indicated distributed
+            # but transitions to REP. Fixed point iteration dictates that we will
+            # eventually fail this check if an argument is ever changed to REP.
+            self._check_user_distributed_args(array_dists, lhs)
         elif rhs.name in self.metadata["threaded"]:
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.Thread

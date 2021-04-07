@@ -929,13 +929,11 @@ def test_sgdr(penalty):
     y = np.array([1, 1, 1, 2, 2, 2])
     T = np.array([[-1, -1], [2, 2], [3, 2]])
     sklearn_predict_result = impl_predict(X, y, T)
-    bodo_predict_result = bodo.jit(distributed=["X_train", "y_train", "X_test"])(
-        impl_predict
-    )(X, y, T)
-    if bodo.get_rank() == 0:
-        np.testing.assert_array_almost_equal(
-            bodo_predict_result, sklearn_predict_result, decimal=2
-        )
+    # TODO [BE-528]: Refactor this code with a distributed implementation
+    bodo_predict_result = bodo.jit()(impl_predict)(X, y, T)
+    np.testing.assert_array_almost_equal(
+        bodo_predict_result, sklearn_predict_result, decimal=2
+    )
 
     # name is used for distinguishing function printing time.
     def impl(X_train, y_train, X_test, y_test, name="BODO"):
@@ -1389,7 +1387,7 @@ def test_linear_regression():
         distributed=["X_train", "y_train", "X_test", "y_test"]
     )(impl)(X_train, y_train, X_test, y_test)
     bodo_predict_result = bodo.jit(
-        distributed=["X_train", "y_train", "X_test", "y_test"]
+        distributed=["X_train", "y_train", "X_test", "y_test", "y_pred"]
     )(impl_pred)(X_train, y_train, X_test, y_test)
     # Can't compare y_pred of bodo vs sklearn
     # So, we need to use a score metrics. However, current supported scores are
@@ -1481,7 +1479,7 @@ def test_lasso():
         distributed=["X_train", "y_train", "X_test", "y_test"]
     )(impl)(X_train, y_train, X_test, y_test)
     bodo_predict_result = bodo.jit(
-        distributed=["X_train", "y_train", "X_test", "y_test"]
+        distributed=["X_train", "y_train", "X_test", "y_test", "y_pred"]
     )(impl_pred)(X_train, y_train, X_test, y_test)
     # Can't compare y_pred of bodo vs sklearn
     # So, we need to use a score metrics. However, current supported scores are
@@ -1549,7 +1547,7 @@ def test_ridge_regression():
         distributed=["X_train", "y_train", "X_test", "y_test"]
     )(impl)(X_train, y_train, X_test, y_test)
     bodo_predict_result = bodo.jit(
-        distributed=["X_train", "y_train", "X_test", "y_test"]
+        distributed=["X_train", "y_train", "X_test", "y_test", "y_pred"]
     )(impl_pred)(X_train, y_train, X_test, y_test)
     # Can't compare y_pred of bodo vs sklearn
     # So, we need to use a score metrics. However, current supported scores are
@@ -1899,7 +1897,9 @@ def test_naive_mnnb_csr():
     X2 = rng.randint(5, size=(6, 100))
     y2 = np.array([1, 1, 2, 2, 3, 3])
     X = scipy.sparse.csr_matrix(X2)
-    y_pred = bodo.jit(distributed=["X"])(test_mnnb)(_get_dist_arg(X), _get_dist_arg(y2))
+    y_pred = bodo.jit(distributed=["X", "y2", "y_pred"])(test_mnnb)(
+        _get_dist_arg(X), _get_dist_arg(y2)
+    )
     y_pred = bodo.allgatherv(y_pred)
     assert_array_equal(y_pred, y2)
 

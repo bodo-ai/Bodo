@@ -1219,7 +1219,7 @@ def test_df_filter_branch(memory_leak_check):
         return df2
 
     df = pd.DataFrame({"A": [1, 11, 2, 0, 3]})
-    check_func(test_impl, (df, True), False)
+    check_func(test_impl, (df, True))
 
 
 def test_empty_object_array_warning(memory_leak_check):
@@ -1260,6 +1260,40 @@ def test_dist_flags(memory_leak_check):
     result_python = impl(A)
     if bodo.get_rank() == 0:
         _test_equal(result_bodo, result_python)
+
+
+def test_user_distributed_rep(memory_leak_check):
+    """Ensures that if user species an argument as distributed
+    but it must be replicated then it throws an error.
+    See [BE-508]
+    """
+
+    def impl(arr):
+        return list(arr)
+
+    arr = np.arange(50)
+    arr_chunk = _get_dist_arg(arr, False)
+    err_msg = "Variable 'arr' has distributed flag in function 'impl', but it's not possible to distribute it."
+    with pytest.raises(
+        BodoError,
+        match=err_msg,
+    ):
+        bodo.jit(impl, distributed=["arr"])(arr_chunk)
+    with pytest.raises(
+        BodoError,
+        match=err_msg,
+    ):
+        bodo.jit(impl, distributed_block=["arr"])(arr_chunk)
+    with pytest.raises(
+        BodoError,
+        match=err_msg,
+    ):
+        bodo.jit(impl, all_args_distributed_varlength=True)(arr_chunk)
+    with pytest.raises(
+        BodoError,
+        match=err_msg,
+    ):
+        bodo.jit(impl, all_args_distributed_block=True)(arr_chunk)
 
 
 @pytest.mark.slow
