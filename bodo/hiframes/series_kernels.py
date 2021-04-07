@@ -17,7 +17,7 @@ from bodo.libs.int_arr_ext import IntDtype
 # TODO: series index and name
 # float columns can have regular np.nan
 def _column_filter_impl(B, ind):  # pragma: no cover
-    A = bodo.hiframes.rolling.alloc_shift(len(B), B)
+    A = bodo.hiframes.rolling.alloc_shift(len(B), B, (-1,))
     for i in numba.parfors.parfor.internal_prange(len(A)):
         if ind[i]:
             A[i] = B[i]
