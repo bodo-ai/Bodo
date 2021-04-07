@@ -1576,6 +1576,8 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
 
             return impl_datetime_timedelta
 
+    raise_bodo_error(f"pd.to_timedelta(): cannot convert date type {arg_a.dtype}")
+
 
 @register_jitable
 def float_to_timedelta_val(data, precision, multiplier):  # pragma: no cover

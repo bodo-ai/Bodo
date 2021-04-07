@@ -2487,6 +2487,29 @@ def crosstab_overload(
     normalize=False,
     _pivot_values=None,
 ):
+
+    unsupported_args = dict(
+        values=values,
+        rownames=rownames,
+        colnames=colnames,
+        aggfunc=aggfunc,
+        margins=margins,
+        margins_name=margins_name,
+        dropna=dropna,
+        normalize=normalize,
+    )
+    arg_defaults = dict(
+        values=None,
+        rownames=None,
+        colnames=None,
+        aggfunc=None,
+        margins=False,
+        margins_name="All",
+        dropna=True,
+        normalize=False,
+    )
+    check_unsupported_args("pd.crosstab", unsupported_args, arg_defaults)
+
     # TODO: handle multiple keys (index args).
     # TODO: handle values and aggfunc options
     def _impl(

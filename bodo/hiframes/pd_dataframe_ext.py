@@ -1376,9 +1376,31 @@ def concat_overload(
 ):
     # TODO: handle options
     # TODO: support Index
-    # TODO(ehsan): proper error checking
     axis = get_overload_const_int(axis)
     ignore_index = is_overload_true(ignore_index)
+
+    unsupported_args = dict(
+        join=join,
+        join_axes=join_axes,
+        keys=keys,
+        levels=levels,
+        names=names,
+        verify_integrity=verify_integrity,
+        sort=sort,
+        copy=copy,
+    )
+
+    arg_defaults = dict(
+        join="outer",
+        join_axes=None,
+        keys=None,
+        levels=None,
+        names=None,
+        verify_integrity=False,
+        sort=None,
+        copy=True,
+    )
+    check_unsupported_args("pd.concat", unsupported_args, arg_defaults)
 
     func_text = (
         "def impl(objs, axis=0, join='outer', join_axes=None, "
