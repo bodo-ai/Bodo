@@ -713,12 +713,23 @@ class TypingTransforms:
         val = inst.value
         val_type = self.typemap.get(val.name, None)
         column_values = [val] * len(col_inds)
+
+        # setting multiple columns using a dataframe
         if isinstance(val_type, DataFrameType):
             # get dataframe data arrays to set
             for i in range(len(col_inds)):
                 func = eval(
                     "lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, _i)"
                 )
+                nodes += compile_func_single_block(
+                    func, [val], None, extra_globals={"_i": i}
+                )
+                column_values[i] = nodes[-1].target
+        # setting multiple columns using a 2D array
+        elif isinstance(val_type, types.Array) and val_type.ndim == 2:
+            # get data columns from 2D array
+            for i in range(len(col_inds)):
+                func = eval("lambda A: np.ascontiguousarray(A[:,_i])")
                 nodes += compile_func_single_block(
                     func, [val], None, extra_globals={"_i": i}
                 )
