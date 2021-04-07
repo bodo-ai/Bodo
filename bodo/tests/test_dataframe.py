@@ -71,11 +71,11 @@ from bodo.utils.utils import is_call_assign
         ),
         pd.DataFrame(
             {
-                "A": pd.array([1, 8, 4, 10, 3], dtype="Int32"),
-                2: [1.1, np.nan, 4.2, 3.1, -1.3],
-                "C": [True, False, False, np.nan, True],
+                "A": pd.array([1, 8, 4, 10, 3] * 2, dtype="Int32"),
+                2: [1.1, np.nan, 4.2, 3.1, -1.3] * 2,
+                "C": [True, False, False, np.nan, True] * 2,
             },
-            ["A", "BA", "", "DD", "C"],
+            ["A", "BA", "", "DD", "C", "e2", "#4", "32", "ec", "#43"],
         ),
         # uint8, float32 dtypes
         pytest.param(
@@ -3756,15 +3756,14 @@ def test_iloc_slice(memory_leak_check):
 def test_iloc_getitem_row(memory_leak_check):
     """test getitem of a single row with iloc"""
 
-    def test_impl(df):
+    def test_impl1(df):
         return df.iloc[1]
 
     def test_impl2(df):
         return df.iloc[1, [1, 2]]
 
     df1 = pd.DataFrame({"A": [1, 4, 6, 11, 4], "B": ["AB", "DD", "E", "A", "GG"]})
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(df1), test_impl(df1), check_names=False)
+    check_func(test_impl1, (df1,), check_names=False, is_out_distributed=False)
     df2 = pd.DataFrame(
         {
             "A": [1, 4, 6, 11, 4],
@@ -3772,8 +3771,167 @@ def test_iloc_getitem_row(memory_leak_check):
             "C": [1.2, 3.1, 4.4, -1.2, 3.2],
         }
     )
-    bodo_func = bodo.jit(test_impl2)
-    pd.testing.assert_series_equal(bodo_func(df2), test_impl2(df2), check_names=False)
+    check_func(test_impl2, (df2,), check_names=False, is_out_distributed=False)
+
+
+@pytest.mark.slow
+def test_iloc_getitem_row_alltypes(df_value, memory_leak_check):
+    """test getitem of a single row with iloc"""
+
+    def test_impl1(df):
+        return df.iloc[1]
+
+    def test_impl2(df):
+        return df.iloc[1, [0, 1]]
+
+    def test_impl3(df):
+        # For dataframes with only 1 column
+        return df.iloc[1, [0]]
+
+    # getitem cannot match pandas when returning a NA value (need to check with pd.isna)
+    # Remove any values to avoid issues.
+    df = df_value.dropna()
+    # Bodo converts float32 -> float64 as a common dtype, so avoid checking dtype.
+
+    check_func(
+        test_impl1,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        is_out_distributed=False,
+    )
+    if len(df.columns == 1):
+        check_func(
+            test_impl3,
+            (df,),
+            check_names=False,
+            check_dtype=False,
+            is_out_distributed=False,
+        )
+    else:
+        check_func(
+            test_impl2,
+            (df,),
+            check_names=False,
+            check_dtype=False,
+            is_out_distributed=False,
+        )
+
+
+@pytest.mark.slow
+def test_iloc_getitem_value_alltypes(df_value, memory_leak_check):
+    """test getitem of a single value with iloc. The value will be returned
+    as a Series."""
+
+    def test_impl(df):
+        return df.iloc[1, 0]
+
+    # getitem cannot match pandas when returning a NA value (need to check with pd.isna)
+    # Remove any values to avoid issues.
+    df = df_value.dropna()
+    check_func(
+        test_impl,
+        (df,),
+        check_names=False,
+        is_out_distributed=False,
+    )
+
+
+@pytest.mark.slow
+def test_iloc_getitem_rows_list_alltypes(df_value, memory_leak_check):
+    """test getitem of a list or rows with iloc."""
+
+    def test_impl1(df, rows):
+        return df.iloc[rows, [0, 1]]
+
+    def test_impl2(df, rows):
+        # For dataframes with only 1 column
+        return df.iloc[rows, [0]]
+
+    def test_impl3(df, rows):
+        # For dataframes with only 1 column
+        return df.iloc[rows, 0]
+
+    np.random.seed(0)
+    bool_idx = np.random.ranf(len(df_value)) < 0.5
+    row_options = [
+        # List of ints
+        [0, 1, 2, 4],
+        # Array of ints
+        np.array([0, 1, 2, 4]),
+        # List of booleans
+        list(bool_idx),
+        # Array of booleans
+        bool_idx,
+        # slice
+        slice(1, 6),
+    ]
+    for rows in row_options:
+        if len(df_value.columns) > 1:
+            check_func(
+                test_impl1,
+                (df_value, rows),
+                check_names=False,
+                dist_test=False,
+            )
+        else:
+            check_func(
+                test_impl2,
+                (df_value, rows),
+                check_names=False,
+                dist_test=False,
+            )
+        check_func(
+            test_impl3,
+            (df_value, rows),
+            check_names=False,
+            dist_test=False,
+        )
+
+
+@pytest.mark.slow
+def test_iloc_getitem_slice_col_alltypes(df_value, memory_leak_check):
+    """test getitem of a list or rows with iloc."""
+
+    def test_impl1(df, rows):
+        return df.iloc[rows, 0:2]
+
+    # TODO [BE-472]: Handle selecting 0 columns
+    # def test_impl2(df, rows):
+    #     return df.iloc[rows, 1:3]
+
+    np.random.seed(0)
+    bool_idx = np.random.ranf(len(df_value)) < 0.5
+    row_options = [
+        2,
+        # List of ints
+        [0, 1, 2, 4],
+        # Array of ints
+        np.array([0, 1, 2, 4]),
+        # List of booleans
+        list(bool_idx),
+        # Array of booleans
+        bool_idx,
+        # slice
+        slice(1, 6),
+    ]
+    for rows in row_options:
+        # Bodo converts float32 -> float64 as a common dtype, so avoid checking dtype.
+        check_func(
+            test_impl1,
+            (df_value, rows),
+            check_names=False,
+            check_dtype=False,
+            dist_test=False,
+        )
+        # TODO [BE-472]: Handle selecting 0 columns
+        # check_func(
+        #     test_impl2,
+        #     (df_value, rows),
+        #     check_names=False,
+        #     check_dtype=False,
+        #     dist_test=False,
+        # )
 
 
 def test_iloc_slice_col_ind(memory_leak_check):

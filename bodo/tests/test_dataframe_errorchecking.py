@@ -1,3 +1,5 @@
+import string
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -578,7 +580,7 @@ def test_df_apply_all_args(memory_leak_check):
         bodo.jit(test_np_func)(df)
 
 
-# TODO: Mark as slow when CI passes
+@pytest.mark.slow
 def test_dataframe_idxmax_unordered_cat(memory_leak_check):
     """Test that DataFrame.idxmax throws an appropriate error with an unordered
     Categorical Column"""
@@ -593,7 +595,7 @@ def test_dataframe_idxmax_unordered_cat(memory_leak_check):
         bodo.jit(impl)(df)
 
 
-# TODO: Mark as slow when CI passes
+@pytest.mark.slow
 def test_dataframe_idxmin_unordered_cat(memory_leak_check):
     """Test that DataFrame.idxmin throws an appropriate error with an unordered
     Categorical Column"""
@@ -606,3 +608,76 @@ def test_dataframe_idxmin_unordered_cat(memory_leak_check):
     match = "DataFrame.idxmin.*: categorical columns must be ordered"
     with pytest.raises(BodoError, match=match):
         bodo.jit(impl)(df)
+
+
+@pytest.mark.slow
+def test_dataframe_iloc_getrow_invalid_col(memory_leak_check):
+    """Test that DataFrame.iloc throws an appropriate error when a col index
+    is out of bounds.
+    """
+
+    def impl1(df):
+        return df.iloc[1, -1]
+
+    def impl2(df):
+        return df.iloc[1, 1]
+
+    def impl3(df):
+        return df.iloc[1, [0, 1]]
+
+    def impl4(df):
+        return df.iloc[1, [-1, 0]]
+
+    def impl5(df):
+        return df.iloc[1, [-1.0, 0]]
+
+    def impl6(df, value):
+        return df.iloc[1, value[0]]
+
+    def impl7(df):
+        values = list(pd.Series(np.array([0, 1, 2, 1, 2])).unique())
+        return df.iloc[1, values]
+
+    df = pd.DataFrame({"A": pd.Categorical([1, 2, 5, None, 2], ordered=False)})
+
+    match = r"df.iloc: column integer must refer to a valid column number"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(impl1)(df)
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(impl2)(df)
+    match = r"df.iloc: column list must be integers referring to a valid column number"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(impl3)(df)
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(impl4)(df)
+    match = r"idx2 in df.iloc\[idx1, idx2\] should be a constant integer or constant list of integers"
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(impl5)(df)
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(impl6)(df, [1, 2])
+    with pytest.raises(BodoError, match=match):
+        bodo.jit(impl7)(df)
+
+
+@pytest.mark.slow
+def test_dataframe_iloc_bad_index(memory_leak_check):
+    def impl1(df):
+        return df.iloc["a", 0]
+
+    def impl2(df):
+        return df.iloc["a", 0:4]
+
+    df = pd.DataFrame(
+        {"A": np.random.randn(10)}, index=list(string.ascii_lowercase)[:10]
+    )
+    error_msg = "df.iloc\[\] getitem using .* not supported"
+    with pytest.raises(
+        BodoError,
+        match=error_msg,
+    ):
+        bodo.jit(impl1)(df)
+    with pytest.raises(
+        BodoError,
+        match=error_msg,
+    ):
+        bodo.jit(impl2)(df)

@@ -2017,12 +2017,12 @@ def bcast_scalar_overload(val):
     val = types.unliteral(val)
     # NOTE: scatterv() can call this with string on rank 0 and None on others, or an
     # Optional type
-    assert (
-        isinstance(val, (types.Integer, types.Float))
-        or val == types.NPDatetime("ns")
-        or val == bodo.string_type
-        or val == types.none
-    )
+    assert isinstance(val, (types.Integer, types.Float)) or val in [
+        types.NPDatetime("ns"),
+        bodo.string_type,
+        types.none,
+        types.bool_,
+    ]
 
     if val == types.none:
         return lambda val: None
@@ -2285,6 +2285,9 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
             tag = np.int32(11)
             send_size = np.zeros(1, np.int64)
             send_val = ""
+            # We send the value to the root first and then have the root broadcast
+            # the value because we don't know which rank holds the data in the 1DVar
+            # case.
             if arr_start <= ind < (arr_start + len(arr)):
                 ind = ind - arr_start
                 start_offset = bodo.libs.str_arr_ext.getitem_str_offset(arr, ind)
@@ -2314,6 +2317,50 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return str_getitem_impl
 
+    if isinstance(arr, bodo.CategoricalArrayType):
+        elem_width = bodo.hiframes.pd_categorical_ext.get_categories_int_type(arr.dtype)
+
+        def cat_getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
+            # Support Categorical getitem by sending the code and then doing the
+            # getitem from the categories.
+
+            if ind >= total_len:
+                raise IndexError("index out of bounds")
+
+            # normalize negative slice
+            ind = ind % total_len
+            # TODO: avoid sending to root in case of 1D since position can be
+            # calculated
+
+            # send code data to rank 0 and broadcast
+            root = np.int32(0)
+            tag = np.int32(11)
+            send_arr = np.zeros(1, elem_width)
+            # We send the value to the root first and then have the root broadcast
+            # the value because we don't know which rank holds the data in the 1DVar
+            # case.
+            if arr_start <= ind < (arr_start + len(arr)):
+                codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(arr)
+                data = codes[ind - arr_start]
+                send_arr = np.full(1, data, elem_width)
+                isend(send_arr, np.int32(1), root, tag, True)
+
+            rank = bodo.libs.distributed_api.get_rank()
+            # Set initial value to null.
+            val = elem_width(-1)
+            if rank == root:
+                val = recv(elem_width, ANY_SOURCE, tag)
+
+            dummy_use(send_arr)
+            val = bcast_scalar(val)
+            # Convert the code to the actual value to match getiem semantics
+            output_val = arr.dtype.categories[max(val, 0)]
+            return output_val
+
+        return cat_getitem_impl
+
+    np_dtype = arr.dtype
+
     def getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
         # TODO: multi-dim array support
 
@@ -2328,16 +2375,16 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
         # send data to rank 0 and broadcast
         root = np.int32(0)
         tag = np.int32(11)
-        send_arr = np.zeros(1, arr.dtype)
+        send_arr = np.zeros(1, np_dtype)
         if arr_start <= ind < (arr_start + len(arr)):
             data = arr[ind - arr_start]
             send_arr = np.full(1, data)
             isend(send_arr, np.int32(1), root, tag, True)
 
         rank = bodo.libs.distributed_api.get_rank()
-        val = np.zeros(1, arr.dtype)[0]  # TODO: better way to get zero of type
+        val = np.zeros(1, np_dtype)[0]  # TODO: better way to get zero of type
         if rank == root:
-            val = recv(arr.dtype, ANY_SOURCE, tag)
+            val = recv(np_dtype, ANY_SOURCE, tag)
 
         dummy_use(send_arr)
         val = bcast_scalar(val)

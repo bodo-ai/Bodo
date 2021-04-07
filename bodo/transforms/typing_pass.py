@@ -476,18 +476,29 @@ class TypingTransforms:
                 return nodes
 
             # create output df
-            columns = target_typ.df_type.columns
+            columns = target_typ.df_type.columns[col_slice]
             # get df arrays using const slice
-            data_outs = []
-            for i in range(len(columns))[col_slice]:
-                arr = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[idx]"
-                data_outs.append(arr)
-            index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx]"
-            header = "def impl(I, idx):\n"
-            header += "  df = I._obj\n"
-            impl = bodo.hiframes.dataframe_impl._gen_init_df(
-                header, columns[col_slice], ", ".join(data_outs), index
-            )
+            # data_outs = []
+            # Generate the results by reusing the indexing helper functions
+            if isinstance(idx_typ.types[0], types.Integer):
+                impl = bodo.hiframes.dataframe_indexing._gen_iloc_getitem_row_impl(
+                    target_typ.df_type, columns, "idx"
+                )
+            elif (
+                is_list_like_index_type(idx_typ.types[0])
+                and isinstance(idx_typ.types[0].dtype, (types.Integer, types.Boolean))
+                or isinstance(idx_typ.types[0], types.SliceType)
+            ):
+                impl = (
+                    bodo.hiframes.dataframe_indexing._gen_iloc_getitem_bool_slice_impl(
+                        target_typ.df_type, columns, idx_typ.types[0], "idx", False
+                    )
+                )
+            else:
+                bodo.utils.typing.raise_bodo_error(
+                    f"df.iloc[] getitem using {idx_typ} not supported"
+                )  # pragma: no cover
+
             self.changed = True
             return nodes + compile_func_single_block(
                 impl, [target, tup_list[0]], assign.target, self

@@ -202,19 +202,38 @@ def overload_iloc_getitem(I, idx):
     if (
         isinstance(idx, types.BaseTuple)
         and len(idx) == 2
-        and (
+        and not isinstance(idx[1], types.SliceType)
+    ):
+        if not (
             is_overload_constant_list(idx.types[1])
             or is_overload_constant_int(idx.types[1])
-        )
-    ):
+        ):
+            raise_bodo_error(
+                "idx2 in df.iloc[idx1, idx2] should be a constant integer or constant list of integers"
+            )
+
+        num_cols = len(df.data)
         if is_overload_constant_int(idx.types[1]):
             is_out_series = True
-            col_inds = [get_overload_const_int(idx.types[1])]
+            col_ind = get_overload_const_int(idx.types[1])
+            # Test out of bounds indices
+            if col_ind < 0 or col_ind >= num_cols:
+                raise BodoError(
+                    "df.iloc: column integer must refer to a valid column number"
+                )
+            col_inds = [col_ind]
         else:
             is_out_series = False
             col_inds = get_overload_const_list(idx.types[1])
+            # Test invalid list type, and out of bounds indices
+            if any(
+                not isinstance(ind, int) or ind < 0 or ind >= num_cols
+                for ind in col_inds
+            ):
+                raise BodoError(
+                    "df.iloc: column list must be integers referring to a valid column number"
+                )
 
-        # TODO: check invalid column indices
         # NOTE: using pd.Series instead of np.array to avoid automatic value conversion
         # see: test_groupby_dead_col_multifunc
         col_names = tuple(pd.Series(df.columns, dtype=object)[col_inds])
@@ -225,9 +244,11 @@ def overload_iloc_getitem(I, idx):
 
                 def impl(I, idx):
                     df = I._obj
-                    return bodo.hiframes.pd_dataframe_ext.get_dataframe_data(
-                        df, col_ind
-                    )[idx[0]]
+                    return bodo.utils.conversion.box_if_dt64(
+                        bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)[
+                            idx[0]
+                        ]
+                    )
 
                 return impl
 
