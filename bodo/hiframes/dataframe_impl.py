@@ -61,6 +61,7 @@ from bodo.utils.typing import (
     get_overload_const_str,
     get_overload_const_tuple,
     get_overload_constant_dict,
+    get_nullable_and_non_nullable_types,
     is_common_scalar_dtype,
     is_literal_type,
     is_overload_bool,
@@ -384,6 +385,8 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
             raise_bodo_error(
                 "DataFrame.select_dtypes() only supports constant strings or types as arguments"
             )
+
+        include_types = get_nullable_and_non_nullable_types(include_types)
         # Filter columns to those with a matching datatype
         # TODO(Nick): Add more general support for type rules:
         # ex. np.number for all numeric types, np.object for all obj types,
@@ -407,6 +410,7 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
             raise_bodo_error(
                 "DataFrame.select_dtypes() only supports constant strings or types as arguments"
             )
+        exclude_types = get_nullable_and_non_nullable_types(exclude_types)
         # Filter columns to those without a matching datatype
         # TODO(Nick): Add more general support for type rules:
         # ex. np.number for all numeric types, np.object for all obj types,

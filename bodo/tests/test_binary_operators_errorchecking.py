@@ -5,12 +5,15 @@ import datetime
 import bodo
 from bodo.utils.typing import BodoError
 
+
 def test_add_timestamp_unsupported(memory_leak_check):
     """
     Test adding timestamp to datetime_date_type and verify bodo error raised.
     """
+
     def impl(a, b):
         return a + b
+
     ts = pd.Timestamp(
         year=2018,
         month=4,
@@ -30,6 +33,7 @@ def test_sub_timedelta_unsupported(memory_leak_check):
     """
     Test subtracting timedelta and datetime.date and verify bodo error raised.
     """
+
     def impl(a, b):
         return a - b
 

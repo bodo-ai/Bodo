@@ -1151,6 +1151,31 @@ def is_immutable_array(typ):
     )
 
 
+def get_nullable_and_non_nullable_types(array_of_types):
+    """For each (non-)nullable type in the input list, add the corresponding (non)-nullable
+    types to the list and return it. This makes checks for types more robust,
+    specifically in pd.DataFrame.select_dtypes func."""
+
+    all_types = []
+    for typ in array_of_types:
+        if typ == bodo.libs.bool_arr_ext.boolean_array:
+            all_types.append(types.Array(types.bool_, 1, "C"))
+
+        elif isinstance(typ, bodo.libs.int_arr_ext.IntegerArrayType):
+            all_types.append(types.Array(typ.dtype, 1, "C"))
+
+        elif isinstance(typ, types.Array):
+            if typ.dtype == types.bool_:
+                all_types.append(bodo.libs.bool_arr_ext.boolean_array)
+
+            if isinstance(typ.dtype, types.Integer):
+                all_types.append(bodo.libs.int_arr_ext.IntegerArrayType(typ.dtype))
+
+        all_types.append(typ)
+
+    return all_types
+
+
 def _gen_objmode_overload(func, output_type, method_name=None):
     """code gen for gen_objmode_func_overload and gen_objmode_method_overload"""
     func_spec = getfullargspec(func)
