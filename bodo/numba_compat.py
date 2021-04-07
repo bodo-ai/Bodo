@@ -2818,19 +2818,27 @@ numba.core.typing.context.BaseContext._get_global_type = _get_global_type
 # TODO(ehsan): remove when Numba's #6608 is merged
 def op_FORMAT_VALUE_byteflow(self, state, inst):
     """
-    FORMAT_VALUE(flags): flags argument specifies format spec which is not supported
-    yet. Currently, we just call str() on the value.
+    FORMAT_VALUE(flags): flags argument specifies conversion (not supported yet) and
+    format spec.
     Pops a value from stack and pushes results back.
     Required for supporting f-strings.
     https://docs.python.org/3/library/dis.html#opcode-FORMAT_VALUE
     """
-    if inst.arg != 0:
-        msg = "format spec in f-strings not supported yet"
+    # check for conversion flags
+    flags = inst.arg
+    if (flags & 0x03) != 0x00:
+        msg = "str/repr/ascii conversion in f-strings not supported yet"
         raise errors.UnsupportedError(msg, loc=self.get_debug_loc(inst.lineno))
+
+    # if format specified
+    format_spec = None
+    if (flags & 0x04) == 0x04:
+        format_spec = state.pop()
+
     value = state.pop()
-    strvar = state.make_temp()
+    fmtvar = state.make_temp()
     res = state.make_temp()
-    state.append(inst, value=value, res=res, strvar=strvar)
+    state.append(inst, value=value, res=res, fmtvar=fmtvar, format_spec=format_spec)
     state.push(res)
 
 
@@ -2853,16 +2861,17 @@ numba.core.byteflow.TraceRunner.op_FORMAT_VALUE = op_FORMAT_VALUE_byteflow
 numba.core.byteflow.TraceRunner.op_BUILD_STRING = op_BUILD_STRING_byteflow
 
 
-def op_FORMAT_VALUE_interpreter(self, inst, value, res, strvar):
+def op_FORMAT_VALUE_interpreter(self, inst, value, res, fmtvar, format_spec):
     """
-    FORMAT_VALUE(flags): flags argument specifies format spec which is not supported
-    yet. Currently, we just call str() on the value.
+    FORMAT_VALUE(flags): flags argument specifies conversion (not supported yet) and
+    format spec.
     https://docs.python.org/3/library/dis.html#opcode-FORMAT_VALUE
     """
     value = self.get(value)
-    strgv = ir.Global("str", str, loc=self.loc)
-    self.store(value=strgv, name=strvar)
-    call = ir.Expr.call(self.get(strvar), (value,), (), loc=self.loc)
+    fmtgv = ir.Global("format", format, loc=self.loc)
+    self.store(value=fmtgv, name=fmtvar)
+    args = (value, self.get(format_spec)) if format_spec else (value,)
+    call = ir.Expr.call(self.get(fmtvar), args, (), loc=self.loc)
     self.store(value=call, name=res)
 
 
