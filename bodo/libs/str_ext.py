@@ -28,7 +28,12 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.libs import hstr_ext
-from bodo.utils.typing import get_overload_const_int, is_overload_constant_int
+from bodo.utils.typing import (
+    get_overload_const_int,
+    get_overload_const_str,
+    is_overload_constant_int,
+    is_overload_constant_str,
+)
 
 
 # from bodo.utils.utils import unliteral_all
@@ -504,6 +509,32 @@ def float_str_overload(v):
             return s
 
         return impl
+
+
+@overload(format, no_unliteral=True)
+def overload_format(value, format_spec=""):
+    """overload python's 'format' builtin function (using objmode if necessary)"""
+
+    # fast path for common cases with no format specified, same as CPython
+    # https://github.com/python/cpython/blob/e35dd556e1adb4fc8b83e5b75ac59e428a8b5460/Objects/abstract.c#L703
+    # https://github.com/python/cpython/blob/e35dd556e1adb4fc8b83e5b75ac59e428a8b5460/Python/formatter_unicode.c#L1527
+    if (
+        is_overload_constant_str(format_spec)
+        and get_overload_const_str(format_spec) == ""
+    ):
+
+        def impl_fast(value, format_spec=""):  # pragma: no cover
+            return str(value)
+
+        return impl_fast
+
+    # use Python's format() in objmode
+    def impl(value, format_spec=""):  # pragma: no cover
+        with numba.objmode(res="string"):
+            res = format(value, format_spec)
+        return res
+
+    return impl
 
 
 @lower_cast(StdStringType, types.float64)

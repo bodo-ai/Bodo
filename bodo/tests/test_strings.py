@@ -123,8 +123,13 @@ def test_f_strings():
     def impl2(a):
         return f"{a+2}"
 
+    # includes format spec
+    def impl3(a):
+        return f"{a:0.0%}"
+
     check_func(impl1, (3,))
     check_func(impl2, (4,))
+    check_func(impl3, (12,))
 
 
 def test_format_cache(memory_leak_check):
