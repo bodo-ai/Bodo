@@ -10,6 +10,8 @@ export PATH=$HOME/miniconda3/bin:$PATH
 source activate $CONDA_ENV
 
 
+# We lock fsspec at version 0.8 because in 0.9 it
+# caused us import errors with s3fs for nightly
 conda install -y -c conda-forge boto3 botocore fsspec=0.8
 conda install -y -c conda-forge pymysql sqlalchemy
 conda install -y -c conda-forge scikit-learn gcsfs
