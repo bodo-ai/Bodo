@@ -229,7 +229,8 @@ get_c_str = types.ExternalFunction("get_c_str", types.voidptr(std_str_type))
 dummy_use = numba.njit(lambda a: None)
 
 
-@overload(int, no_unliteral=True)
+# not using no_unliteral=True to be able to handle string literal
+@overload(int)
 def int_str_overload(in_str, base=10):
     if in_str == string_type:
 
@@ -416,7 +417,7 @@ def random_access_str_arr_getitem(A, ind):
     if A != random_access_string_array:
         return
 
-    if isinstance(types.unliteral(ind), types.Integer):
+    if isinstance(ind, types.Integer):
         return lambda A, ind: A._data[ind]
 
 
@@ -425,7 +426,7 @@ def random_access_str_arr_setitem(A, idx, val):
     if A != random_access_string_array:
         return
 
-    if isinstance(types.unliteral(idx), types.Integer):
+    if isinstance(idx, types.Integer):
         assert val == string_type
 
         def impl_scalar(A, idx, val):  # pragma: no cover
