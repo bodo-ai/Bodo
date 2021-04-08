@@ -1,5 +1,5 @@
 # Copyright (C) 2021 Bodo Inc. All rights reserved.
-""" Implementation of binary operators for the different types. 
+""" Implementation of binary operators for the different types.
     Currently implemented operators:
         arith: add, sub, mul, truediv, floordiv, mod, pow
         cmp: lt, le, eq, ne, ge, gt
@@ -30,6 +30,7 @@ from bodo.hiframes.pd_index_ext import (
 )
 from bodo.hiframes.pd_offsets_ext import (
     date_offset_type,
+    month_begin_type,
     month_end_type,
     week_type,
 )
@@ -54,6 +55,12 @@ def overload_add_operator(lhs, rhs):
     if lhs == week_type or rhs == week_type:
         return bodo.hiframes.pd_offsets_ext.overload_add_operator_week_offset_type(
             lhs, rhs
+        )
+    if lhs == month_begin_type or rhs == month_begin_type:
+        return (
+            bodo.hiframes.pd_offsets_ext.overload_add_operator_month_begin_offset_type(
+                lhs, rhs
+            )
         )
     if lhs == month_end_type or rhs == month_end_type:
         return bodo.hiframes.pd_offsets_ext.overload_add_operator_month_end_offset_type(
@@ -377,7 +384,7 @@ def sub_offset_to_datetime_or_timestamp(lhs, rhs):
     """ Helper function to check types supported in pd_offsets_ext add op overload. """
 
     dt_types = [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
-    offset_types = [date_offset_type, month_end_type, week_type]
+    offset_types = [date_offset_type, month_begin_type, month_end_type, week_type]
 
     return rhs in offset_types and lhs in dt_types
 

@@ -35,6 +35,206 @@ ll.add_symbol("unbox_date_offset", hdatetime_ext.unbox_date_offset)
 
 # 1.Define a new Numba type class by subclassing the Type class
 #   Define a singleton Numba type instance for a non-parametric type
+class MonthBeginType(types.Type):
+    """Class for pd.tseries.offset.MonthBegin"""
+
+    def __init__(self):
+        super(MonthBeginType, self).__init__(name="MonthBeginType()")
+
+
+month_begin_type = MonthBeginType()
+
+
+# 2.Teach Numba how to infer the Numba type of Python values of a certain class,
+# using typeof_impl.register
+@typeof_impl.register(pd.tseries.offsets.MonthBegin)
+def typeof_month_begin(val, c):
+    return month_begin_type
+
+
+# 3.Define the data model for a Numba type using StructModel and register_model
+@register_model(MonthBeginType)
+class MonthBeginModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [("n", types.int64), ("normalize", types.boolean)]
+        super(MonthBeginModel, self).__init__(dmm, fe_type, members)
+
+
+# 4.Implementing a boxing function for a Numba type using the @box decorator
+@box(MonthBeginType)
+def box_month_begin(typ, val, c):
+    month_begin = cgutils.create_struct_proxy(typ)(c.context, c.builder, value=val)
+    n_obj = c.pyapi.long_from_longlong(month_begin.n)
+    normalize_obj = c.pyapi.from_native_value(
+        types.boolean, month_begin.normalize, c.env_manager
+    )
+    month_begin_obj = c.pyapi.unserialize(
+        c.pyapi.serialize_object(pd.tseries.offsets.MonthBegin)
+    )
+    res = c.pyapi.call_function_objargs(month_begin_obj, (n_obj, normalize_obj))
+    c.pyapi.decref(n_obj)
+    c.pyapi.decref(normalize_obj)
+    c.pyapi.decref(month_begin_obj)
+    return res
+
+
+# 5.Implementing an unboxing function for a Numba type
+# using the @unbox decorator and the NativeValue class
+@unbox(MonthBeginType)
+def unbox_month_begin(typ, val, c):
+    n_obj = c.pyapi.object_getattr_string(val, "n")
+    normalize_obj = c.pyapi.object_getattr_string(val, "normalize")
+
+    n = c.pyapi.long_as_longlong(n_obj)
+    normalize = c.pyapi.to_native_value(types.bool_, normalize_obj).value
+
+    month_begin = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    month_begin.n = n
+    month_begin.normalize = normalize
+
+    c.pyapi.decref(n_obj)
+    c.pyapi.decref(normalize_obj)
+
+    is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
+
+    # _getvalue(): Load and return the value of the underlying LLVM structure.
+    return NativeValue(month_begin._getvalue(), is_error=is_error)
+
+
+# 6. Implement the constructor
+@overload(pd.tseries.offsets.MonthBegin, no_unliteral=True)
+def MonthBegin(
+    n=1,
+    normalize=False,
+):
+    def impl(
+        n=1,
+        normalize=False,
+    ):  # pragma: no cover
+        return init_month_begin(n, normalize)
+
+    return impl
+
+
+@intrinsic
+def init_month_begin(typingctx, n, normalize):
+    def codegen(context, builder, signature, args):  # pragma: no cover
+        typ = signature.return_type
+        month_begin = cgutils.create_struct_proxy(typ)(context, builder)
+        month_begin.n = args[0]
+        month_begin.normalize = args[1]
+        return month_begin._getvalue()
+
+    return MonthBeginType()(n, normalize), codegen
+
+
+# 2nd arg is used in LLVM level, 3rd arg is used in python level
+make_attribute_wrapper(MonthBeginType, "n", "n")
+make_attribute_wrapper(MonthBeginType, "normalize", "normalize")
+
+
+# Code is generalized and split across multiple functions in Pandas
+# General structure: https://github.com/pandas-dev/pandas/blob/41ec93a5a4019462c4e461914007d8b25fb91e48/pandas/_libs/tslibs/offsets.pyx#L2137
+# Changing n: https://github.com/pandas-dev/pandas/blob/41ec93a5a4019462c4e461914007d8b25fb91e48/pandas/_libs/tslibs/offsets.pyx#L3938
+# Shifting the month: https://github.com/pandas-dev/pandas/blob/41ec93a5a4019462c4e461914007d8b25fb91e48/pandas/_libs/tslibs/offsets.pyx#L3711
+@register_jitable
+def calculate_month_begin_date(year, month, day, n):  # pragma: no cover
+    """Inputs: A date described by a year, month, and
+    day and the number of month begins to move by, n.
+    Returns: The new date in year, month, day
+    """
+    # If n < 0, we need to increment n when rolling back to the start of
+    # the month. The exception is if we are already at the start of the
+    # month.
+    if n < 0:
+        if day > 1:
+            n += 1
+    # Alter the number of months by n, then update year. Note this is 1 indexed.
+    month = month + n
+    # Subtract 1 to map (1, 12) to (0, 11) so we can use the modulo operator.
+    # Then add the 1 back to restore 1 indexing for months.
+    month -= 1
+    year += month // 12
+    month = (month % 12) + 1
+    day = 1
+    return year, month, day
+
+
+# Implement the necessary operators
+def overload_add_operator_month_begin_offset_type(lhs, rhs):
+    """Implement all of the relevant scalar types additions.
+    These will be reused to implement arrays.
+    """
+    # rhs is a datetime
+    if lhs == month_begin_type and rhs == datetime_datetime_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            year, month, day = calculate_month_begin_date(
+                rhs.year, rhs.month, rhs.day, lhs.n
+            )
+            if lhs.normalize:
+                return pd.Timestamp(year=year, month=month, day=day)
+            else:
+                return pd.Timestamp(
+                    year=year,
+                    month=month,
+                    day=day,
+                    hour=rhs.hour,
+                    minute=rhs.minute,
+                    second=rhs.second,
+                    microsecond=rhs.microsecond,
+                )
+
+        return impl
+
+    # rhs is a timestamp
+    if lhs == month_begin_type and rhs == pd_timestamp_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            year, month, day = calculate_month_begin_date(
+                rhs.year, rhs.month, rhs.day, lhs.n
+            )
+            if lhs.normalize:
+                return pd.Timestamp(year=year, month=month, day=day)
+            else:
+                return pd.Timestamp(
+                    year=year,
+                    month=month,
+                    day=day,
+                    hour=rhs.hour,
+                    minute=rhs.minute,
+                    second=rhs.second,
+                    microsecond=rhs.microsecond,
+                    nanosecond=rhs.nanosecond,
+                )
+
+        return impl
+
+    # rhs is a datetime.date
+    if lhs == month_begin_type and rhs == datetime_date_type:
+        # No need to consider normalize because datetime only goes down to day.
+        def impl(lhs, rhs):  # pragma: no cover
+            year, month, day = calculate_month_begin_date(
+                rhs.year, rhs.month, rhs.day, lhs.n
+            )
+            return pd.Timestamp(year=year, month=month, day=day)
+
+        return impl
+
+    # rhs is the offset
+    if (
+        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
+        and rhs == month_begin_type
+    ):
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return rhs + lhs
+
+        return impl
+    # Raise Bodo error if not supported
+    raise BodoError(f"add operator not supported for data types {lhs} and {rhs}.")
+
+
 class MonthEndType(types.Type):
     """Class for pd.tseries.offset.MonthEnd"""
 
@@ -45,22 +245,16 @@ class MonthEndType(types.Type):
 month_end_type = MonthEndType()
 
 
-# 2.Teach Numba how to infer the Numba type of Python values of a certain class,
-# using typeof_impl.register
 @typeof_impl.register(pd.tseries.offsets.MonthEnd)
 def typeof_month_end(val, c):
     return month_end_type
 
 
-# 3.Define the data model for a Numba type using StructModel and register_model
 @register_model(MonthEndType)
 class MonthEndModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [("n", types.int64), ("normalize", types.boolean)]
         super(MonthEndModel, self).__init__(dmm, fe_type, members)
-
-
-# 4.Implementing a boxing function for a Numba type using the @box decorator
 
 
 @box(MonthEndType)
@@ -80,11 +274,8 @@ def box_month_end(typ, val, c):
     return res
 
 
-# 5.Implementing an unboxing function for a Numba type
-# using the @unbox decorator and the NativeValue class
 @unbox(MonthEndType)
 def unbox_month_end(typ, val, c):
-
     n_obj = c.pyapi.object_getattr_string(val, "n")
     normalize_obj = c.pyapi.object_getattr_string(val, "normalize")
 
@@ -104,17 +295,6 @@ def unbox_month_end(typ, val, c):
     return NativeValue(month_end._getvalue(), is_error=is_error)
 
 
-@lower_constant(MonthEndType)
-def lower_constant_month_end(context, builder, ty, pyval):
-    n = context.get_constant(types.int64, pyval.n)
-    normalize = context.get_constant(types.boolean, pyval.normalize)
-    month_end = cgutils.create_struct_proxy(ty)(context, builder)
-    month_end.n = n
-    month_end.normalize = normalize
-    return month_end._getvalue()
-
-
-# 6. Implement the constructor
 @overload(pd.tseries.offsets.MonthEnd, no_unliteral=True)
 def MonthEnd(
     n=1,
@@ -145,7 +325,17 @@ def init_month_end(typingctx, n, normalize):
 make_attribute_wrapper(MonthEndType, "n", "n")
 make_attribute_wrapper(MonthEndType, "normalize", "normalize")
 
-# Implement the necessary operators
+
+# MonthBegin and MonthEnd have the same constant lowering code
+@lower_constant(MonthBeginType)
+@lower_constant(MonthEndType)
+def lower_constant_month_end(context, builder, ty, pyval):
+    n = context.get_constant(types.int64, pyval.n)
+    normalize = context.get_constant(types.boolean, pyval.normalize)
+    month_end = cgutils.create_struct_proxy(ty)(context, builder)
+    month_end.n = n
+    month_end.normalize = normalize
+    return month_end._getvalue()
 
 
 # Code is generalized and split across multiple functions in Pandas
@@ -807,7 +997,7 @@ def overload_sub_operator_offsets(lhs, rhs):
     # lhs date/datetime/timestamp and rhs date_offset/month_end_type/week_type
     if (
         lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
-    ) and rhs in [date_offset_type, month_end_type, week_type]:
+    ) and rhs in [date_offset_type, month_begin_type, month_end_type, week_type]:
 
         def impl(lhs, rhs):  # pragma: no cover
             return lhs + -rhs
@@ -817,6 +1007,11 @@ def overload_sub_operator_offsets(lhs, rhs):
 
 @overload(operator.neg, no_unliteral=True)
 def overload_neg(lhs):
+    if lhs == month_begin_type:
+
+        def impl(lhs):  # pragma: no cover
+            return pd.tseries.offsets.MonthBegin(-lhs.n, lhs.normalize)
+
     if lhs == month_end_type:
 
         def impl(lhs):  # pragma: no cover
@@ -885,7 +1080,7 @@ def overload_neg(lhs):
 
 def is_offsets_type(val):
     """Function containing all the support offset types"""
-    return val in [date_offset_type, month_end_type, week_type]
+    return val in [date_offset_type, month_begin_type, month_end_type, week_type]
 
 
 ####### tseries.offset.Week #########

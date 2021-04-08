@@ -1,10 +1,9 @@
 # Copyright (C) 2020 Bodo Inc. All rights reserved.
-""" 
+"""
     Test File for pd.tseries.offsets types.
 """
 import datetime
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -135,6 +134,273 @@ def test_week_neg(week_value, memory_leak_check):
         return -me
 
     check_func(test_impl, (week_value,))
+
+
+@pytest.fixture(
+    params=[
+        pd.tseries.offsets.MonthBegin(),
+        pytest.param(
+            pd.tseries.offsets.MonthBegin(n=4, normalize=False),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.tseries.offsets.MonthBegin(n=4, normalize=True),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(pd.tseries.offsets.MonthBegin(n=-2), marks=pytest.mark.slow),
+        pytest.param(
+            pd.tseries.offsets.MonthBegin(n=-1, normalize=True), marks=pytest.mark.slow
+        ),
+    ]
+)
+def month_begin_value(request):
+    return request.param
+
+
+@pytest.mark.slow
+def test_constant_lowering_month_begin(month_begin_value, memory_leak_check):
+    def test_impl():
+        return month_begin_value
+
+    check_func(test_impl, ())
+
+
+@pytest.mark.slow
+def test_month_end_boxing(month_begin_value, memory_leak_check):
+    """
+    Test boxing and unboxing of pd.tseries.offsets.MonthBegin()
+    """
+
+    def test_impl(mb_obj):
+        return mb_obj
+
+    check_func(test_impl, (month_begin_value,))
+
+
+# TODO: Mark as slow after CI passes
+def test_month_begin_constructor(memory_leak_check):
+    def test_impl1():
+        return pd.tseries.offsets.MonthBegin()
+
+    def test_impl2():
+        return pd.tseries.offsets.MonthBegin(n=4, normalize=True)
+
+    def test_impl3():
+        return pd.tseries.offsets.MonthBegin(-2)
+
+    check_func(test_impl1, ())
+    check_func(test_impl2, ())
+    check_func(test_impl3, ())
+
+
+# TODO: Mark as slow after CI passes
+def test_month_begin_n(month_begin_value, memory_leak_check):
+    def test_impl(mb_obj):
+        return mb_obj.n
+
+    check_func(test_impl, (month_begin_value,))
+
+
+# TODO: Mark as slow after CI passes
+def test_month_begin_normalize(month_begin_value, memory_leak_check):
+    def test_impl(mb_obj):
+        return mb_obj.normalize
+
+    check_func(test_impl, (month_begin_value,))
+
+
+def test_month_begin_add_datetime(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    datetime_val = datetime.datetime(
+        year=2020, month=10, day=30, hour=22, minute=12, second=45, microsecond=99320
+    )
+    check_func(test_impl, (month_begin_value, datetime_val))
+    check_func(test_impl, (datetime_val, month_begin_value))
+
+
+@pytest.mark.slow
+def test_month_begin_add_datetime_boundary(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    datetime_val = datetime.datetime(
+        year=2020, month=10, day=1, hour=22, minute=12, second=45, microsecond=99320
+    )
+    check_func(test_impl, (month_begin_value, datetime_val))
+    check_func(test_impl, (datetime_val, month_begin_value))
+
+
+def test_month_begin_add_timestamp(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+    check_func(test_impl, (month_begin_value, timestamp_val))
+    check_func(test_impl, (timestamp_val, month_begin_value))
+
+
+@pytest.mark.slow
+def test_month_begin_add_timestamp_boundary(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=1,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+    check_func(test_impl, (month_begin_value, timestamp_val))
+    check_func(test_impl, (timestamp_val, month_begin_value))
+
+
+def test_month_begin_add_date_timestamp(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    date_val = datetime.date(
+        year=2020,
+        month=10,
+        day=30,
+    )
+    check_func(test_impl, (month_begin_value, date_val))
+    check_func(test_impl, (date_val, month_begin_value))
+
+
+@pytest.mark.slow
+def test_month_begin_add_date_boundary(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    date_val = datetime.date(
+        year=2020,
+        month=10,
+        day=1,
+    )
+    check_func(test_impl, (month_begin_value, date_val))
+    check_func(test_impl, (date_val, month_begin_value))
+
+
+def test_month_begin_add_series(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2020-04-29", periods=5))
+    check_func(test_impl, (month_begin_value, S))
+    check_func(test_impl, (S, month_begin_value))
+
+
+def test_month_begin_sub_datetime(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    datetime_val = datetime.datetime(
+        year=2020, month=10, day=30, hour=22, minute=12, second=45, microsecond=99320
+    )
+    check_func(test_impl, (datetime_val, month_begin_value))
+
+
+@pytest.mark.slow
+def test_month_begin_sub_datetime_boundary(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    datetime_val = datetime.datetime(
+        year=2020, month=10, day=1, hour=22, minute=12, second=45, microsecond=99320
+    )
+    check_func(test_impl, (datetime_val, month_begin_value))
+
+
+@pytest.mark.smoke
+def test_month_begin_sub_timestamp(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+    check_func(test_impl, (timestamp_val, month_begin_value))
+
+
+@pytest.mark.slow
+def test_month_begin_sub_timestamp_boundary(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=31,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+    check_func(test_impl, (timestamp_val, month_begin_value))
+
+
+def test_month_begin_sub_date_timestamp(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    date_val = datetime.date(
+        year=2020,
+        month=10,
+        day=30,
+    )
+    check_func(test_impl, (date_val, month_begin_value))
+
+
+@pytest.mark.slow
+def test_month_begin_sub_date_boundary(month_begin_value, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    date_val = datetime.date(
+        year=2020,
+        month=10,
+        day=1,
+    )
+    check_func(test_impl, (date_val, month_begin_value))
+
+
+def test_month_begin_sub_series(month_begin_value, memory_leak_check):
+    def test_impl(S, val):
+        return S - val
+
+    S = pd.Series(pd.date_range(start="2018-04-24", end="2020-04-29", periods=5))
+    check_func(test_impl, (S, month_begin_value))
+
+
+@pytest.mark.slow
+def test_month_begin_neg(month_begin_value, memory_leak_check):
+    def test_impl(mb):
+        return -mb
+
+    check_func(test_impl, (month_begin_value,))
 
 
 @pytest.fixture(

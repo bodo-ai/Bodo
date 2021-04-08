@@ -88,6 +88,7 @@ from bodo.hiframes.pd_index_ext import (
     TimedeltaIndexType,
 )
 from bodo.hiframes.pd_offsets_ext import (
+    month_begin_type,
     month_end_type,
     week_type,
     date_offset_type,

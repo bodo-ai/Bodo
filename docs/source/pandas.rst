@@ -934,6 +934,7 @@ Offsets
 Bodo supports a subset of the offset types in ``pandas.tseries.offsets``:
 
 * :func:`pandas.tseries.offsets.DateOffset`
+* :func:`pandas.tseries.offsets.MonthBegin`
 * :func:`pandas.tseries.offsets.MonthEnd`
 * :func:`pandas.tseries.offsets.Week`
 
