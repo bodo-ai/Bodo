@@ -539,11 +539,24 @@ def test_replace_types_unsupported(series_replace):
         bodo.jit(series_replace_impl)(series, to_replace, value)
 
 
-@pytest.mark.slow
-def test_replace_float_int():
+def test_replace_float_int_scalar_scalar():
     series = pd.Series([1.0, 2.0, 3.0] * 4)
     to_replace = 1
     value = 2.0
+    check_func(series_replace_impl, (series, to_replace, value))
+
+
+def test_replace_float_int_list_scalar():
+    series = pd.Series([1.0, 2.0, 3.0] * 4)
+    to_replace = [1, 3, 6]
+    value = 4.0
+    check_func(series_replace_impl, (series, to_replace, value))
+
+
+def test_replace_float_int_list_list():
+    series = pd.Series([1.0, 2.0, 3.0] * 4)
+    to_replace = [1, 3]
+    value = [2.0, 4.0]
     check_func(series_replace_impl, (series, to_replace, value))
 
 

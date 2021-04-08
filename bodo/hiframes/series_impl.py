@@ -2221,6 +2221,14 @@ def overload_series_replace(
     else:
         to_replace_type = element_type(to_replace)
         value_type = element_type(value)
+
+    # Replace implementation uses a dictionary with to_replace as key,
+    # so there will be an error if Series values can't be safely
+    # downcast to to_replace_type during look up. We resolve this issue by
+    # casting to_replace_type (if necessary) to match the series type
+    # when creating the dictionary.
+    dtype_conversion = None
+
     # Check if type equality exists. For shorter compilation time, first check
     # if types are equal (common case) and then check if the equality operator exists
     # if that fails.
@@ -2241,6 +2249,15 @@ def overload_series_replace(
                 return S.copy()
 
             return impl
+
+        # We currently only need to worry about casting for numpy types. For other types
+        # (i.e. unicode_type) we don't provide a dtype because there isn't a runtime impl.
+        # See [BE-539] on Jira
+        if (
+            isinstance(series_type, (types.Float, types.Integer))
+            or series_type == np.bool_
+        ):
+            dtype_conversion = series_type
 
     # TODO [BE-468]: Check if we know the equality will never be equality
     # at compile time. For example, np.inf vs int once we have float literal.
@@ -2305,7 +2322,7 @@ def overload_series_replace(
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         n = len(in_arr)
         out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, (-1,))
-        replace_dict = build_replace_dict(to_replace, value)
+        replace_dict = build_replace_dict(to_replace, value, dtype_conversion)
         for i in numba.parfors.parfor.internal_prange(n):
             if bodo.libs.array_kernels.isna(in_arr, i):
                 bodo.libs.array_kernels.setna(out_arr, i)
@@ -2321,13 +2338,13 @@ def overload_series_replace(
 
 # Helper function for creating the dictionary map[replace -> new value]
 # For various data types.
-def build_replace_dict(to_replace, value):
+def build_replace_dict(to_replace, value, key_dtype_conv):
     # Dummy function used for overload
     pass
 
 
 @overload(build_replace_dict)
-def _build_replace_dict(to_replace, value):
+def _build_replace_dict(to_replace, value, key_dtype_conv):
     # TODO: replace with something that captures all scalars
     is_scalar_replace = isinstance(
         to_replace, (types.Number, Decimal128Type)
@@ -2342,8 +2359,16 @@ def _build_replace_dict(to_replace, value):
 
     # Scalar, Scalar case
     if is_scalar_replace and is_scalar_value:
+        if not is_overload_none(key_dtype_conv):
 
-        def impl(to_replace, value):  # pragma: no cover
+            def impl_cast(to_replace, value, key_dtype_conv):  # pragma: no cover
+                replace_dict = {}
+                replace_dict[key_dtype_conv(to_replace)] = value
+                return replace_dict
+
+            return impl_cast
+
+        def impl(to_replace, value, key_dtype_conv):  # pragma: no cover
             replace_dict = {}
             replace_dict[to_replace] = value
             return replace_dict
@@ -2353,7 +2378,17 @@ def _build_replace_dict(to_replace, value):
     # List, Scalar case
     if is_iterable_replace and is_scalar_value:
 
-        def impl(to_replace, value):  # pragma: no cover
+        if not is_overload_none(key_dtype_conv):
+
+            def impl_cast(to_replace, value, key_dtype_conv):  # pragma: no cover
+                replace_dict = {}
+                for r in to_replace:
+                    replace_dict[key_dtype_conv(r)] = value
+                return replace_dict
+
+            return impl_cast
+
+        def impl(to_replace, value, key_dtype_conv):  # pragma: no cover
             replace_dict = {}
             for r in to_replace:
                 replace_dict[r] = value
@@ -2364,7 +2399,20 @@ def _build_replace_dict(to_replace, value):
     # List, List case
     if is_iterable_replace and is_iterable_value:
 
-        def impl(to_replace, value):  # pragma: no cover
+        if not is_overload_none(key_dtype_conv):
+
+            def impl_cast(to_replace, value, key_dtype_conv):  # pragma: no cover
+                replace_dict = {}
+                assert len(to_replace) == len(
+                    value
+                ), "To_replace and value lengths must be the same"
+                for i in range(len(to_replace)):
+                    replace_dict[key_dtype_conv(to_replace[i])] = value[i]
+                return replace_dict
+
+            return impl_cast
+
+        def impl(to_replace, value, key_dtype_conv):  # pragma: no cover
             replace_dict = {}
             assert len(to_replace) == len(
                 value
@@ -2379,7 +2427,7 @@ def _build_replace_dict(to_replace, value):
     # TODO(Nick): Add a check to ensure value type can be converted
     # to key type
     if isinstance(to_replace, numba.types.DictType) and is_overload_none(value):
-        return lambda to_replace, value: to_replace  # pragma: no cover
+        return lambda to_replace, value, key_dtype_conv: to_replace  # pragma: no cover
 
     raise BodoError(
         "Series.replace(): Not supported for types to_replace={} and value={}".format(
@@ -2799,9 +2847,7 @@ def _validate_arguments_mask_where(
                     isinstance(S.data.dtype, types.Integer)
                     and isinstance(other.data.dtype, types.Integer)
                 )
-                or (
-                    S.data.dtype == other.data.dtype
-                )
+                or (S.data.dtype == other.data.dtype)
             )
             and (
                 isinstance(S.data, BooleanArrayType)

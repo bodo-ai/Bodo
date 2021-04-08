@@ -1017,4 +1017,6 @@ def test_numpy_contains_inline(memory_leak_check):
         return "a" in arr
 
     arr = np.array([3, 4, 0, 2, 5])
-    check_func(test_impl, (arr,))
+    # contains operator isn't support on distributed Numpy
+    # arrays yet.
+    check_func(test_impl, (arr,), dist_test=False)
