@@ -22,6 +22,8 @@ class ParquetReader(ir.Stmt):
         loc,
         null_col_map,
         partition_names=None,
+        # These are the same storage_options that would be passed to pandas
+        storage_options=None,
     ):
         self.connector_typ = "parquet"
         self.file_name = file_name
@@ -36,10 +38,12 @@ class ParquetReader(ir.Stmt):
         self.null_col_map = null_col_map
         self.partition_names = partition_names
         self.filters = None
+        # storage_options passed to pandas during read_parquet
+        self.storage_options = storage_options
 
     def __repr__(self):  # pragma: no cover
         # TODO
-        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {})".format(
+        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {}, {})".format(
             self.df_out,
             self.file_name.name,
             self.col_names,
@@ -49,6 +53,7 @@ class ParquetReader(ir.Stmt):
             self.out_vars,
             self.partition_names,
             self.filters,
+            self.storage_options,
         )
 
 

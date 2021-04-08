@@ -62,7 +62,7 @@ void set_null_buff(uint8_t** out_nulls, const uint8_t* null_buff,
 
 typedef void (*s3_opener_t)(const char*,
                             std::shared_ptr<::arrow::io::RandomAccessFile>*,
-                            const char*);
+                            const char*, bool);
 
 typedef void (*gcs_opener_t)(const char*,
                             std::shared_ptr<::arrow::io::RandomAccessFile>*);
@@ -833,7 +833,7 @@ void pq_read_arrow_single_file(
 
 void pq_init_reader(const char* file_name,
                     std::shared_ptr<parquet::arrow::FileReader>* a_reader,
-                    const char* bucket_region) {
+                    const char* bucket_region, bool s3fs_anon) {
     PyObject* f_mod;
     std::string f_name(file_name);
     auto pool = ::arrow::default_memory_pool();
@@ -871,7 +871,7 @@ void pq_init_reader(const char* file_name,
         s3_opener_t s3_open_file =
             (s3_opener_t)PyNumber_AsSsize_t(func_obj, NULL);
         // open Parquet file
-        s3_open_file(f_name.c_str(), &file, bucket_region);
+        s3_open_file(f_name.c_str(), &file, bucket_region, s3fs_anon);
         // create Arrow reader
         status = parquet::arrow::FileReader::Make(
             pool, ParquetFileReader::Open(file), &arrow_reader);

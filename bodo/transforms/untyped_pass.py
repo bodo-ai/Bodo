@@ -1567,17 +1567,14 @@ class UntypedPass:
     def _handle_pq_to_pandas(self, assign, lhs, rhs, t_var):
         return self._gen_parquet_read(self.arrow_tables[t_var.name], lhs)
 
-    def _gen_parquet_read(self, fname, lhs, columns=None):
+    def _gen_parquet_read(self, fname, lhs, columns=None, storage_options=None):
         # make sure pyarrow is available
         if not bodo.utils.utils.has_pyarrow():
             raise RuntimeError("pyarrow is required for Parquet support")
 
-        (
-            columns,
-            data_arrs,
-            index_col,
-            nodes,
-        ) = self.pq_handler.gen_parquet_read(fname, lhs, columns)
+        (columns, data_arrs, index_col, nodes,) = self.pq_handler.gen_parquet_read(
+            fname, lhs, columns, storage_options=storage_options
+        )
         n_cols = len(columns)
         args = ", ".join("data{}".format(i) for i in range(n_cols))
         data_args = ", ".join(
@@ -1645,14 +1642,53 @@ class UntypedPass:
         kws = dict(rhs.kws)
         fname = get_call_expr_arg("read_parquet", rhs.args, kws, 0, "path")
         engine = get_call_expr_arg("read_parquet", rhs.args, kws, 1, "engine", "auto")
+        columns = self._get_const_arg("read_parquet", rhs.args, kws, 2, "columns", -1)
+        storage_options = self._get_const_arg(
+            "read_parquet", rhs.args, kws, 10e4, "storage_options", {}
+        )
+
+        # check unsupported arguments
+        supported_args = (
+            "path",
+            "engine",
+            "columns",
+            "storage_options",
+        )
+        unsupported_args = set(kws.keys()) - set(supported_args)
+        if unsupported_args:
+            raise BodoError(
+                "read_parquet() arguments {} not supported yet".format(unsupported_args)
+            )
+
+        if isinstance(storage_options, dict):
+            supported_storage_options = ("anon",)
+            unsupported_storage_options = set(storage_options.keys()) - set(
+                supported_storage_options
+            )
+            if unsupported_storage_options:
+                raise BodoError(
+                    "read_parquet() arguments {} for 'storage_options' not supported yet".format(
+                        unsupported_storage_options
+                    )
+                )
+
+            if "anon" in storage_options:
+                if not isinstance(storage_options["anon"], bool):
+                    raise BodoError(
+                        "read_parquet: 'anon' in 'storage_options' must be a constant boolean value"
+                    )
+        else:
+            raise BodoError(
+                "read_parquet: 'storage_options' must be a constant dictionary"
+            )
+
         if engine not in ("auto", "pyarrow"):
             raise BodoError("read_parquet: only pyarrow engine supported")
 
-        columns = self._get_const_arg("read_parquet", rhs.args, kws, 2, "columns", -1)
         if columns == -1:
             columns = None
 
-        return self._gen_parquet_read(fname, lhs, columns)
+        return self._gen_parquet_read(fname, lhs, columns, storage_options)
 
     def _handle_np_fromfile(self, assign, lhs, rhs):
         """translate np.fromfile() to native

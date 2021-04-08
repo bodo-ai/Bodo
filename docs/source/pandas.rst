@@ -179,6 +179,7 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
   * :ref:`example usage and more system specific instructions <parquet-section>`
   * Arguments ``path`` and ``columns`` are supported. ``columns``
     should be a constant list of strings if provided.
+  * Argument ``anon`` of ``storage_options`` is supported for S3 filepaths.
   * If ``path`` can be inferred as a constant (e.g. it is a function argument),
     Bodo finds the schema from file at compilation time.
     Otherwise, schema should be provided. For example::

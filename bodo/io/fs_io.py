@@ -34,41 +34,31 @@ _csv_write = types.ExternalFunction(
 ll.add_symbol("csv_write", csv_cpp.csv_write)
 
 
-def get_s3_fs(region=None):
+def get_s3_fs(region=None, storage_options=None):
     """
     initialize S3FileSystem with credentials
     """
     from bodo.io.pyarrow_s3fs_fsspec_wrapper import PyArrowS3FS
 
     custom_endpoint = os.environ.get("AWS_S3_ENDPOINT", None)
-    aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
-    aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
     if not region:
         region = os.environ.get("AWS_DEFAULT_REGION", None)
 
-    if custom_endpoint is not None and (
-        aws_access_key_id is None or aws_secret_access_key is None
-    ):  # pragma: no cover
-        warnings.warn(
-            BodoWarning(
-                "Reading from s3 with custom_endpoint, "
-                "but environment variables AWS_ACCESS_KEY_ID or "
-                "AWS_SECRET_ACCESS_KEY is not set."
-            )
-        )
+    anon = False
+    if storage_options:
+        anon = storage_options.get("anon", False)
 
     PyArrowS3FS.clear_instance_cache()
     fs = PyArrowS3FS(
         region=region,
-        access_key=aws_access_key_id,
-        secret_key=aws_secret_access_key,
         endpoint_override=custom_endpoint,
+        anonymous=anon,
     )
 
     return fs
 
 
-def get_s3_fs_from_path(path, parallel=False):
+def get_s3_fs_from_path(path, parallel=False, storage_options=None):
     """
     Get a pyarrow.fs.S3FileSystem object from an S3
     path, i.e. determine the region and
@@ -80,7 +70,7 @@ def get_s3_fs_from_path(path, parallel=False):
     region = get_s3_bucket_region_njit(path, parallel=parallel)
     if region == "":
         region = None
-    return get_s3_fs(region)
+    return get_s3_fs(region, storage_options)
 
 
 # hdfs related functions(hdfs_list_dir_fnames) should be included in
@@ -451,7 +441,9 @@ def find_file_name_or_handler(path, ftype):
         file_name_or_handler = fs.open(fname, "rb")
     else:
         if parsed_url.scheme != "":
-            raise BodoError(f"Unrecognized scheme {parsed_url.scheme}. Please refer to https://docs.bodo.ai/latest/source/file_io.html")
+            raise BodoError(
+                f"Unrecognized scheme {parsed_url.scheme}. Please refer to https://docs.bodo.ai/latest/source/file_io.html"
+            )
         is_handler = False
 
         if os.path.isdir(path):

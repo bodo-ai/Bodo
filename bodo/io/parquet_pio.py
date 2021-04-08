@@ -65,7 +65,12 @@ from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_const_value
-from bodo.utils.typing import BodoError, FileInfo, get_overload_const_str
+from bodo.utils.typing import (
+    BodoError,
+    FileInfo,
+    get_overload_const_str,
+    get_overload_constant_dict,
+)
 from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
     is_null_pointer,
@@ -98,6 +103,23 @@ register_model(ParquetPredicateType)(models.OpaqueModel)
 
 @unbox(ParquetPredicateType)
 def unbox_parquet_predicate_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+class StorageOptionsDictType(types.Opaque):
+    def __init__(self):
+        super(StorageOptionsDictType, self).__init__(name="StorageOptionsDictType")
+
+
+storage_options_dict_type = StorageOptionsDictType()
+types.storage_options_dict_type = storage_options_dict_type
+register_model(StorageOptionsDictType)(models.OpaqueModel)
+
+
+@unbox(StorageOptionsDictType)
+def unbox_storage_options_dict_type(typ, val, c):
     # just return the Python object pointer
     c.pyapi.incref(val)
     return NativeValue(val)
@@ -173,11 +195,16 @@ class ParquetFileInfo(FileInfo):
     """FileInfo object passed to ForceLiteralArg for
     file name arguments that refer to a parquet dataset"""
 
-    def __init__(self, columns):
+    def __init__(self, columns, storage_options=None):
         self.columns = columns  # columns to select from parquet dataset
+        self.storage_options = storage_options
 
     def get_schema(self, fname):
-        return parquet_file_schema(fname, selected_columns=self.columns)
+        return parquet_file_schema(
+            fname,
+            selected_columns=self.columns,
+            storage_options=self.storage_options,
+        )
 
 
 class ParquetHandler:
@@ -189,7 +216,7 @@ class ParquetHandler:
         self.args = args
         self.locals = _locals
 
-    def gen_parquet_read(self, file_name, lhs, columns):
+    def gen_parquet_read(self, file_name, lhs, columns, storage_options=None):
         scope = lhs.scope
         loc = lhs.loc
 
@@ -215,7 +242,7 @@ class ParquetHandler:
                 self.func_ir,
                 msg,
                 arg_types=self.args,
-                file_info=ParquetFileInfo(columns),
+                file_info=ParquetFileInfo(columns, storage_options=storage_options),
             )
 
             got_schema = False
@@ -244,7 +271,9 @@ class ParquetHandler:
                     col_nb_fields,
                     null_col_map,
                     partition_names,
-                ) = parquet_file_schema(file_name_str, columns)
+                ) = parquet_file_schema(
+                    file_name_str, columns, storage_options=storage_options
+                )
         else:
             col_names_total = list(table_types.keys())
             col_types_total = [t for t in table_types.values()]
@@ -294,6 +323,7 @@ class ParquetHandler:
                 loc,
                 null_col_map,
                 partition_names,
+                storage_options,
             )
         ]
 
@@ -361,6 +391,7 @@ def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targ
         pq_node.col_nb_fields,
         pq_node.out_types,
         pq_node.null_col_map,
+        pq_node.storage_options,
         pq_node.partition_names,
         filter_str,
         extra_args,
@@ -411,12 +442,34 @@ def overload_get_filters_pyobject(filter_str, var_tup):
     return loc_vars["impl"]
 
 
+def get_storage_options_pyobject(storage_options):  # pragma: no cover
+    pass
+
+
+@overload(get_storage_options_pyobject, no_unliteral=True)
+def overload_get_storage_options_pyobject(storage_options):
+    """generate a pyobject for the storage_options to pass to C++"""
+    storage_options_val = get_overload_constant_dict(storage_options)
+    # Remove the dummy variable
+    storage_options_val.pop("bodo_dummy", None)
+    func_text = "def impl(storage_options):\n"
+    func_text += (
+        "  with numba.objmode(storage_options_py='storage_options_dict_type'):\n"
+    )
+    func_text += f"    storage_options_py = {str(storage_options_val)}\n"
+    func_text += "  return storage_options_py\n"
+    loc_vars = {}
+    exec(func_text, globals(), loc_vars)
+    return loc_vars["impl"]
+
+
 def _gen_pq_reader_py(
     col_names,
     col_indices,
     col_nb_fields,
     out_types,
     null_col_map,
+    storage_options,
     partition_names,
     filter_str,
     extra_args,
@@ -435,10 +488,18 @@ def _gen_pq_reader_py(
     func_text += (
         f'  filters = get_filters_pyobject("{filter_str}", ({extra_args}{comma}))\n'
     )
+
+    # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
+    # The dummy variable is popped out in get_storage_options_pyobject.
+    storage_options["bodo_dummy"] = "dummy"
+    func_text += (
+        f"  storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
+    )
+
     # open a DatasetReader, which is a C++ object defined in _parquet.cpp that
     # contains file readers for the files from which this process needs to read,
     # and other information to read this process' chunk
-    func_text += "  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {}, unicode_to_utf8(bucket_region), filters)\n".format(
+    func_text += "  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {}, unicode_to_utf8(bucket_region), filters, storage_options_py)\n".format(
         is_parallel
     )
     # Check if there was an error in the C++ code. If so, raise it.
@@ -499,6 +560,7 @@ def _gen_pq_reader_py(
         "pq_gen_partition_column": _pq_gen_partition_column,
         "unicode_to_utf8": unicode_to_utf8,
         "get_filters_pyobject": get_filters_pyobject,
+        "get_storage_options_pyobject": get_storage_options_pyobject,
         "NS_DTYPE": np.dtype("M8[ns]"),
         "np": np,
         "bodo": bodo,
@@ -804,7 +866,7 @@ def merge_subdatasets(subdatasets, get_row_counts):
     return dataset
 
 
-def is_directory_parallel(fpath):
+def is_directory_parallel(fpath, storage_options=None):
     """Determines whether a path is a directory. Is meant to be called by
     all ranks. Rank 0 will do the check and communicate the result."""
     from mpi4py import MPI
@@ -815,7 +877,10 @@ def is_directory_parallel(fpath):
         try:
             if fpath.startswith("s3://"):
                 isdir = s3_is_directory(
-                    get_s3_fs_from_path(fpath, parallel=False), fpath
+                    get_s3_fs_from_path(
+                        fpath, parallel=False, storage_options=storage_options
+                    ),
+                    fpath,
                 )
             elif fpath.startswith("gcs://"):
                 isdir = gcs_is_directory(fpath)
@@ -837,7 +902,7 @@ def is_directory_parallel(fpath):
     return isdir
 
 
-def is_nested_parallel(fpath, file_names):
+def is_nested_parallel(fpath, file_names, storage_options=None):
     """Returns True if one of the file names in file_names is a directory"""
 
     from mpi4py import MPI
@@ -847,7 +912,9 @@ def is_nested_parallel(fpath, file_names):
     if bodo.get_rank() == 0:
         try:
             if fpath.startswith("s3://"):
-                fs = get_s3_fs_from_path(fpath, parallel=False)
+                fs = get_s3_fs_from_path(
+                    fpath, parallel=False, storage_options=storage_options
+                )
                 for fname in file_names:
                     if fname == os.path.join(fpath, "_delta_log"):
                         continue
@@ -885,7 +952,7 @@ def is_nested_parallel(fpath, file_names):
     return is_nested
 
 
-def get_filenames_parallel(path, filter_func):
+def get_filenames_parallel(path, filter_func, storage_options=None):
     """Get sorted list of file names in directory 'path'. Filter files based
     on the filter function 'filter_func'.
     Is meant to be called by all ranks. Rank 0 will get the list and
@@ -900,7 +967,10 @@ def get_filenames_parallel(path, filter_func):
         try:
             if path.startswith("s3://"):
                 file_names = s3_list_dir_fnames(
-                    get_s3_fs_from_path(path, parallel=False), path
+                    get_s3_fs_from_path(
+                        path, parallel=False, storage_options=storage_options
+                    ),
+                    path,
                 )
             elif path.startswith("hdfs://"):  # pragma: no cover
                 _, file_names = hdfs_list_dir_fnames(path)
@@ -955,6 +1025,7 @@ def get_parquet_filesnames_from_deltalake(delta_lake_path):
     )  # get original value
     aws_default_region_modified = False  # not modified yet
     if delta_lake_path.startswith("s3://"):
+        # (XXX) Check that anon is False, else display error/warning?
         s3_bucket_region = get_s3_bucket_region_njit(delta_lake_path)
         if s3_bucket_region != "":
             os.environ["AWS_DEFAULT_REGION"] = s3_bucket_region
@@ -992,7 +1063,7 @@ def get_parquet_filesnames_from_deltalake(delta_lake_path):
     return file_names
 
 
-def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
+def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_options=None):
     """get ParquetDataset object for 'fpath' and set the number of total rows as an
     attribute. Also, sets the number of rows per file as an attribute of
     ParquetDatasetPiece objects.
@@ -1025,7 +1096,11 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
         if len(fs) == 1:
             return fs[0]
         if fpath.startswith("s3://"):
-            fs.append(get_s3_fs_from_path(fpath, parallel=False))
+            fs.append(
+                get_s3_fs_from_path(
+                    fpath, parallel=False, storage_options=storage_options
+                )
+            )
         elif fpath.startswith("gcs://"):
             google_fs = gcsfs.GCSFileSystem(token=None)
             fs.append(google_fs)
@@ -1039,9 +1114,13 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
             fs.append(None)
         return fs[0]
 
-    if is_directory_parallel(fpath):
-        file_names = get_filenames_parallel(fpath, directory_of_files_common_filter)
-        is_nested = is_nested_parallel(fpath, file_names)
+    if is_directory_parallel(fpath, storage_options=storage_options):
+        file_names = get_filenames_parallel(
+            fpath, directory_of_files_common_filter, storage_options=storage_options
+        )
+        is_nested = is_nested_parallel(
+            fpath, file_names, storage_options=storage_options
+        )
         # if deltalake, then get the list of parquet files from metadata
         is_deltalake = False
         delta_log = os.path.join(fpath, "_delta_log")
@@ -1173,7 +1252,7 @@ def get_parquet_dataset(fpath, parallel, get_row_counts=True, filters=None):
     return dataset
 
 
-def parquet_file_schema(file_name, selected_columns):
+def parquet_file_schema(file_name, selected_columns, storage_options=None):
     """get parquet schema from file using Parquet dataset and Arrow APIs"""
     col_names = []
     col_types = []
@@ -1181,7 +1260,11 @@ def parquet_file_schema(file_name, selected_columns):
     # during compilation we only need the schema and it has to be the same for
     # all processes, so we can set parallel=True to just have rank 0 read
     # the dataset information and broadcast to others
-    pq_dataset = get_parquet_dataset(file_name, parallel=True, get_row_counts=False)
+    pq_dataset = get_parquet_dataset(
+        file_name,
+        get_row_counts=False,
+        storage_options=storage_options,
+    )
     # not using 'partition_names' since the order may not match 'levels'
     partition_names = (
         None
@@ -1317,7 +1400,11 @@ def _get_partition_cat_dtype(part_set):
 _get_dataset_reader = types.ExternalFunction(
     "get_dataset_reader",
     types.Opaque("arrow_reader")(
-        types.voidptr, types.boolean, types.voidptr, parquet_predicate_type
+        types.voidptr,
+        types.boolean,
+        types.voidptr,
+        parquet_predicate_type,
+        storage_options_dict_type,
     ),
 )
 _del_dataset_reader = types.ExternalFunction(

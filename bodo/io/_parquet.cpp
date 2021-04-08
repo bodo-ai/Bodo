@@ -37,6 +37,8 @@ struct DatasetReader {
     std::vector<std::vector<int64_t>> part_vals;
     // If S3, then store the bucket region here
     std::string bucket_region = "";
+    // If S3, then store if s3_reader should use the anonymous mode
+    bool s3fs_anon = false;
     /// Starting row for first file (files[0])
     int start_row_first_file = 0;
     /// Total number of rows this process has to read (across files)
@@ -55,7 +57,8 @@ struct DatasetReader {
  *                  to remove rows from scanned data
  */
 DatasetReader *get_dataset_reader(char *file_name, bool is_parallel,
-                                  char *bucket_region, PyObject* filters);
+                                  char *bucket_region, PyObject* filters,
+                                  PyObject* storage_options);
 void del_dataset_reader(DatasetReader *reader);
 
 int64_t pq_get_size(DatasetReader *reader, int64_t column_idx);
@@ -195,7 +198,8 @@ void get_partition_info(DatasetReader *ds_reader, PyObject *piece) {
 }
 
 DatasetReader *get_dataset_reader(char *file_name, bool parallel,
-                                  char *bucket_region, PyObject* filters) {
+                                  char *bucket_region, PyObject* filters,
+                                  PyObject* storage_options) {
     try {
 #ifdef DEBUG_NESTED_PARQUET
     std::cout << "GET_DATASET_READER, beginning\n";
@@ -205,13 +209,32 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
     DatasetReader *ds_reader = new DatasetReader();
     ds_reader->bucket_region = bucket_region;
 
+    assert (storage_options != Py_None);
+
+    // Extract values from the storage_options dict
+    // Check that it's a dictionary, else throw an error
+    if (PyDict_Check(storage_options)) {
+        // Get value of "anon". Returns NULL if it doesn't exist in the dict.
+        // No need to decref s3fs_anon_py, PyDict_GetItemString returns borrowed ref
+        PyObject* s3fs_anon_py = PyDict_GetItemString(storage_options, "anon");
+        if (s3fs_anon_py != NULL && s3fs_anon_py == Py_True) {
+            ds_reader->s3fs_anon = true;
+        }
+    } else {
+        throw std::runtime_error("parquet.cpp::get_dataset_reader: storage_options is not a python dictionary.");
+    }
+    
+    
+
     // import bodo.io.parquet_pio
     PyObject *pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
 
-    // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name, parallel)
-    PyObject *ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset", "siOO",
-                                       file_name, int(parallel), Py_True, filters);
+    // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name, true, filters=filters, storage_options)
+    PyObject *ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset", "sOOO",
+                                       file_name, Py_True, filters, 
+                                       storage_options);
     Py_DECREF(filters);
+    Py_DECREF(storage_options);
     if (PyErr_Occurred()) return NULL;
 
     Py_DECREF(pq_mod);
@@ -363,7 +386,8 @@ int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,
             // open file reader for this piece
             std::shared_ptr<parquet::arrow::FileReader> file_reader;
             pq_init_reader(filepath.c_str(), &file_reader,
-                           ds_reader->bucket_region.c_str());
+                           ds_reader->bucket_region.c_str(),
+                           ds_reader->s3fs_anon);
 
             int64_t file_size =
                 pq_get_size_single_file(file_reader, column_idx);
@@ -399,7 +423,8 @@ int pq_read_string(DatasetReader *ds_reader, int64_t real_column_idx,
         for (auto filepath : ds_reader->filepaths) {
             std::shared_ptr<parquet::arrow::FileReader> file_reader;
             pq_init_reader(filepath.c_str(), &file_reader,
-                           ds_reader->bucket_region.c_str());
+                           ds_reader->bucket_region.c_str(),
+                           ds_reader->s3fs_anon);
 
             int64_t file_size =
                 pq_get_size_single_file(file_reader, column_idx);
@@ -464,7 +489,8 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t real_column_idx,
         for (auto filepath : ds_reader->filepaths) {
             std::shared_ptr<parquet::arrow::FileReader> file_reader;
             pq_init_reader(filepath.c_str(), &file_reader,
-                           ds_reader->bucket_region.c_str());
+                           ds_reader->bucket_region.c_str(),
+                           ds_reader->s3fs_anon);
 
             int64_t file_size =
                 pq_get_size_single_file(file_reader, column_idx);
@@ -541,7 +567,8 @@ int pq_read_arrow_array(DatasetReader *ds_reader, int64_t real_column_idx,
         for (auto filepath : ds_reader->filepaths) {
             std::shared_ptr<parquet::arrow::FileReader> file_reader;
             pq_init_reader(filepath.c_str(), &file_reader,
-                           ds_reader->bucket_region.c_str());
+                           ds_reader->bucket_region.c_str(),
+                           ds_reader->s3fs_anon);
 
             int64_t file_size =
                 pq_get_size_single_file(file_reader, column_idx);
@@ -588,7 +615,8 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t real_column_idx,
         for (auto filepath : ds_reader->filepaths) {
             std::shared_ptr<parquet::arrow::FileReader> file_reader;
             pq_init_reader(filepath.c_str(), &file_reader,
-                           ds_reader->bucket_region.c_str());
+                           ds_reader->bucket_region.c_str(),
+                           ds_reader->s3fs_anon);
 
             int64_t file_size =
                 pq_get_size_single_file(file_reader, column_idx);
@@ -649,7 +677,7 @@ void pq_gen_partition_column_T(DatasetReader *ds_reader, int64_t part_col_idx,
     for (size_t i=0; i < ds_reader->filepaths.size(); i++) {
         std::shared_ptr<parquet::arrow::FileReader> file_reader;
         pq_init_reader(ds_reader->filepaths[i].c_str(), &file_reader,
-                       ds_reader->bucket_region.c_str());
+                       ds_reader->bucket_region.c_str(), ds_reader->s3fs_anon);
         // XXX get number of rows from first column in parquet file
         int64_t file_size = pq_get_size_single_file(file_reader, 0);
         int64_t rows_to_fill =

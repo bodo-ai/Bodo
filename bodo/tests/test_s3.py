@@ -124,6 +124,43 @@ def test_s3_csv_data_date1(minio_server, s3_bucket, datapath):
     check_func(test_impl, (), py_output=py_output)
 
 
+def test_s3_pq_anon_public_dataset(memory_leak_check):
+    """
+    Test pd.read_parquet(..., storage_options={"anon": True})
+    with a public dataset on S3.
+    """
+
+    import os
+
+    # We need to unset the AWS env vars so it connects to actual S3 instead of MinIO
+    aws_env_vars = [
+        "AWS_S3_ENDPOINT",
+    ]
+    orig_env_vars = {}
+    for v in aws_env_vars:
+        if v in os.environ:
+            orig_env_vars[v] = os.environ[v]
+            del os.environ[v]
+        else:
+            orig_env_vars[v] = None
+
+    # Read from a public bucket
+    def impl():
+        df = pd.read_parquet(
+            "s3://aws-roda-hcls-datalake/opentargets_1911/19_11_target_list/part-00000-af4c14ab-5cfb-47d9-afc0-58db3bf07129-c000.snappy.parquet",
+            storage_options={"anon": True},
+        )
+        return df
+
+    try:
+        check_func(impl, ())
+    finally:
+        # Reset the environment variables.
+        for v in aws_env_vars:
+            if orig_env_vars[v] is not None:
+                os.environ[v] = orig_env_vars[v]
+
+
 @pytest.mark.parametrize(
     "bucket_fixture,bucket_name",
     [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2")],

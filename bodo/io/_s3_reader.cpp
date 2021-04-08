@@ -48,29 +48,37 @@
 // initialized the first time it is needed and reused afterwards
 std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
 bool is_fs_initialized = false;
+bool is_fs_anonymous_mode = false;  // only valid when is_fs_initialized is true
 
-std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region) {
+std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region, bool anonymous) {
     
-    // if already initialized but region for this bucket is different
-    // than the current region, then re-initialize with the right region
-    if (is_fs_initialized && bucket_region != "") {
-        arrow::fs::S3Options options = s3_fs->options();
-        if (bucket_region != options.region) {
-            options.region = bucket_region;
-            arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> result;
-            result = arrow::fs::S3FileSystem::Make(options);
-            CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::Make", s3_fs, std::string(""))
-        }
-    } else if (!is_fs_initialized) {
+    bool reinit_s3fs_instance;
+    if (!is_fs_initialized) {
         arrow::Status status;
         // initialize S3 APIs
         arrow::fs::S3GlobalOptions g_options;
         g_options.log_level = arrow::fs::S3LogLevel::Off;
         status = arrow::fs::InitializeS3(g_options);
         CHECK_ARROW(status, "InitializeS3", std::string(""));
+        // always init in this case
+        reinit_s3fs_instance = true;
+    } else {
+        // If already initialized but region for this bucket is different
+        // than the current region, then re-initialize with the right region.
+        // Similarly if anonymous mode has changed, then re-initialize.
+        reinit_s3fs_instance = ((bucket_region != "") && (s3_fs->options().region != bucket_region)) || (is_fs_anonymous_mode != anonymous);
+    }
 
+    if (reinit_s3fs_instance) {
         // get S3FileSystem
-        arrow::fs::S3Options options = arrow::fs::S3Options::Defaults();
+        arrow::fs::S3Options options;
+        if (!anonymous) {
+            options = arrow::fs::S3Options::Defaults();
+            is_fs_anonymous_mode = false;
+        } else {
+            options = arrow::fs::S3Options::Anonymous();
+            is_fs_anonymous_mode = true;
+        }
         char *default_region = std::getenv("AWS_DEFAULT_REGION");
         
         // Set region if one is provided, else a default region if one is provided, 
@@ -79,7 +87,7 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region) {
             options.region = std::string(bucket_region);
         } else if (default_region) {
             // Arrow actually seems to look for AWS_DEFAULT_REGION
-            // variable and use other heuristics (based on version) 
+            // variable and use other heuristics (based on AWS SDK version) 
             // to determine region if one isn't provided, but doesn't
             // hurt to set it explicitly if env var is provided
             options.region = std::string(default_region);
@@ -130,7 +138,7 @@ class S3FileReader : public SingleFileReader {
     S3FileReader(const char *_fname, const char *f_type, bool csv_header,
                  bool json_lines)
         : SingleFileReader(_fname, f_type, csv_header, json_lines) {
-        fs = get_s3_fs("");
+        fs = get_s3_fs("", false);
         // open file
         result = fs->OpenInputFile(std::string(_fname));
         CHECK_ARROW_AND_ASSIGN(result, "S3FileSystem::OpenInputFile", s3_file, fs->region())
@@ -176,7 +184,7 @@ class S3DirectoryFileReader : public DirectoryFileReader {
         // initialize dir_selector
         dir_selector.base_dir = this->dirname;
 
-        fs = get_s3_fs("");
+        fs = get_s3_fs("", false);
 
         arrow::Result<std::vector<arrow::fs::FileInfo>> result =
             fs->GetFileInfo(dir_selector);
@@ -207,7 +215,7 @@ extern "C" {
 void s3_get_fs(std::shared_ptr<arrow::fs::S3FileSystem> *fs,
                std::string bucket_region) {
     try {
-    *fs = get_s3_fs(bucket_region);
+    *fs = get_s3_fs(bucket_region, false);
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -217,7 +225,7 @@ FileReader *init_s3_reader(const char *fname, const char *suffix,
                            bool csv_header, bool json_lines) {
     try {
     arrow::fs::FileInfo file_stat;
-    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs("");
+    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs("", false);
     arrow::Result<arrow::fs::FileInfo> result =
         fs->GetFileInfo(std::string(fname));
     CHECK_ARROW_AND_ASSIGN(result, "fs->GetFileInfo", file_stat, fs->region())
@@ -237,8 +245,8 @@ FileReader *init_s3_reader(const char *fname, const char *suffix,
 
 void s3_open_file(const char *fname,
                   std::shared_ptr<::arrow::io::RandomAccessFile> *file,
-                  const char *bucket_region) {
-    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs(bucket_region);
+                  const char *bucket_region, bool anonymous) {
+    std::shared_ptr<arrow::fs::S3FileSystem> fs = get_s3_fs(bucket_region, anonymous);
     arrow::Result<std::shared_ptr<::arrow::io::RandomAccessFile>> result;
     result = fs->OpenInputFile(std::string(fname));
     CHECK_ARROW_AND_ASSIGN(result, "fs->OpenInputFile", *file, fs->region())

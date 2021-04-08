@@ -6,7 +6,7 @@
 
 void pq_init_reader(const char *file_name,
                     std::shared_ptr<parquet::arrow::FileReader> *a_reader,
-                    const char *bucket_region);
+                    const char *bucket_region, bool s3fs_anon);
 
 int64_t pq_get_size_single_file(std::shared_ptr<parquet::arrow::FileReader>,
                                 int64_t column_idx);

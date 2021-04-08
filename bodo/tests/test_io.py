@@ -2388,6 +2388,75 @@ def test_csv_repeat_args(memory_leak_check):
         bodo.jit(test_impl)()
 
 
+def test_read_parquet_unsupported_arg(memory_leak_check):
+    """
+    test that an error is raised when unsupported arg is passed.
+    """
+
+    def test_impl():
+        df = pd.read_parquet("some_file.pq", invalid_arg="invalid")
+        return df
+
+    with pytest.raises(
+        BodoError, match=r"read_parquet\(\) arguments {'invalid_arg'} not supported yet"
+    ):
+        bodo.jit(distributed=["df"])(test_impl)()
+
+
+def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
+    """
+    test that an error is raised when unsupported arg for storage_options is passed.
+    """
+
+    def test_impl1():
+        df = pd.read_parquet("some_file.pq", storage_options={"invalid_arg": "invalid"})
+        return df
+
+    def test_impl2():
+        df = pd.read_parquet(
+            "some_file.pq", storage_options={"invalid_arg": "invalid", "anon": True}
+        )
+        return df
+
+    def test_impl3():
+        df = pd.read_parquet("some_file.pq", storage_options="invalid")
+        return df
+
+    with pytest.raises(
+        BodoError,
+        match=r"read_parquet\(\) arguments {'invalid_arg'} for 'storage_options' not supported yet",
+    ):
+        bodo.jit(distributed=["df"])(test_impl1)()
+
+    with pytest.raises(
+        BodoError,
+        match=r"read_parquet\(\) arguments {'invalid_arg'} for 'storage_options' not supported yet",
+    ):
+        bodo.jit(distributed=["df"])(test_impl2)()
+
+    with pytest.raises(
+        BodoError,
+        match="read_parquet: 'storage_options' must be a constant dictionary",
+    ):
+        bodo.jit(distributed=["df"])(test_impl3)()
+
+
+def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
+    """
+    test that an error is raised when non-boolean is passed in for anon in storage_options
+    """
+
+    def test_impl():
+        df = pd.read_parquet("some_file.pq", storage_options={"anon": "True"})
+        return df
+
+    with pytest.raises(
+        BodoError,
+        match="read_parquet: 'anon' in 'storage_options' must be a constant boolean value",
+    ):
+        bodo.jit(distributed=["df"])(test_impl)()
+
+
 def test_read_parquet_invalid_path(memory_leak_check):
     """test error raise when parquet file path is invalid in C++ code."""
 
