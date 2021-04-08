@@ -227,16 +227,6 @@ ext_hdist = Extension(
 )
 
 
-ext_dict = Extension(
-    name="bodo.libs.hdict_ext",
-    sources=["bodo/libs/_dict_ext.cpp"],
-    extra_compile_args=eca,
-    extra_link_args=ela,
-    include_dirs=ind,
-    library_dirs=lid,
-)
-
-
 ext_str = Extension(
     name="bodo.libs.hstr_ext",
     sources=["bodo/libs/_str_ext.cpp", "bodo/libs/_bodo_common.cpp"],
@@ -435,7 +425,6 @@ ext_pyfs = Extension(
 
 _ext_mods = [
     ext_hdist,
-    ext_dict,
     ext_str,
     ext_decimal,
     ext_quantile,
