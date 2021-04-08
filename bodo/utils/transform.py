@@ -574,6 +574,20 @@ def get_const_value_inner(
             )
         )
 
+    # format() call
+    if call_name == ("format", "builtins"):
+        arg = get_const_value_inner(
+            func_ir, var_def.args[0], arg_types, typemap, updated_containers
+        )
+        fmt_spec = (
+            get_const_value_inner(
+                func_ir, var_def.args[1], arg_types, typemap, updated_containers
+            )
+            if len(var_def.args) > 1
+            else ""
+        )
+        return format(arg, fmt_spec)
+
     # Index calls
     if call_name in (
         ("init_string_index", "bodo.hiframes.pd_index_ext"),
