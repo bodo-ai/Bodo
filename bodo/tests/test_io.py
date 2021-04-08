@@ -926,7 +926,7 @@ def test_partition_cols():
             # for some reason, Bodo throws
             # "bodo.utils.typing.BodoError: Cannot convert dtype DatetimeDateType() to index type"
             # in _get_dist_arg with this:
-            #"F": pd.Categorical(date_series),
+            # "F": pd.Categorical(date_series),
             "G": range(8),
         }
     )
@@ -1424,6 +1424,33 @@ def test_write_csv_parallel_unicode(memory_leak_check):
         if get_rank() == 0:
             test_impl(df, pd_fname)
             pd.testing.assert_frame_equal(pd.read_csv(hp_fname), pd.read_csv(pd_fname))
+
+
+def test_pseudo_exception(datapath, memory_leak_check):
+    """Test removal of ForceLiteralArg message"""
+
+    def test_csv(fname):
+        df = pd.read_csv(fname)
+        return df.clip()
+
+    fname = datapath("csv_data1.csv")
+
+    with pytest.raises(Exception) as excinfo:
+        bodo.jit(test_csv)(fname)
+    # Save full traceback as a string
+    csv_track = excinfo.getrepr(style="native")
+    assert "Pseudo-exception" not in str(csv_track)
+
+    def test_pq(file_name):
+        df = pd.read_parquet(file_name)
+        return df.A.WRONG()
+
+    fname = datapath("groupby3.pq")
+    with pytest.raises(Exception) as excinfo:
+        bodo.jit(test_pq)(fname)
+
+    pq_track = excinfo.getrepr(style="native")
+    assert "Pseudo-exception" not in str(pq_track)
 
 
 @pytest.mark.smoke

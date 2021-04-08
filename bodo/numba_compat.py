@@ -1171,7 +1171,15 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
                 new_args.append(args[i])
         args = new_args
         # Re-enter compilation with the Literal-ized arguments
-        return_val = self._compile_for_args(*args)
+        try:
+            # This might raise TypingError/BodoError
+            return_val = self._compile_for_args(*args)
+        except TypingError as e:
+            # Set error to be raised in finally section
+            error = errors.TypingError(str(e))
+        except bodo.utils.typing.BodoError as e:
+            # Set error to be raised in finally section
+            error = bodo.utils.typing.BodoError(str(e))
 
     except errors.TypingError as e:
         # Intercept typing error that may be due to an argument
