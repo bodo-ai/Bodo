@@ -1806,6 +1806,7 @@ typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
 nunique_computation(array_info* arr, array_info* out_arr,
                     grouping_info const& grp_info, bool const& dropna) {
     size_t num_group = grp_info.group_to_first_row.size();
+    if (num_group == 0) return;
     if (arr->arr_type == bodo_array_type::NUMPY) {
         /**
          * Check if a pointer points to a NaN or not
@@ -1846,7 +1847,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
         UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                             std::function<bool(int64_t, int64_t)>>
             eset({}, hash_fct, equal_fct);
-        eset.reserve(double(arr->length) / num_group);
+        eset.reserve(double(arr->length) / num_group); // NOTE: num_group > 0
         eset.max_load_factor(0.4);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
@@ -1926,7 +1927,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
         UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                             std::function<bool(int64_t, int64_t)>>
             eset({}, hash_fct, equal_fct);
-        eset.reserve(double(arr->length) / num_group);
+        eset.reserve(double(arr->length) / num_group); // NOTE: num_group > 0
         eset.max_load_factor(0.4);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
@@ -1974,7 +1975,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
         UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                             std::function<bool(int64_t, int64_t)>>
             eset({}, hash_fct, equal_fct);
-        eset.reserve(double(arr->length) / num_group);
+        eset.reserve(double(arr->length) / num_group); // NOTE: num_group > 0
         eset.max_load_factor(0.4);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
@@ -2016,7 +2017,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
         UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                             std::function<bool(int64_t, int64_t)>>
             eset({}, hash_fct, equal_fct);
-        eset.reserve(double(arr->length) / num_group);
+        eset.reserve(double(arr->length) / num_group); // NOTE: num_group > 0
         eset.max_load_factor(0.4);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
