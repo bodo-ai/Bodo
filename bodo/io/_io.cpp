@@ -1,9 +1,9 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
-#include <boost/filesystem.hpp>
 #include <climits>
 #include <cstdio>
 #include <iostream>
+#include <filesystem>
 #include <string>
 #include "../libs/_bodo_common.h"
 #include "_bodo_file_reader.h"
@@ -99,13 +99,13 @@ uint64_t get_file_size(char* file_name) {
         // posix
         bool throw_error = false;
         if (rank == ROOT) {
-            boost::filesystem::path f_path(file_name);
+            std::filesystem::path f_path(file_name);
             // TODO: throw FileNotFoundError
-            if (!boost::filesystem::exists(f_path)) {
+            if (!std::filesystem::exists(f_path)) {
                 throw_error = true;
             }
             if (!throw_error) {
-                f_size = (uint64_t)boost::filesystem::file_size(f_path);
+                f_size = (uint64_t)std::filesystem::file_size(f_path);
             }
         }
         // Synchronize throw_error

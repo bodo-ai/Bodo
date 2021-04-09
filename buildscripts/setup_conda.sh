@@ -42,7 +42,7 @@ source activate $CONDA_ENV
 
 # ---- install compilers ----
 if [[ "$unamestr" == 'Linux' ]]; then
-    $CONDA_INSTALL gcc_linux-64 gxx_linux-64
+    $CONDA_INSTALL -c conda-forge "gcc_linux-64>=9.0" "gxx_linux-64>=9.0"
 elif [[ "$unamestr" == 'Darwin' ]]; then
     $CONDA_INSTALL -c conda-forge clang_osx-64 clangxx_osx-64
 else
@@ -54,7 +54,9 @@ fi
 if [ "$RUN_NIGHTLY" != "yes" ];
 then
    $CONDA_INSTALL -c conda-forge pyarrow=3.0.0
-   $CONDA_INSTALL fsspec -c conda-forge
+   # We lock fsspec at version 0.8 because in 0.9 it
+   # caused us import errors with s3fs for Pandas tests.
+   $CONDA_INSTALL fsspec=0.8 -c conda-forge
    $CONDA_INSTALL pandas='1.2.*' -c conda-forge
    $CONDA_INSTALL numba=0.53.0 -c conda-forge
    $CONDA_INSTALL cython -c conda-forge
@@ -64,7 +66,9 @@ then
    $CONDA_INSTALL xlrd xlsxwriter openpyxl -c conda-forge
    if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
 else
-   $CONDA_INSTALL -c pytorch -c conda-forge -c defaults bokeh pytorch=1.5 torchvision=0.6
+   $CONDA_INSTALL pytorch=1.8 -c pytorch -c conda-forge -c defaults
+   $CONDA_INSTALL bokeh=2.3 -c pytorch -c conda-forge -c defaults
+   $CONDA_INSTALL torchvision=0.9 -c pytorch -c conda-forge -c defaults
    $CONDA_INSTALL -c conda-forge tensorflow
    if [ "$RUNTIME" != "yes" ]; then pip install horovod[pytorch,tensorflow]; fi
    pip install credstash

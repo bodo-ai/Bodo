@@ -61,13 +61,14 @@ extra_hash_ind2 = ["bodo/libs/HashLibs/TSL/robin-map"]
 extra_hash_ind3 = ["bodo/libs/HashLibs/TSL/sparse-map"]
 extra_hash_ind = extra_hash_ind1 + extra_hash_ind2 + extra_hash_ind3
 lid = [PREFIX_DIR + "/lib"]
-# eca = ["-std=c++11", "-fsanitize=address"]
-# ela = ["-std=c++11", "-fsanitize=address"]
+# eca = ["-std=c++17", "-fsanitize=address"]
+# ela = ["-std=c++17", "-fsanitize=address"]
 if is_win:
-    eca = ["/std=c++latest", "/O2"]
+    eca = ["/std:c++17", "/O2"]
+    ela = ["/std:c++17"]
 else:
-    eca = ["-std=c++11", "-g0", "-O3"]
-ela = ["-std=c++11"]
+    eca = ["-std=c++17", "-g0", "-O3"]
+    ela = ["-std=c++17"]
 
 MPI_LIBS = ["mpi"]
 if "setup_centos7" in os.environ:
@@ -91,8 +92,6 @@ if is_win:
 
 hdf5_libs = MPI_LIBS + ["hdf5"]
 io_libs = MPI_LIBS + ["arrow"]
-if not is_win:
-    io_libs += ["boost_filesystem", "boost_system"]
 
 
 ext_io = Extension(
@@ -293,10 +292,10 @@ ext_dt = Extension(
     ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
     define_macros=np_compile_args["define_macros"],
-    extra_compile_args=["-std=c++11"],
-    extra_link_args=["-std=c++11"],
+    extra_compile_args=eca,
+    extra_link_args=ela,
     include_dirs=np_compile_args["include_dirs"] + ind,
-    library_dirs=np_compile_args["library_dirs"],
+    library_dirs=np_compile_args["library_dirs"] + lid,
     language="c++",
 )
 
@@ -323,13 +322,8 @@ ext_quantile = Extension(
 )
 
 
-# pq_libs = MPI_LIBS + ['boost_filesystem', 'arrow', 'parquet']
+# pq_libs = MPI_LIBS + ['arrow', 'parquet']
 pq_libs = MPI_LIBS.copy()
-
-# Windows MSVC can't have boost library names on command line
-# auto-link magic of boost should be used
-if not is_win:
-    pq_libs += ["boost_filesystem"]
 
 csv_libs = pq_libs + ["arrow"]
 pq_libs += ["arrow", "parquet"]

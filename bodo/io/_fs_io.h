@@ -119,7 +119,7 @@ void open_file_appendstream(
  * writing csv/json to posix:
  *  does not need to open outstream as we use MPI for writing
  * writing parquet to posix:
- *  use boost to create directory if necessary
+ *  use std::filesystem to create directory if necessary
  * @param fs_option: file system to write to
  * @param is_parallel: true if the table is part of a distributed table
  * @param myrank: current MPI rank

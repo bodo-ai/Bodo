@@ -16,13 +16,10 @@
 #include <mpi.h>
 #include <algorithm>
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/operations.hpp>
-#include <boost/filesystem/path.hpp>
-#include <boost/tokenizer.hpp>
 #include <cinttypes>
 #include <ciso646>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -100,7 +97,7 @@ class LocalFileReader : public SingleFileReader {
         CHECK(fstream->good() && !fstream->eof() && fstream->is_open(),
               "could not open file.");
     }
-    uint64_t getSize() { return boost::filesystem::file_size(fname); }
+    uint64_t getSize() { return std::filesystem::file_size(fname); }
     bool seek(int64_t pos) {
         this->fstream->seekg(pos + this->csv_header_bytes, std::ios_base::beg);
         return this->ok();
@@ -127,14 +124,14 @@ class LocalDirectoryFileReader : public DirectoryFileReader {
         const char *suffix = this->f_type_to_string();
 
         auto nonEmptyEndsWithSuffix =
-            [suffix](const boost::filesystem::path &path) -> bool {
-            return (boost::filesystem::is_regular_file(path) &&
+            [suffix](const std::filesystem::path &path) -> bool {
+            return (std::filesystem::is_regular_file(path) &&
                     boost::ends_with(path.string(), suffix) &&
-                    boost::filesystem::file_size(path) > 0);
+                    std::filesystem::file_size(path) > 0);
         };
 
-        std::copy_if(boost::filesystem::directory_iterator(_dirname),
-                     boost::filesystem::directory_iterator(),
+        std::copy_if(std::filesystem::directory_iterator(_dirname),
+                     std::filesystem::directory_iterator(),
                      std::back_inserter(this->file_paths),
                      nonEmptyEndsWithSuffix);
 
@@ -161,7 +158,7 @@ class LocalDirectoryFileReader : public DirectoryFileReader {
         for (auto it = this->file_paths.begin(); it != this->file_paths.end();
              ++it) {
             (this->file_sizes).push_back(this->dir_size);
-            this->dir_size += boost::filesystem::file_size(*it);
+            this->dir_size += std::filesystem::file_size(*it);
             this->dir_size -= this->csv_header_bytes;
         }
         this->file_sizes.push_back(this->dir_size);

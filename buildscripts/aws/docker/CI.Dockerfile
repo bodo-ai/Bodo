@@ -14,4 +14,21 @@ RUN ./setup_conda.sh
 RUN ./setup_minio.sh
 RUN ./test_installs.sh
 
+# This docker image is LARGE, so we remove unnecessary files
+# after the environment is created. This will increase the docker
+# image size because it creates layers, so we use docker-squash
+# https://pypi.org/project/docker-squash/ to generate a new
+# smaller image.
+# TODO: Determine if there are more files that can be removed
+# i.e. source files that are compiled.
+
+# Cleanup leftover compressed files
+RUN bash -c "rm -r /root/miniconda3/pkgs/*.bz2"
+RUN bash -c "rm -r /root/miniconda3/pkgs/*.conda"
+
+# Cleanup leftover cache files
+RUN bash -c "rm -r /root/miniconda3/pkgs/cache"
+RUN bash -c "rm -r /root/.cache"
+
+
 CMD ["/bin/bash"]

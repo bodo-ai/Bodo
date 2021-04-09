@@ -80,7 +80,7 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
             return;
         }
         // handling s3 and hdfs with arrow
-        // & handling posix json directory outputs with boost
+        // & handling posix json directory outputs with std::filesystem
         open_outstream(fs_option, is_parallel, myrank, suffix.substr(1),
                        dirname, fname, orig_path, path_name, &out_stream,
                        bucket_region);

@@ -1,7 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
 #include <arrow/io/api.h>
-#include <boost/filesystem/operations.hpp>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -211,13 +211,13 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
         if (is_parallel) {
             // create output directory
             int error = 0;
-            if (boost::filesystem::exists(dirname)) {
-                if (!boost::filesystem::is_directory(dirname)) error = 1;
+            if (std::filesystem::exists(dirname)) {
+                if (!std::filesystem::is_directory(dirname)) error = 1;
             } else {
                 // for the parallel case, 'dirname' is the directory where the
                 // different parts of the distributed table are stored (each as
                 // a file)
-                boost::filesystem::create_directory(dirname);
+                std::filesystem::create_directory(dirname);
             }
             MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR,
                           MPI_COMM_WORLD);
@@ -229,7 +229,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
                               << std::endl;
                 return;
             }
-            boost::filesystem::path out_path(dirname);
+            std::filesystem::path out_path(dirname);
             out_path /= fname;  // append file name to output path
             open_file_outstream(fs_option, file_type, out_path.string(), NULL,
                                 NULL, out_stream);

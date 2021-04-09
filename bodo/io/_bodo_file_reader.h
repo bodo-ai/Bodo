@@ -1,8 +1,8 @@
 #ifndef _BODO_FILE_READER_H_INCLUDED
 #define _BODO_FILE_READER_H_INCLUDED
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/filesystem.hpp>
 #include <cstdint>
+#include <filesystem>
 #include <vector>
 #include "../libs/_bodo_common.h"
 #include "../libs/_distributed.h"
@@ -12,7 +12,7 @@
 
 typedef std::vector<int64_t> size_vec;
 typedef std::vector<std::string> name_vec;
-typedef std::vector<boost::filesystem::path> path_vec;
+typedef std::vector<std::filesystem::path> path_vec;
 typedef std::vector<std::pair<std::string, int64_t>> name_size_vec;
 
 struct File_Type {
