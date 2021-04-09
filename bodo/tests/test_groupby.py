@@ -1948,7 +1948,7 @@ def test_groupby_apply(is_slow_run):
     def impl1(df):
         df2 = df.groupby("A").apply(
             lambda x, V: pd.DataFrame(
-                {"AA": [x.C.mean(), x.C.sum()], "BB": [V, x["C"].iloc[0]]}
+                {f"AA{V}": [x.C.mean(), x.C.sum()], "BB": [V, x["C"].iloc[0]]}
             ),
             V=11,
         )
