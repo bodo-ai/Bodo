@@ -745,6 +745,25 @@ def test_updated_container_binop(memory_leak_check):
         bodo.jit(impl6)(30000)
 
 
+def test_updated_container_df_rename():
+    """Test updated container in df.rename() input for [BE-287]"""
+
+    def impl():
+        cols = ["1", "24", "124"]
+        d = {"A": "B"}
+        for c in cols:
+            d[c] = "CE"
+        df = pd.DataFrame({"A": np.random.randn(10)})
+        new_df = df.rename(d, axis=1)
+        return new_df
+
+    with pytest.raises(
+        BodoError,
+        match=r"rename\(\): argument 'mapper' requires a constant value",
+    ):
+        bodo.jit(impl)()
+
+
 def test_unsupported_tz_dtype(memory_leak_check):
     """make sure proper error is thrown when input is tz-aware datetime"""
 

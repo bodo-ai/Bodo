@@ -946,7 +946,7 @@ class TypingTransforms:
                 (3, "lsuffix"),
                 (4, "rsuffix"),
             ],
-            "rename": [(2, "columns")],
+            "rename": [(0, "mapper"), (2, "columns")],
             "drop": [
                 (0, "labels"),
                 (1, "axis"),
