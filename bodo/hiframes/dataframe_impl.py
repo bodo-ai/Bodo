@@ -55,13 +55,13 @@ from bodo.utils.typing import (
     ensure_constant_values,
     get_index_data_arr_types,
     get_index_names,
+    get_nullable_and_non_nullable_types,
     get_overload_const_bool,
     get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
     get_overload_const_tuple,
     get_overload_constant_dict,
-    get_nullable_and_non_nullable_types,
     is_common_scalar_dtype,
     is_literal_type,
     is_overload_bool,
@@ -1124,11 +1124,17 @@ def overload_dataframe_cumsum(df, axis=None, skipna=True):
     return _gen_init_df(header, df.columns, data_args)
 
 
+def _is_describe_type(data):
+    """ Check if df.data has supported datatype for describe"""
+    return isinstance(data, IntegerArrayType) or (
+        isinstance(data, types.Array) and isinstance(data.dtype, (types.Number))
+    )
+
+
 @overload_method(DataFrameType, "describe", inline="always", no_unliteral=True)
 def overload_dataframe_describe(
     df, percentiles=None, include=None, exclude=None, datetime_is_numeric=False
 ):
-
     unsupported_args = dict(
         percentiles=percentiles,
         include=include,
@@ -1140,15 +1146,22 @@ def overload_dataframe_describe(
     )
     check_unsupported_args("DataFrame.describe", unsupported_args, arg_defaults)
 
+    # By default, For mixed data types columns Pandas return only an analysis of numeric columns(i.e. remove non-numeric columns)
+    # Drop any non-Bodo supported columns (only keep: int, float, and nullable int)
+    # If all column types are not supported, raise BodoError
+    numeric_cols = [c for c, d in zip(df.columns, df.data) if _is_describe_type(d)]
+    if len(numeric_cols) == 0:
+        raise BodoError("df.describe() only supports numeric columns")
+
     header = "def impl(df, percentiles=None, include=None, exclude=None, datetime_is_numeric=False):\n"
     data_args = ", ".join(
-        f"df.iloc[:, {i}].describe().values" for i in range(len(df.columns))
+        f"df.iloc[:, {df.columns.index(i)}].describe().values" for i in numeric_cols
     )
     index = (
         "bodo.utils.conversion.convert_to_index(['count', 'mean', 'std', "
         "'min', '25%', '50%', '75%', 'max'])"
     )
-    return _gen_init_df(header, df.columns, data_args, index)
+    return _gen_init_df(header, numeric_cols, data_args, index)
 
 
 @overload_method(DataFrameType, "take", inline="always", no_unliteral=True)

@@ -1,4 +1,5 @@
 import string
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -607,6 +608,94 @@ def test_dataframe_idxmin_unordered_cat(memory_leak_check):
 
     match = "DataFrame.idxmin.*: categorical columns must be ordered"
     with pytest.raises(BodoError, match=match):
+        bodo.jit(impl)(df)
+
+
+# --------------------- df.describe() ----------------------
+@pytest.mark.slow
+def test_describe_args(memory_leak_check):
+    """ Test df.describe with unsupported arguments """
+
+    def impl_percentiles(df):
+        return df.describe(percentiles=[0.25, 0.5, 0.75])
+
+    def impl_include(df):
+        return df.describe(include="all")
+
+    def impl_exclude(df):
+        return df.describe(exclude=[np.number])
+
+    def impl_datetime_is_numeric(df):
+        return df.describe(datetime_is_numeric=True)
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+        }
+    )
+
+    err_msg = "parameter only supports default value"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_percentiles)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_include)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_exclude)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_datetime_is_numeric)(df)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(
+            {
+                # Decimal
+                "A": pd.Series(
+                    [
+                        Decimal("1.6"),
+                        Decimal("-0.2"),
+                        Decimal("44.2"),
+                        np.nan,
+                        Decimal("0"),
+                    ]
+                ),
+                # datetime
+                "B": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+                # timedelta
+                "C": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                # list
+                "D": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4], [2]]),
+                # tuple
+                "E": pd.Series([(1, 2), (3,), (5, 4, 6), (-1, 3, 4), (2,)]),
+                # Categorical
+                "F": pd.Categorical([1, 2, 5, 5, 3], ordered=True),
+                # Timestamp
+                "G": [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+                # boolean Array
+                "H": [True, True, False, True, True],
+                # string
+                "I": ["ab", "cd", "ef", "gh", "mm"],
+            }
+        )
+    ],
+)
+def test_describe_unsupported_types(df, memory_leak_check):
+    """ Test df.describe with its unsupported Bodo types"""
+
+    def impl(df):
+        return df.describe()
+
+    err_msg = "only supports numeric columns"
+
+    with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl)(df)
 
 

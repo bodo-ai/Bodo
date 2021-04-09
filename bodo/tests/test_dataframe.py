@@ -1591,15 +1591,33 @@ def test_df_describe(numeric_df_value, memory_leak_check):
     check_func(test_impl, (numeric_df_value,), is_out_distributed=False)
 
 
-def test_df_describe_dt64_stack_trace(memory_leak_check):
-    # TODO: Change it after fixing [BE-360]
+def test_df_describe_mixed_types(memory_leak_check):
+    """ Test describe with numeric and not numeric columns. Default is to drop non-numeric ones"""
 
-    def test_impl(df):
+    def impl(df):
         return df.describe()
 
     df = pd.DataFrame(
         {
-            "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
+            "A": ["aa", "bb", "cc", "dd", "ee"],
+            "B": [1, 2, 3, 4, 5],
+            "C": pd.Categorical([1, 2, 5, 3, 3], ordered=True),
+            "D": [1.1, 2.2, 3.3, 4.4, 5.5],
+        }
+    )
+
+    check_func(impl, (df,), is_out_distributed=False)
+
+
+def test_df_stack_trace(memory_leak_check):
+    """Test that stack trace is suppressed in user mode and available in developer mode """
+
+    def test_impl(df):
+        return df.pct_change()
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4, 5, 6],
             "B": pd.Series(pd.date_range(start="1/1/2018", end="1/4/2018", periods=6)),
         }
     )

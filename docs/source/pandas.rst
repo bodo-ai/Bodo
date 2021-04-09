@@ -376,7 +376,7 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.cumprod`
 * :meth:`pandas.Series.cummin`
 * :meth:`pandas.Series.cummax`
-* :meth:`pandas.Series.describe`
+* :meth:`pandas.Series.describe` (supports numeric types)
 * :meth:`pandas.Series.diff` (Implemented for Numpy Array data types. Supports `periods` argument.)
 * :meth:`pandas.Series.max`
 * :meth:`pandas.Series.mean`
@@ -593,7 +593,7 @@ Computations / Descriptive Stats:
 * :meth:`pandas.DataFrame.cummin`
 * :meth:`pandas.DataFrame.cumprod`
 * :meth:`pandas.DataFrame.cumsum`
-* :meth:`pandas.DataFrame.describe`
+* :meth:`pandas.DataFrame.describe` (supports numeric types)
 * :meth:`pandas.DataFrame.diff` (Implemented for Numpy Array data types. Supports `periods` argument.)
 * :meth:`pandas.DataFrame.max`
 * :meth:`pandas.DataFrame.mean`

@@ -1900,16 +1900,28 @@ def overload_series_describe(
     )
     check_unsupported_args("Series.describe", unsupported_args, arg_defaults)
 
-    # TODO: support categorical, dt64, ...
+    # This check is needed for S.describe(), even though it's redundant if coming from df.describe()
+    # Bodo limitations for supported types
+    # Currently only numeric data types (int, float, and nullable int) are supported
+    if not (
+        isinstance(S.data, types.Array) and isinstance(S.data.dtype, (types.Number))
+    ) and not isinstance(S.data, IntegerArrayType):
+        raise BodoError(f"describe() column input type {S.data} not supported.")
+
+    # TODO: Support non-numeric columns set columns (e.g. categorical, BooleanArrayType, string)
+    # These types compute count, unique, top, and freq only.
+    # TODO: compute unique, top (most common value), freq (how many times the most common value is found)
+
+    # This is for numeric columns only and datetime (datetime_is_numeric=True)
     def impl(
         S, percentiles=None, include=None, exclude=None, datetime_is_numeric=False
     ):  # pragma: no cover
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        a_count = np.float64(S.count())
-        a_min = np.float64(S.min())
-        a_max = np.float64(S.max())
-        a_mean = np.float64(S.mean())
-        a_std = np.float64(S.std())
+        a_count = S.count()
+        a_min = S.min()
+        a_max = S.max()
+        a_mean = S.mean()
+        a_std = S.std()
         q25 = S.quantile(0.25)
         q50 = S.quantile(0.5)
         q75 = S.quantile(0.75)
