@@ -534,15 +534,16 @@ static void c_scatterv(void* send_data, int* sendcounts, int* displs,
  * @param comm new communicator handle
  */
 static void c_comm_create(const int* comm_ranks, int n, MPI_Comm* comm) {
+    MPI_Group new_group;
     MPI_Group world_group;
     int err = MPI_Comm_group(MPI_COMM_WORLD, &world_group);
     assert(err == MPI_SUCCESS);
-    MPI_Group new_group;
     err = MPI_Group_incl(world_group, n, comm_ranks, &new_group);
     assert(err == MPI_SUCCESS);
-    err = MPI_Comm_create_group(MPI_COMM_WORLD, new_group, 0, comm);
+    err = MPI_Comm_create(MPI_COMM_WORLD, new_group, comm);
     assert(err == MPI_SUCCESS);
 }
+
 /**
  * MPI_Bcast for all ranks or subset of them
  * NOTE: broadcast root is 0 (ROOT_PE) for both MPI_COMM_WORLD or
