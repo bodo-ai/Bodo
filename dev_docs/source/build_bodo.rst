@@ -54,7 +54,7 @@ Troubleshooting MacOS Build
 
 * Add the following line to your .zshrc file::
 
-    export CONDA_BUILD_SYSROOT=/opt/MacOSX10.9.sdk
+    export CONDA_BUILD_SYSROOT=/opt/MacOSX10.15.sdk
 
 * Execute buildscripts/setup_osx_sdk.sh to resolve this issue.
 
