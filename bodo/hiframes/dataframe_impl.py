@@ -447,10 +447,11 @@ def overload_dataframe_head(df, n=5):
 
     # call head() on column Series
     data_args = ", ".join(
-        f"df.iloc[:, {i}].head(n).values" for i in range(len(df.columns))
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[:n]"
+        for i in range(len(df.columns))
     )
     header = "def impl(df, n=5):\n"
-    index = "bodo.allgatherv(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[:n], False)"
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[:n]"
     return _gen_init_df(header, df.columns, data_args, index)
 
 
@@ -461,10 +462,11 @@ def overload_dataframe_tail(df, n=5):
         raise BodoError("Dataframe.tail(): 'n' must be an Integer")
     # call tail() on column Series
     data_args = ", ".join(
-        f"df.iloc[:, {i}].tail(n).values" for i in range(len(df.columns))
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[-n:]"
+        for i in range(len(df.columns))
     )
     header = "def impl(df, n=5):\n"
-    index = "bodo.allgatherv(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[-n:], False)"
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[-n:]"
     return _gen_init_df(header, df.columns, data_args, index)
 
 

@@ -20,7 +20,6 @@ from bodo.tests.utils import (
     _get_dist_arg,
     _test_equal,
     check_func,
-    count_array_OneDs,
     count_array_REPs,
     count_parfor_REPs,
     get_start_end,
@@ -3591,7 +3590,7 @@ def test_series_head(series_val, memory_leak_check):
     def test_impl(S):
         return S.head(3)
 
-    check_func(test_impl, (series_val,), False)
+    check_func(test_impl, (series_val,))
 
 
 def test_series_tail(series_val, memory_leak_check):
@@ -3602,7 +3601,7 @@ def test_series_tail(series_val, memory_leak_check):
     def test_impl(S):
         return S.tail(3)
 
-    check_func(test_impl, (series_val,), False)
+    check_func(test_impl, (series_val,))
 
 
 @pytest.mark.slow
@@ -3615,7 +3614,7 @@ def test_series_tail_default_args(memory_leak_check):
         return S.tail()
 
     S = pd.Series(np.arange(5))
-    check_func(test_impl, (S,), False)
+    check_func(test_impl, (S,))
 
 
 # Pandas returns an empty df but Bodo is returning the whole df.
@@ -3626,7 +3625,7 @@ def test_series_tail_zero(memory_leak_check):
     def test_impl(S):
         return S.tail(0)
 
-    check_func(test_impl, (S,), False)
+    check_func(test_impl, (S,))
 
 
 @pytest.mark.parametrize(
@@ -6233,16 +6232,6 @@ class TestSeries(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         pd.testing.assert_series_equal(bodo_func(), test_impl())
-
-    def test_series_head_index_parallel1(self):
-        def test_impl(S):
-            return S.head(3)
-
-        S = pd.Series([6, 9, 2, 3, 6, 4, 5], ["a", "ab", "abc", "c", "f", "hh", ""])
-        bodo_func = bodo.jit(distributed_block={"S"})(test_impl)
-        start, end = get_start_end(len(S))
-        pd.testing.assert_series_equal(bodo_func(S[start:end]), test_impl(S))
-        self.assertTrue(count_array_OneDs() > 0)
 
     def test_series_median1(self):
         def test_impl(S):
