@@ -1083,14 +1083,19 @@ def test_series_copy(series_val, memory_leak_check):
 
 
 def test_series_to_list(series_val, memory_leak_check):
+    """Test Series.to_list(): non-float NAs throw a runtime error since can't be
+    represented in lists.
+    """
     # TODO: [BE-498] Correctly convert nan
-    f = lambda S: S.to_list()
+    def impl(S):
+        return S.to_list()
+
     if series_val.hasnans and not isinstance(series_val.iat[0], np.floating):
         message = "Not supported for NA values"
         with pytest.raises(ValueError, match=message):
-            bodo.jit(f)(series_val)
+            bodo.jit(impl)(series_val)
     else:
-        check_func(f, (series_val,))
+        check_func(impl, (series_val,), only_seq=True)
 
 
 def test_series_to_numpy(numeric_series_val, memory_leak_check):
