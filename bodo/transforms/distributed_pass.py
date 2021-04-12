@@ -2333,7 +2333,7 @@ class DistributedPass:
         size_def = guard(get_definition, self.func_ir, size_var)
         # find trivial calc_nitems(0, n, 1) call and use n instead
         if (
-            guard(find_callname, self.func_ir, size_def)
+            guard(find_callname, self.func_ir, size_def, self.typemap)
             == ("calc_nitems", "bodo.libs.array_kernels")
             and guard(find_const, self.func_ir, size_def.args[0]) == 0
             and guard(find_const, self.func_ir, size_def.args[2]) == 1
@@ -2374,7 +2374,7 @@ class DistributedPass:
 
         if new_size_var is None:
             # Series.combine() uses max(s1, s2) to get output size
-            calc_call = guard(find_callname, self.func_ir, size_def)
+            calc_call = guard(find_callname, self.func_ir, size_def, self.typemap)
             if calc_call == ("max", "builtins"):
                 s1 = self._get_1D_Var_size(size_def.args[0], equiv_set, avail_vars, out)
                 s2 = self._get_1D_Var_size(size_def.args[1], equiv_set, avail_vars, out)
@@ -3316,7 +3316,7 @@ class DistributedPass:
             var_def = get_definition(self.func_ir, var)
             require(isinstance(var_def, ir.Expr))
             if var_def.op == "call":
-                fdef = find_callname(self.func_ir, var_def)
+                fdef = find_callname(self.func_ir, var_def, self.typemap)
                 if (
                     fdef[0] in ("create_dataset", "create_group")
                     and isinstance(fdef[1], ir.Var)

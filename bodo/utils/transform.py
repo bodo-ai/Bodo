@@ -123,6 +123,7 @@ no_side_effect_call_tuples = {
     ("get_dataframe_data", "pd_dataframe_ext", "hiframes", bodo),
     ("get_dataframe_index", "pd_dataframe_ext", "hiframes", bodo),
     ("init_rolling", "pd_rolling_ext", "hiframes", bodo),
+    ("init_groupby", "pd_groupby_ext", "hiframes", bodo),
     # array kernels
     ("calc_nitems", "array_kernels", "libs", bodo),
     ("concat", "array_kernels", "libs", bodo),

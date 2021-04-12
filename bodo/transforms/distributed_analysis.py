@@ -1850,7 +1850,7 @@ class DistributedAnalysis:
         size_def = guard(get_definition, self.func_ir, size_var)
         # find trivial calc_nitems(0, n, 1) call and use n instead
         if (
-            guard(find_callname, self.func_ir, size_def)
+            guard(find_callname, self.func_ir, size_def, self.typemap)
             == ("calc_nitems", "bodo.libs.array_kernels")
             and guard(find_const, self.func_ir, size_def.args[0]) == 0
             and guard(find_const, self.func_ir, size_def.args[2]) == 1
@@ -2606,7 +2606,7 @@ class DistributedAnalysis:
                 dcall = vdef
             require(is_expr(dcall, "call"))
             require(
-                find_callname(self.func_ir, dcall)
+                find_callname(self.func_ir, dcall, self.typemap)
                 == ("dist_return", "bodo.libs.distributed_api")
             )
             return True
@@ -2709,7 +2709,7 @@ class DistributedAnalysis:
     def _get_calc_n_items_range_index(self, size_def):
         """match RangeIndex calc_nitems(r._start, r._stop, r._step) call and return r"""
         require(
-            find_callname(self.func_ir, size_def)
+            find_callname(self.func_ir, size_def, self.typemap)
             == ("calc_nitems", "bodo.libs.array_kernels")
         )
         start_def = get_definition(self.func_ir, size_def.args[0])
@@ -2740,7 +2740,7 @@ class DistributedAnalysis:
             concat_reduce_vars = set()
         var_def = guard(get_definition, self.func_ir, varname)
         if is_call(var_def):
-            fdef = guard(find_callname, self.func_ir, var_def)
+            fdef = guard(find_callname, self.func_ir, var_def, self.typemap)
             # data and index variables of dataframes are created from concat()
             if fdef == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
                 tup_list = guard(find_build_tuple, self.func_ir, var_def.args[0])
@@ -2854,7 +2854,7 @@ def _is_concat_reduce(reduce_varname, reduce_nodes, func_ir, typemap):
         and reduce_nodes[-2].target.name == reduce_nodes[-1].value.name
     )
     reduce_func_call = reduce_nodes[-2].value
-    fdef = find_callname(func_ir, reduce_nodes[-2].value)
+    fdef = find_callname(func_ir, reduce_nodes[-2].value, typemap)
     if fdef == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
         arg_def = get_definition(func_ir, reduce_func_call.args[0])
         require(is_expr(arg_def, "build_tuple"))
@@ -2865,7 +2865,7 @@ def _is_concat_reduce(reduce_varname, reduce_nodes, func_ir, typemap):
         reduce_func_call = get_definition(func_ir, reduce_func_call.args[0])
 
     require(
-        find_callname(func_ir, reduce_func_call)
+        find_callname(func_ir, reduce_func_call, typemap)
         == ("concat", "bodo.libs.array_kernels")
     )
     return True
