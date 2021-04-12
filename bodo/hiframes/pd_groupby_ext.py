@@ -6,6 +6,7 @@ from enum import Enum
 import numba
 import numpy as np
 from numba.core import cgutils, types
+from numba.core.imputils import impl_ret_borrowed
 from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import (
     AbstractTemplate,
@@ -79,7 +80,6 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_none,
     is_overload_true,
-    is_overload_zero,
     list_cumulative,
     raise_bodo_error,
     raise_const_error,
@@ -123,102 +123,6 @@ class GroupbyModel(models.StructModel):
 
 
 make_attribute_wrapper(DataFrameGroupByType, "obj", "obj")
-
-
-@overload_method(DataFrameType, "groupby", inline="always", no_unliteral=True)
-def df_groupby_overload(
-    df,
-    by=None,
-    axis=0,
-    level=None,
-    as_index=True,
-    sort=False,
-    group_keys=True,
-    squeeze=False,
-    observed=False,
-    dropna=True,
-):
-
-    validate_groupby_spec(
-        df, by, axis, level, as_index, sort, group_keys, squeeze, observed, dropna
-    )
-
-    def _impl(
-        df,
-        by=None,
-        axis=0,
-        level=None,
-        as_index=True,
-        sort=False,
-        group_keys=True,
-        squeeze=False,
-        observed=False,
-        dropna=True,
-    ):  # pragma: no cover
-        return bodo.hiframes.pd_groupby_ext.init_groupby(df, by, as_index)
-
-    return _impl
-
-
-def validate_groupby_spec(
-    df, by, axis, level, as_index, sort, group_keys, squeeze, observed, dropna
-):
-    """
-    validate df.groupby() specifications: In addition to consistent error checking
-    with pandas, we also check for unsupported specs.
-
-    An error is raised if the spec is invalid.
-    """
-
-    # make sure 'by' is supplied
-    if is_overload_none(by):
-        raise BodoError("groupby(): 'by' must be supplied.")
-
-    # make sure axis has default value 0
-    if not is_overload_zero(axis):
-        raise BodoError("groupby(): 'axis' parameter only supports integer value 0.")
-
-    # make sure level is not specified
-    if not is_overload_none(level):
-        raise BodoError(
-            "groupby(): 'level' is not supported since MultiIndex is not supported."
-        )
-
-    # make sure by is a const str list
-    if not is_literal_type(by) and not is_overload_constant_list(by):
-        raise_const_error(
-            f"groupby(): 'by' parameter only supports a constant column label or column labels, not {by}."
-        )
-
-    # make sure by has valid label(s)
-    if len(set(get_overload_const_list(by)).difference(set(df.columns))) > 0:
-        raise_const_error(
-            "groupby(): invalid key {} for 'by' (not available in columns {}).".format(
-                get_overload_const_list(by), df.columns
-            )
-        )
-
-    # make sure as_index is of type bool
-    if not is_overload_constant_bool(as_index):
-        raise_const_error(
-            "groupby(): 'as_index' parameter must be a constant bool, not {}.".format(
-                as_index
-            ),
-        )
-
-    # NOTE: sort default value is True in pandas. We opt to set it to False by default for performance
-    unsupported_args = dict(
-        sort=sort,
-        group_keys=group_keys,
-        squeeze=squeeze,
-        observed=observed,
-        dropna=dropna,
-    )
-    args_defaults = dict(
-        sort=False, group_keys=True, squeeze=False, observed=False, dropna=True
-    )
-
-    check_unsupported_args("Dataframe.groupby", unsupported_args, args_defaults)
 
 
 def validate_udf(func_name, func):
