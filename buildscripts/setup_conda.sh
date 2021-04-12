@@ -66,10 +66,15 @@ then
    $CONDA_INSTALL xlrd xlsxwriter openpyxl -c conda-forge
    if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
 else
-   $CONDA_INSTALL pytorch=1.8 -c pytorch -c conda-forge -c defaults
-   $CONDA_INSTALL bokeh=2.3 -c pytorch -c conda-forge -c defaults
-   $CONDA_INSTALL torchvision=0.9 -c pytorch -c conda-forge -c defaults
-   $CONDA_INSTALL -c conda-forge tensorflow
-   if [ "$RUNTIME" != "yes" ]; then pip install horovod[pytorch,tensorflow]; fi
+   if [ "$RUNTIME" != "yes" ];
+    then
+       $CONDA_INSTALL pytorch=1.8 -c pytorch -c conda-forge -c defaults
+       $CONDA_INSTALL bokeh=2.3 -c pytorch -c conda-forge -c defaults
+       $CONDA_INSTALL torchvision=0.9 -c pytorch -c conda-forge -c defaults
+       # Install h5py and hd5f directly because otherwise tensorflow
+       # installs a non-mpi version.
+       $CONDA_INSTALL tensorflow h5py hdf5=*=*mpich* -c conda-forge
+       pip install horovod;
+    fi
    pip install credstash
 fi

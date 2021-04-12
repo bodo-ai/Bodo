@@ -19,13 +19,7 @@ RUN ./test_installs.sh
 # smaller image.
 # TODO: Determine if there are more files that can be removed
 # i.e. source files that are compiled.
-
-# Cleanup leftover compressed files
-RUN bash -c "rm -r /root/miniconda3/pkgs/*.bz2"
-RUN bash -c "rm -r /root/miniconda3/pkgs/*.conda"
-
-# Cleanup leftover cache files
-RUN bash -c "rm -r /root/miniconda3/pkgs/cache"
-RUN bash -c "rm -r /root/.cache"
+ADD buildscripts/aws/clean_conda.sh .
+RUN ./clean_conda.sh
 
 CMD ["/bin/bash"]

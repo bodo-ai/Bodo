@@ -450,8 +450,6 @@ def get_storage_options_pyobject(storage_options):  # pragma: no cover
 def overload_get_storage_options_pyobject(storage_options):
     """generate a pyobject for the storage_options to pass to C++"""
     storage_options_val = get_overload_constant_dict(storage_options)
-    # Remove the dummy variable
-    storage_options_val.pop("bodo_dummy", None)
     func_text = "def impl(storage_options):\n"
     func_text += (
         "  with numba.objmode(storage_options_py='storage_options_dict_type'):\n"
@@ -490,7 +488,6 @@ def _gen_pq_reader_py(
     )
 
     # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
-    # The dummy variable is popped out in get_storage_options_pyobject.
     storage_options["bodo_dummy"] = "dummy"
     func_text += (
         f"  storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
