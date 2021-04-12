@@ -314,7 +314,6 @@ _dataframe_no_inline_methods = {
     "assign",
     "to_string",
     "query",
-    "groupby",
     "rolling",
 }
 
