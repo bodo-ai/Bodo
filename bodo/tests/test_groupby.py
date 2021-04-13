@@ -3385,11 +3385,12 @@ def test_std_one_col(test_df, memory_leak_check):
     if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
         test_df["B"].dtype, pd.CategoricalDtype
     ):
-        # TODO: [BE-53] Add a check that Bodo gracefully errors
-        # with a clear error message
-        return
-
-    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+        with pytest.raises(
+            BodoError, match="Groupby with Categorical key not supported."
+        ):
+            bodo.jit(impl1)(test_df)
+    else:
+        check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -3662,12 +3663,51 @@ def test_var(test_df, memory_leak_check):
     if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
         test_df["B"].dtype, pd.CategoricalDtype
     ):
-        # TODO: [BE-53] Add a check that Bodo gracefully errors
-        # with a clear error message
-        return
-
-    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+        with pytest.raises(
+            BodoError, match="Groupby with Categorical key not supported."
+        ):
+            bodo.jit(impl1)(test_df)
+    else:
+        check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
+
+
+@pytest.mark.slow
+def test_var_std_supported_types(memory_leak_check):
+    """
+    Test Groupby.var()
+    """
+
+    def impl1(df):
+        A = df.groupby("A").var()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").std()
+        return A
+
+    # Empty dataframe
+    df = pd.DataFrame({"A": [], "B": []})
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+
+    # Zero columns
+    df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl1)(df_empty)
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl2)(df_empty)
+
+    # Test different column types in same dataframe
+    df_mix = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 2, 3],
+            "B": [1.1, 2.2, 3.3, 4.4, 1.1],
+            "C": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+        }
+    )
+    check_func(impl1, (df_mix,), sort_output=True, check_dtype=False)
+    check_func(impl2, (df_mix,), sort_output=True, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -3689,11 +3729,13 @@ def test_var_one_col(test_df, memory_leak_check):
     if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
         test_df["B"].dtype, pd.CategoricalDtype
     ):
-        # TODO: [BE-53] Add a check that Bodo gracefully errors
-        # with a clear error message
-        return
+        with pytest.raises(
+            BodoError, match="Groupby with Categorical key not supported."
+        ):
+            bodo.jit(impl1)(test_df)
+    else:
+        check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
 
-    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -3799,6 +3841,44 @@ def test_idxmin_idxmax(memory_leak_check):
     check_func(impl3, (df2,), sort_output=True)
     check_func(impl3, (df3,), sort_output=True)
     check_func(impl4, (df1,), sort_output=True)
+
+
+@pytest.mark.slow
+def test_idxmin_idxmax_supported_types(memory_leak_check):
+    """
+    Test Groupby.idxmin() and Groupby.idxmax()
+    """
+
+    def impl1(df):
+        A = df.groupby("A").idxmin()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").idxmax()
+        return A
+
+    # Empty dataframe
+    # TODO: [BE-547] bodo keeps columns result.shape = (0, 1), while Pandas doesn't (0,0)
+    # df = pd.DataFrame({"A": [], "B": []})
+    # check_func(impl1, (df,), sort_output=True)
+    # check_func(impl2, (df,), sort_output=True)
+
+    # Zero columns
+    df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl1)(df_empty)
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl2)(df_empty)
+
+    # Test different column types in same dataframe
+    df_mix = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 2, 3],
+            "B": [1.1, 2.2, 3.3, 4.4, 1.1],
+        }
+    )
+    check_func(impl1, (df_mix,), sort_output=True, reset_index=True)
+    check_func(impl2, (df_mix,), sort_output=True, reset_index=True)
 
 
 @pytest.mark.slow

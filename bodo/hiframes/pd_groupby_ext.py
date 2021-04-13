@@ -393,10 +393,27 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
                     ),
                 )
 
-    if isinstance(in_dtype, types.Boolean) and func_name in {"cumsum", "sum", "mean"}:
+    if isinstance(in_dtype, types.Boolean) and func_name in {
+        "cumsum",
+        "sum",
+        "mean",
+        "std",
+        "var",
+        # See: [BE-549]
+        "idxmin",
+        "idxmax",
+    }:
         return (
             None,
             "groupby built-in functions {} does not support boolean column".format(
+                func_name
+            ),
+        )
+    # See: [BE-549]
+    if func_name in {"idxmin", "idxmax"} and isinstance(arr_type, IntegerArrayType):
+        return (
+            None,
+            "column type of nullable integer is not supported in groupby built-in function {}".format(
                 func_name
             ),
         )
@@ -562,6 +579,27 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     )
                     unsupported_args = dict(numeric_only=numeric_only)
                     arg_defaults = dict(numeric_only=True)
+                    check_unsupported_args(
+                        f"Groupby.{func_name}", unsupported_args, arg_defaults
+                    )
+                elif func_name in ("idxmin", "idxmax"):
+                    kws = dict(kws) if kws else {}
+                    # pop arguments from kws or args
+                    # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
+                    axis = args[0] if len(args) > 0 else kws.pop("axis", 0)
+                    skipna = args[1] if len(args) > 1 else kws.pop("skipna", True)
+                    unsupported_args = dict(axis=axis, skipna=skipna)
+                    arg_defaults = dict(axis=0, skipna=True)
+                    check_unsupported_args(
+                        f"Groupby.{func_name}", unsupported_args, arg_defaults
+                    )
+                elif func_name in ("var", "std"):
+                    kws = dict(kws) if kws else {}
+                    # pop arguments from kws or args
+                    # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
+                    ddof = args[0] if len(args) > 0 else kws.pop("ddof", 1)
+                    unsupported_args = dict(ddof=ddof)
+                    arg_defaults = dict(ddof=1)
                     check_unsupported_args(
                         f"Groupby.{func_name}", unsupported_args, arg_defaults
                     )
@@ -859,11 +897,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.var", no_unliteral=True)
     def resolve_var(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "var")
+        return self._get_agg_typ(grp, args, "var", kws=kws)
 
     @bound_function("groupby.std", no_unliteral=True)
     def resolve_std(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "std")
+        return self._get_agg_typ(grp, args, "std", kws=kws)
 
     @bound_function("groupby.first", no_unliteral=True)
     def resolve_first(self, grp, args, kws):
@@ -875,11 +913,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.idxmin", no_unliteral=True)
     def resolve_idxmin(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "idxmin")
+        return self._get_agg_typ(grp, args, "idxmin", kws=kws)
 
     @bound_function("groupby.idxmax", no_unliteral=True)
     def resolve_idxmax(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "idxmax")
+        return self._get_agg_typ(grp, args, "idxmax", kws=kws)
 
     @bound_function("groupby.size", no_unliteral=True)
     def resolve_size(self, grp, args, kws):

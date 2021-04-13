@@ -1190,3 +1190,338 @@ def test_min_max_unsupported_types(memory_leak_check):
         bodo.jit(impl1)(df_tuples)
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl2)(df_tuples)
+
+
+# ------------------------------ df.groupby().var()/std()------------------------------ #
+
+
+@pytest.mark.slow
+def test_var_args(memory_leak_check):
+    """ Test Groupby.var with arguments """
+
+    # wrong keyword value test
+    def impl_ddof(df):
+        A = df.groupby("A").var(ddof=10)
+        return A
+
+    # wrong arg value test
+    def impl_ddof_arg(df):
+        A = df.groupby("A").var(10)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [1.1, 2.2, 1.1, 3.3, 4.4, 3.2, 45.6, 10.0],
+        }
+    )
+
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_ddof)(df)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_ddof_arg)(df)
+
+
+@pytest.mark.slow
+def test_std_args(memory_leak_check):
+    """ Test Groupby.std with arguments """
+
+    # wrong keyword value test
+    def impl_ddof(df):
+        A = df.groupby("A").std(ddof=10)
+        return A
+
+    # wrong arg value test
+    def impl_ddof_arg(df):
+        A = df.groupby("A").std(10)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [1.1, 2.2, 1.1, 3.3, 4.4, 3.2, 45.6, 10.0],
+        }
+    )
+
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_ddof)(df)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_ddof_arg)(df)
+
+
+# ------------------------------ df.groupby().idxmin()/idxmax()------------------------------ #
+
+
+@pytest.mark.slow
+def test_idxmin_args(memory_leak_check):
+    """ Test Groupby.idxmin with arguments """
+
+    # wrong keyword value test
+    def impl_axis(df):
+        A = df.groupby("A").idxmin(axis=1)
+        return A
+
+    # wrong arg value test
+    def impl_axis_arg(df):
+        A = df.groupby("A").idxmin(1)
+        return A
+
+    def impl_skipna(df):
+        A = df.groupby("A").idxmin(skipna=False)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [1.1, 2.2, 1.1, 3.3, 4.4, 3.2, 45.6, 10.0],
+        }
+    )
+
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_axis_arg)(df)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_axis)(df)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_skipna)(df)
+
+
+@pytest.mark.slow
+def test_idxmax_args(memory_leak_check):
+    """ Test Groupby.idxmax with arguments """
+
+    # wrong keyword value test
+    def impl_axis(df):
+        A = df.groupby("A").idxmax(axis=1)
+        return A
+
+    # wrong arg value test
+    def impl_axis_arg(df):
+        A = df.groupby("A").idxmax(1)
+        return A
+
+    def impl_skipna(df):
+        A = df.groupby("A").idxmax(skipna=False)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [1.1, 2.2, 1.1, 3.3, 4.4, 3.2, 45.6, 10.0],
+        }
+    )
+
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_axis_arg)(df)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_axis)(df)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_skipna)(df)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "df",
+    [
+        # datetime
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 2, 3],
+                "B": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+            }
+        ),
+        # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3, 2, 1],
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                    pd.Series(data=[None], index=[4])
+                ),
+            }
+        ),
+        # timedelta
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3, 2, 1],
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+            }
+        ),
+        # [BE-416] Support with list
+        pd.DataFrame(
+            {"A": [2, 1, 1, 2], "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]])}
+        ),
+        # Tuple
+        pd.DataFrame(
+            {"A": [2, 1, 1, 2], "B": pd.Series([(1, 2), (3), (5, 4, 6), (-1, 3, 4)])}
+        ),
+        # Categorical
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16, 16],
+                "B": pd.Categorical([1, 2, 5, 5, 3, 3], ordered=True),
+            }
+        ),
+        # Timestamp
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16],
+                "B": [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+            }
+        ),
+        # boolean Array
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16, 16, 1, 40],
+                "B": [True, np.nan, False, True, np.nan, False, False, True],
+                "C": [True, True, False, True, True, False, False, True],
+            }
+        ),
+        # string
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16, 16, 1, 40],
+                "B": ["ab", "cd", "ef", "gh", "mm", "a", "abc", "x"],
+            }
+        ),
+    ],
+)
+def test_var_std_unsupported_types(df, memory_leak_check):
+    """ Test var/std with their unsupported Bodo types"""
+
+    def impl1(df):
+        A = df.groupby("A").var()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").std()
+        return A
+
+    err_msg = "not supported in groupby"
+    if isinstance(df["B"][0], bool):
+        err_msg = "does not support boolean column"
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(df)
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl2)(df)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "df",
+    [
+        # Decimal
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 2, 2],
+                "B": pd.Series(
+                    [
+                        Decimal("1.6"),
+                        Decimal("-0.2"),
+                        Decimal("44.2"),
+                        np.nan,
+                        Decimal("0"),
+                    ]
+                ),
+            }
+        ),
+        # datetime
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 2, 3],
+                "B": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+            }
+        ),
+        # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3, 2, 1],
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                    pd.Series(data=[None], index=[4])
+                ),
+            }
+        ),
+        # timedelta
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3, 2, 1],
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+            }
+        ),
+        # [BE-416] Support with list
+        pd.DataFrame(
+            {"A": [2, 1, 1, 2], "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]])}
+        ),
+        # Tuple
+        pd.DataFrame(
+            {"A": [2, 1, 1, 2], "B": pd.Series([(1, 2), (3), (5, 4, 6), (-1, 3, 4)])}
+        ),
+        # Categorical
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16, 16],
+                "B": pd.Categorical([1, 2, 5, 5, 3, 3], ordered=True),
+            }
+        ),
+        # Timestamp
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16],
+                "B": [
+                    pd.Timestamp("20130101 09:00:00"),
+                    pd.Timestamp("20130101 09:00:02"),
+                    pd.Timestamp("20130101 09:00:03"),
+                    pd.Timestamp("20130101 09:00:05"),
+                    pd.Timestamp("20130101 09:00:06"),
+                ],
+            }
+        ),
+        # string
+        pd.DataFrame(
+            {
+                "A": [16, 1, 1, 1, 16, 16, 1, 40],
+                "B": ["ab", "cd", "ef", "gh", "mm", "a", "abc", "x"],
+            }
+        ),
+        # nullable
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 2, 3],
+                "B": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+            }
+        ),
+        # boolean
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 1, 2, 2, 1],
+                "B": [True, True, False, True, True, False, False],
+            }
+        ),
+    ],
+)
+def test_idxmin_idxmax_unsupported_types(df, memory_leak_check):
+    """ Test idxmin/idxmax with their unsupported Bodo types"""
+
+    def impl1(df):
+        A = df.groupby("A").idxmin()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").idxmax()
+        return A
+
+    err_msg = "not supported in groupby"
+    if isinstance(df["B"][0], np.bool_):
+        err_msg = "does not support boolean column"
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(df)
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl2)(df)
