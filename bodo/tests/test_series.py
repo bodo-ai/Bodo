@@ -5082,6 +5082,22 @@ def test_np_pd_timedelta_truediv(memory_leak_check):
     check_func(test_impl, (S, val3))
 
 
+def test_datetime_date_pd_timedelta_ge(memory_leak_check):
+    """
+    Test that Series.ge works between a Series of datetimedate
+    and a pd.Timestamp type.
+    """
+
+    def test_impl(S, val):
+        return S >= val
+
+    S = pd.Series(pd.date_range(start="1/1/2018", end="1/08/2018").date)
+    val1 = pd.Timestamp("1/1/2018")
+    val2 = pd.Timestamp("1/1/2021")
+    check_func(test_impl, (S, val1))
+    check_func(test_impl, (S, val2))
+
+
 def test_series_std(memory_leak_check):
     def f(S):
         return S.std()

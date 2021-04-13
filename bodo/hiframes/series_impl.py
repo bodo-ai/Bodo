@@ -3223,30 +3223,56 @@ def create_binary_op_overload(op):
         # left arg is series
         if isinstance(lhs, SeriesType):
 
-            def impl2(lhs, rhs):  # pragma: no cover
+            # left arg is dt64/td64 series, may need to unbox RHS
+            if lhs.dtype in [bodo.datetime64ns, bodo.timedelta64ns]:
+
+                def impl(lhs, rhs):  # pragma: no cover
+                    arr = bodo.hiframes.pd_series_ext.get_series_data(lhs)
+                    index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
+                    name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
+                    rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)
+                    # Unbox the other value in case its a scalar
+                    out_arr = op(arr, bodo.utils.conversion.unbox_if_timestamp(rhs_arr))
+                    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+                return impl
+
+            def impl(lhs, rhs):  # pragma: no cover
                 arr = bodo.hiframes.pd_series_ext.get_series_data(lhs)
                 index = bodo.hiframes.pd_series_ext.get_series_index(lhs)
                 name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
                 rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)
-                # Unbox the other value in case its a scalar
-                out_arr = op(arr, bodo.utils.conversion.unbox_if_timestamp(rhs_arr))
+                out_arr = op(arr, rhs_arr)
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
-            return impl2
+            return impl
 
         # right arg is Series
         if isinstance(rhs, SeriesType):
 
-            def impl2(lhs, rhs):  # pragma: no cover
+            # right arg is dt64/td64 series, may need to unbox LHS
+            if rhs.dtype in [bodo.datetime64ns, bodo.timedelta64ns]:
+
+                def impl(lhs, rhs):  # pragma: no cover
+                    arr = bodo.hiframes.pd_series_ext.get_series_data(rhs)
+                    index = bodo.hiframes.pd_series_ext.get_series_index(rhs)
+                    name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
+                    lhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
+                    # Unbox the other value in case its a scalar
+                    out_arr = op(bodo.utils.conversion.unbox_if_timestamp(lhs_arr), arr)
+                    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+                return impl
+
+            def impl(lhs, rhs):  # pragma: no cover
                 arr = bodo.hiframes.pd_series_ext.get_series_data(rhs)
                 index = bodo.hiframes.pd_series_ext.get_series_index(rhs)
                 name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
                 lhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
-                # Unbox the other value in case its a scalar
-                out_arr = op(bodo.utils.conversion.unbox_if_timestamp(lhs_arr), arr)
+                out_arr = op(lhs_arr, arr)
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
-            return impl2
+            return impl
         # raise BodoError(f"{op} operator not supported for data types {lhs} and {rhs}.")
 
     return overload_series_binary_op
