@@ -916,6 +916,7 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.max`
 * :meth:`pandas.core.groupby.GroupBy.mean`
 * :meth:`pandas.core.groupby.GroupBy.min`
+* :meth:`pandas.core.groupby.GroupBy.pipe` `func` should be a function (not tuple)
 * :meth:`pandas.core.groupby.GroupBy.prod`
 * :meth:`pandas.core.groupby.GroupBy.rolling`
 * :meth:`pandas.core.groupby.GroupBy.std`

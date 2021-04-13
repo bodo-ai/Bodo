@@ -2184,6 +2184,28 @@ def test_groupby_multiindex():
     check_func(impl, (df,), sort_output=True, check_dtype=False, reset_index=True)
 
 
+def test_groupby_pipe():
+    """
+    Test Groupby.pipe()
+    """
+
+    def impl1(df):
+        return df.groupby("A").pipe(lambda g: g.sum())
+
+    # test *args, **kwargs
+    def impl2(df, a, b):
+        return df.groupby("A").pipe(lambda g, a, b: g.sum() + a + b, a, b=b)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 4, 4, 11, 4, 1],
+            "B": [1, 2, 3, 4, 5, 6],
+        }
+    )
+    check_func(impl1, (df,), sort_output=True, reset_index=True)
+    check_func(impl2, (df, 1, 2), sort_output=True, reset_index=True)
+
+
 @pytest.mark.slow
 def test_single_col_reset_index(test_df, memory_leak_check):
     """We need the reset_index=True because otherwise the order is scrambled"""

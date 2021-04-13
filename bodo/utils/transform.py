@@ -743,10 +743,11 @@ def fold_argument_types(pysig, args, kws):
     return args
 
 
-def get_const_func_output_type(func, arg_types, kw_types, typing_context):
+def get_const_func_output_type(func, arg_types, kw_types, typing_context, is_udf=True):
     """Get output type of constant function 'func' when compiled with 'arg_types' as
     argument types.
     'func' can be a MakeFunctionLiteral (inline lambda) or FunctionLiteral (function)
+    'is_udf' prepares the output for UDF cases like Series.apply()
     """
     from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 
@@ -795,7 +796,7 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context):
 
     # replace returned dictionary with a StructType to enabling typing for
     # StructArrayType later
-    if isinstance(f_return_type, types.DictType):
+    if is_udf and isinstance(f_return_type, types.DictType):
         struct_key_names = guard(get_struct_keynames, f_ir, typemap)
         if struct_key_names is not None:
             f_return_type = StructType(
@@ -803,7 +804,7 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context):
             )
 
     # add length/index info for constant Series output (required for output typing)
-    if isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType)):
+    if is_udf and isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType)):
         # run SeriesPass to simplify Series calls (e.g. pd.Series)
         typingctx = numba.core.registry.cpu_target.typing_context
         series_pass = bodo.transforms.series_pass.SeriesPass(
