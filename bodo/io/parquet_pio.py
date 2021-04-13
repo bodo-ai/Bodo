@@ -1132,12 +1132,23 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
             # Note: ParquetDataset has metadata_nthreads parameter but it
             # seems to use Python threads and not make a difference
             if bodo.get_rank() == 0:
+                validate_schema = bodo.parquet_validate_schema
                 dataset = pq.ParquetDataset(
                     fpath,
                     filesystem=getfs(),
                     filters=filters,
                     use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
+                    validate_schema=validate_schema,
                 )
+                if not validate_schema:
+                    # We need to set the schema. Copied from pyarrow.parquet.ParquetDataset.validate_schemas
+                    if dataset.metadata is None and dataset.schema is None:
+                        if dataset.common_metadata is not None:
+                            dataset.schema = dataset.common_metadata.schema
+                        else:
+                            dataset.schema = dataset.pieces[0].get_metadata().schema
+                    elif dataset.schema is None:
+                        dataset.schema = dataset.metadata.schema
 
                 if is_deltalake:
                     # apply the deltalake filter too

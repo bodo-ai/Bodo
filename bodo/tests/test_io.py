@@ -1031,7 +1031,9 @@ def test_read_partitions():
             n2 = len(df[df["part"] == val])
             return n, n2
 
+        bodo.parquet_validate_schema = False
         check_func(impl, ("pq_data",))
+        bodo.parquet_validate_schema = True
         check_func(impl2, ("pq_data", "a"))
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl2)
@@ -1040,6 +1042,7 @@ def test_read_partitions():
         check_func(impl3, ("pq_data", "a"))
         bodo.barrier()
     finally:
+        bodo.parquet_validate_schema = True
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
 

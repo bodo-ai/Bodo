@@ -109,7 +109,7 @@ from bodo.decorators import is_jit_execution, jit
 from bodo.master_mode import init_master_mode
 
 multithread_mode = False
-
+parquet_validate_schema = True
 
 from ._version import get_versions
 
