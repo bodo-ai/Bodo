@@ -3986,6 +3986,18 @@ def test_global_list():
     check_func(impl2, (df,), sort_output=True)
 
 
+df_global = pd.DataFrame({"A": [1, 2, 1], "B": [1.1, 2.2, 3.3]})
+
+
+def test_global_df():
+    """test groupby on a global dataframe object"""
+
+    def impl():
+        return df_global.groupby("A").sum()
+
+    check_func(impl, (), sort_output=True, only_seq=True)
+
+
 # TODO: add memory leak check when issues addressed
 def test_literal_args():
     """

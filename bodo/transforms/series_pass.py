@@ -407,7 +407,7 @@ class SeriesPass:
         ):
             t_def = guard(get_definition, self.func_ir, target)
             # TODO: support other const array calls
-            if guard(find_callname, self.func_ir, t_def) in (
+            if guard(find_callname, self.func_ir, t_def, self.typemap) in (
                 ("str_arr_from_sequence", "bodo.libs.str_arr_ext"),
                 ("asarray", "numpy"),
             ):
@@ -785,7 +785,9 @@ class SeriesPass:
         ):
             r_def = guard(get_definition, self.func_ir, rhs.value)
             # find init_range_index(start, stop, step) call and replace value
-            if r_def is not None and guard(find_callname, self.func_ir, r_def) == (
+            if r_def is not None and guard(
+                find_callname, self.func_ir, r_def, self.typemap
+            ) == (
                 "init_range_index",
                 "bodo.hiframes.pd_index_ext",
             ):
@@ -834,7 +836,7 @@ class SeriesPass:
             isinstance(rhs_type, BodoSQLContextType) and rhs.attr == "dataframes"
         ):  # pragma: no cover
             sql_ctx_def = guard(get_definition, self.func_ir, rhs.value)
-            if guard(find_callname, self.func_ir, sql_ctx_def) == (
+            if guard(find_callname, self.func_ir, sql_ctx_def, self.typemap) == (
                 "init_sql_context",
                 "bodosql.context_ext",
             ):
@@ -1354,28 +1356,28 @@ class SeriesPass:
 
         if fdef == ("get_int_arr_data", "bodo.libs.int_arr_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
             if call_def == ("init_integer_array", "bodo.libs.int_arr_ext"):
                 assign.value = var_def.args[0]
                 return [assign]
 
         if fdef == ("get_int_arr_bitmap", "bodo.libs.int_arr_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
             if call_def == ("init_integer_array", "bodo.libs.int_arr_ext"):
                 assign.value = var_def.args[1]
                 return [assign]
 
         if fdef == ("get_bool_arr_data", "bodo.libs.bool_arr_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
             if call_def == ("init_bool_array", "bodo.libs.bool_arr_ext"):
                 assign.value = var_def.args[0]
                 return [assign]
 
         if fdef == ("get_bool_arr_bitmap", "bodo.libs.bool_arr_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
             if call_def == ("init_bool_array", "bodo.libs.bool_arr_ext"):
                 assign.value = var_def.args[1]
                 return [assign]
@@ -1698,7 +1700,7 @@ class SeriesPass:
             obj = get_call_expr_arg(fdef[0], rhs.args, dict(rhs.kws), 0, "obj")
             obj_def = guard(get_definition, self.func_ir, obj)
             # Timestamp/Timedelta values are boxed before passing to UDF
-            if guard(find_callname, self.func_ir, obj_def) in (
+            if guard(find_callname, self.func_ir, obj_def, self.typemap) in (
                 ("convert_datetime64_to_timestamp", "bodo.hiframes.pd_timestamp_ext"),
                 (
                     "convert_numpy_timedelta64_to_pd_timedelta",
@@ -1869,7 +1871,7 @@ class SeriesPass:
 
         if fdef == ("get_index_data", "bodo.hiframes.pd_index_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
             if call_def in (
                 ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
                 ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
@@ -1882,7 +1884,7 @@ class SeriesPass:
 
         if fdef == ("get_index_name", "bodo.hiframes.pd_index_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
             if (
                 call_def
                 in (
@@ -1908,7 +1910,7 @@ class SeriesPass:
         if fdef == ("get_series_data", "bodo.hiframes.pd_series_ext"):
             # or other functions, using any reference to payload
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
             if call_def == ("init_series", "bodo.hiframes.pd_series_ext"):
                 assign.value = var_def.args[0]
             return [assign]
@@ -1916,7 +1918,7 @@ class SeriesPass:
         if fdef == ("get_series_index", "bodo.hiframes.pd_series_ext"):
             # or other functions, using any reference to payload
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
             if (
                 call_def == ("init_series", "bodo.hiframes.pd_series_ext")
                 and len(var_def.args) > 1
@@ -1927,7 +1929,7 @@ class SeriesPass:
         if fdef == ("get_series_name", "bodo.hiframes.pd_series_ext"):
             # TODO: make sure name is not altered
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
-            call_def = guard(find_callname, self.func_ir, var_def)
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
             if (
                 call_def == ("init_series", "bodo.hiframes.pd_series_ext")
                 and len(var_def.args) > 2
@@ -2189,7 +2191,7 @@ class SeriesPass:
             assert len(rhs.args) == 2, "invalid explode() args"
 
             array_src = guard(get_definition, self.func_ir, rhs.args[0].name)
-            array_src_call = guard(find_callname, self.func_ir, array_src)
+            array_src_call = guard(find_callname, self.func_ir, array_src, self.typemap)
             if array_src_call == (
                 "str_split",
                 "bodo.libs.str_ext",
@@ -2970,7 +2972,7 @@ class SeriesPass:
 
     def _get_index_data(self, dt_var, nodes):
         var_def = guard(get_definition, self.func_ir, dt_var)
-        call_def = guard(find_callname, self.func_ir, var_def)
+        call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
         if call_def in (
             ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
             ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
@@ -2995,7 +2997,7 @@ class SeriesPass:
         # XXX assuming init_series() is the only call to create a series
         # and series._data is never overwritten
         var_def = guard(get_definition, self.func_ir, series_var)
-        call_def = guard(find_callname, self.func_ir, var_def)
+        call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
         if call_def == ("init_series", "bodo.hiframes.pd_series_ext"):
             return var_def.args[0]
 
@@ -3013,7 +3015,7 @@ class SeriesPass:
         # XXX assuming init_series is the only call to create a series
         # and series._index is never overwritten
         var_def = guard(get_definition, self.func_ir, series_var)
-        call_def = guard(find_callname, self.func_ir, var_def)
+        call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
         if call_def == ("init_series", "bodo.hiframes.pd_series_ext") and (
             len(var_def.args) >= 2 and not self._is_const_none(var_def.args[1])
         ):
@@ -3031,7 +3033,7 @@ class SeriesPass:
 
     def _get_series_name(self, series_var, nodes):
         var_def = guard(get_definition, self.func_ir, series_var)
-        call_def = guard(find_callname, self.func_ir, var_def)
+        call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
         if (
             call_def == ("init_series", "bodo.hiframes.pd_series_ext")
             and len(var_def.args) == 3
@@ -3067,7 +3069,7 @@ class SeriesPass:
                 if is_call_assign(stmt):
                     rhs = stmt.value
                     func_type = self.typemap[rhs.func.name]
-                    fdef = guard(find_callname, self.func_ir, rhs)
+                    fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
                     if fdef in (
                         (
                             "set_df_column_with_reflect",

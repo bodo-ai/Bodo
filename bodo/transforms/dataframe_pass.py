@@ -335,7 +335,7 @@ class DataFramePass:
             df_var = rhs.args[0]
             ind = guard(find_const, self.func_ir, rhs.args[1])
             var_def = guard(get_definition, self.func_ir, df_var)
-            call_def = guard(find_callname, self.func_ir, var_def)
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
             if not self._is_updated_df(df_var.name) and call_def == (
                 "init_dataframe",
                 "bodo.hiframes.pd_dataframe_ext",
@@ -347,7 +347,7 @@ class DataFramePass:
         if fdef == ("get_dataframe_index", "bodo.hiframes.pd_dataframe_ext"):
             df_var = rhs.args[0]
             var_def = guard(get_definition, self.func_ir, df_var)
-            call_def = guard(find_callname, self.func_ir, var_def)
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
             if call_def == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
                 assign.value = var_def.args[1]
 
@@ -1144,7 +1144,7 @@ class DataFramePass:
         # TODO: make sure col1 and col2 are in the same df
         # TODO: compare df index and Series index and match them in setitem
         arr_def = guard(get_definition, self.func_ir, new_arr)
-        if guard(find_callname, self.func_ir, arr_def) == (
+        if guard(find_callname, self.func_ir, arr_def, self.typemap) == (
             "init_series",
             "bodo.hiframes.pd_series_ext",
         ):  # pragma: no cover
@@ -1385,7 +1385,7 @@ class DataFramePass:
             return self._run_call_groupby_apply(assign, lhs, rhs, grp_var)
 
         grp_typ = self.typemap[grp_var.name]
-        df_var = self._get_df_obj_select(grp_var, "groupby")
+        df_var = self._get_groupby_df_obj(grp_var)
         df_type = self.typemap[df_var.name]
         out_typ = self.typemap[lhs.name]
 
@@ -1613,7 +1613,7 @@ class DataFramePass:
         keyword arguments (not supported by Numba).
         """
         grp_typ = self.typemap[grp_var.name]
-        df_var = self._get_df_obj_select(grp_var, "groupby")
+        df_var = self._get_groupby_df_obj(grp_var)
         df_type = self.typemap[df_var.name]
         out_typ = self.typemap[lhs.name]
         n_out_cols = 1 if isinstance(out_typ, SeriesType) else len(out_typ.columns)
@@ -2136,8 +2136,8 @@ class DataFramePass:
         out_vars.append(out_index)
         return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
-    def _get_df_obj_select(self, obj_var, obj_name):
-        """get df object for groupby() or rolling()
+    def _get_groupby_df_obj(self, obj_var):
+        """get df object for groupby()
         e.g. groupby('A')['B'], groupby('A')['B', 'C'], groupby('A')
         """
         select_def = guard(get_definition, self.func_ir, obj_var)
@@ -2150,16 +2150,12 @@ class DataFramePass:
 
         obj_call = guard(get_definition, self.func_ir, obj_var)
         # find dataframe
-        call_def = guard(find_callname, self.func_ir, obj_call)
-        assert (
-            call_def is not None
-            and call_def[0] == obj_name
-            and isinstance(call_def[1], ir.Var)
-            and self._is_df_var(call_def[1])
-        )
-        df_var = call_def[1]
-
-        return df_var
+        call_def = guard(find_callname, self.func_ir, obj_call, self.typemap)
+        if call_def == ("init_groupby", "bodo.hiframes.pd_groupby_ext"):
+            return obj_call.args[0]
+        else:  # pragma: no cover
+            # TODO(ehsan): support groupby obj through control flow & function args
+            raise BodoError("Invalid groupby call", loc=obj_var.loc)
 
     def _get_const_tup(self, tup_var):
         tup_def = guard(get_definition, self.func_ir, tup_var)
@@ -2182,7 +2178,7 @@ class DataFramePass:
         df_typ = self.typemap[df_var.name]
         ind = df_typ.columns.index(col_name)
         var_def = guard(get_definition, self.func_ir, df_var)
-        call_def = guard(find_callname, self.func_ir, var_def)
+        call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
         if not self._is_updated_df(df_var.name) and call_def == (
             "init_dataframe",
             "bodo.hiframes.pd_dataframe_ext",
@@ -2210,7 +2206,7 @@ class DataFramePass:
     def _get_dataframe_index(self, df_var, nodes):
         df_typ = self.typemap[df_var.name]
         var_def = guard(get_definition, self.func_ir, df_var)
-        call_def = guard(find_callname, self.func_ir, var_def)
+        call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
         # TODO(ehsan): make sure dataframe index is not updated elsewhere
         if call_def == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
             return var_def.args[1]
@@ -2227,7 +2223,7 @@ class DataFramePass:
 
     def _get_index_name(self, dt_var, nodes):
         var_def = guard(get_definition, self.func_ir, dt_var)
-        call_def = guard(find_callname, self.func_ir, var_def)
+        call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
         if (
             call_def
             in (

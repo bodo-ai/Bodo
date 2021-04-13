@@ -5,7 +5,8 @@ from enum import Enum
 
 import numba
 import numpy as np
-from numba.core import types
+from numba.core import cgutils, types
+from numba.core.imputils import impl_ret_borrowed
 from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import (
     AbstractTemplate,
@@ -17,7 +18,9 @@ from numba.core.typing.templates import (
 from numba.extending import (
     infer,
     infer_getattr,
+    intrinsic,
     lower_builtin,
+    make_attribute_wrapper,
     models,
     overload,
     overload_method,
@@ -77,7 +80,6 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_none,
     is_overload_true,
-    is_overload_zero,
     list_cumulative,
     raise_bodo_error,
     raise_const_error,
@@ -111,105 +113,16 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
         )
 
 
-# dummy model since info is kept in type
-# TODO: add df object to allow control flow?
-register_model(DataFrameGroupByType)(models.OpaqueModel)
+@register_model(DataFrameGroupByType)
+class GroupbyModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [
+            ("obj", fe_type.df_type),
+        ]
+        super(GroupbyModel, self).__init__(dmm, fe_type, members)
 
 
-@overload_method(DataFrameType, "groupby", no_unliteral=True)
-def df_groupby_overload(
-    df,
-    by=None,
-    axis=0,
-    level=None,
-    as_index=True,
-    sort=False,
-    group_keys=True,
-    squeeze=False,
-    observed=False,
-    dropna=True,
-):
-
-    validate_groupby_spec(
-        df, by, axis, level, as_index, sort, group_keys, squeeze, observed, dropna
-    )
-
-    def _impl(
-        df,
-        by=None,
-        axis=0,
-        level=None,
-        as_index=True,
-        sort=False,
-        group_keys=True,
-        squeeze=False,
-        observed=False,
-        dropna=True,
-    ):  # pragma: no cover
-        return bodo.hiframes.pd_groupby_ext.groupby_dummy(df, by, as_index)
-
-    return _impl
-
-
-def validate_groupby_spec(
-    df, by, axis, level, as_index, sort, group_keys, squeeze, observed, dropna
-):
-    """
-    validate df.groupby() specifications: In addition to consistent error checking
-    with pandas, we also check for unsupported specs.
-
-    An error is raised if the spec is invalid.
-    """
-
-    # make sure 'by' is supplied
-    if is_overload_none(by):
-        raise BodoError("groupby(): 'by' must be supplied.")
-
-    # make sure axis has default value 0
-    if not is_overload_zero(axis):
-        raise BodoError("groupby(): 'axis' parameter only supports integer value 0.")
-
-    # make sure level is not specified
-    if not is_overload_none(level):
-        raise BodoError(
-            "groupby(): 'level' is not supported since MultiIndex is not supported."
-        )
-
-    # make sure by is a const str list
-    if not is_literal_type(by) and not is_overload_constant_list(by):
-        raise_const_error(
-            f"groupby(): 'by' parameter only supports a constant column label or column labels, not {by}."
-        )
-
-    # make sure by has valid label(s)
-    if len(set(get_overload_const_list(by)).difference(set(df.columns))) > 0:
-        raise_const_error(
-            "groupby(): invalid key {} for 'by' (not available in columns {}).".format(
-                get_overload_const_list(by), df.columns
-            )
-        )
-
-    # make sure as_index is of type bool
-    if not is_overload_constant_bool(as_index):
-        raise_const_error(
-            "groupby(): 'as_index' parameter must be a constant bool, not {}.".format(
-                as_index
-            ),
-        )
-
-    # NOTE: sort default value is True in pandas. We opt to set it to False by default for performance
-    unsupported_args = dict(
-        sort=sort,
-        group_keys=group_keys,
-        squeeze=squeeze,
-        observed=observed,
-        dropna=dropna,
-    )
-    args_defaults = dict(
-        sort=False, group_keys=True, squeeze=False, observed=False, dropna=True
-    )
-
-    check_unsupported_args("Dataframe.groupby", unsupported_args, args_defaults)
+make_attribute_wrapper(DataFrameGroupByType, "obj", "obj")
 
 
 def validate_udf(func_name, func):
@@ -227,46 +140,40 @@ def validate_udf(func_name, func):
         )
 
 
-# a dummy groupby function that will be replace in dataframe_pass
-def groupby_dummy(df, by, as_index):  # pragma: no cover
-    return 0
+@intrinsic
+def init_groupby(typingctx, obj_type, by_type, as_index_type=None):
+    """Initialize a groupby object. The data object inside can be a DataFrame"""
 
+    def codegen(context, builder, signature, args):
+        obj_val = args[0]
+        groupby_type = signature.return_type
+        groupby_val = cgutils.create_struct_proxy(groupby_type)(context, builder)
+        groupby_val.obj = obj_val
+        context.nrt.incref(builder, signature.args[0], obj_val)
+        return groupby_val._getvalue()
 
-@infer_global(groupby_dummy)
-class GroupbyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        df, by, as_index = args
+    # get groupby key column names
+    if is_overload_constant_list(by_type):
+        keys = tuple(get_overload_const_list(by_type))
+    elif is_literal_type(by_type):
+        keys = (get_literal_value(by_type),)
 
-        if is_overload_constant_list(by):
-            keys = tuple(get_overload_const_list(by))
-        elif is_literal_type(by):
-            keys = (get_literal_value(by),)
+    selection = list(obj_type.columns)
+    for k in keys:
+        selection.remove(k)
 
-        selection = list(df.columns)
-        for k in keys:
-            selection.remove(k)
+    if is_overload_constant_bool(as_index_type):
+        as_index = is_overload_true(as_index_type)
+    else:
+        # XXX as_index type is just bool when value not passed. Therefore,
+        # we assume the default True value.
+        # TODO: more robust fix or just check
+        as_index = True
 
-        if is_overload_constant_bool(as_index):
-            as_index = is_overload_true(as_index)
-        else:
-            # XXX as_index type is just bool when value not passed. Therefore,
-            # we assume the default True value.
-            # TODO: more robust fix or just check
-            as_index = True
-
-        out_typ = DataFrameGroupByType(df, keys, tuple(selection), as_index, False)
-        return signature(out_typ, *args)
-
-
-GroupbyTyper._no_unliteral = True
-
-
-# dummy lowering to avoid overload errors, remove after overload inline PR
-# is merged
-@lower_builtin(groupby_dummy, types.VarArg(types.Any))
-def lower_groupby_dummy(context, builder, sig, args):
-    return context.get_constant_null(sig.return_type)
+    groupby_type = DataFrameGroupByType(
+        obj_type, keys, tuple(selection), as_index, False
+    )
+    return groupby_type(obj_type, by_type, as_index_type), codegen
 
 
 # dummy lowering for groupby.count since it is used in Series.value_counts()
@@ -308,7 +215,7 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
 # dummpy lowering for groupby getitem to avoid errors (e.g. test_series_groupby_arr)
 @lower_builtin("static_getitem", DataFrameGroupByType, types.Any)
 def static_getitem_df_groupby(context, builder, sig, args):
-    return context.get_constant_null(sig.return_type)
+    return impl_ret_borrowed(context, builder, sig.return_type, args[0])
 
 
 def get_groupby_output_dtype(arr_type, func_name, index_type=None):
