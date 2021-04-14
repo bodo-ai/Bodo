@@ -200,6 +200,12 @@ def init_multi_index(typingctx, data, names, name=None):
     return ret_typ(data, names, name), codegen
 
 
+@overload(len, no_unliteral=True)
+def overload_len_pd_multiindex(A):
+    if isinstance(A, MultiIndexType):
+        return lambda A: len(A._data[0])  # pragma: no cover
+
+
 @overload(operator.getitem, no_unliteral=True)
 def overload_multi_index_getitem(I, ind):
     if not isinstance(I, MultiIndexType):

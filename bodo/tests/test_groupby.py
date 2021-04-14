@@ -2167,6 +2167,23 @@ def test_groupby_apply_arg_dist():
     check_func(impl1, (df, 10), sort_output=True, reset_index=True)
 
 
+def test_groupby_multiindex():
+    """ Test groupby with a multiindex having more than one col. """
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 9, 1, 2, 2, 1],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        }
+    )
+
+    def impl(df):
+        s = df.groupby(["A", "B"]).mean()
+        return s
+
+    check_func(impl, (df,), sort_output=True, check_dtype=False, reset_index=True)
+
+
 @pytest.mark.slow
 def test_single_col_reset_index(test_df, memory_leak_check):
     """We need the reset_index=True because otherwise the order is scrambled"""
