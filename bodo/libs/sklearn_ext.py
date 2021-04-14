@@ -3583,15 +3583,10 @@ def overload_train_test_split(
         global get_data_slice_parallel
         if isinstance(get_data_slice_parallel, pytypes.FunctionType):
             get_data_slice_parallel = bodo.jit(
-                distributed=[
-                    "data",
-                    "labels",
-                    "data_train",
-                    "data_test",
-                    "labels_train",
-                    "labels_test",
-                ]
-            )(get_data_slice_parallel)
+                get_data_slice_parallel,
+                all_args_distributed_varlength=True,
+                all_returns_distributed=True,
+            )
 
         # Allowed inputs are lists, numpy arrays, scipy-sparse matrices or pandas dataframes.
 
