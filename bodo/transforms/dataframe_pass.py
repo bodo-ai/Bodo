@@ -354,6 +354,21 @@ class DataFramePass:
         if fdef == ("join_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_join(assign, lhs, rhs)
 
+        # df/series/groupby.pipe()
+        if (
+            isinstance(func_mod, ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                (
+                    DataFrameType,
+                    bodo.hiframes.pd_series_ext.SeriesType,
+                    DataFrameGroupByType,
+                ),
+            )
+            and func_name == "pipe"
+        ):
+            return self._run_call_pipe(rhs, func_mod)
+
         if isinstance(func_mod, ir.Var) and isinstance(
             self.typemap[func_mod.name], DataFrameType
         ):
@@ -1384,9 +1399,6 @@ class DataFramePass:
         if func_name == "apply":
             return self._run_call_groupby_apply(assign, lhs, rhs, grp_var)
 
-        if func_name == "pipe":
-            return self._run_call_groupby_pipe(assign, lhs, rhs, grp_var)
-
         grp_typ = self.typemap[grp_var.name]
         df_var = self._get_groupby_df_obj(grp_var)
         df_type = self.typemap[df_var.name]
@@ -1982,16 +1994,16 @@ class DataFramePass:
 
         return func_text
 
-    def _run_call_groupby_pipe(self, assign, lhs, rhs, grp_var):
-        """generate IR nodes for df.groupby().pipe().
+    def _run_call_pipe(self, rhs, obj_var):
+        """generate IR nodes for df/series/groupby.pipe().
         Transform: grp.pipe(f, args) -> f(grp, args)
         """
         # get pipe function and args
         kws = dict(rhs.kws)
-        func_var = get_call_expr_arg("GroupBy.pipe", rhs.args, kws, 0, "func")
+        func_var = get_call_expr_arg("pipe", rhs.args, kws, 0, "func")
         func = get_overload_const_func(self.typemap[func_var.name])
         extra_args = [] if len(rhs.args) < 2 else rhs.args[1:]
-        args = [grp_var] + list(extra_args)
+        args = [obj_var] + list(extra_args)
 
         return replace_func(
             self,

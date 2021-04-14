@@ -3239,6 +3239,28 @@ def test_df_apply_datetime(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+def test_dataframe_pipe():
+    """
+    Test DataFrame.pipe()
+    """
+
+    def impl1(df):
+        return df.pipe(lambda df: df.sum())
+
+    # test *args, **kwargs
+    def impl2(df, a, b):
+        return df.pipe(lambda df, a, b: df.sum() + a + b, a, b=b)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 4, 4, 11, 4, 1],
+            "B": [1, 2, 3, 4, 5, 6],
+        }
+    )
+    check_func(impl1, (df,), is_out_distributed=False)
+    check_func(impl2, (df, 1, 2), is_out_distributed=False)
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "data",
