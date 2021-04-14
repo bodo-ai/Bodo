@@ -1342,6 +1342,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
     output = alloc_shift(N, in_arr, (-1,))
     send_right = shift > 0
     send_left = shift <= 0
+    is_parallel_str = False
     if parallel:
         rank = bodo.libs.distributed_api.get_rank()
         n_pes = bodo.libs.distributed_api.get_size()
@@ -1362,6 +1363,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
         # update start of output array (from left recv buff) early for string arrays
         # since they are immutable and should be written in order
         if send_right and is_str_array(in_arr):
+            is_parallel_str = True
             shift_left_recv(
                 r_send_req,
                 l_send_req,
@@ -1373,7 +1375,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
                 output,
             )
 
-    shift_seq(in_arr, shift, output)
+    shift_seq(in_arr, shift, output, is_parallel_str)
 
     if parallel:
         if send_right:
@@ -1406,13 +1408,16 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
 
 
 @register_jitable(cache=True)
-def shift_seq(in_arr, shift, output):  # pragma: no cover
+def shift_seq(in_arr, shift, output, is_parallel_str=False):  # pragma: no cover
     N = len(in_arr)
     # maximum shift size is N
     sign_shift = 1 if shift > 0 else -1
     shift = sign_shift * min(abs(shift), N)
-    # set border values to NA
-    if shift > 0:
+    # set border values to NA. We skip this for parallel string arrays because
+    # their values were already set in order, except for rank 0.
+    # We never need to do this for rank != 0 because if shift > N
+    # another code path is chosen.
+    if shift > 0 and (not is_parallel_str or bodo.get_rank() == 0):
         bodo.libs.array_kernels.setna_slice(output, slice(None, shift))
 
     # range is shift..N for positive shift, 0..N+shift for negative shift
