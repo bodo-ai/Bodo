@@ -64,7 +64,7 @@ from bodo.utils.typing import (
 )
 
 
-def model_fit(m, X, y):
+def random_forest_model_fit(m, X, y):
     # TODO check that random_state behavior matches sklearn when
     # the training is distributed (does not apply currently)
 
@@ -136,20 +136,23 @@ def model_fit(m, X, y):
         # footprint
         for i in range(0, n_estimators_global, 10):
             comm.bcast(m.estimators_[i : i + 10])
-        comm.bcast(m.n_classes_)
+        if isinstance(m, sklearn.ensemble.RandomForestClassifier):
+            comm.bcast(m.n_classes_)
+            comm.bcast(m.classes_)
         comm.bcast(m.n_outputs_)
-        comm.bcast(m.classes_)
     # Add no cover becuase coverage report is done by one rank only.
     else:  # pragma: no cover
         estimators = []
         for i in range(0, n_estimators_global, 10):
             estimators += comm.bcast(None)
-        m.n_classes_ = comm.bcast(None)
+        if isinstance(m, sklearn.ensemble.RandomForestClassifier):
+            m.n_classes_ = comm.bcast(None)
+            m.classes_ = comm.bcast(None)
         m.n_outputs_ = comm.bcast(None)
-        m.classes_ = comm.bcast(None)
         m.estimators_ = estimators
     assert len(m.estimators_) == n_estimators_global
     m.n_estimators = n_estimators_global
+    m.n_features_ = X.shape[1]
 
 
 # -----------------------------------------------------------------------------
@@ -240,7 +243,7 @@ def sklearn_ensemble_RandomForestClassifier_overload(
         max_samples=None,
     ):  # pragma: no cover
         with numba.objmode(m="random_forest_classifier_type"):
-            if random_state is None and get_num_nodes() > 1:
+            if random_state is not None and get_num_nodes() > 1:
                 print("With multinode, fixed random_state seed values are ignored.\n")
                 random_state = None
             m = sklearn.ensemble.RandomForestClassifier(
@@ -267,40 +270,6 @@ def sklearn_ensemble_RandomForestClassifier_overload(
         return m
 
     return _sklearn_ensemble_RandomForestClassifier_impl
-
-
-@overload_method(BodoRandomForestClassifierType, "fit", no_unliteral=True)
-def overload_model_fit(
-    m,
-    X,
-    y,
-    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
-):
-    def _model_fit_impl(m, X, y, _is_data_distributed=False):  # pragma: no cover
-
-        # Get lowest rank in each node
-        with numba.objmode(first_rank_node="int32[:]"):
-            first_rank_node = get_nodes_first_ranks()
-        if _is_data_distributed:
-            nnodes = len(first_rank_node)
-            X = bodo.gatherv(X)
-            y = bodo.gatherv(y)
-            # Broadcast X, y to first rank in each node
-            if nnodes > 1:
-                X = bodo.libs.distributed_api.bcast_comm(
-                    X, comm_ranks=first_rank_node, nranks=nnodes
-                )
-                y = bodo.libs.distributed_api.bcast_comm(
-                    y, comm_ranks=first_rank_node, nranks=nnodes
-                )
-
-        with numba.objmode:
-            model_fit(m, X, y)  # return value is m
-
-        bodo.barrier()
-        return m
-
-    return _model_fit_impl
 
 
 def parallel_predict_regression(m, X):
@@ -4163,3 +4132,172 @@ def overload_hashing_vectorizer_fit_transform(
         return transformed_X
 
     return _hashing_vectorizer_fit_transform_impl
+
+
+# -----------------------------------------------------------------------------
+# Typing and overloads to use RandomForestRegressor inside Bodo functions
+# directly via sklearn's API
+
+
+class BodoRandomForestRegressorType(types.Opaque):
+    def __init__(self):
+        super(BodoRandomForestRegressorType, self).__init__(
+            name="BodoRandomForestRegressorType"
+        )
+
+
+random_forest_regressor_type = BodoRandomForestRegressorType()
+types.random_forest_regressor_type = random_forest_regressor_type
+
+register_model(BodoRandomForestRegressorType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.ensemble.RandomForestRegressor)
+def typeof_random_forest_regressor(val, c):
+    return random_forest_regressor_type
+
+
+@box(BodoRandomForestRegressorType)
+def box_random_forest_regressor(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoRandomForestRegressorType)
+def unbox_random_forest_regressor(typ, obj, c):
+    # borrow a reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.ensemble.RandomForestRegressor, no_unliteral=True)
+def overload_sklearn_rf_regressor(
+    n_estimators=100,
+    criterion="mse",
+    max_depth=None,
+    min_samples_split=2,
+    min_samples_leaf=1,
+    min_weight_fraction_leaf=0.0,
+    max_features="auto",
+    max_leaf_nodes=None,
+    min_impurity_decrease=0.0,
+    min_impurity_split=None,
+    bootstrap=True,
+    oob_score=False,
+    n_jobs=None,
+    random_state=None,
+    verbose=0,
+    warm_start=False,
+    ccp_alpha=0.0,
+    max_samples=None,
+):
+    """
+    Provide implementation for __init__ functions of RandomForestRegressor.
+    We simply call sklearn in objmode.
+    """
+
+    # TODO n_jobs should be left unspecified so should probably throw an error if used
+
+    def _sklearn_ensemble_RandomForestRegressor_impl(
+        n_estimators=100,
+        criterion="mse",
+        max_depth=None,
+        min_samples_split=2,
+        min_samples_leaf=1,
+        min_weight_fraction_leaf=0.0,
+        max_features="auto",
+        max_leaf_nodes=None,
+        min_impurity_decrease=0.0,
+        min_impurity_split=None,
+        bootstrap=True,
+        oob_score=False,
+        n_jobs=None,
+        random_state=None,
+        verbose=0,
+        warm_start=False,
+        ccp_alpha=0.0,
+        max_samples=None,
+    ):  # pragma: no cover
+        with numba.objmode(m="random_forest_regressor_type"):
+            if random_state is not None and get_num_nodes() > 1:
+                print("With multinode, fixed random_state seed values are ignored.\n")
+                random_state = None
+            m = sklearn.ensemble.RandomForestRegressor(
+                n_estimators=n_estimators,
+                criterion=criterion,
+                max_depth=max_depth,
+                min_samples_split=min_samples_split,
+                min_samples_leaf=min_samples_leaf,
+                min_weight_fraction_leaf=min_weight_fraction_leaf,
+                max_features=max_features,
+                max_leaf_nodes=max_leaf_nodes,
+                min_impurity_decrease=min_impurity_decrease,
+                min_impurity_split=min_impurity_split,
+                bootstrap=bootstrap,
+                oob_score=oob_score,
+                n_jobs=1,
+                random_state=random_state,
+                verbose=verbose,
+                warm_start=warm_start,
+                ccp_alpha=ccp_alpha,
+                max_samples=max_samples,
+            )
+        return m
+
+    return _sklearn_ensemble_RandomForestRegressor_impl
+
+
+@overload_method(BodoRandomForestRegressorType, "predict", no_unliteral=True)
+def overload_rf_regressor_predict(m, X):
+    """Overload Random Forest Regressor predict. (Data parallelization)"""
+    return parallel_predict_regression(m, X)
+
+
+@overload_method(BodoRandomForestRegressorType, "score", no_unliteral=True)
+def overload_rf_regressor_score(
+    m,
+    X,
+    y,
+    sample_weight=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """Overload Random Forest Regressor score."""
+    return parallel_score(m, X, y, sample_weight, _is_data_distributed)
+
+
+@overload_method(BodoRandomForestRegressorType, "fit", no_unliteral=True)
+@overload_method(BodoRandomForestClassifierType, "fit", no_unliteral=True)
+def overload_rf_classifier_model_fit(
+    m,
+    X,
+    y,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """Distribute data to first rank in each node then call fit operation"""
+
+    def _model_fit_impl(m, X, y, _is_data_distributed=False):  # pragma: no cover
+
+        # Get lowest rank in each node
+        with numba.objmode(first_rank_node="int32[:]"):
+            first_rank_node = get_nodes_first_ranks()
+        if _is_data_distributed:
+            nnodes = len(first_rank_node)
+            X = bodo.gatherv(X)
+            y = bodo.gatherv(y)
+            # Broadcast X, y to first rank in each node
+            if nnodes > 1:
+                X = bodo.libs.distributed_api.bcast_comm(
+                    X, comm_ranks=first_rank_node, nranks=nnodes
+                )
+                y = bodo.libs.distributed_api.bcast_comm(
+                    y, comm_ranks=first_rank_node, nranks=nnodes
+                )
+
+        with numba.objmode:
+            random_forest_model_fit(m, X, y)  # return value is m
+
+        bodo.barrier()
+        return m
+
+    return _model_fit_impl

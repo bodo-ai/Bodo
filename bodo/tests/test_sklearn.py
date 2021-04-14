@@ -10,7 +10,7 @@ import scipy
 from sklearn import datasets
 from sklearn.cluster import KMeans
 from sklearn.datasets import make_classification, make_regression
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.feature_extraction.text import HashingVectorizer
 from sklearn.linear_model import (
     Lasso,
@@ -1904,3 +1904,86 @@ def test_naive_mnnb_csr():
     assert_array_equal(y_pred, y2)
 
     check_func(test_mnnb, (X, y2))
+
+
+# ---------------------- RandomForestRegressor tests ----------------------
+def generate_dataset(n_train, n_test, n_features, noise=0.1, verbose=False):
+    """Generate a regression dataset with the given parameters."""
+    """ Copied from https://scikit-learn.org/0.16/auto_examples/applications/plot_prediction_latency.html """
+    if verbose:
+        print("generating dataset...")
+    X, y, coef = make_regression(
+        n_samples=n_train + n_test, n_features=n_features, noise=noise, coef=True
+    )
+    X_train = X[:n_train]
+    y_train = y[:n_train]
+    X_test = X[n_train:]
+    y_test = y[n_train:]
+    idx = np.arange(n_train)
+    np.random.seed(13)
+    np.random.shuffle(idx)
+    X_train = X_train[idx]
+    y_train = y_train[idx]
+
+    std = X_train.std(axis=0)
+    mean = X_train.mean(axis=0)
+    X_train = (X_train - mean) / std
+    X_test = (X_test - mean) / std
+
+    std = y_train.std(axis=0)
+    mean = y_train.mean(axis=0)
+    y_train = (y_train - mean) / std
+    y_test = (y_test - mean) / std
+
+    import gc
+
+    gc.collect()
+    if verbose:
+        print("ok")
+    return X_train, y_train, X_test, y_test
+
+
+def test_rf_regressor():
+    """
+    Test RandomForestRegressor model, fit, predict, and score
+    """
+
+    # Test model
+    # https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/ensemble/tests/test_forest.py#L1402
+    X = np.zeros((10, 10))
+    y = np.ones((10,))
+
+    def test_model(X, y):
+        return RandomForestRegressor(n_estimators=10, random_state=57).fit(X, y)
+
+    gbr = bodo.jit(test_model)(_get_dist_arg(X), _get_dist_arg(y))
+    assert_array_equal(gbr.feature_importances_, np.zeros(10, dtype=np.float64))
+
+    # Test predict and score
+    X_train, y_train, X_test, y_test = generate_dataset(100, 20, 30)
+
+    def test_predict(X_train, y_train, X_test):
+        rfr = RandomForestRegressor(random_state=7)
+        rfr.fit(X_train, y_train)
+        y_pred = rfr.predict(X_test)
+        return y_pred
+
+    check_func(test_predict, (X_train, y_train, X_test))
+
+    def test_score(X_train, y_train, X_test, y_test):
+        rfr = RandomForestRegressor(random_state=7)
+        rfr.fit(X_train, y_train)
+        y_pred = rfr.predict(X_test)
+        score = r2_score(y_test, y_pred)
+        return score
+
+    bodo_score = bodo.jit(distributed=["X_train", "y_train", "X_test", "y_test"])(
+        test_score
+    )(
+        _get_dist_arg(np.array(X_train)),
+        _get_dist_arg(np.array(y_train)),
+        _get_dist_arg(np.array(X_test)),
+        _get_dist_arg(np.array(y_test)),
+    )
+    sklearn_score = test_score(X_train, y_train, X_test, y_test)
+    assert np.allclose(sklearn_score, bodo_score, atol=0.1)

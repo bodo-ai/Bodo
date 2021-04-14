@@ -125,12 +125,25 @@ Ensemble Methods
 
   This class provides Random Forest Classifier, an ensemble learning model, for distributed large-scale learning.
 
+  * ``random_state`` value is ignored when running on multi-node.
+
 Methods:
 
   * :any:`sklearn.ensemble.RandomForestClassifier.fit`
   * :any:`sklearn.ensemble.RandomForestClassifier.predict`
   * :any:`sklearn.ensemble.RandomForestClassifier.score`
 
+:class:`sklearn.ensemble.RandomForestRegressor`
+
+  This class provides Random Forest Regressor, an ensemble learning model, for distributed large-scale learning.
+
+  * ``random_state`` value is ignored when running on multi-node.
+
+Methods:
+
+  * :any:`sklearn.ensemble.RandomForestRegressor.fit`
+  * :any:`sklearn.ensemble.RandomForestRegressor.predict`
+  * :any:`sklearn.ensemble.RandomForestRegressor.score`
 
 Naive Bayes
 ***********

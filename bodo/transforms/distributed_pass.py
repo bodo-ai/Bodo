@@ -409,6 +409,7 @@ class DistributedPass:
                 self.typemap[func_mod.name],
                 (
                     bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
+                    bodo.libs.sklearn_ext.BodoRandomForestRegressorType,
                     bodo.libs.sklearn_ext.BodoSGDClassifierType,
                     bodo.libs.sklearn_ext.BodoSGDRegressorType,
                     bodo.libs.sklearn_ext.BodoKMeansClusteringType,
@@ -435,6 +436,7 @@ class DistributedPass:
                 self.typemap[func_mod.name],
                 (
                     bodo.libs.sklearn_ext.BodoRandomForestClassifierType,
+                    bodo.libs.sklearn_ext.BodoRandomForestRegressorType,
                     bodo.libs.sklearn_ext.BodoSGDClassifierType,
                     bodo.libs.sklearn_ext.BodoSGDRegressorType,
                     bodo.libs.sklearn_ext.BodoKMeansClusteringType,
