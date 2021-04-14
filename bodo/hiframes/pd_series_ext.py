@@ -753,6 +753,12 @@ class SeriesAttribute(AttributeTemplate):
     def resolve_combine(self, ary, args, kws):
         return self._resolve_combine_func(ary, args, kws)
 
+    @bound_function("series.pipe", no_unliteral=True)
+    def resolve_pipe(self, ary, args, kws):
+        return bodo.hiframes.pd_groupby_ext.resolve_obj_pipe(
+            self, ary, args, kws, "Series"
+        )
+
     def generic_resolve(self, S, attr):
         """Handle getattr on row Series values pass to df.apply() UDFs."""
         from bodo.hiframes.pd_index_ext import HeterogeneousIndexType
@@ -1088,7 +1094,6 @@ series_unsupported_methods = (
     "transform",
     "expanding",
     "ewm",
-    "pipe",
     # Computations / descriptive stats
     "clip",
     "factorize",

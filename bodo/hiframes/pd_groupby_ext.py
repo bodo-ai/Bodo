@@ -893,6 +893,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
         msg = "Groupby.shift() doesn't support timedelta"  # HA: for now, until its error is fixed.
         return self.resolve_transformative(grp, args, kws, msg, "shift")
 
+    @bound_function("groupby.pipe", no_unliteral=True)
+    def resolve_pipe(self, grp, args, kws):
+        return resolve_obj_pipe(self, grp, args, kws, "GroupBy")
+
     @bound_function("groupby.apply", no_unliteral=True)
     def resolve_apply(self, grp, args, kws):
         kws = dict(kws)
@@ -997,17 +1001,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 f_return_type.data, out_index_type, f_return_type.columns
             )
 
-        arg_names = ", ".join(f"arg{i}" for i in range(len(f_args)))
-        arg_names = arg_names + ", " if arg_names else ""
-        # add dummy default value for UDF kws to avoid errors
-        kw_names = ", ".join(f"{a} = ''" for a in kws.keys())
-        func_text = f"def apply_stub(func, {arg_names}{kw_names}):\n"
-        func_text += "    pass\n"
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        apply_stub = loc_vars["apply_stub"]
-
-        pysig = numba.core.utils.pysignature(apply_stub)
+        pysig = gen_apply_pysig(len(f_args), kws.keys())
         new_args = (func, *f_args) + tuple(kws.values())
         return signature(ret_type, *new_args).replace(pysig=pysig)
 
@@ -1058,6 +1052,45 @@ def _get_groupby_apply_udf_out_type(func, grp, f_args, kws, context):
             get_udf_error_msg("GroupBy.apply()", e), getattr(e, "loc", None)
         )
     return f_return_type
+
+
+def resolve_obj_pipe(self, grp, args, kws, obj_name):
+    """handle groupyby/dataframe/series.pipe in low-level API since it requires
+    **kwargs which is not supported in overloads yet.
+    Transform: grp.pipe(f, args) -> f(grp, args)
+    """
+    kws = dict(kws)
+    func = args[0] if len(args) > 0 else kws.pop("func", None)
+    f_args = tuple(args[1:]) if len(args) > 0 else ()
+
+    arg_typs = (grp,) + f_args
+    try:
+        f_return_type = get_const_func_output_type(
+            func, arg_typs, kws, self.context, False
+        )
+    except Exception as e:
+        raise_bodo_error(
+            get_udf_error_msg(f"{obj_name}.pipe()", e), getattr(e, "loc", None)
+        )
+
+    pysig = gen_apply_pysig(len(f_args), kws.keys())
+    new_args = (func, *f_args) + tuple(kws.values())
+    return signature(f_return_type, *new_args).replace(pysig=pysig)
+
+
+def gen_apply_pysig(n_args, kws):
+    """generate pysignature object for apply/pipe"""
+    arg_names = ", ".join(f"arg{i}" for i in range(n_args))
+    arg_names = arg_names + ", " if arg_names else ""
+    # add dummy default value for UDF kws to avoid errors
+    kw_names = ", ".join(f"{a} = ''" for a in kws)
+    func_text = f"def apply_stub(func, {arg_names}{kw_names}):\n"
+    func_text += "    pass\n"
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    apply_stub = loc_vars["apply_stub"]
+
+    return numba.core.utils.pysignature(apply_stub)
 
 
 # a dummy pivot_table function that will be replace in dataframe_pass
@@ -1376,7 +1409,6 @@ groupby_unsupported = {
     "ohlc",
     "pad",
     "pct_change",
-    "pipe",
     "plot",
     "quantile",
     "rank",

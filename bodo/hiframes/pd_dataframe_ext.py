@@ -239,6 +239,12 @@ class DataFrameModel(models.StructModel):
 class DataFrameAttribute(AttributeTemplate):
     key = DataFrameType
 
+    @bound_function("df.pipe", no_unliteral=True)
+    def resolve_pipe(self, df, args, kws):
+        return bodo.hiframes.pd_groupby_ext.resolve_obj_pipe(
+            self, df, args, kws, "DataFrame"
+        )
+
     @bound_function("df.apply", no_unliteral=True)
     def resolve_apply(self, df, args, kws):
         kws = dict(kws)
@@ -2598,7 +2604,6 @@ dataframe_unsupported = {
     "align",
     "add",
     "squeeze",
-    "pipe",
     "swapaxes",
     "to_pickle",
     "to_timestamp",

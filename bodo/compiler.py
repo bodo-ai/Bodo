@@ -292,6 +292,7 @@ _series_no_inline_methods = {
     "to_dict",
     "map",
     "apply",
+    "pipe",
     "combine",
 }
 # Series methods that are just aliases of another method
@@ -307,6 +308,7 @@ _series_method_alias = {
 _dataframe_no_inline_methods = {
     "apply",
     "itertuples",
+    "pipe",
     "to_parquet",
     "to_sql",
     "to_csv",

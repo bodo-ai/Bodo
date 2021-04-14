@@ -387,6 +387,7 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.nsmallest` (non-numerics not supported yet)
 * :meth:`pandas.Series.pct_change` (supports numeric types and
   only the `periods` argument supported)
+* :meth:`pandas.Series.pipe` `func` should be a function (not tuple)
 * :meth:`pandas.Series.prod`
 * :meth:`pandas.Series.product`
 * :meth:`pandas.Series.quantile`
@@ -601,6 +602,7 @@ Computations / Descriptive Stats:
 * :meth:`pandas.DataFrame.min`
 * :meth:`pandas.DataFrame.nunique` `dropna` argument not supported yet.
 * :meth:`pandas.DataFrame.pct_change`
+* :meth:`pandas.DataFrame.pipe` `func` should be a function (not tuple)
 * :meth:`pandas.DataFrame.prod`
 * :meth:`pandas.DataFrame.product`
 * :meth:`pandas.DataFrame.quantile`
@@ -916,6 +918,7 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.max`
 * :meth:`pandas.core.groupby.GroupBy.mean`
 * :meth:`pandas.core.groupby.GroupBy.min`
+* :meth:`pandas.core.groupby.GroupBy.pipe` `func` should be a function (not tuple)
 * :meth:`pandas.core.groupby.GroupBy.prod`
 * :meth:`pandas.core.groupby.GroupBy.rolling`
 * :meth:`pandas.core.groupby.GroupBy.std`

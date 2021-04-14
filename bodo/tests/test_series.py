@@ -2452,6 +2452,23 @@ def test_series_apply_kw(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_series_pipe():
+    """
+    Test Series.pipe()
+    """
+
+    def impl1(S):
+        return S.pipe(lambda S: S.sum())
+
+    # test *args, **kwargs
+    def impl2(S, a, b):
+        return S.pipe(lambda S, a, b: S.sum() + a + b, a, b=b)
+
+    S = pd.Series([1, 2, 3, 4, 5, 6])
+    check_func(impl1, (S,))
+    check_func(impl2, (S, 1, 2))
+
+
 def test_series_heter_constructor(memory_leak_check):
     """
     test creating Series with heterogeneous values

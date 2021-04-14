@@ -354,6 +354,21 @@ class DataFramePass:
         if fdef == ("join_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_join(assign, lhs, rhs)
 
+        # df/series/groupby.pipe()
+        if (
+            isinstance(func_mod, ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                (
+                    DataFrameType,
+                    bodo.hiframes.pd_series_ext.SeriesType,
+                    DataFrameGroupByType,
+                ),
+            )
+            and func_name == "pipe"
+        ):
+            return self._run_call_pipe(rhs, func_mod)
+
         if isinstance(func_mod, ir.Var) and isinstance(
             self.typemap[func_mod.name], DataFrameType
         ):
@@ -1978,6 +1993,26 @@ class DataFramePass:
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
 
         return func_text
+
+    def _run_call_pipe(self, rhs, obj_var):
+        """generate IR nodes for df/series/groupby.pipe().
+        Transform: grp.pipe(f, args) -> f(grp, args)
+        """
+        # get pipe function and args
+        kws = dict(rhs.kws)
+        func_var = get_call_expr_arg("pipe", rhs.args, kws, 0, "func")
+        func = get_overload_const_func(self.typemap[func_var.name])
+        extra_args = [] if len(rhs.args) < 2 else rhs.args[1:]
+        args = [obj_var] + list(extra_args)
+
+        return replace_func(
+            self,
+            func,
+            args,
+            kws=rhs.kws,
+            pysig=numba.core.utils.pysignature(func),
+            run_full_pipeline=True,
+        )
 
     def _run_call_pivot_table(self, assign, lhs, rhs):
         df_var, values, index, columns, aggfunc, _pivot_values = rhs.args
