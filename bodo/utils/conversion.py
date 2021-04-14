@@ -371,6 +371,14 @@ def overload_coerce_to_ndarray(
 
         return impl_num
 
+    # Tuple of numerics can be converted to Numpy array
+    if isinstance(data, types.BaseTuple) and all(
+        isinstance(t, (types.Float, types.Integer)) for t in data.types
+    ):
+        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: np.array(
+            data
+        )  # pragma: no cover
+
     # data is already an array
     if bodo.utils.utils.is_array_typ(data, False):
         return (
@@ -378,7 +386,7 @@ def overload_coerce_to_ndarray(
         )  # pragma: no cover
 
     if is_overload_true(error_on_nonarray):
-        raise BodoError("cannot coerce {} to array".format(data))
+        raise BodoError(f"cannot coerce {data} to array")
 
     return (
         lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data

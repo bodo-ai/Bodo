@@ -1157,7 +1157,8 @@ def overload_dataframe_describe(
 
     header = "def impl(df, percentiles=None, include=None, exclude=None, datetime_is_numeric=False):\n"
     data_args = ", ".join(
-        f"df.iloc[:, {df.columns.index(i)}].describe().values" for i in numeric_cols
+        f"bodo.utils.conversion.coerce_to_array(df.iloc[:, {df.columns.index(i)}].describe().values)"
+        for i in numeric_cols
     )
     index = (
         "bodo.utils.conversion.convert_to_index(['count', 'mean', 'std', "

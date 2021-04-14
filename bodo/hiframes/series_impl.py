@@ -65,14 +65,16 @@ from bodo.utils.typing import (
 )
 
 
+@overload_attribute(HeterogeneousSeriesType, "index", inline="always")
 @overload_attribute(SeriesType, "index", inline="always")
 def overload_series_index(s):
-    return lambda s: bodo.hiframes.pd_series_ext.get_series_index(s)
+    return lambda s: bodo.hiframes.pd_series_ext.get_series_index(s)  # pragma: no cover
 
 
+@overload_attribute(HeterogeneousSeriesType, "values", inline="always")
 @overload_attribute(SeriesType, "values", inline="always")
 def overload_series_values(s):
-    return lambda s: bodo.hiframes.pd_series_ext.get_series_data(s)
+    return lambda s: bodo.hiframes.pd_series_ext.get_series_data(s)  # pragma: no cover
 
 
 @overload_attribute(SeriesType, "dtype", inline="always")
@@ -81,54 +83,69 @@ def overload_series_dtype(s):
     if s.dtype == bodo.string_type:
         raise BodoError("Series.dtype not supported for string Series yet")
 
-    return lambda s: bodo.hiframes.pd_series_ext.get_series_data(s).dtype
+    return lambda s: bodo.hiframes.pd_series_ext.get_series_data(
+        s
+    ).dtype  # pragma: no cover
 
 
+@overload_attribute(HeterogeneousSeriesType, "shape")
 @overload_attribute(SeriesType, "shape")
 def overload_series_shape(s):
-    return lambda s: (len(bodo.hiframes.pd_series_ext.get_series_data(s)),)
+    return lambda s: (
+        len(bodo.hiframes.pd_series_ext.get_series_data(s)),
+    )  # pragma: no cover
 
 
+@overload_attribute(HeterogeneousSeriesType, "ndim", inline="always")
 @overload_attribute(SeriesType, "ndim", inline="always")
 def overload_series_ndim(s):
-    return lambda s: 1
+    return lambda s: 1  # pragma: no cover
 
 
+@overload_attribute(HeterogeneousSeriesType, "size")
 @overload_attribute(SeriesType, "size")
 def overload_series_size(s):
-    return lambda s: len(bodo.hiframes.pd_series_ext.get_series_data(s))
+    return lambda s: len(
+        bodo.hiframes.pd_series_ext.get_series_data(s)
+    )  # pragma: no cover
 
 
+@overload_attribute(HeterogeneousSeriesType, "T", inline="always")
 @overload_attribute(SeriesType, "T", inline="always")
 def overload_series_T(s):
-    return lambda s: s
+    return lambda s: s  # pragma: no cover
 
 
 @overload_attribute(SeriesType, "hasnans", inline="always")
 def overload_series_hasnans(s):
-    return lambda s: s.isna().sum() != 0
+    return lambda s: s.isna().sum() != 0  # pragma: no cover
 
 
+@overload_attribute(HeterogeneousSeriesType, "empty")
 @overload_attribute(SeriesType, "empty")
 def overload_series_empty(s):
-    return lambda s: len(bodo.hiframes.pd_series_ext.get_series_data(s)) == 0
+    return (
+        lambda s: len(bodo.hiframes.pd_series_ext.get_series_data(s)) == 0
+    )  # pragma: no cover
 
 
 @overload_attribute(SeriesType, "dtypes", inline="always")
 def overload_series_dtypes(s):
-    return lambda s: s.dtype
+    return lambda s: s.dtype  # pragma: no cover
 
 
 @overload_attribute(HeterogeneousSeriesType, "name", inline="always")
 @overload_attribute(SeriesType, "name", inline="always")
 def overload_series_name(s):
-    return lambda s: bodo.hiframes.pd_series_ext.get_series_name(s)
+    return lambda s: bodo.hiframes.pd_series_ext.get_series_name(s)  # pragma: no cover
 
 
 @overload(len, no_unliteral=True)
 def overload_series_len(S):
-    if isinstance(S, SeriesType):
-        return lambda S: len(bodo.hiframes.pd_series_ext.get_series_data(S))
+    if isinstance(S, (SeriesType, HeterogeneousSeriesType)):
+        return lambda S: len(
+            bodo.hiframes.pd_series_ext.get_series_data(S)
+        )  # pragma: no cover
 
 
 @overload_method(SeriesType, "copy", inline="always", no_unliteral=True)
@@ -1926,7 +1943,7 @@ def overload_series_describe(
         q50 = S.quantile(0.5)
         q75 = S.quantile(0.75)
         return bodo.hiframes.pd_series_ext.init_series(
-            np.array([a_count, a_mean, a_std, a_min, q25, q50, q75, a_max]),
+            (a_count, a_mean, a_std, a_min, q25, q50, q75, a_max),
             bodo.utils.conversion.convert_to_index(
                 ["count", "mean", "std", "min", "25%", "50%", "75%", "max"]
             ),
