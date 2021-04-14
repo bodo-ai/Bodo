@@ -15,11 +15,11 @@ jobs:
 
   - script: |
       set -eo pipefail
-      
+
       export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
       echo "##vso[task.setvariable variable=BODO_VERSION]$BODO_VERSION"
       echo "BODO_VERSION: $BODO_VERSION"
-      
+
       export IS_RELEASE=`git tag --points-at HEAD`
       echo "##vso[task.setvariable variable=IS_RELEASE]$IS_RELEASE"
       echo "IS_RELEASE: $IS_RELEASE"
@@ -74,14 +74,14 @@ jobs:
         echo "Skipping Obfuscation"
       fi
     displayName: 'Obfuscation'
-  
+
   - script: |
        set -eo pipefail
        export PATH=$HOME/miniconda3/bin:${PATH}
        source activate bodo_build
        python rename_to_pyx.py
     displayName: 'Rename py to pyx'
-  
+
   - script: |
       set -eo pipefail
       if [[ ! -z $IS_RELEASE ]]; then

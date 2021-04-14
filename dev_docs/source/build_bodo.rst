@@ -15,7 +15,7 @@ such as Numba on Ubuntu Linux::
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n DEV python numpy scipy pandas='1.2.*' boost-cpp=1.74.0 cmake h5py mpich mpi -c conda-forge
+    conda create -n DEV python numpy scipy pandas='1.2.*' boost-cpp cmake h5py mpich mpi -c conda-forge
     source activate DEV
     # Linux: conda install gcc_linux-64 gxx_linux-64 -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 -c conda-forge
@@ -62,24 +62,38 @@ Troubleshooting MacOS Build
 On Windows
 ~~~~~~~~~~
 
-* Install Visual Studio Community 2017 (15.9.18)
-* From the Visual Studio installer, install following individual components::
+* Install `Microsoft Build Tools for Visual Studio 2019 <https://www.visualstudio.com/downloads/#build-tools-for-visual-studio-2019>`_::
 
-    Windows 10 SDK (10.0.17763.0)
-    Windows Universal CRT SDK
-    VC++ 2015.3 v14.00 (v140) toolset for desktop
+  In Build tools, install C++ build tools and ensure the latest versions of MSVCv142 - VS 2019 C++ x64/x86 build
+  tools and Windows 10 SDK are checked.
 
-* Install `Miniconda for Windows <https://repo.continuum.io/miniconda/Miniconda3-latest-Windows-x86_64.exe>`_.
-* Start 'Anaconda (Miniconda3) prompt'
-* Setup the Conda environment in Anaconda Prompt::
+* Install `Miniconda for Windows <https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe>`_.
 
-    conda create -n DEV python numpy scipy pandas="1.2.*" boost-cpp=1.74.0 cmake h5py -c conda-forge
-    source activate DEV
+* Start "Anaconda Prompt (miniconda3)"
+
+* Set up the Visual C++ environment::
+
+  The Visual Studio and VS C++ variables need to be in your environment.
+  If they are not already set (for example look for ``VCINSTALLDIR``,
+  ``VCToolsVersion`` and ``VisualStudioVersion`` in your environment variables)
+  you can do so by running ``vcvars64.bat`` inside the miniconda
+  prompt. For Microsoft Visual Studio this batch file is located in::
+
+  C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat
+
+* Set up the Conda environment in Anaconda Prompt::
+
+    conda create -n DEV python numpy scipy pandas="1.2.*" boost-cpp -c conda-forge
+    conda activate DEV
     conda install numba=0.53.0 -c conda-forge
-    conda install vc vs2015_runtime vs2015_win-64
-    conda install -c defaults -c intel impi_rt impi-devel
+    conda install mpi4py msmpi cython -c conda-forge
     conda install -c conda-forge pyarrow=3.0.0
+    # Required for IO with S3
     conda install -c conda-forge fsspec
+    # The following is required for s3 related development and tests
+    # conda install -c conda-forge boto3 botocore
+    # The following is required for IO with gcs
+    # conda install -c conda-forge gcsfs
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo

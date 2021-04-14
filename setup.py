@@ -75,18 +75,10 @@ if "setup_centos7" in os.environ:
     MPI_LIBS = ["mpich"]
 H5_CPP_FLAGS = []
 
-use_impi = False
-if use_impi:
-    MPI_ROOT = os.environ["I_MPI_ROOT"]
-    MPI_INC = MPI_ROOT + "/include64/"
-    MPI_LIBDIR = MPI_ROOT + "/lib64/"
-    MPI_LIBS = ["mpifort", "mpi", "mpigi"]
-    ind = [PREFIX_DIR + "/include", MPI_INC]
-    lid = [PREFIX_DIR + "/lib", MPI_LIBDIR]
 
 if is_win:
-    # use Intel MPI on Windows
-    MPI_LIBS = ["impi"]
+    # use Microsoft MPI on Windows
+    MPI_LIBS = ["msmpi"]
     # hdf5-parallel Windows build uses CMake which needs this flag
     H5_CPP_FLAGS = [("H5_BUILT_AS_DYNAMIC_LIB", None)]
 
@@ -189,10 +181,10 @@ dist_macros = []
 dist_includes = []
 dist_sources = []
 dist_libs = []
-if os.environ.get("CHECK_LICENSE_EXPIRED", None) == "1" and not is_win:
+if os.environ.get("CHECK_LICENSE_EXPIRED", None) == "1":
     dist_macros.append(("CHECK_LICENSE_EXPIRED", "1"))
 
-if os.environ.get("CHECK_LICENSE_CORE_COUNT", None) == "1" and not is_win:
+if os.environ.get("CHECK_LICENSE_CORE_COUNT", None) == "1":
     dist_macros.append(("CHECK_LICENSE_CORE_COUNT", "1"))
 
 if os.environ.get("CHECK_LICENSE_PLATFORM_AWS", None) == "1":
@@ -203,11 +195,15 @@ if os.environ.get("CHECK_LICENSE_PLATFORM_AWS", None) == "1":
     dist_sources += ["bodo/libs/gason/gason.cpp"]
     dist_libs += ["curl"]
 
-if not is_win and (
+if (
     os.environ.get("CHECK_LICENSE_EXPIRED", None) == "1"
     or os.environ.get("CHECK_LICENSE_CORE_COUNT", None) == "1"
 ):
-    dist_libs += ["ssl", "crypto"]
+    if is_win:
+        dist_libs += ["libssl", "libcrypto"]
+    else:
+        dist_libs += ["ssl", "crypto"]
+
 
 ext_hdist = Extension(
     name="bodo.libs.hdist",
@@ -486,7 +482,9 @@ setup(
             "data/*",
             "data/*/*",
         ],
-        "bodo": ["pytest.ini"],
+        # on Windows we copy libssl and libcrypto DLLs to bodo/libs to bundle
+        # them with our package and avoid external dependency
+        "bodo": ["pytest.ini", "libs/*.dll"],
     },
     install_requires=["numba"],
     extras_require={"HDF5": ["h5py"], "Parquet": ["pyarrow"]},

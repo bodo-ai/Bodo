@@ -7,6 +7,15 @@ isort:skip_file
 # set number of threads to 1 for Numpy to avoid interference with Bodo's parallelism
 # NOTE: has to be done before importing Numpy, and for all threading backends
 import os
+import platform
+
+if platform.system() == "Windows":
+    # loads the Arrow DLLs (we require arrow.dll and parquet.dll) so that they
+    # are found in memory when loading our own modules that depend on them.
+    # This might not be necessary for the conda version, but is needed for
+    # the pip version because the libraries are not in any PATH
+    import pyarrow
+    import pyarrow.parquet
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
