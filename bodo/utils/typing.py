@@ -1005,6 +1005,22 @@ def get_udf_out_arr_type(f_return_type, return_nullable=False):
     return out_arr_type
 
 
+def equality_always_false(t1, t2):
+    """Helper function returns True if equality
+    may exist between t1 and t2, but if so it will
+    always return False.
+    """
+    # TODO: Enumerate all possible cases
+    string_types = (
+        types.UnicodeType,
+        types.StringLiteral,
+        types.UnicodeCharSeq,
+    )
+    return (isinstance(t1, string_types) and not isinstance(t2, string_types)) or (
+        isinstance(t2, string_types) and not isinstance(t1, string_types)
+    )
+
+
 def types_equality_exists(t1, t2):
     """Determines if operator.eq is implemented between types
     t1 and t2. For efficient compilation time, you should first

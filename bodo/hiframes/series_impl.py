@@ -2247,7 +2247,9 @@ def overload_series_replace(
     if series_type != types.unliteral(to_replace_type):
         # Technically this check isn't complete because equality may exist but always return false,
         # which cause in to fail (i.e. int and str).
-        if not bodo.utils.typing.types_equality_exists(series_type, to_replace_type):
+        if bodo.utils.typing.equality_always_false(
+            series_type, types.unliteral(to_replace_type)
+        ) or not bodo.utils.typing.types_equality_exists(series_type, to_replace_type):
 
             def impl(
                 S,
