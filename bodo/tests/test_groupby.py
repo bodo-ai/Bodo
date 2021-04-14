@@ -2196,6 +2196,15 @@ def test_groupby_pipe():
     def impl2(df, a, b):
         return df.groupby("A").pipe(lambda g, a, b: g.sum() + a + b, a, b=b)
 
+    # test chaining
+    def impl3(df, a, b):
+        return (
+            df.groupby("A")
+            .pipe(lambda g, a: g.sum() + a, a)
+            .pipe(lambda df, b: (df + b).B, b=b)
+            .pipe(lambda S: S.sum())
+        )
+
     df = pd.DataFrame(
         {
             "A": [1, 4, 4, 11, 4, 1],
@@ -2204,6 +2213,7 @@ def test_groupby_pipe():
     )
     check_func(impl1, (df,), sort_output=True, reset_index=True)
     check_func(impl2, (df, 1, 2), sort_output=True, reset_index=True)
+    check_func(impl3, (df, 1, 2), sort_output=True, reset_index=True)
 
 
 @pytest.mark.slow
