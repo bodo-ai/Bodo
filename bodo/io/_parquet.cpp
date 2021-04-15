@@ -410,7 +410,15 @@ int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,
 int pq_read_string(DatasetReader *ds_reader, int64_t real_column_idx,
                    int64_t column_idx, NRT_MemInfo **out_meminfo) {
     try {
-        if (ds_reader->count == 0) return 0;
+        if (ds_reader->count == 0) {
+            // This is to avoid segfaults in case of empty arrays on
+            // some ranks
+            array_info *out_arr = alloc_array(0, 0, -1, bodo_array_type::STRING,
+                                              Bodo_CTypes::STRING, 0, 0);
+            *out_meminfo = out_arr->meminfo;
+            delete out_arr;
+            return 0;
+        }
 
         int64_t start = ds_reader->start_row_first_file;
 

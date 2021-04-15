@@ -430,6 +430,8 @@ def test_pq_arrow_array_random():
 
 # TODO: Add memory_leak_check when bugs are resolved.
 def test_pq_array_item(datapath):
+    # TODO: [BE-581] Handle cases where the number of processes are
+    # greater than the number of rows for nested arrays and other types.
     def test_impl(fname):
         return pd.read_parquet(fname)
 
@@ -492,6 +494,11 @@ def test_pq_date32(datapath, memory_leak_check):
         return pd.read_parquet(fname)
 
     check_func(test_impl, (datapath("date32_1.pq"),))
+
+
+def test_pq_processes_greater_than_string_rows(datapath):
+    f = lambda filename: pd.read_parquet(filename)
+    check_func(f, [datapath("small_strings.pq")])
 
 
 def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
