@@ -961,19 +961,9 @@ def overload_index_from_array(data, name=None):
             data, name=name
         )  # pragma: no cover
 
-    if isinstance(data.dtype, types.Integer):
-        if not data.dtype.signed:
-            return lambda data, name=None: pd.UInt64Index(
-                data, name=name
-            )  # pragma: no cover
-        else:
-            return lambda data, name=None: pd.Int64Index(
-                data, name=name
-            )  # pragma: no cover
-
-    if isinstance(data.dtype, types.Float):
-        return lambda data, name=None: pd.Float64Index(
-            data, name=name
+    if isinstance(data.dtype, (types.Integer, types.Float)):
+        return lambda data, name=None: bodo.hiframes.pd_index_ext.init_numeric_index(
+            data, name
         )  # pragma: no cover
 
     # TODO: timedelta, period

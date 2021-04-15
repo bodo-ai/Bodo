@@ -2723,9 +2723,6 @@ def test_series_groupby_by_arg_supported_types(series_val, memory_leak_check):
     if isinstance(series_val.values[0], Decimal):
         return
 
-    if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        return
-
     # matches length for both series_val and by argument
     if len(series_val) > 5:
         series_val = series_val[:5]

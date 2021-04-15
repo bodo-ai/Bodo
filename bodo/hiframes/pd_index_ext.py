@@ -76,9 +76,17 @@ def typeof_pd_index(val, c):
     if val.inferred_type == "date":
         return DatetimeIndexType(get_val_type_maybe_str_literal(val.name))
 
+    # Pandas uses object dtype for nullable int arrays
+    if val.inferred_type == "integer":
+        return NumericIndexType(
+            types.int64,
+            get_val_type_maybe_str_literal(val.name),
+            IntegerArrayType(types.int64),
+        )
+
     # catch-all for non-supported Index types
     # RangeIndex is directly supported (TODO: make sure this is not called)
-    raise NotImplementedError("unsupported pd.Index type")
+    raise NotImplementedError(f"unsupported pd.Index type {val}")
 
 
 # -------------------------  DatetimeIndex ------------------------------
@@ -1913,6 +1921,10 @@ def NumericIndex_get_name(ni):
 
 @box(NumericIndexType)
 def box_numeric_index(typ, val, c):
+    """Box NumericIndexType values by calling pd.Index(data).
+    Bodo supports all numberic dtypes (e.g. int32) but Pandas is limited to
+    Int64/UInt64/Float64. pd.Index() will convert to the available Index type.
+    """
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     class_obj = c.pyapi.import_module_noblock(mod_name)
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
@@ -1921,20 +1933,11 @@ def box_numeric_index(typ, val, c):
     c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
 
-    assert typ.dtype in (types.int64, types.uint64, types.float64)
-    func_name = "Int64Index"
-    if typ.dtype == types.uint64:
-        func_name = "UInt64Index"
-    elif typ.dtype == types.float64:
-        func_name = "Float64Index"
-    else:
-        assert typ.dtype == types.int64
-
     dtype_obj = c.pyapi.make_none()
     copy_obj = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
 
     index_obj = c.pyapi.call_method(
-        class_obj, func_name, (data_obj, dtype_obj, copy_obj, name_obj)
+        class_obj, "Index", (data_obj, dtype_obj, copy_obj, name_obj)
     )
 
     c.pyapi.decref(data_obj)
@@ -2238,7 +2241,8 @@ def overload_index_getitem(I, ind):
 
 
 # similar to index_from_array()
-def array_typ_to_index(arr_typ, name_typ=None):
+def array_type_to_index(arr_typ, name_typ=None):
+    """convert array type to a corresponding Index type"""
     if arr_typ == bodo.string_array_type:
         return StringIndexType(name_typ)
 
@@ -2257,16 +2261,10 @@ def array_typ_to_index(arr_typ, name_typ=None):
     if arr_typ.dtype == types.NPTimedelta("ns"):
         return TimedeltaIndexType(name_typ)
 
-    if isinstance(arr_typ.dtype, types.Integer):
-        if not arr_typ.dtype.signed:
-            return NumericIndexType(types.uint64, name_typ, arr_typ)
-        else:
-            return NumericIndexType(types.int64, name_typ, arr_typ)
+    if isinstance(arr_typ.dtype, (types.Integer, types.Float)):
+        return NumericIndexType(arr_typ.dtype, name_typ, arr_typ)
 
-    if isinstance(arr_typ.dtype, types.Float):
-        return NumericIndexType(types.float64, name_typ)
-
-    raise TypeError("invalid index type {}".format(arr_typ))
+    raise BodoError(f"invalid index type {arr_typ}")
 
 
 def is_pd_index_type(t):

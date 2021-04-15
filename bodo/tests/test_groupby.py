@@ -146,7 +146,7 @@ def test_nullable_int(memory_leak_check):
 
     df = pd.DataFrame(
         {
-            "A": [2, 1, 1, 1, 2, 2, 1],
+            "A": pd.array([2, 1, 1, 1, 2, 2, 1], "Int32"),
             "B": pd.Series(
                 np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int8"
             ),
@@ -1244,6 +1244,7 @@ def test_series_groupby_max_min_cat(memory_leak_check):
         reset_index=True,
         py_output=test_impl1(S1).astype(S1.dtype),
         check_names=False,
+        check_categorical=False,
     )
     check_func(
         test_impl4,
@@ -1252,6 +1253,7 @@ def test_series_groupby_max_min_cat(memory_leak_check):
         reset_index=True,
         py_output=test_impl2(S1).astype(S1.dtype),
         check_names=False,
+        check_categorical=False,
     )
 
 

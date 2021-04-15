@@ -388,6 +388,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
             out_column_type.append(ColumnType.KeyColumn.value)
 
     def _get_agg_typ(self, grp, args, func_name, func=None, kws=None):
+        """Get output signature for a groupby function"""
         index = RangeIndexType(types.none)
         out_data = []
         out_columns = []
@@ -409,7 +410,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 # TODO [BE-403]: Support Categorical Key
                 if isinstance(grp.df_type.data[ind], bodo.CategoricalArrayType):
                     raise BodoError("Groupby with Categorical key not supported.")
-                index = bodo.hiframes.pd_index_ext.array_typ_to_index(
+                index = bodo.hiframes.pd_index_ext.array_type_to_index(
                     grp.df_type.data[ind], types.StringLiteral(grp.keys[0])
                 )
 
@@ -938,7 +939,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     )
                 else:
                     ind = grp.df_type.columns.index(grp.keys[0])
-                    out_index_type = bodo.hiframes.pd_index_ext.array_typ_to_index(
+                    out_index_type = bodo.hiframes.pd_index_ext.array_type_to_index(
                         grp.df_type.data[ind], types.literal(grp.keys[0])
                     )
             out_data = tuple(out_data)
@@ -1129,7 +1130,7 @@ class PivotTyper(AbstractTemplate):
         n_vals = len(pivot_vals)
 
         ind = df.columns.index(index)
-        index_typ = bodo.hiframes.pd_index_ext.array_typ_to_index(
+        index_typ = bodo.hiframes.pd_index_ext.array_type_to_index(
             df.data[ind], types.StringLiteral(index)
         )
 
@@ -1165,7 +1166,7 @@ class CrossTabTyper(AbstractTemplate):
 
         pivot_vals = _pivot_values.meta
         n_vals = len(pivot_vals)
-        index_typ = bodo.hiframes.pd_index_ext.array_typ_to_index(
+        index_typ = bodo.hiframes.pd_index_ext.array_type_to_index(
             index.data, types.StringLiteral("index")
         )
         out_df = DataFrameType((out_arr_typ,) * n_vals, index_typ, tuple(pivot_vals))

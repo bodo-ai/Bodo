@@ -1755,9 +1755,10 @@ def overload_series_groupby(
     by_dtype = by
     if isinstance(by, SeriesType):
         by_dtype = by.data
-    if isinstance(by_dtype, (IntegerArrayType, DecimalArrayType)):
+
+    if isinstance(by_dtype, DecimalArrayType):
         raise BodoError(
-            "Series.groupby(): by argument with nullable integer type is not supported yet."
+            "Series.groupby(): by argument with decimal type is not supported yet."
         )
 
     # TODO: [BE-347] support by argument type to be categorical

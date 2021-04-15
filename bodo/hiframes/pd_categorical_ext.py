@@ -61,7 +61,9 @@ class PDCategoricalDtype(types.Opaque):
 def _typeof_pd_cat_dtype(val, c):
     cats = val.categories.to_list()
     elem_type = None if len(cats) == 0 else bodo.typeof(cats[0])
-    return PDCategoricalDtype(tuple(cats), elem_type, val.ordered)
+    return PDCategoricalDtype(
+        tuple(cats), elem_type, val.ordered, bodo.typeof(val.categories)
+    )
 
 
 def _get_cat_index_type(elem_type):

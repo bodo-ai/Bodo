@@ -1057,7 +1057,7 @@ class UntypedPass:
             # TODO: support index_col
             # if index_col is not None:
             #     index_name = col_names[index_col]
-            #     index = bodo.hiframes.pd_index_ext.array_typ_to_index(dtype_map[index_name], types.StringLiteral(index_name))
+            #     index = bodo.hiframes.pd_index_ext.array_type_to_index(dtype_map[index_name], types.StringLiteral(index_name))
             #     col_names.remove(index_name)
             data_arrs = tuple(dtype_map[c] for c in col_names)
             df_type = DataFrameType(data_arrs, index, tuple(col_names))
