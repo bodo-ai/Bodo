@@ -1060,6 +1060,31 @@ def get_parquet_filesnames_from_deltalake(delta_lake_path):
     return file_names
 
 
+def get_dataset_schema(dataset):  # pragma: no cover
+    # All of the code in this function is copied from
+    # pyarrow.parquet.ParquetDataset.validate_schemas and is the first part
+    # of that function
+    if dataset.metadata is None and dataset.schema is None:
+        if dataset.common_metadata is not None:
+            dataset.schema = dataset.common_metadata.schema
+        else:
+            dataset.schema = dataset.pieces[0].get_metadata().schema
+    elif dataset.schema is None:
+        dataset.schema = dataset.metadata.schema
+
+    # Verify schemas are all compatible
+    dataset_schema = dataset.schema.to_arrow_schema()
+    # Exclude the partition columns from the schema, they are provided
+    # by the path, not the DatasetPiece
+    if dataset.partitions is not None:
+        for partition_name in dataset.partitions.partition_names:
+            if dataset_schema.get_field_index(partition_name) != -1:
+                field_idx = dataset_schema.get_field_index(partition_name)
+                dataset_schema = dataset_schema.remove(field_idx)
+
+    return dataset_schema
+
+
 def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_options=None):
     """get ParquetDataset object for 'fpath' and set the number of total rows as an
     attribute. Also, sets the number of rows per file as an attribute of
@@ -1129,38 +1154,73 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
             # hive scheme) we let pyarrow.parquet.ParquetDataset
             # extract all the information by passing it the top-level directory.
             # This happens sequentially.
+            # We then do schema validation and get the row counts (which are the
+            # most expensive operations) in parallel.
             # Note: ParquetDataset has metadata_nthreads parameter but it
             # seems to use Python threads and not make a difference
+            validate_schema = bodo.parquet_validate_schema
             if bodo.get_rank() == 0:
-                validate_schema = bodo.parquet_validate_schema
                 dataset = pq.ParquetDataset(
                     fpath,
                     filesystem=getfs(),
                     filters=filters,
                     use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
-                    validate_schema=validate_schema,
+                    validate_schema=False,  # we do validation below if needed
                 )
-                if not validate_schema:
-                    # We need to set the schema. Copied from pyarrow.parquet.ParquetDataset.validate_schemas
-                    if dataset.metadata is None and dataset.schema is None:
-                        if dataset.common_metadata is not None:
-                            dataset.schema = dataset.common_metadata.schema
-                        else:
-                            dataset.schema = dataset.pieces[0].get_metadata().schema
-                    elif dataset.schema is None:
-                        dataset.schema = dataset.metadata.schema
 
                 if is_deltalake:
                     # apply the deltalake filter too
                     dataset.pieces = [p for p in dataset.pieces if p.path in file_names]
-                dataset._bodo_total_rows = 0
-                if get_row_counts:
-                    for piece in dataset.pieces:
-                        piece._bodo_num_rows = piece.get_metadata().num_rows
-                        dataset._bodo_total_rows += piece._bodo_num_rows
+
+                dataset_schema = get_dataset_schema(dataset)
                 comm.bcast(dataset)
+                comm.bcast(dataset_schema)
             else:
                 dataset = comm.bcast(None)
+                dataset_schema = comm.bcast(None)
+
+            dataset._bodo_total_rows = 0
+            if get_row_counts or validate_schema:
+                # getting row counts and validating schema requires reading
+                # the file metadata from the parquet files and is very expensive
+                # for large datasets, so we do this in parallel
+                num_pieces = len(dataset.pieces)
+                start = get_start(num_pieces, bodo.get_size(), bodo.get_rank())
+                end = get_end(num_pieces, bodo.get_size(), bodo.get_rank())
+                total_rows_chunk = 0
+                piece_nrows_chunk = []
+                valid = True  # True if schema of all parquet files match
+                for p in dataset.pieces[start:end]:
+                    file_metadata = p.get_metadata()
+                    if get_row_counts:
+                        piece_nrows_chunk.append(file_metadata.num_rows)
+                        total_rows_chunk += file_metadata.num_rows
+                    if validate_schema:
+                        file_schema = file_metadata.schema.to_arrow_schema()
+                        if not dataset_schema.equals(file_schema, check_metadata=False):  # pragma: no cover
+                            # this is the same error message that pyarrow shows
+                            print(
+                                "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
+                                    p, file_schema, dataset_schema
+                                )
+                            )
+                            valid = False
+                            break
+
+                if validate_schema:
+                    valid = comm.allreduce(valid, op=MPI.LAND)
+                    if not valid:  # pragma: no cover
+                        raise BodoError("Schema in parquet files don't match")
+
+                if get_row_counts:
+                    dataset._bodo_total_rows = comm.allreduce(
+                        total_rows_chunk, op=MPI.SUM
+                    )
+                    rows_by_ranks = comm.allgather(piece_nrows_chunk)
+                    for i, num_rows in enumerate(
+                        [n for sublist in rows_by_ranks for n in sublist]
+                    ):
+                        dataset.pieces[i]._bodo_num_rows = num_rows
         else:
             # Note that at this point there could still be files in file_names
             # which aren't valid parquet files, so the division of work between
