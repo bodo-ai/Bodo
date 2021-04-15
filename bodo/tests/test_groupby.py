@@ -1244,6 +1244,7 @@ def test_series_groupby_max_min_cat(memory_leak_check):
         reset_index=True,
         py_output=test_impl1(S1).astype(S1.dtype),
         check_names=False,
+        check_categorical=False,
     )
     check_func(
         test_impl4,
@@ -1252,6 +1253,7 @@ def test_series_groupby_max_min_cat(memory_leak_check):
         reset_index=True,
         py_output=test_impl2(S1).astype(S1.dtype),
         check_names=False,
+        check_categorical=False,
     )
 
 
