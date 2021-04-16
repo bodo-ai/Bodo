@@ -1206,6 +1206,15 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
             )
             e.patch_message(msg)
 
+        # In user mode if error comes from numba lowering, suppress stack.
+        # Only if it has not been suppressed earlier (because of TypingError in Bodo).
+        if not numba.core.config.DEVELOPER_MODE:
+            # If error_info is already there, that means Bodo already suppressed stack.
+            if bodo_typing_error_info not in e.msg:
+                msg = "Compilation error."
+                msg += f"{bodo_typing_error_info}"
+                msg += "\n" + e.loc.strformat() + "\n"
+                e.patch_message(msg)
         error_rewrite(e, "typing")
     except errors.UnsupportedError as e:
         # Something unsupported is present in the user code, add help info

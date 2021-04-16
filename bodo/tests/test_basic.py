@@ -43,12 +43,22 @@ def test_dict_unbox(memory_leak_check):
         return d
 
     check_func(test_impl, (d,))
+
+    # Save default developer mode value
+    default_mode = numba.core.config.DEVELOPER_MODE
+
+    # Test as a developer
+    numba.core.config.DEVELOPER_MODE = 1
+
     # test an unsupported data type
     with pytest.raises(
         numba.errors.TypingError,
         match="Cannot type dict element type",
     ):
         bodo.jit(test_impl)({"A": fractions.Fraction(2, 3)})
+
+    # Reset back to original setting
+    numba.core.config.DEVELOPER_MODE = default_mode
 
 
 @pytest.mark.smoke

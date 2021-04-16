@@ -1652,13 +1652,41 @@ def test_df_stack_trace(memory_leak_check):
 
     # Test as a user
     numba.core.config.DEVELOPER_MODE = 0
-    with pytest.raises(numba.TypingError, match="use of unsupported features"):
+    with pytest.raises(
+        numba.TypingError, match="Compilation error for DataFrame.pct_change"
+    ):
         bodo.jit(test_impl)(df)
 
     # Test as a developer
     numba.core.config.DEVELOPER_MODE = 1
     with pytest.raises(numba.TypingError, match="- Resolution failure "):
         bodo.jit(test_impl)(df)
+
+    # Reset back to original setting
+    numba.core.config.DEVELOPER_MODE = default_mode
+
+
+def test_df_stack_trace_numba(memory_leak_check):
+    """Test that stack trace from numba is suppressed in user mode and available in developer mode """
+
+    def test_impl():
+        ans = "xx" + 1
+        return ans
+
+    # Save default developer mode value
+    default_mode = numba.core.config.DEVELOPER_MODE
+
+    # Test as a user
+    numba.core.config.DEVELOPER_MODE = 0
+    with pytest.raises(numba.TypingError, match="Compilation error"):
+        bodo.jit(test_impl)()
+
+    # Test as a developer
+    numba.core.config.DEVELOPER_MODE = 1
+    with pytest.raises(
+        numba.TypingError, match="No implementation of function Function"
+    ):
+        bodo.jit(test_impl)()
 
     # Reset back to original setting
     numba.core.config.DEVELOPER_MODE = default_mode
@@ -4484,8 +4512,17 @@ def test_df_type_unify_error():
             df = pd.DataFrame({"A": ["a", "b", "c"]})
         return df
 
+    # Save default developer mode value
+    default_mode = numba.core.config.DEVELOPER_MODE
+
+    # Test as a developer
+    numba.core.config.DEVELOPER_MODE = 1
+
     with pytest.raises(numba.TypingError, match="Cannot unify dataframe"):
         bodo.jit(test_impl)([3, 4])
+
+    # Reset back to original setting
+    numba.core.config.DEVELOPER_MODE = default_mode
 
 
 # TODO: fix memory leak and add memory_leak_check
