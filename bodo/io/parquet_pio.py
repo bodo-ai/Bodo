@@ -1190,6 +1190,12 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
                 total_rows_chunk = 0
                 piece_nrows_chunk = []
                 valid = True  # True if schema of all parquet files match
+                # During broadcast of the dataset (presumably as part of (un)pickling)
+                # pyarrow resets the filesystem to one picked internally, not the one
+                # we originally passed. For S3 this means that pyarrow selects
+                # pyarrow._s3fs.S3FileSystem, but we need it to use our
+                # PyArrowS3FS wrapper otherwise get_metadata() fails
+                dataset._metadata.fs = getfs()
                 for p in dataset.pieces[start:end]:
                     file_metadata = p.get_metadata()
                     if get_row_counts:
