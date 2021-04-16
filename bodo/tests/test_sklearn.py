@@ -1912,8 +1912,16 @@ def generate_dataset(n_train, n_test, n_features, noise=0.1, verbose=False):
     """ Copied from https://scikit-learn.org/0.16/auto_examples/applications/plot_prediction_latency.html """
     if verbose:
         print("generating dataset...")
+    # IMPORTANT (Bodo change): This is called on all ranks to generate the same
+    # data so they must call with the same random_state.
+    # By the way we use our tests in this module, it's possible that sklearn's
+    # internal random state is out of sync across processes when we get here
     X, y, coef = make_regression(
-        n_samples=n_train + n_test, n_features=n_features, noise=noise, coef=True
+        n_samples=n_train + n_test,
+        n_features=n_features,
+        noise=noise,
+        coef=True,
+        random_state=7,
     )
     X_train = X[:n_train]
     y_train = y[:n_train]
