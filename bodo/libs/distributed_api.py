@@ -805,6 +805,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
         return impl_range_index
 
+    # Index types
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
         from bodo.hiframes.pd_index_ext import PeriodIndexType
 
@@ -855,7 +856,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
                 (), bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data), ()
             )  # pragma: no cover
 
-        data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
+        data_args = ", ".join(f"g_data_{i}" for i in range(n_cols))
         col_var = bodo.utils.transform.gen_const_tup(data.columns)
 
         func_text = (
