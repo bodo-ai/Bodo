@@ -8,6 +8,45 @@ import pytest
 import bodo
 from bodo.utils.typing import BodoError
 
+@pytest.mark.slow
+def test_df_filter_err_check(memory_leak_check):
+    """
+    Tests df.filter with the 'items' and 'like' args both passed.
+    """
+
+    df = pd.DataFrame(
+        np.array(([1, 2, 3], [4, 5, 6])),
+        index=["mouse", "rabbit"],
+        columns=["one", "two", "three"],
+    )
+
+    def test_multiple_args(df):
+        return df.filter(items=["one", "three"], like="bla")
+
+    def test_variable_like_arg(df, like):
+        return df.filter(like=like)
+
+    def test_non_list_items(df):
+        return df.filter(items=7)
+
+    with pytest.raises(
+        BodoError,
+        match="keyword arguments `items`, `like`, and `regex` are mutually exclusive",
+    ):
+        bodo.jit(test_multiple_args)(df)
+
+    with pytest.raises(
+        BodoError,
+        match="argument 'like' must be a constant string",
+    ):
+        bodo.jit(test_variable_like_arg)(df, "bla")
+
+    with pytest.raises(
+        BodoError,
+        match="argument 'items' must be a list of constant strings",
+    ):
+        bodo.jit(test_non_list_items)(df)
+
 
 @pytest.mark.slow
 def test_df_iat_getitem_nonconstant(memory_leak_check):

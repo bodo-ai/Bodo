@@ -2550,7 +2550,6 @@ dataframe_unsupported = {
     "rmul",
     "pad",
     "sparse",
-    "filter",
     "combine_first",
     "kurt",
     "at_time",

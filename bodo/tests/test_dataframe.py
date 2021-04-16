@@ -254,6 +254,31 @@ def test_df_select_dtypes_include():
     check_func(test_impl_int, (), only_seq=True)
 
 
+def test_df_filter_cols(memory_leak_check):
+    df = pd.DataFrame(
+        np.array(([1, 2, 3], [4, 5, 6])),
+        index=["mouse", "rabbit"],
+        columns=["one", "two", "three"],
+    )
+
+    def test_regex(df):
+        return df.filter(regex="e$")
+
+    def test_like(df):
+        return df.filter(like="ne")
+
+    def test_items(df):
+        return df.filter(items=["one", "three"])
+
+    def test_items_with_axis(df):
+        return df.filter(items=["one", "three"], axis="columns")
+
+    check_func(test_regex, (df,))
+    check_func(test_like, (df,))
+    check_func(test_items, (df,))
+    check_func(test_items_with_axis, (df,))
+
+
 def test_df_select_dtypes_str_exclude(select_dtypes_df):
     df = select_dtypes_df
 

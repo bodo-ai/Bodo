@@ -541,6 +541,7 @@ Attributes and underlying data:
 * :attr:`pandas.DataFrame.index`
 * :attr:`pandas.DataFrame.ndim`
 * :meth:`pandas.DataFrame.select_dtypes` (only supports constant strings or types as arguments)
+* :attr:`pandas.DataFrame.filter` (only supports the column axis)
 * :attr:`pandas.DataFrame.shape`
 * :attr:`pandas.DataFrame.size`
 * :meth:`pandas.DataFrame.to_numpy` (only for numeric dataframes)

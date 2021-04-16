@@ -5,6 +5,7 @@ Implementation of DataFrame attributes and methods using overload.
 import operator
 import warnings
 from collections import namedtuple
+import re
 
 import llvmlite.llvmpy.core as lc
 import numba
@@ -339,6 +340,92 @@ def overload_dataframe_rename(
         "copy=True, inplace=False, level=None, errors='ignore', _bodo_transformed=False):\n"
     )
     return _gen_init_df(header, new_cols, ", ".join(data_outs))
+
+
+@overload_method(DataFrameType, "filter", no_unliteral=True)
+def overload_dataframe_filter(df, items=None, like=None, regex=None, axis=None):
+    items_set = not is_overload_none(items)
+    like_set = not is_overload_none(like)
+    regex_set = not is_overload_none(regex)
+    only_one_arg = items_set ^ like_set ^ regex_set
+
+    if not only_one_arg:
+        raise BodoError(
+            "DataFrame.filter(): keyword arguments `items`, `like`, and `regex` are mutually exclusive"
+        )
+
+    # the default info axis is 'columns' for DataFrame
+    if is_overload_none(axis):
+        axis = "columns"
+
+    # get the axis for filtering
+    if is_overload_constant_str(axis):
+        axis = get_overload_const_str(axis)
+        assert axis in {"index", "columns"}
+        axis_typ = 0 if axis == "index" else 1
+    else:
+        axis_typ = axis
+
+    assert axis_typ in {0, 1}
+
+    # start with the signature of the function
+    func_text = "def impl(df, items=None, like=None, regex=None, axis=None):\n"
+
+    if axis_typ == 0:
+        raise BodoError(
+            "DataFrame.filter(): filtering based on index is not supported."
+        )
+
+    # axis is columns
+    if axis_typ == 1:
+        var_names = []
+        selected_cols = []
+        selected_col_indices = []
+
+        # extract the arguments if not none
+        if items_set:
+            if is_overload_constant_list(items):
+                items_list = get_overload_const_list(items)
+            else:
+                raise BodoError(
+                    "Dataframe.filter(): argument 'items' must be a list of constant strings."
+                )
+        if like_set:
+            if is_overload_constant_str(like):
+                like_val = get_overload_const_str(like)
+            else:
+                raise BodoError(
+                    "Dataframe.filter(): argument 'like' must be a constant string."
+                )
+        if regex_set:
+            if is_overload_constant_str(regex):
+                regex_val = get_overload_const_str(regex)
+                regex_prog = re.compile(regex_val)
+            else:
+                raise BodoError(
+                    "Dataframe.filter(): argument 'regex' must be a constant string."
+                )
+
+        # get the selected columns
+        for i, c in enumerate(df.columns):
+            if (
+                (not is_overload_none(items) and c in items_list)
+                or (not is_overload_none(like) and like_val in str(c))
+                or (not is_overload_none(regex) and regex_prog.search(str(c)))
+            ):
+                selected_cols.append(c)
+                selected_col_indices.append(i)
+
+        # generate the code text
+        for i in selected_col_indices:
+            var_name = f"data_{i}"
+            var_names.append(var_name)
+            func_text += f"  {var_name} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
+
+        data_args = ", ".join(var_names)
+
+        # generate the df object using the init function
+        return _gen_init_df(func_text, selected_cols, data_args)
 
 
 @overload_method(DataFrameType, "isna", inline="always", no_unliteral=True)
