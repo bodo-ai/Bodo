@@ -146,7 +146,7 @@ def test_nullable_int(memory_leak_check):
 
     df = pd.DataFrame(
         {
-            "A": pd.array([2, 1, 1, 1, 2, 2, 1], "Int32"),
+            "A": pd.array([2, 1, 1, 1, 21, 2, 11], "Int32"),
             "B": pd.Series(
                 np.array([np.nan, 8, 2, np.nan, np.nan, np.nan, 20]), dtype="Int8"
             ),

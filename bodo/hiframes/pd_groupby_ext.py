@@ -272,18 +272,14 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             }:
                 return (
                     None,
-                    "column type of strings or list of strings is not supported in groupby built-in function {}".format(
-                        func_name
-                    ),
+                    f"column type of strings or list of strings is not supported in groupby built-in function {func_name}",
                 )
         else:
             if isinstance(in_dtype, bodo.PDCategoricalDtype):
                 if func_name in ("min", "max") and not in_dtype.ordered:
                     return (
                         None,
-                        "categorical column must be ordered in groupby built-in function {}".format(
-                            func_name
-                        ),
+                        f"categorical column must be ordered in groupby built-in function {func_name}",
                     )
             if func_name not in {
                 "count",
@@ -295,9 +291,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             }:
                 return (
                     None,
-                    "column type of {} is not supported in groupby built-in function {}".format(
-                        in_dtype, func_name
-                    ),
+                    f"column type of {in_dtype} is not supported in groupby built-in function {func_name}",
                 )
 
     if isinstance(in_dtype, types.Boolean) and func_name in {
@@ -312,17 +306,13 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
     }:
         return (
             None,
-            "groupby built-in functions {} does not support boolean column".format(
-                func_name
-            ),
+            f"groupby built-in functions {func_name} does not support boolean column",
         )
     # See: [BE-549]
     if func_name in {"idxmin", "idxmax"} and isinstance(arr_type, IntegerArrayType):
         return (
             None,
-            "column type of nullable integer is not supported in groupby built-in function {}".format(
-                func_name
-            ),
+            f"column type of nullable integer is not supported in groupby built-in function {func_name}",
         )
     if func_name in {"idxmin", "idxmax"}:
         return get_index_data_arr_types(index_type)[0].dtype, "ok"
