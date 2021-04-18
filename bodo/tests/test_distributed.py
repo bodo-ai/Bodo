@@ -141,6 +141,14 @@ def test_array_size1(A, memory_leak_check):
     # TODO: tests with array created inside the function
 
 
+@pytest.mark.parametrize("A", [np.ones(11), np.arange(33, dtype="int8").reshape(11, 3)])
+def test_array_nbytes(A, memory_leak_check):
+    def impl(A):
+        return A.nbytes
+
+    check_func(impl, (A,))
+
+
 def test_concat_axis_1(memory_leak_check):
     """make sure concatenate with axis=1 is supported properly in distributed analysis"""
 

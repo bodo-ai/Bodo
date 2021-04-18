@@ -16,7 +16,7 @@ from numba.core import cgutils, types, typing
 from numba.core.imputils import lower_builtin
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
-from numba.extending import overload, register_jitable
+from numba.extending import overload, overload_attribute, register_jitable
 from numba.np.arrayobj import make_array
 from numba.np.numpy_support import as_dtype
 from numba.parfors.array_analysis import ArrayAnalysis
@@ -2425,3 +2425,10 @@ def _overload_nan_argmax(arr):
 
     # TODO: Does this need a parallel implementation?
     return lambda arr: arr.argmax()  # pragma: no cover
+
+
+@overload_attribute(types.Array, "nbytes", inline="always")
+def overload_dataframe_index(A):
+    """get number of bytes in Numpy array"""
+    # TODO(ehsan): contribute to Numba
+    return lambda A: A.size * bodo.io.np_io.get_dtype_size(A.dtype)  # pragma: no cover
