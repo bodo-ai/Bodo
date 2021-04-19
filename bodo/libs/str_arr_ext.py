@@ -166,7 +166,7 @@ lower_builtin(pd.StringDtype)(lambda c, b, s, a: c.get_dummy_value())
 
 
 def create_binary_op_overload(op):
-    na_fill = op == operator.ne
+    """create an overload function for a string array comparison operator"""
 
     def overload_string_array_binary_op(lhs, rhs):
         # both string array
@@ -175,14 +175,15 @@ def create_binary_op_overload(op):
             def impl_both(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
                 n = len(lhs)
-                out_arr = np.empty(n, np.bool_)
+                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(
                         lhs, i
                     ) or bodo.libs.array_kernels.isna(rhs, i):
-                        val = na_fill
-                    else:
-                        val = op(lhs[i], rhs[i])
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                        continue
+
+                    val = op(lhs[i], rhs[i])
                     out_arr[i] = val
                     # XXX assigning to out_arr indirectly since parfor fusion
                     # cannot handle branching properly here and doesn't remove
@@ -198,12 +199,13 @@ def create_binary_op_overload(op):
             def impl_left(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
                 n = len(lhs)
-                out_arr = np.empty(n, np.bool_)
+                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(lhs, i):
-                        val = na_fill
-                    else:
-                        val = op(lhs[i], rhs)
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                        continue
+
+                    val = op(lhs[i], rhs)
                     out_arr[i] = val
 
                 return out_arr
@@ -216,12 +218,13 @@ def create_binary_op_overload(op):
             def impl_right(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
                 n = len(rhs)
-                out_arr = np.empty(n, np.bool_)
+                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
                 for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(rhs, i):
-                        val = na_fill
-                    else:
-                        val = op(lhs, rhs[i])
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                        continue
+
+                    val = op(lhs, rhs[i])
                     out_arr[i] = val
 
                 return out_arr

@@ -370,7 +370,7 @@ def check_func_seq(
     # count how many pes passed the test, since throwing exceptions directly
     # can lead to inconsistency across pes and hangs
     n_passed = reduce_sum(passed)
-    assert n_passed == n_pes
+    assert n_passed == n_pes, "Parallel test failed"
     return w
 
 
@@ -434,7 +434,7 @@ def check_func_1D(
         )
 
     n_passed = reduce_sum(passed)
-    assert n_passed == n_pes
+    assert n_passed == n_pes, "Parallel test failed"
 
 
 def check_func_1D_var(
@@ -493,7 +493,7 @@ def check_func_1D_var(
             rtol,
         )
     n_passed = reduce_sum(passed)
-    assert n_passed == n_pes
+    assert n_passed == n_pes, "Parallel test failed"
 
 
 def _get_arg(a, copy=False):
@@ -1238,7 +1238,7 @@ def check_parallel_coherency(
             print(e)
             passed = 0
     n_passed = reduce_sum(passed)
-    assert n_passed == n_pes
+    assert n_passed == n_pes, "Parallel test failed"
 
 
 def gen_random_arrow_array_struct_int(span, n):

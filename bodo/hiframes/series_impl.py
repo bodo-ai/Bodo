@@ -3215,6 +3215,7 @@ def create_binary_op_overload(op):
                 for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(arr, i):
                         bodo.libs.array_kernels.setna(out_arr, i)
+                        continue
                     timestamp_val = (
                         bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
                             arr[i]

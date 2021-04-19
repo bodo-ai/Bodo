@@ -3,9 +3,9 @@
 Implementation of DataFrame attributes and methods using overload.
 """
 import operator
+import re
 import warnings
 from collections import namedtuple
-import re
 
 import llvmlite.llvmpy.core as lc
 import numba
@@ -1528,9 +1528,7 @@ def create_binary_op_overload(op):
             if isinstance(rhs, DataFrameType):
                 if lhs != rhs:
                     raise TypeError(
-                        "Inconsistent dataframe schemas in binary operator {} ({} and {})".format(
-                            op, lhs, rhs
-                        )
+                        f"Inconsistent dataframe schemas in binary operator {op} ({lhs} and {rhs})"
                     )
 
                 data_args = ", ".join(
@@ -1566,9 +1564,7 @@ def create_binary_op_overload(op):
                 data_args = ", ".join(data_impl)
             else:
                 data_args = ", ".join(
-                    "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(lhs, {0}) {1} rhs".format(
-                        i, op_str
-                    )
+                    f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(lhs, {i}) {op_str} rhs"
                     for i in range(len(lhs.columns))
                 )
 
@@ -1577,7 +1573,7 @@ def create_binary_op_overload(op):
                 header += "  numba.parfors.parfor.init_prange()\n"
                 header += "  n = len(lhs)\n"
                 header += "".join(
-                    "  {0} = np.empty(n, dtype=np.bool_)\n".format(arr_name)
+                    f"  {arr_name} = np.empty(n, dtype=np.bool_)\n"
                     for arr_name in diff_types
                 )
                 header += "  for i in numba.parfors.parfor.internal_prange(n):\n"
