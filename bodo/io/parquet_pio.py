@@ -1114,13 +1114,13 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
 
     fs = []
 
-    def getfs():
+    def getfs(parallel=False):
         if len(fs) == 1:
             return fs[0]
         if fpath.startswith("s3://"):
             fs.append(
                 get_s3_fs_from_path(
-                    fpath, parallel=False, storage_options=storage_options
+                    fpath, parallel=parallel, storage_options=storage_options
                 )
             )
         elif fpath.startswith("gcs://"):
@@ -1159,6 +1159,19 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
             # Note: ParquetDataset has metadata_nthreads parameter but it
             # seems to use Python threads and not make a difference
             validate_schema = bodo.parquet_validate_schema
+            if get_row_counts or validate_schema:
+                # Getting row counts and schema validation is going to be
+                # distributed across ranks, so every rank will need a filesystem
+                # object to query the metadata of their assigned pieces.
+                # There are issues with broadcasting the s3 filesystem object
+                # as part of the ParquetDataset, so instead we initialize
+                # the filesystem before the broadcast. One of the issues is that
+                # our PyArrowS3FS is not correctly pickled (instead what is
+                # sent is the underlying pyarrow S3FileSystem). The other issue
+                # is that for some reason unpickling seems like it can cause
+                # incorrect credential handling state in Arrow or AWS client.
+                _ = getfs(parallel=True)
+
             if bodo.get_rank() == 0:
                 dataset = pq.ParquetDataset(
                     fpath,
@@ -1173,6 +1186,10 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
                     dataset.pieces = [p for p in dataset.pieces if p.path in file_names]
 
                 dataset_schema = get_dataset_schema(dataset)
+                # We don't want to send the filesystem because of the issues
+                # mentioned above, so we set it to None. Note that this doesn't
+                # seem to be enough to prevent sending it
+                dataset._metadata.fs = None
                 comm.bcast(dataset)
                 comm.bcast(dataset_schema)
             else:
@@ -1190,11 +1207,6 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
                 total_rows_chunk = 0
                 piece_nrows_chunk = []
                 valid = True  # True if schema of all parquet files match
-                # During broadcast of the dataset (presumably as part of (un)pickling)
-                # pyarrow resets the filesystem to one picked internally, not the one
-                # we originally passed. For S3 this means that pyarrow selects
-                # pyarrow._s3fs.S3FileSystem, but we need it to use our
-                # PyArrowS3FS wrapper otherwise get_metadata() fails
                 dataset._metadata.fs = getfs()
                 for p in dataset.pieces[start:end]:
                     file_metadata = p.get_metadata()
