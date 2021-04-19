@@ -2352,6 +2352,17 @@ def test_dataframe_binary_op(op, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_dataframe_str_cmp(memory_leak_check):
+    """test dataframe/string comparison for [BE-431]"""
+
+    def test_impl(df, other):
+        return df == other
+
+    df = pd.DataFrame({"A": ["AA", "B", "A", "D", "A", "ABC"]})
+    check_func(test_impl, (df, "A"))
+
+
+@pytest.mark.slow
 @pytest.mark.parametrize("op", (operator.eq, operator.ne))
 def test_dataframe_binary_comp_op_diff_types(op, memory_leak_check):
     """

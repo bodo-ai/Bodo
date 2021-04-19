@@ -1107,6 +1107,8 @@ def is_common_scalar_dtype(scalar_types):
     """Returns True if a list of scalar types share a common
     Numpy type or are equal.
     """
+    scalar_types = [types.unliteral(a) for a in scalar_types]
+
     if len(scalar_types) == 0:
         return True
     try:
