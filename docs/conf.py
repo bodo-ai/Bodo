@@ -60,7 +60,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "Bodo"
-copyright = "2020, Bodo, Inc."
+copyright = "2021, Bodo, Inc."
 author = "Bodo"
 
 # The version info for the project you're documenting, acts as replacement for
