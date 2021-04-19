@@ -212,6 +212,8 @@ class SeriesPass:
         self.dataframe_pass._updated_dataframes = self._get_updated_dataframes(
             blocks, topo_order
         )
+        # Keep track of the updated dataframes already visited on this pass.
+        self.dataframe_pass._visited_updated_dataframes = set()
 
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         while work_list:

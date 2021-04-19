@@ -2283,10 +2283,22 @@ class DataFramePass:
         """returns True if columns of dataframe 'varname' may be updated inplace
         somewhere in the program.
         """
-        return varname in self._updated_dataframes or any(
-            isinstance(v, ir.Var) and self._is_updated_df(v.name)
+        if varname in self._updated_dataframes:
+            return True
+        if varname in self._visited_updated_dataframes:
+            return False
+        self._visited_updated_dataframes.add(varname)
+        updated_df = any(
+            self._is_updated_df(v.name)
             for v in self.func_ir._definitions[varname]
+            if (
+                isinstance(v, ir.Var) and v.name not in self._visited_updated_dataframes
+            )
         )
+        # Cache updated dataframes to avoid redundant checks.
+        if updated_df:
+            self._updated_dataframes.add(varname)
+        return updated_df
 
     def _is_df_var(self, var):
         return isinstance(self.typemap[var.name], DataFrameType)
