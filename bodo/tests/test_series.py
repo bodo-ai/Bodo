@@ -3922,6 +3922,34 @@ def test_series_quantile(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,))
 
 
+def test_series_quantile_q(memory_leak_check):
+    """ Test passing list, int, and unsupported type to q argument"""
+
+    # List
+    def test_impl(S):
+        ans = S.quantile([0.15, 0.5, 0.65, 1])
+        return ans
+
+    S = pd.Series([1.2, 3.4, 4.5, 32.3, 67.8, 100])
+
+    check_func(test_impl, (S,), is_out_distributed=False)
+
+    # int
+    def test_int(S):
+        ans = S.quantile(0)
+        return ans
+
+    check_func(test_int, (S,))
+
+    def test_str(S):
+        ans = S.quantile("aa")
+        return ans
+
+    # unsupported q type
+    with pytest.raises(BodoError, match=r"Series.quantile\(\) q type must be float"):
+        bodo.jit(test_str)(S)
+
+
 def test_series_nunique(series_val, memory_leak_check):
     # not supported for Datetime.date yet, TODO: support and test
     if isinstance(series_val.values[0], datetime.date):

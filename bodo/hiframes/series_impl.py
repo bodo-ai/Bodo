@@ -1873,12 +1873,36 @@ def overload_series_quantile(S, q=0.5, interpolation="linear"):
     arg_defaults = dict(interpolation="linear")
     check_unsupported_args("Series.quantile", unsupported_args, arg_defaults)
 
-    # TODO: datetime support
-    def impl(S, q=0.5, interpolation="linear"):  # pragma: no cover
-        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        return bodo.libs.array_kernels.quantile(arr, q)
+    # TODO: [BE-623] q value should be between 0 and 1 only
+    # Pandas API says float or iterable of floats. It allows 0 and 1.
+    if is_iterable_type(q) and isinstance(q.dtype, types.Number):
 
-    return impl
+        def impl_list(S, q=0.5, interpolation="linear"):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = np.empty(len(q), np.float64)
+            for i in range(len(q)):
+                q_val = np.float(q[i])
+                out_arr[i] = bodo.libs.array_kernels.quantile(arr, q_val)
+            index = bodo.hiframes.pd_index_ext.init_numeric_index(
+                bodo.utils.conversion.coerce_to_array(q), None
+            )
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return impl_list
+    elif isinstance(q, types.Number):
+
+        # TODO: datetime support
+        def impl(S, q=0.5, interpolation="linear"):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            q = np.float64(q)
+            return bodo.libs.array_kernels.quantile(arr, q)
+
+        return impl
+    else:
+        raise BodoError(
+            f"Series.quantile() q type must be float or iterable of floats only."
+        )
 
 
 @overload_method(SeriesType, "nunique", inline="always", no_unliteral=True)
