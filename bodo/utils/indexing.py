@@ -348,6 +348,7 @@ def none_optional_setitem_overload(A, idx, val):
         ):
 
             def setitem_none_int_arr(A, idx, val):  # pragma: no cover
+                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
                 for i in idx:
                     bodo.libs.array_kernels.setna(A, i)
 
@@ -357,7 +358,27 @@ def none_optional_setitem_overload(A, idx, val):
             bodo.utils.typing.is_list_like_index_type(idx) and idx.dtype == types.bool_
         ):
 
+            # Handle string array specially because we need to copy the data
+            if A == bodo.string_array_type:
+
+                def string_arr_impl(A, idx, val):
+                    n = len(A)
+                    # NOTE: necessary to convert potential Series to array
+                    idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
+                    for i in numba.parfors.parfor.internal_prange(n):
+                        if idx[i] or bodo.libs.array_kernels.isna(A, i):
+                            out_arr[i] = ""
+                            bodo.libs.str_arr_ext.str_arr_set_na(out_arr, i)
+                        else:
+                            out_arr[i] = A[i]  # TODO(ehsan): copy inplace
+
+                    bodo.libs.str_arr_ext.move_str_arr_payload(A, out_arr)
+
+                return string_arr_impl
+
             def setitem_none_bool_arr(A, idx, val):  # pragma: no cover
+                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
                 n = len(idx)
                 for i in range(n):
                     if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
@@ -396,6 +417,7 @@ def none_optional_setitem_overload(A, idx, val):
         ):
 
             def setitem_optional_int_arr(A, idx, val):  # pragma: no cover
+                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
                 for i in idx:
                     if val is None:
                         bodo.libs.array_kernels.setna(A, i)
@@ -408,7 +430,19 @@ def none_optional_setitem_overload(A, idx, val):
             bodo.utils.typing.is_list_like_index_type(idx) and idx.dtype == types.bool_
         ):
 
+            # Handle string array specially because we need to copy the data
+            if A == bodo.string_array_type:
+
+                def string_arr_impl(A, idx, val):
+                    if val is None:
+                        A[idx] = None
+                    else:
+                        A[idx] = bodo.utils.indexing.unoptional(val)
+
+                return string_arr_impl
+
             def setitem_optional_bool_arr(A, idx, val):  # pragma: no cover
+                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
                 n = len(idx)
                 for i in range(n):
                     if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:

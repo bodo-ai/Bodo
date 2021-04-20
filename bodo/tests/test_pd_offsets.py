@@ -177,7 +177,7 @@ def test_month_end_boxing(month_begin_value, memory_leak_check):
     check_func(test_impl, (month_begin_value,))
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_month_begin_constructor(memory_leak_check):
     def test_impl1():
         return pd.tseries.offsets.MonthBegin()
@@ -193,7 +193,7 @@ def test_month_begin_constructor(memory_leak_check):
     check_func(test_impl3, ())
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_month_begin_n(month_begin_value, memory_leak_check):
     def test_impl(mb_obj):
         return mb_obj.n
@@ -201,7 +201,7 @@ def test_month_begin_n(month_begin_value, memory_leak_check):
     check_func(test_impl, (month_begin_value,))
 
 
-# TODO: Mark as slow after CI passes
+@pytest.mark.slow
 def test_month_begin_normalize(month_begin_value, memory_leak_check):
     def test_impl(mb_obj):
         return mb_obj.normalize

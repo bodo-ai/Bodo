@@ -7,6 +7,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError
 
 
 @pytest.fixture(
@@ -183,10 +184,7 @@ def test_setitem_int(memory_leak_check):
     A = pd.array(["AB", "", "한국", pd.NA, "abcd"])
     idx = 2
     val = "국한"  # same size as element 2 but different value
-    bodo_func = bodo.jit(test_impl)
-    pd.util.testing.assert_extension_array_equal(
-        pd.array(bodo_func(A.copy(), idx, val), "string"), test_impl(A.copy(), idx, val)
-    )
+    check_func(test_impl, (A, idx, val), copy_input=True)
 
 
 @pytest.mark.slow
@@ -200,10 +198,8 @@ def test_setitem_none_int(memory_leak_check):
             A[i] = "A"
         return A
 
-    bodo_func = bodo.jit(test_impl)
-    pd.util.testing.assert_extension_array_equal(
-        pd.array(bodo_func(8, 1), "string"), pd.array(["A", None] + ["A"] * 6, "string")
-    )
+    py_output = pd.array(["A", None] + ["A"] * 6, "string")
+    check_func(test_impl, (8, 1), copy_input=True, dist_test=False, py_output=py_output)
 
 
 @pytest.mark.slow
@@ -218,10 +214,167 @@ def test_setitem_optional_int(memory_leak_check):
             A[i] = value
         return A
 
-    bodo_func = bodo.jit(test_impl)
-    pd.util.testing.assert_extension_array_equal(
-        pd.array(bodo_func(8, 1), "string"), pd.array(["A", None] + ["A"] * 6, "string")
-    )
+    py_output = pd.array(["A", None] + ["A"] * 6, "string")
+    check_func(test_impl, (8, 1), copy_input=True, dist_test=False, py_output=py_output)
+
+
+def test_setitem_slice(memory_leak_check):
+    """
+    Test operator.setitem with a slice index. String arrays
+    should only have setitem used during initialization, so
+    we create a new string array in the test.
+    """
+
+    def test_impl(val):
+        A = bodo.libs.str_arr_ext.pre_alloc_string_array(8, -1)
+        A[0] = "AB"
+        A[1] = "CD"
+        A[2:7] = val
+        A[7] = "GH"
+        return A
+
+    values = (pd.array(["IJ"] * 5), ["IJ"] * 5, "IJ")
+    py_output = pd.array(["AB", "CD"] + ["IJ"] * 5 + ["GH"], "string")
+    for val in values:
+        check_func(test_impl, (val,), dist_test=False, py_output=py_output)
+
+
+@pytest.mark.slow
+def test_setitem_slice_optional(memory_leak_check):
+    """
+    Test operator.setitem with a slice index and an optional type.
+    String arrays should only have setitem used during
+    initialization, so we create a new string array in the test.
+    """
+
+    def test_impl(val, flag):
+        A = bodo.libs.str_arr_ext.pre_alloc_string_array(8, -1)
+        A[0] = "AB"
+        A[1] = "CD"
+        if flag:
+            A[2:7] = val
+        else:
+            A[2:7] = None
+        A[7] = "GH"
+        return A
+
+    values = (pd.array(["IJ"] * 5), ["IJ"] * 5, "IJ")
+    py_output_flag = pd.array(["AB", "CD"] + ["IJ"] * 5 + ["GH"], "string")
+    py_output_no_flag = pd.array(["AB", "CD"] + [None] * 5 + ["GH"], "string")
+    for val in values:
+        check_func(test_impl, (val, True), dist_test=False, py_output=py_output_flag)
+        check_func(
+            test_impl, (val, False), dist_test=False, py_output=py_output_no_flag
+        )
+
+
+@pytest.mark.slow
+def test_setitem_slice_none(memory_leak_check):
+    """
+    Test operator.setitem with a slice index and None.
+    String arrays should only have setitem used during
+    initialization, so we create a new string array in the test.
+    """
+
+    def test_impl():
+        A = bodo.libs.str_arr_ext.pre_alloc_string_array(8, -1)
+        A[0] = "AB"
+        A[1] = "CD"
+        A[2:7] = None
+        A[7] = "GH"
+        return A
+
+    py_output = pd.array(["AB", "CD"] + [None] * 5 + ["GH"], "string")
+    check_func(test_impl, (), dist_test=False, py_output=py_output)
+
+
+def test_setitem_bool(memory_leak_check):
+    """
+    Test operator.setitem with a bool index.
+    The bool setitem index is used with Series.loc/Series.iloc, so
+    it modifies the array in place. However, the size of the elements
+    should be the same.
+    """
+
+    def test_impl(val, idx):
+        A = bodo.libs.str_arr_ext.pre_alloc_string_array(8, -1)
+        for i in range(8):
+            A[i] = "AB"
+        A[idx] = val
+        return A
+
+    values = (pd.array(["IJ"] * 5), np.array(["IJ"] * 5), "IJ")
+    py_output = pd.array(["AB"] * 2 + ["IJ"] * 5 + ["AB"], "string")
+    idx = [False, False, True, True, True, True, True, False]
+    array_idx = np.array(idx)
+    for val in values:
+        check_func(test_impl, (val, idx), dist_test=False, py_output=py_output)
+        check_func(test_impl, (val, array_idx), dist_test=False, py_output=py_output)
+
+
+@pytest.mark.slow
+def test_setitem_bool_optional(memory_leak_check):
+    """
+    Test operator.setitem with a bool index and an optional type.
+    The bool setitem index is used with Series.loc/Series.iloc, so
+    it modifies the array in place. However, the size of the elements
+    should be the same.
+    """
+
+    def test_impl(val, idx, flag):
+        A = bodo.libs.str_arr_ext.pre_alloc_string_array(8, -1)
+        for i in range(8):
+            A[i] = "AB"
+        if flag:
+            A[idx] = val
+        else:
+            A[idx] = None
+        return A
+
+    values = (pd.array(["IJ"] * 5), np.array(["IJ"] * 5), "IJ")
+    py_output_flag = pd.array(["AB"] * 2 + ["IJ"] * 5 + ["AB"], "string")
+    py_output_no_flag = pd.array(["AB"] * 2 + [None] * 5 + ["AB"], "string")
+    idx = [False, False, True, True, True, True, True, False]
+    array_idx = np.array(idx)
+    for val in values:
+        check_func(
+            test_impl, (val, idx, False), dist_test=False, py_output=py_output_no_flag
+        )
+        check_func(
+            test_impl,
+            (val, array_idx, False),
+            dist_test=False,
+            py_output=py_output_no_flag,
+        )
+        check_func(
+            test_impl, (val, idx, True), dist_test=False, py_output=py_output_flag
+        )
+        check_func(
+            test_impl, (val, array_idx, True), dist_test=False, py_output=py_output_flag
+        )
+
+
+@pytest.mark.slow
+def test_setitem_bool_none(memory_leak_check):
+    """
+    Test operator.setitem with a bool index and None.
+    The bool setitem index is used with Series.loc/Series.iloc, so
+    it modifies the array in place. However, the size of the elements
+    should be the same.
+    """
+
+    def test_impl(idx):
+        A = bodo.libs.str_arr_ext.pre_alloc_string_array(8, -1)
+        for i in range(8):
+            A[i] = "AB"
+        A[idx] = None
+        return A
+
+    py_output = pd.array(["AB"] * 2 + [None] * 5 + ["AB"], "string")
+    idx = [False, False, True, True, True, True, True, False]
+    array_idx = np.array(idx)
+    check_func(test_impl, (idx,), dist_test=False, py_output=py_output)
+    check_func(test_impl, (array_idx,), dist_test=False, py_output=py_output)
 
 
 @pytest.mark.slow
@@ -245,3 +398,37 @@ def test_astype_str(memory_leak_check):
         return A.astype(str)
 
     check_func(test_impl, (pd.array(["AA", "B"] * 4),))
+
+
+@pytest.mark.slow
+def test_str_array_setitem_unsupported(memory_leak_check):
+    """
+    Checks that string array setitem with unsupported index, value
+    pairs throw BodoErrors. String Array setitem shouldn't occur
+    after initialization, but since these tests should error at compile
+    time, this shouldn't be an issue.
+    """
+
+    def impl(arr, idx, val):
+        arr[idx] = val
+
+    err_msg = "StringArray setitem with index .* and value .* not supported yet."
+
+    arr = pd.array(["AB", "", "ABC", pd.NA, "abcd"])
+    # Check integer with a non-string
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl)(arr, 2, ["erw", "qwewq"])
+    # Check slice with a numpy str array
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl)(arr, slice(0, 2), np.array(["erw", "qwe"]))
+
+    bool_list = np.array([True, False, True, False, True])
+    # Check boolean array with list
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl)(arr, bool_list, ["erw", "qwewq"])
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl)(arr, np.array(bool_list), ["erw", "qwewq"])
+
+    # Check integer array index (not supported yet)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl)(arr, np.array([1, 2]), ["erw", "qwewq"])
