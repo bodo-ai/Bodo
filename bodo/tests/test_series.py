@@ -2305,7 +2305,7 @@ def test_series_str_cmp(memory_leak_check):
     def test_impl(S):
         return S == "A"
 
-    S = pd.Series(["AA", "D", None, "녁은", "AA🐍"] * 2, [3, 5, 0, 7, -1] * 2)
+    S = pd.Series(pd.array(["AA", "D", None, "녁은", "AA🐍"] * 2), [3, 5, 0, 7, -1] * 2)
     check_func(test_impl, (S,))
 
 
@@ -4631,7 +4631,7 @@ def test_series_np_where_str(memory_leak_check):
         return pd.Series(np.where(S == "aa", a, S))
 
     S = pd.Series(
-        ["aa", "b", "aa", "cc", np.nan, "aa", "DD"], [5, 1, 2, 0, 3, 4, 9], name="AA"
+        ["aa", "b", "aa", "cc", "s", "aa", "DD"], [5, 1, 2, 0, 3, 4, 9], name="AA"
     )
     check_func(test_impl1, (S,))
     check_func(test_impl2, (S, "ddd"))
