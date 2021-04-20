@@ -93,24 +93,16 @@ def test_string_base16_cast(memory_leak_check):
 def test_cmp_binary_op(op, memory_leak_check):
     op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
     func_text = "def test_impl(A, other):\n"
-    func_text += "  return A {} other\n".format(op_str)
+    func_text += f"  return A {op_str} other\n"
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     test_impl = loc_vars["test_impl"]
 
-    A1 = np.array(["A", np.nan, "CC", "DD", np.nan, "ABC"], dtype="O")
-    A2 = np.array(["A", np.nan, "CCD", "AADD", "DAA", "ABCE"], dtype="O")
-
-    # # >, >=, <, <= not supported in numpy between np.nan and str
-    if op_str not in ("==", "!=="):
-        A1[4] = "AF"
-
+    A1 = pd.array(["A", np.nan, "CC", "DD", np.nan, "ABC"])
+    A2 = pd.array(["A", np.nan, "CCD", "AADD", "DAA", "ABCE"])
     check_func(test_impl, (A1, A2))
-
-    # >, >=, <, <= not supported in numpy between array and str
-    if op_str in ("==", "!=="):
-        check_func(test_impl, (A1, "DD"))
-        check_func(test_impl, ("CCD", A2))
+    check_func(test_impl, (A1, "DD"))
+    check_func(test_impl, ("CCD", A2))
 
 
 def test_f_strings():

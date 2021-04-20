@@ -3215,6 +3215,7 @@ def create_binary_op_overload(op):
                 for i in numba.parfors.parfor.internal_prange(n):
                     if bodo.libs.array_kernels.isna(arr, i):
                         bodo.libs.array_kernels.setna(out_arr, i)
+                        continue
                     timestamp_val = (
                         bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
                             arr[i]
@@ -3715,7 +3716,9 @@ def overload_np_where(condition, x, y):
         func_text += "  out_codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(out_arr)\n"
         func_text += "  x_codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(x)\n"
     func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
-    func_text += "    if condition[j]:\n"
+    func_text += (
+        "    if not bodo.libs.array_kernels.isna(condition, j) and condition[j]:\n"
+    )
     if is_x_arr:
         func_text += "      if bodo.libs.array_kernels.isna(x, j):\n"
         func_text += "        setna(out_arr, j)\n"
