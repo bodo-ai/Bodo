@@ -865,7 +865,7 @@ def str_list_to_array(str_list):
 @overload(str_list_to_array, no_unliteral=True)
 def str_list_to_array_overload(str_list):
     """same as cp_str_list_to_array, except this call allocates output"""
-    if str_list == types.List(string_type):
+    if isinstance(str_list, types.List) and str_list.dtype == bodo.string_type:
 
         def str_list_impl(str_list):  # pragma: no cover
             n = len(str_list)
@@ -1710,9 +1710,14 @@ def str_arr_setitem(A, idx, val):
         # None/Optional goes through a separate step.
         return
 
+    typ_err_msg = (
+        f"StringArray setitem with index {idx} and value {val} not supported yet."
+    )
+
     # scalar case
     if isinstance(idx, types.Integer):
-        assert val == string_type
+        if val != string_type:
+            raise BodoError(typ_err_msg)
 
         # XXX: setitem works only if value is same size as the previous value
         # maximum number of bytes possible in UTF-8 is 4
@@ -1748,117 +1753,113 @@ def str_arr_setitem(A, idx, val):
         return impl_scalar
 
     # slice case
-    if isinstance(idx, types.SliceType) and val == string_array_type:
+    if isinstance(idx, types.SliceType):
 
-        def impl_slice(A, idx, val):  # pragma: no cover
-            slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
-            start = slice_idx.start
-            data_arr = A._data
-            start_offset = np.int64(getitem_str_offset(A, start))
-            required_capacity = start_offset + np.int64(num_total_chars(val))
-            bodo.libs.array_item_arr_ext.ensure_data_capacity(
-                data_arr, start_offset, required_capacity
-            )
-            set_string_array_range(A, val, start, start_offset)
-            # nulls of input and output arrays should match
-            curr = 0
-            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                if str_arr_is_na(val, curr):
-                    str_arr_set_na(A, i)
-                else:
-                    str_arr_set_not_na(A, i)
-                curr += 1
+        if val == string_array_type:
 
-        return impl_slice
+            def impl_slice(A, idx, val):  # pragma: no cover
+                slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
+                start = slice_idx.start
+                data_arr = A._data
+                start_offset = np.int64(getitem_str_offset(A, start))
+                required_capacity = start_offset + np.int64(num_total_chars(val))
+                bodo.libs.array_item_arr_ext.ensure_data_capacity(
+                    data_arr, start_offset, required_capacity
+                )
+                set_string_array_range(A, val, start, start_offset)
+                # nulls of input and output arrays should match
+                curr = 0
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    if str_arr_is_na(val, curr):
+                        str_arr_set_na(A, i)
+                    else:
+                        str_arr_set_not_na(A, i)
+                    curr += 1
 
-    # slice case with list(str)
-    if (
-        isinstance(idx, types.SliceType)
-        and isinstance(val, types.List)
-        and val.dtype == string_type
-    ):
+            return impl_slice
 
-        def impl_slice_list(A, idx, val):  # pragma: no cover
-            val_arr = str_list_to_array(val)
-            A[idx] = val_arr
+        # slice with list
+        elif isinstance(val, types.List) and val.dtype == string_type:
 
-        return impl_slice_list
+            def impl_slice_list(A, idx, val):  # pragma: no cover
+                val_arr = str_list_to_array(val)
+                A[idx] = val_arr
 
-    # slice with scalar
-    if isinstance(idx, types.SliceType) and val == string_type:
+            return impl_slice_list
 
-        def impl_slice(A, idx, val):  # pragma: no cover
-            slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
-            for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
-                A[i] = val
+        # slice with scalar
+        elif val == string_type:
 
-        return impl_slice
+            def impl_slice(A, idx, val):  # pragma: no cover
+                slice_idx = numba.cpython.unicode._normalize_slice(idx, len(A))
+                for i in range(slice_idx.start, slice_idx.stop, slice_idx.step):
+                    A[i] = val
+
+            return impl_slice
+
+        else:
+            raise BodoError(typ_err_msg)
 
     # set scalar value using bool index
     # NOTE: this changes the array inplace after construction
-    if is_list_like_index_type(idx) and idx.dtype == types.bool_ and val == string_type:
+    if is_list_like_index_type(idx) and idx.dtype == types.bool_:
 
-        def impl_bool_scalar(A, idx, val):  # pragma: no cover
-            n = len(A)
-            # NOTE: necessary to convert potential Series to array
-            idx = bodo.utils.conversion.coerce_to_ndarray(idx)
-            out_arr = pre_alloc_string_array(n, -1)
-            for i in numba.parfors.parfor.internal_prange(n):
-                if idx[i]:
-                    out_arr[i] = val
-                else:
-                    if bodo.libs.array_kernels.isna(A, i):
-                        out_arr[i] = ""
-                        str_arr_set_na(out_arr, i)
+        if val == string_type:
+
+            def impl_bool_scalar(A, idx, val):  # pragma: no cover
+                n = len(A)
+                # NOTE: necessary to convert potential Series to array
+                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                out_arr = pre_alloc_string_array(n, -1)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if idx[i]:
+                        out_arr[i] = val
                     else:
-                        out_arr[i] = A[i]  # TODO(ehsan): copy inplace
+                        if bodo.libs.array_kernels.isna(A, i):
+                            out_arr[i] = ""
+                            str_arr_set_na(out_arr, i)
+                        else:
+                            out_arr[i] = A[i]  # TODO(ehsan): copy inplace
 
-            move_str_arr_payload(A, out_arr)
+                move_str_arr_payload(A, out_arr)
 
-        return impl_bool_scalar
+            return impl_bool_scalar
 
-    if (
-        is_list_like_index_type(idx)
-        and idx.dtype == types.bool_
-        and (
-            val == string_array_type
-            or (
-                isinstance(val, types.Array)
-                and isinstance(val.dtype, types.UnicodeCharSeq)
-            )
-        )
-    ):
+        elif val == string_array_type or (
+            isinstance(val, types.Array) and isinstance(val.dtype, types.UnicodeCharSeq)
+        ):
 
-        def impl_bool_arr(A, idx, val):  # pragma: no cover
-            n = len(A)
-            # NOTE: necessary to convert potential Series to array
-            idx = bodo.utils.conversion.coerce_to_ndarray(idx)
-            out_arr = pre_alloc_string_array(n, -1)
-            ind_count = 0
-            for i in numba.parfors.parfor.internal_prange(n):
-                if idx[i]:
-                    if bodo.libs.array_kernels.isna(val, ind_count):
-                        out_arr[i] = ""
-                        str_arr_set_na(out_arr, ind_count)
+            def impl_bool_arr(A, idx, val):  # pragma: no cover
+                n = len(A)
+                # NOTE: necessary to convert potential Series to array
+                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                out_arr = pre_alloc_string_array(n, -1)
+                ind_count = 0
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if idx[i]:
+                        if bodo.libs.array_kernels.isna(val, ind_count):
+                            out_arr[i] = ""
+                            str_arr_set_na(out_arr, ind_count)
+                        else:
+                            # Convert to a string to support UnicodeCharSeq
+                            out_arr[i] = str(val[ind_count])
+                        ind_count += 1
                     else:
-                        # Convert to a string to support UnicodeCharSeq
-                        out_arr[i] = str(val[ind_count])
-                    ind_count += 1
-                else:
-                    if bodo.libs.array_kernels.isna(A, i):
-                        out_arr[i] = ""
-                        str_arr_set_na(out_arr, i)
-                    else:
-                        out_arr[i] = A[i]  # TODO(ehsan): copy inplace
+                        if bodo.libs.array_kernels.isna(A, i):
+                            out_arr[i] = ""
+                            str_arr_set_na(out_arr, i)
+                        else:
+                            out_arr[i] = A[i]  # TODO(ehsan): copy inplace
 
-            move_str_arr_payload(A, out_arr)
+                move_str_arr_payload(A, out_arr)
 
-        return impl_bool_arr
+            return impl_bool_arr
+
+        else:
+            raise BodoError(typ_err_msg)
 
     # TODO: other setitem cases
-    raise BodoError(
-        f"StringArray setitem with index {idx} and value {val} not supported."
-    )
+    raise BodoError(typ_err_msg)
 
 
 @overload_attribute(StringArrayType, "dtype")
