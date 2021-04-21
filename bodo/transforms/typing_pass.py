@@ -1073,6 +1073,7 @@ class TypingTransforms:
         series_call_const_args = {
             "map": [(0, "arg")],
             "apply": [(0, "func")],
+            "to_frame": [(0, "name")],
         }
 
         if func_name in series_call_const_args:

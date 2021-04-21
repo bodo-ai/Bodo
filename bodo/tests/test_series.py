@@ -4140,6 +4140,45 @@ def test_series_dropna(S, memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_series_to_frame(memory_leak_check):
+    """test Series.to_frame(). Series name should be known at compile time"""
+    # Series name is constant
+    def impl1():
+        S = pd.Series([1, 2, 3], name="A")
+        return S.to_frame()
+
+    # Series name should be None
+    def impl2(S):
+        return S.to_frame()
+
+    # name is provided
+    def impl3(S, name):
+        return S.to_frame(name)
+
+    # name is not constant
+    def impl4(S, A):
+        return S.to_frame(A[0])
+
+    check_func(impl1, (), only_seq=True)
+    # name is None case
+    S = pd.Series([1, 2, 5, 1, 11, 12])
+    check_func(impl2, (S,))
+    # name is not compile time constant
+    S = pd.Series([1, 2, 5, 1, 11, 12], name="A")
+    with pytest.raises(
+        BodoError,
+        match=r"Series.to_frame\(\): output column name should be known at compile time",
+    ):
+        bodo.jit(impl2)(S)
+
+    check_func(impl3, (S, "A"))
+    with pytest.raises(
+        BodoError,
+        match=r"Series.to_frame\(\): output column name should be known at compile time",
+    ):
+        bodo.jit(impl4)(S, ["A", "B"])
+
+
 def test_series_drop_inplace_check(memory_leak_check):
     """make sure inplace=True is not use in Series.dropna()"""
 
