@@ -518,9 +518,10 @@ String handling:
 * :meth:`pandas.Series.str.isnumeric`
 * :meth:`pandas.Series.str.isdecimal`
 
-Serialization
+Serialization / Conversion
 
-* :meth:`pandas.Series.to_dict`
+* :meth:`pandas.Series.to_dict` is not parallelized since dictionaries are not parallelized
+* :meth:`pandas.Series.to_frame` Series name should be a known constant or a constant 'name' should be provided
 
 DataFrame
 ~~~~~~~~~
