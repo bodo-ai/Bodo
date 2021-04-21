@@ -2668,10 +2668,9 @@ class TestIO(unittest.TestCase):
         def test_impl():
             df = pd.read_parquet(fname)
             A = df.five.values == "foo"
-            return A
+            return A.sum()
 
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_almost_equal(bodo_func(), test_impl())
+        check_func(test_impl, (), dist_test=False)
 
     def test_pq_str_with_nan_par(self):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")

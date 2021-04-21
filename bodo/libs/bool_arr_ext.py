@@ -609,6 +609,29 @@ def overload_bool_arr_copy(A):
     )
 
 
+@overload_method(BooleanArrayType, "sum", no_unliteral=True, inline="always")
+def overload_bool_sum(A):
+    """
+    Support for .sum() method for BooleanArrays. This is not yet supported
+    in Pandas, but can be used to resolve issues where .sum() may be called on
+    boolean array that would otherwise be a numpy array.
+
+    We don't accept any arguments at this time as the common case is just A.sum()
+    """
+
+    def impl(A):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        s = 0
+        for i in numba.parfors.parfor.internal_prange(len(A)):
+            val = 0
+            if not bodo.libs.array_kernels.isna(A, i):
+                val = A[i]
+            s += val
+        return s
+
+    return impl
+
+
 @overload_method(BooleanArrayType, "astype", no_unliteral=True)
 def overload_bool_arr_astype(A, dtype, copy=True):
     # same dtype case
