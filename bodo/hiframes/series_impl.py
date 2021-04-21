@@ -3906,3 +3906,32 @@ def overload_to_dict(S, into=None):
         # TODO: support other types of dictionaries for the 'into' arg
 
     return impl
+
+
+@overload_method(SeriesType, "to_frame", inline="always", no_unliteral=True)
+def overload_series_to_frame(S, name=None):
+    """Support Series.to_frame(). Series name should be constant if name not provided."""
+    err_msg = "Series.to_frame(): output column name should be known at compile time. Set 'name' to a constant value."
+
+    # get output column name
+    if is_overload_none(name):
+        # use Series name if name is not provided
+        if is_literal_type(S.name_typ):
+            out_name = get_literal_value(S.name_typ)
+        else:
+            raise_bodo_error(err_msg)
+    else:
+        if is_literal_type(name):
+            out_name = get_literal_value(name)
+        else:
+            raise_bodo_error(err_msg)
+
+    # Pandas sets output name to 0 if it is None
+    out_name = 0 if out_name is None else out_name
+
+    def impl(S, name=None):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        return bodo.hiframes.pd_dataframe_ext.init_dataframe((arr,), index, (out_name,))
+
+    return impl

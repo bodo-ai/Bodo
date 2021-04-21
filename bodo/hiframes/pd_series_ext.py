@@ -1153,7 +1153,6 @@ series_unsupported_methods = (
     # Serialization / IO / conversion
     "to_pickle",
     "to_excel",
-    "to_frame",
     "to_xarray",
     "to_hdf",
     "to_string",
