@@ -49,7 +49,7 @@ recommended for production usage due to security, performance and other consider
     conda install bodo h5py scipy hdf5=*=*mpich* -c file:///path-to-bodo-package/bodo-inc/ -c conda-forge
 
 
-4. Copy the `Pi example <https://github.com/Bodo-inc/Bodo-examples/blob/master/examples/pi.py>`_ to a file called pi.py in the home directory of
+4. Copy the `Pi example <https://github.com/Bodo-inc/Bodo-examples/blob/master/examples/miscellaneous/pi.py>`_ to a file called pi.py in the home directory of
 all instances and run it with and without MPI and see execution times.
 You should see speed up when running on more cores ("-n 2" and "-n 4" cases)::
 
@@ -59,5 +59,5 @@ You should see speed up when running on more cores ("-n 2" and "-n 4" cases)::
 
 
 Possible next experiments from here are running a more complex example like the
-`logistic regression example <https://github.com/Bodo-inc/Bodo-examples/blob/master/examples/logistic_regression.py>`_.
+`logistic regression example <https://github.com/Bodo-inc/Bodo-examples/blob/master/examples/miscellaneous/logistic_regression.py>`_.
 Furthermore, attaching a shared EFS storage volume and experimenting with parallel I/O in Bodo is recommended.
