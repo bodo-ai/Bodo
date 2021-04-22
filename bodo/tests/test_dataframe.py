@@ -1047,6 +1047,28 @@ def test_df_shape(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
+@pytest.mark.slow
+def test_df_dtypes(df_value):
+    def impl(df):
+        return df.dtypes
+
+    # Bodo avoids object arrays for string/bool dtypes so we use the equivalent
+    # python output dtypes for testing
+    py_output = df_value.dtypes
+    df_type = bodo.typeof(df_value)
+    for i in range(len(df_value.columns)):
+        if py_output.iloc[i] == np.object_:
+            if df_type.data[i] == bodo.boolean_array:
+                py_output.iloc[i] = pd.BooleanDtype()
+            if df_type.data[i] == bodo.string_array_type:
+                py_output.iloc[i] = pd.StringDtype()
+        # Bodo reads all bool arrays as nullable
+        if py_output.iloc[i] == np.bool_:
+            py_output.iloc[i] = pd.BooleanDtype()
+
+    check_func(impl, (df_value,), is_out_distributed=False, py_output=py_output)
+
+
 # TODO: empty df: pd.DataFrame()
 @pytest.mark.slow
 @pytest.mark.parametrize("df", [pd.DataFrame({"A": [1, 3]}), pd.DataFrame({"A": []})])

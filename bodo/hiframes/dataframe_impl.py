@@ -180,6 +180,31 @@ def overload_dataframe_shape(df):
     return lambda df: (len(df), types.int64(ncols))  # pragma: no cover
 
 
+@overload_attribute(DataFrameType, "dtypes")
+def overload_dataframe_dtypes(df):
+    """Support df.dtypes by getting dtype values from underlying arrays"""
+
+    func_text = "def impl(df):\n"
+
+    data = ", ".join(
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}).dtype\n"
+        for i in range(len(df.columns))
+    )
+    comma = "," if len(df.columns) == 1 else ""
+    func_text += f"  return bodo.hiframes.pd_series_ext.init_series(({data}{comma}), df.columns, None)\n"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
 @overload_attribute(DataFrameType, "empty")
 def overload_dataframe_empty(df):
     if len(df.columns) == 0:
