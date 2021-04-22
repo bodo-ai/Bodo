@@ -4,6 +4,7 @@
 import operator
 
 import numba
+import numpy as np
 from numba.core import types
 from numba.extending import (
     NativeValue,
@@ -201,17 +202,22 @@ def tuple_arr_setitem(arr, ind, val):
 @overload(len, no_unliteral=True)
 def overload_tuple_arr_len(A):
     if isinstance(A, TupleArrayType):
-        return lambda A: len(A._data)
+        return lambda A: len(A._data)  # pragma: no cover
 
 
 @overload_attribute(TupleArrayType, "shape")
 def overload_tuple_arr_shape(A):
-    return lambda A: (len(A._data),)
+    return lambda A: (len(A._data),)  # pragma: no cover
+
+
+@overload_attribute(TupleArrayType, "dtype")
+def overload_tuple_arr_dtype(A):
+    return lambda A: np.object_  # pragma: no cover
 
 
 @overload_attribute(TupleArrayType, "ndim")
 def overload_tuple_arr_ndim(A):
-    return lambda A: 1
+    return lambda A: 1  # pragma: no cover
 
 
 @overload_method(TupleArrayType, "copy", no_unliteral=True)

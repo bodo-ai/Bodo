@@ -133,6 +133,14 @@ def test_shape(decimal_arr_value, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_dtype(decimal_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.dtype
+
+    check_func(test_impl, (decimal_arr_value,))
+
+
+@pytest.mark.slow
 def test_ndim(decimal_arr_value, memory_leak_check):
     def test_impl(A):
         return A.ndim

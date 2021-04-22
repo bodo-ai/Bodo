@@ -1364,17 +1364,22 @@ def struct_arr_setitem(arr, ind, val):
 @overload(len, no_unliteral=True)
 def overload_struct_arr_len(A):
     if isinstance(A, StructArrayType):
-        return lambda A: len(get_data(A)[0])
+        return lambda A: len(get_data(A)[0])  # pragma: no cover
 
 
 @overload_attribute(StructArrayType, "shape")
 def overload_struct_arr_shape(A):
-    return lambda A: (len(get_data(A)[0]),)
+    return lambda A: (len(get_data(A)[0]),)  # pragma: no cover
+
+
+@overload_attribute(StructArrayType, "dtype")
+def overload_struct_arr_dtype(A):
+    return lambda A: np.object_  # pragma: no cover
 
 
 @overload_attribute(StructArrayType, "ndim")
 def overload_struct_arr_ndim(A):
-    return lambda A: 1
+    return lambda A: 1  # pragma: no cover
 
 
 @overload_method(StructArrayType, "copy", no_unliteral=True)

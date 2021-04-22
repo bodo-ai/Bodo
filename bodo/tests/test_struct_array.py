@@ -1,12 +1,8 @@
 # Copyright (C) 2020 Bodo Inc. All rights reserved.
 """Tests for array of struct values.
 """
-import operator
-from collections import namedtuple
 
-import numba
 import numpy as np
-import pandas as pd
 import pytest
 
 import bodo
@@ -202,6 +198,25 @@ def test_shape(struct_arr_value, memory_leak_check):
         return A.shape
 
     assert bodo.jit(test_impl)(struct_arr_value) == test_impl(struct_arr_value)
+
+
+@pytest.mark.slow
+def test_dtype(memory_leak_check):
+    def test_impl(A):
+        return A.dtype
+
+    A = np.array(
+        [
+            {"X": 1, "Y": 3.1},
+            {"X": 2, "Y": 1.1},
+            None,
+            {"X": -1, "Y": 7.8},
+            {"X": 3, "Y": 4.0},
+            {"X": -3, "Y": -1.2},
+            {"X": None, "Y": 9.0},
+        ]
+    )
+    assert bodo.jit(test_impl)(A) == test_impl(A)
 
 
 @pytest.mark.slow
