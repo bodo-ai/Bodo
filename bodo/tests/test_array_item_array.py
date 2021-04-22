@@ -226,6 +226,15 @@ def test_shape(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_dtype(memory_leak_check):
+    def test_impl(A):
+        return A.dtype
+
+    A = np.array([[1, 2, 3], [2], None, []])
+    assert bodo.jit(test_impl)(A) == test_impl(A)
+
+
+@pytest.mark.slow
 def test_copy(array_item_arr_value, memory_leak_check):
     def test_impl(A):
         return A.copy()

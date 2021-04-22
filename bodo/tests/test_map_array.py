@@ -1,15 +1,10 @@
 # Copyright (C) 2020 Bodo Inc. All rights reserved.
 """Tests for array of map values.
 """
-import operator
-from collections import namedtuple
 
-import numba
 import numpy as np
-import pandas as pd
 import pytest
 
-import bodo
 from bodo.tests.utils import check_func
 
 
@@ -62,3 +57,11 @@ def test_unbox(map_arr_value):
 
     check_func(impl, (map_arr_value,))
     check_func(impl2, (map_arr_value,))
+
+
+@pytest.mark.slow
+def test_dtype(map_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.dtype
+
+    check_func(test_impl, (map_arr_value,))

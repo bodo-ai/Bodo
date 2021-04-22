@@ -538,6 +538,7 @@ Attributes and underlying data:
 
 
 * :attr:`pandas.DataFrame.columns`
+* :attr:`pandas.DataFrame.dtypes`
 * :attr:`pandas.DataFrame.empty`
 * :attr:`pandas.DataFrame.index`
 * :attr:`pandas.DataFrame.ndim`
