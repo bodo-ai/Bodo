@@ -3035,7 +3035,7 @@ class DistributedPass:
             )
 
         # avoid replicated prints, print on all PEs only when there is dist arg
-        if all(self._is_REP(v.name) for v in print_node.args):
+        if all(self._is_REP(v.name) and not self._is_rank(v) for v in print_node.args):
             args = print_node.args
             arg_names = ", ".join(f"v{i}" for i in range(len(print_node.args)))
             print_args = arg_names
@@ -3111,6 +3111,11 @@ class DistributedPass:
             )
         )
         return True
+
+    def _is_rank(self, v):
+        """return True if 'v' is output of bodo.get_rank()"""
+        var_def = guard(get_definition, self.func_ir, v.name)
+        return guard(find_callname, self.func_ir, var_def) == ("get_rank", "bodo")
 
     def _get_dist_var_start_count(self, arr, equiv_set, avail_vars):
         """get distributed chunk start/count of current rank for 1D_Block arrays"""

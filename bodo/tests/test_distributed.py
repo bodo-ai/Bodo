@@ -328,6 +328,19 @@ def test_print_dist_slice(memory_leak_check, capsys):
     assert captured.out
 
 
+def test_print_dist_get_rank(memory_leak_check, capsys):
+    """make sure print calls with rank are not avoided on non-zero ranks
+    (since REP input is not printed)
+    """
+
+    def impl():
+        print("rank", bodo.get_rank())
+
+    bodo.jit(impl)()
+    captured = capsys.readouterr()
+    assert captured.out
+
+
 def test_bodo_func_dist_call1(memory_leak_check):
     """make sure calling other bodo functions with their distributed flags set works as
     expected (dist info is propagated across functions).
