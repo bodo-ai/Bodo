@@ -108,6 +108,7 @@ class BooleanDtype(types.Number):
     """
 
     def __init__(self):
+        self.dtype = types.bool_
         super(BooleanDtype, self).__init__("BooleanDtype")
 
 
