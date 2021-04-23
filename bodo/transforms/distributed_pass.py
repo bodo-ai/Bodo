@@ -277,11 +277,8 @@ class DistributedPass:
                     )
                 elif isinstance(inst, ir.Return):
                     out_nodes = [inst]
-                # avoid replicated prints, print on all PEs only when there is dist arg
-                elif isinstance(inst, ir.Print) and all(
-                    self._is_REP(v.name) for v in inst.args
-                ):
-                    out_nodes = self._run_print(inst)
+                elif isinstance(inst, ir.Print):
+                    out_nodes = self._run_print(inst, equiv_set)
 
                 if out_nodes is None:
                     out_nodes = [inst]
@@ -1757,11 +1754,8 @@ class DistributedPass:
         return out
 
     def _run_call_df(self, lhs, df, func_name, assign, args):
-        if func_name == "to_parquet" and (self._is_1D_or_1D_Var_arr(df.name)):
-            self._set_last_arg_to_true(assign.value)
-            return [assign]
-        elif func_name == "to_sql" and (self._is_1D_or_1D_Var_arr(df.name)):
-            # Calling in parallel case
+        """transform DataFrame calls to be distributed"""
+        if func_name in ("to_parquet", "to_sql") and self._is_1D_or_1D_Var_arr(df.name):
             self._set_last_arg_to_true(assign.value)
             return [assign]
         elif func_name == "to_csv" and self._is_1D_or_1D_Var_arr(df.name):
@@ -3022,24 +3016,109 @@ class DistributedPass:
     #                 return lhs // rhs
     #     return None
 
-    def _run_print(self, print_node):
-        args = print_node.args
-        arg_names = ", ".join("v{}".format(i) for i in range(len(print_node.args)))
-        print_args = arg_names
+    def _run_print(self, print_node, equiv_set):
+        """handle Print nodes. 1) avoid duplicate prints for all-REP case.
+        2) avoid printing empty slices of distributed arrays.
+        """
 
-        # handle vararg like print(*a)
-        if print_node.vararg is not None:
-            arg_names += "{}vararg".format(", " if args else "")
-            print_args += "{}*vararg".format(", " if args else "")
-            args.append(print_node.vararg)
+        # avoid printing empty slices of distributed arrays/series/dataframes
+        if (
+            len(print_node.args) == 1
+            and not print_node.vararg
+            and guard(self._is_dist_slice, print_node.args[0], equiv_set)
+        ):
+            return compile_func_single_block(
+                lambda A: bodo.libs.distributed_api.print_if_not_empty(A),
+                [print_node.args[0]],
+                None,
+                self,
+            )
 
-        func_text = "def impl({}):\n".format(arg_names)
-        func_text += "  bodo.libs.distributed_api.single_print({})\n".format(print_args)
-        loc_vars = {}
-        exec(func_text, {"bodo": bodo}, loc_vars)
-        impl = loc_vars["impl"]
+        # avoid replicated prints, print on all PEs only when there is dist arg
+        if all(self._is_REP(v.name) and not self._is_rank(v) for v in print_node.args):
+            args = print_node.args
+            arg_names = ", ".join(f"v{i}" for i in range(len(print_node.args)))
+            print_args = arg_names
 
-        return compile_func_single_block(impl, args, None, self)
+            # handle vararg like print(*a)
+            if print_node.vararg is not None:
+                arg_names += "{}vararg".format(", " if args else "")
+                print_args += "{}*vararg".format(", " if args else "")
+                args.append(print_node.vararg)
+
+            func_text = f"def impl({arg_names}):\n"
+            func_text += f"  bodo.libs.distributed_api.single_print({print_args})\n"
+            loc_vars = {}
+            exec(func_text, {"bodo": bodo}, loc_vars)
+            impl = loc_vars["impl"]
+
+            return compile_func_single_block(impl, args, None, self)
+
+        return [print_node]
+
+    def _is_dist_slice(self, var, equiv_set):
+        """return True if 'var' is a limited (not full length) distributed slice of a
+        distributed array/series/dataframe.
+        Limited means the slice doesn't go through the whole length of the array like
+        `A[:]` or `A[::3]`. The `is_whole_slice` and `is_slice_equiv_arr ` checks below
+        test this case.
+        """
+        # make sure var is distributed, and is output of getitem of distributed array
+        require(self._is_1D_or_1D_Var_arr(var.name))
+        var_def = get_definition(self.func_ir, var.name)
+
+        # dataframe case, check data arrays and index
+        if guard(find_callname, self.func_ir, var_def) == (
+            "init_dataframe",
+            "bodo.hiframes.pd_dataframe_ext",
+        ):
+            arrs_tup = get_definition(self.func_ir, var_def.args[0])
+            assert is_expr(arrs_tup, "build_tuple"), "invalid init_dataframe"
+            arrs = list(arrs_tup.items) + [var_def.args[1]]
+            return all(self._is_dist_slice(v, equiv_set) for v in arrs)
+
+        # Series case, check data array and index
+        if guard(find_callname, self.func_ir, var_def) == (
+            "init_series",
+            "bodo.hiframes.pd_series_ext",
+        ):
+            return self._is_dist_slice(
+                var_def.args[0], equiv_set
+            ) and self._is_dist_slice(var_def.args[1], equiv_set)
+
+        require(
+            isinstance(var_def, ir.Expr) and var_def.op in ("getitem", "static_getitem")
+        )
+        require(self._is_1D_or_1D_Var_arr(var_def.value.name))
+
+        # make sure getitem index is a limited slice
+        index_var = get_getsetitem_index_var(var_def, self.typemap, [])
+        require(self.typemap[index_var.name] in (types.slice2_type, types.slice3_type))
+        require(
+            not guard(
+                is_whole_slice,
+                self.typemap,
+                self.func_ir,
+                index_var,
+                accept_stride=True,
+            )
+        )
+        require(
+            not guard(
+                is_slice_equiv_arr,
+                var,
+                index_var,
+                self.func_ir,
+                equiv_set,
+                accept_stride=True,
+            )
+        )
+        return True
+
+    def _is_rank(self, v):
+        """return True if 'v' is output of bodo.get_rank()"""
+        var_def = guard(get_definition, self.func_ir, v.name)
+        return guard(find_callname, self.func_ir, var_def) == ("get_rank", "bodo")
 
     def _get_dist_var_start_count(self, arr, equiv_set, avail_vars):
         """get distributed chunk start/count of current rank for 1D_Block arrays"""
