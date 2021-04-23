@@ -629,17 +629,22 @@ def overload_decimal_arr_copy(A):
 @overload(len, no_unliteral=True)
 def overload_decimal_arr_len(A):
     if isinstance(A, DecimalArrayType):
-        return lambda A: len(A._data)
+        return lambda A: len(A._data)  # pragma: no cover
 
 
 @overload_attribute(DecimalArrayType, "shape")
 def overload_decimal_arr_shape(A):
-    return lambda A: (len(A._data),)
+    return lambda A: (len(A._data),)  # pragma: no cover
+
+
+@overload_attribute(DecimalArrayType, "dtype")
+def overload_decimal_arr_dtype(A):
+    return lambda A: np.object_  # pragma: no cover
 
 
 @overload_attribute(DecimalArrayType, "ndim")
 def overload_decimal_arr_ndim(A):
-    return lambda A: 1
+    return lambda A: 1  # pragma: no cover
 
 
 @overload(operator.setitem, no_unliteral=True)

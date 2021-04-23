@@ -108,6 +108,7 @@ class BooleanDtype(types.Number):
     """
 
     def __init__(self):
+        self.dtype = types.bool_
         super(BooleanDtype, self).__init__("BooleanDtype")
 
 
@@ -583,22 +584,22 @@ def bool_arr_setitem(A, idx, val):
 @overload(len, no_unliteral=True)
 def overload_bool_arr_len(A):
     if A == boolean_array:
-        return lambda A: len(A._data)
+        return lambda A: len(A._data)  # pragma: no cover
 
 
 @overload_attribute(BooleanArrayType, "shape")
 def overload_bool_arr_shape(A):
-    return lambda A: (len(A._data),)
+    return lambda A: (len(A._data),)  # pragma: no cover
 
 
 @overload_attribute(BooleanArrayType, "dtype")
 def overload_bool_arr_dtype(A):
-    return lambda A: np.bool_
+    return lambda A: pd.BooleanDtype()  # pragma: no cover
 
 
 @overload_attribute(BooleanArrayType, "ndim")
 def overload_bool_arr_ndim(A):
-    return lambda A: 1
+    return lambda A: 1  # pragma: no cover
 
 
 @overload_method(BooleanArrayType, "copy", no_unliteral=True)
@@ -606,7 +607,7 @@ def overload_bool_arr_copy(A):
     return lambda A: bodo.libs.bool_arr_ext.init_bool_array(
         bodo.libs.bool_arr_ext.get_bool_arr_data(A).copy(),
         bodo.libs.bool_arr_ext.get_bool_arr_bitmap(A).copy(),
-    )
+    )  # pragma: no cover
 
 
 @overload_method(BooleanArrayType, "sum", no_unliteral=True, inline="always")

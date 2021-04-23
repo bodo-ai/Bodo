@@ -2669,7 +2669,6 @@ dataframe_unsupported = {
 
 
 dataframe_unsupported_attrs = (
-    "dtypes",
     "axes",
     "at",
     "attrs",

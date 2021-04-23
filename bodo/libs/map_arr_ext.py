@@ -8,32 +8,22 @@ For example: [{1: 2.1, 3: 1.1}, {5: -1.0}]
 [[{"key": 1, "value" 2.1}, {"key": 3, "value": 1.1}], [{"key": 5, "value": -1.0}]]
 """
 import operator
-from collections import namedtuple
 
 import llvmlite.binding as ll
-import numba
 import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
-from numba.core.imputils import impl_ret_borrowed
 from numba.extending import (
     NativeValue,
     box,
     intrinsic,
-    lower_builtin,
-    lower_getattr,
     make_attribute_wrapper,
     models,
     overload,
     overload_attribute,
-    overload_method,
     register_model,
-    type_callable,
-    typeof_impl,
     unbox,
 )
-from numba.parfors.array_analysis import ArrayAnalysis
-from numba.typed.typedobjectutils import _cast
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
@@ -51,20 +41,9 @@ from bodo.utils.cg_helpers import (
     get_array_elem_counts,
     get_bitmap_bit,
     is_na_value,
-    list_check,
-    pyarray_getitem,
     pyarray_setitem,
     seq_getitem,
     set_bitmap_bit,
-    to_arr_obj_if_list_obj,
-)
-from bodo.utils.typing import (
-    BodoError,
-    get_overload_const_int,
-    get_overload_const_str,
-    is_list_like_index_type,
-    is_overload_constant_int,
-    is_overload_constant_str,
 )
 
 # NOTE: importing hdist is necessary for MPI initialization before array_ext
@@ -543,6 +522,11 @@ def overload_map_arr_len(A):
 @overload_attribute(MapArrayType, "shape")
 def overload_map_arr_shape(A):
     return lambda A: (len(A._data),)  # pragma: no cover
+
+
+@overload_attribute(MapArrayType, "dtype")
+def overload_map_arr_dtype(A):
+    return lambda A: np.object_  # pragma: no cover
 
 
 @overload_attribute(MapArrayType, "ndim")
