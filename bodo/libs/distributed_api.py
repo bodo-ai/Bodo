@@ -2680,8 +2680,10 @@ def single_print(*args):  # pragma: no cover
 
 @numba.njit(no_cpython_wrapper=True)
 def print_if_not_empty(arg):  # pragma: no cover
-    """print argument if it is not empty (assumed to be array-like)"""
-    if len(arg) != 0:
+    """print argument if it is not empty (assumed to be array-like).
+    Always print on rank 0 to avoid user confusion.
+    """
+    if len(arg) != 0 or bodo.get_rank() == 0:
         print(arg)
 
 
