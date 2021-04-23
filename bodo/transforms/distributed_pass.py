@@ -3059,6 +3059,9 @@ class DistributedPass:
     def _is_dist_slice(self, var, equiv_set):
         """return True if 'var' is a limited (not full length) distributed slice of a
         distributed array/series/dataframe.
+        Limited means the slice doesn't go through the whole length of the array like
+        `A[:]` or `A[::3]`. The `is_whole_slice` and `is_slice_equiv_arr ` checks below
+        test this case.
         """
         # make sure var is distributed, and is output of getitem of distributed array
         require(self._is_1D_or_1D_Var_arr(var.name))
