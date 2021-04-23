@@ -295,6 +295,52 @@ def test_print3(memory_leak_check):
     bodo_func(np.ones(3), (3, np.ones(3)))
 
 
+def test_print_dist_slice(memory_leak_check, capsys):
+    """make sure empty distributed slices are not printed"""
+
+    def impl1(A, n):
+        print(A[:n])
+
+    def impl2(df):
+        print(df.head())
+
+    def impl3(A):
+        print(A[::2])
+
+    # array case
+    bodo.jit(distributed=["A"])(impl1)(np.arange(111), 4)
+    captured = capsys.readouterr()
+    assert "[]" not in captured.out
+
+    # dataframe case
+    bodo.jit(distributed=["df"])(impl2)(pd.DataFrame({"A": np.arange(111)}))
+    captured = capsys.readouterr()
+    assert "Empty" not in captured.out
+
+    # series case
+    bodo.jit(distributed=["df"])(impl2)(pd.Series(np.arange(111)))
+    captured = capsys.readouterr()
+    assert "[]" not in captured.out
+
+    # empty array case that should be printed since slice is full length
+    bodo.jit(distributed=["A"])(impl3)(np.arange(0))
+    captured = capsys.readouterr()
+    assert captured.out
+
+
+def test_print_dist_get_rank(memory_leak_check, capsys):
+    """make sure print calls with rank are not avoided on non-zero ranks
+    (since REP input is not printed)
+    """
+
+    def impl():
+        print("rank", bodo.get_rank())
+
+    bodo.jit(impl)()
+    captured = capsys.readouterr()
+    assert captured.out
+
+
 def test_bodo_func_dist_call1(memory_leak_check):
     """make sure calling other bodo functions with their distributed flags set works as
     expected (dist info is propagated across functions).

@@ -3932,7 +3932,7 @@ def test_series_quantile_q(memory_leak_check):
 
     S = pd.Series([1.2, 3.4, 4.5, 32.3, 67.8, 100])
 
-    check_func(test_impl, (S,), is_out_distributed=False)
+    check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4)
 
     # int
     def test_int(S):
