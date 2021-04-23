@@ -3028,7 +3028,7 @@ class DistributedPass:
             and guard(self._is_dist_slice, print_node.args[0], equiv_set)
         ):
             return compile_func_single_block(
-                lambda A: bodo.libs.distributed_api.print_if_not_empty(A),
+                eval("lambda A: bodo.libs.distributed_api.print_if_not_empty(A)"),
                 [print_node.args[0]],
                 None,
                 self,
