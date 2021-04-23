@@ -188,7 +188,6 @@ Generally, these Python features are not supported:
 * list, set, dict and generator comprehensions
 * async features
 * class definition: `class`
-* string formatting, e.g. `"A: {}".format(a)`
 * jit functions cannot have `**kwargs`
 * functions can be passed as arguments but not returned
 * lists of lists cannot be passed as arguments unless if
