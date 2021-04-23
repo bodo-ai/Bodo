@@ -1,12 +1,8 @@
 # Copyright (C) 2020 Bodo Inc. All rights reserved.
 """Tests for array of tuple values.
 """
-import operator
-from collections import namedtuple
 
-import numba
 import numpy as np
-import pandas as pd
 import pytest
 
 import bodo
@@ -131,6 +127,14 @@ def test_ndim(tuple_arr_value, memory_leak_check):
 def test_shape(tuple_arr_value, memory_leak_check):
     def test_impl(A):
         return A.shape
+
+    assert bodo.jit(test_impl)(tuple_arr_value) == test_impl(tuple_arr_value)
+
+
+@pytest.mark.slow
+def test_dtype(tuple_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.dtype
 
     assert bodo.jit(test_impl)(tuple_arr_value) == test_impl(tuple_arr_value)
 

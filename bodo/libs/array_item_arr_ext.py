@@ -781,17 +781,22 @@ def ensure_data_capacity(arr, old_size, new_size):  # pragma: no cover
 @overload(len, no_unliteral=True)
 def overload_array_item_arr_len(A):
     if isinstance(A, ArrayItemArrayType):
-        return lambda A: get_n_arrays(A)
+        return lambda A: get_n_arrays(A)  # pragma: no cover
 
 
 @overload_attribute(ArrayItemArrayType, "shape")
 def overload_array_item_arr_shape(A):
-    return lambda A: (get_n_arrays(A),)
+    return lambda A: (get_n_arrays(A),)  # pragma: no cover
+
+
+@overload_attribute(ArrayItemArrayType, "dtype")
+def overload_array_item_arr_dtype(A):
+    return lambda A: np.object_  # pragma: no cover
 
 
 @overload_attribute(ArrayItemArrayType, "ndim")
 def overload_array_item_arr_ndim(A):
-    return lambda A: 1
+    return lambda A: 1  # pragma: no cover
 
 
 @overload(operator.getitem, no_unliteral=True)
