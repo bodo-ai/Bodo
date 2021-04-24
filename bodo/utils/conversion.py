@@ -759,8 +759,29 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
 
             return impl
 
+    # nullable bool array case
+    if nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
+
+        def impl_bool(data, new_dtype, copy=None, nan_to_str=True):  # pragma: no cover
+            n = len(data)
+            numba.parfors.parfor.init_prange()
+            B = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(data, i):
+                    bodo.libs.array_kernels.setna(B, i)
+                else:
+                    B[i] = bool(data[i])
+            return B
+
+        return impl_bool
+
     # Array case
-    if do_copy or data.dtype != nb_dtype:
+    if do_copy and data.dtype == nb_dtype:
+        return (
+            lambda data, new_dtype, copy=None, nan_to_str=True: data.copy()
+        )  # pragma: no cover
+
+    if data.dtype != nb_dtype:
         return lambda data, new_dtype, copy=None, nan_to_str=True: data.astype(
             nb_dtype
         )  # pragma: no cover
