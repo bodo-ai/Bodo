@@ -4477,3 +4477,36 @@ def test_size_agg(df_null, memory_leak_check):
         return df2
 
     check_func(impl1, (df_null,), sort_output=True, reset_index=True)
+
+
+def test_value_counts():
+    """ Test groupby.value_counts """
+
+    # SeriesGroupBy
+    def impl1(df):
+        ans = df.groupby(["C", "X"])["D"].value_counts()
+        return ans
+
+    # Pandas restriction DataFrameGroupBy
+    def impl2(df):
+        ans = df.groupby(["X"]).value_counts()
+        return ans
+
+    # Pandas restriction as_index=False not allowed
+    def impl3(df):
+        ans = df.groupby(["X"], as_index=False).value_counts()
+        return ans
+
+    df = pd.DataFrame(
+        {
+            "X": [1, 1, 1, 3, 2, 3],
+            "C": ["ab", "ab", "ab", "cd", "ef", "cd"],
+            "D": [5, 6, 5, 1, 4, 1],
+        }
+    )
+    check_func(impl1, (df,), sort_output=True)
+    with pytest.raises(BodoError, match="'DataFrameGroupBy' object has no attribute"):
+        bodo.jit(impl2)(df)
+
+    with pytest.raises(BodoError, match="'DataFrameGroupBy' object has no attribute"):
+        bodo.jit(impl3)(df)
