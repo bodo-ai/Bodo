@@ -155,6 +155,11 @@ def test_getitem_bool(str_arr_value, memory_leak_check):
         check_dtype=False,
         dist_test=False,
     )
+    # Check nullable with pd.array and insert NA values
+    ind = pd.array(ind)
+    ind[1] = None
+    ind[3] = None
+    check_func(test_impl, (str_arr_value, ind), check_dtype=False, dist_test=False)
 
 
 def test_getitem_slice(str_arr_value, memory_leak_check):

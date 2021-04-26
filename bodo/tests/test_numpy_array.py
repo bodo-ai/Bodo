@@ -886,6 +886,19 @@ def test_getitem(mutable_bodo_arr, memory_leak_check):
     idx = np.random.ranf(len(mutable_bodo_arr)) < 0.2
     check_func(test_impl, (mutable_bodo_arr, idx), dist_test=False)
 
+    # Check nullable with pd.array and insert NA values
+    # Indexing with pd.Array into Numpy array not supported in regular Numpy/Pandas
+    if isinstance(mutable_bodo_arr, np.ndarray):
+        idx[1] = False
+        idx[-1] = False
+        py_output = mutable_bodo_arr[idx]
+    else:
+        py_output = None
+    idx = pd.array(idx)
+    idx[1] = None
+    idx[-1] = None
+    check_func(test_impl, (mutable_bodo_arr, idx), py_output=py_output, dist_test=False)
+
     # Slice
     idx = slice(1, 4)
     check_func(test_impl, (mutable_bodo_arr, idx), dist_test=False)

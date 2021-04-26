@@ -120,6 +120,17 @@ def overload_isna(arr, i):
     if isinstance(arr, bodo.hiframes.pd_categorical_ext.CategoricalArrayType):
         return lambda arr, i: arr.codes[i] == -1
 
+    # List support
+    if isinstance(arr, types.List):
+        if arr.dtype == types.none:
+            return lambda arr, i: True
+
+        elif isinstance(arr.dtype, types.optional):
+            return lambda arr, i: arr[i] is None
+
+        else:
+            return lambda arr, i: False
+
     # TODO: extend to other types (which ones are missing?)
     assert isinstance(arr, types.Array)
     dtype = arr.dtype
@@ -160,7 +171,19 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         return impl
 
-    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr == boolean_array:
+    # String array comparisons return BooleanArrays. These then get coerced
+    # to a numpy array. For indexing purposes, we need to try NA as False, so
+    # we set the data here.
+    # TODO: Update coerce_to_ndarray or indexing to handle NA properly.
+    if arr == boolean_array:
+
+        def impl(arr, ind, int_nan_const=0):
+            arr[ind] = False
+            bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, 0)
+
+        return impl
+
+    if isinstance(arr, (IntegerArrayType, DecimalArrayType)):
         return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
             arr._null_bitmap, ind, 0
         )  # pragma: no cover
