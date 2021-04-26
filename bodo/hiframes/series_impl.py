@@ -1643,6 +1643,7 @@ def overload_series_value_counts(
     ascending=False,
     bins=None,
     dropna=True,
+    _index_name=None,  # bodo argument. See groupby.value_counts
 ):
     unsupported_args = dict(normalize=normalize, sort=sort, bins=bins, dropna=dropna)
     arg_defaults = dict(normalize=False, sort=True, bins=None, dropna=True)
@@ -1657,6 +1658,7 @@ def overload_series_value_counts(
         ascending=False,
         bins=None,
         dropna=True,
+        _index_name=None,  # bodo argument. See groupby.value_counts
     ):  # pragma: no cover
         # create a dummy dataframe to use groupby/count and sort_values
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -1670,7 +1672,7 @@ def overload_series_value_counts(
         ind_arr = bodo.utils.conversion.coerce_to_array(
             bodo.hiframes.pd_dataframe_ext.get_dataframe_index(count_df)
         )
-        index = bodo.utils.conversion.index_from_array(ind_arr)
+        index = pd.Index(ind_arr, name=_index_name)
         count_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(count_df, 0)
         return bodo.hiframes.pd_series_ext.init_series(count_arr, index, name)
 

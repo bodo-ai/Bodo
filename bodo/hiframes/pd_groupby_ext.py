@@ -997,7 +997,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return signature(ret_type, *new_args).replace(pysig=pysig)
 
     def generic_resolve(self, grpby, attr):
-        if attr in groupby_unsupported or attr == "rolling":
+        if attr in groupby_unsupported or attr in ("rolling", "value_counts"):
             return
         if attr not in grpby.df_type.columns:
             raise_const_error(
@@ -1368,6 +1368,36 @@ def overload_reverse_shuffle(data, shuffle_info):
         return out_arr
 
     return impl_arr
+
+
+@overload_method(
+    DataFrameGroupByType, "value_counts", inline="always", no_unliteral=True
+)
+def groupby_value_counts(
+    grp, normalize=False, sort=True, ascending=False, bins=None, dropna=True
+):
+
+    unsupported_args = dict(normalize=normalize, sort=sort, bins=bins, dropna=dropna)
+    arg_defaults = dict(normalize=False, sort=True, bins=None, dropna=True)
+    check_unsupported_args("Groupby.value_counts", unsupported_args, arg_defaults)
+
+    # Pandas restriction: value_counts work on SeriesGroupBy only so only one column selection is allowed
+    if (len(grp.selection) > 1) or (not grp.as_index):
+        raise BodoError("'DataFrameGroupBy' object has no attribute 'value_counts'")
+
+    # Series.value_counts set its index name to `None`
+    # Here, last index name in MultiIndex will have series name.
+    name = grp.selection[0]
+
+    # df.groupby("X")["Y"].value_counts() => df.groupby("X")["Y"].apply(lambda S : S.value_counts())
+    func_text = f"def impl(grp, normalize=False, sort=True, ascending=False, bins=None, dropna=True):\n"
+    # TODO: [BE-635] Use S.rename_axis
+    udf = f"lambda S : S.value_counts(ascending={ascending}, _index_name='{name}')"
+    func_text += f"    return grp.apply({udf})\n"
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
 
 
 groupby_unsupported = {
