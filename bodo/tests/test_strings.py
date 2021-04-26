@@ -167,7 +167,6 @@ def test_string_array_getitem_na(ind, memory_leak_check):
 
     bodo_func = bodo.jit(impl)
     S = pd.Series(["A", np.nan, "CC", "DD", np.nan, "ABC"])
-    # ind = slice(0, 3)
     pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind), check_dtype=False)
     pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind), check_dtype=False)
 

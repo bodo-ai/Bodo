@@ -1621,13 +1621,13 @@ def str_arr_getitem_int(A, ind):
             n_strs = 0
             n_chars = 0
             for i in range(n):
-                if ind[i]:
+                if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
                     n_strs += 1
                     n_chars += get_str_arr_item_length(A, i)
             out_arr = pre_alloc_string_array(n_strs, n_chars)
             str_ind = 0
             for i in range(n):
-                if ind[i]:
+                if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
                     _str = A[i]
                     out_arr[str_ind] = _str
                     # set NA
@@ -1812,7 +1812,7 @@ def str_arr_setitem(A, idx, val):
                 idx = bodo.utils.conversion.coerce_to_ndarray(idx)
                 out_arr = pre_alloc_string_array(n, -1)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    if idx[i]:
+                    if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
                         out_arr[i] = val
                     else:
                         if bodo.libs.array_kernels.isna(A, i):
@@ -1832,11 +1832,13 @@ def str_arr_setitem(A, idx, val):
             def impl_bool_arr(A, idx, val):  # pragma: no cover
                 n = len(A)
                 # NOTE: necessary to convert potential Series to array
-                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx = bodo.utils.conversion.coerce_to_array(
+                    idx, use_nullable_array=True
+                )
                 out_arr = pre_alloc_string_array(n, -1)
                 ind_count = 0
                 for i in numba.parfors.parfor.internal_prange(n):
-                    if idx[i]:
+                    if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
                         if bodo.libs.array_kernels.isna(val, ind_count):
                             out_arr[i] = ""
                             str_arr_set_na(out_arr, ind_count)
