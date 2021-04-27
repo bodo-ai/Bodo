@@ -333,6 +333,9 @@ def get_const_value(
         val = get_const_value_inner(
             func_ir, var, arg_types, typemap, file_info=file_info
         )
+        if isinstance(val, ir.UndefinedType):
+            name = func_ir.get_definition(var.name).name
+            raise BodoError(f"name '{name}' is not defined")
     except GuardException:
         raise BodoError(err_msg)
     return val
