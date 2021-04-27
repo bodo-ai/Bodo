@@ -194,6 +194,11 @@ double get_nth_q(std::vector<T> &my_array, int64_t local_size, int64_t k,
     if (parallel) {
         val = get_nth_parallel(my_array, k, myrank, n_pes, type_enum);
     } else {
+        // If q is 1.0 we may request a value longer than the array,
+        // so return the last element.
+        if (k >= local_size) {
+            k = local_size - 1;
+        }
         std::nth_element(my_array.begin(), my_array.begin() + k,
                          my_array.end());
         val = my_array[k];
@@ -263,6 +268,11 @@ T get_nth_parallel(std::vector<T> &my_array, int64_t k, int myrank, int n_pes,
                   MPI_COMM_WORLD);
     // printf("total size: %ld k: %ld\n", total_size, k);
     int64_t threshold = (int64_t)pow(10.0, 7.0);  // 100 million
+    // If q is 1.0 we may request a value longer than the array,
+    // so return the last element.
+    if (k >= total_size) {
+        k = total_size - 1;
+    }
     // int64_t threshold = 20;
     if (total_size < threshold || n_pes == 1) {
         return small_get_nth_parallel(my_array, total_size, myrank, n_pes, k,

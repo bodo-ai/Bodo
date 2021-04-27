@@ -1884,7 +1884,7 @@ def overload_series_quantile(S, q=0.5, interpolation="linear"):
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             out_arr = np.empty(len(q), np.float64)
             for i in range(len(q)):
-                q_val = np.float(q[i])
+                q_val = np.float64(q[i])
                 out_arr[i] = bodo.libs.array_kernels.quantile(arr, q_val)
             index = bodo.hiframes.pd_index_ext.init_numeric_index(
                 bodo.utils.conversion.coerce_to_array(q), None
