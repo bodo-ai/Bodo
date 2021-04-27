@@ -485,7 +485,9 @@ def test_groupby_cumsum_argument_check(memory_leak_check):
         BodoError, match="For cumsum argument of skipna should be a boolean"
     ):
         bodo.jit(impl1)(df)
-    with pytest.raises(BodoError, match="argument to cumsum can only be skipna"):
+    with pytest.raises(
+        BodoError, match="Groupby.cumsum got an unexpected keyword argument 'wrongarg'"
+    ):
         bodo.jit(impl2)(df)
 
 
@@ -520,7 +522,9 @@ def test_groupby_cumprod_argument_check(memory_leak_check):
         BodoError, match="For cumprod argument of skipna should be a boolean"
     ):
         bodo.jit(impl1)(df)
-    with pytest.raises(BodoError, match="argument to cumprod can only be skipna"):
+    with pytest.raises(
+        BodoError, match="Groupby.cumprod got an unexpected keyword argument 'wrongarg'"
+    ):
         bodo.jit(impl2)(df)
 
 
@@ -540,7 +544,9 @@ def test_groupby_nunique_argument_check(memory_leak_check):
         BodoError, match="argument of dropna to nunique should be a boolean"
     ):
         bodo.jit(impl1)(df)
-    with pytest.raises(BodoError, match="argument to nunique can only be dropna"):
+    with pytest.raises(
+        BodoError, match="Groupby.nunique got an unexpected keyword argument 'wrongarg'"
+    ):
         bodo.jit(impl2)(df)
 
 

@@ -501,6 +501,16 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     check_unsupported_args(
                         f"Groupby.{func_name}", unsupported_args, arg_defaults
                     )
+                elif func_name == "nunique":
+                    kws = dict(kws) if kws else {}
+                    # pop arguments from kws or args
+                    # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
+                    dropna = args[0] if len(args) > 0 else kws.pop("dropna", 1)
+                    if len(kws) > 0:
+                        bad_key = list(kws.keys())[0]
+                        raise BodoError(
+                            f"Groupby.{func_name} got an unexpected keyword argument '{bad_key}'"
+                        )
                 out_dtype, err_msg = get_groupby_output_dtype(
                     data, func_name, grp.df_type.index
                 )
@@ -767,11 +777,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.count", no_unliteral=True)
     def resolve_count(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "count")
+        return self._get_agg_typ(grp, args, "count", kws=kws)
 
     @bound_function("groupby.nunique", no_unliteral=True)
     def resolve_nunique(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "nunique")
+        return self._get_agg_typ(grp, args, "nunique", kws=kws)
 
     @bound_function("groupby.median", no_unliteral=True)
     def resolve_median(self, grp, args, kws):
@@ -819,7 +829,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.size", no_unliteral=True)
     def resolve_size(self, grp, args, kws):
-        return self._get_agg_typ(grp, args, "size")
+        return self._get_agg_typ(grp, args, "size", kws=kws)
 
     def resolve_transformative(self, grp, args, kws, msg, name_operation):
         """For datetime and timedelta datatypes, we can support cummin / cummax,
@@ -848,6 +858,17 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     raise BodoError(msg)
 
             out_data.append(data)
+
+        if name_operation in bodo.utils.typing.list_cumulative:
+            # pop arguments from kws or args
+            # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
+            skipna = args[0] if len(args) > 0 else kws.pop("skipna", 1)
+            if len(kws) > 0:
+                bad_key = list(kws.keys())[0]
+                raise BodoError(
+                    f"Groupby.{name_operation} got an unexpected keyword argument '{bad_key}'"
+                )
+
         out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
         # XXX output becomes series if single output and explicitly selected
         if len(grp.selection) == 1 and grp.explicit_select and grp.as_index:
