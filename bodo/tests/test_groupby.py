@@ -1913,6 +1913,25 @@ def test_as_index_count(memory_leak_check):
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
+def test_named_agg_nunique(memory_leak_check):
+    """
+    Test nunique groupby with pd.NamedAgg() relabeling
+    """
+
+    def impl(df):
+        return df.groupby("A", as_index=False).agg(
+            SUPPLIER_CNT=pd.NamedAgg(column="B", aggfunc="nunique")
+        )
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4, 5, 6],
+            "B": pd.Series(pd.date_range(start="1/1/2018", end="1/4/2018", periods=6)),
+        }
+    )
+    check_func(impl, (df,))
+
+
 def test_named_agg(memory_leak_check):
     """
     Test groupby with pd.NamedAgg() relabeling

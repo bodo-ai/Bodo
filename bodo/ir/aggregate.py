@@ -320,6 +320,9 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         shift_periods_t = 1
         if isinstance(rhs, ir.Expr):
             for erec in rhs.kws:
+                # Type checking should be handled at the overload/bound_func level.
+                # Any unknown kws at this stage should be naming the
+                # output column.
                 if func_name in list_cumulative:
                     if erec[0] == "skipna":
                         skipdropna = guard(find_const, func_ir, erec[1])
@@ -329,10 +332,6 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                                     func_name
                                 )
                             )
-                    else:
-                        raise BodoError(
-                            "argument to {} can only be skipna".format(func_name)
-                        )
                 if func_name == "nunique":
                     if erec[0] == "dropna":
                         skipdropna = guard(find_const, func_ir, erec[1])
@@ -340,8 +339,6 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                             raise BodoError(
                                 "argument of dropna to nunique should be a boolean"
                             )
-                    else:
-                        raise BodoError("argument to nunique can only be dropna")
 
         # To handle shift(2) and shift(periods=2)
         if func_name == "shift" and (len(rhs.args) > 0 or len(rhs.kws) > 0):
