@@ -63,6 +63,7 @@ from bodo.utils.typing import (
     get_overload_const_str,
     get_overload_const_tuple,
     get_overload_constant_dict,
+    get_overload_constant_series,
     is_common_scalar_dtype,
     is_literal_type,
     is_overload_bool,
@@ -71,6 +72,7 @@ from bodo.utils.typing import (
     is_overload_constant_dict,
     is_overload_constant_int,
     is_overload_constant_list,
+    is_overload_constant_series,
     is_overload_constant_str,
     is_overload_constant_tuple,
     is_overload_false,
@@ -191,7 +193,10 @@ def overload_dataframe_dtypes(df):
         for i in range(len(df.columns))
     )
     comma = "," if len(df.columns) == 1 else ""
-    func_text += f"  return bodo.hiframes.pd_series_ext.init_series(({data}{comma}), df.columns, None)\n"
+    # NOTE: using init_heter_index instead of just df.columns since df.dtypes could be
+    # input to df.astype(), which requires constant input (see test_df_astype_dtypes)
+    index = f"bodo.hiframes.pd_index_ext.init_heter_index({df.columns})"
+    func_text += f"  return bodo.hiframes.pd_series_ext.init_series(({data}{comma}), {index}, None)\n"
 
     loc_vars = {}
     exec(
@@ -220,7 +225,9 @@ def overload_dataframe_assign(df, **kwargs):
 
 
 def _get_dtype_str(dtype):
-    """return string representation of dtype value"""
+    """return string representation of dtype value
+    'dtype' could be actual value or type. TODO(ehsan): refactor to be consistent.
+    """
     # function cases like str
     if isinstance(dtype, types.Function):  # pragma: no cover
         if dtype.key[0] == str:
@@ -233,9 +240,19 @@ def _get_dtype_str(dtype):
             return "bool"
         else:
             raise BodoError(f"invalid dtype: {dtype}")
+
+    # e.g. dtype(int64)
+    if isinstance(dtype, types.DTypeSpec):
+        dtype = dtype.dtype
+
     # cases like np.float32
     if isinstance(dtype, types.functions.NumberClass):
         return f"'{dtype.key}'"
+
+    # pd.StringDtype
+    if dtype in (bodo.libs.str_arr_ext.string_dtype, pd.StringDtype()):
+        return "str"
+
     return f"'{dtype}'"
 
 
@@ -251,8 +268,12 @@ def overload_dataframe_astype(df, dtype, copy=True, errors="raise"):
 
     # just call astype() on all column Series
     # TODO: support categorical, dt64, etc.
-    if is_overload_constant_dict(dtype):
-        dtype_const = get_overload_constant_dict(dtype)
+    if is_overload_constant_dict(dtype) or is_overload_constant_series(dtype):
+        dtype_const = (
+            get_overload_constant_dict(dtype)
+            if is_overload_constant_dict(dtype)
+            else dict(get_overload_constant_series(dtype))
+        )
         data_args = ", ".join(
             f"df.iloc[:, {i}].astype({_get_dtype_str(dtype_const[c])}).values"
             if c in dtype_const
