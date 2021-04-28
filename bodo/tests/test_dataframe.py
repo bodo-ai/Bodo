@@ -1057,7 +1057,7 @@ def test_df_dtypes(df_value):
     py_output = df_value.dtypes
     df_type = bodo.typeof(df_value)
     for i in range(len(df_value.columns)):
-        if py_output.iloc[i] == np.object_:
+        if py_output.iloc[i] == object:
             if df_type.data[i] == bodo.boolean_array:
                 py_output.iloc[i] = pd.BooleanDtype()
             if df_type.data[i] == bodo.string_array_type:
@@ -1067,6 +1067,26 @@ def test_df_dtypes(df_value):
             py_output.iloc[i] = pd.BooleanDtype()
 
     check_func(impl, (df_value,), is_out_distributed=False, py_output=py_output)
+
+
+def test_df_astype_dtypes(memory_leak_check):
+    """test converting dataframe types to dtypes of another dataframe (BE-535)"""
+
+    def impl(df1, df2):
+        return df1.astype(df2.dtypes)
+
+    df1 = pd.DataFrame(
+        {
+            "A": [2, 1, 1] * 2,
+            "B": ["a", "b", "c"] * 2,
+            "C": pd.array([1, 2, 3] * 2, "Int64"),
+            "D": [True, False, True] * 2,
+            "E": pd.date_range("2017-01-03", periods=6),
+        }
+    )
+    df2 = df1.copy()
+    df2["A"] = [2.0, 1.3, 1.6] * 2
+    check_func(impl, (df1, df2))
 
 
 # TODO: empty df: pd.DataFrame()

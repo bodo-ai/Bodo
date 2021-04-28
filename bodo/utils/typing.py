@@ -673,10 +673,12 @@ def parse_dtype(dtype):
             return bodo.libs.int_arr_ext.typeof_pd_int_dtype(
                 pd.api.types.pandas_dtype(d_str), None
             )
+        if d_str == "boolean":
+            return bodo.libs.bool_arr_ext.boolean_dtype
         return numba.np.numpy_support.from_dtype(np.dtype(d_str))
     except:
         pass
-    raise BodoError("invalid dtype {}".format(dtype))
+    raise BodoError(f"invalid dtype {dtype}")
 
 
 def is_list_like_index_type(t):
@@ -886,6 +888,7 @@ register_model(MetaType)(models.OpaqueModel)
 
 
 def is_literal_type(t):
+    """return True if 't' represents a data type with known compile-time constant value"""
     # sometimes Dispatcher objects become TypeRef, see test_groupby_agg_const_dict
     if isinstance(t, types.TypeRef):
         t = t.instance_type
@@ -904,17 +907,66 @@ def is_literal_type(t):
         or is_initial_value_type(t)
         # dtype literals should be treated as literals
         or isinstance(t, (types.DTypeSpec, types.Function))
+        or isinstance(t, bodo.libs.int_arr_ext.IntDtype)
+        or t
+        in (bodo.libs.bool_arr_ext.boolean_dtype, bodo.libs.str_arr_ext.string_dtype)
         # values like np.sum could be passed as UDFs and are technically literals
         # See test_groupby_agg_func_udf
         or isinstance(t, types.Function)
+        # Index with known values
+        or is_overload_constant_index(t)
+        # Series with known values
+        or is_overload_constant_series(t)
+    )
+
+
+def is_overload_constant_index(t):
+    """return True if 't' is a Index data type with known compile time values"""
+    from bodo.hiframes.pd_index_ext import HeterogeneousIndexType
+
+    return (
+        isinstance(t, HeterogeneousIndexType)
+        and is_literal_type(t.data)
+        and is_literal_type(t.name_type)
+    )
+
+
+def get_overload_constant_index(t):
+    """return compile time constant value for Index type 't' (assuming it is a literal)"""
+    assert is_overload_constant_index(t)
+    return pd.Index(get_literal_value(t.data), name=get_literal_value(t.name_type))
+
+
+def is_overload_constant_series(t):
+    """return True if 't' is a Series data type with known compile time values"""
+    from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
+
+    return (
+        isinstance(t, (SeriesType, HeterogeneousSeriesType))
+        and is_literal_type(t.data)
+        and is_literal_type(t.index)
+        and is_literal_type(t.name_typ)
+    )
+
+
+def get_overload_constant_series(t):
+    """return compile time constant value for Series type 't' (assuming it is a literal)"""
+    assert is_overload_constant_series(t)
+    return pd.Series(
+        get_literal_value(t.data),
+        get_literal_value(t.index),
+        name=get_literal_value(t.name_typ),
     )
 
 
 def get_literal_value(t):
+    """return compile time constant value for type 't' (assuming it is a literal)"""
     # sometimes Dispatcher objects become TypeRef, see test_groupby_agg_const_dict
     if isinstance(t, types.TypeRef):
         t = t.instance_type
     assert is_literal_type(t)
+    if t == types.none:
+        return None
     if isinstance(t, types.Literal):
         # LiteralStrKeyDict with all const values, e.g. {"A": ["B"]}
         if isinstance(t, types.LiteralStrKeyDict):
@@ -936,6 +988,16 @@ def get_literal_value(t):
         return t.initial_value
     if isinstance(t, (types.DTypeSpec, types.Function)):
         return t
+    if isinstance(t, bodo.libs.int_arr_ext.IntDtype):
+        return getattr(pd, str(t)[:-2])()
+    if t == bodo.libs.bool_arr_ext.boolean_dtype:
+        return pd.BooleanDtype()
+    if t == bodo.libs.str_arr_ext.string_dtype:
+        return pd.StringDtype()
+    if is_overload_constant_index(t):
+        return get_overload_constant_index(t)
+    if is_overload_constant_series(t):
+        return get_overload_constant_series(t)
 
 
 def can_literalize_type(t, pyobject_to_literal=False):
