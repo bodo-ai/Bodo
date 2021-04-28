@@ -41,23 +41,6 @@ class WhereNullable:
         return iter([self.series, self.cond, self.other])
 
 
-_cov_corr_series = [
-    (pd.Series(x), pd.Series(y))
-    for x, y in [
-        ([np.nan, -2.0, 3.0, 9.1], [np.nan, -2.0, 3.0, 5.0]),
-        # TODO(quasilyte): more intricate data for complex-typed series.
-        # Some arguments make assert_almost_equal fail.
-        # Functions that yield mismaching results: _column_corr_impl and _column_cov_impl.
-        (
-            [complex(-2.0, 1.0), complex(3.0, 1.0)],
-            [complex(-3.0, 1.0), complex(2.0, 1.0)],
-        ),
-        ([complex(-2.0, 1.0), complex(3.0, 1.0)], [1.0, -2.0]),
-        ([1.0, -4.5], [complex(-4.5, 1.0), complex(3.0, 1.0)]),
-    ]
-]
-
-
 GLOBAL_VAL = 2
 
 
