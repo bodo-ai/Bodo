@@ -55,6 +55,10 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
                                   int64_t num_keys, int64_t keep, int64_t total_cols=-1);
 
+table_info* drop_duplicates_table_inner(table_info* in_table,
+                                        int64_t num_keys, int64_t keep,
+                                        int step);
+
 /** This function is the function for the dropping of duplicated keys:
  * ---only the keys are returned
  * ---non-null entries are removed from the output.

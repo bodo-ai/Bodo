@@ -4796,14 +4796,33 @@ class GroupbyPipeline {
                         tmp->num_keys = num_keys;
                         push_back_arrays(tmp->columns, in_table->columns[c]);
 
-                        // TODO: If we know that the |set(values)|/len(values) is low
-                        // on all ranks then it should be beneficial to drop local
-                        // duplicates before the shuffle
+                        // If we know that the |set(values)|/len(values)
+                        // is low on this (or all ranks?) then it should be
+                        // beneficial to drop local duplicates before the shuffle.
+                        // NOTE: lines below always drop local duplicates, but
+                        // there are some cases where this might worsen performance.
+                        // I observed this in one case, and other cases where I
+                        // think this might be worse in general is when the amount of
+                        // duplicates is very low, shuffle cost is low,
+                        // cluster of one or few nodes, but I haven't had time
+                        // to evaluate. Estimating amount of duplicates on each
+                        // process to decide whether to drop or not based on
+                        // some threshold doesn't seem to be effective in
+                        // making the best decision.
 
-                        // shuffle_table steals the reference but we still need it for the
-                        // code after C++ groupby
+                        // drop_duplicates_table_inner steals the reference but
+                        // we still need it for the code after C++ groupby
                         for (auto a : tmp->columns) incref_array(a);
-                        table_info* tmp2 = shuffle_table(tmp, tmp->ncols());
+                        table_info* tmp2 = drop_duplicates_table_inner(tmp, tmp->ncols(), 0, 1);
+                        delete tmp;
+                        tmp = tmp2;
+                        // NOTE: to improve scaling this spreads based on the keys
+                        // *and* also the values. If we only spread based on
+                        // keys, scaling will be limited by the number
+                        // of groups, which is sometimes very small compared
+                        // to the number of cores
+                        tmp2 = shuffle_table(tmp, tmp->ncols());
+                        delete tmp;
 
                         tmp2->num_keys = num_keys;
                         tmp2->id = table_id_counter++;

@@ -414,9 +414,9 @@ static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table,
  * of the operation after the rows have been merged on the computation
  * @return the table to be used.
  */
-static table_info* drop_duplicates_table_inner(table_info* in_table,
-                                               int64_t num_keys, int64_t keep,
-                                               int step) {
+table_info* drop_duplicates_table_inner(table_info* in_table,
+                                        int64_t num_keys, int64_t keep,
+                                        int step) {
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<array_info*> key_arrs(num_keys);
     for (size_t iKey = 0; iKey < size_t(num_keys); iKey++)
