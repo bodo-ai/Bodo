@@ -1929,7 +1929,7 @@ def test_named_agg_nunique(memory_leak_check):
             "B": pd.Series(pd.date_range(start="1/1/2018", end="1/4/2018", periods=6)),
         }
     )
-    check_func(impl, (df,))
+    check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
 def test_named_agg(memory_leak_check):
