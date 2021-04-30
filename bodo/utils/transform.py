@@ -145,6 +145,7 @@ no_side_effect_call_tuples = {
     ("groupby",),
     ("rolling",),
     (pd.CategoricalDtype,),
+    (bodo.hiframes.pd_categorical_ext.get_code_for_value,),
     # Numpy
     ("asarray", np),
     ("int32", np),

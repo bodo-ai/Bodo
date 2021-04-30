@@ -36,7 +36,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.testing import ensure_clean
 from bodo.utils.typing import BodoError
-from bodo.utils.utils import is_call_assign
+from bodo.utils.utils import is_assign, is_call_assign, is_expr
 
 kde_file = os.path.join("bodo", "tests", "data", "kde.parquet")
 
@@ -1198,14 +1198,18 @@ def test_read_partitions_large():
 
 
 def _check_for_pq_reader_filters(bodo_func):
-    """make sure ParquetReader node has filters set"""
+    """make sure ParquetReader node has filters set, and the filtering code in the IR
+    is removed
+    """
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     pq_read_found = False
     for stmt in fir.blocks[0].body:
         if isinstance(stmt, bodo.ir.parquet_ext.ParquetReader):
             assert stmt.filters is not None
             pq_read_found = True
-            break
+        # filtering code has getitem which should be removed
+        assert not (is_assign(stmt) and is_expr(stmt.value, "getitem"))
+
     assert pq_read_found
 
 

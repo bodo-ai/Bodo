@@ -369,6 +369,8 @@ class UntypedPass:
         # set ParquetReader node filters (no exception was raise until this end point
         # so filters are valid)
         read_pq_node.filters = filters
+        # remove filtering code since not necessary anymore
+        assign.value = assign.value.value
 
     def _reorder_filter_nodes(self, read_pq_node, index_def, df_var, filters):
         """reorder nodes that are used for Parquet partition filtering to be before the
