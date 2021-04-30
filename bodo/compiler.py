@@ -54,6 +54,20 @@ except ImportError:
     # bodo functions should give more meaningful errors than:
     # Untyped global name 'RandomForestClassifier': cannot determine Numba type of <class 'abc.ABCMeta'>
     pass
+
+# Flag to determine if matplotlib is installed for Series pass.
+# TODO: Try use this flg to get meaningful errors if someone tries
+# to reference matplotlib without having installed matplotlib
+_matplotlib_installed = False
+try:
+    import matplotlib  # noqa
+
+    import bodo.libs.matplotlib_ext  # noqa
+
+    _matplotlib_installed = True
+except ImportError:
+    pass
+
 import bodo.hiframes.dataframe_indexing  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_datetime_ext  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_timedelta_ext  # noqa # side effect: initialize Numba extensions

@@ -1256,7 +1256,7 @@ def get_nullable_and_non_nullable_types(array_of_types):
     return all_types
 
 
-def _gen_objmode_overload(func, output_type, method_name=None):
+def _gen_objmode_overload(func, output_type, method_name=None, single_rank=False):
     """code gen for gen_objmode_func_overload and gen_objmode_method_overload"""
     func_spec = getfullargspec(func)
 
@@ -1266,11 +1266,21 @@ def _gen_objmode_overload(func, output_type, method_name=None):
     defaults = [] if func_spec.defaults is None else func_spec.defaults
     n_pos_args = len(func_spec.args) - len(defaults)
 
-    sig = ", ".join(
-        arg + ("" if i < n_pos_args else "=" + str(defaults[i - n_pos_args]))
-        for i, arg in enumerate(func_spec.args)
-    )
-    args = ", ".join(func_spec.args[1:]) if method_name else ", ".join(func_spec.args)
+    # Matplotlib specifies some arguments as `<deprecated parameter>`.
+    # We can't support them, and it breaks our infrastructure, so omit them.
+
+    args = func_spec.args[1:] if method_name else func_spec.args[:]
+    arg_strs = []
+    for i, arg in enumerate(func_spec.args):
+        if i < n_pos_args:
+            arg_strs.append(arg)
+        elif str(defaults[i - n_pos_args]) != "<deprecated parameter>":
+            arg_strs.append(arg + "=" + str(defaults[i - n_pos_args]))
+        else:
+            args.remove(arg)
+
+    sig = ", ".join(arg_strs)
+    args = ", ".join(args)
 
     # workaround objmode string type name requirement by adding the type to types module
     # TODO: fix Numba's object mode to take type refs
@@ -1287,8 +1297,13 @@ def _gen_objmode_overload(func, output_type, method_name=None):
     call_str = f"self.{method_name}" if method_name else f"{func_name}"
     func_text = f"def overload_impl({sig}):\n"
     func_text += f"    def impl({sig}):\n"
-    func_text += f"        with numba.objmode(res='{type_name}'):\n"
-    func_text += f"            res = {call_str}({args})\n"
+    if single_rank:
+        func_text += f"        if bodo.get_rank() == 0:\n"
+        extra_indent = "    "
+    else:
+        extra_indent = ""
+    func_text += f"        {extra_indent}with numba.objmode(res='{type_name}'):\n"
+    func_text += f"            {extra_indent}res = {call_str}({args})\n"
     func_text += f"        return res\n"
     func_text += f"    return impl\n"
 
@@ -1303,19 +1318,21 @@ def _gen_objmode_overload(func, output_type, method_name=None):
     return overload_impl
 
 
-def gen_objmode_func_overload(func, output_type):
+def gen_objmode_func_overload(func, output_type=None, single_rank=False):
     """generate an objmode overload to support function 'func' with output type
     'output_type'
     """
-    overload_impl = _gen_objmode_overload(func, output_type)
+    overload_impl = _gen_objmode_overload(func, output_type, single_rank=single_rank)
     overload(func, no_unliteral=True)(overload_impl)
 
 
-def gen_objmode_method_overload(obj_type, method_name, method, output_type):
+def gen_objmode_method_overload(
+    obj_type, method_name, method, output_type=None, single_rank=False
+):
     """generate an objmode overload_method to support method 'method'
     (named 'method_name') with output type 'output_type'.
     """
-    overload_impl = _gen_objmode_overload(method, output_type, method_name)
+    overload_impl = _gen_objmode_overload(method, output_type, method_name, single_rank)
     overload_method(obj_type, method_name, no_unliteral=True)(overload_impl)
 
 
