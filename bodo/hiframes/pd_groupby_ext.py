@@ -135,9 +135,7 @@ def validate_udf(func_name, func):
             CPUDispatcher,
         ),
     ):
-        raise_const_error(
-            "Groupby.{}: 'func' must be user defined function".format(func_name)
-        )
+        raise_const_error(f"Groupby.{func_name}: 'func' must be user defined function")
 
 
 @intrinsic
@@ -584,7 +582,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
             f_name = get_overload_const_str(f_val)
         if not is_udf:
             if f_name not in bodo.ir.aggregate.supported_agg_funcs[:-1]:
-                raise BodoError("unsupported aggregate function {}".format(f_name))
+                raise BodoError(f"unsupported aggregate function {f_name}")
             # run typer on a groupby with just column col
             ret_grp = DataFrameGroupByType(
                 grp.df_type, grp.keys, (col,), grp.as_index, True

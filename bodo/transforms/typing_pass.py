@@ -1448,6 +1448,19 @@ class TypingTransforms:
                 # save for potential loop unrolling
                 self._require_const[var] = label
                 continue
+            # set values don't have literal types yet
+            # convert to list for agg since it is equivalent, but skip otherwise
+            # TODO(ehsan): add other functions where set is equivalent to list
+            # we can look at is_list_like() use in Pandas
+            if isinstance(val, set):
+                if func_name in ("agg", "aggregate"):
+                    val = list(val)
+                    # avoid build_set since it can fail in Numba
+                    var_def = guard(get_definition, self.func_ir, var)
+                    if is_expr(var_def, "build_set"):
+                        var_def.op = "build_list"
+                else:
+                    continue
             # replace argument variable with a new variable holding constant
             new_var = _create_const_var(val, var.name, var.scope, rhs.loc, nodes)
             set_call_expr_arg(new_var, rhs.args, kws, arg_no, arg_name)
