@@ -34,7 +34,7 @@ from numba.core.ir_utils import (
 import bodo
 import bodo.io
 from bodo.io import h5
-from bodo.utils.utils import is_call, is_expr, is_assign
+from bodo.utils.utils import is_assign, is_call, is_expr
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -365,12 +365,31 @@ class UntypedPass:
             lhs_def,
             rhs_def,
         )
+        self._check_non_filter_df_use(df_var.name, assign)
         self._reorder_filter_nodes(read_pq_node, index_def, df_var, filters)
         # set ParquetReader node filters (no exception was raise until this end point
         # so filters are valid)
         read_pq_node.filters = filters
         # remove filtering code since not necessary anymore
         assign.value = assign.value.value
+
+    def _check_non_filter_df_use(self, df_varname, assign):
+        """make sure the original dataframe variable is not used after filtering in the
+        program. e.g. df2 = df[...]; A = df.A
+        Assumes that Numba renames variables if the same df name is used later. e.g.:
+            df2 = df[...]
+            df = ....  # numba renames df to df.1
+        TODO(ehsan): use proper liveness analysis to handle cases with control flow:
+            df2 = df[...]
+            if flag:
+                df = ....
+        """
+        for block in self.func_ir.blocks.values():
+            for stmt in reversed(block.body):
+                # ignore code before the filtering node in the same basic block
+                if stmt is assign:
+                    break
+                require(all(v.name != df_varname for v in stmt.list_vars()))
 
     def _reorder_filter_nodes(self, read_pq_node, index_def, df_var, filters):
         """reorder nodes that are used for Parquet partition filtering to be before the

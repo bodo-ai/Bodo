@@ -1038,6 +1038,29 @@ def test_read_partitions():
             n2 = len(df[df["part"] == val])
             return n, n2
 
+        # make sure filtering doesn't happen if df is used after filtering
+        def impl4(path, val):
+            df = pd.read_parquet(path)
+            n2 = len(df[df["part"] == val])
+            return len(df), n2
+
+        # make sure filtering happens if df name is reused
+        def impl5(path, val):
+            df = pd.read_parquet(path)
+            n = len(df[df["part"] == val])
+            df = pd.DataFrame({"A": np.arange(11)})
+            n += df.A.sum()
+            return n
+
+        # TODO(ehsan): make sure filtering happens if df name is reused in control flow
+        # def impl6(path, val):
+        #     df = pd.read_parquet(path)
+        #     n = len(df[df["part"] == val])
+        #     if val == "b":
+        #         df = pd.DataFrame({"A": np.arange(11)})
+        #         n += df.A.sum()
+        #     return n
+
         bodo.parquet_validate_schema = False
         check_func(impl, ("pq_data",))
         bodo.parquet_validate_schema = True
@@ -1047,6 +1070,11 @@ def test_read_partitions():
         bodo_func("pq_data", "a")
         _check_for_pq_reader_filters(bodo_func)
         check_func(impl3, ("pq_data", "a"))
+        check_func(impl4, ("pq_data", "a"))
+        check_func(impl5, ("pq_data", "a"))
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl5)
+        bodo_func("pq_data", "a")
+        _check_for_pq_reader_filters(bodo_func)
         bodo.barrier()
     finally:
         bodo.parquet_validate_schema = True
