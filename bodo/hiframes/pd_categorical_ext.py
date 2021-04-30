@@ -325,7 +325,7 @@ def _install_cmp_ops():
 _install_cmp_ops()
 
 
-@numba.njit
+@register_jitable
 def get_code_for_value(cat_dtype, val):
     """get categorical code for value 'val' by finding its index in categories"""
     # TODO(ehsan): use get_loc when support by arrays
@@ -335,7 +335,7 @@ def get_code_for_value(cat_dtype, val):
         if cat_arr[i] == val:
             return i
 
-    return -2
+    return -2  # return dummy value that doesn't match any categorical code
 
 
 @overload_method(CategoricalArrayType, "astype", inline="always", no_unliteral=True)
@@ -720,7 +720,7 @@ def overload_cat_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
-@numba.njit
+@register_jitable
 def get_label_dict_from_categories(vals):  # pragma: no cover
     labels = dict()
 
