@@ -266,6 +266,19 @@ def test_agg(memory_leak_check):
     check_func(impl, (udf_in_df2,), sort_output=True, check_dtype=False)
 
 
+def test_agg_set_error(memory_leak_check):
+    """
+    Test Groupby.agg() with constant set input (BE-327)
+    TODO: support set input
+    """
+
+    def impl(df):
+        return df.groupby("A").agg({"max"})
+
+    with pytest.raises(BodoError, match="must be user defined function"):
+        bodo.jit(impl)(udf_in_df)
+
+
 @pytest.mark.slow
 def test_sum_string(memory_leak_check):
     def impl(df):
