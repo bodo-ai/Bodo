@@ -38,6 +38,8 @@ such as Numba on Ubuntu Linux::
     # conda install -c conda-forge boto3 botocore
     # The following is required for IO with gcs
     # conda install -c conda-forge gcsfs
+    # The following is required for matplotlib Testing
+    # conda install -c conda-forge matplotlib
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo
@@ -94,6 +96,8 @@ On Windows
     # conda install -c conda-forge boto3 botocore
     # The following is required for IO with gcs
     # conda install -c conda-forge gcsfs
+    # The following is required for matplotlib Testing
+    # conda install -c conda-forge matplotlib
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo

@@ -212,7 +212,7 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
             return signature(ret_grp, *args)
 
 
-# dummpy lowering for groupby getitem to avoid errors (e.g. test_series_groupby_arr)
+# dummy lowering for groupby getitem to avoid errors (e.g. test_series_groupby_arr)
 @lower_builtin("static_getitem", DataFrameGroupByType, types.Any)
 def static_getitem_df_groupby(context, builder, sig, args):
     return impl_ret_borrowed(context, builder, sig.return_type, args[0])

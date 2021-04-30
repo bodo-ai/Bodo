@@ -180,6 +180,11 @@ _binop_to_str = {
 }
 
 
+# Matplotlib functions that must be replaced
+mpl_plt_kwargs_functions = ["plot", "subplots"]
+mpl_axes_kwargs_functions = ["plot", "set_xlabel", "set_ylabel", "set_title", "legend"]
+
+
 class SeriesPass:
     """
     This pass converts Series operations to array operations as much as possible to
@@ -1298,6 +1303,23 @@ class SeriesPass:
         ):
             return self._handle_ufuncs_bool_arr(func_name, rhs.args)
 
+        # support matplot lib calls
+        if bodo.compiler._matplotlib_installed:
+            # matplotlib.pyplot functions
+            if (
+                func_mod == "matplotlib.pyplot"
+                and func_name in mpl_plt_kwargs_functions
+            ):
+                return self._run_call_matplotlib(lhs, rhs, func_mod, func_name)
+
+            # matplotlib.axes.Axes methods
+            if (
+                isinstance(func_mod, ir.Var)
+                and func_name in mpl_axes_kwargs_functions
+                and self.typemap[func_mod.name] == types.mpl_axes_type
+            ):
+                return self._run_call_matplotlib(lhs, rhs, func_mod, func_name)
+
         # Handle inlining to avoid conflict with Numba np.hstack definition
         if fdef == ("hstack", "numpy"):
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -2236,7 +2258,6 @@ class SeriesPass:
             return self._run_call_string(
                 assign, assign.target, rhs, func_mod, func_name
             )
-
         return [assign]
 
     def _fix_unhandled_calls(self, assign, lhs, rhs):
@@ -2385,6 +2406,119 @@ class SeriesPass:
         in_typs = tuple(self.typemap[a.name] for a in args)
         impl = overload_func(*in_typs)
         return replace_func(self, impl, args)
+
+    def _run_call_matplotlib(self, lhs, rhs, func_mod, func_name):
+        """
+        Replace functions in matplotlib that use *args or **kwargs and
+        cannot be handled with a regular overload. These implementations
+        call into objmode using a helper function and call the original
+        matplotlib implementation.
+
+        For functions that display output or modify the figure's data, we
+        only call the function on rank 0. For functions that only produce or
+        modify configuration objects (i.e. set_xlabel), we call on all ranks
+        as it will not impact correctness.
+        """
+        kws = dict(rhs.kws)
+        keys = list(kws.keys())
+        header_args = (
+            ", ".join(f"e{i}" for i in range(len(rhs.args)))
+            + (", " if rhs.args else "")
+            + ", ".join(f"e{i + len(rhs.args)}" for i in range(len(keys)))
+        )
+        arg_names = (
+            ", ".join(f"e{i}" for i in range(len(rhs.args)))
+            + (", " if rhs.args else "")
+            + ", ".join(f"{a}=e{i + len(rhs.args)}" for i, a in enumerate(keys))
+        )
+        method_var = "matplotlib_obj" if isinstance(func_mod, ir.Var) else ""
+        if method_var:
+            full_header = method_var + ", " + header_args
+        else:
+            full_header = header_args
+
+        primary_func = self._generate_mpl_primary_func(
+            lhs, rhs, func_name, method_var, full_header, arg_names
+        )
+        helper_func = self._generate_mpl_helper_func(
+            lhs, rhs, func_mod, func_name, method_var, full_header, arg_names
+        )
+        glbs = {
+            f"helper_{func_name}": helper_func,
+        }
+        args = (
+            ([func_mod] if method_var else []) + rhs.args + [kws[key] for key in keys]
+        )
+        return replace_func(
+            self,
+            primary_func,
+            args,
+            extra_globals=glbs,
+        )
+
+    def _generate_mpl_primary_func(
+        self, lhs, rhs, func_name, method_var, full_header, arg_names
+    ):
+        """
+        Generates the primary function that used in matplotlib function
+        replacements. This function gathers data if necessary and calls
+        a helper function that enters objmode to avoid objmode limitations.
+        """
+        # Define the primary function
+        func_text = f"def f({full_header}):\n"
+        if func_name == "plot":
+            for i in range(len(rhs.args)):
+                arg_typ = self.typemap[rhs.args[i].name]
+                if bodo.utils.utils.is_array_typ(arg_typ, False):
+                    # Gather any data for plotting distributed arrays
+                    func_text += f"    e{i} = bodo.gatherv(e{i}, warn_if_rep=False)\n"
+            # Only output any plots on rank 0
+            func_text += "    if bodo.get_rank() == 0:\n"
+            extra_indent = "     "
+        else:
+            extra_indent = ""
+        func_text += f"    {extra_indent}return helper_{func_name}({full_header})\n"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+        f = loc_vars["f"]
+        return f
+
+    def _generate_mpl_helper_func(
+        self, lhs, rhs, func_mod, func_name, method_var, full_header, arg_names
+    ):
+        """
+        Generates the helper that is used in matplotlib function replacements.
+        This function calls the original matplotlib implementation in objmode.
+        """
+        import matplotlib
+
+        if lhs in self.typemap:
+            output_type = self.typemap[lhs]
+        else:
+            output_type = types.none
+        type_name = str(output_type)
+        if not hasattr(types, type_name):
+            type_name = f"objmode_type{ir_utils.next_label()}"
+            setattr(types, type_name, output_type)
+
+        func_text = f"def helper_{func_name}({full_header}):\n"
+        func_text += f"    with numba.objmode(res='{type_name}'):\n"
+        if method_var:
+            func_text += f"        res = {method_var}.{func_name}({arg_names})\n"
+        else:
+            func_text += f"        res = {func_mod}.{func_name}({arg_names})\n"
+        # if axes is np.array, we convert to nested tuples
+        # TODO: Replace with np.array when we can handle objs
+        if func_name == "subplots" and isinstance(output_type[1], types.BaseTuple):
+            func_text += f"        fig, axes = res\n"
+            func_text += "        axes = tuple([tuple(elem) if isinstance(elem, np.ndarray) else elem for elem in axes])\n"
+            func_text += "        res = (fig, axes)\n"
+
+        func_text += f"    return res\n"
+        loc_vars = {}
+        exec(func_text, {"matplotlib": matplotlib, "numba": numba, "np": np}, loc_vars)
+        helper_func = numba.njit(loc_vars[f"helper_{func_name}"])
+        return helper_func
 
     def _run_call_string(self, assign, lhs, rhs, string_var, func_name):
         """String operations that need to be replaced because they require kwargs"""

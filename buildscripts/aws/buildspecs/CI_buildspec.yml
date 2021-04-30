@@ -1,6 +1,6 @@
 version: 0.2
 
-# Actual buildspec file used to run each CI job where NP =1. 
+# Actual buildspec file used to run each CI job where NP =1.
 # This file is NOT a template but is shared across the distributed test runs.
 # Buildspec Reference: https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html
 
@@ -15,6 +15,7 @@ phases:
     install:
         commands:
         - echo Entered the install phase...
+        - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/test_installs.sh
         - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/merge_with_master.sh
     build:
         commands:
