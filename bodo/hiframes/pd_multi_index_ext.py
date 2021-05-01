@@ -14,12 +14,19 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
+    register_jitable,
     register_model,
     typeof_impl,
     unbox,
 )
 
-from bodo.utils.typing import get_val_type_maybe_str_literal
+from bodo.utils.typing import (
+    BodoError,
+    check_unsupported_args,
+    get_val_type_maybe_str_literal,
+    is_overload_none,
+    scalar_to_array_type,
+)
 
 
 # NOTE: minimal MultiIndex support that just stores the index arrays without factorizing
@@ -127,7 +134,6 @@ def unbox_multi_index(typ, val, c):
     # save array objects to decref later since array may be created on demand and
     # cleaned up in Pandas
     arr_objs = []
-
     for i in range(typ.nlevels):
         # generate val.get_level_values(i)
         i_obj = c.pyapi.unserialize(c.pyapi.serialize_object(i))
@@ -168,6 +174,48 @@ def unbox_multi_index(typ, val, c):
     c.pyapi.decref(names_tup_obj)
     c.pyapi.decref(name_obj)
     return NativeValue(index_val._getvalue())
+
+
+def from_product_error_checking(iterables, sortorder, names):
+    fname = "pandas.MultiIndex.from_product"
+    unsupported_args = dict(sortorder=sortorder)
+    arg_defaults = dict(sortorder=None)
+    check_unsupported_args(fname, unsupported_args, arg_defaults)
+    if not (is_overload_none(names) or isinstance(names, types.BaseTuple)):
+        raise BodoError(f"{fname}: names must be None or a tuple.")
+    elif not isinstance(iterables, types.BaseTuple):
+        raise BodoError(f"{fname}: iterables must be a tuple.")
+    elif not is_overload_none(names) and len(iterables) != len(names):
+        raise BodoError(f"{fname}: iterables and names must be of the same length.")
+
+
+def from_product(iterable, sortorder=None, names=None):  # pragma: no cover
+    """Overloaded in from_product_overload"""
+    pass
+
+
+@overload(from_product)
+def from_product_overload(iterables, sortorder=None, names=None):
+    from_product_error_checking(iterables, sortorder, names)
+    # Convert to array type to match unboxing
+    array_types = tuple(scalar_to_array_type(iterable.dtype) for iterable in iterables)
+    if is_overload_none(names):
+        names_typ = tuple([types.none] * len(iterables))
+    else:
+        names_typ = names.types
+    multiindex_type = MultiIndexType(array_types, names_typ)
+    t_name = f"from_product_multiindex{numba.core.ir_utils.next_label()}"
+    setattr(types, t_name, multiindex_type)
+    func_text = f"""
+def impl(iterables, sortorder=None, names=None):
+    with numba.objmode(mi='{t_name}'):
+        mi = pd.MultiIndex.from_product(iterables, names=names)
+    return mi
+"""
+    loc_vars = {}
+    exec(func_text, globals(), loc_vars)
+    impl = loc_vars["impl"]
+    return impl
 
 
 @intrinsic
