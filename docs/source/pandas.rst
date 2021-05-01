@@ -818,6 +818,12 @@ boxed/unboxed and set as index to dataframes and series.
 Operations on them will be supported in upcoming releases.
 
 
+MultiIndex
+**********
+
+* :meth:`pandas.MultiIndex.from_product` (*iterables* and *names* supported as tuples, no parallel support yet)
+
+
 Timestamp
 ~~~~~~~~~
 

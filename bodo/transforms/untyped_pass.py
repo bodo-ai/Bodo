@@ -247,6 +247,20 @@ class UntypedPass:
                             assign.target,
                         )
 
+            if rhs.op == "getattr" and rhs.attr == "from_product":
+                val_def = guard(get_definition, self.func_ir, rhs.value)
+                if is_expr(val_def, "getattr") and val_def.attr == "MultiIndex":
+                    val_def.attr = "Index"
+                    mod_def = guard(get_definition, self.func_ir, val_def.value)
+                    if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+                        return compile_func_single_block(
+                            eval(
+                                "lambda: bodo.hiframes.pd_multi_index_ext.from_product"
+                            ),
+                            (),
+                            assign.target,
+                        )
+
             # replace datetime.date.fromordinal with an internal function since class methods
             # are not supported in Numba's typing
             if rhs.op == "getattr" and rhs.attr == "fromordinal":
