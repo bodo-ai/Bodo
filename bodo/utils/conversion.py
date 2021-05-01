@@ -461,6 +461,7 @@ def overload_coerce_to_array(
         (
             bodo.libs.int_arr_ext.IntegerArrayType,
             DecimalArrayType,
+            bodo.libs.interval_arr_ext.IntervalArrayType,
             bodo.libs.tuple_arr_ext.TupleArrayType,
             bodo.libs.struct_arr_ext.StructArrayType,
             bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
