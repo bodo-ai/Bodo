@@ -6,7 +6,7 @@ parameters:
 jobs:
 - job: ${{ parameters.name }}
   timeoutInMinutes: 240
-  pool: 
+  pool:
     vmImage: ${{ parameters.vmImage }}
   strategy:
     maxParallel: 11
@@ -34,7 +34,7 @@ jobs:
   - script: |
       buildscripts/setup_minio.sh
     displayName: 'Setup minio'
-  
+
   - script: |
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
