@@ -5,6 +5,7 @@ Used for IntervalIndex, which is necessary for Series.value_counts() with 'bins'
 argument.
 """
 
+import numba
 import pandas as pd
 from numba.core import cgutils, types
 from numba.extending import (
@@ -19,6 +20,7 @@ from numba.extending import (
     typeof_impl,
     unbox,
 )
+from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 
@@ -86,6 +88,46 @@ def init_interval_array(typingctx, left, right=None):
     ret_typ = IntervalArrayType(left)
     sig = ret_typ(left, right)
     return sig, codegen
+
+
+# array analysis and alias analysis necessary since init_interval_array is inlined in
+# Series.value_counts()
+def init_interval_array_equiv(self, scope, equiv_set, loc, args, kws):
+    """array analysis for init_interval_array()
+    output has same shape as input left/right
+    """
+    assert len(args) == 2 and not kws
+    # left/right have the same shape
+    all_shapes = []
+    for in_arr_var in args:
+        in_arr_shape = equiv_set.get_shape(in_arr_var)
+        if in_arr_shape is not None:
+            all_shapes.append(in_arr_shape[0])
+
+    if len(all_shapes) > 1:
+        equiv_set.insert_equiv(*all_shapes)
+
+    left = args[0]
+    if equiv_set.has_shape(left):
+        return ArrayAnalysis.AnalyzeResult(shape=left, pre=[])
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_interval_arr_ext_init_interval_array = (
+    init_interval_array_equiv
+)
+
+
+def alias_ext_init_interval_array(lhs_name, args, alias_map, arg_aliases):
+    """output Interval array aliases left/right inputs"""
+    assert len(args) == 2
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
+
+
+numba.core.ir_utils.alias_func_extensions[
+    ("init_interval_array", "bodo.libs.int_arr_ext")
+] = alias_ext_init_interval_array
 
 
 @box(IntervalArrayType)
