@@ -117,7 +117,7 @@ jobs:
       source activate $CONDA_ENV
       pip install deltalake
     displayName: 'Setup deltalake testing'
-  
+
   - script: |
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
@@ -144,6 +144,13 @@ jobs:
     displayName: 'Download test license'
     inputs:
       secureFile: 'bodo.lic'
+
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
+      conda install -y matplotlib -c conda-forge
+    displayName: 'Matplotlib'
 
   - script: |
       set -eo pipefail
