@@ -16,7 +16,7 @@ RUN yum install -y boost-devel
 
 SHELL ["usr/bin/scl", "enable", "rh-python38" ]
 
-RUN pip install Cython numpy numba==0.53.0 wheel pandas==1.2.* pyarrow==3.0.0
+RUN pip install Cython numpy numba==0.53.0 wheel pandas==1.2.* pyarrow==4.0.0
 RUN MPICC=/usr/lib64/mpich/bin/mpicc pip install mpi4py
 RUN ln -s /opt/rh/rh-python38/root/usr/local/lib64/python3.8/site-packages/pyarrow/libarrow.so.300 /opt/rh/rh-python38/root/usr/local/lib64/python3.8/site-packages/pyarrow/libarrow.so
 RUN ln -s /opt/rh/rh-python38/root/usr/local/lib64/python3.8/site-packages/pyarrow/libparquet.so.300 /opt/rh/rh-python38/root/usr/local/lib64/python3.8/site-packages/pyarrow/libparquet.so

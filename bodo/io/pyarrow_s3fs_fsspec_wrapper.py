@@ -39,6 +39,7 @@ class PyArrowS3FS(AbstractFileSystem):
         session_name=None,
         external_id=None,
         load_frequency=900,
+        proxy_options=None,
         **kwargs,
     ):
         super().__init__(self, **kwargs)
@@ -55,6 +56,7 @@ class PyArrowS3FS(AbstractFileSystem):
             session_name=session_name,
             external_id=external_id,
             load_frequency=load_frequency,
+            proxy_options=proxy_options,
         )
 
     def __getattribute__(self, name: str):
