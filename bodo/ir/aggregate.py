@@ -786,7 +786,7 @@ ir_utils.visit_vars_extensions[Aggregate] = visit_vars_aggregate
 def aggregate_array_analysis(aggregate_node, equiv_set, typemap, array_analysis):
     # empty aggregate nodes should be deleted in remove dead
     assert (
-        len(aggregate_node.df_in_vars) > 0
+        len(aggregate_node.df_out_vars) > 0
         or aggregate_node.out_key_vars is not None
         or aggregate_node.is_crosstab
     ), "empty aggregate in array analysis"
