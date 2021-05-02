@@ -53,7 +53,7 @@ fi
 # ---- Conda installs for source build ----
 if [ "$RUN_NIGHTLY" != "yes" ];
 then
-   $CONDA_INSTALL -c conda-forge pyarrow=3.0.0
+   $CONDA_INSTALL -c conda-forge pyarrow=4.0.0
    # We lock fsspec at version 0.8 because in 0.9 it
    # caused us import errors with s3fs for Pandas tests.
    $CONDA_INSTALL fsspec=0.8 -c conda-forge

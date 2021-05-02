@@ -382,6 +382,12 @@ These environment variables are used for File I/O with S3 credentials:
   - ``AWS_DEFAULT_REGION``: default as ``us-east-1``
   - ``AWS_S3_ENDPOINT``: specify custom host name, default as AWS endpoint(``s3.amazonaws.com``)
 
+Connecting to S3 endpoints through a proxy is supported. The proxy URI can be provided by setting one of the following environment variables (listed in order of precedence):
+  - ``http_proxy``
+  - ``https_proxy``
+  - ``HTTP_PROXY``
+  - ``HTTPS_PROXY``
+
 Bodo uses `Apache Arrow <https://arrow.apache.org/>`_ internally for read and write of data on S3.
 
 .. _GCS:

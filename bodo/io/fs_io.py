@@ -34,6 +34,24 @@ _csv_write = types.ExternalFunction(
 ll.add_symbol("csv_write", csv_cpp.csv_write)
 
 
+def get_proxy_uri_from_env_vars():
+    """
+    Get proxy URI from environment variables if they're set,
+    else return None.
+    Precedence order of the different environment
+    variables should be consistent with
+    get_s3_proxy_options_from_env_vars in _s3_reader.cpp
+    to avoid differences in compile-time and runtime
+    behavior.
+    """
+    return (
+        os.environ.get("http_proxy", None)
+        or os.environ.get("https_proxy", None)
+        or os.environ.get("HTTP_PROXY", None)
+        or os.environ.get("HTTPS_PROXY", None)
+    )
+
+
 def get_s3_fs(region=None, storage_options=None):
     """
     initialize S3FileSystem with credentials
@@ -45,6 +63,7 @@ def get_s3_fs(region=None, storage_options=None):
         region = os.environ.get("AWS_DEFAULT_REGION", None)
 
     anon = False
+    proxy_options = get_proxy_uri_from_env_vars()
     if storage_options:
         anon = storage_options.get("anon", False)
 
@@ -53,6 +72,7 @@ def get_s3_fs(region=None, storage_options=None):
         region=region,
         endpoint_override=custom_endpoint,
         anonymous=anon,
+        proxy_options=proxy_options,
     )
 
     return fs

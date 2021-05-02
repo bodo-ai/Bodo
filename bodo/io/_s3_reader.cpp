@@ -43,6 +43,44 @@
     CHECK_ARROW(res.status(), msg, s3_fs_region)            \
     lhs = std::move(res).ValueOrDie();
 
+// Return a arrow::fs::S3ProxyOptions struct based
+// on appropriate environment variables (if they are set), else
+// return the default options (i.e. do not use a proxy)
+arrow::fs::S3ProxyOptions get_s3_proxy_options_from_env_vars() {
+    
+    arrow::Result<arrow::fs::S3ProxyOptions> options_res;
+    arrow::fs::S3ProxyOptions options;
+
+    // There seems to be no industry-standard precedence for these
+    // environment variables.
+    // The precedence order below should be consistent with
+    // get_proxy_uri_from_env_vars in fs_io.py
+    // to avoid differences in compile-time and runtime
+    // behavior.
+    char* http_proxy = std::getenv("http_proxy");
+    char* https_proxy = std::getenv("https_proxy");
+    char* HTTP_PROXY = std::getenv("HTTP_PROXY");
+    char* HTTPS_PROXY = std::getenv("HTTPS_PROXY");
+
+    if (http_proxy) {
+        options_res = arrow::fs::S3ProxyOptions::FromUri(http_proxy);
+    } else if (https_proxy) {
+        options_res = arrow::fs::S3ProxyOptions::FromUri(https_proxy);
+    } else if (HTTP_PROXY) {
+        options_res = arrow::fs::S3ProxyOptions::FromUri(HTTP_PROXY);
+    } else if (HTTPS_PROXY) {
+        options_res = arrow::fs::S3ProxyOptions::FromUri(HTTPS_PROXY);
+    } else {
+        // If no environment variable found, then return the default
+        // S3ProxyOptions struct (the CHECK_ARROW_AND_ASSIGN macro
+        // would fail on an unset options_res).
+        return options;
+    }
+    
+    // Safely set options, else throw an error.
+    CHECK_ARROW_AND_ASSIGN(options_res, "S3ProxyOptions::FromUri", options, std::string(""));
+    return options;
+}
 
 // a global singleton instance of S3FileSystem that is
 // initialized the first time it is needed and reused afterwards
@@ -95,6 +133,9 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region, bo
         char *custom_endpoint = std::getenv("AWS_S3_ENDPOINT");
         if (custom_endpoint)
             options.endpoint_override = std::string(custom_endpoint);
+        
+        // Set proxy options if the appropriate environment variables are set
+        options.proxy_options = get_s3_proxy_options_from_env_vars();
 
         arrow::Result<std::shared_ptr<arrow::fs::S3FileSystem>> result;
         result = arrow::fs::S3FileSystem::Make(options);
