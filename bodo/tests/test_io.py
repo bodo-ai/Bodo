@@ -36,7 +36,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.testing import ensure_clean
 from bodo.utils.typing import BodoError
-from bodo.utils.utils import is_call_assign
+from bodo.utils.utils import is_assign, is_call_assign, is_expr
 
 kde_file = os.path.join("bodo", "tests", "data", "kde.parquet")
 
@@ -1038,6 +1038,29 @@ def test_read_partitions():
             n2 = len(df[df["part"] == val])
             return n, n2
 
+        # make sure filtering doesn't happen if df is used after filtering
+        def impl4(path, val):
+            df = pd.read_parquet(path)
+            n2 = len(df[df["part"] == val])
+            return len(df), n2
+
+        # make sure filtering happens if df name is reused
+        def impl5(path, val):
+            df = pd.read_parquet(path)
+            n = len(df[df["part"] == val])
+            df = pd.DataFrame({"A": np.arange(11)})
+            n += df.A.sum()
+            return n
+
+        # TODO(ehsan): make sure filtering happens if df name is reused in control flow
+        # def impl6(path, val):
+        #     df = pd.read_parquet(path)
+        #     n = len(df[df["part"] == val])
+        #     if val == "b":
+        #         df = pd.DataFrame({"A": np.arange(11)})
+        #         n += df.A.sum()
+        #     return n
+
         bodo.parquet_validate_schema = False
         check_func(impl, ("pq_data",))
         bodo.parquet_validate_schema = True
@@ -1047,6 +1070,11 @@ def test_read_partitions():
         bodo_func("pq_data", "a")
         _check_for_pq_reader_filters(bodo_func)
         check_func(impl3, ("pq_data", "a"))
+        check_func(impl4, ("pq_data", "a"))
+        check_func(impl5, ("pq_data", "a"))
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl5)
+        bodo_func("pq_data", "a")
+        _check_for_pq_reader_filters(bodo_func)
         bodo.barrier()
     finally:
         bodo.parquet_validate_schema = True
@@ -1198,14 +1226,18 @@ def test_read_partitions_large():
 
 
 def _check_for_pq_reader_filters(bodo_func):
-    """make sure ParquetReader node has filters set"""
+    """make sure ParquetReader node has filters set, and the filtering code in the IR
+    is removed
+    """
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     pq_read_found = False
     for stmt in fir.blocks[0].body:
         if isinstance(stmt, bodo.ir.parquet_ext.ParquetReader):
             assert stmt.filters is not None
             pq_read_found = True
-            break
+        # filtering code has getitem which should be removed
+        assert not (is_assign(stmt) and is_expr(stmt.value, "getitem"))
+
     assert pq_read_found
 
 
