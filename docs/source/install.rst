@@ -4,11 +4,10 @@
 Installation
 ============
 
-Bodo is a Python package and can be installed in a Conda environment easily. See the section on :ref:`conda` if you don't already have Conda installed. Create a Conda environment, install Bodo and its
-dependencies as shown below::
+Bodo is a Python package and can be installed in a Conda environment easily. See the section on :ref:`conda` if you don't already have Conda installed. Create a Conda environment, install Bodo and its dependencies as shown below::
 
     conda create -n Bodo python
-    source activate Bodo
+    conda activate Bodo
     conda install bodo -c bodo.ai -c conda-forge
 
 Bodo uses `MPI <https://en.wikipedia.org/wiki/Message_Passing_Interface>`_ for parallelization,
@@ -87,6 +86,11 @@ On macOS::
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
 
+On Windows::
+
+    start /wait "" Miniconda3-latest-Windows-x86_64.exe /InstallationType=JustMe /RegisterPython=0 /S /D=%UserProfile%\Miniconda3
+
+Open the Anaconda Prompt (click Start, select Anaconda Prompt). You may use other Terminals if you have already added Anaconda to your PATH.
 
 Optional Dependencies
 ---------------------
