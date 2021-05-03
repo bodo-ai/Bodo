@@ -116,16 +116,15 @@ class PyArrowS3FS(AbstractFileSystem):
         # Remove the s3:// prefix if it exists (and other path sanitization)
         path_ = (options.netloc + options.path).rstrip("/")
 
-        if not self.isdir(path):
+        file_selector = pa_fs.FileSelector(path_, recursive=False)
+        file_stats = self.pa_s3fs.get_file_info(file_selector)
+        if len(file_stats) == 0:
             if self.isfile(path):
                 if detail:
                     return [{"type": "file", "name": path_}]
                 else:
                     return [path_]
             return []  # Probably a non-existent path
-
-        file_selector = pa_fs.FileSelector(path_, recursive=False)
-        file_stats = self.pa_s3fs.get_file_info(file_selector)
 
         # Remove the directory object itself if it appears in the list
         if (
