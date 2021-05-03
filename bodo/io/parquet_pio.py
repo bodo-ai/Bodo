@@ -84,7 +84,7 @@ use_nullable_int_arr = True
 
 from urllib.parse import urlparse
 
-import pyarrow.parquet as pq
+import bodo.io.pa_parquet
 
 
 class ParquetPredicateType(types.Type):
@@ -123,48 +123,6 @@ def unbox_storage_options_dict_type(typ, val, c):
     # just return the Python object pointer
     c.pyapi.incref(val)
     return NativeValue(val)
-
-
-def ParquetManifest_visit_level(self, level, base_path, part_keys):
-    fs = self.filesystem
-
-    _, directories, files = next(fs.walk(base_path))
-
-    filtered_files = []
-    for path in files:
-        if path == "":  # Bodo change
-            continue
-        full_path = self.pathsep.join((base_path, path))
-        if path.endswith("_common_metadata"):
-            self.common_metadata_path = full_path
-        elif path.endswith("_metadata"):
-            self.metadata_path = full_path
-        elif self._should_silently_exclude(path):
-            continue
-        else:
-            filtered_files.append(full_path)
-
-    # ARROW-1079: Filter out "private" directories starting with underscore
-    filtered_directories = [
-        self.pathsep.join((base_path, x))
-        for x in directories
-        if not pq._is_private_directory(x)
-    ]
-
-    filtered_files.sort()
-    filtered_directories.sort()
-
-    if len(filtered_files) > 0 and len(filtered_directories) > 0:
-        raise ValueError(
-            "Found files in an intermediate " "directory: {}".format(base_path)
-        )
-    elif len(filtered_directories) > 0:
-        self._visit_directories(level, filtered_directories, part_keys)
-    else:
-        self._push_pieces(filtered_files, part_keys)
-
-
-pq.ParquetManifest._visit_level = ParquetManifest_visit_level
 
 
 def read_parquet():  # pragma: no cover
@@ -1156,8 +1114,6 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
             # This happens sequentially.
             # We then do schema validation and get the row counts (which are the
             # most expensive operations) in parallel.
-            # Note: ParquetDataset has metadata_nthreads parameter but it
-            # seems to use Python threads and not make a difference
             validate_schema = bodo.parquet_validate_schema
             if get_row_counts or validate_schema:
                 # Getting row counts and schema validation is going to be
@@ -1173,12 +1129,17 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
                 _ = getfs(parallel=True)
 
             if bodo.get_rank() == 0:
+                nthreads = 1
+                cpu_count = os.cpu_count()
+                if cpu_count is not None and cpu_count > 1:
+                    nthreads = cpu_count // 2
                 dataset = pq.ParquetDataset(
                     fpath,
                     filesystem=getfs(),
                     filters=filters,
                     use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
                     validate_schema=False,  # we do validation below if needed
+                    metadata_nthreads=nthreads,
                 )
 
                 if is_deltalake:
@@ -1215,7 +1176,9 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
                         total_rows_chunk += file_metadata.num_rows
                     if validate_schema:
                         file_schema = file_metadata.schema.to_arrow_schema()
-                        if not dataset_schema.equals(file_schema, check_metadata=False):  # pragma: no cover
+                        if not dataset_schema.equals(
+                            file_schema, check_metadata=False
+                        ):  # pragma: no cover
                             # this is the same error message that pyarrow shows
                             print(
                                 "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
