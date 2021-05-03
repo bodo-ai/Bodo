@@ -299,9 +299,6 @@ T get_nth_parallel(std::vector<T> &my_array, int64_t k, int myrank, int n_pes,
         // printf("set sizes: %ld %ld %ld\n", l0_num, l1_num, l2_num);
         assert(l0_num + l1_num + l2_num == total_size);
         // []----*---o----*-----]
-        // if there are more elements in the last set than elemenet k to end,
-        // this means k2 is equal to k
-        if (l2_num > total_size - k) return k2_val;
         assert(l0_num < k);
 
         std::vector<T> new_my_array;
@@ -393,7 +390,7 @@ std::pair<T, T> get_lower_upper_kth_parallel(std::vector<T> &my_array,
     T k1_val;
     T k2_val;
     if (myrank == root) {
-        int local_k = (int)(k * (total_sample_size / (T)total_size));
+        int local_k = (int)(k * (total_sample_size / (double)total_size));
         // printf("k:%ld local_k:%d\n", k, local_k);
         int k1 = (int)(local_k - sqrt(total_sample_size * log(total_size)));
         int k2 = (int)(local_k + sqrt(total_sample_size * log(total_size)));
