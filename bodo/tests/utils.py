@@ -616,6 +616,7 @@ def _test_equal(
             check_names=check_names,
             check_categorical=check_categorical,
             check_dtype=check_dtype,
+            check_index_type="equiv" if check_dtype else False,
             check_freq=False,
             atol=atol,
             rtol=rtol,

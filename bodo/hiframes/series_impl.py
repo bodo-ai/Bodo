@@ -9,7 +9,12 @@ import numpy as np
 import pandas as pd
 from numba.core import types
 from numba.core.typing.templates import AbstractTemplate, infer_global
-from numba.extending import overload, overload_attribute, overload_method
+from numba.extending import (
+    overload,
+    overload_attribute,
+    overload_method,
+    register_jitable,
+)
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
@@ -1605,7 +1610,6 @@ def overload_series_sort_values(
         axis=axis,
         inplace=inplace,
         kind=kind,
-        na_position=na_position,
         ignore_index=ignore_index,
         key=key,
     )
@@ -1613,12 +1617,13 @@ def overload_series_sort_values(
         axis=0,
         inplace=False,
         kind="quicksort",
-        na_position="last",
         ignore_index=False,
         key=None,
     )
     check_unsupported_args("Series.sort_values", unsupported_args, arg_defaults)
 
+    # reusing dataframe sort_values() in implementation.
+    # TODO(ehsan): use a direct kernel to avoid compilation overhead
     def impl(
         S,
         axis=0,
@@ -1632,13 +1637,138 @@ def overload_series_sort_values(
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        df = bodo.hiframes.pd_dataframe_ext.init_dataframe((arr,), index, ("A",))
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (arr,), index, ("$_bodo_col_",)
+        )
         sorted_df = df.sort_values(
-            ["A"], ascending=ascending, inplace=inplace, na_position=na_position
+            ["$_bodo_col_"],
+            ascending=ascending,
+            inplace=inplace,
+            na_position=na_position,
         )
         out_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(sorted_df, 0)
         out_index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(sorted_df)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
+
+    return impl
+
+
+def get_bin_inds(bins, arr):  # pragma: no cover
+    return arr
+
+
+@overload(get_bin_inds, inline="always", no_unliteral=True)
+def overload_get_bin_inds(bins, arr):
+    """get bin indices for values in array. equivalent to Pandas code here:
+    https://github.com/pandas-dev/pandas/blob/ee18cb5b19357776deffa434a3b9a552fe50af32/pandas/core/reshape/tile.py#L421-L426
+    """
+
+    def impl(bins, arr):  # pragma: no cover
+        bins = bodo.utils.conversion.coerce_to_ndarray(bins)
+        numba.parfors.parfor.init_prange()
+        n = len(arr)
+        out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(arr, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
+            val = arr[i]
+            if val == bins[0]:
+                ind = 1
+            else:
+                ind = np.searchsorted(bins, val)
+            if ind == 0 or ind == len(bins):
+                bodo.libs.array_kernels.setna(out_arr, i)
+            else:
+                out_arr[i] = ind - 1
+        return out_arr
+
+    return impl
+
+
+# copied from Pandas with minor modification:
+# https://github.com/pandas-dev/pandas/blob/ee18cb5b19357776deffa434a3b9a552fe50af32/pandas/core/reshape/tile.py#L616
+@register_jitable
+def _round_frac(x, precision: int):  # pragma: no cover
+    """
+    Round the fractional part of the given number
+    """
+    if not np.isfinite(x) or x == 0:
+        return x
+    else:
+        # replace modf with divmod since not supported in Numba (TODO: support in Numba)
+        # frac, whole = np.modf(x)
+        whole, frac = np.divmod(x, 1)
+
+        if whole == 0:
+            digits = -int(np.floor(np.log10(abs(frac)))) - 1 + precision
+        else:
+            digits = precision
+        return np.around(x, digits)
+
+
+# copied from Pandas with minor modification:
+# https://github.com/pandas-dev/pandas/blob/ee18cb5b19357776deffa434a3b9a552fe50af32/pandas/core/reshape/tile.py#L631
+@register_jitable
+def _infer_precision(base_precision: int, bins) -> int:  # pragma: no cover
+    """
+    Infer an appropriate precision for _round_frac
+    """
+    for precision in range(base_precision, 20):
+        levels = np.array([_round_frac(b, precision) for b in bins])
+        if len(np.unique(levels)) == len(bins):
+            return precision
+    return base_precision  # default
+
+
+def get_bin_labels(bins):  # pragma: no cover
+    pass
+
+
+@overload(get_bin_labels, no_unliteral=True)
+def overload_get_bin_labels(bins):
+    """
+    Get labels from bins. Equivalent to Pandas code here:
+    https://github.com/pandas-dev/pandas/blob/ee18cb5b19357776deffa434a3b9a552fe50af32/pandas/core/reshape/tile.py#L552
+    """
+
+    dtype = np.float64 if isinstance(bins.dtype, types.Integer) else bins.dtype
+
+    def impl(bins):  # pragma: no cover
+        base_precision = 3  # default precision of pd.cut() used in value_counts()
+        precision = _infer_precision(base_precision, bins)
+        breaks = np.array([_round_frac(b, precision) for b in bins], dtype=dtype)
+        # adjust lhs of first interval by precision to account for being right closed
+        breaks[0] = breaks[0] - 10.0 ** (-precision)
+        interval_arr = bodo.libs.interval_arr_ext.init_interval_array(
+            breaks[:-1], breaks[1:]
+        )
+        return bodo.hiframes.pd_index_ext.init_interval_index(interval_arr, None)
+
+    return impl
+
+
+def get_output_bin_counts(count_series, nbins):  # pragma: no cover
+    pass
+
+
+@overload(get_output_bin_counts, no_unliteral=True)
+def overload_get_output_bin_counts(count_series, nbins):
+    """
+    Get output bin counts from value counts. Needs special handling since some bins
+    may be empty, and the output has to be sorted.
+    https://github.com/pandas-dev/pandas/blob/ee18cb5b19357776deffa434a3b9a552fe50af32/pandas/core/algorithms.py#L846
+    """
+
+    def impl(count_series, nbins):  # pragma: no cover
+        count_arr = bodo.hiframes.pd_series_ext.get_series_data(count_series)
+        count_ind = bodo.utils.conversion.index_to_array(
+            bodo.hiframes.pd_series_ext.get_series_index(count_series)
+        )
+        out_arr = np.zeros(nbins, np.int64)
+        for i in range(len(count_arr)):
+            out_arr[count_ind[i]] = count_arr[i]
+        return out_arr
 
     return impl
 
@@ -1653,37 +1783,72 @@ def overload_series_value_counts(
     dropna=True,
     _index_name=None,  # bodo argument. See groupby.value_counts
 ):
-    unsupported_args = dict(normalize=normalize, sort=sort, bins=bins, dropna=dropna)
-    arg_defaults = dict(normalize=False, sort=True, bins=None, dropna=True)
+    unsupported_args = dict(normalize=normalize, sort=sort, dropna=dropna)
+    arg_defaults = dict(normalize=False, sort=True, dropna=True)
     check_unsupported_args("Series.value_counts", unsupported_args, arg_defaults)
+
+    is_bins = not is_overload_none(bins)
 
     # reusing aggregate/count
     # TODO(ehsan): write optimized implementation
-    def impl(
-        S,
-        normalize=False,
-        sort=True,
-        ascending=False,
-        bins=None,
-        dropna=True,
-        _index_name=None,  # bodo argument. See groupby.value_counts
-    ):  # pragma: no cover
-        # create a dummy dataframe to use groupby/count and sort_values
-        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        dummy_index = bodo.hiframes.pd_index_ext.init_range_index(0, len(arr), 1, None)
-        in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-            (arr, arr), dummy_index, ("A", "B")
-        )
-        count_df = in_df.groupby("A").count().sort_values("B", ascending=ascending)
-        # create the output Series and remove "A"/"B" labels from index/column
-        ind_arr = bodo.utils.conversion.coerce_to_array(
-            bodo.hiframes.pd_dataframe_ext.get_dataframe_index(count_df)
-        )
-        index = pd.Index(ind_arr, name=_index_name)
-        count_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(count_df, 0)
-        return bodo.hiframes.pd_series_ext.init_series(count_arr, index, name)
+    func_text = "def impl(\n"
+    func_text += "    S,\n"
+    func_text += "    normalize=False,\n"
+    func_text += "    sort=True,\n"
+    func_text += "    ascending=False,\n"
+    func_text += "    bins=None,\n"
+    func_text += "    dropna=True,\n"
+    func_text += "    _index_name=None,  # bodo argument. See groupby.value_counts\n"
+    func_text += "):\n"
 
+    func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+
+    if is_bins:
+        func_text += "    arr = get_bin_inds(bins, arr)\n"
+
+    # create a dummy dataframe to use groupby/count and sort_values
+    func_text += "    in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(\n"
+    func_text += "        (arr,), index, ('$_bodo_col2_',)\n"
+    func_text += "    )\n"
+    func_text += "    count_series = in_df.groupby('$_bodo_col2_').size()\n"
+
+    if is_bins:
+        func_text += "    count_series = bodo.gatherv(count_series, allgather=True, warn_if_rep=False)\n"
+        func_text += (
+            "    count_arr = get_output_bin_counts(count_series, len(bins) - 1)\n"
+        )
+        func_text += "    index = get_bin_labels(bins)\n"
+    else:
+        # create the output Series and remove "$_bodo_col2_" labels from index/column
+        func_text += "    count_arr = bodo.hiframes.pd_series_ext.get_series_data(count_series)\n"
+        func_text += "    ind_arr = bodo.utils.conversion.coerce_to_array(\n"
+        func_text += (
+            "        bodo.hiframes.pd_series_ext.get_series_index(count_series)\n"
+        )
+        func_text += "    )\n"
+        func_text += "    index = bodo.utils.conversion.index_from_array(ind_arr, name=_index_name)\n"
+
+    func_text += (
+        "    res = bodo.hiframes.pd_series_ext.init_series(count_arr, index, name)\n"
+    )
+    func_text += "    res = res.sort_values(ascending=ascending)\n"
+    func_text += "    return res\n"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "pd": pd,
+            "get_bin_inds": get_bin_inds,
+            "get_bin_labels": get_bin_labels,
+            "get_output_bin_counts": get_output_bin_counts,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
     return impl
 
 
@@ -1847,7 +2012,6 @@ def overload_series_isin(S, values):
             A = bodo.hiframes.pd_series_ext.get_series_data(S)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
-            numba.parfors.parfor.init_prange()
             n = len(A)
             out_arr = np.empty(n, np.bool_)
             bodo.libs.array.array_isin(out_arr, A, values_arr, False)
