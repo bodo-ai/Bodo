@@ -156,6 +156,7 @@ struct bodo_array_type {
         ARROW = 4,              // Arrow Array
         CATEGORICAL = 5,
         ARRAY_ITEM = 6,
+        INTERVAL = 7,
         // string_array_split_view_type, etc.
     };
 };

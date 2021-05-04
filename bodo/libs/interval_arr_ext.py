@@ -16,6 +16,7 @@ from numba.extending import (
     models,
     overload,
     overload_attribute,
+    overload_method,
     register_model,
     typeof_impl,
     unbox,
@@ -204,3 +205,11 @@ def overload_interval_arr_shape(A):
 @overload_attribute(IntervalArrayType, "ndim")
 def overload_interval_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
+
+
+@overload_method(IntervalArrayType, "copy", no_unliteral=True)
+def overload_interval_arr_copy(A):
+    return lambda A: bodo.libs.interval_arr_ext.init_interval_array(
+        A._left.copy(),
+        A._right.copy(),
+    )  # pragma: no cover
