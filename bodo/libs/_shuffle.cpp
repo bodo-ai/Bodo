@@ -1793,6 +1793,17 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             MPI_Bcast(out_arr->data1, n_rows, mpi_typ, mpi_root,
                       MPI_COMM_WORLD);
         }
+        if (arr_type == bodo_array_type::INTERVAL) {
+            MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+            if (myrank == mpi_root)
+                out_arr = copy_array(in_arr);
+            else
+                out_arr = alloc_array(n_rows, -1, -1, arr_type, dtype, 0, 0);
+            MPI_Bcast(out_arr->data1, n_rows, mpi_typ, mpi_root,
+                      MPI_COMM_WORLD);
+            MPI_Bcast(out_arr->data2, n_rows, mpi_typ, mpi_root,
+                      MPI_COMM_WORLD);
+        }
         if (arr_type == bodo_array_type::STRING) {
             MPI_Datatype mpi_typ_offset = get_MPI_typ(Bodo_CType_offset);
             MPI_Datatype mpi_typ8 = get_MPI_typ(Bodo_CTypes::UINT8);
@@ -2219,6 +2230,28 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                 data1_ptr = out_arr->data1;
             }
             MPI_Gengatherv(in_arr->data1, n_rows, mpi_typ, data1_ptr,
+                           rows_counts.data(), rows_disps.data(), mpi_typ,
+                           mpi_root, MPI_COMM_WORLD, all_gather);
+        }
+        if (arr_type == bodo_array_type::INTERVAL) {
+            MPI_Datatype mpi_typ = get_MPI_typ(dtype);
+            // Computing the total number of rows.
+            // On mpi_root, all rows, on others just 1 row for consistency.
+            int64_t n_rows_tot = 0;
+            for (int i_p = 0; i_p < n_pes; i_p++)
+                n_rows_tot += arr_gath_r[3 * i_p];
+            char* data1_ptr = NULL;
+            char* data2_ptr = NULL;
+            if (myrank == mpi_root || all_gather) {
+                out_arr = alloc_array(n_rows_tot, -1, -1, arr_type, dtype, 0,
+                                      num_categories);
+                data1_ptr = out_arr->data1;
+                data2_ptr = out_arr->data2;
+            }
+            MPI_Gengatherv(in_arr->data1, n_rows, mpi_typ, data1_ptr,
+                           rows_counts.data(), rows_disps.data(), mpi_typ,
+                           mpi_root, MPI_COMM_WORLD, all_gather);
+            MPI_Gengatherv(in_arr->data2, n_rows, mpi_typ, data2_ptr,
                            rows_counts.data(), rows_disps.data(), mpi_typ,
                            mpi_root, MPI_COMM_WORLD, all_gather);
         }

@@ -337,6 +337,33 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
             out_arr->set_null_bit(iRow, bit);
         }
     }
+    if (arr_type == bodo_array_type::INTERVAL) {
+        // Interval array requires copying left and right data
+        uint64_t siztype = numpy_item_size[dtype];
+        std::vector<char> vectNaN = RetrieveNaNentry(dtype);
+        char* left_data = in_arr->data1;
+        char* right_data = in_arr->data2;
+        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+        char* out_left_data = out_arr->data1;
+        char* out_right_data = out_arr->data2;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            int64_t idx = f(iRow);
+            char* out_left_ptr = out_left_data + siztype * iRow;
+            char* out_right_ptr = out_right_data + siztype * iRow;
+            char* in_left_ptr;
+            char* in_right_ptr;
+            // To allow NaN values in the column.
+            if (idx >= 0) {
+                in_left_ptr = left_data + siztype * idx;
+                in_right_ptr = right_data + siztype * idx;
+            } else {
+                in_left_ptr = vectNaN.data();
+                in_right_ptr = vectNaN.data();
+            }
+            memcpy(out_left_ptr, in_left_ptr, siztype);
+            memcpy(out_right_ptr, in_right_ptr, siztype);
+        }
+    }
     if (arr_type == bodo_array_type::CATEGORICAL) {
         // In the case of CATEGORICAL array we have only to put a single
         // entry. For the NaN entry the value is -1.
