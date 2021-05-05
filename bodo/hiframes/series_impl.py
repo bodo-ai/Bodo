@@ -1787,6 +1787,39 @@ def overload_get_output_bin_counts(count_series, nbins):
     return impl
 
 
+def compute_bins(nbins, min_val, max_val):
+    pass
+
+
+@overload(compute_bins, no_unliteral=True)
+def overload_compute_bins(nbins, min_val, max_val):
+    """compute bin boundaries from number of bins and min/max of dataset values. See:
+    https://github.com/pandas-dev/pandas/blob/ee18cb5b19357776deffa434a3b9a552fe50af32/pandas/core/reshape/tile.py#L239
+    """
+
+    def impl(nbins, min_val, max_val):  # pragma: no cover
+        if nbins < 1:
+            raise ValueError("`bins` should be a positive integer.")
+        min_val = min_val + 0.0
+        max_val = max_val + 0.0
+        if np.isinf(min_val) or np.isinf(max_val):
+            raise ValueError(
+                "cannot specify integer `bins` when input data contains infinity"
+            )
+        elif min_val == max_val:  # adjust end points before binning
+            min_val -= 0.001 * abs(min_val) if min_val != 0 else 0.001
+            max_val += 0.001 * abs(max_val) if max_val != 0 else 0.001
+            bins = np.linspace(min_val, max_val, nbins + 1, endpoint=True)
+        else:  # adjust end points after binning
+            bins = np.linspace(min_val, max_val, nbins + 1, endpoint=True)
+            adj = (max_val - min_val) * 0.001  # 0.1% of the range
+            bins[0] -= adj
+
+        return bins
+
+    return impl
+
+
 @overload_method(SeriesType, "value_counts", inline="always", no_unliteral=True)
 def overload_series_value_counts(
     S,
@@ -1820,7 +1853,20 @@ def overload_series_value_counts(
     func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
 
     if is_bins:
-        func_text += "    bins = bodo.utils.conversion.coerce_to_ndarray(bins)\n"
+        if isinstance(bins, types.Integer):
+            # TODO(ehsan): use array kernels to avoid compilation overhead
+            func_text += "    min_val = S.min()\n"
+            func_text += "    max_val = S.max()\n"
+            if S.dtype == bodo.datetime64ns:
+                # Timestamp to int
+                func_text += "    min_val = min_val.value\n"
+                func_text += "    max_val = max_val.value\n"
+            func_text += "    bins = compute_bins(bins, min_val, max_val)\n"
+            if S.dtype == bodo.datetime64ns:
+                # compute_bins() returns float values, should be converted to datetime64
+                func_text += "    bins = bins.astype(np.int64).view(np.dtype('datetime64[ns]'))\n"
+        else:
+            func_text += "    bins = bodo.utils.conversion.coerce_to_ndarray(bins)\n"
         func_text += "    arr = get_bin_inds(bins, arr)\n"
 
     # create a dummy dataframe to use groupby/count and sort_values
@@ -1858,9 +1904,11 @@ def overload_series_value_counts(
         {
             "bodo": bodo,
             "pd": pd,
+            "np": np,
             "get_bin_inds": get_bin_inds,
             "get_bin_labels": get_bin_labels,
             "get_output_bin_counts": get_output_bin_counts,
+            "compute_bins": compute_bins,
         },
         loc_vars,
     )
