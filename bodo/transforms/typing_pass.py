@@ -1074,6 +1074,10 @@ class TypingTransforms:
             "map": [(0, "arg")],
             "apply": [(0, "func")],
             "to_frame": [(0, "name")],
+            "value_counts": [
+                (0, "normalize"),
+                (1, "sort"),
+            ],
         }
 
         if func_name in series_call_const_args:

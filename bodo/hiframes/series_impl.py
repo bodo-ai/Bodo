@@ -1830,8 +1830,8 @@ def overload_series_value_counts(
     dropna=True,
     _index_name=None,  # bodo argument. See groupby.value_counts
 ):
-    unsupported_args = dict(normalize=normalize, sort=sort, dropna=dropna)
-    arg_defaults = dict(normalize=False, sort=True, dropna=True)
+    unsupported_args = dict(dropna=dropna)
+    arg_defaults = dict(dropna=True)
     check_unsupported_args("Series.value_counts", unsupported_args, arg_defaults)
 
     is_bins = not is_overload_none(bins)
@@ -1895,7 +1895,11 @@ def overload_series_value_counts(
     func_text += (
         "    res = bodo.hiframes.pd_series_ext.init_series(count_arr, index, name)\n"
     )
-    func_text += "    res = res.sort_values(ascending=ascending)\n"
+    if is_overload_true(sort):
+        func_text += "    res = res.sort_values(ascending=ascending)\n"
+    if is_overload_true(normalize):
+        size_str = "len(S)" if is_bins else "count_arr.sum()"
+        func_text += f"    res = res / float({size_str})\n"
     func_text += "    return res\n"
 
     loc_vars = {}
