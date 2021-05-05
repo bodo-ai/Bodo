@@ -1664,7 +1664,6 @@ def overload_get_bin_inds(bins, arr):
     """
 
     def impl(bins, arr):  # pragma: no cover
-        bins = bodo.utils.conversion.coerce_to_ndarray(bins)
         numba.parfors.parfor.init_prange()
         n = len(arr)
         out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
@@ -1733,6 +1732,21 @@ def overload_get_bin_labels(bins):
     """
 
     dtype = np.float64 if isinstance(bins.dtype, types.Integer) else bins.dtype
+
+    # datetime64 case
+    if dtype == bodo.datetime64ns:
+        td64_1 = bodo.timedelta64ns(1)  # pandas subtracts 1ns in case of datetime64
+
+        def impl_dt64(bins):  # pragma: no cover
+            breaks = bins.copy()
+            # adjust first interval by precision to account for being right closed
+            breaks[0] = breaks[0] - td64_1
+            interval_arr = bodo.libs.interval_arr_ext.init_interval_array(
+                breaks[:-1], breaks[1:]
+            )
+            return bodo.hiframes.pd_index_ext.init_interval_index(interval_arr, None)
+
+        return impl_dt64
 
     def impl(bins):  # pragma: no cover
         base_precision = 3  # default precision of pd.cut() used in value_counts()
@@ -1806,6 +1820,7 @@ def overload_series_value_counts(
     func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
 
     if is_bins:
+        func_text += "    bins = bodo.utils.conversion.coerce_to_ndarray(bins)\n"
         func_text += "    arr = get_bin_inds(bins, arr)\n"
 
     # create a dummy dataframe to use groupby/count and sort_values
@@ -1815,6 +1830,7 @@ def overload_series_value_counts(
     func_text += "    count_series = in_df.groupby('$_bodo_col2_').size()\n"
 
     if is_bins:
+        # replicate output in the bins case since it is small
         func_text += "    count_series = bodo.gatherv(count_series, allgather=True, warn_if_rep=False)\n"
         func_text += (
             "    count_arr = get_output_bin_counts(count_series, len(bins) - 1)\n"
