@@ -402,7 +402,7 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.unique` the output is assumed to be "small" relative to input and is replicated.
   Use Series.drop_duplicates() if the output should remain distributed.
 * :meth:`pandas.Series.nunique`
-* :meth:`pandas.Series.value_counts`
+* :meth:`pandas.Series.value_counts` all optional arguments except `dropna` are supported.
 * :meth:`pandas.Series.between`
 
 
