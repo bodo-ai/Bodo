@@ -4532,12 +4532,34 @@ def test_series_value_counts(memory_leak_check):
     def impl3(S):
         return S.value_counts(bins=[-1, 3, 7])
 
+    def impl4(S):
+        return S.value_counts(
+            bins=[
+                pd.Timestamp("2017-01-01"),
+                pd.Timestamp("2017-01-05"),
+                pd.Timestamp("2017-01-15"),
+                pd.Timestamp("2017-01-21"),
+            ]
+        )
+
     S = pd.Series(["AA", "BB", "C", "AA", "C", "AA"])
     check_func(impl1, (S,))
     S = pd.Series([1.1, 2.2, 1.3, 4.4, 3.0, 1.7, np.nan, 6.6, 4.3, np.nan])
     check_func(impl2, (S,), check_dtype=False, is_out_distributed=False)
     S = pd.Series(pd.array([-1, 4, None, 7, 11, 2, 5, 6, None, 1, -11]))
     check_func(impl3, (S,), check_dtype=False, is_out_distributed=False)
+    S = pd.Series(
+        [
+            pd.Timestamp("2017-01-01"),
+            pd.Timestamp("2017-01-03"),
+            pd.Timestamp("2017-01-01"),
+            pd.Timestamp("2017-01-01"),
+            pd.Timestamp("2017-01-03"),
+            pd.Timestamp("2017-01-11"),
+            pd.Timestamp("2017-01-7"),
+        ]
+    )
+    check_func(impl4, (S,), check_dtype=False, is_out_distributed=False)
 
 
 def test_series_sum(memory_leak_check):
