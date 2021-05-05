@@ -13,9 +13,38 @@ import bodo
 from bodo.utils.typing import BodoError
 
 
-# TODO: Replace with a more general testing framework in the future.
+def bodo_check_figures_equal(*, extensions=("png", "pdf", "svg"), tol=0):
+    """
+    Bodo decorate around check_figures_equal that only compares
+    values on rank 0.
+
+    Example usage: @bodo_check_figures_equal(extensions=["png"], tol=0.1)
+    """
+    if bodo.get_rank() == 0:
+        return check_figures_equal(extensions=extensions, tol=tol)
+    else:
+        # If we aren't on rank 0, we want to run the same code but not
+        # generate any files
+        def decorator(func):
+            def wrapper(*args, request, **kwargs):
+                # Generate a fake fig_test and fig_ref to match mpl decorator
+                # behavior
+                fig_test = matplotlib.pyplot.figure()
+                fig_ref = matplotlib.pyplot.figure()
+                # Wrap the function call in a try so we can close the figures.
+                try:
+                    func(*args, fig_test=fig_test, fig_ref=fig_ref, **kwargs)
+                finally:
+                    matplotlib.pyplot.close(fig_test)
+                    matplotlib.pyplot.close(fig_ref)
+
+            return wrapper
+
+        return decorator
+
+
 # TODO: Determine a reasonable value for tol
-@check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_usage_example(fig_test, fig_ref):
     """
     Tests a basic example from the matplotlib user guide.
@@ -31,14 +60,12 @@ def test_usage_example(fig_test, fig_ref):
         ax.set_ylabel("y label")  # Add a y-label to the axes.
         ax.set_title("Simple Plot")  # Add a title to the axes.
         ax.legend()  # Add a legend.
-        # Add a barrier so rank 0 has always written the file.
-        bodo.barrier()
 
     impl(fig_ref)
     bodo.jit(impl)(fig_test)
 
 
-@check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_usage_axes_example(fig_test, fig_ref):
     """
     Tests a basic example from the matplotlib user guide with multiple axes.
@@ -54,14 +81,12 @@ def test_usage_axes_example(fig_test, fig_ref):
         axes[1][0].set_ylabel("y label")  # Add a y-label to the axes.
         axes[1][0].set_title("Simple Plot")  # Add a title to the axes.
         axes[1][0].legend()  # Add a legend.
-        # Add a barrier so rank 0 has always written the file.
-        bodo.barrier()
 
     impl(fig_ref)
     bodo.jit(impl)(fig_test)
 
 
-@check_figures_equal(extensions=["png"], tol=0.1)
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_usage_replicated_example(fig_test, fig_ref):
     """
     Tests a basic example from the matplotlib user guide with replicated data.
@@ -76,8 +101,6 @@ def test_usage_replicated_example(fig_test, fig_ref):
         ax.set_ylabel("y label")  # Add a y-label to the axes.
         ax.set_title("Simple Plot")  # Add a title to the axes.
         ax.legend()  # Add a legend.
-        # Add a barrier so rank 0 has always written the file.
-        bodo.barrier()
 
     x = np.linspace(0, 2, 100)
     impl(x, fig_ref)
