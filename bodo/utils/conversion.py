@@ -964,9 +964,11 @@ def overload_index_from_array(data, name=None):
             data, name
         )  # pragma: no cover
 
-    assert (
-        isinstance(data, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType))
-        or data == bodo.hiframes.datetime_date_ext.datetime_date_array_type
+    assert isinstance(
+        data, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType)
+    ) or data in (
+        bodo.hiframes.datetime_date_ext.datetime_date_array_type,
+        bodo.boolean_array,
     )
 
     if (
@@ -982,7 +984,7 @@ def overload_index_from_array(data, name=None):
             data, name=name
         )  # pragma: no cover
 
-    if isinstance(data.dtype, (types.Integer, types.Float)):
+    if isinstance(data.dtype, (types.Integer, types.Float, types.Boolean)):
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_numeric_index(
             data, name
         )  # pragma: no cover
