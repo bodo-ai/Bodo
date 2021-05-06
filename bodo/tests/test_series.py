@@ -3614,8 +3614,7 @@ def test_series_tail_default_args(memory_leak_check):
     check_func(test_impl, (S,))
 
 
-# Pandas returns an empty df but Bodo is returning the whole df.
-@pytest.mark.skip("[BE-95]: Incorrect result")
+@pytest.mark.slow
 def test_series_tail_zero(memory_leak_check):
     S = pd.Series([3, 4, 0, 2, 5])
 

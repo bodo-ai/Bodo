@@ -595,11 +595,12 @@ def overload_dataframe_tail(df, n=5):
         raise BodoError("Dataframe.tail(): 'n' must be an Integer")
     # call tail() on column Series
     data_args = ", ".join(
-        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[-n:]"
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[m:]"
         for i in range(len(df.columns))
     )
     header = "def impl(df, n=5):\n"
-    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[-n:]"
+    header += "  m = bodo.hiframes.series_impl.tail_slice(len(df), n)\n"
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[m:]"
     return _gen_init_df(header, df.columns, data_args, index)
 
 
