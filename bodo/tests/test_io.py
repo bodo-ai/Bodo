@@ -501,6 +501,21 @@ def test_pq_processes_greater_than_string_rows(datapath):
     check_func(f, [datapath("small_strings.pq")])
 
 
+@pytest.mark.slow
+def test_csv_infer_type_error(datapath):
+    ints = [0] * 1000
+    strings = ["a"] * 1000
+    df = pd.DataFrame({"A": ints + strings})
+    filepath = datapath("test_csv_infer_type_error.csv", check_exists=False)
+    with ensure_clean(filepath):
+        df.to_csv(filepath, index=False)
+        message = r"pd.read_csv\(\): Bodo could not infer dtypes correctly."
+        with pytest.raises(TypeError, match=message):
+            bodo.jit(lambda: pd.read_csv(filepath), all_returns_distributed=True)()
+        with pytest.raises(TypeError, match=message):
+            bodo.jit(lambda: pd.read_csv(filepath), distributed=False)()
+
+
 def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
     """read_csv() handling code uses the first column for creating RangeIndex of the
     output dataframe. In cases where the first column array is dead, it should be
