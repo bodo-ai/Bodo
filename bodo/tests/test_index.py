@@ -1378,3 +1378,28 @@ def test_index_cmp_ops(op, memory_leak_check):
     check_func(test_impl, (S, S))
     check_func(test_impl, (S, 2))
     check_func(test_impl, (2, S))
+
+
+def test_boolean_index(memory_leak_check):
+    def impl1(arr):
+        idx = pd.Index(arr)
+        return idx
+
+    arr = np.array([True, False] * 10)
+    check_func(impl1, (arr,))
+
+    n_arr = pd.array([True, False, None, True, None] * 3)
+    check_func(impl1, (n_arr,))
+
+    def impl2(idx, data):
+        return pd.Series(data, index=idx)
+
+    idx = pd.Index(arr)
+    data = np.arange(20)
+    check_func(
+        impl2,
+        (
+            data,
+            idx,
+        ),
+    )
