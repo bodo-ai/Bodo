@@ -243,8 +243,8 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
         )
     # [BE-416] Support with list
     # [BE-433] Support with tuples
-    if func_name in ("first", "last", "sum", "prod", "min", "max") and isinstance(
-        arr_type, (TupleArrayType, ArrayItemArrayType)
+    if (func_name in ("first", "last", "sum", "prod", "min", "max", "count")) and (
+        isinstance(arr_type, (TupleArrayType, ArrayItemArrayType))
     ):
         return (
             None,
@@ -349,6 +349,19 @@ def get_pivot_output_dtype(arr_type, func_name, index_type=None):
     raise BodoError("invalid pivot operation")
 
 
+def check_args_kwargs(func_name, len_args, args, kws):
+    """ Check for extra incorrect arguments """
+    if len(kws) > 0:
+        bad_key = list(kws.keys())[0]
+        raise BodoError(
+            f"Groupby.{func_name}() got an unexpected keyword argument '{bad_key}'."
+        )
+    elif len(args) > len_args:
+        raise BodoError(
+            f"Groupby.{func_name}() takes {len_args+1} positional argument but {len(args)} were given."
+        )
+
+
 class ColumnType(Enum):
     KeyColumn = 0
     NumericalColumn = 1
@@ -405,6 +418,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
         # get output type for each selected column
         list_err_msg = []
         for c in grp.selection:
+            if func_name in ("size", "count"):
+                kws = dict(kws) if kws else {}
+                check_args_kwargs(func_name, 0, args, kws)
+
             # size always produces one integer output and doesn't depend on any input
             if func_name == "size":
                 out_data.append(types.Array(types.int64, 1, "C"))
@@ -835,6 +852,20 @@ class DataframeGroupByAttribute(AttributeTemplate):
         index = grp.df_type.index
         out_columns = []
         out_data = []
+        if name_operation in list_cumulative:
+            kws = dict(kws) if kws else {}
+            # pop arguments from kws or args
+            # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
+            axis = args[0] if len(args) > 0 else kws.pop("axis", 0)
+            numeric_only = args[1] if len(args) > 1 else kws.pop("numeric_only", False)
+            skipna = args[2] if len(args) > 2 else kws.pop("skipna", 1)
+            unsupported_args = dict(axis=axis, numeric_only=numeric_only)
+            arg_defaults = dict(axis=0, numeric_only=False)
+            check_unsupported_args(
+                f"Groupby.{name_operation}", unsupported_args, arg_defaults
+            )
+            check_args_kwargs(name_operation, 3, args, kws)
+
         for c in grp.selection:
             out_columns.append(c)
             ind = grp.df_type.columns.index(c)
@@ -856,17 +887,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     raise BodoError(msg)
 
             out_data.append(data)
-
-        if name_operation in bodo.utils.typing.list_cumulative:
-            # pop arguments from kws or args
-            # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
-            skipna = args[0] if len(args) > 0 else kws.pop("skipna", 1)
-            if len(kws) > 0:
-                bad_key = list(kws.keys())[0]
-                raise BodoError(
-                    f"Groupby.{name_operation} got an unexpected keyword argument '{bad_key}'"
-                )
-
+        if len(out_data) == 0:
+            raise BodoError("No columns in output.")
         out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
         # XXX output becomes series if single output and explicitly selected
         if len(grp.selection) == 1 and grp.explicit_select and grp.as_index:

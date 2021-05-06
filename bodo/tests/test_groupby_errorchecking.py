@@ -486,7 +486,7 @@ def test_groupby_cumsum_argument_check(memory_leak_check):
     ):
         bodo.jit(impl1)(df)
     with pytest.raises(
-        BodoError, match="Groupby.cumsum got an unexpected keyword argument 'wrongarg'"
+        BodoError, match="got an unexpected keyword argument 'wrongarg'"
     ):
         bodo.jit(impl2)(df)
 
@@ -523,7 +523,7 @@ def test_groupby_cumprod_argument_check(memory_leak_check):
     ):
         bodo.jit(impl1)(df)
     with pytest.raises(
-        BodoError, match="Groupby.cumprod got an unexpected keyword argument 'wrongarg'"
+        BodoError, match="got an unexpected keyword argument 'wrongarg'"
     ):
         bodo.jit(impl2)(df)
 
@@ -545,7 +545,7 @@ def test_groupby_nunique_argument_check(memory_leak_check):
     ):
         bodo.jit(impl1)(df)
     with pytest.raises(
-        BodoError, match="Groupby.nunique got an unexpected keyword argument 'wrongarg'"
+        BodoError, match="got an unexpected keyword argument 'wrongarg'"
     ):
         bodo.jit(impl2)(df)
 
@@ -1531,3 +1531,335 @@ def test_idxmin_idxmax_unsupported_types(df, memory_leak_check):
 
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl2)(df)
+
+
+# ------------------------------ df.groupby().cumulatives()------------------------------ #
+@pytest.mark.slow
+def test_cumultative_args(memory_leak_check):
+    """ Test Groupby.cumultatives (sum, prod, min, max) with arguments """
+
+    # keyword axis=1 cummin
+    def impl_cummin_axis_kwargs(df):
+        A = df.groupby("A").cummin(axis=1)
+        return A
+
+    # keyword axis=1 cummax
+    def impl_cummax_axis_kwargs(df):
+        A = df.groupby("A").cummax(axis=1)
+        return A
+
+    # keyword axis=1 cumsum
+    def impl_cumsum_axis_kwargs(df):
+        A = df.groupby("A").cumsum(axis=1)
+        return A
+
+    # keyword axis=1 cumprod
+    def impl_cumprod_axis_kwargs(df):
+        A = df.groupby("A").cumprod(axis=1)
+        return A
+
+    # args axis=1 cummin
+    def impl_cummin_axis_args(df):
+        A = df.groupby("A").cummin(1)
+        return A
+
+    # args axis=1 cummax
+    def impl_cummax_axis_args(df):
+        A = df.groupby("A").cummax(1)
+        return A
+
+    # args axis=1 cumsum
+    def impl_cumsum_axis_args(df):
+        A = df.groupby("A").cumsum(1)
+        return A
+
+    # args axis=1 cumprod
+    def impl_cumprod_axis_args(df):
+        A = df.groupby("A").cumprod(1)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [1.1, 2.2, 1.1, 3.3, 4.4, 3.2, 45.6, 10.0],
+        }
+    )
+    err_msg = "axis parameter only supports default value 0"
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_cummin_axis_kwargs)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_cummax_axis_kwargs)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_cumsum_axis_kwargs)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_cumprod_axis_kwargs)(df)
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_cummin_axis_args)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_cummax_axis_args)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_cumsum_axis_args)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_cumprod_axis_args)(df)
+
+
+@pytest.fixture(
+    params=[
+        # Decimal
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2, 2],
+                    "B": pd.Series(
+                        [
+                            Decimal("1.6"),
+                            Decimal("-0.2"),
+                            Decimal("44.2"),
+                            np.nan,
+                            Decimal("0"),
+                        ]
+                    ),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # datetime
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2, 3],
+                    "B": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 2, 3, 2, 1],
+                    "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                        pd.Series(data=[None], index=[4])
+                    ),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # timedelta
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 2, 3, 2, 1],
+                    "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # [BE-416] Support with list
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2],
+                    "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]]),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # Tuple
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2],
+                    "B": pd.Series([(1, 2), (3), (5, 4, 6), (-1, 3, 4)]),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # Categorical
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [16, 1, 1, 1, 16, 16],
+                    "B": pd.Categorical([1, 2, 5, 5, 3, 3], ordered=True),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # Timestamp
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [16, 1, 1, 1, 16],
+                    "B": [
+                        pd.Timestamp("20130101 09:00:00"),
+                        pd.Timestamp("20130101 09:00:02"),
+                        pd.Timestamp("20130101 09:00:03"),
+                        pd.Timestamp("20130101 09:00:05"),
+                        pd.Timestamp("20130101 09:00:06"),
+                    ],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # string
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [16, 1, 1, 1, 16, 16, 1, 40],
+                    "B": ["ab", "cd", "ef", "gh", "mm", "a", "abc", "x"],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # boolean
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 1, 2, 2, 1],
+                    "B": [True, True, False, True, True, False, False],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_cumulatives_df(request):
+    return request.param
+
+
+def test_cumulatives_unsupported_types(test_cumulatives_df, memory_leak_check):
+    """ Test cummin, cummax, cumprod, and cumsum with their unsupported Bodo types"""
+
+    def impl1(df):
+        A = df.groupby("A").cummin()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").cummax()
+        return A
+
+    def impl3(df):
+        A = df.groupby("A").cumsum()
+        return A
+
+    def impl4(df):
+        A = df.groupby("A").cumprod()
+        return A
+
+    err_msg = "only supports columns of types"
+
+    # cummin/cummax supports datetime and timedelta
+    if not isinstance(
+        test_cumulatives_df["B"].values[0],
+        (
+            np.timedelta64,
+            np.datetime64,
+        ),
+    ):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(impl1)(test_cumulatives_df)
+
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(impl2)(test_cumulatives_df)
+
+    # cumsum supports string and list of strings
+    if not isinstance(test_cumulatives_df["B"][0], str):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(impl3)(test_cumulatives_df)
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl4)(test_cumulatives_df)
+
+
+# ------------------------------ df.groupby().count()/size()------------------------------ #
+@pytest.mark.slow
+def test_count_size_args(memory_leak_check):
+    """ Test Groupby.size/count with arguments """
+
+    # keyword axis=1
+    def impl_size_kwargs(df):
+        A = df.groupby("A").size(axis=1)
+        return A
+
+    # args
+    def impl_size_args(df):
+        A = df.groupby("A").size(1)
+        return A
+
+    # keyword axis=1
+    def impl_count_kwargs(df):
+        A = df.groupby("A").count(axis=1)
+        return A
+
+    # args
+    def impl_count_args(df):
+        A = df.groupby("A").count(1)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [1.1, 2.2, 1.1, 3.3, 4.4, 3.2, 45.6, 10.0],
+        }
+    )
+    err_msg = "got an unexpected keyword argument."
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_size_kwargs)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_count_kwargs)(df)
+    err_msg = "takes 1 positional argument but "
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_size_args)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_count_args)(df)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "df",
+    [
+        # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3, 2, 1],
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                    pd.Series(data=[None], index=[4])
+                ),
+            }
+        ),
+        # [BE-416] Support with list
+        pd.DataFrame(
+            {"A": [2, 1, 1, 2], "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]])}
+        ),
+        # Tuple
+        pd.DataFrame(
+            {"A": [2, 1, 1, 2], "B": pd.Series([(1, 2), (3), (5, 4, 6), (-1, 3, 4)])}
+        ),
+    ],
+)
+def test_count_unsupported_types(df, memory_leak_check):
+    """ Test count with their unsupported Bodo types"""
+
+    def impl1(df):
+        A = df.groupby("A").count()
+        return A
+
+    err_msg = "not supported in groupby"
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(df)
+
+
+@pytest.mark.slow
+def test_size_supported_no_cols(memory_leak_check):
+    def impl1(df):
+        A = df.groupby("A").size()
+        return A
+
+    # Zero columns
+    df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl1)(df_empty)
