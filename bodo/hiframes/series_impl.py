@@ -1441,6 +1441,13 @@ def overload_series_head(S, n=5):
     return impl
 
 
+@numba.extending.register_jitable
+def tail_slice(k, n):
+    if n == 0:
+        return k
+    return -n
+
+
 @overload_method(SeriesType, "tail", inline="always", no_unliteral=True)
 def overload_series_tail(S, n=5):
     # n must be an integer for indexing.
@@ -1448,11 +1455,12 @@ def overload_series_tail(S, n=5):
         raise BodoError("Series.tail(): 'n' must be an Integer")
 
     def impl(S, n=5):  # pragma: no cover
+        m = tail_slice(len(S), n)
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        new_data = arr[-n:]
-        new_index = index[-n:]
+        new_data = arr[m:]
+        new_index = index[m:]
         return bodo.hiframes.pd_series_ext.init_series(new_data, new_index, name)
 
     return impl

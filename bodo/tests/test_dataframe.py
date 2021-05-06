@@ -1322,6 +1322,13 @@ def test_df_tail_no_args(memory_leak_check):
     check_func(impl, (df,))
 
 
+@pytest.mark.slow
+def test_df_tail_zero(memory_leak_check):
+    df = pd.DataFrame({"A": [1, 2, 3, 4, 5], "B": [-5, -4, -3, -2, -1]})
+    f = lambda df: df.tail(0)
+    check_func(f, [df])
+
+
 @pytest.mark.parametrize(
     "other", [pd.DataFrame({"A": np.arange(5), "C": np.arange(5) ** 2}), [2, 3, 4, 5]]
 )
