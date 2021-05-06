@@ -34,9 +34,9 @@ def datapath():
     """
     BASE_PATH = os.path.join(os.path.dirname(__file__), "data")
 
-    def deco(*args):
+    def deco(*args, check_exists=True):
         path = os.path.join(BASE_PATH, *args)
-        if not os.path.exists(path):
+        if check_exists and not os.path.exists(path):
             msg = "Could not find file {}."
             raise ValueError(msg.format(path))
         return path
