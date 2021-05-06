@@ -4511,6 +4511,253 @@ def test_size_agg(df_null, memory_leak_check):
     check_func(impl1, (df_null,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
+def test_cumulatives_supported_cases(memory_leak_check):
+    """
+    Test Groupby.cummin, cummax, cumsum, cumprod
+    """
+
+    def impl1(df):
+        A = df.groupby("A").cummin()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").cummax()
+        return A
+
+    def impl3(df):
+        A = df.groupby("A").cumsum()
+        return A
+
+    def impl4(df):
+        A = df.groupby("A").cumprod()
+        return A
+
+    # Empty dataframe
+    df = pd.DataFrame({"A": [], "B": []})
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+    check_func(impl3, (df,), sort_output=True)
+    check_func(impl4, (df,), sort_output=True)
+
+    # Zero columns
+    df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl1)(df_empty)
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl2)(df_empty)
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl3)(df_empty)
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl4)(df_empty)
+
+    # Test different column types in same dataframe
+    df_mix = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 2, 3],
+            "B": [1.1, 2.2, 3.3, 4.4, 1.1],
+            "C": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+        }
+    )
+    check_func(impl1, (df_mix,), sort_output=True, check_dtype=False)
+    check_func(impl2, (df_mix,), sort_output=True, check_dtype=False)
+    check_func(impl3, (df_mix,), sort_output=True, check_dtype=False)
+    check_func(impl4, (df_mix,), sort_output=True, check_dtype=False)
+
+
+@pytest.fixture(
+    params=[
+        # Decimal
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2, 2],
+                    "B": pd.Series(
+                        [
+                            Decimal("1.6"),
+                            Decimal("-0.2"),
+                            Decimal("44.2"),
+                            np.nan,
+                            Decimal("0"),
+                        ]
+                    ),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # datetime
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2, 3],
+                    "B": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # timedelta
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 2, 3, 2, 1],
+                    "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # Categorical
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [16, 1, 1, 1, 16, 16],
+                    "B": pd.Categorical([1, 2, 5, 5, 3, 3], ordered=True),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # Timestamp
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [16, 1, 1, 1, 16],
+                    "B": [
+                        pd.Timestamp("20130101 09:00:00"),
+                        pd.Timestamp("20130101 09:00:02"),
+                        pd.Timestamp("20130101 09:00:03"),
+                        pd.Timestamp("20130101 09:00:05"),
+                        pd.Timestamp("20130101 09:00:06"),
+                    ],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # string
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [16, 1, 1, 1, 16, 16, 1, 40],
+                    "B": ["ab", "cd", "ef", "gh", "mm", "a", "abc", "x"],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # nullable
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2, 3],
+                    "B": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # boolean
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 1, 2, 2, 1],
+                    "B": [True, True, False, True, True, False, False],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # DatetimeTimeDeltaType
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 2, 3, 2, 1],
+                    "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                        pd.Series(data=[None], index=[4])
+                    ),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # list
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2],
+                    "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]]),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # Tuple
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2],
+                    "B": pd.Series([(1, 2), (3), (5, 4, 6), (-1, 3, 4)]),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # Empty dataframe
+        pytest.param(
+            pd.DataFrame({"A": [], "B": []}),
+            marks=pytest.mark.slow,
+        ),
+        # Test different column types in same dataframe
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2, 3],
+                    "B": [1.1, 2.2, 3.3, 4.4, 1.1],
+                    "C": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_size_df(request):
+    return request.param
+
+
+def test_size_supported_types(test_size_df, memory_leak_check):
+    """
+    Test Groupby.size
+    Supports all since it doesn't care about type of column
+    """
+
+    def impl1(df):
+        A = df.groupby("A").size()
+        return A
+
+    check_func(impl1, (test_size_df,), sort_output=True)
+
+
+@pytest.mark.slow
+def test_count_supported_cases(memory_leak_check):
+    """
+    Test Groupby.count
+    """
+
+    def impl1(df):
+        A = df.groupby("A").count()
+        return A
+
+    # Empty dataframe
+    df = pd.DataFrame({"A": [], "B": []})
+    check_func(impl1, (df,), sort_output=True)
+
+    # Zero columns
+    df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
+    with pytest.raises(BodoError, match="No columns in output"):
+        bodo.jit(impl1)(df_empty)
+
+    # Test different column types in same dataframe
+    df_mix = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 2, 3],
+            "B": [1.1, 2.2, 3.3, 4.4, 1.1],
+            "C": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+        }
+    )
+    check_func(impl1, (df_mix,), sort_output=True, check_dtype=False)
+
+
 def test_value_counts():
     """ Test groupby.value_counts """
 
