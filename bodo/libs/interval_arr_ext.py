@@ -62,6 +62,10 @@ make_attribute_wrapper(IntervalArrayType, "right", "_right")
 
 @typeof_impl.register(pd.arrays.IntervalArray)
 def typeof_interval_array(val, c):
+    """get Numba type for IntervalArray object. Assuming left/right have the same
+    data type, which is enforced in Pandas here:
+    https://github.com/pandas-dev/pandas/blob/067749183490feebf0093648122e6a55b43e8c79/pandas/core/arrays/interval.py#L276
+    """
     arr_type = bodo.typeof(val._left)
     return IntervalArrayType(arr_type)
 
