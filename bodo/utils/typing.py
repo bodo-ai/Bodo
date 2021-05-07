@@ -1279,6 +1279,13 @@ def _gen_objmode_overload(func, output_type, method_name=None, single_rank=False
         else:
             args.remove(arg)
 
+    # Handle kwonly args. This assumes they have default values.
+    if func_spec.kwonlyargs is not None:
+        for arg in func_spec.kwonlyargs:
+            # write args as arg=arg to handle kwonly requirement
+            args.append(f"{arg}={arg}")
+            arg_strs.append(f"{arg}={str(func_spec.kwonlydefaults[arg])}")
+
     sig = ", ".join(arg_strs)
     args = ", ".join(args)
 

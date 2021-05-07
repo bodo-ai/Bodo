@@ -181,8 +181,21 @@ _binop_to_str = {
 
 
 # Matplotlib functions that must be replaced
-mpl_plt_kwargs_functions = ["plot", "subplots"]
-mpl_axes_kwargs_functions = ["plot", "set_xlabel", "set_ylabel", "set_title", "legend"]
+mpl_plt_kwargs_funcs = ["gca", "plot", "subplots", "suptitle", "tight_layout"]
+mpl_axes_kwargs_funcs = [
+    "annotate",
+    "plot",
+    "set_xlabel",
+    "set_ylabel",
+    "set_xscale",
+    "set_yscale",
+    "set_xticklabels",
+    "set_yticklabels",
+    "set_title",
+    "legend",
+    "grid",
+]
+mpl_figure_kwargs_funcs = ["suptitle", "tight_layout"]
 
 
 class SeriesPass:
@@ -1306,19 +1319,24 @@ class SeriesPass:
         # support matplot lib calls
         if bodo.compiler._matplotlib_installed:
             # matplotlib.pyplot functions
-            if (
-                func_mod == "matplotlib.pyplot"
-                and func_name in mpl_plt_kwargs_functions
-            ):
+            if func_mod == "matplotlib.pyplot" and func_name in mpl_plt_kwargs_funcs:
                 return self._run_call_matplotlib(lhs, rhs, func_mod, func_name)
 
-            # matplotlib.axes.Axes methods
-            if (
-                isinstance(func_mod, ir.Var)
-                and func_name in mpl_axes_kwargs_functions
-                and self.typemap[func_mod.name] == types.mpl_axes_type
-            ):
-                return self._run_call_matplotlib(lhs, rhs, func_mod, func_name)
+            # matplotlib methods
+            if isinstance(func_mod, ir.Var):
+                # axes
+                if (
+                    self.typemap[func_mod.name] == types.mpl_axes_type
+                    and func_name in mpl_axes_kwargs_funcs
+                ):
+                    return self._run_call_matplotlib(lhs, rhs, func_mod, func_name)
+
+                # figs
+                if (
+                    self.typemap[func_mod.name] == types.mpl_figure_type
+                    and func_name in mpl_figure_kwargs_funcs
+                ):
+                    return self._run_call_matplotlib(lhs, rhs, func_mod, func_name)
 
         # Handle inlining to avoid conflict with Numba np.hstack definition
         if fdef == ("hstack", "numpy"):

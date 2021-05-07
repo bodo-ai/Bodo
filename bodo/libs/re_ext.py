@@ -231,7 +231,7 @@ gen_objmode_method_overload(
     RePatternType, "fullmatch", re.Pattern.fullmatch, "re_match_type"
 )
 gen_objmode_method_overload(RePatternType, "split", re.Pattern.split, "list_str_type")
-gen_objmode_method_overload(RePatternType, "sub", re.Pattern.split, "unicode_type")
+gen_objmode_method_overload(RePatternType, "sub", re.Pattern.sub, "unicode_type")
 
 
 @overload_method(RePatternType, "findall", no_unliteral=True)
