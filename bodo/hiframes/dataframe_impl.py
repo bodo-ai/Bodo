@@ -266,7 +266,7 @@ def overload_dataframe_astype(df, dtype, copy=True, errors="raise"):
     args_default_dict = {"copy": True, "errors": "raise"}
     check_unsupported_args("df.astype", args_dict, args_default_dict)
 
-    # just call astype() on all column Series
+    # just call astype() on all column arrays
     # TODO: support categorical, dt64, etc.
     if is_overload_constant_dict(dtype) or is_overload_constant_series(dtype):
         dtype_const = (
@@ -275,14 +275,15 @@ def overload_dataframe_astype(df, dtype, copy=True, errors="raise"):
             else dict(get_overload_constant_series(dtype))
         )
         data_args = ", ".join(
-            f"df.iloc[:, {i}].astype({_get_dtype_str(dtype_const[c])}).values"
+            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {_get_dtype_str(dtype_const[c])}, copy)"
             if c in dtype_const
             else f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
             for i, c in enumerate(df.columns)
         )
     else:
         data_args = ", ".join(
-            f"df.iloc[:, {i}].astype(dtype).values" for i in range(len(df.columns))
+            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), dtype, copy)"
+            for i in range(len(df.columns))
         )
 
     header = "def impl(df, dtype, copy=True, errors='raise'):\n"
@@ -479,7 +480,8 @@ def overload_dataframe_filter(df, items=None, like=None, regex=None, axis=None):
 def overload_dataframe_isna(df):
     # call isna() on column Series
     data_args = ", ".join(
-        f"df.iloc[:, {i}].isna().values" for i in range(len(df.columns))
+        f"bodo.libs.array_ops.array_op_isna(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}))"
+        for i in range(len(df.columns))
     )
     header = "def impl(df):\n"
     return _gen_init_df(header, df.columns, data_args)
@@ -549,11 +551,14 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         # ex. np.number for all numeric types, np.object for all obj types,
         # "string" for all string types
         chosen_columns = tuple(
-            c for i, c in enumerate(chosen_columns) if df.data[i] not in exclude_types
+            c
+            for c in chosen_columns
+            if df.data[df.columns.index(c)] not in exclude_types
         )
 
     data_args = ", ".join(
-        f"df.iloc[:, {df.columns.index(c)}].values" for c in chosen_columns
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)})"
+        for c in chosen_columns
     )
     # Define our function
     header = "def impl(df, include=None, exclude=None):\n"
@@ -566,7 +571,8 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
 def overload_dataframe_notna(df):
     # call notna() on column Series
     data_args = ", ".join(
-        f"df.iloc[:, {i}].notna().values" for i in range(len(df.columns))
+        f"bodo.libs.array_ops.array_op_isna(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})) == False"
+        for i in range(len(df.columns))
     )
     header = "def impl(df):\n"
     return _gen_init_df(header, df.columns, data_args)
@@ -845,8 +851,10 @@ def overload_dataframe_cov(df, min_periods=None, ddof=1):
 @overload_method(DataFrameType, "count", inline="always", no_unliteral=True)
 def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
     # TODO: numeric_only flag
-    data_args = ", ".join(f"df.iloc[:, {i}].count()" for i in range(len(df.columns)))
-
+    data_args = ", ".join(
+        f"bodo.libs.array_ops.array_op_count(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}))"
+        for i in range(len(df.columns))
+    )
     func_text = "def impl(df, axis=0, level=None, numeric_only=False):\n"
     func_text += "  data = np.array([{}])\n".format(data_args)
     func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, df.columns)\n"
@@ -861,7 +869,10 @@ def overload_dataframe_nunique(df, axis=0, dropna=True):
     unsupported_args = dict(axis=0, dropna=dropna)
     arg_defaults = dict(axis=0, dropna=True)
     check_unsupported_args("DataFrame.nunique", unsupported_args, arg_defaults)
-    data_args = ", ".join(f"df.iloc[:, {i}].nunique()" for i in range(len(df.columns)))
+    data_args = ", ".join(
+        f"bodo.libs.array_kernels.nunique(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}))"
+        for i in range(len(df.columns))
+    )
     func_text = "def impl(df, axis=0, dropna=True):\n"
     func_text += "  data = np.asarray(({},))\n".format(data_args)
     func_text += "  return bodo.hiframes.pd_series_ext.init_series(data, df.columns)\n"
@@ -1142,8 +1153,25 @@ def _gen_reduce_impl_axis0(df, func_name, out_colnames, comm_dtype, args):
     ):
         typ_cast = ", dtype=np.float32"
 
+    kernel_func_name = f"bodo.libs.array_ops.array_op_{func_name}"
+    kernel_args = ""
+    if func_name in ["sum", "prod"]:
+        # skipna isn't supported by sum or prod
+        kernel_args = "True, min_count"
+    elif func_name in ["idxmax", "idxmin"]:
+        kernel_args = "index"
+    elif func_name == "quantile":
+        kernel_args = "q"
+    elif func_name in ["std", "var"]:
+        # skipna isn't supported by std or var
+        kernel_args = "True, ddof"
+    elif func_name == "median":
+        # skipna isn't supported by median
+        kernel_args = "True"
+
     data_args = ", ".join(
-        f"df.iloc[:, {df.columns.index(c)}].{func_name}({args})" for c in out_colnames
+        f"{kernel_func_name}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)}), {kernel_args})"
+        for c in out_colnames
     )
 
     func_text = ""
@@ -1152,6 +1180,9 @@ def _gen_reduce_impl_axis0(df, func_name, out_colnames, comm_dtype, args):
         # idxmax/idxmin don't cast type since just index value is produced
         # but need to convert tuple of Timestamp to dt64 array
         # see idxmax test numeric_df_value[6]
+        func_text += (
+            "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
+        )
         func_text += "  data = bodo.utils.conversion.coerce_to_array(({},))\n".format(
             data_args
         )
@@ -1227,7 +1258,8 @@ def overload_dataframe_pct_change(
     check_unsupported_args("DataFrame.pct_change", unsupported_args, arg_defaults)
 
     data_args = ", ".join(
-        f"df.iloc[:, {i}].pct_change(periods).values" for i in range(len(df.columns))
+        f"bodo.hiframes.rolling.pct_change(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), periods, False)"
+        for i in range(len(df.columns))
     )
     header = "def impl(df, periods=1, fill_method='pad', limit=None, freq=None):\n"
     return _gen_init_df(header, df.columns, data_args)
@@ -1240,7 +1272,8 @@ def overload_dataframe_cumprod(df, axis=None, skipna=True):
     check_unsupported_args("DataFrame.cumprod", unsupported_args, arg_defaults)
 
     data_args = ", ".join(
-        f"df.iloc[:, {i}].values.cumprod()" for i in range(len(df.columns))
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}).cumprod()"
+        for i in range(len(df.columns))
     )
     header = "def impl(df, axis=None, skipna=True):\n"
     return _gen_init_df(header, df.columns, data_args)
@@ -1253,7 +1286,8 @@ def overload_dataframe_cumsum(df, axis=None, skipna=True):
     check_unsupported_args("DataFrame.cumsum", unsupported_args, arg_defaults)
 
     data_args = ", ".join(
-        f"df.iloc[:, {i}].values.cumsum()" for i in range(len(df.columns))
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}).cumsum()"
+        for i in range(len(df.columns))
     )
 
     header = "def impl(df, axis=None, skipna=True):\n"
@@ -1291,7 +1325,7 @@ def overload_dataframe_describe(
 
     header = "def impl(df, percentiles=None, include=None, exclude=None, datetime_is_numeric=False):\n"
     data_args = ", ".join(
-        f"bodo.utils.conversion.coerce_to_array(df.iloc[:, {df.columns.index(i)}].describe().values)"
+        f"bodo.utils.conversion.coerce_to_array(bodo.libs.array_ops.array_op_describe(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(i)})))"
         for i in numeric_cols
     )
     index = (

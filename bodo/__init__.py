@@ -68,6 +68,7 @@ import bodo.hiframes.pd_timestamp_ext
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 import bodo.libs.binops_ext
+import bodo.libs.array_ops
 from bodo.utils.utils import cprint
 from bodo.hiframes.datetime_date_ext import datetime_date_type, datetime_date_array_type
 from bodo.hiframes.datetime_timedelta_ext import (

@@ -1004,6 +1004,7 @@ def test_series_astype_cat(S):
     check_func(test_impl, (S, ctype))
     # partial dtype values to force NA
     new_cats = ctype.categories.tolist()[:-1]
+    np.random.seed(0)
     np.random.shuffle(new_cats)
     ctype = pd.CategoricalDtype(new_cats)
     check_func(test_impl, (S, ctype))
@@ -4495,6 +4496,7 @@ def test_np_argmax(memory_leak_check):
     def impl(A):
         return np.argmax(A, 1)
 
+    np.random.seed(0)
     check_func(impl, (np.random.rand(500, 50),))
 
 
@@ -4502,6 +4504,7 @@ def test_np_argmin(memory_leak_check):
     def impl(A):
         return np.argmin(A, 1)
 
+    np.random.seed(0)
     check_func(impl, (np.random.rand(500, 50),))
 
 

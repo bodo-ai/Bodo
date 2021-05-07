@@ -1388,7 +1388,7 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
-        if fdef == ("median", "bodo.libs.array_kernels") and (
+        if fdef == ("array_op_median", "bodo.libs.array_ops") and (
             self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
             self._set_last_arg_to_true(assign.value)
@@ -2977,7 +2977,6 @@ class DistributedPass:
         loc = parfor.init_block.loc
         pre = []
         out = []
-
         for reduce_varname, (_init_val, reduce_nodes, _op) in sorted(
             parfor.reddict.items()
         ):
