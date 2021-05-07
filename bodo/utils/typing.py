@@ -783,7 +783,7 @@ def get_index_type_from_dtype(t):
     if t == bodo.string_type:
         return StringIndexType(types.none)
 
-    if isinstance(t, (types.Integer, types.Float)):
+    if isinstance(t, (types.Integer, types.Float, types.Boolean)):
         return NumericIndexType(t, types.none)
 
     raise BodoError(f"Cannot convert dtype {t} to index type")

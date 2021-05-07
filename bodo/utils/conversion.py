@@ -978,7 +978,7 @@ def overload_index_from_array(data, name=None):
             data, name=name
         )  # pragma: no cover
 
-    if isinstance(data.dtype, (types.Integer, types.Float)):
+    if isinstance(data.dtype, (types.Integer, types.Float, types.Boolean)):
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_numeric_index(
             data, name
         )  # pragma: no cover

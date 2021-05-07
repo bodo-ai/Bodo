@@ -3452,15 +3452,17 @@ def test_df_groupby_supported_types(data):
 
     check_func(test_impl, (data,), sort_output=True, reset_index=True)
 
-    # [BE-358] Categorical, uint, and boolean array don't work with next check.
-    if isinstance(data.dtypes.loc["B"], pd.CategoricalDtype):
-        return
-    if isinstance(data["B"].iat[0], (np.bool_, np.uint8)):
-        return
-
     # Testing different type of column used for grouping
     def test_impl2(df):
         return df.groupby("B").max()
+
+    # TODO: [BE-77] support Categorical Index types
+    if isinstance(data.dtypes.loc["B"], pd.CategoricalDtype):
+        with pytest.raises(
+            BodoError, match="Groupby with Categorical key not supported"
+        ):
+            bodo.jit(test_impl2)(data)
+        return
 
     check_func(
         test_impl2, (data,), sort_output=True, reset_index=True, check_dtype=False
