@@ -174,7 +174,7 @@ _install_date_fields()
 
 def create_date_method_overload(method):
     def overload_method(S_dt):
-        """.dt methods on only datetime64s. Only .normalize is supported so far."""
+        """.dt methods on only datetime64s. Only normalize and day_name supported so far."""
         if not S_dt.stype.dtype == types.NPDatetime("ns"):  # pragma: no cover
             return
         func_text = "def impl(S_dt):\n"
@@ -184,13 +184,20 @@ def create_date_method_overload(method):
         func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
         func_text += "    numba.parfors.parfor.init_prange()\n"
         func_text += "    n = len(arr)\n"
-        func_text += "    out_arr = np.empty(n, np.dtype('datetime64[ns]'))\n"
+        if method == "day_name":
+            func_text += "    out_arr = bodo.utils.utils.alloc_type(n, bodo.string_array_type, (-1,))\n"
+        else:
+            func_text += "    out_arr = np.empty(n, np.dtype('datetime64[ns]'))\n"
         func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
         func_text += "        if bodo.libs.array_kernels.isna(arr, i):\n"
         func_text += "            bodo.libs.array_kernels.setna(out_arr, i)\n"
         func_text += "            continue\n"
         func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(arr[i])\n"
-        func_text += f"        out_arr[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(ts.{method}().value)\n"
+        func_text += f"        method_val = ts.{method}()\n"
+        if method == "day_name":
+            func_text += "        out_arr[i] = method_val\n"
+        else:
+            func_text += "        out_arr[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(method_val.value)\n"
         func_text += (
             "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
         )
@@ -1060,7 +1067,6 @@ def create_cmp_op_overload(op):
 
 series_dt_unsupported_methods = {
     "asfreq",
-    "day_name",
     "month_name",
     "normalize",
     "to_period",

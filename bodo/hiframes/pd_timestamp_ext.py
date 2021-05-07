@@ -51,6 +51,7 @@ from bodo.libs import hdatetime_ext
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import (
     BodoError,
+    check_unsupported_args,
     get_overload_const_str,
     is_iterable_type,
     is_overload_constant_int,
@@ -104,7 +105,7 @@ date_fields = [
     "weekofyear",
     "weekday",
 ]
-date_methods = ["normalize"]
+date_methods = ["normalize", "day_name"]
 
 # Timedelta fields separated by return type
 timedelta_fields = ["days", "seconds", "microseconds", "nanoseconds"]
@@ -812,6 +813,33 @@ def overload_pd_timestamp_isoformat(ts, sep=None):
 def overload_pd_timestamp_normalize(ptt):
     def impl(ptt):  # pragma: no cover
         return pd.Timestamp(year=ptt.year, month=ptt.month, day=ptt.day)
+
+    return impl
+
+
+@overload_method(PandasTimestampType, "day_name", no_unliteral=True)
+def overload_pd_timestamp_day_name(ptt, locale=None):
+    """
+    Support for Timestamp.day_name(). This returns the full name
+    of the day of the week as a string.
+    """
+    unsupported_args = dict(locale=locale)
+    arg_defaults = dict(locale=None)
+    check_unsupported_args("Timestamp.day_name", unsupported_args, arg_defaults)
+
+    def impl(ptt, locale=None):  # pragma: no cover
+        day_names = (
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+        )
+        # Gets the day of the week 1-indexed: Monday = 1, Sunday = 7
+        _, _, day_num = ptt.isocalendar()
+        return day_names[day_num - 1]
 
     return impl
 

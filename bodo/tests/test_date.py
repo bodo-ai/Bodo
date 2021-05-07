@@ -359,6 +359,15 @@ def test_timestamp_weekday(memory_leak_check):
         check_func(test_impl, (ts,))
 
 
+def test_timestamp_day_name(memory_leak_check):
+    def test_impl(ts):
+        return ts.day_name()
+
+    for i in range(1, 21):
+        ts = pd.Timestamp("2021-06-" + ("0" + str(i) if i < 10 else str(i)))
+        check_func(test_impl, (ts,))
+
+
 @pytest.mark.slow
 def test_timestamp_strftime(memory_leak_check):
     def test_impl(ts, fmt_string):

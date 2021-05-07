@@ -472,6 +472,7 @@ Datetime properties:
 * :attr:`pandas.Series.dt.weekday`
 * :attr:`pandas.Series.dt.weekofyear`
 * :meth:`pandas.Series.dt.ceil`
+* :meth:`pandas.Series.dt.day_name` (``locale`` not supported)
 * :meth:`pandas.Series.dt.floor`
 * :meth:`pandas.Series.dt.normalize`
 * :meth:`pandas.Series.dt.round`
@@ -853,6 +854,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
 * :attr:`pandas.Timestamp.weekofyear`
 * :meth:`pandas.Timestamp.ceil`
 * :meth:`pandas.Timestamp.date`
+* :meth:`pandas.Timestamp.day_name` (``locale`` not supported)
 * :meth:`pandas.Timestamp.floor`
 * :meth:`pandas.Timestamp.isocalendar`
 * :meth:`pandas.Timestamp.isoformat`
