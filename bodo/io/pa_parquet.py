@@ -1,9 +1,87 @@
 import asyncio
+import os
 from concurrent import futures
 
 import pyarrow.parquet as pq
 
+from bodo.io.fs_io import get_s3_bucket_region_njit
+
 # Monkey-patching pyarrow.parquet
+
+
+def get_parquet_filesnames_from_deltalake(delta_lake_path):
+    """Get sorted list of parquet file names in a DeltaLake 'delta_lake_path'.
+    Is meant to be called only on rank 0"""
+
+    try:
+        from deltalake import DeltaTable
+    except Exception as e:  # pragma: no cover
+        raise ImportError(
+            "Bodo Error: please pip install the 'deltalake' package to read parquet from delta lake"
+        )
+
+    file_names = None
+    path = delta_lake_path.rstrip("/")
+
+    # The DeltaTable API doesn't have automatic S3 region detection and doesn't
+    # seem to provide a way to specify a region except through the AWS_DEFAULT_REGION
+    # environment variable.
+    # So, we detect the region using our existing infrastructure and set the env var
+    # so that it's picked up by the deltalake library
+    aws_default_region_set = "AWS_DEFAULT_REGION" in os.environ  # is the env var set
+    orig_aws_default_region = os.environ.get(
+        "AWS_DEFAULT_REGION", ""
+    )  # get original value
+    aws_default_region_modified = False  # not modified yet
+    if delta_lake_path.startswith("s3://"):
+        # (XXX) Check that anon is False, else display error/warning?
+        s3_bucket_region = get_s3_bucket_region_njit(delta_lake_path)
+        if s3_bucket_region != "":
+            os.environ["AWS_DEFAULT_REGION"] = s3_bucket_region
+            aws_default_region_modified = True  # mark as modified
+
+    dt = DeltaTable(delta_lake_path)
+    file_names = dt.files()
+
+    # pq.ParquetDataset() needs the full path for each file
+    file_names = [(path + "/" + f) for f in sorted(file_names)]
+
+    # Restore AWS_DEFAULT_REGION env var if it was modified
+    if aws_default_region_modified:
+        if aws_default_region_set:
+            # If it was originally set to a value, restore it to that value
+            os.environ["AWS_DEFAULT_REGION"] = orig_aws_default_region
+        else:
+            # Else delete the env var
+            del os.environ["AWS_DEFAULT_REGION"]
+
+    return file_names
+
+
+def get_dataset_schema(dataset):
+    # All of the code in this function is copied from
+    # pyarrow.parquet.ParquetDataset.validate_schemas and is the first part
+    # of that function
+    if dataset.metadata is None and dataset.schema is None:
+        if dataset.common_metadata is not None:  # pragma: no cover
+            dataset.schema = dataset.common_metadata.schema
+        else:
+            dataset.schema = dataset.pieces[0].get_metadata().schema
+    elif dataset.schema is None:
+        dataset.schema = dataset.metadata.schema
+
+    # Verify schemas are all compatible
+    dataset_schema = dataset.schema.to_arrow_schema()
+    # Exclude the partition columns from the schema, they are provided
+    # by the path, not the DatasetPiece
+    if dataset.partitions is not None:
+        for partition_name in dataset.partitions.partition_names:
+            if dataset_schema.get_field_index(partition_name) != -1:  # pragma: no cover
+                field_idx = dataset_schema.get_field_index(partition_name)
+                dataset_schema = dataset_schema.remove(field_idx)
+
+    return dataset_schema
+
 
 # We modify pyarrow.parquet.ParquetManifest to use coroutine-based concurrency
 # for _visit_level tasks and thread-based concurrency for parallelism
@@ -40,6 +118,9 @@ class ParquetManifest:
         self.common_metadata_path = None
         self.metadata_path = None
 
+        # Bodo change: filter for Delta Lake (only consider files in Delta table)
+        self.delta_lake_filter = set()
+
         # Bodo change (run _visit_level with asyncio)
         self.loop = asyncio.get_event_loop()
         self.loop.run_until_complete(self._visit_level(0, self.dirpath, []))
@@ -66,6 +147,13 @@ class ParquetManifest:
             base_path,
         )
 
+        # Bodo change
+        if level == 0 and "_delta_log" in directories:
+            # this is a Delta Lake table
+            self.delta_lake_filter = set(
+                get_parquet_filesnames_from_deltalake(base_path)
+            )
+
         filtered_files = []
         for path in files:
             if path == "":  # Bodo change
@@ -76,6 +164,8 @@ class ParquetManifest:
             elif path.endswith("_metadata"):
                 self.metadata_path = full_path
             elif self._should_silently_exclude(path):
+                continue
+            elif self.delta_lake_filter and full_path not in self.delta_lake_filter:
                 continue
             else:
                 filtered_files.append(full_path)
@@ -90,7 +180,7 @@ class ParquetManifest:
         filtered_files.sort()
         filtered_directories.sort()
 
-        if len(filtered_files) > 0 and len(filtered_directories) > 0:
+        if len(filtered_files) > 0 and len(filtered_directories) > 0:  # pragma: no cover
             raise ValueError(
                 "Found files in an intermediate " "directory: {}".format(base_path)
             )
