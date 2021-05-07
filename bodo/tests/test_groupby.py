@@ -4675,8 +4675,8 @@ def test_cumulatives_supported_cases(memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": [1, 2, 3, 2, 1],
-                    "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                    "A": [1, 2, 3, 2, 1, 3],
+                    "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)).append(
                         pd.Series(data=[None], index=[4])
                     ),
                 }
@@ -4687,8 +4687,8 @@ def test_cumulatives_supported_cases(memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": [2, 1, 1, 2],
-                    "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]]),
+                    "A": [2, 1, 1, 2, 1, 1],
+                    "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4], [1], [1, 2]]),
                 }
             ),
             marks=pytest.mark.slow,
@@ -4697,8 +4697,8 @@ def test_cumulatives_supported_cases(memory_leak_check):
         pytest.param(
             pd.DataFrame(
                 {
-                    "A": [2, 1, 1, 2],
-                    "B": pd.Series([(1, 2), (3), (5, 4, 6), (-1, 3, 4)]),
+                    "A": [2, 1, 1, 2, 1, 2],
+                    "B": pd.Series([(1, 2), (3,), (5, 4, 6), (-1, 3, 4), (1,), (1, 2)]),
                 }
             ),
             marks=pytest.mark.slow,

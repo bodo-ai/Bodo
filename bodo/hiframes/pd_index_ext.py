@@ -34,6 +34,7 @@ import bodo.utils.conversion
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_series_ext import SeriesType, string_array_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
+from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_ext import string_type
 from bodo.utils.transform import get_const_func_output_type
@@ -77,11 +78,23 @@ def typeof_pd_index(val, c):
         return DatetimeIndexType(get_val_type_maybe_str_literal(val.name))
 
     # Pandas uses object dtype for nullable int arrays
-    if val.inferred_type == "integer":
+    if (
+        val.inferred_type == "integer"
+        or pd._libs.lib.infer_dtype(val, True) == "integer"
+    ):
         return NumericIndexType(
             types.int64,
             get_val_type_maybe_str_literal(val.name),
             IntegerArrayType(types.int64),
+        )
+    if (
+        val.inferred_type == "boolean"
+        or pd._libs.lib.infer_dtype(val, True) == "boolean"
+    ):
+        return NumericIndexType(
+            types.bool_,
+            get_val_type_maybe_str_literal(val.name),
+            boolean_array,
         )
 
     # catch-all for non-supported Index types
@@ -605,18 +618,12 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
         data, (SeriesType, types.List, types.UniTuple)
     ):
         # Numeric Indices:
-        if elem_type in (
-            types.int64,
-            types.int32,
-            types.float64,
-            types.uint32,
-            types.uint64,
-        ):
+        if isinstance(elem_type, (types.Integer, types.Float, types.Boolean)):
 
             def impl(
                 data=None, dtype=None, copy=False, name=None, tupleize_cols=True
             ):  # pragma: no cover
-                data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
+                data_arr = bodo.utils.conversion.coerce_to_array(data)
                 data_coerced = bodo.utils.conversion.fix_arr_dtype(data_arr, elem_type)
                 return bodo.hiframes.pd_index_ext.init_numeric_index(data_coerced, name)
 
@@ -2013,7 +2020,7 @@ class NumericIndexType(types.IterableType, types.ArrayCompatible):
         return types.Array(types.undefined, 1, "C")
 
     def copy(self):
-        return NumericIndexType(self.dtype, self.name_typ)
+        return NumericIndexType(self.dtype, self.name_typ, self.data)
 
     @property
     def iterator_type(self):
@@ -2408,9 +2415,9 @@ def array_type_to_index(arr_typ, name_typ=None):
     if arr_typ == bodo.string_array_type:
         return StringIndexType(name_typ)
 
-    assert (
-        isinstance(arr_typ, (types.Array, IntegerArrayType))
-        or arr_typ == bodo.datetime_date_array_type
+    assert isinstance(arr_typ, (types.Array, IntegerArrayType)) or arr_typ in (
+        bodo.datetime_date_array_type,
+        bodo.boolean_array,
     ), f"Converting array type {arr_typ} to index not supported"
 
     # TODO: Pandas keeps datetime_date Index as a generic Index(, dtype=object)
@@ -2423,7 +2430,7 @@ def array_type_to_index(arr_typ, name_typ=None):
     if arr_typ.dtype == types.NPTimedelta("ns"):
         return TimedeltaIndexType(name_typ)
 
-    if isinstance(arr_typ.dtype, (types.Integer, types.Float)):
+    if isinstance(arr_typ.dtype, (types.Integer, types.Float, types.Boolean)):
         return NumericIndexType(arr_typ.dtype, name_typ, arr_typ)
 
     raise BodoError(f"invalid index type {arr_typ}")
@@ -3099,7 +3106,7 @@ def lower_constant_numeric_index(context, builder, ty, pyval):
     """ Constant lowering for NumericIndexType. """
 
     # make sure the type is one of the numeric ones
-    assert ty.dtype in (types.int64, types.uint64, types.float64)
+    assert isinstance(ty.dtype, (types.Integer, types.Float, types.Boolean))
 
     # get the data
     data = context.get_constant_generic(
