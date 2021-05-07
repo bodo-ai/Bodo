@@ -1,5 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import os
+import pickle
 from collections import defaultdict
 
 import llvmlite.binding as ll
@@ -35,20 +36,7 @@ from bodo.hiframes.datetime_date_ext import (
 )
 from bodo.hiframes.pd_series_ext import _get_series_array_type
 from bodo.io import parquet_cpp
-from bodo.io.fs_io import (
-    abfs_is_directory,
-    abfs_list_dir_fnames,
-    directory_of_files_common_filter,
-    gcs_is_directory,
-    gcs_list_dir_fnames,
-    get_hdfs_fs,
-    get_s3_bucket_region_njit,
-    get_s3_fs_from_path,
-    hdfs_is_directory,
-    hdfs_list_dir_fnames,
-    s3_is_directory,
-    s3_list_dir_fnames,
-)
+from bodo.io.fs_io import get_hdfs_fs, get_s3_fs_from_path
 from bodo.libs.array import _lower_info_to_array_numpy, array_info_type
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
@@ -265,7 +253,7 @@ class ParquetHandler:
             index_col = index_col if index_col in col_names else None
             # Initialize null_col_map. See parquet_file_schema for definition.
             null_col_map = [False] * len(col_names)
-            partition_names = None
+            partition_names = []
 
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
@@ -791,263 +779,6 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
     return arr_typ
 
 
-def merge_subdatasets(subdatasets, get_row_counts):
-    """Merge datasets of type pyarrow.parquet.ParquetDataset into one.
-    Each dataset contains a subset of pieces (parquet files) of the same dataset.
-    This function will check that the schema of all datasets is the same.
-    If get_row_counts is True, pieces must have '_bodo_num_rows' attribute
-    to indicate the number of rows of each piece, and the total number
-    of rows will be saved to the resulting dataset in '_bodo_total_rows'
-    attribute.
-    NOTE: this will modify the first dataset in the list
-    """
-    dataset = None
-    for subdataset in subdatasets:
-        if subdataset is None:
-            continue
-        if isinstance(subdataset, Exception):
-            e = subdataset
-            raise e
-        if dataset is None:
-            # This is the first valid dataset in the list. We use this object
-            # to generate the result
-            dataset = subdataset
-            dataset._bodo_total_rows = 0
-        else:
-            # add this dataset's pieces to the result
-            dataset.pieces += subdataset.pieces
-        if get_row_counts:
-            for piece in subdataset.pieces:
-                dataset._bodo_total_rows += piece._bodo_num_rows
-        if dataset.schema != subdataset.schema:
-            raise BodoError("Files in directory have non-matching schema")
-    if dataset is None:
-        raise BodoError("No parquet files found in directory")
-    return dataset
-
-
-def is_directory_parallel(fpath, storage_options=None):
-    """Determines whether a path is a directory. Is meant to be called by
-    all ranks. Rank 0 will do the check and communicate the result."""
-    from mpi4py import MPI
-
-    comm = MPI.COMM_WORLD
-    isdir = None
-    if bodo.get_rank() == 0:
-        try:
-            if fpath.startswith("s3://"):
-                isdir = s3_is_directory(
-                    get_s3_fs_from_path(
-                        fpath, parallel=False, storage_options=storage_options
-                    ),
-                    fpath,
-                )
-            elif fpath.startswith("gcs://"):
-                isdir = gcs_is_directory(fpath)
-            elif fpath.startswith("hdfs://"):  # pragma: no cover
-                _, isdir = hdfs_is_directory(fpath)
-            # TODO merge with hdfs when new pyarrow API works with abfs
-            elif fpath.startswith("abfs://") or fpath.startswith(
-                "abfss://"
-            ):  # pragma: no cover
-                _, isdir = abfs_is_directory(fpath)
-            else:
-                isdir = os.path.isdir(fpath)
-        except Exception as e:
-            isdir = e
-    isdir = comm.bcast(isdir)
-    if isinstance(isdir, Exception):
-        e = isdir
-        raise e
-    return isdir
-
-
-def is_nested_parallel(fpath, file_names, storage_options=None):
-    """Returns True if one of the file names in file_names is a directory"""
-
-    from mpi4py import MPI
-
-    comm = MPI.COMM_WORLD
-    is_nested = False
-    if bodo.get_rank() == 0:
-        try:
-            if fpath.startswith("s3://"):
-                fs = get_s3_fs_from_path(
-                    fpath, parallel=False, storage_options=storage_options
-                )
-                for fname in file_names:
-                    if fname == os.path.join(fpath, "_delta_log"):
-                        continue
-                    if s3_is_directory(fs, fname):
-                        is_nested = True
-                        break
-            else:
-                if fpath.startswith("hdfs://"):  # pragma: no cover
-                    is_dir_func = hdfs_is_directory
-                # TODO merge with hdfs when new pyarrow API works with abfs
-                elif fpath.startswith("abfs://") or fpath.startswith(
-                    "abfss://"
-                ):  # pragma: no cover
-                    is_dir_func = abfs_is_directory
-                elif fpath.startswith("gcs://"):
-                    is_dir_func = gcs_is_directory
-                else:
-                    is_dir_func = os.path.isdir
-                for fname in file_names:
-                    if fname == os.path.join(fpath, "_delta_log"):
-                        continue
-                    is_dir = is_dir_func(fname)
-                    # TODO improve
-                    if not isinstance(is_dir, bool):
-                        is_dir = is_dir[1]
-                    if is_dir:
-                        is_nested = True
-                        break
-        except Exception as e:
-            is_nested = e
-    is_nested = comm.bcast(is_nested)
-    if isinstance(is_nested, Exception):
-        e = is_nested
-        raise e
-    return is_nested
-
-
-def get_filenames_parallel(path, filter_func, storage_options=None):
-    """Get sorted list of file names in directory 'path'. Filter files based
-    on the filter function 'filter_func'.
-    Is meant to be called by all ranks. Rank 0 will get the list and
-    communicate the result."""
-
-    from mpi4py import MPI
-
-    comm = MPI.COMM_WORLD
-    file_names = None
-    path = path.rstrip("/")  # remove any trailing / from path
-    if bodo.get_rank() == 0:
-        try:
-            if path.startswith("s3://"):
-                file_names = s3_list_dir_fnames(
-                    get_s3_fs_from_path(
-                        path, parallel=False, storage_options=storage_options
-                    ),
-                    path,
-                )
-            elif path.startswith("hdfs://"):  # pragma: no cover
-                _, file_names = hdfs_list_dir_fnames(path)
-            # TODO merge with hdfs when new pyarrow API works with abfs
-            elif path.startswith("abfs://") or path.startswith(
-                "abfss://"
-            ):  # pragma: no cover
-                _, file_names = abfs_list_dir_fnames(path)
-            elif path.startswith("gcs://"):
-                file_names = gcs_list_dir_fnames(path)
-            else:
-                file_names = os.listdir(path)
-            # pq.ParquetDataset() needs the full path for each file
-            file_names = [
-                (path + "/" + f) for f in sorted(filter(filter_func, file_names))
-            ]
-        except Exception as e:
-            file_names = e
-    file_names = comm.bcast(file_names)
-    if isinstance(file_names, Exception):
-        e = file_names
-        raise e
-    return file_names
-
-
-def get_parquet_filesnames_from_deltalake(delta_lake_path):
-    """Get sorted list of parquet file names in a DeltaLake 'delta_lake_path'.
-    Is meant to be called by all ranks. Rank 0 will get the list and
-    communicate the result."""
-
-    from mpi4py import MPI
-
-    try:
-        from deltalake import DeltaTable
-    except Exception as e:
-        raise ImportError(
-            "Bodo Error: please pip install the 'deltalake' package to read parquet from delta lake"
-        )
-
-    comm = MPI.COMM_WORLD
-    file_names = None
-    path = delta_lake_path.rstrip("/")
-
-    # The DeltaTable API doesn't have automatic S3 region detection and doesn't
-    # seem to provide a way to specify a region except through the AWS_DEFAULT_REGION
-    # environment variable.
-    # So, we detect the region using our existing infrastructure and set the env var
-    # so that it's picked up by the deltalake library
-    aws_default_region_set = "AWS_DEFAULT_REGION" in os.environ  # is the env var set
-    orig_aws_default_region = os.environ.get(
-        "AWS_DEFAULT_REGION", ""
-    )  # get original value
-    aws_default_region_modified = False  # not modified yet
-    if delta_lake_path.startswith("s3://"):
-        # (XXX) Check that anon is False, else display error/warning?
-        s3_bucket_region = get_s3_bucket_region_njit(delta_lake_path)
-        if s3_bucket_region != "":
-            os.environ["AWS_DEFAULT_REGION"] = s3_bucket_region
-            aws_default_region_modified = True  # mark as modified
-
-    if bodo.get_rank() == 0:
-        try:
-            dt = DeltaTable(delta_lake_path)
-            file_names = dt.files()
-
-            # pq.ParquetDataset() needs the full path for each file
-            file_names = [(path + "/" + f) for f in sorted(file_names)]
-        except Exception as e:
-            if "Delta" in e.__class__.__name__:
-                file_names = Exception("deltalake error: " + str(e))
-            else:
-                file_names = e
-        file_names = comm.bcast(file_names)
-
-    else:
-        file_names = comm.bcast(None)
-
-    # Restore AWS_DEFAULT_REGION env var if it was modified
-    if aws_default_region_modified:
-        if aws_default_region_set:
-            # If it was originally set to a value, restore it to that value
-            os.environ["AWS_DEFAULT_REGION"] = orig_aws_default_region
-        else:
-            # Else delete the env var
-            del os.environ["AWS_DEFAULT_REGION"]
-
-    if isinstance(file_names, Exception):
-        e = file_names
-        raise e
-    return file_names
-
-
-def get_dataset_schema(dataset):  # pragma: no cover
-    # All of the code in this function is copied from
-    # pyarrow.parquet.ParquetDataset.validate_schemas and is the first part
-    # of that function
-    if dataset.metadata is None and dataset.schema is None:
-        if dataset.common_metadata is not None:
-            dataset.schema = dataset.common_metadata.schema
-        else:
-            dataset.schema = dataset.pieces[0].get_metadata().schema
-    elif dataset.schema is None:
-        dataset.schema = dataset.metadata.schema
-
-    # Verify schemas are all compatible
-    dataset_schema = dataset.schema.to_arrow_schema()
-    # Exclude the partition columns from the schema, they are provided
-    # by the path, not the DatasetPiece
-    if dataset.partitions is not None:
-        for partition_name in dataset.partitions.partition_names:
-            if dataset_schema.get_field_index(partition_name) != -1:
-                field_idx = dataset_schema.get_field_index(partition_name)
-                dataset_schema = dataset_schema.remove(field_idx)
-
-    return dataset_schema
-
-
 def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_options=None):
     """get ParquetDataset object for 'fpath' and set the number of total rows as an
     attribute. Also, sets the number of rows per file as an attribute of
@@ -1087,6 +818,7 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
                 )
             )
         elif fpath.startswith("gcs://"):
+            # TODO pass storage_options to GCSFileSystem
             google_fs = gcsfs.GCSFileSystem(token=None)
             fs.append(google_fs)
         elif (
@@ -1099,181 +831,101 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
             fs.append(None)
         return fs[0]
 
-    if is_directory_parallel(fpath, storage_options=storage_options):
-        file_names = get_filenames_parallel(
-            fpath, directory_of_files_common_filter, storage_options=storage_options
-        )
-        is_nested = is_nested_parallel(
-            fpath, file_names, storage_options=storage_options
-        )
-        # if deltalake, then get the list of parquet files from metadata
-        is_deltalake = False
-        delta_log = os.path.join(fpath, "_delta_log")
-        if delta_log in file_names:
-            is_deltalake = True
-            file_names = get_parquet_filesnames_from_deltalake(fpath)
-        if filters is not None or is_nested:
-            # For now, for nested directories (for example partitioned datasets using
-            # hive scheme) we let pyarrow.parquet.ParquetDataset
-            # extract all the information by passing it the top-level directory.
-            # This happens sequentially.
-            # We then do schema validation and get the row counts (which are the
-            # most expensive operations) in parallel.
-            validate_schema = bodo.parquet_validate_schema
-            if get_row_counts or validate_schema:
-                # Getting row counts and schema validation is going to be
-                # distributed across ranks, so every rank will need a filesystem
-                # object to query the metadata of their assigned pieces.
-                # There are issues with broadcasting the s3 filesystem object
-                # as part of the ParquetDataset, so instead we initialize
-                # the filesystem before the broadcast. One of the issues is that
-                # our PyArrowS3FS is not correctly pickled (instead what is
-                # sent is the underlying pyarrow S3FileSystem). The other issue
-                # is that for some reason unpickling seems like it can cause
-                # incorrect credential handling state in Arrow or AWS client.
-                _ = getfs(parallel=True)
+    validate_schema = bodo.parquet_validate_schema
+    if get_row_counts or validate_schema:
+        # Getting row counts and schema validation is going to be
+        # distributed across ranks, so every rank will need a filesystem
+        # object to query the metadata of their assigned pieces.
+        # There are issues with broadcasting the s3 filesystem object
+        # as part of the ParquetDataset, so instead we initialize
+        # the filesystem before the broadcast. One of the issues is that
+        # our PyArrowS3FS is not correctly pickled (instead what is
+        # sent is the underlying pyarrow S3FileSystem). The other issue
+        # is that for some reason unpickling seems like it can cause
+        # incorrect credential handling state in Arrow or AWS client.
+        _ = getfs(parallel=True)
 
-            if bodo.get_rank() == 0:
-                nthreads = 1
-                cpu_count = os.cpu_count()
-                if cpu_count is not None and cpu_count > 1:
-                    nthreads = cpu_count // 2
-                dataset = pq.ParquetDataset(
-                    fpath,
-                    filesystem=getfs(),
-                    filters=filters,
-                    use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
-                    validate_schema=False,  # we do validation below if needed
-                    metadata_nthreads=nthreads,
-                )
+    if bodo.get_rank() == 0:
+        nthreads = 1  # number of threads to use on rank 0 to collect metadata
+        cpu_count = os.cpu_count()
+        if cpu_count is not None and cpu_count > 1:
+            nthreads = cpu_count // 2
+        try:
+            dataset = pq.ParquetDataset(
+                fpath,
+                filesystem=getfs(),
+                filters=filters,
+                use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
+                validate_schema=False,  # we do validation below if needed
+                metadata_nthreads=nthreads,
+            )
+            dataset_schema = bodo.io.pa_parquet.get_dataset_schema(dataset)
+            # pyarrow bug workaround: the dataset after pickling and unpickling
+            # in some cases doesn't match the original. In this situation we use
+            # the string representation for comparison
+            if pickle.loads(pickle.dumps(dataset_schema)) != dataset_schema:
+                dataset_schema = dataset_schema.to_string()
+            # We don't want to send the filesystem because of the issues
+            # mentioned above, so we set it to None. Note that this doesn't
+            # seem to be enough to prevent sending it
+            dataset._metadata.fs = None
+        except Exception as e:
+            comm.bcast(e)
+            raise e
 
-                if is_deltalake:
-                    # apply the deltalake filter too
-                    dataset.pieces = [p for p in dataset.pieces if p.path in file_names]
-
-                dataset_schema = get_dataset_schema(dataset)
-                # We don't want to send the filesystem because of the issues
-                # mentioned above, so we set it to None. Note that this doesn't
-                # seem to be enough to prevent sending it
-                dataset._metadata.fs = None
-                comm.bcast(dataset)
-                comm.bcast(dataset_schema)
-            else:
-                dataset = comm.bcast(None)
-                dataset_schema = comm.bcast(None)
-
-            dataset._bodo_total_rows = 0
-            if get_row_counts or validate_schema:
-                # getting row counts and validating schema requires reading
-                # the file metadata from the parquet files and is very expensive
-                # for large datasets, so we do this in parallel
-                num_pieces = len(dataset.pieces)
-                start = get_start(num_pieces, bodo.get_size(), bodo.get_rank())
-                end = get_end(num_pieces, bodo.get_size(), bodo.get_rank())
-                total_rows_chunk = 0
-                piece_nrows_chunk = []
-                valid = True  # True if schema of all parquet files match
-                dataset._metadata.fs = getfs()
-                for p in dataset.pieces[start:end]:
-                    file_metadata = p.get_metadata()
-                    if get_row_counts:
-                        piece_nrows_chunk.append(file_metadata.num_rows)
-                        total_rows_chunk += file_metadata.num_rows
-                    if validate_schema:
-                        file_schema = file_metadata.schema.to_arrow_schema()
-                        if not dataset_schema.equals(
-                            file_schema, check_metadata=False
-                        ):  # pragma: no cover
-                            # this is the same error message that pyarrow shows
-                            print(
-                                "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
-                                    p, file_schema, dataset_schema
-                                )
-                            )
-                            valid = False
-                            break
-
-                if validate_schema:
-                    valid = comm.allreduce(valid, op=MPI.LAND)
-                    if not valid:  # pragma: no cover
-                        raise BodoError("Schema in parquet files don't match")
-
-                if get_row_counts:
-                    dataset._bodo_total_rows = comm.allreduce(
-                        total_rows_chunk, op=MPI.SUM
-                    )
-                    rows_by_ranks = comm.allgather(piece_nrows_chunk)
-                    for i, num_rows in enumerate(
-                        [n for sublist in rows_by_ranks for n in sublist]
-                    ):
-                        dataset.pieces[i]._bodo_num_rows = num_rows
-        else:
-            # Note that at this point there could still be files in file_names
-            # which aren't valid parquet files, so the division of work between
-            # ranks below won't be perfect.
-            # We can either do better filtering in `get_filenames_parallel` or
-            # do a further subdivision of work after checking which files are
-            # parquet files below. But I think this is already good.
-            try:
-                start = get_start(len(file_names), bodo.get_size(), bodo.get_rank())
-                end = get_end(len(file_names), bodo.get_size(), bodo.get_rank())
-                # When passing list of files these can only be valid parquet files,
-                # so we check each one of them manually.
-                # Note that for s3 this is needed anyway (if you call pq.ParquetDataset()
-                # with a directory name and the directory contains non-parquet files
-                # it will fail). And we are doing this in parallel so it shouldn't
-                # be an issue.
-                myfiles = []
-                for fname in file_names[start:end]:
-                    try:
-                        pq.ParquetDataset(
-                            fname,
-                            filesystem=getfs(),
-                            use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
-                        )
-                        myfiles.append(fname)
-                    except:
-                        # this is not a valid parquet file
-                        pass
-                subdataset = None
-                if len(myfiles) > 0:
-                    subdataset = pq.ParquetDataset(
-                        myfiles,
-                        filesystem=getfs(),
-                        use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
-                    )
-                    if get_row_counts:
-                        for piece in subdataset.pieces:
-                            piece._bodo_num_rows = piece.get_metadata().num_rows
-            except Exception as e:
-                subdataset = e
-
-            subdatasets = comm.allgather(subdataset)
-            # merge all the subdatasets into one
-            dataset = merge_subdatasets(subdatasets, get_row_counts)
+        comm.bcast(dataset)
+        comm.bcast(dataset_schema)
     else:
-        if bodo.get_rank() == 0:
-            try:
-                dataset = pq.ParquetDataset(
-                    fpath,
-                    filesystem=getfs(),
-                    filters=filters,
-                    use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
-                )
-                if get_row_counts:
-                    dataset._bodo_total_rows = 0
-                    for piece in dataset.pieces:
-                        piece._bodo_num_rows = piece.get_metadata().num_rows
-                        dataset._bodo_total_rows += piece._bodo_num_rows
-            except Exception as e:
-                dataset = e
-            comm.bcast(dataset)
-        else:
-            dataset = comm.bcast(None)
+        dataset = comm.bcast(None)
+        if isinstance(dataset, Exception):  # pragma: no cover
+            error = dataset
+            raise error
+        dataset_schema = comm.bcast(None)
 
-    if isinstance(dataset, Exception):
-        e = dataset
-        raise e
+    dataset._bodo_total_rows = 0
+    if get_row_counts or validate_schema:
+        # getting row counts and validating schema requires reading
+        # the file metadata from the parquet files and is very expensive
+        # for datasets consisting of many files, so we do this in parallel
+        num_pieces = len(dataset.pieces)
+        start = get_start(num_pieces, bodo.get_size(), bodo.get_rank())
+        end = get_end(num_pieces, bodo.get_size(), bodo.get_rank())
+        total_rows_chunk = 0
+        piece_nrows_chunk = []
+        valid = True  # True if schema of all parquet files match
+        dataset._metadata.fs = getfs()
+        convert_file_schema_to_str = isinstance(dataset_schema, str)
+        for p in dataset.pieces[start:end]:
+            file_metadata = p.get_metadata()
+            if get_row_counts:
+                piece_nrows_chunk.append(file_metadata.num_rows)
+                total_rows_chunk += file_metadata.num_rows
+            if validate_schema:
+                file_schema = file_metadata.schema.to_arrow_schema()
+                if convert_file_schema_to_str:
+                    file_schema = file_schema.to_string()
+                if dataset_schema != file_schema:  # pragma: no cover
+                    # this is the same error message that pyarrow shows
+                    print(
+                        "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
+                            p, file_schema, dataset_schema
+                        )
+                    )
+                    valid = False
+                    break
+
+        if validate_schema:
+            valid = comm.allreduce(valid, op=MPI.LAND)
+            if not valid:  # pragma: no cover
+                raise BodoError("Schema in parquet files don't match")
+
+        if get_row_counts:
+            dataset._bodo_total_rows = comm.allreduce(total_rows_chunk, op=MPI.SUM)
+            rows_by_ranks = comm.allgather(piece_nrows_chunk)
+            for i, num_rows in enumerate(
+                [n for sublist in rows_by_ranks for n in sublist]
+            ):
+                dataset.pieces[i]._bodo_num_rows = num_rows
 
     # When we pass in a path instead of a filename or list of files to
     # pq.ParquetDataset, the path of the pieces of the resulting dataset
@@ -1321,7 +973,7 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
     )
     # not using 'partition_names' since the order may not match 'levels'
     partition_names = (
-        None
+        []
         if pq_dataset.partitions is None
         else [
             pq_dataset.partitions.levels[i].name
