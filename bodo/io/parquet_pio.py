@@ -158,11 +158,16 @@ class ParquetFileInfo(FileInfo):
         self.storage_options = storage_options
 
     def get_schema(self, fname):
-        return parquet_file_schema(
-            fname,
-            selected_columns=self.columns,
-            storage_options=self.storage_options,
-        )
+        try:
+            return parquet_file_schema(
+                fname,
+                selected_columns=self.columns,
+                storage_options=self.storage_options,
+            )
+        except OSError as e:
+            if "non-file path" in str(e):
+                raise FileNotFoundError(str(e))
+            raise
 
 
 class ParquetHandler:

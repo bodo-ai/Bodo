@@ -1161,25 +1161,32 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         # Convert requested arguments into a Literal.
         # Bodo change: requested args with FileInfo object are converted to FilenameType
         new_args = []
-        for i, v in enumerate(args):
-            if i in e.requested_args:
-                if i in e.file_infos:
-                    new_args.append(types.FilenameType(args[i], e.file_infos[i]))
-                else:
-                    new_args.append(types.literal(args[i]))
-            else:
-                new_args.append(args[i])
-        args = new_args
-        # Re-enter compilation with the Literal-ized arguments
         try:
-            # This might raise TypingError/BodoError
-            return_val = self._compile_for_args(*args)
-        except TypingError as e:
-            # Set error to be raised in finally section
-            error = errors.TypingError(str(e))
-        except bodo.utils.typing.BodoError as e:
-            # Set error to be raised in finally section
-            error = bodo.utils.typing.BodoError(str(e))
+            for i, v in enumerate(args):
+                if i in e.requested_args:
+                    if i in e.file_infos:
+                        new_args.append(types.FilenameType(args[i], e.file_infos[i]))
+                    else:
+                        new_args.append(types.literal(args[i]))
+                else:
+                    new_args.append(args[i])
+            args = new_args
+        # exception comes from find_file_name_or_handler in fs_io.py called by FilenameType
+        # OSError: When AWS credentials are not provided/incorrect
+        except (OSError, FileNotFoundError) as ferr:
+            error = FileNotFoundError(str(ferr) + "\n" + e.loc.strformat() + "\n")
+        # Re-enter compilation with the Literal-ized arguments
+        # only if there's no problem with FilenameType
+        if error is None:
+            try:
+                # This might raise TypingError/BodoError
+                return_val = self._compile_for_args(*args)
+            except TypingError as e:
+                # Set error to be raised in finally section
+                error = errors.TypingError(str(e))
+            except bodo.utils.typing.BodoError as e:
+                # Set error to be raised in finally section
+                error = bodo.utils.typing.BodoError(str(e))
 
     except errors.TypingError as e:
         # Intercept typing error that may be due to an argument
