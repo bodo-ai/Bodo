@@ -1095,6 +1095,43 @@ def test_agg_as_index(memory_leak_check):
     pd.testing.assert_frame_equal(pandas_df, bodo_df)
 
 
+@pytest.mark.skip
+def test_agg_dt64(memory_leak_check):
+    """
+    Test using groupby.agg with dt64 column values. [BE-735]
+    """
+
+    def test_impl(df):
+        A = df.groupby("A").agg(lambda x: x.max())
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 2, 1],
+            "B": pd.Series(pd.date_range(start="1/1/2018", end="1/08/2018", periods=5)),
+        }
+    )
+    check_func(test_impl, (df,), sort_output=True, reset_index=True)
+
+
+def test_agg_td64(memory_leak_check):
+    """
+    Test using groupby.agg with td64 column values. [BE-733]
+    """
+
+    def test_impl(df):
+        A = df.groupby("A").agg(lambda x: x.sum())
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 2, 1],
+            "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
+        }
+    )
+    check_func(test_impl, (df,), sort_output=True, reset_index=True)
+
+
 def test_agg_select_col_fast(memory_leak_check):
     """
     Test Groupby.agg() with explicitly select one (str)column
