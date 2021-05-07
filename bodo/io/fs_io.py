@@ -33,6 +33,16 @@ _csv_write = types.ExternalFunction(
 )
 ll.add_symbol("csv_write", csv_cpp.csv_write)
 
+bodo_error_msg = """
+    Some possible causes:
+        (1) Incorrect path: Specified file/directory doesn't exist or is unreachable.
+        (2) Missing credentials: You haven't provided S3 credentials, neither through 
+            environment variables, nor through a local AWS setup 
+            that makes the credentials available at ~/.aws/credentials.
+        (3) Incorrect credentials: Your S3 credentials are incorrect or do not have
+            the correct permissions.
+    """
+
 
 def get_proxy_uri_from_env_vars():
     """
@@ -168,6 +178,8 @@ def s3_is_directory(fs, path):
         if (not path_info.size) and path_info.type == pa_fs.FileType.Directory:
             return True
         return False
+    except (FileNotFoundError, OSError) as e:
+        raise
     except BodoError:  # pragma: no cover
         raise
     except Exception as e:  # pragma: no cover
@@ -175,14 +187,7 @@ def s3_is_directory(fs, path):
         # credential issues, region issues, etc. in pyarrow (unlike s3fs).
         # So we include a blanket message to verify these details.
         raise BodoError(
-            f"error from pyarrow S3FileSystem: {type(e).__name__}: {str(e)}\n"
-            "Some possible causes:\n"
-            "  (1) Incorrect path: Specified file/directory doesn't exist or is unreachable.\n"
-            "  (2) Missing credentials: You haven't provided S3 credentials, neither through "
-            "environment variables, nor through a local AWS setup "
-            "that makes the credentials available at ~/.aws/credentials.\n"
-            "  (3) Incorrect credentials: Your S3 credentials are incorrect or do not have "
-            "the correct permissions."
+            f"error from pyarrow S3FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
         )
 
 
@@ -223,6 +228,8 @@ def s3_list_dir_fnames(fs, path):
                 # get actual names of objects inside the dir
                 file_stats = file_stats[1:]
             file_names = [file_stat.base_name for file_stat in file_stats]
+    except (FileNotFoundError, OSError) as e:
+        raise FileNotFoundError(str(e) + "\n" + bodo_error_msg)
     except BodoError:  # pragma: no cover
         raise
     except Exception as e:  # pragma: no cover
@@ -230,14 +237,7 @@ def s3_list_dir_fnames(fs, path):
         # credential issues, region issues, etc. in pyarrow (unlike s3fs).
         # So we include a blanket message to verify these details.
         raise BodoError(
-            f"error from pyarrow S3FileSystem: {type(e).__name__}: {str(e)}\n"
-            "Some possible causes:\n"
-            "  (1) Incorrect path: Specified file/directory doesn't exist or is unreachable.\n"
-            "  (2) Missing credentials: You haven't provided S3 credentials, neither through "
-            "environment variables, nor through a local AWS setup "
-            "that makes the credentials available at ~/.aws/credentials.\n"
-            "  (3) Incorrect credentials: Your S3 credentials are incorrect or do not have "
-            "the correct permissions."
+            f"error from pyarrow S3FileSystem: {type(e).__name__}: {str(e)}\n{bodo_error_msg}"
         )
 
     return file_names

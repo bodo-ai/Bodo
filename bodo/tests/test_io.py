@@ -2589,6 +2589,37 @@ def test_csv_dtype_unicode(memory_leak_check):
     check_func(test_impl, (fname,))
 
 
+def _check_filenotfound(fname, func):
+    with pytest.raises(FileNotFoundError) as excinfo:
+        bodo.jit(func)(fname)
+    err_track = excinfo.getrepr(style="native")
+    assert "Pseudo-exception" not in str(err_track)
+
+
+def test_file_not_found(memory_leak_check):
+    """Test removal Pseduo-exception with FileNotFoundError"""
+
+    def test_csv(fname):
+        df = pd.read_csv(fname)
+        return df.C
+
+    def test_pq(fname):
+        df = pd.read_parquet(fname)
+        return len(df)
+
+    def test_json(fname):
+        df = pd.read_json(fname)
+        return df.C
+
+    _check_filenotfound("nofile.csv", test_csv)
+    _check_filenotfound("nofile.pq", test_pq)
+    _check_filenotfound("nofile.json", test_json)
+    _check_filenotfound("s3://bodo-test/csv_data_date_not_found.csv", test_csv)
+    _check_filenotfound(
+        "gcs://anaconda-public-data/nyc-taxi/nyc.parquet/art.0.parquet", test_pq
+    )
+
+
 @pytest.mark.slow
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
