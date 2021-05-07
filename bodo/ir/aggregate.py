@@ -1346,6 +1346,8 @@ def gen_update_cb(
             "__init_func": udf_func_struct.init_func,
             "__update_redvars": udf_func_struct.update_all_func,
             "is_null_pointer": is_null_pointer,
+            "dt64_dtype": np.dtype("datetime64[ns]"),
+            "td64_dtype": np.dtype("timedelta64[ns]"),
         },
         loc_vars,
     )
@@ -1443,6 +1445,8 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs, label_suffi
             "__init_func": udf_func_struct.init_func,
             "__combine_redvars": udf_func_struct.combine_all_func,
             "is_null_pointer": is_null_pointer,
+            "dt64_dtype": np.dtype("datetime64[ns]"),
+            "td64_dtype": np.dtype("timedelta64[ns]"),
         },
         loc_vars,
     )
@@ -1532,6 +1536,8 @@ def gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_data_typs_, label_suffix)
             "incref": incref,
             "__eval_res": udf_func_struct.eval_all_func,
             "is_null_pointer": is_null_pointer,
+            "dt64_dtype": np.dtype("datetime64[ns]"),
+            "td64_dtype": np.dtype("timedelta64[ns]"),
         },
         loc_vars,
     )
