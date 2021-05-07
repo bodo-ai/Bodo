@@ -1828,6 +1828,168 @@ def unbox_period_index(typ, val, c):
     return NativeValue(index_val._getvalue())
 
 
+# ------------------------------ IntervalIndex ---------------------------
+
+
+class IntervalIndexType(types.ArrayCompatible):
+    """data type for IntervalIndex values"""
+
+    def __init__(self, data, name_typ=None):
+        from bodo.libs.interval_arr_ext import IntervalArrayType
+
+        assert isinstance(
+            data, IntervalArrayType
+        ), "IntervalIndexType expects IntervalArrayType"
+        name_typ = types.none if name_typ is None else name_typ
+        self.name_typ = name_typ
+        self.data = data
+        super(IntervalIndexType, self).__init__(
+            name=f"IntervalIndexType(data={self.data}, name={name_typ})"
+        )
+
+    ndim = 1
+
+    def copy(self):
+        return IntervalIndexType(self.data, self.name_typ)
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
+
+    @property
+    def key(self):
+        return self.data, self.name_typ
+
+
+@register_model(IntervalIndexType)
+class IntervalIndexTypeModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [
+            ("data", fe_type.data),
+            ("name", fe_type.name_typ),
+            # assuming a tuple of left/right values is key in dict
+            (
+                "dict",
+                types.DictType(
+                    types.UniTuple(fe_type.data.arr_type.dtype, 2), types.int64
+                ),
+            ),
+            # TODO(ehsan): support closed (assuming "right" for now)
+        ]
+        super(IntervalIndexTypeModel, self).__init__(dmm, fe_type, members)
+
+
+@typeof_impl.register(pd.IntervalIndex)
+def typeof_interval_index(val, c):
+    # keep string literal value in type since reset_index() may need it
+    return IntervalIndexType(
+        bodo.typeof(val.values), get_val_type_maybe_str_literal(val.name)
+    )
+
+
+@box(IntervalIndexType)
+def box_interval_index(typ, val, c):
+    """"""
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+
+    interval_index = numba.core.cgutils.create_struct_proxy(typ)(
+        c.context, c.builder, val
+    )
+
+    # box IntervalArray
+    c.context.nrt.incref(c.builder, typ.data, interval_index.data)
+    arr_obj = c.pyapi.from_native_value(typ.data, interval_index.data, c.env_manager)
+    c.context.nrt.incref(c.builder, typ.name_typ, interval_index.name)
+    name_obj = c.pyapi.from_native_value(
+        typ.name_typ, interval_index.name, c.env_manager
+    )
+
+    # call pd.IntervalIndex(arr, name=name)
+    args = c.pyapi.tuple_pack([arr_obj])
+    kws = c.pyapi.dict_pack([("name", name_obj)])
+    const_call = c.pyapi.object_getattr_string(pd_class_obj, "IntervalIndex")
+    res = c.pyapi.call(const_call, args, kws)
+
+    c.pyapi.decref(arr_obj)
+    c.pyapi.decref(name_obj)
+    c.pyapi.decref(pd_class_obj)
+    c.pyapi.decref(const_call)
+    c.pyapi.decref(args)
+    c.pyapi.decref(kws)
+    c.context.nrt.decref(c.builder, typ, val)
+    return res
+
+
+@unbox(IntervalIndexType)
+def unbox_interval_index(typ, val, c):
+    # get data and name attributes
+    values_obj = c.pyapi.object_getattr_string(val, "values")
+    data = c.pyapi.to_native_value(typ.data, values_obj).value
+    name_obj = c.pyapi.object_getattr_string(val, "name")
+    name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
+    c.pyapi.decref(values_obj)
+    c.pyapi.decref(name_obj)
+
+    # create index struct
+    index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    index_val.data = data
+    index_val.name = name
+    # create empty dict for get_loc hashmap
+    dtype = types.UniTuple(typ.data.arr_type.dtype, 2)
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(dtype, types.int64),
+        types.DictType(dtype, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
+    return NativeValue(index_val._getvalue())
+
+
+@intrinsic
+def init_interval_index(typingctx, data, name=None):
+    """Create a IntervalIndex with provided data and name values."""
+    name = types.none if name is None else name
+
+    def codegen(context, builder, signature, args):
+        data_val, name_val = args
+        # create interval_index struct and store values
+        interval_index = cgutils.create_struct_proxy(signature.return_type)(
+            context, builder
+        )
+        interval_index.data = data_val
+        interval_index.name = name_val
+
+        # increase refcount of stored values
+        context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], name_val)
+
+        # create empty dict for get_loc hashmap
+        dtype = types.UniTuple(data.arr_type.dtype, 2)
+        interval_index.dict = context.compile_internal(
+            builder,
+            lambda: numba.typed.Dict.empty(dtype, types.int64),
+            types.DictType(dtype, types.int64)(),
+            [],
+        )  # pragma: no cover
+
+        return interval_index._getvalue()
+
+    ret_typ = IntervalIndexType(data, name)
+    sig = signature(ret_typ, data, name)
+    return sig, codegen
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_interval_index = (
+    init_index_equiv
+)
+
+make_attribute_wrapper(IntervalIndexType, "data", "_data")
+make_attribute_wrapper(IntervalIndexType, "name", "_name")
+make_attribute_wrapper(IntervalIndexType, "dict", "_dict")
+
+
 # ---------------- NumericIndex -------------------
 
 
@@ -2281,6 +2443,7 @@ def is_pd_index_type(t):
             NumericIndexType,
             DatetimeIndexType,
             TimedeltaIndexType,
+            IntervalIndexType,
             PeriodIndexType,
             StringIndexType,
             RangeIndexType,
@@ -2451,6 +2614,7 @@ def overload_index_len(I):
             NumericIndexType,
             StringIndexType,
             PeriodIndexType,
+            IntervalIndexType,
             DatetimeIndexType,
             TimedeltaIndexType,
         ),
@@ -2466,6 +2630,7 @@ def overload_index_len(I):
 @overload_attribute(StringIndexType, "shape")
 @overload_attribute(PeriodIndexType, "shape")
 @overload_attribute(TimedeltaIndexType, "shape")
+@overload_attribute(IntervalIndexType, "shape")
 def overload_index_shape(s):
     return lambda s: (
         len(bodo.hiframes.pd_index_ext.get_index_data(s)),
@@ -2589,6 +2754,7 @@ def overload_index_map(I, mapper, na_action=None):
 @lower_builtin(operator.is_, PeriodIndexType, PeriodIndexType)
 @lower_builtin(operator.is_, DatetimeIndexType, DatetimeIndexType)
 @lower_builtin(operator.is_, TimedeltaIndexType, TimedeltaIndexType)
+@lower_builtin(operator.is_, IntervalIndexType, IntervalIndexType)
 def index_is(context, builder, sig, args):
     aty, bty = sig.args
     if aty != bty:  # pragma: no cover
@@ -2751,6 +2917,7 @@ def is_index_type(t):
             PeriodIndexType,
             DatetimeIndexType,
             TimedeltaIndexType,
+            IntervalIndexType,
         ),
     )
 
@@ -3145,6 +3312,7 @@ def _install_index_unsupported():
         ("NumericIndexType.", NumericIndexType),
         ("StringIndexType.", StringIndexType),
         ("TimedeltaIndexType.", TimedeltaIndexType),
+        ("IntervalIndexType.", IntervalIndexType),
         ("PeriodIndexType.", PeriodIndexType),
         ("DatetimeIndexType.", DatetimeIndexType),
     ]

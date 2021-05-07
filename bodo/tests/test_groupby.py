@@ -4455,6 +4455,16 @@ def test_groupby_size(by):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+def test_groupby_size_single_column(memory_leak_check):
+    """test groupby size() for dataframes with single column"""
+
+    def impl(df):
+        return df.groupby("A").size()
+
+    df = pd.DataFrame({"A": [1, 2, 3] * 3})
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+
+
 def test_size(memory_leak_check):
     def impl(df):
         result = df.groupby("class", as_index=False).size()

@@ -80,6 +80,7 @@ from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.struct_arr_ext import StructArrayType

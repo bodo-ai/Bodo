@@ -316,6 +316,15 @@ array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
                           meminfo_bitmask);
 }
 
+array_info* interval_array_to_info(uint64_t n_items, char* left_data,
+                                   char* right_data, int typ_enum, NRT_MemInfo* left_meminfo,
+                                   NRT_MemInfo* right_meminfo) {
+    return new array_info(bodo_array_type::INTERVAL,
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
+                          left_data, right_data, NULL, NULL, NULL, left_meminfo,
+                          right_meminfo);
+}
+
 array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                   char* null_bitmap, NRT_MemInfo* meminfo,
                                   NRT_MemInfo* meminfo_bitmask,
@@ -395,6 +404,24 @@ void info_to_nullable_array(array_info* info, uint64_t* n_items,
     *meminfo = info->meminfo;
     *meminfo_bitmask = info->meminfo_bitmask;
 }
+
+void info_to_interval_array(array_info* info, uint64_t* n_items,
+                            char** left_data, char** right_data,
+                            NRT_MemInfo** left_meminfo,
+                            NRT_MemInfo** right_meminfo) {
+    if (info->arr_type != bodo_array_type::INTERVAL) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "_array.cpp::info_to_interval_array: "
+                        "info_to_interval_array requires interval input");
+        return;
+    }
+    *n_items = info->length;
+    *left_data = info->data1;
+    *right_data = info->data2;
+    *left_meminfo = info->meminfo;
+    *right_meminfo = info->meminfo_bitmask;
+}
+
 
 table_info* arr_info_list_to_table(array_info** arrs, int64_t n_arrs) {
     std::vector<array_info*> columns(arrs, arrs + n_arrs);
@@ -1250,6 +1277,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "nullable_array_to_info",
         PyLong_FromVoidPtr((void*)(&nullable_array_to_info)));
+    PyObject_SetAttrString(
+        m, "interval_array_to_info",
+        PyLong_FromVoidPtr((void*)(&interval_array_to_info)));
     // Not covered by error handler
     PyObject_SetAttrString(m, "decimal_array_to_info",
                            PyLong_FromVoidPtr((void*)(&decimal_array_to_info)));
@@ -1265,6 +1295,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "info_to_nullable_array",
         PyLong_FromVoidPtr((void*)(&info_to_nullable_array)));
+    PyObject_SetAttrString(
+        m, "info_to_interval_array",
+        PyLong_FromVoidPtr((void*)(&info_to_interval_array)));
     PyObject_SetAttrString(m, "alloc_numpy",
                            PyLong_FromVoidPtr((void*)(&alloc_numpy)));
     PyObject_SetAttrString(m, "alloc_string_array",
