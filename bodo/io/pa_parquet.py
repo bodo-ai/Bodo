@@ -1,5 +1,6 @@
 import asyncio
 import os
+import threading
 from concurrent import futures
 
 import pyarrow.parquet as pq
@@ -83,6 +84,38 @@ def get_dataset_schema(dataset):
     return dataset_schema
 
 
+class VisitLevelThread(threading.Thread):
+    """Thread that is used to traverse directory tree in ParquetManifest.
+    We use a separate thread in case the main thread already
+    has an event loop running (e.g. Jupyter with tornado)
+    See Bodo changes to ParquetManifest below for more information.
+    """
+
+    def __init__(self, manifest):
+        threading.Thread.__init__(self)
+        self.manifest = manifest
+        self.exc = None
+
+    def run(self):
+        try:
+            manifest = self.manifest
+            manifest.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(manifest.loop)
+            manifest.loop.run_until_complete(
+                manifest._visit_level(0, manifest.dirpath, [])
+            )
+        except Exception as e:
+            self.exc = e
+        finally:
+            if hasattr(manifest, "loop") and not manifest.loop.is_closed():
+                manifest.loop.close()
+
+    def join(self):
+        super(VisitLevelThread, self).join()
+        if self.exc:
+            raise self.exc
+
+
 # We modify pyarrow.parquet.ParquetManifest to use coroutine-based concurrency
 # for _visit_level tasks and thread-based concurrency for parallelism
 # of IO calls, because deadlocks can occur in the original code.
@@ -122,8 +155,11 @@ class ParquetManifest:
         self.delta_lake_filter = set()
 
         # Bodo change (run _visit_level with asyncio)
-        self.loop = asyncio.get_event_loop()
-        self.loop.run_until_complete(self._visit_level(0, self.dirpath, []))
+        # Do traversal in a separate thread in case the main thread already
+        # has an event loop running (e.g. Jupyter with tornado)
+        thread = VisitLevelThread(self)
+        thread.start()
+        thread.join()
 
         # Due to concurrency, pieces will potentially by out of order if the
         # dataset is partitioned so we sort them to yield stable results
