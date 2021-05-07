@@ -174,9 +174,10 @@ def init_groupby(typingctx, obj_type, by_type, as_index_type=None):
     return groupby_type(obj_type, by_type, as_index_type), codegen
 
 
-# dummy lowering for groupby.count since it is used in Series.value_counts()
+# dummy lowering for groupby.size since it is used in Series.value_counts()
 # groupby.apply is used in groupby.rolling
 @lower_builtin("groupby.count", types.VarArg(types.Any))
+@lower_builtin("groupby.size", types.VarArg(types.Any))
 @lower_builtin("groupby.apply", types.VarArg(types.Any))
 def lower_groupby_count_dummy(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
@@ -415,6 +416,11 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     grp.df_type.data[ind], types.StringLiteral(grp.keys[0])
                 )
 
+        # size always produces one integer output and doesn't depend on any input
+        if func_name == "size":
+            out_data.append(types.Array(types.int64, 1, "C"))
+            out_columns.append("size")
+
         # get output type for each selected column
         list_err_msg = []
         for c in grp.selection:
@@ -422,10 +428,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 kws = dict(kws) if kws else {}
                 check_args_kwargs(func_name, 0, args, kws)
 
-            # size always produces one integer output and doesn't depend on any input
             if func_name == "size":
-                out_data.append(types.Array(types.int64, 1, "C"))
-                out_columns.append("size")
                 break
             ind = grp.df_type.columns.index(c)
             data = grp.df_type.data[ind]

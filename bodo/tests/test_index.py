@@ -697,6 +697,20 @@ def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
+    "interval_index",
+    [
+        pd.IntervalIndex.from_arrays(np.arange(11), np.arange(11) + 1),
+    ],
+)
+def test_interval_index_box(interval_index, memory_leak_check):
+    def impl(A):
+        return A
+
+    check_func(impl, (interval_index,))
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
     "period_index",
     [
         pd.PeriodIndex(year=[2015, 2016, 2018], quarter=[1, 2, 3]),

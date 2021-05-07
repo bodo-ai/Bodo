@@ -623,7 +623,7 @@ def overload_decimal_arr_copy(A):
         A._null_bitmap.copy(),
         precision,
         scale,
-    )
+    )  # pragma: no cover
 
 
 @overload(len, no_unliteral=True)

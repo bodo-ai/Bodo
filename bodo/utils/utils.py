@@ -321,6 +321,7 @@ def is_array_typ(var_typ, include_index_series=True):
                 bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
                 bodo.libs.array_item_arr_ext.ArrayItemArrayType,
                 bodo.libs.struct_arr_ext.StructArrayType,
+                bodo.libs.interval_arr_ext.IntervalArrayType,
                 bodo.libs.tuple_arr_ext.TupleArrayType,
                 bodo.libs.map_arr_ext.MapArrayType,
                 bodo.libs.csr_matrix_ext.CSRMatrixType,

@@ -461,6 +461,7 @@ def overload_coerce_to_array(
         (
             bodo.libs.int_arr_ext.IntegerArrayType,
             DecimalArrayType,
+            bodo.libs.interval_arr_ext.IntervalArrayType,
             bodo.libs.tuple_arr_ext.TupleArrayType,
             bodo.libs.struct_arr_ext.StructArrayType,
             bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
@@ -964,13 +965,6 @@ def overload_index_from_array(data, name=None):
             data, name
         )  # pragma: no cover
 
-    assert isinstance(
-        data, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType)
-    ) or data in (
-        bodo.hiframes.datetime_date_ext.datetime_date_array_type,
-        bodo.boolean_array,
-    )
-
     if (
         data == bodo.hiframes.datetime_date_ext.datetime_date_array_type
         or data.dtype == types.NPDatetime("ns")
@@ -986,6 +980,12 @@ def overload_index_from_array(data, name=None):
 
     if isinstance(data.dtype, (types.Integer, types.Float, types.Boolean)):
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_numeric_index(
+            data, name
+        )  # pragma: no cover
+
+    # interval array
+    if isinstance(data, bodo.libs.interval_arr_ext.IntervalArrayType):
+        return lambda data, name=None: bodo.hiframes.pd_index_ext.init_interval_index(
             data, name
         )  # pragma: no cover
 

@@ -23,6 +23,7 @@ from bodo.libs.array_item_arr_ext import (
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.str_arr_ext import (
     _get_string_arr_payload,
     char_arr_type,
@@ -38,6 +39,7 @@ from bodo.libs.struct_arr_ext import (
     define_struct_arr_dtor,
 )
 from bodo.libs.tuple_arr_ext import TupleArrayType
+from bodo.utils.typing import BodoError
 from bodo.utils.utils import (
     CTypeEnum,
     check_and_propagate_cpp_exception,
@@ -50,12 +52,14 @@ ll.add_symbol("string_array_to_info", array_ext.string_array_to_info)
 ll.add_symbol("numpy_array_to_info", array_ext.numpy_array_to_info)
 ll.add_symbol("categorical_array_to_info", array_ext.categorical_array_to_info)
 ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
+ll.add_symbol("interval_array_to_info", array_ext.interval_array_to_info)
 ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
 ll.add_symbol("info_to_nested_array", array_ext.info_to_nested_array)
 ll.add_symbol("info_to_list_string_array", array_ext.info_to_list_string_array)
 ll.add_symbol("info_to_string_array", array_ext.info_to_string_array)
 ll.add_symbol("info_to_numpy_array", array_ext.info_to_numpy_array)
 ll.add_symbol("info_to_nullable_array", array_ext.info_to_nullable_array)
+ll.add_symbol("info_to_interval_array", array_ext.info_to_interval_array)
 ll.add_symbol("alloc_numpy", array_ext.alloc_numpy)
 ll.add_symbol("alloc_string_array", array_ext.alloc_string_array)
 ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
@@ -102,6 +106,8 @@ register_model(TableType)(models.OpaqueModel)
 
 @intrinsic
 def array_to_info(typingctx, arr_type_t=None):
+    """convert array to array info wrapper to pass to C++"""
+
     def codegen(context, builder, sig, args):
         (in_arr,) = args
         arr_type = arr_type_t
@@ -596,6 +602,50 @@ def array_to_info(typingctx, arr_type_t=None):
                     ],
                 )
 
+        # interval array
+        if isinstance(arr_type, IntervalArrayType):
+            assert isinstance(
+                arr_type.arr_type, types.Array
+            ), "array_to_info(): only IntervalArrayType with Numpy arrays supported"
+            arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
+            left_arr = context.make_array(arr_type.arr_type)(context, builder, arr.left)
+            right_arr = context.make_array(arr_type.arr_type)(
+                context, builder, arr.right
+            )
+            length = builder.extract_value(left_arr.shape, 0)
+
+            typ_enum = numba_to_c_type(arr_type.arr_type.dtype)
+            typ_arg = cgutils.alloca_once_value(
+                builder, lir.Constant(lir.IntType(32), typ_enum)
+            )
+            fnty = lir.FunctionType(
+                lir.IntType(8).as_pointer(),
+                [
+                    lir.IntType(64),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(32),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                ],
+            )
+            fn_tp = builder.module.get_or_insert_function(
+                fnty, name="interval_array_to_info"
+            )
+            return builder.call(
+                fn_tp,
+                [
+                    length,
+                    builder.bitcast(left_arr.data, lir.IntType(8).as_pointer()),
+                    builder.bitcast(right_arr.data, lir.IntType(8).as_pointer()),
+                    builder.load(typ_arg),
+                    left_arr.meminfo,
+                    right_arr.meminfo,
+                ],
+            )
+
+        raise BodoError(f"array_to_info(): array type {arr_type} is not supported")
+
     return array_info_type(arr_type_t), codegen
 
 
@@ -900,6 +950,7 @@ def nested_to_array(
 
 @intrinsic
 def info_to_array(typingctx, info_type, array_type):
+    """convert array info wrapper from C++ to regular array object"""
     arr_type = (
         array_type.instance_type
         if isinstance(array_type, types.TypeRef)
@@ -1169,6 +1220,96 @@ def info_to_array(typingctx, info_type, array_type):
             )
             arr.null_bitmap = nulls_arr._getvalue()
             return arr._getvalue()
+
+        # interval array
+        if isinstance(arr_type, IntervalArrayType):
+            arr = cgutils.create_struct_proxy(arr_type)(context, builder)
+            left_arr = context.make_array(arr_type.arr_type)(context, builder)
+            right_arr = context.make_array(arr_type.arr_type)(context, builder)
+
+            length_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+            left_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+            right_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+            meminfo_left_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+            meminfo_right_ptr = cgutils.alloca_once(
+                builder, lir.IntType(8).as_pointer()
+            )
+
+            fnty = lir.FunctionType(
+                lir.VoidType(),
+                [
+                    lir.IntType(8).as_pointer(),  # info
+                    lir.IntType(64).as_pointer(),  # num_items
+                    lir.IntType(8).as_pointer().as_pointer(),  # left_ptr
+                    lir.IntType(8).as_pointer().as_pointer(),  # right_ptr
+                    lir.IntType(8).as_pointer().as_pointer(),  # left meminfo
+                    lir.IntType(8).as_pointer().as_pointer(),  # right meminfo
+                ],
+            )  # meminfo_nulls
+            fn_tp = builder.module.get_or_insert_function(
+                fnty, name="info_to_interval_array"
+            )
+            builder.call(
+                fn_tp,
+                [
+                    in_info,
+                    length_ptr,
+                    left_ptr,
+                    right_ptr,
+                    meminfo_left_ptr,
+                    meminfo_right_ptr,
+                ],
+            )
+            context.compile_internal(
+                builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+            )  # pragma: no cover
+
+            intp_t = context.get_value_type(types.intp)
+
+            # left array
+            shape_array = cgutils.pack_array(
+                builder, [builder.load(length_ptr)], ty=intp_t
+            )
+            itemsize = context.get_constant(
+                types.intp,
+                context.get_abi_sizeof(context.get_data_type(arr_type.arr_type.dtype)),
+            )
+            strides_array = cgutils.pack_array(builder, [itemsize], ty=intp_t)
+
+            left_data = builder.bitcast(
+                builder.load(left_ptr),
+                context.get_data_type(arr_type.arr_type.dtype).as_pointer(),
+            )
+
+            numba.np.arrayobj.populate_array(
+                left_arr,
+                data=left_data,
+                shape=shape_array,
+                strides=strides_array,
+                itemsize=itemsize,
+                meminfo=builder.load(meminfo_left_ptr),
+            )
+            arr.left = left_arr._getvalue()
+
+            # right array
+            right_data = builder.bitcast(
+                builder.load(right_ptr),
+                context.get_data_type(arr_type.arr_type.dtype).as_pointer(),
+            )
+
+            numba.np.arrayobj.populate_array(
+                right_arr,
+                data=right_data,
+                shape=shape_array,
+                strides=strides_array,
+                itemsize=itemsize,
+                meminfo=builder.load(meminfo_right_ptr),
+            )
+            arr.right = right_arr._getvalue()
+
+            return arr._getvalue()
+
+        raise BodoError(f"info_to_array(): array type {arr_type} is not supported")
 
     return arr_type(info_type, array_type), codegen
 

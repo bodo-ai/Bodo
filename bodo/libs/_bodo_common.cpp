@@ -147,6 +147,18 @@ array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
                           data, NULL, NULL, NULL, NULL, meminfo, NULL);
 }
 
+
+array_info* alloc_interval_array(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
+    int64_t size = length * numpy_item_size[typ_enum];
+    NRT_MemInfo* left_meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
+    NRT_MemInfo* right_meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
+    char* left_data = (char*)left_meminfo->data;
+    char* right_data = (char*)right_meminfo->data;
+    return new array_info(bodo_array_type::INTERVAL, typ_enum, length, -1, -1,
+                          left_data, right_data, NULL, NULL, NULL, left_meminfo, right_meminfo);
+}
+
+
 array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
                               int64_t num_categories) {
     int64_t size = length * numpy_item_size[typ_enum];
@@ -392,6 +404,9 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL)
         return alloc_nullable_array(length, dtype, extra_null_bytes);
 
+    if (arr_type == bodo_array_type::INTERVAL)
+        return alloc_interval_array(length, dtype);
+
     if (arr_type == bodo_array_type::NUMPY) return alloc_numpy(length, dtype);
 
     if (arr_type == bodo_array_type::CATEGORICAL)
@@ -507,6 +522,11 @@ array_info* copy_array(array_info* earr) {
         earr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
         memcpy(farr->data1, earr->data1, siztype * earr->length);
+    }
+    if (earr->arr_type == bodo_array_type::INTERVAL) {
+        uint64_t siztype = numpy_item_size[earr->dtype];
+        memcpy(farr->data1, earr->data1, siztype * earr->length);
+        memcpy(farr->data2, earr->data2, siztype * earr->length);
     }
     if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         uint64_t siztype = numpy_item_size[earr->dtype];

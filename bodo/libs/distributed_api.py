@@ -40,6 +40,7 @@ from bodo.libs.array_item_arr_ext import (
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
+from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import (
     convert_len_arr_to_offset,
@@ -739,6 +740,18 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             return all_data
 
         return gatherv_impl_int_arr
+
+    # interval array
+    if isinstance(data, IntervalArrayType):
+        # gather the left/right arrays
+        def impl_interval_arr(
+            data, allgather=False, warn_if_rep=True, root=MPI_ROOT
+        ):  # pragma: no cover
+            all_left = bodo.gatherv(data._left, allgather, warn_if_rep, root)
+            all_right = bodo.gatherv(data._right, allgather, warn_if_rep, root)
+            return bodo.libs.interval_arr_ext.init_interval_array(all_left, all_right)
+
+        return impl_interval_arr
 
     if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
 
