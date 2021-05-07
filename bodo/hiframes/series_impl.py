@@ -17,7 +17,6 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.datetime_timedelta_ext import (
     PDTimeDeltaType,
@@ -316,12 +315,7 @@ def overload_series_isna(S):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        numba.parfors.parfor.init_prange()
-        n = len(arr)
-        out_arr = np.empty(n, np.bool_)
-        for i in numba.parfors.parfor.internal_prange(n):
-            out_arr[i] = bodo.libs.array_kernels.isna(arr, i)
-
+        out_arr = bodo.libs.array_ops.array_op_isna(arr)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
@@ -356,54 +350,11 @@ def overload_series_sum(
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.sum(): axis argument not supported")
 
-    # TODO: series that have different underlying data type than dtype
-    # like records/tuples
-    if isinstance(S.dtype, types.Integer):
-        retty = types.intp
-    elif isinstance(S.dtype, types.Boolean):
-        retty = np.int64
-    else:
-        retty = S.dtype
-    val_zero = retty(0)
-
-    # For integer array we cannot handle the missing values because
-    # we cannot mix np.nan with integers
-    if isinstance(S.dtype, types.Float) and (
-        not is_overload_true(skipna) or not is_overload_zero(min_count)
-    ):
-
-        def impl(
-            S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
-        ):  # pragma: no cover
-            A = bodo.hiframes.pd_series_ext.get_series_data(S)
-            numba.parfors.parfor.init_prange()
-            s = val_zero
-            count = 0
-            for i in numba.parfors.parfor.internal_prange(len(A)):
-                val = val_zero
-                count_val = 0
-                if not bodo.libs.array_kernels.isna(A, i) or not skipna:
-                    val = A[i]
-                    count_val = 1
-                s += val
-                count += count_val
-            res = bodo.hiframes.series_kernels._var_handle_mincount(s, count, min_count)
-            return res
-
-    else:
-
-        def impl(
-            S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
-        ):  # pragma: no cover
-            A = bodo.hiframes.pd_series_ext.get_series_data(S)
-            numba.parfors.parfor.init_prange()
-            s = val_zero
-            for i in numba.parfors.parfor.internal_prange(len(A)):
-                val = val_zero
-                if not bodo.libs.array_kernels.isna(A, i):
-                    val = A[i]
-                s += val
-            return s
+    def impl(
+        S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
+    ):  # pragma: no cover)
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        return bodo.libs.array_ops.array_op_sum(arr, skipna, min_count)
 
     return impl
 
@@ -421,48 +372,11 @@ def overload_series_prod(
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.product(): axis argument not supported")
 
-    val_one = S.dtype(1)
-    # Using True fails for some reason in test_dataframe.py::test_df_prod"[df_value2]"
-    # with Bodo inliner
-    if S.dtype == types.bool_:
-        val_one = 1
-
-    # For integer array we cannot handle the missing values because
-    # we cannot mix np.nan with integers
-    if isinstance(S.dtype, types.Float):
-
-        def impl(
-            S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
-        ):  # pragma: no cover
-            A = bodo.hiframes.pd_series_ext.get_series_data(S)
-            numba.parfors.parfor.init_prange()
-            s = val_one
-            count = 0
-            for i in numba.parfors.parfor.internal_prange(len(A)):
-                val = val_one
-                count_val = 0
-                if not bodo.libs.array_kernels.isna(A, i) or not skipna:
-                    val = A[i]
-                    count_val = 1
-                count += count_val
-                s *= val
-            res = bodo.hiframes.series_kernels._var_handle_mincount(s, count, min_count)
-            return res
-
-    else:
-
-        def impl(
-            S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
-        ):  # pragma: no cover
-            A = bodo.hiframes.pd_series_ext.get_series_data(S)
-            numba.parfors.parfor.init_prange()
-            s = val_one
-            for i in numba.parfors.parfor.internal_prange(len(A)):
-                val = val_one
-                if not bodo.libs.array_kernels.isna(A, i):
-                    val = A[i]
-                s *= val
-            return s
+    def impl(
+        S, axis=None, skipna=True, level=None, numeric_only=None, min_count=0
+    ):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        return bodo.libs.array_ops.array_op_prod(arr, skipna, min_count)
 
     return impl
 
@@ -616,36 +530,12 @@ def overload_series_mean(S, axis=None, skipna=None, level=None, numeric_only=Non
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.mean(): axis argument not supported")
-    # see core/nanops.py/nanmean() for output types
-    # TODO: more accurate port of dtypes from pandas
-    sum_dtype = types.float64
-    count_dtype = types.float64
-    if S.dtype == types.float32:
-        sum_dtype = types.float32
-        count_dtype = types.float32
-
-    val_0 = sum_dtype(0)
-    count_0 = count_dtype(0)
-    count_1 = count_dtype(1)
 
     def impl(
         S, axis=None, skipna=None, level=None, numeric_only=None
     ):  # pragma: no cover
-        A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfors.parfor.init_prange()
-        s = val_0
-        count = count_0
-        for i in numba.parfors.parfor.internal_prange(len(A)):
-            val = val_0
-            count_val = count_0
-            if not bodo.libs.array_kernels.isna(A, i):
-                val = A[i]
-                count_val = count_1
-            s += val
-            count += count_val
-
-        res = bodo.hiframes.series_kernels._mean_handle_nan(s, count)
-        return res
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        return bodo.libs.array_ops.array_op_mean(arr)
 
     return impl
 
@@ -781,24 +671,8 @@ def overload_series_var(
     def impl(
         S, axis=None, skipna=True, level=None, ddof=1, numeric_only=None
     ):  # pragma: no cover
-        A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfors.parfor.init_prange()
-        first_moment = 0
-        second_moment = 0
-        count = 0
-        for i in numba.parfors.parfor.internal_prange(len(A)):
-            val = 0
-            count_val = 0
-            if not bodo.libs.array_kernels.isna(A, i) or not skipna:
-                val = A[i]
-                count_val = 1
-            first_moment += val
-            second_moment += val * val
-            count += count_val
-
-        s = second_moment - first_moment * first_moment / count
-        res = bodo.hiframes.series_kernels._handle_nan_count_ddof(s, count, ddof)
-        return res
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        return bodo.libs.array_ops.array_op_var(arr, skipna, ddof)
 
     return impl
 
@@ -818,7 +692,8 @@ def overload_series_std(
     def impl(
         S, axis=None, skipna=True, level=None, ddof=1, numeric_only=None
     ):  # pragma: no cover
-        return S.var(skipna=skipna, ddof=ddof) ** 0.5
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        return bodo.libs.array_ops.array_op_std(arr, skipna, ddof)
 
     return impl
 
@@ -969,16 +844,7 @@ def overload_series_count(S, level=None):
 
     def impl(S, level=None):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfors.parfor.init_prange()
-        count = 0
-        for i in numba.parfors.parfor.internal_prange(len(A)):
-            count_val = 0
-            if not bodo.libs.array_kernels.isna(A, i):
-                count_val = 1
-            count += count_val
-
-        res = count
-        return res
+        return bodo.libs.array_ops.array_op_count(A)
 
     return impl
 
@@ -1060,93 +926,15 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
     if not (is_overload_none(axis) or is_overload_zero(axis)):
         raise BodoError("Series.min(): axis argument not supported")
 
-    # TODO: min/max of string dtype, etc.
-    if S.dtype == bodo.datetime64ns:
-
-        def impl_dt64(
-            S, axis=None, skipna=None, level=None, numeric_only=None
-        ):  # pragma: no cover
-            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            numba.parfors.parfor.init_prange()
-            s = numba.cpython.builtins.get_type_max_value(np.int64)
-            count = 0
-            for i in numba.parfors.parfor.internal_prange(len(in_arr)):
-                val = s
-                count_val = 0
-                if not bodo.libs.array_kernels.isna(in_arr, i):
-                    val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
-                    count_val = 1
-                s = min(s, val)
-                count += count_val
-            return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
-
-        return impl_dt64
-
-    # categorical case
     if isinstance(S.dtype, PDCategoricalDtype):
         if not S.dtype.ordered:  # pragma: no cover
             raise BodoError("Series.min(): only ordered categoricals are possible")
 
-        def impl_cat(
-            S, axis=None, skipna=None, level=None, numeric_only=None
-        ):  # pragma: no cover
-            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(in_arr)
-            numba.parfors.parfor.init_prange()
-            s = numba.cpython.builtins.get_type_max_value(np.int64)
-            count = 0
-            for i in numba.parfors.parfor.internal_prange(len(codes)):
-                v = codes[i]
-                if v == -1:
-                    continue
-                s = min(s, v)
-                count += 1
-
-            res = bodo.hiframes.series_kernels._box_cat_val(s, in_arr.dtype, count)
-            return res
-
-        return impl_cat
-
-    # TODO: Setup datetime_date_array.dtype() so we can reuse impl
-    if S.dtype == datetime_date_type:
-
-        def impl_date(
-            S, axis=None, skipna=None, level=None, numeric_only=None
-        ):  # pragma: no cover
-            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            numba.parfors.parfor.init_prange()
-            s = bodo.hiframes.series_kernels._get_date_max_value()
-            count = 0
-            for i in numba.parfors.parfor.internal_prange(len(in_arr)):
-                val = s
-                count_val = 0
-                if not bodo.libs.array_kernels.isna(in_arr, i):
-                    val = in_arr[i]
-                    count_val = 1
-                s = min(s, val)
-                count += count_val
-            res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
-            return res
-
-        return impl_date
-
     def impl(
         S, axis=None, skipna=None, level=None, numeric_only=None
     ):  # pragma: no cover
-        in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfors.parfor.init_prange()
-        s = bodo.hiframes.series_kernels._get_type_max_value(in_arr.dtype)
-        count = 0
-        for i in numba.parfors.parfor.internal_prange(len(in_arr)):
-            val = s
-            count_val = 0
-            if not bodo.libs.array_kernels.isna(in_arr, i):
-                val = in_arr[i]
-                count_val = 1
-            s = min(s, val)
-            count += count_val
-        res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
-        return res
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        return bodo.libs.array_ops.array_op_min(arr)
 
     return impl
 
@@ -1203,90 +991,15 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.max(): axis argument not supported")
 
-    # datetime case
-    if S.dtype == bodo.datetime64ns:
-
-        def impl_dt64(
-            S, axis=None, skipna=None, level=None, numeric_only=None
-        ):  # pragma: no cover
-            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            numba.parfors.parfor.init_prange()
-            s = numba.cpython.builtins.get_type_min_value(np.int64)
-            count = 0
-            for i in numba.parfors.parfor.internal_prange(len(in_arr)):
-                val = s
-                count_val = 0
-                if not bodo.libs.array_kernels.isna(in_arr, i):
-                    val = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(in_arr[i])
-                    count_val = 1
-                s = max(s, val)
-                count += count_val
-            return bodo.hiframes.pd_index_ext._dti_val_finalize(s, count)
-
-        return impl_dt64
-
-    # categorical case
     if isinstance(S.dtype, PDCategoricalDtype):
         if not S.dtype.ordered:  # pragma: no cover
             raise BodoError("Series.max(): only ordered categoricals are possible")
 
-        def impl_cat(
-            S, axis=None, skipna=None, level=None, numeric_only=None
-        ):  # pragma: no cover
-            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(in_arr)
-            numba.parfors.parfor.init_prange()
-            s = -1
-            # keeping track of NAs is not necessary for max since all valid codes are
-            # greater than -1
-            for i in numba.parfors.parfor.internal_prange(len(codes)):
-                s = max(s, codes[i])
-
-            res = bodo.hiframes.series_kernels._box_cat_val(s, in_arr.dtype, 1)
-            return res
-
-        return impl_cat
-
-    # TODO: Setup datetime_date_array.dtype() so we can reuse impl
-    if S.dtype == datetime_date_type:
-
-        def impl_date(
-            S, axis=None, skipna=None, level=None, numeric_only=None
-        ):  # pragma: no cover
-            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            numba.parfors.parfor.init_prange()
-            s = bodo.hiframes.series_kernels._get_date_min_value()
-            count = 0
-            for i in numba.parfors.parfor.internal_prange(len(in_arr)):
-                val = s
-                count_val = 0
-                if not bodo.libs.array_kernels.isna(in_arr, i):
-                    val = in_arr[i]
-                    count_val = 1
-                s = max(s, val)
-                count += count_val
-            res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
-            return res
-
-        return impl_date
-
     def impl(
         S, axis=None, skipna=None, level=None, numeric_only=None
     ):  # pragma: no cover
-        in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfors.parfor.init_prange()
-        s = bodo.hiframes.series_kernels._get_type_min_value(in_arr.dtype)
-        count = 0
-        for i in numba.parfors.parfor.internal_prange(len(in_arr)):
-            val = s
-            count_val = 0
-            if not bodo.libs.array_kernels.isna(in_arr, i):
-                val = in_arr[i]
-                count_val = 1
-            s = max(s, val)
-            count += count_val
-        res = bodo.hiframes.series_kernels._sum_handle_nan(s, count)
-        return res
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        return bodo.libs.array_ops.array_op_max(arr)
 
     return impl
 
@@ -1323,22 +1036,13 @@ def overload_series_idxmin(S, axis=0, skipna=True):
     if isinstance(S.data, bodo.CategoricalArrayType) and not S.dtype.ordered:
         raise BodoError("Series.idxmin(): only ordered categoricals are possible")
 
-    if S.dtype == types.none:
-        return (
-            lambda S, axis=0, skipna=True: bodo.hiframes.pd_series_ext.get_series_data(
-                S
-            ).argmin()
-        )
-    else:
-        # TODO: Make sure -1 is replaced with np.nan
-        def impl(S, axis=0, skipna=True):  # pragma: no cover
-            i = bodo.libs.array_kernels._nan_argmin(
-                bodo.hiframes.pd_series_ext.get_series_data(S)
-            )
-            index = bodo.hiframes.pd_series_ext.get_series_index(S)
-            return index[i]
+    # TODO: other types like strings
+    def impl(S, axis=0, skipna=True):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        return bodo.libs.array_ops.array_op_idxmin(arr, index)
 
-        return impl
+    return impl
 
 
 @overload_method(SeriesType, "idxmax", inline="always", no_unliteral=True)
@@ -1374,23 +1078,12 @@ def overload_series_idxmax(S, axis=0, skipna=True):
         raise BodoError("Series.idxmax(): only ordered categoricals are possible")
 
     # TODO: other types like strings
-    if S.dtype == types.none:
-        return (
-            lambda S, axis=0, skipna=True: bodo.hiframes.pd_series_ext.get_series_data(
-                S
-            ).argmax()
-        )
+    def impl(S, axis=0, skipna=True):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        return bodo.libs.array_ops.array_op_idxmax(arr, index)
 
-    else:
-        # TODO: Make sure -1 is replaced with np.nan
-        def impl(S, axis=0, skipna=True):  # pragma: no cover
-            i = bodo.libs.array_kernels._nan_argmax(
-                bodo.hiframes.pd_series_ext.get_series_data(S)
-            )
-            index = bodo.hiframes.pd_series_ext.get_series_index(S)
-            return index[i]
-
-        return impl
+    return impl
 
 
 @overload_attribute(SeriesType, "is_monotonic", inline="always")
@@ -1424,9 +1117,9 @@ def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=N
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.median(): axis argument not supported")
 
-    return lambda S, axis=None, skipna=True, level=None, numeric_only=None: bodo.libs.array_kernels.median(
+    return lambda S, axis=None, skipna=True, level=None, numeric_only=None: bodo.libs.array_ops.array_op_median(
         bodo.hiframes.pd_series_ext.get_series_data(S), skipna
-    )
+    )  # pragma: no cover
 
 
 @overload_method(SeriesType, "head", inline="always", no_unliteral=True)
@@ -1523,7 +1216,7 @@ def overload_series_notna(S):
     return lambda S: S.isna() == False
 
 
-@overload_method(SeriesType, "astype", no_unliteral=True)
+@overload_method(SeriesType, "astype", inline="always", no_unliteral=True)
 def overload_series_astype(S, dtype, copy=True, errors="raise"):
 
     unsupported_args = dict(errors=errors)
@@ -2121,11 +1814,8 @@ def overload_series_quantile(S, q=0.5, interpolation="linear"):
 
         def impl_list(S, q=0.5, interpolation="linear"):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            out_arr = bodo.libs.array_ops.array_op_quantile(arr, q)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
-            out_arr = np.empty(len(q), np.float64)
-            for i in range(len(q)):
-                q_val = np.float64(q[i])
-                out_arr[i] = bodo.libs.array_kernels.quantile(arr, q_val)
             index = bodo.hiframes.pd_index_ext.init_numeric_index(
                 bodo.utils.conversion.coerce_to_array(q), None
             )
@@ -2137,8 +1827,7 @@ def overload_series_quantile(S, q=0.5, interpolation="linear"):
         # TODO: datetime support
         def impl(S, q=0.5, interpolation="linear"):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            q = np.float64(q)
-            return bodo.libs.array_kernels.quantile(arr, q)
+            return bodo.libs.array_ops.array_op_quantile(arr, q)
 
         return impl
     else:
@@ -2200,17 +1889,10 @@ def overload_series_describe(
     def impl(
         S, percentiles=None, include=None, exclude=None, datetime_is_numeric=False
     ):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        a_count = S.count()
-        a_min = S.min()
-        a_max = S.max()
-        a_mean = S.mean()
-        a_std = S.std()
-        q25 = S.quantile(0.25)
-        q50 = S.quantile(0.5)
-        q75 = S.quantile(0.75)
         return bodo.hiframes.pd_series_ext.init_series(
-            (a_count, a_mean, a_std, a_min, q25, q50, q75, a_max),
+            bodo.libs.array_ops.array_op_describe(arr),
             bodo.utils.conversion.convert_to_index(
                 ["count", "mean", "std", "min", "25%", "50%", "75%", "max"]
             ),

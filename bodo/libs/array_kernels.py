@@ -330,14 +330,6 @@ def median_series_computation(res, arr, is_parallel, skipna):  # pragma: no cove
     delete_info_decref_array(arr_info)
 
 
-@numba.njit
-def median(arr, skipna=True, parallel=False):  # pragma: no cover
-    # TODO: check return types, e.g. float32 -> float32
-    res = np.empty(1, types.float64)
-    median_series_computation(res.ctypes, arr, parallel, skipna)
-    return res[0]
-
-
 ################################ autocorr ####################################
 
 ll.add_symbol("autocorr_series_computation", quantile_alg.autocorr_series_computation)

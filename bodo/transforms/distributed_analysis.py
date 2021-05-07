@@ -1253,7 +1253,7 @@ class DistributedAnalysis:
         if fdef == ("autocorr", "bodo.libs.array_kernels"):
             return
 
-        if fdef == ("median", "bodo.libs.array_kernels"):
+        if fdef == ("array_op_median", "bodo.libs.array_ops"):
             return
 
         if fdef == ("concat", "bodo.libs.array_kernels"):

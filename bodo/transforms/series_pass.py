@@ -1541,44 +1541,34 @@ class SeriesPass:
             ("_get_type_max_value", "bodo.transforms.series_pass"),
             ("_get_type_max_value", "bodo.hiframes.series_kernels"),
         ):
-            if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
-                return replace_func(
-                    self,
-                    eval(
-                        ""
-                        "lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64("
-                        "    numba.cpython.builtins.get_type_max_value("
-                        "        numba.core.types.uint64"
-                        "    )"
-                    ),
-                    [],
-                )
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            impl = getattr(
+                bodo.hiframes.series_kernels, "_get_type_max_value_overload"
+            )(*arg_typs, **kw_typs)
             return replace_func(
                 self,
-                eval("lambda d: numba.cpython.builtins.get_type_max_value(d)"),
+                impl,
                 rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
             )
 
         if fdef in (
             ("_get_type_min_value", "bodo.transforms.series_pass"),
             ("_get_type_min_value", "bodo.hiframes.series_kernels"),
         ):
-            if self.typemap[rhs.args[0].name] == types.DType(types.NPDatetime("ns")):
-                return replace_func(
-                    self,
-                    eval(
-                        ""
-                        "lambda: bodo.hiframes.pd_timestamp_ext.integer_to_dt64("
-                        "    numba.cpython.builtins.get_type_min_value("
-                        "        numba.core.types.uint64"
-                        "    )"
-                    ),
-                    [],
-                )
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            impl = getattr(
+                bodo.hiframes.series_kernels, "_get_type_min_value_overload"
+            )(*arg_typs, **kw_typs)
             return replace_func(
                 self,
-                eval("lambda d: numba.cpython.builtins.get_type_min_value(d)"),
+                impl,
                 rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
             )
 
         if fdef == ("h5_read_dummy", "bodo.io.h5_api"):
@@ -1988,6 +1978,9 @@ class SeriesPass:
         if fdef == ("full", "numpy"):
             return self._handle_np_full(assign, lhs, rhs)
 
+        if func_mod == "bodo.libs.array_ops" and "array_op_" in func_name:
+            return self._handle_array_ops(assign, rhs, func_name)
+
         if fdef == ("alloc_type", "bodo.utils.utils"):
             impl = bodo.utils.utils.overload_alloc_type(
                 *tuple(self.typemap[v.name] for v in rhs.args)
@@ -2310,6 +2303,40 @@ class SeriesPass:
         else:
             nodes.append(assign)
             return nodes
+
+    def _handle_array_ops(self, assign, rhs, func_name):
+        """
+        Helper function that inlines array op implementations
+        for Series/DataFrame that must be manually inlined.
+        """
+        op = func_name.split("_")[-1]
+
+        if op in (
+            "isna",
+            "count",
+            "min",
+            "max",
+            "mean",
+            "sum",
+            "prod",
+            "describe",
+            "var",
+            "std",
+            "quantile",
+        ):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            overload_func = getattr(bodo.libs.array_ops, "overload_array_op_" + op)
+            impl = overload_func(*arg_typs, **kw_typs)
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+        else:
+            return [assign]
 
     def _run_const_call(self, assign, lhs, rhs, func):
         # replace direct calls to operators with Expr binop nodes to enable

@@ -301,7 +301,6 @@ _series_no_inline_methods = {
     "rolling",
     "to_csv",
     "count",
-    "astype",
     "fillna",
     "to_dict",
     "map",
