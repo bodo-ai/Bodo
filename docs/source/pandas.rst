@@ -435,7 +435,8 @@ Missing data handling:
 Reshaping, sorting:
 
 * :meth:`pandas.Series.argsort`
-* :meth:`pandas.Series.sort_values`
+* :meth:`pandas.Series.sort_index` `ascending` and `na_position` arguments are supported
+* :meth:`pandas.Series.sort_values` `ascending` and `na_position` arguments are supported
 * :meth:`pandas.Series.append` `ignore_index` is supported.
   setting name for output Series not supported yet)
 * :meth:`pandas.Series.explode`

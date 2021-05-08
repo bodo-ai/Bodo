@@ -1125,7 +1125,6 @@ series_unsupported_methods = (
     "argmin",
     "argmax",
     "reorder_levels",
-    "sort_index",
     "swaplevel",
     "unstack",
     "searchsorted",

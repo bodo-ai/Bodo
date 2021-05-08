@@ -1288,6 +1288,69 @@ def overload_series_argsort(S, axis=0, kind="quicksort", order=None):
     return impl
 
 
+@overload_method(SeriesType, "sort_index", inline="always", no_unliteral=True)
+def overload_series_sort_index(
+    S,
+    axis=0,
+    level=None,
+    ascending=True,
+    inplace=False,
+    kind="quicksort",
+    na_position="last",
+    sort_remaining=True,
+    ignore_index=False,
+    key=None,
+):
+    unsupported_args = dict(
+        axis=axis,
+        level=level,
+        inplace=inplace,
+        kind=kind,
+        sort_remaining=sort_remaining,
+        ignore_index=ignore_index,
+        key=key,
+    )
+    arg_defaults = dict(
+        axis=0,
+        level=None,
+        inplace=False,
+        kind="quicksort",
+        sort_remaining=True,
+        ignore_index=False,
+        key=None,
+    )
+    check_unsupported_args("Series.sort_index", unsupported_args, arg_defaults)
+
+    # reusing dataframe sort_index() in implementation.
+    # TODO(ehsan): use a direct kernel to avoid compilation overhead
+    def impl(
+        S,
+        axis=0,
+        level=None,
+        ascending=True,
+        inplace=False,
+        kind="quicksort",
+        na_position="last",
+        sort_remaining=True,
+        ignore_index=False,
+        key=None,
+    ):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (arr,), index, ("$_bodo_col3_",)
+        )
+        sorted_df = df.sort_index(
+            ascending=ascending, inplace=inplace, na_position=na_position
+        )
+        out_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(sorted_df, 0)
+        out_index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(sorted_df)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
+
+    return impl
+
+
 @overload_method(SeriesType, "sort_values", inline="always", no_unliteral=True)
 def overload_series_sort_values(
     S,
