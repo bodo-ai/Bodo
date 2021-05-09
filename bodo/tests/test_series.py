@@ -3795,6 +3795,26 @@ def test_series_argsort(series_val, memory_leak_check):
     # check_func(test_impl, (series_val,))
 
 
+@pytest.mark.slow
+def test_series_index(series_val, memory_leak_check):
+    """test Series.sort_index() on various Series types"""
+
+    def test_impl(A):
+        return A.sort_index()
+
+    check_func(test_impl, (series_val,))
+
+
+def test_series_index_fast(memory_leak_check):
+    """test Series.sort_index() on a single Series type for faster CI"""
+
+    def test_impl(A):
+        return A.sort_index()
+
+    S = pd.Series([1, 3, 5, 2, -3], index=[5, 3, 6, -4, 9])
+    check_func(test_impl, (S,), dist_test=False)
+
+
 # TODO: add memory_leak_check
 def test_series_sort_values(series_val):
     # not supported for Datetime.date yet, TODO: support and test
