@@ -698,9 +698,7 @@ def test_arange_equiv():
         return ans
 
     arr = np.array([1, 4] * 10)
-    # test only on 1 process since size 20 is hard-coded inside the function
-    if bodo.get_size() == 1:
-        check_func(test, (arr,), only_1DVar=True)
+    check_func(test, (arr,), only_1DVar=True)
 
 
 # TODO: test other array types
