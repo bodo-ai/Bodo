@@ -2345,7 +2345,8 @@ class DistributedPass:
 
         new_size_var = None
         for v in equiv_set.get_equiv_set(size_var):
-            if "#" in v and self._is_1D_Var_arr(v.split("#")[0]):
+            # 'v' could be int (size value) or str (varname)
+            if isinstance(v, str) and "#" in v and self._is_1D_Var_arr(v.split("#")[0]):
                 arr_name = v.split("#")[0]
                 if arr_name not in avail_vars:
                     continue

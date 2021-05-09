@@ -690,6 +690,19 @@ def test_series_alloc_equiv1(memory_leak_check):
     assert not dist_IR_contains(f_ir, "dist_reduce")
 
 
+def test_arange_equiv():
+    """make sure array size equivalence is set properly for arange() call"""
+
+    def test(idx):
+        ans = pd.Series(np.arange(20), index=idx)
+        return ans
+
+    arr = np.array([1, 4] * 10)
+    # test only on 1 process since size 20 is hard-coded inside the function
+    if bodo.get_size() == 1:
+        check_func(test, (arr,), only_1DVar=True)
+
+
 # TODO: test other array types
 @pytest.mark.parametrize(
     "A",
