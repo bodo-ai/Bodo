@@ -652,15 +652,24 @@ def init_dataframe_equiv(self, scope, equiv_set, loc, args, kws):
     """shape analysis for init_dataframe() calls. All input arrays have the same shape,
     which is the same as output dataframe's shape.
     """
+    from bodo.hiframes.pd_index_ext import HeterogeneousIndexType
+
     assert len(args) == 3 and not kws
     data_tup = args[0]
-    # TODO: add shape for index (requires full shape support for indices)
+    index = args[1]
+
     if equiv_set.has_shape(data_tup):
         data_shapes = equiv_set.get_shape(data_tup)
         # all data arrays have the same shape
         if len(data_shapes) > 1:
             equiv_set.insert_equiv(*data_shapes)
         if len(data_shapes) > 0:
+            # index and data have the same length (avoid tuple index)
+            index_type = self.typemap[index.name]
+            if not isinstance(
+                index_type, HeterogeneousIndexType
+            ) and equiv_set.has_shape(index):
+                equiv_set.insert_equiv(data_shapes[0], index)
             return ArrayAnalysis.AnalyzeResult(
                 shape=(data_shapes[0], len(data_shapes)), pre=[]
             )
