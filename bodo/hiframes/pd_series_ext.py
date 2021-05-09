@@ -411,15 +411,31 @@ def init_series(typingctx, data, index, name=None):
 
 
 def init_series_equiv(self, scope, equiv_set, loc, args, kws):
-    assert len(args) >= 1 and not kws
-    # TODO: add shape for index
-    var = args[0]
+    """array analysis for init_series(), which inserts equivalence for input data array,
+    input index and output Series.
+    """
+    from bodo.hiframes.pd_index_ext import HeterogeneousIndexType
+
+    assert len(args) >= 2 and not kws
+    data = args[0]
+    index = args[1]
+
     # avoid returning shape for tuple input (results in dimension mismatch error)
-    data_type = self.typemap[var.name]
+    data_type = self.typemap[data.name]
     if is_heterogeneous_tuple_type(data_type) or isinstance(data_type, types.BaseTuple):
         return None
-    if equiv_set.has_shape(var):
-        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
+
+    # index and data have the same length (avoid tuple index)
+    index_type = self.typemap[index.name]
+    if (
+        not isinstance(index_type, HeterogeneousIndexType)
+        and equiv_set.has_shape(data)
+        and equiv_set.has_shape(index)
+    ):
+        equiv_set.insert_equiv(data, index)
+
+    if equiv_set.has_shape(data):
+        return ArrayAnalysis.AnalyzeResult(shape=data, pre=[])
     return None
 
 

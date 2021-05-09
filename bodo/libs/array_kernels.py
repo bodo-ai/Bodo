@@ -14,6 +14,7 @@ import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types, typing
 from numba.core.imputils import lower_builtin
+from numba.core.ir_utils import find_const, guard
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import overload, overload_attribute, register_jitable
@@ -1604,10 +1605,27 @@ def overload_resize_and_copy(A, old_size, new_len):
 # calculation is replaced with explicit call for easier matching
 # (e.g. for handling 1D_Var RangeIndex)
 # TODO: move this to upstream Numba
-@numba.njit
+@register_jitable
 def calc_nitems(start, stop, step):  # pragma: no cover
     nitems_r = math.ceil((stop - start) / step)
     return int(max(nitems_r, 0))
+
+
+def calc_nitems_equiv(self, scope, equiv_set, loc, args, kws):
+    """Array analysis function for calc_nitems() which returns equivalence of 'stop'
+    input to output if 'start' is 0 and 'step' is 1
+    """
+    assert len(args) == 3 and not kws
+    # TODO(ehsan): optimize out trivial calc_nitems calls? they handle negative input
+    # but it is rare. Maybe add non-negative analysis.
+    if (
+        guard(find_const, self.func_ir, args[0]) == 0
+        and guard(find_const, self.func_ir, args[2]) == 1
+    ):
+        return ArrayAnalysis.AnalyzeResult(shape=args[1], pre=[])
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_array_kernels_calc_nitems = calc_nitems_equiv
 
 
 def arange_parallel_impl(return_type, *args):
