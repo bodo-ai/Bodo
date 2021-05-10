@@ -4756,6 +4756,11 @@ def test_cumulatives_supported_cases(memory_leak_check):
             ),
             marks=pytest.mark.slow,
         ),
+        # Zero columns
+        pytest.param(
+            pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]}),
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_size_df(request):
