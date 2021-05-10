@@ -1885,9 +1885,8 @@ def overload_series_quantile(S, q=0.5, interpolation="linear"):
             return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
         return impl_list
-    elif isinstance(q, types.Number):
+    elif isinstance(q, (float, types.Number)) or is_overload_constant_int(q):
 
-        # TODO: datetime support
         def impl(S, q=0.5, interpolation="linear"):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             return bodo.libs.array_ops.array_op_quantile(arr, q)
