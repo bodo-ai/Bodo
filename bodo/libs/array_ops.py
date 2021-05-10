@@ -6,6 +6,7 @@ such as count and max.
 
 import numba
 import numpy as np
+import pandas as pd
 from numba.core import types
 from numba.extending import overload
 
@@ -258,6 +259,16 @@ def array_op_mean(arr):  # pragma: no cover
 
 @overload(array_op_mean)
 def overload_array_op_mean(arr):
+
+    # datetime
+    if arr.dtype == bodo.datetime64ns:
+
+        def impl(arr):  # pragma: no cover
+            return pd.Timestamp(
+                types.int64(bodo.libs.array_ops.array_op_mean(arr.view(np.int64)))
+            )
+
+        return impl
     # see core/nanops.py/nanmean() for output types
     # TODO: more accurate port of dtypes from pandas
     sum_dtype = types.float64
@@ -339,6 +350,19 @@ def array_op_quantile(arr, q):  # pragma: no cover
 def overload_array_op_quantile(arr, q):
     if is_iterable_type(q):
 
+        if arr.dtype == bodo.datetime64ns:
+
+            def _impl_list_dt(arr, q):  # pragma: no cover
+                out_arr = np.empty(len(q), np.int64)
+                for i in range(len(q)):
+                    q_val = np.float64(q[i])
+                    out_arr[i] = bodo.libs.array_kernels.quantile(
+                        arr.view(np.int64), q_val
+                    )
+                return out_arr.view(np.dtype("datetime64[ns]"))
+
+            return _impl_list_dt
+
         def impl_list(arr, q):  # pragma: no cover
             out_arr = np.empty(len(q), np.float64)
             for i in range(len(q)):
@@ -347,7 +371,16 @@ def overload_array_op_quantile(arr, q):
             return out_arr
 
         return impl_list
-    # TODO: datetime support
+
+    if arr.dtype == bodo.datetime64ns:
+
+        def _impl_dt(arr, q):  # pragma: no cover
+            return pd.Timestamp(
+                bodo.libs.array_kernels.quantile(arr.view(np.int64), np.float64(q))
+            )
+
+        return _impl_dt
+
     def impl(arr, q):  # pragma: no cover
         return bodo.libs.array_kernels.quantile(arr, np.float64(q))
 

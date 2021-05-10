@@ -3909,10 +3909,6 @@ def test_series_append_multi(series_val, ignore_index, memory_leak_check):
 
 
 def test_series_quantile(numeric_series_val, memory_leak_check):
-    # quantile not supported for dt64 yet, TODO: support and test
-    if numeric_series_val.dtype == np.dtype("datetime64[ns]"):
-        return
-
     def test_impl(A):
         return A.quantile(0.30)
 
@@ -3930,6 +3926,10 @@ def test_series_quantile_q(memory_leak_check):
 
     S = pd.Series([1.2, 3.4, 4.5, 32.3, 67.8, 100])
 
+    check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4)
+
+    # dt64
+    S = pd.Series(pd.date_range("2030-01-1", periods=11))
     check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4)
 
     # int
@@ -5406,3 +5406,17 @@ def test_series_loc_rm_dead(memory_leak_check):
     A = np.array([1, 2, 3])
     B = np.array([True, False, True])
     check_func(impl2, (A, B))
+
+
+@pytest.mark.slow
+def test_datetime_series_mean(memory_leak_check):
+    """
+    Test Series.mean() with a datetime Series.
+    """
+    S = pd.Series(pd.date_range("2030-01-1", periods=11))
+
+    def impl_mean(S):
+        return S.mean()
+
+    check_func(impl_mean, (S,))
+    bodo.jit(impl_mean)(S)
