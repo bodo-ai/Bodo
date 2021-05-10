@@ -1394,6 +1394,44 @@ def test_index_cmp_ops(op, memory_leak_check):
     check_func(test_impl, (2, S))
 
 
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Int64Index([10, 12]),
+        pd.Float64Index([10.1, 12.1]),
+        pd.UInt64Index([10, 12]),
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+        pd.timedelta_range(start="1D", end="3D", name="A"),
+        pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"]),
+        pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+        pd.RangeIndex(10),
+    ],
+)
+def test_index_nbytes(index, memory_leak_check):
+    """ Test nbytes computation with different Index types"""
+
+    def impl(idx):
+        return idx.nbytes
+
+    # RangeIndexType has three int64 values, so the total is 24
+    if isinstance(index, pd.RangeIndex):
+        py_out = 24
+        check_func(impl, (index,), py_output=py_out)
+    # StringIndex has three 3 underlying arrays (data, offsets, nulll_bit_map)
+    # In this example: 15 characters,
+    # data=15 characters * 1 byte +
+    # offset=(7 elements + 1 extra) * 8 bytes +
+    # null_bit_map= 1 byte
+    # Total = 80 bytes for sequential case
+    # + 9 (For each rank we get an extra 8 bytes for offset
+    # and 1 byte for null_bit_map)
+    elif isinstance(index[0], str):
+        py_out = 80 + (bodo.get_size() - 1) * 9
+        check_func(impl, (index,), py_output=py_out, only_1D=True)
+    else:
+        check_func(impl, (index,))
+
+
 def test_boolean_index(memory_leak_check):
     def impl1(arr):
         idx = pd.Index(arr)

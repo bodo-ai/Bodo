@@ -935,6 +935,11 @@ def str_arr_shape_overload(str_arr):
     return lambda str_arr: (str_arr.size,)  # pragma: no cover
 
 
+@overload_attribute(StringArrayType, "nbytes")
+def str_arr_nbytes_overload(str_arr):
+    return lambda str_arr: str_arr._data.nbytes  # pragma: no cover
+
+
 import llvmlite.binding as ll
 from llvmlite import ir as lir
 

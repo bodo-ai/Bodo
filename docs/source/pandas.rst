@@ -702,6 +702,7 @@ Properties
 * :attr:`pandas.Index.shape`
 * :attr:`pandas.Index.values`
   Returns the underlying data array
+* :attr:`pandas.Index.nbytes`
 
 Modifying and computations:
 

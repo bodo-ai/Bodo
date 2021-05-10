@@ -49,6 +49,13 @@ from numba.parfors.parfor import (
 import bodo
 import bodo.utils.utils
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_index_ext import (
+    DatetimeIndexType,
+    NumericIndexType,
+    PeriodIndexType,
+    StringIndexType,
+    TimedeltaIndexType,
+)
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.io import csv_cpp
 from bodo.io.h5_api import h5file_type, h5group_type
@@ -324,6 +331,29 @@ class DistributedPass:
         ):
             return self._run_array_size(inst.target, rhs.value, equiv_set, avail_vars)
 
+        # index.nbytes
+        if (
+            rhs.op == "getattr"
+            and rhs.attr == "nbytes"
+            and isinstance(
+                self.typemap[rhs.value.name],
+                (
+                    NumericIndexType,
+                    StringIndexType,
+                    DatetimeIndexType,
+                    TimedeltaIndexType,
+                    PeriodIndexType,
+                ),
+            )
+            and self._is_1D_or_1D_Var_arr(rhs.value.name)
+        ):
+            return [inst] + compile_func_single_block(
+                eval("lambda r: bodo.libs.distributed_api.dist_reduce(r.nbytes, _op)"),
+                (rhs.value,),
+                inst.target,
+                self,
+                extra_globals={"_op": np.int32(Reduce_Type.Sum.value)},
+            )
         # RangeIndex._stop, get global value
         if (
             rhs.op == "getattr"
