@@ -1851,15 +1851,3 @@ def test_count_unsupported_types(df, memory_leak_check):
 
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl1)(df)
-
-
-@pytest.mark.slow
-def test_size_supported_no_cols(memory_leak_check):
-    def impl1(df):
-        A = df.groupby("A").size()
-        return A
-
-    # Zero columns
-    df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
-    with pytest.raises(BodoError, match="No columns in output"):
-        bodo.jit(impl1)(df_empty)
