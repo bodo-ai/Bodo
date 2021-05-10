@@ -1218,8 +1218,23 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         if not numba.core.config.DEVELOPER_MODE:
             # If error_info is already there, that means Bodo already suppressed stack.
             if bodo_typing_error_info not in e.msg:
-                msg = "Compilation error."
-                msg += f"{bodo_typing_error_info}"
+                # This is a Numba error
+                numba_deny_list = [
+                    "Failed in nopython mode pipeline",
+                    "Failed in bodo mode pipeline",
+                    "numba",
+                    "Overload",
+                    "lowering",
+                ]
+                n_found = False
+                for n_msg in numba_deny_list:
+                    if n_msg in e.msg:
+                        msg = "Compilation error. "
+                        msg += f"{bodo_typing_error_info}"
+                        n_found = True
+                        break
+                if not n_found:
+                    msg = f"{str(e)}"
                 msg += "\n" + e.loc.strformat() + "\n"
                 e.patch_message(msg)
         error_rewrite(e, "typing")
