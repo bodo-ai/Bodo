@@ -1,7 +1,7 @@
-.. _aws:
+.. _mpi_aws:
 
-AWS Setup
-=========
+Basic MPI/Bodo Setup on AWS
+===========================
 
 
 This page describes a simple setup process for Bodo on Amazon EC2 instances. You need to have an account on Amazon Web Services (AWS)
@@ -46,7 +46,8 @@ recommended for production usage due to security, performance and other consider
     export PATH=$HOME/miniconda3/bin:$PATH
     conda create -n Bodo python
     source activate Bodo
-    conda install bodo h5py scipy hdf5=*=*mpich* -c file:///path-to-bodo-package/bodo-inc/ -c conda-forge
+    # or conda activate Bodo (depending on the OS)
+    conda install bodo -c bodo.ai -c conda-forge
 
 
 4. Copy the `Pi example <https://github.com/Bodo-inc/Bodo-examples/blob/master/examples/miscellaneous/pi.py>`_ to a file called pi.py in the home directory of
