@@ -26,7 +26,6 @@ Bodo
    source/advanced
    source/performance
    source/compilation
-   source/aws
    source/spark
    source/BodoSQL
    source/jupyter

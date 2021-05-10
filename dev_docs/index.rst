@@ -27,6 +27,7 @@ Welcome to Bodo Development's documentation!
    source/aws_codebuild
    source/customer_faq
    source/benchmarking
+   source/mpi_aws
 
 
 Indices and tables
