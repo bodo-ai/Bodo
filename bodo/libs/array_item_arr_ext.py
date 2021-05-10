@@ -799,6 +799,13 @@ def overload_array_item_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
+@overload_attribute(ArrayItemArrayType, "nbytes")
+def overload_array_item_arr_nbytes(A):
+    return (
+        lambda A: get_data(A).nbytes + get_offsets(A).nbytes + get_null_bitmap(A).nbytes
+    )  # pragma: no cover
+
+
 @overload(operator.getitem, no_unliteral=True)
 def array_item_arr_getitem_array(arr, ind):
     if not isinstance(arr, ArrayItemArrayType):

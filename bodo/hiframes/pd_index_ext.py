@@ -3034,6 +3034,34 @@ def heter_index_get_name(si):
     return impl
 
 
+@overload_attribute(NumericIndexType, "nbytes")
+@overload_attribute(DatetimeIndexType, "nbytes")
+@overload_attribute(TimedeltaIndexType, "nbytes")
+@overload_attribute(RangeIndexType, "nbytes")
+@overload_attribute(StringIndexType, "nbytes")
+@overload_attribute(PeriodIndexType, "nbytes")
+def overload_nbytes(I):
+    """ Add support for Index.nbytes by computing underlying arrays nbytes """
+    # Note: Pandas have a different underlying data structure
+    # Hence, we get different number from Pandas RangeIndex.nbytes
+    if isinstance(I, RangeIndexType):
+
+        def _impl_nbytes(I):  # pragma: no cover
+            return (
+                bodo.io.np_io.get_dtype_size(type(I._start))
+                + bodo.io.np_io.get_dtype_size(type(I._step))
+                + bodo.io.np_io.get_dtype_size(type(I._stop))
+            )
+
+        return _impl_nbytes
+    else:
+
+        def _impl_nbytes(I):  # pragma: no cover
+            return I._data.nbytes
+
+        return _impl_nbytes
+
+
 # TODO(ehsan): test
 @overload(operator.getitem, no_unliteral=True)
 def overload_heter_index_getitem(I, ind):  # pragma: no cover
