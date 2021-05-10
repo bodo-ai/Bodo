@@ -1,12 +1,14 @@
 import string
 from decimal import Decimal
 
+import numba
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.utils.typing import BodoError
+
 
 @pytest.mark.slow
 def test_df_filter_err_check(memory_leak_check):
@@ -809,3 +811,14 @@ def test_dataframe_iloc_bad_index(memory_leak_check):
         match=error_msg,
     ):
         bodo.jit(impl2)(df)
+
+
+def test_non_numba_err(memory_leak_check):
+    def test():
+        return x
+
+    with pytest.raises(
+        numba.TypingError,
+        match="name 'x' is not defined",
+    ):
+        bodo.jit(test)()
