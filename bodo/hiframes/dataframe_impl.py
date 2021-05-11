@@ -3429,6 +3429,7 @@ class SetDfColInfer(AbstractTemplate):
         target = args[0]
         ind = args[1].literal_value
         val = args[2]
+        assert val != types.unknown
         ret = target
 
         if isinstance(target, DataFrameType):
