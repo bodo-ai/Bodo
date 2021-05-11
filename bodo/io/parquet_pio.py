@@ -34,7 +34,6 @@ from bodo.hiframes.datetime_date_ext import (
     datetime_date_array_type,
     datetime_date_type,
 )
-from bodo.hiframes.pd_series_ext import _get_series_array_type
 from bodo.io import parquet_cpp
 from bodo.io.fs_io import get_hdfs_fs, get_s3_fs_from_path
 from bodo.libs.array import _lower_info_to_array_numpy, array_info_type
@@ -56,6 +55,7 @@ from bodo.utils.transform import get_const_value
 from bodo.utils.typing import (
     BodoError,
     FileInfo,
+    dtype_to_array_type,
     get_overload_const_str,
     get_overload_constant_dict,
 )
@@ -1171,7 +1171,7 @@ class ReadParquetArrayItemInfer(AbstractTemplate):
         elem_type = args[4].dtype
         # Implement IntegerArrayType(elem_type) when this code path is restored.
         return signature(
-            ArrayItemArrayType(_get_series_array_type(elem_type)), *unliteral_all(args)
+            ArrayItemArrayType(dtype_to_array_type(elem_type)), *unliteral_all(args)
         )
 
 
