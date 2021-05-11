@@ -42,6 +42,7 @@ from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 from bodo.hiframes.pd_index_ext import (
+    CategoricalIndexType,
     DatetimeIndexType,
     HeterogeneousIndexType,
     NumericIndexType,
@@ -746,6 +747,7 @@ class SeriesPass:
                     NumericIndexType,
                     StringIndexType,
                     PeriodIndexType,
+                    CategoricalIndexType,
                     DatetimeIndexType,
                     TimedeltaIndexType,
                 ),

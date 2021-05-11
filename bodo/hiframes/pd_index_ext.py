@@ -1828,6 +1828,183 @@ def unbox_period_index(typ, val, c):
     return NativeValue(index_val._getvalue())
 
 
+# ------------------------------ CategoricalIndex ---------------------------
+
+
+class CategoricalIndexType(types.ArrayCompatible):
+    """data type for CategoricalIndex values"""
+
+    def __init__(self, data, name_typ=None):
+        from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
+
+        assert isinstance(
+            data, CategoricalArrayType
+        ), "CategoricalIndexType expects CategoricalArrayType"
+        name_typ = types.none if name_typ is None else name_typ
+        self.name_typ = name_typ
+        self.data = data
+        super(CategoricalIndexType, self).__init__(
+            name=f"CategoricalIndexType(data={self.data}, name={name_typ})"
+        )
+
+    ndim = 1
+
+    def copy(self):
+        return CategoricalIndexType(self.data, self.name_typ)
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
+
+    @property
+    def dtype(self):
+        return self.data.dtype
+
+    @property
+    def key(self):
+        return self.data, self.name_typ
+
+
+@register_model(CategoricalIndexType)
+class CategoricalIndexTypeModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        from bodo.hiframes.pd_categorical_ext import get_categories_int_type
+
+        code_int_type = get_categories_int_type(fe_type.data.dtype)
+        members = [
+            ("data", fe_type.data),
+            ("name", fe_type.name_typ),
+            # assuming category codes are key in dict
+            (
+                "dict",
+                types.DictType(code_int_type, types.int64),
+            ),
+        ]
+        super(CategoricalIndexTypeModel, self).__init__(dmm, fe_type, members)
+
+
+@typeof_impl.register(pd.CategoricalIndex)
+def typeof_categorical_index(val, c):
+    # keep string literal value in type since reset_index() may need it
+    return CategoricalIndexType(
+        bodo.typeof(val.values), get_val_type_maybe_str_literal(val.name)
+    )
+
+
+@box(CategoricalIndexType)
+def box_categorical_index(typ, val, c):
+    """"""
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+
+    categorical_index = numba.core.cgutils.create_struct_proxy(typ)(
+        c.context, c.builder, val
+    )
+
+    # box CategoricalArray
+    c.context.nrt.incref(c.builder, typ.data, categorical_index.data)
+    arr_obj = c.pyapi.from_native_value(typ.data, categorical_index.data, c.env_manager)
+    c.context.nrt.incref(c.builder, typ.name_typ, categorical_index.name)
+    name_obj = c.pyapi.from_native_value(
+        typ.name_typ, categorical_index.name, c.env_manager
+    )
+
+    # call pd.CategoricalIndex(arr, name=name)
+    args = c.pyapi.tuple_pack([arr_obj])
+    kws = c.pyapi.dict_pack([("name", name_obj)])
+    const_call = c.pyapi.object_getattr_string(pd_class_obj, "CategoricalIndex")
+    res = c.pyapi.call(const_call, args, kws)
+
+    c.pyapi.decref(arr_obj)
+    c.pyapi.decref(name_obj)
+    c.pyapi.decref(pd_class_obj)
+    c.pyapi.decref(const_call)
+    c.pyapi.decref(args)
+    c.pyapi.decref(kws)
+    c.context.nrt.decref(c.builder, typ, val)
+    return res
+
+
+@unbox(CategoricalIndexType)
+def unbox_categorical_index(typ, val, c):
+    from bodo.hiframes.pd_categorical_ext import get_categories_int_type
+
+    # get data and name attributes
+    values_obj = c.pyapi.object_getattr_string(val, "values")
+    data = c.pyapi.to_native_value(typ.data, values_obj).value
+    name_obj = c.pyapi.object_getattr_string(val, "name")
+    name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
+    c.pyapi.decref(values_obj)
+    c.pyapi.decref(name_obj)
+
+    # create index struct
+    index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    index_val.data = data
+    index_val.name = name
+    # create empty dict for get_loc hashmap
+    dtype = get_categories_int_type(typ.data.dtype)
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(dtype, types.int64),
+        types.DictType(dtype, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
+    return NativeValue(index_val._getvalue())
+
+
+@intrinsic
+def init_categorical_index(typingctx, data, name=None):
+    """Create a CategoricalIndex with provided data and name values."""
+    name = types.none if name is None else name
+
+    def codegen(context, builder, signature, args):
+        from bodo.hiframes.pd_categorical_ext import get_categories_int_type
+
+        data_val, name_val = args
+        # create categorical_index struct and store values
+        categorical_index = cgutils.create_struct_proxy(signature.return_type)(
+            context, builder
+        )
+        categorical_index.data = data_val
+        categorical_index.name = name_val
+
+        # increase refcount of stored values
+        context.nrt.incref(builder, signature.args[0], data_val)
+        context.nrt.incref(builder, signature.args[1], name_val)
+
+        # create empty dict for get_loc hashmap
+        dtype = get_categories_int_type(signature.return_type.data.dtype)
+        categorical_index.dict = context.compile_internal(
+            builder,
+            lambda: numba.typed.Dict.empty(dtype, types.int64),
+            types.DictType(dtype, types.int64)(),
+            [],
+        )  # pragma: no cover
+
+        return categorical_index._getvalue()
+
+    ret_typ = CategoricalIndexType(data, name)
+    sig = signature(ret_typ, data, name)
+    return sig, codegen
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_categorical_index = (
+    init_index_equiv
+)
+
+make_attribute_wrapper(CategoricalIndexType, "data", "_data")
+make_attribute_wrapper(CategoricalIndexType, "name", "_name")
+make_attribute_wrapper(CategoricalIndexType, "dict", "_dict")
+
+
+@overload_method(CategoricalIndexType, "copy", no_unliteral=True)
+def overload_categorical_index_copy(A):
+    return lambda A: bodo.hiframes.pd_index_ext.init_categorical_index(
+        A._data.copy(), A._name
+    )  # pragma: no cover
+
+
 # ------------------------------ IntervalIndex ---------------------------
 
 
@@ -2444,6 +2621,7 @@ def is_pd_index_type(t):
             DatetimeIndexType,
             TimedeltaIndexType,
             IntervalIndexType,
+            CategoricalIndexType,
             PeriodIndexType,
             StringIndexType,
             RangeIndexType,
@@ -2456,6 +2634,7 @@ def is_pd_index_type(t):
 @overload_method(RangeIndexType, "take", no_unliteral=True)
 @overload_method(NumericIndexType, "take", no_unliteral=True)
 @overload_method(StringIndexType, "take", no_unliteral=True)
+@overload_method(CategoricalIndexType, "take", no_unliteral=True)
 @overload_method(PeriodIndexType, "take", no_unliteral=True)
 @overload_method(DatetimeIndexType, "take", no_unliteral=True)
 @overload_method(TimedeltaIndexType, "take", no_unliteral=True)
@@ -2561,12 +2740,14 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
 @overload_method(RangeIndexType, "isna", no_unliteral=True)
 @overload_method(NumericIndexType, "isna", no_unliteral=True)
 @overload_method(StringIndexType, "isna", no_unliteral=True)
+@overload_method(CategoricalIndexType, "isna", no_unliteral=True)
 @overload_method(PeriodIndexType, "isna", no_unliteral=True)
 @overload_method(DatetimeIndexType, "isna", no_unliteral=True)
 @overload_method(TimedeltaIndexType, "isna", no_unliteral=True)
 @overload_method(RangeIndexType, "isnull", no_unliteral=True)
 @overload_method(NumericIndexType, "isnull", no_unliteral=True)
 @overload_method(StringIndexType, "isnull", no_unliteral=True)
+@overload_method(CategoricalIndexType, "isnull", no_unliteral=True)
 @overload_method(PeriodIndexType, "isnull", no_unliteral=True)
 @overload_method(DatetimeIndexType, "isnull", no_unliteral=True)
 @overload_method(TimedeltaIndexType, "isnull", no_unliteral=True)
@@ -2599,6 +2780,7 @@ def overload_index_isna(I):
 @overload_attribute(RangeIndexType, "values")
 @overload_attribute(NumericIndexType, "values")
 @overload_attribute(StringIndexType, "values")
+@overload_attribute(CategoricalIndexType, "values")
 @overload_attribute(PeriodIndexType, "values")
 @overload_attribute(DatetimeIndexType, "values")
 @overload_attribute(TimedeltaIndexType, "values")
@@ -2615,6 +2797,7 @@ def overload_index_len(I):
             StringIndexType,
             PeriodIndexType,
             IntervalIndexType,
+            CategoricalIndexType,
             DatetimeIndexType,
             TimedeltaIndexType,
         ),
@@ -2631,6 +2814,7 @@ def overload_index_len(I):
 @overload_attribute(PeriodIndexType, "shape")
 @overload_attribute(TimedeltaIndexType, "shape")
 @overload_attribute(IntervalIndexType, "shape")
+@overload_attribute(CategoricalIndexType, "shape")
 def overload_index_shape(s):
     return lambda s: (
         len(bodo.hiframes.pd_index_ext.get_index_data(s)),
@@ -2691,6 +2875,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_get_index_data = (
 @overload_method(RangeIndexType, "map", inline="always", no_unliteral=True)
 @overload_method(NumericIndexType, "map", inline="always", no_unliteral=True)
 @overload_method(StringIndexType, "map", inline="always", no_unliteral=True)
+@overload_method(CategoricalIndexType, "map", inline="always", no_unliteral=True)
 @overload_method(PeriodIndexType, "map", inline="always", no_unliteral=True)
 @overload_method(DatetimeIndexType, "map", inline="always", no_unliteral=True)
 @overload_method(TimedeltaIndexType, "map", inline="always", no_unliteral=True)
@@ -2704,6 +2889,8 @@ def overload_index_map(I, mapper, na_action=None):
         dtype = pd_timestamp_type
     if dtype == types.NPTimedelta("ns"):
         dtype = pd_timedelta_type
+    if isinstance(dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
+        dtype = dtype.elem_type
 
     # get output element type
     typing_context = numba.core.registry.cpu_target.typing_context
@@ -2755,6 +2942,7 @@ def overload_index_map(I, mapper, na_action=None):
 @lower_builtin(operator.is_, DatetimeIndexType, DatetimeIndexType)
 @lower_builtin(operator.is_, TimedeltaIndexType, TimedeltaIndexType)
 @lower_builtin(operator.is_, IntervalIndexType, IntervalIndexType)
+@lower_builtin(operator.is_, CategoricalIndexType, CategoricalIndexType)
 def index_is(context, builder, sig, args):
     aty, bty = sig.args
     if aty != bty:  # pragma: no cover
@@ -2918,6 +3106,7 @@ def is_index_type(t):
             DatetimeIndexType,
             TimedeltaIndexType,
             IntervalIndexType,
+            CategoricalIndexType,
         ),
     )
 
@@ -3039,6 +3228,7 @@ def heter_index_get_name(si):
 @overload_attribute(TimedeltaIndexType, "nbytes")
 @overload_attribute(RangeIndexType, "nbytes")
 @overload_attribute(StringIndexType, "nbytes")
+@overload_attribute(CategoricalIndexType, "nbytes")
 @overload_attribute(PeriodIndexType, "nbytes")
 def overload_nbytes(I):
     """ Add support for Index.nbytes by computing underlying arrays nbytes """
@@ -3242,6 +3432,7 @@ def _install_index_getiter():
     index_types = [
         NumericIndexType,
         StringIndexType,
+        CategoricalIndexType,
         TimedeltaIndexType,
         DatetimeIndexType,
     ]
@@ -3341,6 +3532,7 @@ def _install_index_unsupported():
         ("StringIndexType.", StringIndexType),
         ("TimedeltaIndexType.", TimedeltaIndexType),
         ("IntervalIndexType.", IntervalIndexType),
+        ("CategoricalIndexType.", CategoricalIndexType),
         ("PeriodIndexType.", PeriodIndexType),
         ("DatetimeIndexType.", DatetimeIndexType),
     ]
