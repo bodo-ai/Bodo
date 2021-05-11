@@ -1115,7 +1115,8 @@ void get_group_info(std::vector<table_info*>& tables,
     // in the map (but note that the group values I record in the output go from
     // 0 to num_groups - 1)
     int next_group = 1;
-    UNORD_MAP_CONTAINER<multi_col_key, int64_t, multi_col_key_hash> key_to_group;
+    UNORD_MAP_CONTAINER<multi_col_key, int64_t, multi_col_key_hash>
+        key_to_group;
     bool key_is_nullable = false;
     if (check_for_null_keys) {
         key_is_nullable = does_keys_have_nulls(key_cols);
@@ -1163,7 +1164,8 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels) {
     uint32_t* hashes = hash_keys(key_cols, seed);
 
     int next_group = 1;
-    UNORD_MAP_CONTAINER<multi_col_key, int64_t, multi_col_key_hash> key_to_group;
+    UNORD_MAP_CONTAINER<multi_col_key, int64_t, multi_col_key_hash>
+        key_to_group;
     bool key_is_nullable = does_keys_have_nulls(key_cols);
 
     for (int64_t i = 0; i < table->nrows(); i++) {
@@ -1219,7 +1221,8 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
     // in the map (but note that the group values I record in the output go from
     // 0 to num_groups - 1)
     int next_group = 1;
-    UNORD_MAP_CONTAINER<multi_col_key, int64_t, multi_col_key_hash> key_to_group;
+    UNORD_MAP_CONTAINER<multi_col_key, int64_t, multi_col_key_hash>
+        key_to_group;
     for (int64_t i = 0; i < table->nrows(); i++) {
         if (key_is_nullable) {
             if (does_row_has_nulls(key_cols, i)) {
@@ -1847,7 +1850,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
         UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                             std::function<bool(int64_t, int64_t)>>
             eset({}, hash_fct, equal_fct);
-        eset.reserve(double(arr->length) / num_group); // NOTE: num_group > 0
+        eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(0.4);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
@@ -1882,8 +1885,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
         std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
             // We do not put the lengths and bitmask in the hash
             // computation. after all, it is just a hash
-            char* val_chars =
-                arr->data1 + in_data_offsets[in_index_offsets[i]];
+            char* val_chars = arr->data1 + in_data_offsets[in_index_offsets[i]];
             int len = in_data_offsets[in_index_offsets[i + 1]] -
                       in_data_offsets[in_index_offsets[i]];
             uint32_t val;
@@ -1900,12 +1902,10 @@ nunique_computation(array_info* arr, array_info* out_arr,
             size_t len2 = in_index_offsets[i2 + 1] - in_index_offsets[i2];
             if (len1 != len2) return false;
             for (size_t u = 0; u < len1; u++) {
-                offset_t len_str1 =
-                    in_data_offsets[in_index_offsets[i1] + 1] -
-                    in_data_offsets[in_index_offsets[i1]];
-                offset_t len_str2 =
-                    in_data_offsets[in_index_offsets[i2] + 1] -
-                    in_data_offsets[in_index_offsets[i2]];
+                offset_t len_str1 = in_data_offsets[in_index_offsets[i1] + 1] -
+                                    in_data_offsets[in_index_offsets[i1]];
+                offset_t len_str2 = in_data_offsets[in_index_offsets[i2] + 1] -
+                                    in_data_offsets[in_index_offsets[i2]];
                 if (len_str1 != len_str2) return false;
                 bool bit1 = GetBit(sub_null_bitmask, in_index_offsets[i1]);
                 bool bit2 = GetBit(sub_null_bitmask, in_index_offsets[i2]);
@@ -1916,18 +1916,16 @@ nunique_computation(array_info* arr, array_info* out_arr,
             offset_t nb_char2 = in_data_offsets[in_index_offsets[i2 + 1]] -
                                 in_data_offsets[in_index_offsets[i2]];
             if (nb_char1 != nb_char2) return false;
-            char* ptr1 =
-                arr->data1 +
-                sizeof(offset_t) * in_data_offsets[in_index_offsets[i1]];
-            char* ptr2 =
-                arr->data1 +
-                sizeof(offset_t) * in_data_offsets[in_index_offsets[i2]];
+            char* ptr1 = arr->data1 + sizeof(offset_t) *
+                                          in_data_offsets[in_index_offsets[i1]];
+            char* ptr2 = arr->data1 + sizeof(offset_t) *
+                                          in_data_offsets[in_index_offsets[i2]];
             return strncmp(ptr1, ptr2, len1) == 0;
         };
         UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                             std::function<bool(int64_t, int64_t)>>
             eset({}, hash_fct, equal_fct);
-        eset.reserve(double(arr->length) / num_group); // NOTE: num_group > 0
+        eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(0.4);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
@@ -1975,7 +1973,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
         UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                             std::function<bool(int64_t, int64_t)>>
             eset({}, hash_fct, equal_fct);
-        eset.reserve(double(arr->length) / num_group); // NOTE: num_group > 0
+        eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(0.4);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
@@ -2017,7 +2015,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
         UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                             std::function<bool(int64_t, int64_t)>>
             eset({}, hash_fct, equal_fct);
-        eset.reserve(double(arr->length) / num_group); // NOTE: num_group > 0
+        eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(0.4);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
@@ -2451,6 +2449,28 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                             getv<ARR_O, T>(out_col, i_grp) =
                                 getv<ARR_I, T>(in_col, i);
                             out_col->set_null_bit(i_grp, true);
+                        }
+                    }
+                    return;
+                case Bodo_FTypes::idxmax:
+                    for (int64_t i = 0; i < in_col->length; i++) {
+                        int64_t i_grp = f(i);
+                        if (i_grp != -1) {
+                            idxmax_agg<T, dtype>::apply(
+                                getv<ARR_O, T>(out_col, i_grp),
+                                getv<ARR_I, T>(in_col, i),
+                                getv<ARR_O, uint64_t>(aux_cols[0], i_grp), i);
+                        }
+                    }
+                    return;
+                case Bodo_FTypes::idxmin:
+                    for (int64_t i = 0; i < in_col->length; i++) {
+                        int64_t i_grp = f(i);
+                        if (i_grp != -1) {
+                            idxmin_agg<T, dtype>::apply(
+                                getv<ARR_O, T>(out_col, i_grp),
+                                getv<ARR_I, T>(in_col, i),
+                                getv<ARR_O, uint64_t>(aux_cols[0], i_grp), i);
                         }
                     }
                     return;
@@ -4490,8 +4510,9 @@ class NUniqueColSet : public BasicColSet<ARRAY> {
                   table_info* nunique_table = nullptr,
                   bool nunique_grp_shuffle_after = false,
                   bool nunique_only = false)
-        : BasicColSet<ARRAY>(in_col, Bodo_FTypes::nunique,
-                             nunique_grp_shuffle_after || nunique_only),  // do_combine
+        : BasicColSet<ARRAY>(
+              in_col, Bodo_FTypes::nunique,
+              nunique_grp_shuffle_after || nunique_only),  // do_combine
           dropna(_dropna),
           my_nunique_table(nunique_table),
           nunique_grp_shuffle_after(nunique_grp_shuffle_after),
@@ -4798,29 +4819,30 @@ class GroupbyPipeline {
 
                         // If we know that the |set(values)|/len(values)
                         // is low on this (or all ranks?) then it should be
-                        // beneficial to drop local duplicates before the shuffle.
-                        // NOTE: lines below always drop local duplicates, but
-                        // there are some cases where this might worsen performance.
-                        // I observed this in one case, and other cases where I
-                        // think this might be worse in general is when the amount of
-                        // duplicates is very low, shuffle cost is low,
-                        // cluster of one or few nodes, but I haven't had time
-                        // to evaluate. Estimating amount of duplicates on each
-                        // process to decide whether to drop or not based on
-                        // some threshold doesn't seem to be effective in
-                        // making the best decision.
+                        // beneficial to drop local duplicates before the
+                        // shuffle. NOTE: lines below always drop local
+                        // duplicates, but there are some cases where this might
+                        // worsen performance. I observed this in one case, and
+                        // other cases where I think this might be worse in
+                        // general is when the amount of duplicates is very low,
+                        // shuffle cost is low, cluster of one or few nodes, but
+                        // I haven't had time to evaluate. Estimating amount of
+                        // duplicates on each process to decide whether to drop
+                        // or not based on some threshold doesn't seem to be
+                        // effective in making the best decision.
 
                         // drop_duplicates_table_inner steals the reference but
                         // we still need it for the code after C++ groupby
                         for (auto a : tmp->columns) incref_array(a);
-                        table_info* tmp2 = drop_duplicates_table_inner(tmp, tmp->ncols(), 0, 1);
+                        table_info* tmp2 = drop_duplicates_table_inner(
+                            tmp, tmp->ncols(), 0, 1);
                         delete tmp;
                         tmp = tmp2;
-                        // NOTE: to improve scaling this spreads based on the keys
-                        // *and* also the values. If we only spread based on
-                        // keys, scaling will be limited by the number
-                        // of groups, which is sometimes very small compared
-                        // to the number of cores
+                        // NOTE: to improve scaling this spreads based on the
+                        // keys *and* also the values. If we only spread based
+                        // on keys, scaling will be limited by the number of
+                        // groups, which is sometimes very small compared to the
+                        // number of cores
                         tmp2 = shuffle_table(tmp, tmp->ncols());
                         delete tmp;
 

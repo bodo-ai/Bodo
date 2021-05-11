@@ -1495,20 +1495,8 @@ def test_var_std_unsupported_types(df, memory_leak_check):
                 "B": ["ab", "cd", "ef", "gh", "mm", "a", "abc", "x"],
             }
         ),
-        # nullable
-        pd.DataFrame(
-            {
-                "A": [2, 1, 1, 2, 3],
-                "B": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
-            }
-        ),
-        # boolean
-        pd.DataFrame(
-            {
-                "A": [2, 1, 1, 1, 2, 2, 1],
-                "B": [True, True, False, True, True, False, False],
-            }
-        ),
+        # Zero columns
+        pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]}),
     ],
 )
 def test_idxmin_idxmax_unsupported_types(df, memory_leak_check):
@@ -1522,6 +1510,12 @@ def test_idxmin_idxmax_unsupported_types(df, memory_leak_check):
         A = df.groupby("A").idxmax()
         return A
 
+    if len(df.columns) == 1:
+        with pytest.raises(BodoError, match="No columns in output"):
+            bodo.jit(impl1)(df)
+        with pytest.raises(BodoError, match="No columns in output"):
+            bodo.jit(impl2)(df)
+        return
     err_msg = "not supported in groupby"
     if isinstance(df["B"][0], np.bool_):
         err_msg = "does not support boolean column"
