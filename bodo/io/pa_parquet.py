@@ -36,7 +36,7 @@ def get_parquet_filesnames_from_deltalake(delta_lake_path):
     aws_default_region_modified = False  # not modified yet
     if delta_lake_path.startswith("s3://"):
         # (XXX) Check that anon is False, else display error/warning?
-        s3_bucket_region = get_s3_bucket_region_njit(delta_lake_path)
+        s3_bucket_region = get_s3_bucket_region_njit(delta_lake_path, parallel=False)
         if s3_bucket_region != "":
             os.environ["AWS_DEFAULT_REGION"] = s3_bucket_region
             aws_default_region_modified = True  # mark as modified
