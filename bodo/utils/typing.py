@@ -1009,39 +1009,75 @@ def can_literalize_type(t, pyobject_to_literal=False):
     )
 
 
-def scalar_to_array_type(t):
-    """convert scalar type "t" to array of "t" values"""
-    if isinstance(t, (types.UnicodeType, types.StringLiteral)):
+def dtype_to_array_type(dtype):
+    """get default array type for scalar dtype"""
+    dtype = types.unliteral(dtype)
+
+    # UDFs may return lists, but we store array of array for output
+    if isinstance(dtype, types.List):
+        dtype = dtype_to_array_type(dtype.dtype)
+
+    # string array
+    if dtype == bodo.string_type:
         return bodo.string_array_type
 
-    # decimal arrays are a little different
-    if isinstance(t, bodo.libs.decimal_arr_ext.Decimal128Type):
-        precision = t.precision
-        scale = t.scale
-        return bodo.libs.decimal_arr_ext.DecimalArrayType(precision, scale)
+    if bodo.utils.utils.is_array_typ(dtype, False):
+        return bodo.ArrayItemArrayType(dtype)
 
-    # datetime.date values are stored as date arrays
-    if t == bodo.hiframes.datetime_date_ext.datetime_date_type:
+    # categorical
+    if isinstance(dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
+        return bodo.CategoricalArrayType(dtype)
+
+    if isinstance(dtype, bodo.libs.int_arr_ext.IntDtype):
+        return bodo.IntegerArrayType(dtype.dtype)
+
+    if dtype == types.bool_:
+        return bodo.boolean_array
+
+    if dtype == bodo.datetime_date_type:
         return bodo.hiframes.datetime_date_ext.datetime_date_array_type
 
-    # pd.Timedelta values are stored as td64 arrays
-    if t == bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type:
-        return types.Array(types.NPTimedelta("ns"), 1, "C")
+    if isinstance(dtype, bodo.Decimal128Type):
+        return bodo.DecimalArrayType(dtype.precision, dtype.scale)
 
-    # datetime.timedelta values are stored as timedelta arrays
-    if t == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
-        return types.Array(types.NPTimedelta("ns"), 1, "C")
+    # struct array
+    if isinstance(dtype, bodo.libs.struct_arr_ext.StructType):
+        return bodo.StructArrayType(
+            tuple(dtype_to_array_type(t) for t in dtype.data), dtype.names
+        )
 
-    # datetime.datetime values are stored as dt64 arrays
-    if t == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
-        return types.Array(types.NPDatetime("ns"), 1, "C")
+    # tuple array
+    if isinstance(dtype, types.BaseTuple):
+        return bodo.TupleArrayType(tuple(dtype_to_array_type(t) for t in dtype.types))
 
-    # Timestamp values are stored as dt64 arrays
-    if t == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
-        return types.Array(types.NPDatetime("ns"), 1, "C")
+    # map array
+    if isinstance(dtype, types.DictType):
+        return bodo.MapArrayType(
+            dtype_to_array_type(dtype.key_type),
+            dtype_to_array_type(dtype.value_type),
+        )
 
-    # TODO: make sure t is a Numpy dtype
-    return types.Array(t, 1, "C")
+    # Timestamp/datetime are stored as dt64 array
+    if dtype in (
+        bodo.pd_timestamp_type,
+        bodo.hiframes.datetime_datetime_ext.datetime_datetime_type,
+    ):
+        return types.Array(bodo.datetime64ns, 1, "C")
+
+    # pd.Timedelta/datetime.timedelta values are stored as td64 arrays
+    if dtype in (
+        bodo.pd_timedelta_type,
+        bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type,
+    ):
+        return types.Array(bodo.timedelta64ns, 1, "C")
+
+    # regular numpy array
+    if isinstance(
+        dtype, (types.Number, types.Boolean, types.NPDatetime, types.NPTimedelta)
+    ):
+        return types.Array(dtype, 1, "C")
+
+    raise BodoError(f"dtype {dtype} cannot be stored in arrays")  # pragma: no cover
 
 
 def get_udf_out_arr_type(f_return_type, return_nullable=False):
@@ -1062,7 +1098,7 @@ def get_udf_out_arr_type(f_return_type, return_nullable=False):
     if f_return_type == bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type:
         f_return_type = types.NPTimedelta("ns")
 
-    out_arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(f_return_type)
+    out_arr_type = dtype_to_array_type(f_return_type)
     out_arr_type = to_nullable_type(out_arr_type) if return_nullable else out_arr_type
     return out_arr_type
 

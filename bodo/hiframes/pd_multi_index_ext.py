@@ -14,7 +14,6 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
-    register_jitable,
     register_model,
     typeof_impl,
     unbox,
@@ -23,9 +22,9 @@ from numba.extending import (
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
+    dtype_to_array_type,
     get_val_type_maybe_str_literal,
     is_overload_none,
-    scalar_to_array_type,
 )
 
 
@@ -191,14 +190,13 @@ def from_product_error_checking(iterables, sortorder, names):
 
 def from_product(iterable, sortorder=None, names=None):  # pragma: no cover
     """Overloaded in from_product_overload"""
-    pass
 
 
 @overload(from_product)
 def from_product_overload(iterables, sortorder=None, names=None):
     from_product_error_checking(iterables, sortorder, names)
     # Convert to array type to match unboxing
-    array_types = tuple(scalar_to_array_type(iterable.dtype) for iterable in iterables)
+    array_types = tuple(dtype_to_array_type(iterable.dtype) for iterable in iterables)
     if is_overload_none(names):
         names_typ = tuple([types.none] * len(iterables))
     else:

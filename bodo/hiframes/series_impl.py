@@ -48,6 +48,7 @@ from bodo.utils.typing import (
     BodoError,
     can_replace,
     check_unsupported_args,
+    dtype_to_array_type,
     element_type,
     get_literal_value,
     get_overload_const_int,
@@ -3686,7 +3687,7 @@ def overload_np_where(condition, x, y):
     y_data = get_data(y)
     is_nullable = any(bodo.utils.typing.is_nullable(data) for data in [x_data, y_data])
     if x_data == y_data and not is_nullable:
-        out_dtype = bodo.hiframes.pd_series_ext._get_series_array_type(x_dtype)
+        out_dtype = dtype_to_array_type(x_dtype)
     # output is string if any input is string
     elif x_dtype == string_type or y_dtype == string_type:
         out_dtype = bodo.string_array_type

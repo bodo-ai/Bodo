@@ -37,11 +37,7 @@ from bodo.hiframes.pd_dataframe_ext import (
 )
 from bodo.hiframes.pd_index_ext import StringIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.hiframes.pd_series_ext import (
-    SeriesType,
-    _get_series_array_type,
-    if_series_to_array_type,
-)
+from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.libs.bool_arr_ext import boolean_array
@@ -52,6 +48,7 @@ from bodo.utils.typing import (
     BodoError,
     BodoWarning,
     check_unsupported_args,
+    dtype_to_array_type,
     ensure_constant_arg,
     ensure_constant_values,
     get_index_data_arr_types,
@@ -83,7 +80,6 @@ from bodo.utils.typing import (
     parse_dtype,
     raise_bodo_error,
     raise_const_error,
-    scalar_to_array_type,
     unliteral_val,
 )
 from bodo.utils.utils import is_array_typ
@@ -510,12 +506,10 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         # If the input is a list process each elem in the list
         if is_overload_constant_list(include):
             include = get_overload_const_list(include)
-            include_types = [
-                _get_series_array_type(parse_dtype(elem)) for elem in include
-            ]
+            include_types = [dtype_to_array_type(parse_dtype(elem)) for elem in include]
         # If its a scalar then just make it a list of 1 element
         elif is_legal_input(include):
-            include_types = [_get_series_array_type(parse_dtype(include))]
+            include_types = [dtype_to_array_type(parse_dtype(include))]
         else:
             raise_bodo_error(
                 "DataFrame.select_dtypes() only supports constant strings or types as arguments"
@@ -535,12 +529,10 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         # If the input is a list process each elem in the list
         if is_overload_constant_list(exclude):
             exclude = get_overload_const_list(exclude)
-            exclude_types = [
-                _get_series_array_type(parse_dtype(elem)) for elem in exclude
-            ]
+            exclude_types = [dtype_to_array_type(parse_dtype(elem)) for elem in exclude]
         # If its a scalar then just make it a list of 1 element
         elif is_legal_input(exclude):
-            exclude_types = [_get_series_array_type(parse_dtype(exclude))]
+            exclude_types = [dtype_to_array_type(parse_dtype(exclude))]
         else:
             raise_bodo_error(
                 "DataFrame.select_dtypes() only supports constant strings or types as arguments"
@@ -3450,9 +3442,9 @@ class SetDfColInfer(AbstractTemplate):
                 val = val.data
 
             if isinstance(val, types.List):
-                val = scalar_to_array_type(val.dtype)
+                val = dtype_to_array_type(val.dtype)
             if not is_array_typ(val):
-                val = scalar_to_array_type(val)
+                val = dtype_to_array_type(val)
             if ind in target.columns:
                 # set existing column, with possibly a new array type
                 new_cols = target.columns
