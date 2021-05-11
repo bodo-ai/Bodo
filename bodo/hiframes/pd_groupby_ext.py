@@ -299,19 +299,10 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
         "mean",
         "std",
         "var",
-        # See: [BE-549]
-        "idxmin",
-        "idxmax",
     }:
         return (
             None,
             f"groupby built-in functions {func_name} does not support boolean column",
-        )
-    # See: [BE-549]
-    if func_name in {"idxmin", "idxmax"} and isinstance(arr_type, IntegerArrayType):
-        return (
-            None,
-            f"column type of nullable integer is not supported in groupby built-in function {func_name}",
         )
     if func_name in {"idxmin", "idxmax"}:
         return get_index_data_arr_types(index_type)[0].dtype, "ok"

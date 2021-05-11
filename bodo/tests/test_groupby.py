@@ -3963,8 +3963,39 @@ def test_idxmin_idxmax(memory_leak_check):
     check_func(impl4, (df1,), sort_output=True)
 
 
-@pytest.mark.slow
-def test_idxmin_idxmax_supported_types(memory_leak_check):
+@pytest.mark.parametrize(
+    "df",
+    [
+        # Test different column types in same dataframe
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 2, 3],
+                "B": [1.1, 2.2, 3.3, 4.4, 1.1],
+            }
+        ),
+        # nullable int
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2, 3],
+                    "B": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # boolean
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 1, 2, 2, 1],
+                    "B": [True, True, False, True, True, False, False],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_idxmin_idxmax_supported_types(df, memory_leak_check):
     """
     Test Groupby.idxmin() and Groupby.idxmax()
     """
@@ -3983,22 +4014,8 @@ def test_idxmin_idxmax_supported_types(memory_leak_check):
     # check_func(impl1, (df,), sort_output=True)
     # check_func(impl2, (df,), sort_output=True)
 
-    # Zero columns
-    df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
-    with pytest.raises(BodoError, match="No columns in output"):
-        bodo.jit(impl1)(df_empty)
-    with pytest.raises(BodoError, match="No columns in output"):
-        bodo.jit(impl2)(df_empty)
-
-    # Test different column types in same dataframe
-    df_mix = pd.DataFrame(
-        {
-            "A": [2, 1, 1, 2, 3],
-            "B": [1.1, 2.2, 3.3, 4.4, 1.1],
-        }
-    )
-    check_func(impl1, (df_mix,), sort_output=True, reset_index=True)
-    check_func(impl2, (df_mix,), sort_output=True, reset_index=True)
+    check_func(impl1, (df,), sort_output=True, reset_index=True)
+    check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
 @pytest.mark.slow
