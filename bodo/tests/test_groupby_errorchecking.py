@@ -1845,3 +1845,109 @@ def test_count_unsupported_types(df, memory_leak_check):
 
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl1)(df)
+
+
+# ------------------------------ df.groupby().shift()/nunique()------------------------------ #
+
+
+@pytest.mark.slow
+def test_shift_args(memory_leak_check):
+    """ Test Groupby.shift with wrong arguments values"""
+
+    # wrong freq keyword value test
+    def impl_freq(df):
+        A = df.groupby("A").shift(freq="D")
+        return A
+
+    # wrong freq arg value test
+    def impl_freq_arg(df):
+        A = df.groupby("A").shift(-1, "D")
+        return A
+
+    # wrong keyword value test
+    def impl_axis(df):
+        A = df.groupby("A").shift(axis=1)
+        return A
+
+    # wrong keyword value test
+    def impl_fill_value(df):
+        A = df.groupby("A").shift(fill_value=1)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16],
+            "B": [3, 5, 6, 5, 4, 4],
+        }
+    )
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_freq)(df)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_freq_arg)(df)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_axis)(df)
+    with pytest.raises(BodoError, match="parameter only supports default value"):
+        bodo.jit(impl_fill_value)(df)
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
+        pd.DataFrame(
+            {
+                "A": [1, 2, 3, 2, 1],
+                "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
+                    pd.Series(data=[None], index=[4])
+                ),
+            }
+        ),
+        # [BE-416] Support with list
+        pd.DataFrame(
+            {"A": [2, 1, 1, 2], "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]])}
+        ),
+        # Tuple
+        pd.DataFrame(
+            {"A": [2, 1, 1, 2], "B": pd.Series([(1, 2), (3), (5, 4, 6), (-1, 3, 4)])}
+        ),
+        # Zero columns
+        pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]}),
+    ],
+)
+@pytest.mark.slow
+def test_nunique_shift_unsupported_types(df, memory_leak_check):
+    """ Test nunique/shift with their unsupported Bodo types"""
+
+    def impl_nunique(df):
+        A = df.groupby("A").nunique()
+        return A
+
+    def impl_shift(df):
+        A = df.groupby("A").shift()
+        return A
+
+    err_msg = "not supported in groupby"
+    if len(df.columns) == 1:
+        err_msg = "No columns in output"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_nunique)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_shift)(df)
+
+
+# ------------------------------ df.groupby().agg()------------------------------ #
+@pytest.mark.slow
+def test_agg_unsupported_types(test_cumulatives_df, memory_leak_check):
+    """ Test groupby.agg with unsupported types"""
+
+    def impl1(df):
+        A = df.groupby("A").agg(lambda x: x.sum())
+        return A
+
+    err_msg = "is unsupported/not a valid input type"
+
+    if isinstance(test_cumulatives_df["B"][0], (np.bool_, pd.Timedelta)):
+        return
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(test_cumulatives_df)

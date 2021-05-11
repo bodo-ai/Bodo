@@ -4725,18 +4725,6 @@ def test_cumulatives_supported_cases(memory_leak_check):
             ),
             marks=pytest.mark.slow,
         ),
-        # DatetimeTimeDeltaType
-        pytest.param(
-            pd.DataFrame(
-                {
-                    "A": [1, 2, 3, 2, 1, 3],
-                    "B": pd.Series(pd.timedelta_range(start="1 day", periods=5)).append(
-                        pd.Series(data=[None], index=[4])
-                    ),
-                }
-            ),
-            marks=pytest.mark.slow,
-        ),
         # list
         pytest.param(
             pd.DataFrame(
@@ -4756,6 +4744,12 @@ def test_cumulatives_supported_cases(memory_leak_check):
                 }
             ),
             marks=pytest.mark.slow,
+        ),
+        # nullable boolean
+        pytest.param(
+            pd.DataFrame(
+                {"A": [2, 1, 1, 2, 3], "B": pd.array([True, False, None, True, True])}
+            )
         ),
         # Empty dataframe
         pytest.param(
@@ -4858,3 +4852,90 @@ def test_value_counts():
 
     with pytest.raises(BodoError, match="'DataFrameGroupBy' object has no attribute"):
         bodo.jit(impl3)(df)
+
+
+@pytest.mark.slow
+def test_nunique_supported_types(test_size_df, memory_leak_check):
+    """
+    Test Groupby.nunique
+    Skipping: dataframe that has no columns in output,
+              columns with categorical, tuple, and list type cases
+    """
+
+    if len(test_size_df.columns) == 1 or (
+        isinstance(test_size_df["B"].dtype, pd.CategoricalDtype)
+        or (len(test_size_df) > 0 and isinstance(test_size_df["B"][0], (tuple, list)))
+    ):
+        return
+
+    def impl1(df):
+        A = df.groupby("A").nunique()
+        return A
+
+    check_func(impl1, (test_size_df,), sort_output=True)
+
+
+@pytest.mark.slow
+def test_shift_supported_types(test_size_df, memory_leak_check):
+    """
+    Test Groupby.shift
+    Skipping: dataframe that has no columns in output,
+              columns with tuple, and list type cases
+    """
+
+    if len(test_size_df.columns) == 1 or (
+        len(test_size_df) > 0 and isinstance(test_size_df["B"][0], (tuple, list))
+    ):
+        return
+
+    def impl1(df):
+        A = df.groupby("A").shift()
+        return A
+
+    check_func(impl1, (test_size_df,), sort_output=True)
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # Empty dataframe
+        pd.DataFrame({"A": [], "B": []}),
+        # Test different column types in same dataframe
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 2, 3],
+                "B": [1.1, 2.2, 3.3, 4.4, 1.1],
+                "C": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+            }
+        ),
+        # nullable boolean
+        pd.DataFrame(
+            {"A": [2, 1, 1, 2, 3], "B": pd.array([True, False, None, True, True])}
+        ),
+        # nullable int
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 2, 3],
+                "B": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+            }
+        ),
+        # boolean
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 1, 2, 2, 1],
+                "B": [True, True, False, True, True, False, False],
+            }
+        ),
+    ],
+)
+@pytest.mark.slow
+def test_agg_supported_types(df, memory_leak_check):
+    """
+    Test Groupby.agg()
+    """
+
+    def impl1(df):
+        A = df.groupby("A").agg(lambda x: x.sum())
+        return A
+
+    check_func(impl1, (df,), sort_output=True, check_dtype=False, reset_index=True)

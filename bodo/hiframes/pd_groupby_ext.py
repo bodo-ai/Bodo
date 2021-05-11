@@ -84,7 +84,7 @@ from bodo.utils.typing import (
     raise_bodo_error,
     raise_const_error,
 )
-from bodo.utils.utils import is_expr
+from bodo.utils.utils import dt_err, is_expr
 
 
 class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
@@ -229,11 +229,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
     # Bodo don't support DatetimeTimeDeltaType. use (timedelta64 instead)
     if isinstance(in_dtype, bodo.hiframes.datetime_timedelta_ext.DatetimeTimeDeltaType):
         raise BodoError(
-            "column type of {} is not supported in groupby built-in function {}.\n \
-            If you are trying to set NULL values for timedelta64 in regular Python, \
-            consider using np.timedelta64('nat') instead of None".format(
-                in_dtype, func_name
-            )
+            f"column type of {in_dtype} is not supported in groupby built-in function {func_name}.\n{dt_err}"
         )
     if func_name == "median" and not isinstance(
         in_dtype, (Decimal128Type, types.Float, types.Integer)
@@ -244,14 +240,12 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
         )
     # [BE-416] Support with list
     # [BE-433] Support with tuples
-    if (func_name in ("first", "last", "sum", "prod", "min", "max", "count")) and (
-        isinstance(arr_type, (TupleArrayType, ArrayItemArrayType))
-    ):
+    if (
+        func_name in ("first", "last", "sum", "prod", "min", "max", "count", "nunique")
+    ) and (isinstance(arr_type, (TupleArrayType, ArrayItemArrayType))):
         return (
             None,
-            "column type of list of {} is not supported in groupby built-in function {}".format(
-                in_dtype, func_name
-            ),
+            f"column type of list/tuple of {in_dtype} is not supported in groupby built-in function {func_name}",
         )
 
     if (func_name in {"median", "mean", "var", "std"}) and isinstance(
@@ -515,11 +509,8 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     # pop arguments from kws or args
                     # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
                     dropna = args[0] if len(args) > 0 else kws.pop("dropna", 1)
-                    if len(kws) > 0:
-                        bad_key = list(kws.keys())[0]
-                        raise BodoError(
-                            f"Groupby.{func_name} got an unexpected keyword argument '{bad_key}'"
-                        )
+                    check_args_kwargs(func_name, 1, args, kws)
+
                 out_dtype, err_msg = get_groupby_output_dtype(
                     data, func_name, grp.df_type.index
                 )
@@ -859,6 +850,19 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 f"Groupby.{name_operation}", unsupported_args, arg_defaults
             )
             check_args_kwargs(name_operation, 3, args, kws)
+        elif name_operation == "shift":
+            # pop arguments from kws or args
+            # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
+            periods = args[0] if len(args) > 0 else kws.pop("periods", 1)
+            freq = args[1] if len(args) > 1 else kws.pop("freq", None)
+            axis = args[2] if len(args) > 2 else kws.pop("axis", 0)
+            fill_value = args[3] if len(args) > 3 else kws.pop("fill_value", None)
+            unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
+            arg_defaults = dict(freq=None, axis=0, fill_value=None)
+            check_unsupported_args(
+                f"Groupby.{name_operation}", unsupported_args, arg_defaults
+            )
+            check_args_kwargs(name_operation, 4, args, kws)
 
         for c in grp.selection:
             out_columns.append(c)
@@ -879,7 +883,16 @@ class DataframeGroupByAttribute(AttributeTemplate):
                     data.dtype
                 ):
                     raise BodoError(msg)
-
+            if name_operation == "shift":
+                if isinstance(data, (TupleArrayType, ArrayItemArrayType)):
+                    raise BodoError(msg)
+                if isinstance(
+                    data.dtype,
+                    bodo.hiframes.datetime_timedelta_ext.DatetimeTimeDeltaType,
+                ):
+                    raise BodoError(
+                        f"column type of {data.dtype} is not supported in groupby built-in function shift.\n{dt_err}"
+                    )
             out_data.append(data)
         if len(out_data) == 0:
             raise BodoError("No columns in output.")
@@ -916,7 +929,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.shift", no_unliteral=True)
     def resolve_shift(self, grp, args, kws):
-        msg = "Groupby.shift() doesn't support timedelta"  # HA: for now, until its error is fixed.
+        msg = "Column type of list/tuple is not supported in groupby built-in function shift"
         return self.resolve_transformative(grp, args, kws, msg, "shift")
 
     @bound_function("groupby.pipe", no_unliteral=True)
