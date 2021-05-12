@@ -175,6 +175,13 @@ def box_cat_dtype(typ, val, c):
     return dtype_obj
 
 
+@overload_attribute(PDCategoricalDtype, "nbytes")
+def pd_categorical_nbytes_overload(A):
+    return lambda A: A.categories.nbytes + bodo.io.np_io.get_dtype_size(
+        types.bool_
+    )  # pragma: no cover
+
+
 # Array of categorical data (similar to Pandas Categorical array)
 class CategoricalArrayType(types.ArrayCompatible):
     def __init__(self, dtype):
@@ -719,6 +726,11 @@ def overload_cat_arr_shape(A):
 @overload_attribute(CategoricalArrayType, "ndim")
 def overload_cat_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
+
+
+@overload_attribute(CategoricalArrayType, "nbytes")
+def cat_arr_nbytes_overload(A):
+    return lambda A: A.codes.nbytes + A.dtype.nbytes  # pragma: no cover
 
 
 @register_jitable

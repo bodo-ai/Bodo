@@ -248,3 +248,15 @@ def test_setitem_arr(bool_arr_value, memory_leak_check):
     # Single boolean as a value, reuses the same idx
     val = True
     check_func(test_impl, (bool_arr_value, idx, val), dist_test=False, copy_input=True)
+
+
+@pytest.mark.slow
+def test_bool_arr_nbytes(bool_arr_value, memory_leak_check):
+    """Test BooleanArrayType nbytes"""
+
+    def impl(A):
+        return A.nbytes
+
+    py_out = 5 + bodo.get_size()  # 1 extra byte for null_bit_map per rank
+    check_func(impl, (bool_arr_value,), py_output=py_out, only_1D=True)
+    check_func(impl, (bool_arr_value,), py_output=6, only_seq=True)

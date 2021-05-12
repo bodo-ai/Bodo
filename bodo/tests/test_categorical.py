@@ -530,3 +530,16 @@ def test_pd_categorical_compile_time():
     check_func(test_impl1, (S,), check_categorical=False)
     check_func(test_impl2, (S,), check_categorical=False)
     check_func(test_impl3, (S,), check_categorical=False)
+
+
+@pytest.mark.slow
+def test_categorical_nbytes():
+    """Test CategoricalArrayType nbytes"""
+
+    def impl(A):
+        return A.nbytes
+
+    A = pd.Categorical([1, 2, 5, None, 2] * 2, ordered=True)
+    py_out = 10 + 25 * bodo.get_size()  # A.dtype is replicated on ranks
+    check_func(impl, (A,), py_output=py_out, only_1D=True)
+    check_func(impl, (A,), py_output=35, only_seq=True)

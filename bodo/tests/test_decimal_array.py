@@ -344,3 +344,27 @@ def test_setitem_arr(decimal_arr_value, memory_leak_check):
     check_func(
         test_impl, (decimal_arr_value, idx, val), dist_test=False, copy_input=True
     )
+
+
+@pytest.mark.slow
+def test_decimal_arr_nbytes(memory_leak_check):
+    """Test DecimalArrayType nbytes"""
+
+    def impl(A):
+        return A.nbytes
+
+    arr = np.array(
+        [
+            Decimal("1.6"),
+            None,
+            Decimal("-0.222"),
+            Decimal("1111.316"),
+            Decimal("1234.00046"),
+            Decimal("5.1"),
+            Decimal("-11131.0056"),
+            Decimal("0.0"),
+        ]
+    )
+    py_out = 128 + bodo.get_size()  # 1 extra byte for null_bit_map per rank
+    check_func(impl, (arr,), py_output=py_out, only_1D=True, only_1DVar=True)
+    check_func(impl, (arr,), py_output=129, only_seq=True)

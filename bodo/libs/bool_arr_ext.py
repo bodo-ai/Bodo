@@ -602,6 +602,11 @@ def overload_bool_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
+@overload_attribute(BooleanArrayType, "nbytes")
+def bool_arr_nbytes_overload(A):
+    return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover
+
+
 @overload_method(BooleanArrayType, "copy", no_unliteral=True)
 def overload_bool_arr_copy(A):
     return lambda A: bodo.libs.bool_arr_ext.init_bool_array(

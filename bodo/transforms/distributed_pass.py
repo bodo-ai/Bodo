@@ -12,6 +12,8 @@ from collections import defaultdict
 import numba
 import numpy as np
 
+from bodo.libs.bool_arr_ext import boolean_array
+
 try:
     import sklearn
 except:
@@ -332,20 +334,27 @@ class DistributedPass:
         ):
             return self._run_array_size(inst.target, rhs.value, equiv_set, avail_vars)
 
-        # index.nbytes
+        # index.nbytes,
+        # bodo_arrays.nbytes (BooleanArrayType, DecimalArrayType, IntegerArrayType, CategoricalArrayType)
         if (
             rhs.op == "getattr"
             and rhs.attr == "nbytes"
-            and isinstance(
-                self.typemap[rhs.value.name],
-                (
-                    NumericIndexType,
-                    StringIndexType,
-                    CategoricalIndexType,
-                    DatetimeIndexType,
-                    TimedeltaIndexType,
-                    PeriodIndexType,
-                ),
+            and (
+                isinstance(
+                    self.typemap[rhs.value.name],
+                    (
+                        NumericIndexType,
+                        StringIndexType,
+                        CategoricalIndexType,
+                        DatetimeIndexType,
+                        TimedeltaIndexType,
+                        PeriodIndexType,
+                        bodo.IntegerArrayType,
+                        bodo.DecimalArrayType,
+                        bodo.CategoricalArrayType,
+                    ),
+                )
+                or self.typemap[rhs.value.name] == boolean_array
             )
             and self._is_1D_or_1D_Var_arr(rhs.value.name)
         ):
