@@ -410,7 +410,7 @@ def overload_coerce_to_array(
     use_nullable_array=True returns nullable boolean/int arrays instead of Numpy arrays.
     """
     # TODO: support other arrays like list(str), datetime.date ...
-    from bodo.hiframes.pd_index_ext import StringIndexType
+    from bodo.hiframes.pd_index_ext import CategoricalIndexType, StringIndexType
     from bodo.hiframes.pd_series_ext import SeriesType
 
     # unliteral e.g. Tuple(Literal[int](3), Literal[int](1)) to UniTuple(int64 x 2)
@@ -422,8 +422,8 @@ def overload_coerce_to_array(
             data
         )  # pragma: no cover
 
-    # string Index
-    if isinstance(data, StringIndexType):
+    # string/categorical Index
+    if isinstance(data, (StringIndexType, CategoricalIndexType)):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.hiframes.pd_index_ext.get_index_data(
             data
         )  # pragma: no cover
@@ -898,6 +898,7 @@ def overload_convert_to_index(data, name=None):
     convert data to Index object if necessary.
     """
     from bodo.hiframes.pd_index_ext import (
+        CategoricalIndexType,
         DatetimeIndexType,
         NumericIndexType,
         RangeIndexType,
@@ -914,10 +915,11 @@ def overload_convert_to_index(data, name=None):
             DatetimeIndexType,
             TimedeltaIndexType,
             StringIndexType,
+            CategoricalIndexType,
             types.NoneType,
         ),
     ):
-        return lambda data, name=None: data
+        return lambda data, name=None: data  # pragma: no cover
 
     def impl(data, name=None):  # pragma: no cover
         data_arr = bodo.utils.conversion.coerce_to_array(data)
@@ -981,8 +983,16 @@ def overload_index_from_array(data, name=None):
             data, name
         )  # pragma: no cover
 
+    # categorical array
+    if isinstance(data, bodo.hiframes.pd_categorical_ext.CategoricalArrayType):
+        return (
+            lambda data, name=None: bodo.hiframes.pd_index_ext.init_categorical_index(
+                data, name
+            )
+        )  # pragma: no cover
+
     # TODO: timedelta, period
-    raise BodoError(f"invalid index type {data}")
+    raise BodoError(f"cannot convert {data} to Index")  # pragma: no cover
 
 
 def index_to_array(data):  # pragma: no cover
@@ -1025,6 +1035,7 @@ def extract_name_if_none(data, name):  # pragma: no cover
 def overload_extract_name_if_none(data, name):
     """Extract name if `data` is has name (Series/Index) and `name` is None"""
     from bodo.hiframes.pd_index_ext import (
+        CategoricalIndexType,
         DatetimeIndexType,
         NumericIndexType,
         PeriodIndexType,
@@ -1037,7 +1048,14 @@ def overload_extract_name_if_none(data, name):
 
     # Index type, TODO: other indices like Range?
     if isinstance(
-        data, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType, PeriodIndexType)
+        data,
+        (
+            NumericIndexType,
+            DatetimeIndexType,
+            TimedeltaIndexType,
+            PeriodIndexType,
+            CategoricalIndexType,
+        ),
     ):
         return lambda data, name: bodo.hiframes.pd_index_ext.get_index_name(
             data

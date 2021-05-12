@@ -42,6 +42,7 @@ from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 from bodo.hiframes.pd_index_ext import (
+    CategoricalIndexType,
     DatetimeIndexType,
     HeterogeneousIndexType,
     NumericIndexType,
@@ -728,6 +729,7 @@ class SeriesPass:
                     NumericIndexType,
                     StringIndexType,
                     PeriodIndexType,
+                    CategoricalIndexType,
                     DatetimeIndexType,
                     TimedeltaIndexType,
                 ),
@@ -1894,6 +1896,7 @@ class SeriesPass:
                 ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
                 ("init_string_index", "bodo.hiframes.pd_index_ext"),
                 ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
+                ("init_categorical_index", "bodo.hiframes.pd_index_ext"),
                 ("init_heter_index", "bodo.hiframes.pd_index_ext"),
             ):
                 assign.value = var_def.args[0]
@@ -1909,6 +1912,7 @@ class SeriesPass:
                     ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
                     ("init_string_index", "bodo.hiframes.pd_index_ext"),
                     ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
+                    ("init_categorical_index", "bodo.hiframes.pd_index_ext"),
                     ("init_heter_index", "bodo.hiframes.pd_index_ext"),
                 )
                 and len(var_def.args) > 1
@@ -3144,6 +3148,7 @@ class SeriesPass:
             ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
             ("init_string_index", "bodo.hiframes.pd_index_ext"),
             ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
+            ("init_categorical_index", "bodo.hiframes.pd_index_ext"),
             ("init_heter_index", "bodo.hiframes.pd_index_ext"),
         ):
             return var_def.args[0]

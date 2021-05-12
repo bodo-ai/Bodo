@@ -93,6 +93,8 @@ from bodo.hiframes.pd_index_ext import (
     DatetimeIndexType,
     NumericIndexType,
     PeriodIndexType,
+    IntervalIndexType,
+    CategoricalIndexType,
     RangeIndexType,
     StringIndexType,
     TimedeltaIndexType,

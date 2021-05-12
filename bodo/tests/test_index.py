@@ -219,6 +219,7 @@ def test_array_index_box(index, memory_leak_check):
         # pd.RangeIndex(3, 10, 2), # TODO: support
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
         pd.timedelta_range(start="1D", end="3D", name="A"),
+        pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
         # TODO: PeriodIndex.values returns object array of Period objects
         # pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
     ],
@@ -695,6 +696,20 @@ def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "categorical_index",
+    [
+        pd.CategoricalIndex(["A", "B", "A", "CC", "B"]),
+        pd.CategoricalIndex([1, 4, 5, 1, 4, 2], ordered=True),
+    ],
+)
+def test_categorical_index_box(categorical_index, memory_leak_check):
+    def impl(A):
+        return A
+
+    check_func(impl, (categorical_index,))
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "interval_index",
@@ -860,6 +875,8 @@ def test_map_str(memory_leak_check):
             marks=pytest.mark.slow,
         ),
         pytest.param(pd.date_range("2019-01-14", periods=11), marks=pytest.mark.slow),
+        # TODO(ehsan): return CategoricalIndex for CategoricalIndex.map()
+        # pytest.param(pd.CategoricalIndex(["A", "B"]*3), marks=pytest.mark.slow),
         # TODO: enable when pd.Timedelta is supported (including box_if_dt64)
         # pd.timedelta_range("3D", periods=11),
     ],
