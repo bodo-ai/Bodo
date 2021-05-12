@@ -43,6 +43,7 @@ from bodo.utils.cg_helpers import (
 )
 from bodo.utils.typing import (
     BodoError,
+    dtype_to_array_type,
     get_overload_const_int,
     get_overload_const_str,
     is_list_like_index_type,
@@ -97,9 +98,7 @@ class StructArrayType(types.ArrayCompatible):
         """create a StructArrayType from dict where keys are names and values are dtypes"""
         assert isinstance(d, dict)
         names = tuple(str(a) for a in d.keys())
-        data = tuple(
-            bodo.hiframes.pd_series_ext._get_series_array_type(t) for t in d.values()
-        )
+        data = tuple(dtype_to_array_type(t) for t in d.values())
         return StructArrayType(data, names)
 
     def copy(self):

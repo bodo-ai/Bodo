@@ -31,26 +31,16 @@ from numba.extending import (
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
-from bodo.hiframes.pd_categorical_ext import (
-    CategoricalArrayType,
-    PDCategoricalDtype,
-)
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.io import csv_cpp
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
-from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
-from bodo.libs.map_arr_ext import MapArrayType
-from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.int_arr_ext import IntDtype
 from bodo.libs.str_ext import string_type, unicode_to_utf8
-from bodo.libs.struct_arr_ext import StructArrayType, StructType
-from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
     create_unsupported_overload,
+    dtype_to_array_type,
     get_overload_const_tuple,
     get_udf_error_msg,
     get_udf_out_arr_type,
@@ -79,7 +69,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         # keeping data array in type since operators can make changes such
         # as making array unaligned etc.
         # data is underlying array type and can have different dtype
-        data = _get_series_array_type(dtype) if data is None else data
+        data = dtype_to_array_type(dtype) if data is None else data
         # store regular dtype instead of IntDtype to avoid errors
         dtype = dtype.dtype if isinstance(dtype, IntDtype) else dtype
         self.dtype = dtype
@@ -102,7 +92,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         if index is None:
             index = self.index.copy()
         dtype = dtype if dtype is not None else self.dtype
-        data = _get_series_array_type(dtype)
+        data = dtype_to_array_type(dtype)
         return SeriesType(dtype, data, index, self.name_typ)
 
     @property
@@ -201,63 +191,6 @@ class HeterSeriesAttribute(AttributeTemplate):
             if attr in indices:
                 arr_ind = indices.index(attr)
                 return S.data[arr_ind]
-
-
-def _get_series_array_type(dtype):
-    """get underlying default array type of series based on its dtype"""
-    dtype = types.unliteral(dtype)
-
-    # UDFs may return lists, but we store array of array for output
-    if isinstance(dtype, types.List):
-        dtype = _get_series_array_type(dtype.dtype)
-
-    # string array
-    if dtype == string_type:
-        return string_array_type
-
-    if bodo.utils.utils.is_array_typ(dtype, False):
-        return ArrayItemArrayType(dtype)
-
-    # categorical
-    if isinstance(dtype, PDCategoricalDtype):
-        return CategoricalArrayType(dtype)
-
-    if isinstance(dtype, IntDtype):
-        return IntegerArrayType(dtype.dtype)
-
-    if dtype == types.bool_:
-        return boolean_array
-
-    if dtype == datetime_date_type:
-        return bodo.hiframes.datetime_date_ext.datetime_date_array_type
-
-    if isinstance(dtype, Decimal128Type):
-        return DecimalArrayType(dtype.precision, dtype.scale)
-
-    if isinstance(dtype, StructType):
-        return StructArrayType(
-            tuple(_get_series_array_type(t) for t in dtype.data), dtype.names
-        )
-
-    if isinstance(dtype, types.BaseTuple):
-        return TupleArrayType(tuple(_get_series_array_type(t) for t in dtype.types))
-
-    if isinstance(dtype, types.DictType):
-        return MapArrayType(
-            _get_series_array_type(dtype.key_type),
-            _get_series_array_type(dtype.value_type),
-        )
-
-    # PandasTimestamp becomes dt64 array
-    if dtype == bodo.pd_timestamp_type:
-        return types.Array(bodo.datetime64ns, 1, "C")
-
-    if dtype == bodo.pd_timedelta_type:
-        return types.Array(bodo.timedelta64ns, 1, "C")
-
-    # TODO: other types?
-    # regular numpy array
-    return types.Array(dtype, 1, "C")
 
 
 def is_str_series_typ(t):
@@ -561,18 +494,13 @@ numba.core.ir_utils.alias_func_extensions[
 ] = alias_ext_dummy_func
 
 
-def series_to_array_type(typ):
-    return typ.data
-    # return _get_series_array_type(typ.dtype)
-
-
 def is_series_type(typ):
     return isinstance(typ, SeriesType)
 
 
 def if_series_to_array_type(typ):
     if isinstance(typ, SeriesType):
-        return series_to_array_type(typ)
+        return typ.data
 
     return typ
 
@@ -663,12 +591,12 @@ class SeriesAttribute(AttributeTemplate):
             # NOTE: get_const_func_output_type() adds const_info attribute for Series
             # output
             _, index_vals = f_return_type.const_info
-            arrs = tuple(_get_series_array_type(t) for t in f_return_type.data.types)
+            arrs = tuple(dtype_to_array_type(t) for t in f_return_type.data.types)
             ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
         elif isinstance(f_return_type, SeriesType):
             n_cols, index_vals = f_return_type.const_info
             arrs = tuple(
-                _get_series_array_type(f_return_type.dtype) for _ in range(n_cols)
+                dtype_to_array_type(f_return_type.dtype) for _ in range(n_cols)
             )
             ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
         else:

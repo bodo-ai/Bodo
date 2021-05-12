@@ -60,6 +60,7 @@ from bodo.utils.shuffle import (
 )
 from bodo.utils.typing import (
     BodoError,
+    dtype_to_array_type,
     find_common_np_dtype,
     is_dtype_nullable,
     is_nullable_type,
@@ -685,9 +686,7 @@ def _match_join_key_types(t1, t2, loc):
         return t1
 
     try:
-        arr = bodo.hiframes.pd_series_ext._get_series_array_type(
-            find_common_np_dtype([t1, t2])
-        )
+        arr = dtype_to_array_type(find_common_np_dtype([t1, t2]))
         # output should be nullable if any input is nullable
         return (
             to_nullable_type(arr)

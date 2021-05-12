@@ -25,11 +25,7 @@ from bodo.hiframes.pd_dataframe_ext import (
     DataFrameType,
     construct_dataframe,
 )
-from bodo.hiframes.pd_series_ext import (
-    HeterogeneousSeriesType,
-    SeriesType,
-    _get_series_array_type,
-)
+from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.libs import hstr_ext
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
@@ -43,6 +39,7 @@ from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
+    dtype_to_array_type,
     get_overload_const_int,
     is_overload_constant_int,
     to_nullable_type,
@@ -106,7 +103,7 @@ def unbox_dataframe(typ, val, c):
 def get_hiframes_dtypes(df):
     """get hiframe data types for a pandas dataframe"""
     hi_typs = [
-        _get_series_array_type(_infer_series_dtype(df.iloc[:, i]))
+        dtype_to_array_type(_infer_series_dtype(df.iloc[:, i]))
         for i in range(len(df.columns))
     ]
     return tuple(hi_typs)
@@ -513,9 +510,7 @@ def _get_struct_value_arr_type(v):
         return numba.typeof(_value_to_array(v))
 
     if isinstance(v, list):
-        return bodo.hiframes.pd_series_ext._get_series_array_type(
-            numba.typeof(_value_to_array(v))
-        )
+        return dtype_to_array_type(numba.typeof(_value_to_array(v)))
 
     if pd.api.types.is_scalar(v) and pd.isna(v):
         # assume string array if first field value is NA
@@ -528,7 +523,7 @@ def _get_struct_value_arr_type(v):
         )
         return string_array_type
 
-    arr_typ = bodo.hiframes.pd_series_ext._get_series_array_type(numba.typeof(v))
+    arr_typ = dtype_to_array_type(numba.typeof(v))
     # use nullable arrays for integer/bool values since there could be None objects
     if isinstance(v, (int, bool)):
         arr_typ = to_nullable_type(arr_typ)

@@ -31,11 +31,7 @@ import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.hiframes.pd_series_ext import (
-    HeterogeneousSeriesType,
-    SeriesType,
-    _get_series_array_type,
-)
+from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
@@ -63,6 +59,7 @@ from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
     create_unsupported_overload,
+    dtype_to_array_type,
     get_index_data_arr_types,
     get_index_name_types,
     get_literal_value,
@@ -517,7 +514,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
             if err_msg == "ok":
                 if out_dtype != ArrayItemArrayType(string_array_type):
-                    out_arr = _get_series_array_type(out_dtype)
+                    out_arr = dtype_to_array_type(out_dtype)
                 else:
                     out_arr = out_dtype
                 out_data.append(out_arr)
@@ -1003,16 +1000,14 @@ class DataframeGroupByAttribute(AttributeTemplate):
         if single_row_output:
             if isinstance(f_return_type, HeterogeneousSeriesType):
                 _, index_vals = f_return_type.const_info
-                arrs = tuple(
-                    _get_series_array_type(t) for t in f_return_type.data.types
-                )
+                arrs = tuple(dtype_to_array_type(t) for t in f_return_type.data.types)
                 ret_type = DataFrameType(
                     out_data + arrs, out_index_type, out_columns + index_vals
                 )
             elif isinstance(f_return_type, SeriesType):
                 n_cols, index_vals = f_return_type.const_info
                 arrs = tuple(
-                    _get_series_array_type(f_return_type.dtype) for _ in range(n_cols)
+                    dtype_to_array_type(f_return_type.dtype) for _ in range(n_cols)
                 )
                 ret_type = DataFrameType(
                     out_data + arrs, out_index_type, out_columns + index_vals
@@ -1162,7 +1157,7 @@ class PivotTyper(AbstractTemplate):
         # get output data type
         data = df.data[df.columns.index(values)]
         out_dtype = get_pivot_output_dtype(data, aggfunc.literal_value)
-        out_arr_typ = _get_series_array_type(out_dtype)
+        out_arr_typ = dtype_to_array_type(out_dtype)
 
         pivot_vals = _pivot_values.meta
         n_vals = len(pivot_vals)

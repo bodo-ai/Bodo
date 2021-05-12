@@ -32,16 +32,18 @@ import bodo
 import bodo.hiframes
 import bodo.utils.conversion
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
-from bodo.hiframes.pd_series_ext import SeriesType, string_array_type
+from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
     create_unsupported_overload,
+    dtype_to_array_type,
     get_overload_const_func,
     get_overload_const_str,
     get_udf_error_msg,
@@ -2002,11 +2004,7 @@ class NumericIndexType(types.IterableType, types.ArrayCompatible):
         name_typ = types.none if name_typ is None else name_typ
         self.dtype = dtype
         self.name_typ = name_typ
-        data = (
-            bodo.hiframes.pd_series_ext._get_series_array_type(dtype)
-            if data is None
-            else data
-        )
+        data = dtype_to_array_type(dtype) if data is None else data
         self.data = data
         super(NumericIndexType, self).__init__(
             name=f"NumericIndexType({dtype}, {name_typ}, {data})"

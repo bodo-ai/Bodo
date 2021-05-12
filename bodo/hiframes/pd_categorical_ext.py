@@ -28,6 +28,7 @@ from bodo.utils.typing import (
     NOT_CONSTANT,
     BodoError,
     check_unsupported_args,
+    dtype_to_array_type,
     get_literal_value,
     get_overload_const,
     get_overload_const_bool,
@@ -347,7 +348,7 @@ def overload_cat_arr_astype(A, dtype, copy=True):
             f"Converting categorical array {A} to dtype {dtype} not supported yet"
         )
 
-    arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(nb_dtype)
+    arr_type = dtype_to_array_type(nb_dtype)
 
     def impl(A, dtype, copy=True):  # pragma: no cover
         codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A)
@@ -664,7 +665,7 @@ def cat_replace_overload(arr, to_replace, value):
 
         return impl_str
 
-    _arr_type = bodo.utils.typing.scalar_to_array_type(_elem_type)
+    _arr_type = dtype_to_array_type(_elem_type)
 
     def impl(arr, to_replace, value):  # pragma: no cover
         categories = arr.dtype.categories

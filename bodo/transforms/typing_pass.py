@@ -1337,7 +1337,10 @@ class TypingTransforms:
         args = [df_var, cname_var, inst.value]
 
         # assign output df type if possible to reduce typing iterations
-        if inst.value.name in self.typemap:
+        if (
+            inst.value.name in self.typemap
+            and self.typemap[inst.value.name] != types.unknown
+        ):
             nodes += compile_func_single_block(
                 func, args, out_var, self, extra_globals={"_inplace": inplace}
             )
