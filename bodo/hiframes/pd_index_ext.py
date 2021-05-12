@@ -2592,7 +2592,9 @@ def array_type_to_index(arr_typ, name_typ=None):
     if arr_typ == bodo.string_array_type:
         return StringIndexType(name_typ)
 
-    assert isinstance(arr_typ, (types.Array, IntegerArrayType)) or arr_typ in (
+    assert isinstance(
+        arr_typ, (types.Array, IntegerArrayType, bodo.CategoricalArrayType)
+    ) or arr_typ in (
         bodo.datetime_date_array_type,
         bodo.boolean_array,
     ), f"Converting array type {arr_typ} to index not supported"
@@ -2603,6 +2605,10 @@ def array_type_to_index(arr_typ, name_typ=None):
         "ns"
     ):
         return DatetimeIndexType(name_typ)
+
+    # categorical array
+    if isinstance(arr_typ, bodo.CategoricalArrayType):
+        return CategoricalIndexType(arr_typ, name_typ)
 
     if arr_typ.dtype == types.NPTimedelta("ns"):
         return TimedeltaIndexType(name_typ)
@@ -2855,6 +2861,9 @@ numba.core.ir_utils.alias_func_extensions[
 ] = alias_ext_dummy_func
 numba.core.ir_utils.alias_func_extensions[
     ("init_string_index", "bodo.hiframes.pd_index_ext")
+] = alias_ext_dummy_func
+numba.core.ir_utils.alias_func_extensions[
+    ("init_categorical_index", "bodo.hiframes.pd_index_ext")
 ] = alias_ext_dummy_func
 
 

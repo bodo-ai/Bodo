@@ -696,7 +696,6 @@ def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
     )
 
 
-@pytest.mark.slow
 @pytest.mark.parametrize(
     "categorical_index",
     [
