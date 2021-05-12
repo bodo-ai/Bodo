@@ -57,6 +57,19 @@ from bodo.utils.typing import BodoError
             ),
             marks=pytest.mark.slow,
         ),
+        # Categorical key
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Categorical(["A", "B", "A", "A", "B", None, "B"]),
+                    "B": [-8.3, np.nan, 3.8, 1.3, 5.4, np.nan, -7.0],
+                    "C": [3.4, 2.5, 9.6, 1.5, -4.3, 4.3, -3.7],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # Categorical key and value
+        # TODO [BE-746]: Support Categorical data in groupby functions
         pytest.param(
             pd.DataFrame(
                 {
@@ -76,7 +89,7 @@ from bodo.utils.typing import BodoError
                     ),
                 }
             ),
-            marks=pytest.mark.slow,
+            marks=pytest.mark.skip,
         ),
     ]
 )
@@ -2295,14 +2308,7 @@ def test_single_col_reset_index(test_df, memory_leak_check):
         A = df.groupby("A")["B"].sum().reset_index()
         return A
 
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True, reset_index=True)
+    check_func(impl1, (test_df,), sort_output=True, reset_index=True)
 
 
 @pytest.mark.slow
@@ -2617,14 +2623,7 @@ def test_max(test_df, memory_leak_check):
         }
     )
 
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (test_df,), sort_output=True)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl2, (11,))
 
@@ -2657,14 +2656,7 @@ def test_max_one_col(test_df, memory_leak_check):
     if any(pd.Int64Dtype() == v for v in test_df.dtypes.to_list()):
         check_dtype = False
 
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
 
 
 #    check_func(impl1, (df_bool,), sort_output=True)
@@ -2744,14 +2736,7 @@ def test_mean(test_df, memory_leak_check):
         A = df.groupby("A").mean()
         return A
 
-    # Categorical isn't numeric so this should fail in Pandas.
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -2770,14 +2755,7 @@ def test_mean_one_col(test_df, memory_leak_check):
         A = df.groupby("A")["B"].mean()
         return A
 
-    # Categorical isn't numeric so this should fail in Pandas.
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -2891,14 +2869,7 @@ def test_min(test_df, memory_leak_check):
         }
     )
 
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (test_df,), sort_output=True)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
@@ -3001,14 +2972,7 @@ def test_min_one_col(test_df, memory_leak_check):
     if any(pd.Int64Dtype() == v for v in test_df.dtypes.to_list()):
         check_dtype = False
 
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
@@ -3080,14 +3044,7 @@ def test_prod(test_df, memory_leak_check):
         }
     )
 
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (test_df,), sort_output=True)
     # Pandas 1.2.0 converts the all boolean values to integers
     # TODO: Change in Bodo
     check_func(impl1, (df_bool,), sort_output=True, check_dtype=False)
@@ -3108,14 +3065,6 @@ def test_prod_one_col(test_df, memory_leak_check):
         df = pd.DataFrame({"A": np.ones(n, np.int64), "B": np.arange(n)})
         A = df.groupby("A")["B"].prod()
         return A
-
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-        return
 
     df_bool = pd.DataFrame(
         {
@@ -3234,27 +3183,13 @@ def test_first_last(test_df, memory_leak_check):
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
     )
 
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (test_df,), sort_output=True)
     check_func(impl1, (df_str,), sort_output=True, check_typing_issues=False)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl3)(test_df)
-    else:
-        check_func(impl3, (test_df,), sort_output=True)
+    check_func(impl3, (test_df,), sort_output=True)
     check_func(impl3, (df_str,), sort_output=True, check_typing_issues=False)
     check_func(impl3, (df_bool,), sort_output=True)
     check_func(impl3, (df_dt,), sort_output=True)
@@ -3393,27 +3328,13 @@ def test_first_last_one_col(test_df, memory_leak_check):
     if any(pd.Int64Dtype() == v for v in test_df.dtypes.to_list()):
         check_dtype = False
 
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=check_dtype)
     check_func(impl1, (df_str,), sort_output=True, check_typing_issues=False)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl3)(test_df)
-    else:
-        check_func(impl3, (test_df,), sort_output=True, check_dtype=check_dtype)
+    check_func(impl3, (test_df,), sort_output=True, check_dtype=check_dtype)
     check_func(impl3, (df_str,), sort_output=True, check_typing_issues=False)
     check_func(impl3, (df_bool,), sort_output=True)
     check_func(impl3, (df_dt,), sort_output=True)
@@ -3502,15 +3423,7 @@ def test_std_one_col(test_df, memory_leak_check):
         A = df.groupby("A")["B"].std()
         return A
 
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
-        test_df["B"].dtype, pd.CategoricalDtype
-    ):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -3549,14 +3462,7 @@ def test_sum(test_df, memory_leak_check):
         A = df.groupby("A").sum()
         return A
 
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (test_df,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
 
@@ -3575,16 +3481,7 @@ def test_sum_one_col(test_df, memory_leak_check):
         A = df.groupby("A")["B"].sum()
         return A
 
-    # Pandas doesn't support sum on Categorical
-    # TODO [BE-403]: Support Categorical Key
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True)
-
+    check_func(impl1, (test_df,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
 
@@ -3779,16 +3676,7 @@ def test_var(test_df, memory_leak_check):
         A = df.groupby("A").var()
         return A
 
-    # Pandas: no numeric type
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
-        test_df["B"].dtype, pd.CategoricalDtype
-    ):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 
@@ -3845,17 +3733,7 @@ def test_var_one_col(test_df, memory_leak_check):
         A = df.groupby("A")["B"].var()
         return A
 
-    # Pandas: no numeric type
-    if isinstance(test_df["A"].dtype, pd.CategoricalDtype) or isinstance(
-        test_df["B"].dtype, pd.CategoricalDtype
-    ):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported."
-        ):
-            bodo.jit(impl1)(test_df)
-    else:
-        check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
-
+    check_func(impl1, (test_df,), sort_output=True, check_dtype=False)
     check_func(impl2, (11,), sort_output=True, check_dtype=False)
 
 

@@ -80,6 +80,7 @@ no_side_effect_call_tuples = {
     # Index
     ("init_string_index", "pd_index_ext", "hiframes", bodo),
     ("init_numeric_index", "pd_index_ext", "hiframes", bodo),
+    ("init_categorical_index", "pd_index_ext", "hiframes", bodo),
     ("_dti_val_finalize", "pd_index_ext", "hiframes", bodo),
     ("init_datetime_index", "pd_index_ext", "hiframes", bodo),
     ("init_timedelta_index", "pd_index_ext", "hiframes", bodo),
@@ -597,6 +598,7 @@ def get_const_value_inner(
     if call_name in (
         ("init_string_index", "bodo.hiframes.pd_index_ext"),
         ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
+        ("init_categorical_index", "bodo.hiframes.pd_index_ext"),
         ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
         ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
         ("init_heter_index", "bodo.hiframes.pd_index_ext"),

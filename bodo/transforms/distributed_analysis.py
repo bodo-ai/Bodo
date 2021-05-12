@@ -1380,6 +1380,7 @@ class DistributedAnalysis:
         if func_mod == "bodo.hiframes.pd_index_ext" and func_name in (
             "init_numeric_index",
             "init_string_index",
+            "init_categorical_index",
             "init_datetime_index",
             "init_timedelta_index",
             "get_index_data",
