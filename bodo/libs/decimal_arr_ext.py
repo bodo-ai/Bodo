@@ -647,6 +647,11 @@ def overload_decimal_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
+@overload_attribute(DecimalArrayType, "nbytes")
+def decimal_arr_nbytes_overload(A):
+    return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover
+
+
 @overload(operator.setitem, no_unliteral=True)
 def decimal_arr_setitem(A, idx, val):
     if not isinstance(A, DecimalArrayType):

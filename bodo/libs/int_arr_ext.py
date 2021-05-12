@@ -613,6 +613,11 @@ def overload_int_arr_ndim(A):
     return lambda A: 1
 
 
+@overload_attribute(IntegerArrayType, "nbytes")
+def int_arr_nbytes_overload(A):
+    return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover
+
+
 @overload_method(IntegerArrayType, "copy", no_unliteral=True)
 def overload_int_arr_copy(A):
     return lambda A: bodo.libs.int_arr_ext.init_integer_array(
