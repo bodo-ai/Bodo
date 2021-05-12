@@ -180,24 +180,6 @@ _binop_to_str = {
 }
 
 
-# Matplotlib functions that must be replaced
-mpl_plt_kwargs_funcs = ["gca", "plot", "subplots", "suptitle", "tight_layout"]
-mpl_axes_kwargs_funcs = [
-    "annotate",
-    "plot",
-    "set_xlabel",
-    "set_ylabel",
-    "set_xscale",
-    "set_yscale",
-    "set_xticklabels",
-    "set_yticklabels",
-    "set_title",
-    "legend",
-    "grid",
-]
-mpl_figure_kwargs_funcs = ["suptitle", "tight_layout"]
-
-
 class SeriesPass:
     """
     This pass converts Series operations to array operations as much as possible to
@@ -1319,7 +1301,10 @@ class SeriesPass:
         # support matplot lib calls
         if bodo.compiler._matplotlib_installed:
             # matplotlib.pyplot functions
-            if func_mod == "matplotlib.pyplot" and func_name in mpl_plt_kwargs_funcs:
+            if (
+                func_mod == "matplotlib.pyplot"
+                and func_name in bodo.libs.matplotlib_ext.mpl_plt_kwargs_funcs
+            ):
                 return self._run_call_matplotlib(lhs, rhs, func_mod, func_name)
 
             # matplotlib methods
@@ -1327,14 +1312,14 @@ class SeriesPass:
                 # axes
                 if (
                     self.typemap[func_mod.name] == types.mpl_axes_type
-                    and func_name in mpl_axes_kwargs_funcs
+                    and func_name in bodo.libs.matplotlib_ext.mpl_axes_kwargs_funcs
                 ):
                     return self._run_call_matplotlib(lhs, rhs, func_mod, func_name)
 
                 # figs
                 if (
                     self.typemap[func_mod.name] == types.mpl_figure_type
-                    and func_name in mpl_figure_kwargs_funcs
+                    and func_name in bodo.libs.matplotlib_ext.mpl_figure_kwargs_funcs
                 ):
                     return self._run_call_matplotlib(lhs, rhs, func_mod, func_name)
 
@@ -2511,7 +2496,7 @@ class SeriesPass:
         """
         # Define the primary function
         func_text = f"def f({full_header}):\n"
-        if func_name == "plot":
+        if func_name in bodo.libs.matplotlib_ext.mpl_gather_plots:
             for i in range(len(rhs.args)):
                 arg_typ = self.typemap[rhs.args[i].name]
                 if bodo.utils.utils.is_array_typ(arg_typ, False):

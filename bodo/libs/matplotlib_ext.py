@@ -38,6 +38,70 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import unliteral_all
 
+# Matplotlib functions that must be replaced. These are used in
+# series pass.
+
+# matplotlib.pyplot
+mpl_plt_kwargs_funcs = [
+    "gca",
+    "plot",
+    "scatter",
+    "bar",
+    "contour",
+    "contourf",
+    "quiver",
+    "pie",
+    "fill",
+    "fill_between",
+    "step",
+    "text",
+    "subplots",
+    "suptitle",
+    "tight_layout",
+]
+# axes methods
+mpl_axes_kwargs_funcs = [
+    "annotate",
+    "plot",
+    "scatter",
+    "bar",
+    "contour",
+    "contourf",
+    "quiver",
+    "pie",
+    "fill",
+    "fill_between",
+    "step",
+    "text",
+    "set_xlabel",
+    "set_ylabel",
+    "set_xscale",
+    "set_yscale",
+    "set_xticklabels",
+    "set_yticklabels",
+    "set_title",
+    "legend",
+    "grid",
+]
+# figure methods
+mpl_figure_kwargs_funcs = ["suptitle", "tight_layout"]
+# plots that require gathering all the data onto rank 0
+mpl_gather_plots = [
+    "plot",
+    "scatter",
+    "bar",
+    "contour",
+    "contourf",
+    "quiver",
+    "pie",
+    "fill",
+    "fill_between",
+    "step",
+]
+
+
+# TODO: Refactor all mpl pointer types into an install function
+# that creates all types from a common template.
 
 # Define matplot lib types as void* pointers because they will be used only inside objmode
 class MplFigure(types.Opaque):
@@ -122,10 +186,186 @@ def typeof_mpl_annotation(val, c):
     return mpl_annotation_type
 
 
+class MplLine2D(types.Opaque):
+    """
+    Type for Line2D in matplotlib:
+    for example res[0] from:
+    `res = matplotlib.pyplot.plot(x)`
+    """
+
+    def __init__(self):
+        super(MplLine2D, self).__init__(name="MplLine2D")
+
+
+mpl_line_2d_type = MplLine2D()
+types.mpl_line_2d_type = mpl_line_2d_type
+register_model(MplLine2D)(models.OpaqueModel)
+
+
+@typeof_impl.register(matplotlib.lines.Line2D)
+def typeof_mpl_line_2d(val, c):
+    return mpl_line_2d_type
+
+
+class MplPathCollection(types.Opaque):
+    """
+    Type for PathCollection in matplotlib:
+    for example res from:
+    `res = matplotlib.pyplot.scatter(x, y)`
+    """
+
+    def __init__(self):
+        super(MplPathCollection, self).__init__(name="MplPathCollection")
+
+
+mpl_path_collection_type = MplPathCollection()
+types.mpl_path_collection_type = mpl_path_collection_type
+register_model(MplPathCollection)(models.OpaqueModel)
+
+
+@typeof_impl.register(matplotlib.collections.PathCollection)
+def typeof_mpl_path_collection(val, c):
+    return mpl_path_collection_type
+
+
+class MplBarContainer(types.Opaque):
+    """
+    Type for BarContainer in matplotlib:
+    for example res from:
+    `res = matplotlib.pyplot.bar(x, height)`
+    """
+
+    def __init__(self):
+        super(MplBarContainer, self).__init__(name="MplBarContainer")
+
+
+mpl_bar_container_type = MplBarContainer()
+types.mpl_bar_container_type = mpl_bar_container_type
+register_model(MplBarContainer)(models.OpaqueModel)
+
+
+@typeof_impl.register(matplotlib.container.BarContainer)
+def typeof_mpl_bar_container(val, c):
+    return mpl_bar_container_type
+
+
+class MplQuadContourSet(types.Opaque):
+    """
+    Type for QuadContourSet in matplotlib:
+    for example res from:
+    `res = matplotlib.pyplot.contour(z)`
+    """
+
+    def __init__(self):
+        super(MplQuadContourSet, self).__init__(name="MplQuadContourSet")
+
+
+mpl_quad_contour_set_type = MplQuadContourSet()
+types.mpl_quad_contour_set_type = mpl_quad_contour_set_type
+register_model(MplQuadContourSet)(models.OpaqueModel)
+
+
+@typeof_impl.register(matplotlib.contour.QuadContourSet)
+def typeof_mpl_quad_contour_set(val, c):
+    return mpl_quad_contour_set_type
+
+
+class MplQuiver(types.Opaque):
+    """
+    Type for Quiver in matplotlib:
+    for example res from:
+    `res = matplotlib.pyplot.quiver(u, v)`
+    """
+
+    def __init__(self):
+        super(MplQuiver, self).__init__(name="MplQuiver")
+
+
+mpl_quiver_type = MplQuiver()
+types.mpl_quiver_type = mpl_quiver_type
+register_model(MplQuiver)(models.OpaqueModel)
+
+
+@typeof_impl.register(matplotlib.quiver.Quiver)
+def typeof_mpl_quiver(val, c):
+    return mpl_quiver_type
+
+
+class MplWedge(types.Opaque):
+    """
+    Type for Wedge in matplotlib:
+    for example wedges[0] from:
+    `wedges, texts = matplotlib.pyplot.pie(x)`
+    """
+
+    def __init__(self):
+        super(MplWedge, self).__init__(name="MplWedge")
+
+
+mpl_wedge_type = MplWedge()
+types.mpl_wedge = mpl_wedge_type
+register_model(MplWedge)(models.OpaqueModel)
+
+
+@typeof_impl.register(matplotlib.patches.Wedge)
+def typeof_mpl_wedge(val, c):
+    return mpl_wedge_type
+
+
+class MplPolygon(types.Opaque):
+    """
+    Type for Polygon in matplotlib:
+    for example res[0] from:
+    `res = matplotlib.pyplot.fill(x, y)`
+    """
+
+    def __init__(self):
+        super(MplPolygon, self).__init__(name="MplPolygon")
+
+
+mpl_polygon_type = MplPolygon()
+types.mpl_polygon_type = mpl_polygon_type
+register_model(MplPolygon)(models.OpaqueModel)
+
+
+@typeof_impl.register(matplotlib.patches.Polygon)
+def typeof_mpl_polygon(val, c):
+    return mpl_polygon_type
+
+
+class MplPolyCollection(types.Opaque):
+    """
+    Type for PolyCollection in matplotlib:
+    for example res from:
+    `res = matplotlib.pyplot.fill_between(x, y1)`
+    """
+
+    def __init__(self):
+        super(MplPolyCollection, self).__init__(name="MplPolyCollection")
+
+
+mpl_poly_collection_type = MplPolyCollection()
+types.mpl_poly_collection_type = mpl_poly_collection_type
+register_model(MplPolyCollection)(models.OpaqueModel)
+
+
+@typeof_impl.register(matplotlib.collections.PolyCollection)
+def typeof_mpl_poly_collection(val, c):
+    return mpl_poly_collection_type
+
+
 @unbox(MplFigure)
 @unbox(MplAxes)
 @unbox(MplText)
 @unbox(MplAnnotation)
+@unbox(MplLine2D)
+@unbox(MplPathCollection)
+@unbox(MplBarContainer)
+@unbox(MplQuadContourSet)
+@unbox(MplQuiver)
+@unbox(MplWedge)
+@unbox(MplPolygon)
+@unbox(MplPolyCollection)
 def unbox_mpl_obj(typ, val, c):
     # just return the Python object pointer
     c.pyapi.incref(val)
@@ -136,6 +376,14 @@ def unbox_mpl_obj(typ, val, c):
 @box(MplAxes)
 @box(MplText)
 @box(MplAnnotation)
+@box(MplLine2D)
+@box(MplPathCollection)
+@box(MplBarContainer)
+@box(MplQuadContourSet)
+@box(MplQuiver)
+@box(MplWedge)
+@box(MplPolygon)
+@box(MplPolyCollection)
 def box_mpl_obj(typ, val, c):
     # just return the Python object pointer
     c.pyapi.incref(val)
@@ -190,12 +438,116 @@ def generate_axes_typing(mod_name, nrows, ncols):
     return output_type
 
 
+def generate_pie_return_type(args, kws):
+    """
+    Helper function to determine the return type for calls to pie.
+    The tuple returned differs depending on if the autopct argument
+    is provided.
+    """
+    # https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.pie.html?highlight=pie#matplotlib.pyplot.pie
+    # autopct is argument 4
+    autopct_typ = args[4] if len(args) > 5 else kws.get("autopct", types.none)
+    # If autopct is none we return a Tuple(list(wedge), list(Text))
+    if autopct_typ == types.none:
+        return types.Tuple([types.List(mpl_wedge_type), types.List(mpl_text_type)])
+    # Otherwise we return a Tuple(list(wedge), list(Text), list(Text))
+    return types.Tuple(
+        [
+            types.List(mpl_wedge_type),
+            types.List(mpl_text_type),
+            types.List(mpl_text_type),
+        ]
+    )
+
+
 # Define a signature for the plt.plot function because it uses *args and **kwargs.
 @infer_global(plt.plot)
 class PlotTyper(AbstractTemplate):
     def generic(self, args, kws):
-        # plot doesn't return anything
-        return generate_matplotlib_signature(types.none, args, kws)
+        # plot returns list of Line2D
+        return generate_matplotlib_signature(types.List(mpl_line_2d_type), args, kws)
+
+
+# Define a signature for the plt.step function because it uses *args and **kwargs.
+@infer_global(plt.step)
+class StepTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # step returns list of Line2D
+        return generate_matplotlib_signature(types.List(mpl_line_2d_type), args, kws)
+
+
+# Define a signature for the plt.scatter function because it uses *args and **kwargs.
+@infer_global(plt.scatter)
+class ScatterTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # scatter returns PathCollection
+        return generate_matplotlib_signature(mpl_path_collection_type, args, kws)
+
+
+# Define a signature for the plt.bar function because it uses *args and **kwargs.
+@infer_global(plt.bar)
+class BarTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # bar returns BarContainer
+        return generate_matplotlib_signature(mpl_bar_container_type, args, kws)
+
+
+# Define a signature for the plt.contour function because it uses *args and **kwargs.
+@infer_global(plt.contour)
+class ContourTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # contour returns QuadContourSet
+        return generate_matplotlib_signature(mpl_quad_contour_set_type, args, kws)
+
+
+# Define a signature for the plt.contourf function because it uses *args and **kwargs.
+@infer_global(plt.contourf)
+class ContourfTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # contourf returns QuadContourSet
+        return generate_matplotlib_signature(mpl_quad_contour_set_type, args, kws)
+
+
+# Define a signature for the plt.quiver function because it uses *args and **kwargs.
+@infer_global(plt.quiver)
+class QuiverTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # quiver returns Quiver
+        return generate_matplotlib_signature(mpl_quiver_type, args, kws)
+
+
+# Define a signature for the plt.fill function because it uses *args and **kwargs.
+@infer_global(plt.fill)
+class FillTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # fill returns list of polygons
+        return generate_matplotlib_signature(types.List(mpl_polygon_type), args, kws)
+
+
+# Define a signature for the plt.fill_between function because it uses *args and **kwargs.
+@infer_global(plt.fill_between)
+class FillBetweenTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # fill_between returns PolyCollection
+        return generate_matplotlib_signature(mpl_poly_collection_type, args, kws)
+
+
+# Define a signature for the plt.pie function because it uses *args and **kwargs.
+@infer_global(plt.pie)
+class PieTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # pie return type varies based on autopct arg.
+        return generate_matplotlib_signature(
+            generate_pie_return_type(args, kws), args, kws
+        )
+
+
+# Define a signature for the plt.text function because it uses *args and **kwargs.
+@infer_global(plt.text)
+class TextTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # text returns Text
+        return generate_matplotlib_signature(mpl_text_type, args, kws)
 
 
 # Define a signature for the plt.gca function because it uses **kwargs.
@@ -270,7 +622,65 @@ class MatplotlibAxesKwargsAttribute(AttributeTemplate):
 
     @bound_function("ax.plot", no_unliteral=True)
     def resolve_plot(self, ax_typ, args, kws):
-        return generate_matplotlib_signature(types.none, args, kws, obj_typ=ax_typ)
+        return generate_matplotlib_signature(
+            types.List(mpl_line_2d_type), args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.step", no_unliteral=True)
+    def resolve_step(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            types.List(mpl_line_2d_type), args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.scatter", no_unliteral=True)
+    def resolve_scatter(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            mpl_path_collection_type, args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.contour", no_unliteral=True)
+    def resolve_contour(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            mpl_quad_contour_set_type, args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.contourf", no_unliteral=True)
+    def resolve_contourf(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            mpl_quad_contour_set_type, args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.quiver", no_unliteral=True)
+    def resolve_quiver(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(mpl_quiver_type, args, kws, obj_typ=ax_typ)
+
+    @bound_function("ax.bar", no_unliteral=True)
+    def resolve_bar(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            mpl_bar_container_type, args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.fill", no_unliteral=True)
+    def resolve_fill(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            types.List(mpl_polygon_type), args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.fill_between", no_unliteral=True)
+    def resolve_fill_between(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            mpl_poly_collection_type, args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.pie", no_unliteral=True)
+    def resolve_pie(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            generate_pie_return_type(args, kws), args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.text", no_unliteral=True)
+    def resolve_text(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(mpl_text_type, args, kws, obj_typ=ax_typ)
 
     @bound_function("ax.set_xlabel", no_unliteral=True)
     def resolve_set_xlabel(self, ax_typ, args, kws):
