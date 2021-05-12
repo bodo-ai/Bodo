@@ -108,6 +108,298 @@ def test_usage_replicated_example(fig_test, fig_ref):
 
 
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_scatter_example(fig_test, fig_ref):
+    """
+    Tests a basic example of scatter with distributed data.
+    """
+
+    def impl(input_fig):
+        x = np.arange(50)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.scatter(x, x, alpha=0.2)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_scatter_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of scatter with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.scatter(x, x, alpha=0.2)  # Plot some data on the axes.
+
+    x = np.arange(50)
+    impl(x, fig_ref)
+    bodo.jit(impl)(x, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_bar_example(fig_test, fig_ref):
+    """
+    Tests a basic example of bar with distributed data.
+    """
+
+    def impl(input_fig):
+        x = np.arange(50)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.bar(x, x, width=0.4)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_bar_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of bar with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.bar(x, x, width=0.4)  # Plot some data on the axes.
+
+    x = np.arange(50)
+    impl(x, fig_ref)
+    bodo.jit(impl)(x, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_contour_example(fig_test, fig_ref):
+    """
+    Tests a basic example of contour with distributed data.
+    """
+
+    def impl(input_fig):
+        z = np.arange(50).reshape(5, 10)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.contour(z)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_contour_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of contour with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.contour(z)  # Plot some data on the axes.
+
+    z = np.arange(50).reshape(5, 10)
+    impl(z, fig_ref)
+    bodo.jit(impl)(z, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_contourf_example(fig_test, fig_ref):
+    """
+    Tests a basic example of contourf with distributed data.
+    """
+
+    def impl(input_fig):
+        z = np.arange(50).reshape(5, 10)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.contourf(z)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_contourf_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of contourf with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.contourf(z)  # Plot some data on the axes.
+
+    z = np.arange(50).reshape(5, 10)
+    impl(z, fig_ref)
+    bodo.jit(impl)(z, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_quiver_example(fig_test, fig_ref):
+    """
+    Tests a basic example of quiver with distributed data.
+    """
+
+    def impl(input_fig):
+        x = np.arange(50)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.quiver(x, x)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_quiver_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of quiver with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.quiver(x, x)  # Plot some data on the axes.
+
+    x = np.arange(50)
+    impl(x, fig_ref)
+    bodo.jit(impl)(x, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_pie_example(fig_test, fig_ref):
+    """
+    Tests a basic example of pie with distributed data.
+    """
+
+    def impl(input_fig):
+        x = np.arange(50)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.pie(x)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_pie_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of pie with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.pie(x)  # Plot some data on the axes.
+
+    x = np.arange(50)
+    impl(x, fig_ref)
+    bodo.jit(impl)(x, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_fill_example(fig_test, fig_ref):
+    """
+    Tests a basic example of fill with distributed data.
+    """
+
+    def impl(input_fig):
+        # Allocate the array manually because np.hstack doesn't preserve order
+        # yet in Bodo.
+        x = np.empty(20, dtype=np.int64)
+        y = np.empty(20, dtype=np.int64)
+        for i in range(2):
+            for j in range(10):
+                x[10 * i + j] = j
+                y[10 * i + j] = i
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.fill(x, y, "b")  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_fill_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of fill with replicated data.
+    """
+
+    def impl(x, y, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.fill(x, y, "b")  # Plot some data on the axes.
+
+    x = np.hstack((np.arange(10), np.arange(10)))
+    y = np.hstack((np.full(10, 0, dtype=np.int64), np.full(10, 1, dtype=np.int64)))
+    impl(x, y, fig_ref)
+    bodo.jit(impl)(x, y, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_fill_between_example(fig_test, fig_ref):
+    """
+    Tests a basic example of fill_between with distributed data.
+    """
+
+    def impl(input_fig):
+        x = np.arange(50)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.fill_between(x, x)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_fill_between_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of fill_between with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.fill_between(x, x)  # Plot some data on the axes.
+
+    x = np.arange(50)
+    impl(x, fig_ref)
+    bodo.jit(impl)(x, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_step_example(fig_test, fig_ref):
+    """
+    Tests a basic example of step with distributed data.
+    """
+
+    def impl(input_fig):
+        x = np.arange(50)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.step(x, x)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_step_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of step with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.step(x, x)  # Plot some data on the axes.
+
+    x = np.arange(50)
+    impl(x, fig_ref)
+    bodo.jit(impl)(x, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_text_example(fig_test, fig_ref):
+    """
+    Tests a basic example of text.
+    """
+
+    def impl(input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.text(0.5, 0.5, "Bodo.ai")  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_axes_set_off(fig_test, fig_ref):
     """
     Tests a series of axes functions followed by turning
