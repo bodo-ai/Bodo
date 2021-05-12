@@ -2266,6 +2266,7 @@ class DataFramePass:
                 ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
                 ("init_string_index", "bodo.hiframes.pd_index_ext"),
                 ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
+                ("init_categorical_index", "bodo.hiframes.pd_index_ext"),
                 ("init_heter_index", "bodo.hiframes.pd_index_ext"),
             )
             and len(var_def.args) == 2
