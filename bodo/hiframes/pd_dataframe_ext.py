@@ -42,11 +42,7 @@ from bodo.hiframes.pd_index_ext import (
     is_pd_index_type,
 )
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
-from bodo.hiframes.pd_series_ext import (
-    HeterogeneousSeriesType,
-    SeriesType,
-    _get_series_array_type,
-)
+from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
 from bodo.io import json_cpp
 from bodo.libs.array import arr_info_list_to_table, array_to_info
@@ -68,6 +64,7 @@ from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
     create_unsupported_overload,
+    dtype_to_array_type,
     get_index_data_arr_types,
     get_literal_value,
     get_overload_const,
@@ -320,12 +317,12 @@ class DataFrameAttribute(AttributeTemplate):
             # NOTE: get_const_func_output_type() adds const_info attribute for Series
             # output
             _, index_vals = f_return_type.const_info
-            arrs = tuple(_get_series_array_type(t) for t in f_return_type.data.types)
+            arrs = tuple(dtype_to_array_type(t) for t in f_return_type.data.types)
             ret_type = DataFrameType(arrs, df.index, index_vals)
         elif isinstance(f_return_type, SeriesType):
             n_cols, index_vals = f_return_type.const_info
             arrs = tuple(
-                _get_series_array_type(f_return_type.dtype) for _ in range(n_cols)
+                dtype_to_array_type(f_return_type.dtype) for _ in range(n_cols)
             )
             ret_type = DataFrameType(arrs, df.index, index_vals)
         else:
@@ -1169,7 +1166,7 @@ def _fill_null_arrays(data_dict, col_names, df_len, dtype):
     if is_overload_none(dtype):
         dtype = "bodo.string_array_type"
     else:
-        dtype = "bodo.utils.conversion.dtype_to_array_type(dtype)"
+        dtype = "bodo.utils.conversion.array_type_from_dtype(dtype)"
 
     # array with NaNs
     null_arr = "bodo.libs.array_kernels.gen_na_array({}, {})".format(df_len, dtype)

@@ -21,7 +21,7 @@ from numba.core.typed_passes import NopythonRewrites
 from numba.core.untyped_passes import PreserveIR
 
 import bodo
-from bodo.utils.typing import BodoWarning
+from bodo.utils.typing import BodoWarning, dtype_to_array_type
 from bodo.utils.utils import is_distributable_tuple_typ, is_distributable_typ
 
 
@@ -826,9 +826,7 @@ def _typeof(val):
                 col_typs.append(typeof_pd_float_dtype(S.dtype))
             else:
                 col_typs.append(bodo.hiframes.boxing._infer_series_dtype(S))
-        col_typs = (
-            bodo.hiframes.boxing._get_series_array_type(typ) for typ in col_typs
-        )
+        col_typs = (dtype_to_array_type(typ) for typ in col_typs)
         col_names = tuple(val.columns.to_list())
         index_typ = numba.typeof(val.index)
         return bodo.DataFrameType(col_typs, index_typ, col_names)

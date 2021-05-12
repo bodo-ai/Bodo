@@ -14,6 +14,7 @@ from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (
     BodoError,
+    dtype_to_array_type,
     get_overload_const_list,
     get_overload_const_str,
     is_heterogeneous_tuple_type,
@@ -477,10 +478,7 @@ def overload_coerce_to_array(
         data.dtype, types.BaseTuple
     ):
         # TODO: support variable length data (e.g strings) in tuples
-        data_types = tuple(
-            bodo.hiframes.pd_series_ext._get_series_array_type(t)
-            for t in data.dtype.types
-        )
+        data_types = tuple(dtype_to_array_type(t) for t in data.dtype.types)
 
         def impl_tuple_list(
             data,
@@ -501,9 +499,7 @@ def overload_coerce_to_array(
         bodo.utils.utils.is_array_typ(data.dtype, False)
         or isinstance(data.dtype, types.List)
     ):
-        data_arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(
-            data.dtype.dtype
-        )
+        data_arr_type = dtype_to_array_type(data.dtype.dtype)
 
         def impl_array_item_arr(
             data,
@@ -790,18 +786,14 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
     return lambda data, new_dtype, copy=None, nan_to_str=True: data  # pragma: no cover
 
 
-def dtype_to_array_type(dtype):
-    return bodo.hiframes.pd_series_ext._get_series_array_type(
-        bodo.utils.typing.parse_dtype(dtype)
-    )
+def array_type_from_dtype(dtype):
+    return dtype_to_array_type(bodo.utils.typing.parse_dtype(dtype))
 
 
-@overload(dtype_to_array_type)
-def overload_dtype_to_array_type(dtype):
+@overload(array_type_from_dtype)
+def overload_array_type_from_dtype(dtype):
     """parse dtype and return corresponding array type TypeRef"""
-    arr_type = bodo.hiframes.pd_series_ext._get_series_array_type(
-        bodo.utils.typing.parse_dtype(dtype)
-    )
+    arr_type = dtype_to_array_type(bodo.utils.typing.parse_dtype(dtype))
     return lambda dtype: arr_type  # pragma: no cover
 
 
