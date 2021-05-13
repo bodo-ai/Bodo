@@ -2111,15 +2111,6 @@ def test_df_set_index(df_value, memory_leak_check):
     def impl(df):
         return df.set_index("A")
 
-    # TODO: [BE-77] support Categorical Index types
-    if isinstance(df_value.iloc[:, 0].dtype, pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError,
-            match="DataFrame.set_index.*: Not supported for categorical columns.",
-        ):
-            bodo.jit(impl)(df_value)
-        return
-
     # TODO: [BE-284] fix nullable int. Produces the incorrect value when there are nulls.
     if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer._IntegerDtype):
         return
@@ -3455,14 +3446,6 @@ def test_df_groupby_supported_types(data):
     # Testing different type of column used for grouping
     def test_impl2(df):
         return df.groupby("B").max()
-
-    # TODO: [BE-77] support Categorical Index types
-    if isinstance(data.dtypes.loc["B"], pd.CategoricalDtype):
-        with pytest.raises(
-            BodoError, match="Groupby with Categorical key not supported"
-        ):
-            bodo.jit(test_impl2)(data)
-        return
 
     check_func(
         test_impl2, (data,), sort_output=True, reset_index=True, check_dtype=False
