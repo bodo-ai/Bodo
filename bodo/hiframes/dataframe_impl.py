@@ -1433,8 +1433,6 @@ def overload_dataframe_set_index(
         raise_bodo_error("DataFrame.set_index(): 'keys' must be a constant string")
     col_name = get_overload_const_str(keys)
     col_ind = df.columns.index(col_name)
-    if isinstance(df.data[col_ind], bodo.CategoricalArrayType):
-        raise BodoError("DataFrame.set_index(): Not supported for categorical columns.")
     if len(df.columns) == 1:
         raise BodoError(
             "DataFrame.set_index(): Not supported on single column DataFrames."
