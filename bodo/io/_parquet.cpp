@@ -40,9 +40,9 @@ struct DatasetReader {
     // If S3, then store if s3_reader should use the anonymous mode
     bool s3fs_anon = false;
     /// Starting row for first file (files[0])
-    int start_row_first_file = 0;
+    int64_t start_row_first_file = 0;
     /// Total number of rows this process has to read (across files)
-    int count = 0;
+    int64_t count = 0;
     // Prefix to add to each of the paths before they're appended to filepaths
     std::string prefix = "";
 };
@@ -61,7 +61,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool is_parallel,
                                   PyObject* storage_options);
 void del_dataset_reader(DatasetReader *reader);
 
-int64_t pq_get_size(DatasetReader *reader, int64_t column_idx);
+int64_t get_pq_local_num_rows(DatasetReader *reader);
 int64_t pq_read(DatasetReader *reader, int64_t real_column_idx,
                 int64_t column_idx, uint8_t *out_data, int out_dtype,
                 uint8_t *out_nulls = nullptr);
@@ -142,8 +142,8 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
                            PyLong_FromVoidPtr((void *)(&del_dataset_reader)));
     PyObject_SetAttrString(m, "pq_read",
                            PyLong_FromVoidPtr((void *)(&pq_read)));
-    PyObject_SetAttrString(m, "pq_get_size",
-                           PyLong_FromVoidPtr((void *)(&pq_get_size)));
+    PyObject_SetAttrString(m, "get_pq_local_num_rows",
+                           PyLong_FromVoidPtr((void *)(&get_pq_local_num_rows)));
     PyObject_SetAttrString(m, "pq_read_string",
                            PyLong_FromVoidPtr((void *)(&pq_read_string)));
     PyObject_SetAttrString(m, "pq_read_list_string",
@@ -367,8 +367,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
 
 void del_dataset_reader(DatasetReader *reader) { delete reader; }
 
-// TODO: column_idx doesn't seem to be used. Remove?
-int64_t pq_get_size(DatasetReader *reader, int64_t column_idx) {
+int64_t get_pq_local_num_rows(DatasetReader *reader) {
     return reader->count;
 }
 
