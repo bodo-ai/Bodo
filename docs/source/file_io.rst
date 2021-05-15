@@ -64,6 +64,22 @@ Run the code above with 4 processors::
 
 See :ref:`read_parquet() <pandas-f-in>`, :ref:`to_parquet() <pandas-f-out>` for supported arguments.
 
+Exploring Large Data Without Full Read
+**************************************
+
+Exploring large datasets often requires seeing its shape and a sample of the data.
+Bodo is able to provide this information quickly without loading the full Parquet dataset,
+which means there is no need for a large cluster with a lot of memory. For example::
+
+    @bodo.jit
+    def head_only_read():
+        df = pd.read_parquet("example.pq")
+        print(df.shape)
+        print(df.head())
+
+In this example, Bodo provides the shape information for the full dataset in ``df.shape``,
+but only loads the first few rows that are necessary for ``df.head()``.
+
 .. _csv-section:
 
 CSV
