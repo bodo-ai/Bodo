@@ -779,6 +779,13 @@ def _gather_output(bodo_output):
     issues (e.g. empty object array). Otherwise, uses mpi4py's gather.
     """
 
+    # don't gather scalar items of tuples since replicated
+    if isinstance(bodo_output, tuple):
+        return tuple(
+            t if bodo.utils.typing.is_scalar_type(bodo.typeof(t)) else _gather_output(t)
+            for t in bodo_output
+        )
+
     try:
         _check_typing_issues(bodo_output)
         bodo_output = bodo.gatherv(bodo_output)
