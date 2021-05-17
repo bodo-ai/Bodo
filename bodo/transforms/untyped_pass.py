@@ -188,136 +188,8 @@ class UntypedPass:
             if rhs.op in ("getitem", "static_getitem"):
                 return self._run_getitem(assign, rhs, label)
 
-            # HACK: delete pd.DataFrame({}) nodes to avoid typing errors
-            # TODO: remove when dictionaries are implemented and typing works
             if rhs.op == "getattr":
-                val_def = guard(get_definition, self.func_ir, rhs.value)
-                if (
-                    isinstance(val_def, ir.Global)
-                    and isinstance(val_def.value, pytypes.ModuleType)
-                    and val_def.value == pd
-                    and rhs.attr in ("read_csv", "read_parquet", "read_json")
-                ):
-                    # put back the definition removed earlier but remove node
-                    # enables function matching without node in IR
-                    self.func_ir._definitions[lhs].append(rhs)
-                    return []
-
-            if rhs.op == "getattr":
-                val_def = guard(get_definition, self.func_ir, rhs.value)
-                if (
-                    isinstance(val_def, ir.Global)
-                    and isinstance(val_def.value, pytypes.ModuleType)
-                    and val_def.value == np
-                    and rhs.attr == "fromfile"
-                ):
-                    # put back the definition removed earlier but remove node
-                    self.func_ir._definitions[lhs].append(rhs)
-                    return []
-
-            # HACK: delete pyarrow.parquet.read_table() to avoid typing errors
-            if rhs.op == "getattr" and rhs.attr == "read_table":
-                import pyarrow.parquet as pq
-
-                val_def = guard(get_definition, self.func_ir, rhs.value)
-                if isinstance(val_def, ir.Global) and val_def.value == pq:
-                    # put back the definition removed earlier but remove node
-                    self.func_ir._definitions[lhs].append(rhs)
-                    return []
-
-            if (
-                rhs.op == "getattr"
-                and rhs.value.name in self.arrow_tables
-                and rhs.attr == "to_pandas"
-            ):
-                # put back the definition removed earlier but remove node
-                self.func_ir._definitions[lhs].append(rhs)
-                return []
-
-            # replace datetime.date.today with an internal function since class methods
-            # are not supported in Numba's typing
-            if rhs.op == "getattr" and rhs.attr == "today":
-                val_def = guard(get_definition, self.func_ir, rhs.value)
-                if is_expr(val_def, "getattr") and val_def.attr == "date":
-                    mod_def = guard(get_definition, self.func_ir, val_def.value)
-                    if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
-                        return compile_func_single_block(
-                            eval("lambda: bodo.hiframes.datetime_date_ext.today_impl"),
-                            (),
-                            assign.target,
-                        )
-
-            if rhs.op == "getattr" and rhs.attr == "from_product":
-                val_def = guard(get_definition, self.func_ir, rhs.value)
-                if is_expr(val_def, "getattr") and val_def.attr == "MultiIndex":
-                    val_def.attr = "Index"
-                    mod_def = guard(get_definition, self.func_ir, val_def.value)
-                    if isinstance(mod_def, ir.Global) and mod_def.value == pd:
-                        return compile_func_single_block(
-                            eval(
-                                "lambda: bodo.hiframes.pd_multi_index_ext.from_product"
-                            ),
-                            (),
-                            assign.target,
-                        )
-
-            # replace datetime.date.fromordinal with an internal function since class methods
-            # are not supported in Numba's typing
-            if rhs.op == "getattr" and rhs.attr == "fromordinal":
-                val_def = guard(get_definition, self.func_ir, rhs.value)
-                if is_expr(val_def, "getattr") and val_def.attr == "date":
-                    mod_def = guard(get_definition, self.func_ir, val_def.value)
-                    if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
-                        return compile_func_single_block(
-                            eval(
-                                "lambda: bodo.hiframes.datetime_date_ext.fromordinal_impl"
-                            ),
-                            (),
-                            assign.target,
-                        )
-
-            # replace datetime.datedatetime.now with an internal function since class methods
-            # are not supported in Numba's typing
-            if rhs.op == "getattr" and rhs.attr == "now":
-                val_def = guard(get_definition, self.func_ir, rhs.value)
-                if is_expr(val_def, "getattr") and val_def.attr == "datetime":
-                    mod_def = guard(get_definition, self.func_ir, val_def.value)
-                    if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
-                        return compile_func_single_block(
-                            eval(
-                                "lambda: bodo.hiframes.datetime_datetime_ext.now_impl"
-                            ),
-                            (),
-                            assign.target,
-                        )
-
-            # replace datetime.datedatetime.strptime with an internal function since class methods
-            # are not supported in Numba's typing
-            if rhs.op == "getattr" and rhs.attr == "strptime":
-                val_def = guard(get_definition, self.func_ir, rhs.value)
-                if is_expr(val_def, "getattr") and val_def.attr == "datetime":
-                    mod_def = guard(get_definition, self.func_ir, val_def.value)
-                    if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
-                        return compile_func_single_block(
-                            eval(
-                                "lambda: bodo.hiframes.datetime_datetime_ext.strptime_impl"
-                            ),
-                            (),
-                            assign.target,
-                        )
-
-            # replace itertools.chain.from_iterable with an internal function since
-            #  class methods are not supported in Numba's typing
-            if rhs.op == "getattr" and rhs.attr == "from_iterable":
-                val_def = guard(get_definition, self.func_ir, rhs.value)
-                if is_expr(val_def, "getattr") and val_def.attr == "chain":
-                    mod_def = guard(get_definition, self.func_ir, val_def.value)
-                    if isinstance(mod_def, ir.Global) and mod_def.value == itertools:
-                        return compile_func_single_block(
-                            eval("lambda: bodo.utils.typing.from_iterable_impl"),
-                            (),
-                            assign.target,
-                        )
+                return self._run_getattr(assign, rhs)
 
             if rhs.op == "make_function":
                 # HACK make globals availabe for typing in series.map()
@@ -329,6 +201,140 @@ class UntypedPass:
             # enables function matching without node in IR
             self.func_ir._definitions[lhs].append(rhs)
             return []
+        return [assign]
+
+    def _run_getattr(self, assign, rhs):
+        """transform ir.Expr.getattr nodes if necessary"""
+        lhs = assign.target.name
+        val_def = guard(get_definition, self.func_ir, rhs.value)
+
+        # HACK: delete pd.DataFrame({}) nodes to avoid typing errors
+        # TODO: remove when dictionaries are implemented and typing works
+        if (
+            isinstance(val_def, ir.Global)
+            and isinstance(val_def.value, pytypes.ModuleType)
+            and val_def.value == pd
+            and rhs.attr in ("read_csv", "read_parquet", "read_json")
+        ):
+            # put back the definition removed earlier but remove node
+            # enables function matching without node in IR
+            self.func_ir._definitions[lhs].append(rhs)
+            return []
+
+        if (
+            isinstance(val_def, ir.Global)
+            and isinstance(val_def.value, pytypes.ModuleType)
+            and val_def.value == np
+            and rhs.attr == "fromfile"
+        ):
+            # put back the definition removed earlier but remove node
+            self.func_ir._definitions[lhs].append(rhs)
+            return []
+
+        # HACK: delete pyarrow.parquet.read_table() to avoid typing errors
+        if rhs.attr == "read_table":
+            import pyarrow.parquet as pq
+
+            val_def = guard(get_definition, self.func_ir, rhs.value)
+            if isinstance(val_def, ir.Global) and val_def.value == pq:
+                # put back the definition removed earlier but remove node
+                self.func_ir._definitions[lhs].append(rhs)
+                return []
+
+        if rhs.value.name in self.arrow_tables and rhs.attr == "to_pandas":
+            # put back the definition removed earlier but remove node
+            self.func_ir._definitions[lhs].append(rhs)
+            return []
+
+        # replace datetime.date.today with an internal function since class methods
+        # are not supported in Numba's typing
+        if (
+            rhs.attr == "today"
+            and is_expr(val_def, "getattr")
+            and val_def.attr == "date"
+        ):
+            mod_def = guard(get_definition, self.func_ir, val_def.value)
+            if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
+                return compile_func_single_block(
+                    eval("lambda: bodo.hiframes.datetime_date_ext.today_impl"),
+                    (),
+                    assign.target,
+                )
+
+        if (
+            rhs.attr == "from_product"
+            and is_expr(val_def, "getattr")
+            and val_def.attr == "MultiIndex"
+        ):
+            val_def.attr = "Index"
+            mod_def = guard(get_definition, self.func_ir, val_def.value)
+            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+                return compile_func_single_block(
+                    eval("lambda: bodo.hiframes.pd_multi_index_ext.from_product"),
+                    (),
+                    assign.target,
+                )
+
+        # replace datetime.date.fromordinal with an internal function since class methods
+        # are not supported in Numba's typing
+        if (
+            rhs.attr == "fromordinal"
+            and is_expr(val_def, "getattr")
+            and val_def.attr == "date"
+        ):
+            mod_def = guard(get_definition, self.func_ir, val_def.value)
+            if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
+                return compile_func_single_block(
+                    eval("lambda: bodo.hiframes.datetime_date_ext.fromordinal_impl"),
+                    (),
+                    assign.target,
+                )
+
+        # replace datetime.datedatetime.now with an internal function since class methods
+        # are not supported in Numba's typing
+        if (
+            rhs.attr == "now"
+            and is_expr(val_def, "getattr")
+            and val_def.attr == "datetime"
+        ):
+            mod_def = guard(get_definition, self.func_ir, val_def.value)
+            if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
+                return compile_func_single_block(
+                    eval("lambda: bodo.hiframes.datetime_datetime_ext.now_impl"),
+                    (),
+                    assign.target,
+                )
+
+        # replace datetime.datedatetime.strptime with an internal function since class methods
+        # are not supported in Numba's typing
+        if (
+            rhs.attr == "strptime"
+            and is_expr(val_def, "getattr")
+            and val_def.attr == "datetime"
+        ):
+            mod_def = guard(get_definition, self.func_ir, val_def.value)
+            if isinstance(mod_def, ir.Global) and mod_def.value == datetime:
+                return compile_func_single_block(
+                    eval("lambda: bodo.hiframes.datetime_datetime_ext.strptime_impl"),
+                    (),
+                    assign.target,
+                )
+
+        # replace itertools.chain.from_iterable with an internal function since
+        #  class methods are not supported in Numba's typing
+        if (
+            rhs.attr == "from_iterable"
+            and is_expr(val_def, "getattr")
+            and val_def.attr == "chain"
+        ):
+            mod_def = guard(get_definition, self.func_ir, val_def.value)
+            if isinstance(mod_def, ir.Global) and mod_def.value == itertools:
+                return compile_func_single_block(
+                    eval("lambda: bodo.utils.typing.from_iterable_impl"),
+                    (),
+                    assign.target,
+                )
+
         return [assign]
 
     def _run_getitem(self, assign, rhs, label):
