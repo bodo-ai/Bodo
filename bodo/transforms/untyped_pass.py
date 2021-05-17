@@ -335,6 +335,23 @@ class UntypedPass:
                     assign.target,
                 )
 
+        # replace SparkSession.builder since class attributes are not supported in Numba
+        if (
+            bodo.compiler._pyspark_installed
+            and rhs.attr == "builder"
+            and isinstance(val_def, ir.Global)
+        ):
+            from pyspark.sql import SparkSession
+
+            if val_def.value == SparkSession:
+                # replace SparkSession global to avoid typing errors
+                val_def.value = "dummy"
+                return compile_func_single_block(
+                    eval("lambda: bodo.libs.pyspark_ext.init_session_builder()"),
+                    (),
+                    assign.target,
+                )
+
         return [assign]
 
     def _run_getitem(self, assign, rhs, label):
