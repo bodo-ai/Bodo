@@ -40,6 +40,8 @@ such as Numba on Ubuntu Linux::
     # conda install -c conda-forge gcsfs
     # The following is required for matplotlib Testing
     # conda install -c conda-forge matplotlib
+    # for PySpark testing:
+    # conda install -c conda-forge pyspark
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo
@@ -140,7 +142,7 @@ To run HDFS related unit tests, use the :ref:`docker image <docker-images>`.
 
 Other useful packages for development::
 
-    conda install pytest sphinx pylint jupyter xlrd xlsxwriter openpyxl mpi4py ipyparallel matplotlib jupyterlab aws-sdk-cpp
+    conda install pytest sphinx pylint jupyter xlrd xlsxwriter openpyxl mpi4py ipyparallel matplotlib pyspark jupyterlab aws-sdk-cpp
 
 
 Cleaning Bodo
