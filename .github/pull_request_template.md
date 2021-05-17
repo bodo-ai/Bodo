@@ -14,6 +14,8 @@
     
     ( Example: `mpiexec -n 3 pytest -s -v -W ignore bodo/tests/test_dataframe.py::my_new_test` )
     
+    - [ ] Remove existing unsupported test (if available).
+
     - [ ] Marked tests slow (after confirming sufficient coverage).
 
   - Formatting:
