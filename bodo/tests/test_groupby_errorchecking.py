@@ -723,20 +723,6 @@ def test_first_last_unsupported_types(memory_leak_check):
         A = df.groupby("A").last()
         return A
 
-    # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
-    df_td = pd.DataFrame(
-        {
-            "A": [1, 2, 3, 2, 1],
-            "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                pd.Series(data=[None], index=[4])
-            ),
-        }
-    )
-    with pytest.raises(BodoError, match="consider using np.timedelta64"):
-        bodo.jit(impl1)(df_td)
-    with pytest.raises(BodoError, match="consider using np.timedelta64"):
-        bodo.jit(impl2)(df_td)
-
     # [BE-416] Support with list
     df_list_int = pd.DataFrame(
         {"A": [2, 1, 1, 2], "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]])}
@@ -1163,20 +1149,6 @@ def test_min_max_unsupported_types(memory_leak_check):
     def impl2(df):
         A = df.groupby("A").max()
         return A
-
-    # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
-    df_td = pd.DataFrame(
-        {
-            "A": [1, 2, 3, 2, 1],
-            "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                pd.Series(data=[None], index=[4])
-            ),
-        }
-    )
-    with pytest.raises(BodoError, match="consider using np.timedelta64"):
-        bodo.jit(impl1)(df_td)
-    with pytest.raises(BodoError, match="consider using np.timedelta64"):
-        bodo.jit(impl2)(df_td)
 
     # [BE-416] Support with list
     df_list_int = pd.DataFrame(
@@ -1629,18 +1601,6 @@ def test_cumultative_args(memory_leak_check):
             ),
             marks=pytest.mark.slow,
         ),
-        # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
-        pytest.param(
-            pd.DataFrame(
-                {
-                    "A": [1, 2, 3, 2, 1],
-                    "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                        pd.Series(data=[None], index=[4])
-                    ),
-                }
-            ),
-            marks=pytest.mark.slow,
-        ),
         # timedelta
         pytest.param(
             pd.DataFrame(
@@ -1815,15 +1775,6 @@ def test_count_size_args(memory_leak_check):
 @pytest.mark.parametrize(
     "df",
     [
-        # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
-        pd.DataFrame(
-            {
-                "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                    pd.Series(data=[None], index=[4])
-                ),
-            }
-        ),
         # [BE-416] Support with list
         pd.DataFrame(
             {"A": [2, 1, 1, 2], "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]])}
@@ -1893,15 +1844,6 @@ def test_shift_args(memory_leak_check):
 @pytest.mark.parametrize(
     "df",
     [
-        # None changes timedelta64[ns] to DatetimeTimeDeltaType() which we don't support
-        pd.DataFrame(
-            {
-                "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                    pd.Series(data=[None], index=[4])
-                ),
-            }
-        ),
         # [BE-416] Support with list
         pd.DataFrame(
             {"A": [2, 1, 1, 2], "B": pd.Series([[1, 2], [3], [5, 4, 6], [-1, 3, 4]])}
