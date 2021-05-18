@@ -321,6 +321,7 @@ def pq_distributed_run(
     # get column variables
     arg_names = ", ".join(f"out{i}" for i in range(n_cols))
     func_text = f"def pq_impl(fname, {extra_args}):\n"
+    # total_rows is used for setting total size variable below
     func_text += (
         f"    (total_rows, {arg_names},) = _pq_reader_py(fname, {extra_args})\n"
     )
@@ -370,6 +371,7 @@ def pq_distributed_run(
     nodes = f_block.body[:-3]
 
     # set total size variable if necessary (for limit pushdown)
+    # value comes from 'total_rows' output of '_pq_reader_py' above
     if meta_head_only_info:
         nodes[-1 - n_cols].target = meta_head_only_info[1]
 
