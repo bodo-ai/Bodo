@@ -317,6 +317,9 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
 
     // head-only optimization ("limit pushdown"): user code may only use df.head()
     // so we just read the necessary rows
+    // This reads the data in an imbalanced way. The assumed use case is printing df.head()
+    // which looks better if the data is in fewer ranks.
+    // TODO: explore if balancing data is necessary for some use cases
     if (tot_rows_to_read != -1) {
         // no rows to read on this process
         if (start_row_global >= tot_rows_to_read) {
