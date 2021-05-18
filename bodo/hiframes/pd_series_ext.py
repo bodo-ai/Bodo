@@ -1012,7 +1012,6 @@ series_unsupported_attrs = (
 
 
 series_unsupported_methods = (
-    "memory_usage",
     # Conversion
     "convert_dtypes",
     "infer_objects",

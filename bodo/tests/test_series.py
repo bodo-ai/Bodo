@@ -5419,4 +5419,33 @@ def test_datetime_series_mean(memory_leak_check):
         return S.mean()
 
     check_func(impl_mean, (S,))
-    bodo.jit(impl_mean)(S)
+
+
+@pytest.mark.slow
+def test_series_mem_usage(memory_leak_check):
+    """ Test Series.memory_usage() with and w/o index"""
+
+    def impl1(S):
+        return S.memory_usage()
+
+    def impl2(S):
+        return S.memory_usage(index=False)
+
+    S = pd.Series([1, 2, 3, 4, 5, 6], index=pd.Int64Index([10, 12, 24, 30, -10, 40]))
+    py_out = 96
+    check_func(impl1, (S,), py_output=py_out)
+    py_out = 48
+    check_func(impl2, (S,), py_output=py_out)
+
+    # Empty Series
+    S = pd.Series()
+    # StringIndex only. Bodo has different underlying arrays than Pandas
+    # Test sequential case
+    py_out = 8
+    check_func(impl1, (S,), only_seq=True, py_output=py_out, is_out_distributed=False)
+    # Test parallel case. Index is replicated across ranks
+    py_out = 8 * bodo.get_size()
+    check_func(impl1, (S,), only_1D=True, py_output=py_out, is_out_distributed=False)
+
+    # Empty and no index.
+    check_func(impl2, (S,), is_out_distributed=False)
