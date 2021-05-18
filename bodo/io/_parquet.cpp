@@ -40,9 +40,11 @@ struct DatasetReader {
     // If S3, then store if s3_reader should use the anonymous mode
     bool s3fs_anon = false;
     /// Starting row for first file (files[0])
-    int start_row_first_file = 0;
+    int64_t start_row_first_file = 0;
     /// Total number of rows this process has to read (across files)
-    int count = 0;
+    int64_t count = 0;
+    /// Total number of total rows in the dataset (all files)
+    int64_t total_rows = 0;
     // Prefix to add to each of the paths before they're appended to filepaths
     std::string prefix = "";
 };
@@ -55,13 +57,16 @@ struct DatasetReader {
  * @param bucket_region : S3 bucket region (when reading from S3)
  * @param filters : PyObject passed to pyarrow.parquet.ParquetDataset filters argument
  *                  to remove rows from scanned data
+ * @param tot_rows_to_read : total number of rows to read from the dataset
+ * (starting from the beginning)
  */
 DatasetReader *get_dataset_reader(char *file_name, bool is_parallel,
                                   char *bucket_region, PyObject* filters,
-                                  PyObject* storage_options);
+                                  PyObject* storage_options, int64_t tot_rows_to_read);
 void del_dataset_reader(DatasetReader *reader);
+int64_t get_pq_total_rows(DatasetReader *reader);
 
-int64_t pq_get_size(DatasetReader *reader, int64_t column_idx);
+int64_t get_pq_local_num_rows(DatasetReader *reader);
 int64_t pq_read(DatasetReader *reader, int64_t real_column_idx,
                 int64_t column_idx, uint8_t *out_data, int out_dtype,
                 uint8_t *out_nulls = nullptr);
@@ -140,10 +145,12 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
                            PyLong_FromVoidPtr((void *)(&get_dataset_reader)));
     PyObject_SetAttrString(m, "del_dataset_reader",
                            PyLong_FromVoidPtr((void *)(&del_dataset_reader)));
+    PyObject_SetAttrString(m, "get_pq_total_rows",
+                           PyLong_FromVoidPtr((void *)(&get_pq_total_rows)));
     PyObject_SetAttrString(m, "pq_read",
                            PyLong_FromVoidPtr((void *)(&pq_read)));
-    PyObject_SetAttrString(m, "pq_get_size",
-                           PyLong_FromVoidPtr((void *)(&pq_get_size)));
+    PyObject_SetAttrString(m, "get_pq_local_num_rows",
+                           PyLong_FromVoidPtr((void *)(&get_pq_local_num_rows)));
     PyObject_SetAttrString(m, "pq_read_string",
                            PyLong_FromVoidPtr((void *)(&pq_read_string)));
     PyObject_SetAttrString(m, "pq_read_list_string",
@@ -199,7 +206,7 @@ void get_partition_info(DatasetReader *ds_reader, PyObject *piece) {
 
 DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                                   char *bucket_region, PyObject* filters,
-                                  PyObject* storage_options) {
+                                  PyObject* storage_options, int64_t tot_rows_to_read) {
     try {
 #ifdef DEBUG_NESTED_PARQUET
     std::cout << "GET_DATASET_READER, beginning\n";
@@ -243,6 +250,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
     PyObject *total_rows_py = PyObject_GetAttrString(ds, "_bodo_total_rows");
     int64_t total_rows = PyLong_AsLongLong(total_rows_py);
     Py_DECREF(total_rows_py);
+    ds_reader->total_rows = total_rows;
 
     // prefix = ds._prefix
     PyObject *prefix_py = PyObject_GetAttrString(ds, "_prefix");
@@ -265,7 +273,9 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
 
     if (!parallel) {
         // the process will read the whole dataset
-        ds_reader->count = total_rows;
+        // head-only optimization ("limit pushdown"): user code may only use df.head()
+        // so we just read the necessary rows
+        ds_reader->count = (tot_rows_to_read != -1) ? std::min(tot_rows_to_read, total_rows) : total_rows;
 
         if (total_rows > 0) {
             // get filepath for every piece
@@ -304,6 +314,24 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
     size_t nranks = dist_get_size();
     int64_t start_row_global = dist_get_start(total_rows, nranks, rank);
     ds_reader->count = dist_get_node_portion(total_rows, nranks, rank);
+
+    // head-only optimization ("limit pushdown"): user code may only use df.head()
+    // so we just read the necessary rows
+    // This reads the data in an imbalanced way. The assumed use case is printing df.head()
+    // which looks better if the data is in fewer ranks.
+    // TODO: explore if balancing data is necessary for some use cases
+    if (tot_rows_to_read != -1) {
+        // no rows to read on this process
+        if (start_row_global >= tot_rows_to_read) {
+            start_row_global = 0;
+            ds_reader->count = 0;
+        }
+        // there may be fewer rows to read
+        else {
+            int64_t new_end = std::min(start_row_global + ds_reader->count, tot_rows_to_read);
+            ds_reader->count = new_end - start_row_global;
+        }
+    }
 
     // get file paths only for the pieces that correspond to my chunk
     if (ds_reader->count > 0) {
@@ -367,9 +395,12 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
 
 void del_dataset_reader(DatasetReader *reader) { delete reader; }
 
-// TODO: column_idx doesn't seem to be used. Remove?
-int64_t pq_get_size(DatasetReader *reader, int64_t column_idx) {
+int64_t get_pq_local_num_rows(DatasetReader *reader) {
     return reader->count;
+}
+
+int64_t get_pq_total_rows(DatasetReader *reader) {
+    return reader->total_rows;
 }
 
 int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,

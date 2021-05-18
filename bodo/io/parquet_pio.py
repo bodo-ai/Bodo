@@ -133,10 +133,6 @@ def read_parquet_arrow_array():  # pragma: no cover
     return 0
 
 
-def get_column_size_parquet():  # pragma: no cover
-    return 0
-
-
 class ParquetFileInfo(FileInfo):
     """FileInfo object passed to ForceLiteralArg for
     file name arguments that refer to a parquet dataset"""
@@ -281,7 +277,15 @@ class ParquetHandler:
         return col_names, data_arrs, index_col, nodes
 
 
-def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targetctx):
+def pq_distributed_run(
+    pq_node,
+    array_dists,
+    typemap,
+    calltypes,
+    typingctx,
+    targetctx,
+    meta_head_only_info=None,
+):
     """lower ParquetReader into regular Numba nodes. Generates code for Parquet
     data read.
     """
@@ -314,10 +318,13 @@ def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targ
         )
         extra_args = ", ".join(vararg_map.values())
 
-    # get column variables and their sizes
-    arg_names = ", ".join("out" + str(i) for i in range(2 * n_cols))
+    # get column variables
+    arg_names = ", ".join(f"out{i}" for i in range(n_cols))
     func_text = f"def pq_impl(fname, {extra_args}):\n"
-    func_text += f"    ({arg_names},) = _pq_reader_py(fname, {extra_args})\n"
+    # total_rows is used for setting total size variable below
+    func_text += (
+        f"    (total_rows, {arg_names},) = _pq_reader_py(fname, {extra_args})\n"
+    )
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -349,6 +356,7 @@ def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targ
         typingctx,
         targetctx,
         parallel,
+        meta_head_only_info,
     )
     arg_types = (string_type,) + tuple(typemap[v.name] for v in filter_vars)
     f_block = compile_to_numba_ir(
@@ -362,8 +370,13 @@ def pq_distributed_run(pq_node, array_dists, typemap, calltypes, typingctx, targ
     replace_arg_nodes(f_block, [pq_node.file_name] + filter_vars)
     nodes = f_block.body[:-3]
 
+    # set total size variable if necessary (for limit pushdown)
+    # value comes from 'total_rows' output of '_pq_reader_py' above
+    if meta_head_only_info:
+        nodes[-1 - n_cols].target = meta_head_only_info[1]
+
     for i in range(n_cols):
-        nodes[2 * (i - n_cols)].target = pq_node.out_vars[i]
+        nodes[i - n_cols].target = pq_node.out_vars[i]
 
     return nodes
 
@@ -425,6 +438,7 @@ def _gen_pq_reader_py(
     typingctx,
     targetctx,
     parallel,
+    meta_head_only_info,
 ):
     if len(parallel) > 0:
         # in parallel read, we assume all columns are parallel
@@ -444,16 +458,22 @@ def _gen_pq_reader_py(
         f"  storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
     )
 
+    # head-only optimization: we may need to read only the first few rows
+    tot_rows_to_read = -1  # read all rows by default
+    if meta_head_only_info and meta_head_only_info[0] is not None:
+        tot_rows_to_read = meta_head_only_info[0]
+
     # open a DatasetReader, which is a C++ object defined in _parquet.cpp that
     # contains file readers for the files from which this process needs to read,
     # and other information to read this process' chunk
-    func_text += "  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {}, unicode_to_utf8(bucket_region), filters, storage_options_py)\n".format(
-        is_parallel
-    )
+    func_text += f"  ds_reader = get_dataset_reader(unicode_to_utf8(fname), {is_parallel}, unicode_to_utf8(bucket_region), filters, storage_options_py, {tot_rows_to_read})\n"
     # Check if there was an error in the C++ code. If so, raise it.
     func_text += "  check_and_propagate_cpp_exception()\n"
     func_text += "  if is_null_pointer(ds_reader):\n"
     func_text += "    raise ValueError('Error reading Parquet dataset')\n"
+    # get local number of rows (number of rows that this process reads)
+    func_text += "  loc_size = get_pq_local_num_rows(ds_reader)\n"
+    func_text += "  total_rows = get_pq_total_rows(ds_reader)\n"
 
     local_types = {}
     if partition_names is None:
@@ -461,6 +481,11 @@ def _gen_pq_reader_py(
     for c_name, (real_col_ind, col_ind), col_siz, c_typ, is_all_null in zip(
         col_names, col_indices, col_nb_fields, out_types, null_col_map
     ):
+        # avoid generating column read call if only dataset length is needed
+        if meta_head_only_info and meta_head_only_info[0] is None:
+            # generate dummy "A = None" to make sure column A is defined for later code
+            func_text += f"  {sanitize_varname(c_name)} = None\n"
+            continue
         if c_name in partition_names:
             # partition columns are handled below
             continue
@@ -490,8 +515,8 @@ def _gen_pq_reader_py(
         local_types[cat_dtype_name] = cat_dtype
 
     func_text += "  del_dataset_reader(ds_reader)\n"
-    func_text += "  return ({},)\n".format(
-        ", ".join("{0}, {0}_size".format(sanitize_varname(c)) for c in col_names)
+    func_text += "  return (total_rows, {},)\n".format(
+        ", ".join(f"{sanitize_varname(c)}" for c in col_names)
     )
     loc_vars = {}
     glbs = {
@@ -499,7 +524,8 @@ def _gen_pq_reader_py(
         "check_and_propagate_cpp_exception": check_and_propagate_cpp_exception,
         "is_null_pointer": is_null_pointer,
         "del_dataset_reader": _del_dataset_reader,
-        "get_column_size_parquet": get_column_size_parquet,
+        "get_pq_local_num_rows": get_pq_local_num_rows,
+        "get_pq_total_rows": _get_pq_total_rows,
         "read_parquet": read_parquet,
         "read_parquet_str": read_parquet_str,
         "read_parquet_list_str": read_parquet_list_str,
@@ -526,20 +552,13 @@ def gen_column_read(
     func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_parallel, is_all_null
 ):
     cname = sanitize_varname(cname)
-    # handle size variables
-    # get_column_size_parquet returns local size of column (number of rows
-    # that this process is going to read)
-    func_text += "  {}_size = get_column_size_parquet(ds_reader, {})\n".format(
-        cname, c_ind
-    )
     # Check if there was an error in the C++ code. If so, raise it.
     func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
-    alloc_size = "{}_size".format(cname)
 
     ret_type = None
     if is_all_null:
         # if the column is made up of all nulls, initialize it as a string array of NaNs.
-        func_text += "  {0} = bodo.libs.str_arr_ext.pre_alloc_string_array({0}_size, 0)\n".format(
+        func_text += "  {0} = bodo.libs.str_arr_ext.pre_alloc_string_array(loc_size, 0)\n".format(
             cname
         )
         func_text += "  bodo.libs.str_arr_ext.set_null_bits_to_value({}, 0)\n".format(
@@ -547,15 +566,15 @@ def gen_column_read(
         )
     elif c_type == string_array_type:
         # pass size for easier allocation and distributed analysis
-        func_text += "  {} = read_parquet_str(ds_reader, {}, {}, {}_size)\n".format(
-            cname, c_ind_real, c_ind, cname
+        func_text += "  {} = read_parquet_str(ds_reader, {}, {}, loc_size)\n".format(
+            cname, c_ind_real, c_ind
         )
     elif c_type == ArrayItemArrayType(string_array_type):
         # TODO does not support null strings?
         # pass size for easier allocation and distributed analysis
         func_text += (
-            "  {} = read_parquet_list_str(ds_reader, {}, {}, {}_size)\n".format(
-                cname, c_ind_real, c_ind, cname
+            "  {} = read_parquet_list_str(ds_reader, {}, {}, loc_size)\n".format(
+                cname, c_ind_real, c_ind
             )
         )
     elif isinstance(c_type, ArrayItemArrayType):
@@ -573,11 +592,10 @@ def gen_column_read(
             # The main gap is in ReadParquetArrayItemInfer and pq_read_array_item_lower
             # Right now we use it only for the float where we do not need nullable items.
             elem_typ = c_type.dtype.dtype
-            func_text += "  {} = read_parquet_array_item(ds_reader, {}, {}, {}_size, np.int32({}), {})\n".format(
+            func_text += "  {} = read_parquet_array_item(ds_reader, {}, {}, loc_size, np.int32({}), {})\n".format(
                 cname,
                 c_ind_real,
                 c_ind,
-                cname,
                 bodo.utils.utils.numba_to_c_type(elem_typ),
                 get_element_type(elem_typ),
             )
@@ -590,7 +608,7 @@ def gen_column_read(
         )
     else:
         el_type = get_element_type(c_type.dtype)
-        func_text += _gen_alloc(c_type, cname, alloc_size, el_type)
+        func_text += _gen_alloc(c_type, cname, "loc_size", el_type)
         func_text += (
             "  status = read_parquet(ds_reader, {}, {}, {}, np.int32({}))\n".format(
                 c_ind_real,
@@ -612,17 +630,8 @@ def gen_column_partition(
     cname = sanitize_varname(partition_name)
     cat_dtype = pd.CategoricalDtype(partition_type.categories, partition_type.ordered)
     cat_dtype_name = "part_pd_cat_dtype_{}".format(part_col_idx)
-
-    # handle size variables
-    # get_column_size_parquet returns local size of column (number of rows
-    # that this process is going to read)
-    # XXX partition is not part of the parquet file. Assume it is same
-    # length as column 0?
-    func_text += "  {}_size = get_column_size_parquet(ds_reader, 0)\n".format(cname)
-    # Check if there was an error in the C++ code. If so, raise it.
-    func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
-    func_text += "  {} = bodo.hiframes.pd_categorical_ext.alloc_categorical_array({}_size, {})\n".format(
-        cname, cname, cat_dtype_name
+    func_text += "  {} = bodo.hiframes.pd_categorical_ext.alloc_categorical_array(loc_size, {})\n".format(
+        cname, cat_dtype_name
     )
     cat_int_dtype = bodo.hiframes.pd_categorical_ext.get_categories_int_type(
         partition_type
@@ -1111,10 +1120,17 @@ _get_dataset_reader = types.ExternalFunction(
         types.voidptr,
         parquet_predicate_type,
         storage_options_dict_type,
+        types.int64,
     ),
+)
+get_pq_local_num_rows = types.ExternalFunction(
+    "get_pq_local_num_rows", types.int64(types.Opaque("arrow_reader"))
 )
 _del_dataset_reader = types.ExternalFunction(
     "del_dataset_reader", types.void(types.Opaque("arrow_reader"))
+)
+_get_pq_total_rows = types.ExternalFunction(
+    "get_pq_total_rows", types.int64(types.Opaque("arrow_reader"))
 )
 
 _pq_gen_partition_column = types.ExternalFunction(
@@ -1127,14 +1143,6 @@ _pq_gen_partition_column = types.ExternalFunction(
     ),
 )
 ll.add_symbol("pq_gen_partition_column", parquet_cpp.pq_gen_partition_column)
-
-
-@infer_global(get_column_size_parquet)
-class SizeParquetInfer(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 2
-        return signature(types.intp, args[0], types.unliteral(args[1]))
 
 
 @infer_global(read_parquet)
@@ -1194,7 +1202,8 @@ if bodo.utils.utils.has_pyarrow():
 
     ll.add_symbol("get_dataset_reader", parquet_cpp.get_dataset_reader)
     ll.add_symbol("del_dataset_reader", parquet_cpp.del_dataset_reader)
-    ll.add_symbol("pq_get_size", parquet_cpp.pq_get_size)
+    ll.add_symbol("get_pq_local_num_rows", parquet_cpp.get_pq_local_num_rows)
+    ll.add_symbol("get_pq_total_rows", parquet_cpp.get_pq_total_rows)
     ll.add_symbol("pq_read", parquet_cpp.pq_read)
     ll.add_symbol("pq_read_string", parquet_cpp.pq_read_string)
     ll.add_symbol("pq_read_list_string", parquet_cpp.pq_read_list_string)
@@ -1202,15 +1211,6 @@ if bodo.utils.utils.has_pyarrow():
     ll.add_symbol("pq_read_arrow_array", parquet_cpp.pq_read_arrow_array)
     ll.add_symbol("pq_write", parquet_cpp.pq_write)
     ll.add_symbol("pq_write_partitioned", parquet_cpp.pq_write_partitioned)
-
-
-@lower_builtin(get_column_size_parquet, types.Opaque("arrow_reader"), types.intp)
-def pq_size_lower(context, builder, sig, args):
-    fnty = lir.FunctionType(
-        lir.IntType(64), [lir.IntType(8).as_pointer(), lir.IntType(64)]
-    )
-    fn = builder.module.get_or_insert_function(fnty, name="pq_get_size")
-    return builder.call(fn, args)
 
 
 @lower_builtin(

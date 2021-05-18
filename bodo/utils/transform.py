@@ -209,7 +209,7 @@ def remove_hiframes(rhs, lives, call_list):
     # can't add these to no_side_effect_call_tuples due to import issues, TODO: fix
     # TODO: probably not reachable here since only used in backend?
     if call_tuple in (
-        (bodo.io.parquet_pio.get_column_size_parquet,),
+        (bodo.io.parquet_pio.get_pq_local_num_rows,),
         (bodo.io.parquet_pio.read_parquet_str,),
         (bodo.io.parquet_pio.read_parquet_array_item,),
     ):  # pragma: no cover

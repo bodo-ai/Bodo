@@ -257,14 +257,32 @@ class DistributedPass:
                 out_nodes = None
                 if type(inst) in distributed_run_extensions:
                     f = distributed_run_extensions[type(inst)]
-                    out_nodes = f(
-                        inst,
-                        self._dist_analysis.array_dists,
-                        self.typemap,
-                        self.calltypes,
-                        self.typingctx,
-                        self.targetctx,
-                    )
+                    if isinstance(inst, bodo.ir.parquet_ext.ParquetReader):
+                        # check if getting shape and/or head of parquet dataset is
+                        # enough for the program
+                        meta_head_only_info = guard(
+                            self._try_meta_head_only_pq_read, inst
+                        )
+                        # save meta for testing in test_io.py
+                        self.func_ir.meta_head_only_info = meta_head_only_info
+                        out_nodes = f(
+                            inst,
+                            self._dist_analysis.array_dists,
+                            self.typemap,
+                            self.calltypes,
+                            self.typingctx,
+                            self.targetctx,
+                            meta_head_only_info,
+                        )
+                    else:
+                        out_nodes = f(
+                            inst,
+                            self._dist_analysis.array_dists,
+                            self.typemap,
+                            self.calltypes,
+                            self.typingctx,
+                            self.targetctx,
+                        )
                 elif isinstance(inst, Parfor):
                     out_nodes = self._run_parfor(inst, equiv_set, avail_vars)
                     # run dist pass recursively
@@ -3721,6 +3739,65 @@ class DistributedPass:
                 vals_list.append(stmt.target)
         out += nodes
         return vals_list
+
+    def _try_meta_head_only_pq_read(self, pq_node):
+        """check if reading metadata and/or head rows of Parquet file is enough for the
+        program. If so, returns the read size and the variable for setting the total
+        size.
+        Also, replaces array shapes in the IR with the total size variable.
+        Raises GuardException if this optimization is not possible.
+        """
+        arr_varnames = {v.name for v in pq_node.out_vars}
+        # arr.shape nodes to transform
+        shape_nodes = []
+        read_size = None
+        scope = None
+
+        # make sure arrays are only used in arr.shape or arr[:11] cases
+        for block in self.func_ir.blocks.values():
+            for stmt in block.body:
+                # pq read node
+                if stmt is pq_node:
+                    scope = block.scope
+                    continue
+                if is_assign(stmt):
+                    rhs = stmt.value
+                    # arr.shape match
+                    if (
+                        is_expr(rhs, "getattr")
+                        and rhs.attr == "shape"
+                        and rhs.value.name in arr_varnames
+                    ):
+                        shape_nodes.append(stmt)
+                        continue
+                    # arr[:11] match
+                    if is_expr(rhs, "getitem") and rhs.value.name in arr_varnames:
+                        # TODO(ehsan): Numba may produce static_getitem?
+                        index_def = get_definition(self.func_ir, rhs.index)
+                        require(
+                            find_callname(self.func_ir, index_def)
+                            == ("slice", "builtins")
+                        )
+                        require(len(index_def.args) == 2)
+                        require(find_const(self.func_ir, index_def.args[0]) == 0)
+                        slice_size = find_const(self.func_ir, index_def.args[1])
+                        if read_size is None:
+                            read_size = slice_size
+                        else:
+                            require(slice_size == read_size)
+                        continue
+
+                # other nodes, array variables shouldn't be used
+                require(not (arr_varnames & {v.name for v in stmt.list_vars()}))
+
+        # optimization is possible, replace the total size variable in shape nodes
+        require(scope is not None)
+        total_len_var = ir.Var(scope, mk_unique_var("total_df_len"), pq_node.loc)
+        self.typemap[total_len_var.name] = types.int64
+        for stmt in shape_nodes:
+            stmt.value = ir.Expr.build_tuple([total_len_var], stmt.loc)
+
+        return read_size, total_len_var
 
     def _get_arr_ndim(self, arrname):
         if self.typemap[arrname] == string_array_type:
