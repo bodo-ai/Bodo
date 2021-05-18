@@ -83,6 +83,7 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_none,
     is_overload_true,
+    is_tuple_like_type,
     raise_bodo_error,
     to_nullable_type,
 )
@@ -108,7 +109,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     ndim = 2
 
     def __init__(self, data=None, index=None, columns=None):
-        # data is tuple of Array types (not Series)
+        # data is tuple of Array types (not Series) or tuples (for df.describe)
         # index is Index obj (not Array type)
         # columns is a tuple of column names (strings, ints, or tuples in case of
         # MultiIndex)
@@ -655,6 +656,11 @@ def init_dataframe_equiv(self, scope, equiv_set, loc, args, kws):
     data_tup = args[0]
     index = args[1]
 
+    # avoid returning shape for tuple data (can result in Numba errors)
+    data_type = self.typemap[data_tup.name]
+    if any(is_tuple_like_type(t) for t in data_type.types):
+        return None
+
     if equiv_set.has_shape(data_tup):
         data_shapes = equiv_set.get_shape(data_tup)
         # all data arrays have the same shape
@@ -684,6 +690,12 @@ def get_dataframe_data_equiv(self, scope, equiv_set, loc, args, kws):
     """
     assert len(args) == 2 and not kws
     var = args[0]
+
+    # avoid returning shape for tuple data (can result in Numba errors)
+    data_types = self.typemap[var.name].data
+    if any(is_tuple_like_type(t) for t in data_types):
+        return None
+
     if equiv_set.has_shape(var):
         return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(var)[0], pre=[])
     return None

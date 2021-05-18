@@ -1288,15 +1288,23 @@ def overload_dataframe_cumsum(df, axis=None, skipna=True):
 
 def _is_describe_type(data):
     """ Check if df.data has supported datatype for describe"""
-    return isinstance(data, IntegerArrayType) or (
-        isinstance(data, types.Array) and isinstance(data.dtype, (types.Number))
+    return (
+        isinstance(data, IntegerArrayType)
+        or (isinstance(data, types.Array) and isinstance(data.dtype, (types.Number)))
+        or data.dtype == bodo.datetime64ns
     )
 
 
 @overload_method(DataFrameType, "describe", inline="always", no_unliteral=True)
 def overload_dataframe_describe(
-    df, percentiles=None, include=None, exclude=None, datetime_is_numeric=False
+    df, percentiles=None, include=None, exclude=None, datetime_is_numeric=True
 ):
+    """
+    Support df.describe with numeric and datetime column.
+    For datetime: Bodo mimic's Pandas future behavior.
+    (treating it like numeric rather than categorical).
+    Hence, datetime_is_numeric is set to True as default value.
+    """
     unsupported_args = dict(
         percentiles=percentiles,
         include=include,
@@ -1304,7 +1312,7 @@ def overload_dataframe_describe(
         datetime_is_numeric=datetime_is_numeric,
     )
     arg_defaults = dict(
-        percentiles=None, include=None, exclude=None, datetime_is_numeric=False
+        percentiles=None, include=None, exclude=None, datetime_is_numeric=True
     )
     check_unsupported_args("DataFrame.describe", unsupported_args, arg_defaults)
 
@@ -1315,15 +1323,40 @@ def overload_dataframe_describe(
     if len(numeric_cols) == 0:
         raise BodoError("df.describe() only supports numeric columns")
 
-    header = "def impl(df, percentiles=None, include=None, exclude=None, datetime_is_numeric=False):\n"
-    data_args = ", ".join(
-        f"bodo.utils.conversion.coerce_to_array(bodo.libs.array_ops.array_op_describe(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(i)})))"
-        for i in numeric_cols
+    # number of datetime columns
+    num_dt = sum(
+        df.data[df.columns.index(c)].dtype == bodo.datetime64ns for c in numeric_cols
     )
-    index = (
-        "bodo.utils.conversion.convert_to_index(['count', 'mean', 'std', "
-        "'min', '25%', '50%', '75%', 'max'])"
-    )
+
+    def _get_describe(col_ind):
+        """get describe values: move std to the end if df has a mix of datetime/numeric
+        columns to match Pandas.
+        https://github.com/pandas-dev/pandas/blob/059c8bac51e47d6eaaa3e36d6a293a22312925e6/pandas/core/describe.py#L179
+        """
+        is_dt = df.data[col_ind].dtype == bodo.datetime64ns
+        if num_dt and num_dt != len(numeric_cols):
+            if is_dt:
+                return f"des_{col_ind} + (np.nan,)"
+            return f"des_{col_ind}[:2] + des_{col_ind}[3:] + (des_{col_ind}[2],)"
+
+        return f"des_{col_ind}"
+
+    header = "def impl(df, percentiles=None, include=None, exclude=None, datetime_is_numeric=True):\n"
+    for c in numeric_cols:
+        col_ind = df.columns.index(c)
+        header += f"  des_{col_ind} = bodo.libs.array_ops.array_op_describe(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {col_ind}))\n"
+
+    data_args = ", ".join(_get_describe(df.columns.index(c)) for c in numeric_cols)
+
+    index_vals = "['count', 'mean', 'std', 'min', '25%', '50%', '75%', 'max']"
+    # Pandas avoids std for datetime-only cases
+    if num_dt == len(numeric_cols):
+        index_vals = "['count', 'mean', 'min', '25%', '50%', '75%', 'max']"
+    # Pandas moves std to the end if df has a mix of datetime/numeric
+    elif num_dt:
+        index_vals = "['count', 'mean', 'min', '25%', '50%', '75%', 'max', 'std']"
+
+    index = f"bodo.utils.conversion.convert_to_index({index_vals})"
     return _gen_init_df(header, numeric_cols, data_args, index)
 
 

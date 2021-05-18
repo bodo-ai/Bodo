@@ -4009,12 +4009,8 @@ def test_series_unique(series_val, memory_leak_check):
 
 
 def test_series_describe(numeric_series_val, memory_leak_check):
-    # not supported for dt64 yet, TODO: support and test
-    if numeric_series_val.dtype == np.dtype("datetime64[ns]"):
-        return
-
     def test_impl(A):
-        return A.describe()
+        return A.describe(datetime_is_numeric=True)
 
     check_func(test_impl, (numeric_series_val,), False)
 
@@ -5242,6 +5238,21 @@ def test_series_std(memory_leak_check):
     check_func(f, (S,))
     check_func(f_skipna, (S,))
     check_func(f_ddof, (S,))
+
+
+def test_series_std_dt64(memory_leak_check):
+    def f():
+        S = pd.Series(pd.date_range("2017-01-03", periods=11))
+        return S.std()
+
+    # Bodo differs in micro/nano seconds accuracy from Pandas
+    # bodo_out: 3 days 07:35:56.381537975
+    # pandas_out: 3 days 07:35:56.381886706
+    # TODO: [BE-765]
+    # check_func(f, (S,))
+    bodo_out = bodo.jit(f)()
+    py_out = f()
+    assert abs(bodo_out - py_out) < datetime.timedelta(milliseconds=1)
 
 
 @pytest.mark.slow

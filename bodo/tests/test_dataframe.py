@@ -1655,14 +1655,32 @@ def test_df_pct_change(numeric_df_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_df_describe(numeric_df_value, memory_leak_check):
-    # not supported for dt64 yet, TODO: support and test
-    if any(d == np.dtype("datetime64[ns]") for d in numeric_df_value.dtypes):
-        return
-
     def test_impl(df):
-        return df.describe()
+        return df.describe(datetime_is_numeric=True)
 
     check_func(test_impl, (numeric_df_value,), is_out_distributed=False)
+
+
+@pytest.mark.slow
+def test_df_describe_mixed_dt(memory_leak_check):
+    """Test mix of datetime and numeric data in describe(). Pandas avoids std for all
+    datetime case, but adds std to the end when mixed.
+    """
+
+    def test_impl(df):
+        return df.describe(datetime_is_numeric=True)
+
+    # all datetime
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range("2017-01-03", periods=6),
+            "B": pd.date_range("2019-01-03", periods=6),
+        }
+    )
+    check_func(test_impl, (df,), is_out_distributed=False)
+    # datetime mixed with numeric
+    df = pd.DataFrame({"A": pd.date_range("2017-01-03", periods=6), "B": np.arange(6)})
+    check_func(test_impl, (df,), is_out_distributed=False)
 
 
 def test_df_describe_mixed_types(memory_leak_check):

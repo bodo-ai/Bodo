@@ -1922,8 +1922,14 @@ def overload_series_unique(S):
 
 @overload_method(SeriesType, "describe", inline="always", no_unliteral=True)
 def overload_series_describe(
-    S, percentiles=None, include=None, exclude=None, datetime_is_numeric=False
+    S, percentiles=None, include=None, exclude=None, datetime_is_numeric=True
 ):
+    """
+    Support S.describe with numeric and datetime column.
+    For datetime: Bodo mimic's Pandas future behavior
+    (treating it like numeric rather than categorical).
+    Hence, datetime_is_numeric is set to True as default value.
+    """
 
     unsupported_args = dict(
         percentiles=percentiles,
@@ -1932,15 +1938,20 @@ def overload_series_describe(
         datetime_is_numeric=datetime_is_numeric,
     )
     arg_defaults = dict(
-        percentiles=None, include=None, exclude=None, datetime_is_numeric=False
+        percentiles=None, include=None, exclude=None, datetime_is_numeric=True
     )
     check_unsupported_args("Series.describe", unsupported_args, arg_defaults)
 
     # This check is needed for S.describe(), even though it's redundant if coming from df.describe()
     # Bodo limitations for supported types
-    # Currently only numeric data types (int, float, and nullable int) are supported
+    # Currently only numeric data types (int, float, and nullable int) and datetime are
+    # supported
     if not (
-        isinstance(S.data, types.Array) and isinstance(S.data.dtype, (types.Number))
+        isinstance(S.data, types.Array)
+        and (
+            isinstance(S.data.dtype, (types.Number))
+            or S.data.dtype == bodo.datetime64ns
+        )
     ) and not isinstance(S.data, IntegerArrayType):
         raise BodoError(f"describe() column input type {S.data} not supported.")
 
@@ -1948,9 +1959,27 @@ def overload_series_describe(
     # These types compute count, unique, top, and freq only.
     # TODO: compute unique, top (most common value), freq (how many times the most common value is found)
 
-    # This is for numeric columns only and datetime (datetime_is_numeric=True)
+    # datetime case doesn't return std
+    if S.data.dtype == bodo.datetime64ns:
+
+        def impl_dt(
+            S, percentiles=None, include=None, exclude=None, datetime_is_numeric=True
+        ):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            return bodo.hiframes.pd_series_ext.init_series(
+                bodo.libs.array_ops.array_op_describe(arr),
+                bodo.utils.conversion.convert_to_index(
+                    ["count", "mean", "min", "25%", "50%", "75%", "max"]
+                ),
+                name,
+            )
+
+        return impl_dt
+
+    # This is for numeric columns only
     def impl(
-        S, percentiles=None, include=None, exclude=None, datetime_is_numeric=False
+        S, percentiles=None, include=None, exclude=None, datetime_is_numeric=True
     ):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
