@@ -35,7 +35,9 @@ from bodo.utils.typing import (
     gen_objmode_func_overload,
     gen_objmode_method_overload,
     get_overload_const_int,
+    is_overload_constant_bool,
     is_overload_constant_int,
+    is_overload_true,
     raise_bodo_error,
 )
 from bodo.utils.utils import unliteral_all
@@ -57,6 +59,12 @@ mpl_plt_kwargs_funcs = [
     "fill_between",
     "step",
     "text",
+    "errorbar",
+    "barbs",
+    "eventplot",
+    "hexbin",
+    "xcorr",
+    "imshow",
     "subplots",
     "suptitle",
     "tight_layout",
@@ -75,6 +83,12 @@ mpl_axes_kwargs_funcs = [
     "fill_between",
     "step",
     "text",
+    "errorbar",
+    "barbs",
+    "eventplot",
+    "hexbin",
+    "xcorr",
+    "imshow",
     "set_xlabel",
     "set_ylabel",
     "set_xscale",
@@ -99,6 +113,12 @@ mpl_gather_plots = [
     "fill",
     "fill_between",
     "step",
+    "errorbar",
+    "barbs",
+    "eventplot",
+    "hexbin",
+    "xcorr",
+    "imshow",
 ]
 
 
@@ -183,6 +203,11 @@ def _install_mpl_types():
         ("mpl_wedge_type", matplotlib.patches.Wedge),
         ("mpl_polygon_type", matplotlib.patches.Polygon),
         ("mpl_poly_collection_type", matplotlib.collections.PolyCollection),
+        ("mpl_axes_image_type", matplotlib.image.AxesImage),
+        ("mpl_errorbar_container_type", matplotlib.container.ErrorbarContainer),
+        ("mpl_barbs_type", matplotlib.quiver.Barbs),
+        ("mpl_event_collection_type", matplotlib.collections.EventCollection),
+        ("mpl_line_collection_type", matplotlib.collections.LineCollection),
     ]
     for type_name, class_val in mpl_types:
         install_mpl_class(type_name, class_val)
@@ -259,6 +284,38 @@ def generate_pie_return_type(args, kws):
             types.List(types.mpl_wedge_type),
             types.List(types.mpl_text_type),
             types.List(types.mpl_text_type),
+        ]
+    )
+
+
+def generate_xcorr_return_type(func_mod, args, kws):
+    """
+    Helper function to determine the return type for calls to xcorr.
+    The tuple returned differs depending on if the usevlines argument
+    is provided.
+    """
+    # https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.xcorr.html?highlight=xcorr#matplotlib.pyplot.xcorr
+    # usevlines is argument 4
+    usevlines = args[4] if len(args) > 5 else kws.get("usevlines", True)
+    if not is_overload_constant_bool(usevlines):
+        raise_bodo_error(f"{func_mod}.xcorr(): usevlines must be a constant boolean")
+    # If usevlines is True we return Tuple(Array(int64), Array(float64), lineCollection, Line2D)
+    if is_overload_true(usevlines):
+        return types.Tuple(
+            [
+                types.Array(types.int64, 1, "C"),
+                types.Array(types.float64, 1, "C"),
+                types.mpl_line_collection_type,
+                types.mpl_line_2d_type,
+            ]
+        )
+    # Otherwise we return a Tuple(Array(int64), Array(float64), Line2D, None)
+    return types.Tuple(
+        [
+            types.Array(types.int64, 1, "C"),
+            types.Array(types.float64, 1, "C"),
+            types.mpl_line_2d_type,
+            types.none,
         ]
     )
 
@@ -357,6 +414,60 @@ class TextTyper(AbstractTemplate):
     def generic(self, args, kws):
         # text returns Text
         return generate_matplotlib_signature(types.mpl_text_type, args, kws)
+
+
+# Define a signature for the plt.errorbar function because it uses *args and **kwargs.
+@infer_global(plt.errorbar)
+class ErrorbarTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # errorbar returns ErrorbarContainer
+        return generate_matplotlib_signature(
+            types.mpl_errorbar_container_type, args, kws
+        )
+
+
+# Define a signature for the plt.barbs function because it uses *args and **kwargs.
+@infer_global(plt.barbs)
+class BarbsTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # barbs returns Barbs
+        return generate_matplotlib_signature(types.mpl_barbs_type, args, kws)
+
+
+# Define a signature for the plt.eventplot function because it uses *args and **kwargs.
+@infer_global(plt.eventplot)
+class EventplotTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # eventplot returns List(EventCollection)
+        return generate_matplotlib_signature(
+            types.List(types.mpl_event_collection_type), args, kws
+        )
+
+
+# Define a signature for the plt.hexbin function because it uses *args and **kwargs.
+@infer_global(plt.hexbin)
+class HexbinTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # hexbin returns PolyCollection
+        return generate_matplotlib_signature(types.mpl_poly_collection_type, args, kws)
+
+
+# Define a signature for the plt.xcorr function because it uses *args and **kwargs.
+@infer_global(plt.xcorr)
+class XcorrTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # xcorr returns different values depending on usevlines
+        return generate_matplotlib_signature(
+            generate_xcorr_return_type("matplotlib.pyplot", args, kws), args, kws
+        )
+
+
+# Define a signature for the plt.imshow function because it uses *args and **kwargs.
+@infer_global(plt.imshow)
+class ImshowTyper(AbstractTemplate):
+    def generic(self, args, kws):
+        # imshow returns AxesImage
+        return generate_matplotlib_signature(types.mpl_axes_image_type, args, kws)
 
 
 # Define a signature for the plt.gca function because it uses **kwargs.
@@ -496,6 +607,45 @@ class MatplotlibAxesKwargsAttribute(AttributeTemplate):
     def resolve_text(self, ax_typ, args, kws):
         return generate_matplotlib_signature(
             types.mpl_text_type, args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.errorbar", no_unliteral=True)
+    def resolve_errorbar(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            types.mpl_errorbar_container_type, args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.barbs", no_unliteral=True)
+    def resolve_barbs(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            types.mpl_barbs_type, args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.eventplot", no_unliteral=True)
+    def resolve_eventplot(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            types.List(types.mpl_event_collection_type), args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.hexbin", no_unliteral=True)
+    def resolve_hexbin(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            types.mpl_poly_collection_type, args, kws, obj_typ=ax_typ
+        )
+
+    @bound_function("ax.xcorr", no_unliteral=True)
+    def resolve_xcorr(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            generate_xcorr_return_type("matplotlib.axes.Axes", args, kws),
+            args,
+            kws,
+            obj_typ=ax_typ,
+        )
+
+    @bound_function("ax.imshow", no_unliteral=True)
+    def resolve_imshow(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            types.mpl_axes_image_type, args, kws, obj_typ=ax_typ
         )
 
     @bound_function("ax.set_xlabel", no_unliteral=True)
