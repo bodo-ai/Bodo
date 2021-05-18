@@ -19,6 +19,7 @@ from numba.core.ir_utils import build_definitions, find_callname
 import bodo
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
+    DistTestPipeline,
     SeriesOptTestPipeline,
     _get_dist_arg,
     _test_equal_guard,
@@ -1254,6 +1255,71 @@ def _check_for_pq_reader_filters(bodo_func):
         assert not (is_assign(stmt) and is_expr(stmt.value, "getitem"))
 
     assert pq_read_found
+
+
+def test_read_pq_head_only(datapath):
+    """
+    test reading only shape and/or head from Parquet file if possible
+    (limit pushdown)
+    """
+
+    # read both shape and head()
+    def impl1(path):
+        df = pd.read_parquet(path)
+        return df.shape, df.head(4)
+
+    # shape only
+    def impl2(path):
+        df = pd.read_parquet(path)
+        return len(df)
+
+    # head only
+    def impl3(path):
+        df = pd.read_parquet(path)
+        return df.head()
+
+    # large file
+    fname = datapath("int_nulls_multi.pq")
+    check_func(impl1, (fname,), check_dtype=False)
+    check_func(impl2, (fname,), check_dtype=False)
+    check_func(impl3, (fname,), check_dtype=False)
+    # small file with Index data
+    check_func(impl1, (datapath("index_test2.pq"),), check_dtype=False)
+    # make sure head-only read is recognized correctly
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl1)
+    bodo_func(fname)
+    _check_for_pq_read_head_only(bodo_func)
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl2)
+    bodo_func(fname)
+    _check_for_pq_read_head_only(bodo_func, has_read=False)
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl3)
+    bodo_func(fname)
+    _check_for_pq_read_head_only(bodo_func)
+    # partitioned data
+    try:
+        if bodo.get_rank() == 0:
+            I = pd.date_range("2018-01-03", "2020-12-05")
+            df = pd.DataFrame(
+                {"A": np.repeat(I.values, 100), "B": np.arange(100 * len(I))}
+            )
+            df.to_parquet("pq_data", partition_cols="A")
+        bodo.barrier()
+
+        check_func(impl1, ("pq_data",), check_dtype=False)
+        bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl1)
+        bodo_func("pq_data")
+        _check_for_pq_read_head_only(bodo_func)
+        bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree("pq_data", ignore_errors=True)
+
+
+def _check_for_pq_read_head_only(bodo_func, has_read=True):
+    """make sure head-only parquet read optimization is recognized"""
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert hasattr(fir, "meta_head_only_info")
+    assert not has_read or fir.meta_head_only_info[0] is not None
 
 
 # TODO: Add memory_leak_check when bugs are resolved.
