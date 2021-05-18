@@ -75,6 +75,22 @@ def array_op_describe(arr):  # pragma: no cover
 
 @overload(array_op_describe)
 def overload_array_op_describe(arr):
+    # Pandas doesn't return std for describe of datetime64 data
+    # https://github.com/pandas-dev/pandas/blob/059c8bac51e47d6eaaa3e36d6a293a22312925e6/pandas/core/describe.py#L328
+    if arr.dtype == bodo.datetime64ns:
+
+        def impl_dt(arr):  # pragma: no cover
+            a_count = array_op_count(arr)
+            a_min = array_op_min(arr)
+            a_max = array_op_max(arr)
+            a_mean = array_op_mean(arr)
+            q25 = array_op_quantile(arr, 0.25)
+            q50 = array_op_quantile(arr, 0.5)
+            q75 = array_op_quantile(arr, 0.75)
+            return (a_count, a_mean, a_min, q25, q50, q75, a_max)
+
+        return impl_dt
+
     def impl(arr):  # pragma: no cover
         a_count = array_op_count(arr)
         a_min = array_op_min(arr)
@@ -309,11 +325,11 @@ def array_op_var(arr, skipna, ddof):  # pragma: no cover
 def overload_array_op_var(arr, skipna, ddof):
     def impl(arr, skipna, ddof):  # pragma: no cover
         numba.parfors.parfor.init_prange()
-        first_moment = 0
-        second_moment = 0
+        first_moment = 0.0
+        second_moment = 0.0
         count = 0
         for i in numba.parfors.parfor.internal_prange(len(arr)):
-            val = 0
+            val = 0.0
             count_val = 0
             if not bodo.libs.array_kernels.isna(arr, i) or not skipna:
                 val = arr[i]
@@ -336,6 +352,15 @@ def array_op_std(arr, skipna=True, ddof=1):  # pragma: no cover
 
 @overload(array_op_std)
 def overload_array_op_std(arr, skipna=True, ddof=1):
+    # datetime
+    if arr.dtype == bodo.datetime64ns:
+
+        def impl_dt64(arr, skipna=True, ddof=1):  # pragma: no cover
+            return pd.Timedelta(
+                types.int64(array_op_var(arr.view(np.int64), skipna, ddof) ** 0.5)
+            )
+
+        return impl_dt64
     return (
         lambda arr, skipna=True, ddof=1: array_op_var(arr, skipna, ddof) ** 0.5
     )  # pragma: no cover

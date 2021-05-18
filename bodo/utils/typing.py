@@ -701,6 +701,17 @@ def is_list_like_index_type(t):
     )
 
 
+def is_tuple_like_type(t):
+    """return True of 't' is a tuple-like type such as tuples or literal list that
+    could be used in constant sized DataFrame, Series or Index.
+    """
+    return (
+        isinstance(t, types.BaseTuple)
+        or is_heterogeneous_tuple_type(t)
+        or isinstance(t, bodo.hiframes.pd_index_ext.HeterogeneousIndexType)
+    )
+
+
 def get_index_names(t, func_name, default_name):
     """get name(s) of index type 't', assuming constant string literal name(s) are used.
     otherwise, throw error.

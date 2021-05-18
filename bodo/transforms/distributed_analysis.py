@@ -50,8 +50,8 @@ from bodo.utils.transform import (
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
-    is_heterogeneous_tuple_type,
     is_overload_false,
+    is_tuple_like_type,
 )
 from bodo.utils.utils import (
     debug_prints,
@@ -1283,7 +1283,7 @@ class DistributedAnalysis:
             "get_series_index",
         ):
             # NOTE: constant sizes Series/Index is not distributed
-            if _is_tuple_like_type(self.typemap[lhs]):
+            if is_tuple_like_type(self.typemap[lhs]):
                 self._analyze_call_set_REP(lhs, args, array_dists, fdef)
                 return
 
@@ -1407,7 +1407,7 @@ class DistributedAnalysis:
 
         if fdef == ("init_series", "bodo.hiframes.pd_series_ext"):
             # NOTE: constant sizes Series/Index is not distributed
-            if _is_tuple_like_type(self.typemap[rhs.args[0].name]):
+            if is_tuple_like_type(self.typemap[rhs.args[0].name]):
                 self._analyze_call_set_REP(lhs, args, array_dists, fdef)
                 return
 
@@ -1420,6 +1420,11 @@ class DistributedAnalysis:
             return
 
         if fdef == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
+            # NOTE: constant sizes DataFrame is not distributed
+            if any(is_tuple_like_type(t) for t in self.typemap[rhs.args[0].name].types):
+                self._analyze_call_set_REP(lhs, args, array_dists, fdef)
+                return
+
             # lhs, data arrays, and index should have the same distribution
             # data arrays
             data_varname = rhs.args[0].name
@@ -1464,11 +1469,14 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if fdef == ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext"):
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
-            return
-
-        if fdef == ("get_dataframe_index", "bodo.hiframes.pd_dataframe_ext"):
+        if func_mod == "bodo.hiframes.pd_dataframe_ext" and func_name in (
+            "get_dataframe_data",
+            "get_dataframe_index",
+        ):
+            # NOTE: constant sizes DataFrame is not distributed
+            if any(is_tuple_like_type(t) for t in self.typemap[rhs.args[0].name].data):
+                self._analyze_call_set_REP(lhs, args, array_dists, fdef)
+                return
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
@@ -2977,17 +2985,6 @@ def is_REP(d):
     if isinstance(d, list):
         return all(a is None or is_REP(a) for a in d)
     return d == Distribution.REP
-
-
-def _is_tuple_like_type(t):
-    """return True of 't' is a tuple-like type such as tuples or literal list that
-    could be used in constant sized Series and Index.
-    """
-    return (
-        isinstance(t, types.BaseTuple)
-        or is_heterogeneous_tuple_type(t)
-        or isinstance(t, bodo.hiframes.pd_index_ext.HeterogeneousIndexType)
-    )
 
 
 def dprint(*s):  # pragma: no cover
