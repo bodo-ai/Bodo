@@ -386,6 +386,201 @@ def test_step_replicated_example(fig_test, fig_ref):
 
 
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_errorbar_example(fig_test, fig_ref):
+    """
+    Tests a basic example of errorbar with distributed data.
+    """
+
+    def impl(input_fig):
+        x = np.arange(50)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.errorbar(x, x)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_errorbar_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of errorbar with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.errorbar(x, x)  # Plot some data on the axes.
+
+    x = np.arange(50)
+    impl(x, fig_ref)
+    bodo.jit(impl)(x, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_barbs_example(fig_test, fig_ref):
+    """
+    Tests a basic example of barbs with distributed data.
+    """
+
+    def impl(input_fig):
+        x = np.arange(50)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.barbs(x, x)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_barbs_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of barbs with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.barbs(x, x)  # Plot some data on the axes.
+
+    x = np.arange(50)
+    impl(x, fig_ref)
+    bodo.jit(impl)(x, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_eventplot_example(fig_test, fig_ref):
+    """
+    Tests a basic example of eventplot with distributed data.
+    """
+
+    def impl(input_fig):
+        x = np.arange(50)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.eventplot(x)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_eventplot_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of eventplot with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.eventplot(x)  # Plot some data on the axes.
+
+    x = np.arange(50)
+    impl(x, fig_ref)
+    bodo.jit(impl)(x, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_hexbin_example(fig_test, fig_ref):
+    """
+    Tests a basic example of hexbin with distributed data.
+    """
+
+    def impl(input_fig):
+        x = np.arange(50)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.hexbin(x, x)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_hexbin_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of hexbin with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.hexbin(x, x)  # Plot some data on the axes.
+
+    x = np.arange(50)
+    impl(x, fig_ref)
+    bodo.jit(impl)(x, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_imshow_example(fig_test, fig_ref):
+    """
+    Tests a basic example of imshow with distributed data.
+    """
+
+    def impl(input_fig):
+        x = np.arange(10000).reshape(100, 100)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.imshow(x)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_imshow_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of imshow with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.imshow(x)  # Plot some data on the axes.
+
+    x = np.arange(10000).reshape(100, 100)
+    impl(x, fig_ref)
+    bodo.jit(impl)(x, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_xcorr_example(fig_test, fig_ref):
+    """
+    Tests a basic example of xcorr with distributed data.
+    """
+
+    def impl(input_fig):
+        x = np.arange(100).astype(np.float64)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.xcorr(x, x)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_xcorr_example_usevlines_false(fig_test, fig_ref):
+    """
+    Tests a basic example of xcorr with distributed data and usevlines=False.
+    """
+
+    def impl(input_fig):
+        x = np.arange(100).astype(np.float64)
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.xcorr(x, x, usevlines=False)  # Plot some data on the axes.
+
+    impl(fig_ref)
+    bodo.jit(impl)(fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
+def test_xcorr_replicated_example(fig_test, fig_ref):
+    """
+    Tests a basic example of imshow with replicated data.
+    """
+
+    def impl(x, input_fig):
+        ax = input_fig.subplots()  # Create a figure and an axes.
+        ax.xcorr(x, x)  # Plot some data on the axes.
+
+    x = np.arange(100).astype(np.float64)
+    impl(x, fig_ref)
+    bodo.jit(impl)(x, fig_test)
+
+
+@bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_text_example(fig_test, fig_ref):
     """
     Tests a basic example of text.
@@ -462,6 +657,42 @@ def test_axes_set_on(fig_test, fig_ref):
     impl(fig_ref)
 
     bodo.jit(impl)(fig_test)
+
+
+def test_mpl_xcorr_errors(memory_leak_check):
+    """
+    Tests that xcorr requires a constant boolean input.
+    """
+
+    def impl1():
+        x = np.arange(100)
+        ax = matplotlib.pyplot.gca()
+        return ax.xcorr(x, x, usevlines=None)
+
+    def impl2():
+        x = np.arange(100)
+        return matplotlib.pyplot.xcorr(x, x, usevlines=None)
+
+    def impl3(lst):
+        x = np.arange(100)
+        ax = matplotlib.pyplot.gca()
+        return ax.xcorr(x, x, usevlines=lst[0])
+
+    def impl4(lst):
+        x = np.arange(100)
+        return matplotlib.pyplot.xcorr(x, x, usevlines=lst[0])
+
+    err_msg = "xcorr.*: usevlines must be a constant boolean"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)()
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl2)()
+
+    lst = [False, True, True, False]
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl3)(lst)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl4)(lst)
 
 
 def test_mpl_subplots_const_error(memory_leak_check):
