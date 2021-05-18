@@ -404,6 +404,7 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.nunique`
 * :meth:`pandas.Series.value_counts` all optional arguments except `dropna` are supported.
 * :meth:`pandas.Series.between`
+* :meth:`pandas.Series.memory_usage` argument `index` supported
 
 
 Reindexing / Selection / Label manipulation:
@@ -614,6 +615,7 @@ Computations / Descriptive Stats:
 * :meth:`pandas.DataFrame.std`
 * :meth:`pandas.DataFrame.sum`
 * :meth:`pandas.DataFrame.var`
+* :meth:`pandas.DataFrame.memory_usage` argument `index` supported
 
 
 Reindexing / Selection / Label manipulation:

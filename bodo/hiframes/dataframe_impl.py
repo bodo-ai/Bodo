@@ -3295,6 +3295,48 @@ def overload_dataframe_sample(
     )
 
 
+@overload_method(DataFrameType, "memory_usage", inline="always", no_unliteral=True)
+def overload_dataframe_memory_usage(df, index=True, deep=False):
+    """Support df.memory_usage by getting nbytes from underlying arrays for each column
+    and return result as a Series
+    index argument is supported
+    Pandas deep is related to object datatype which isn't available in Bodo.
+    Hence, deep argument is meaningless inside Bodo.
+    """
+
+    func_text = "def impl(df, index=True, deep=False):\n"
+
+    data = ", ".join(
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}).nbytes"
+        for i in range(len(df.columns))
+    )
+    if is_overload_true(index):
+        index_nbytes = (
+            "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df).nbytes\n,"
+        )
+        # create index values for the Series output that has 'Index' and column names
+        str_col_names = ",".join(f"'{c}'" for c in df.columns)
+        arr = f"bodo.utils.conversion.coerce_to_array(('Index',{str_col_names}))"
+        index = f"bodo.hiframes.pd_index_ext.init_string_index({arr})"
+        func_text += f"  return bodo.hiframes.pd_series_ext.init_series(({index_nbytes}{data}), {index}, None)\n"
+    else:
+        comma = "," if len(df.columns) == 1 else ""
+        col_var = gen_const_tup(df.columns)
+        func_text += f"  return bodo.hiframes.pd_series_ext.init_series(({data}{comma}), pd.Index({col_var}), None)\n"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "pd": pd,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
 @overload(pd.read_excel, no_unliteral=True)
 def overload_read_excel(
     io,

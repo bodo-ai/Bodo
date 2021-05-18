@@ -207,6 +207,7 @@ class DataFramePass:
         # level selection in multi-level df
         if (
             isinstance(rhs_type, DataFrameType)
+            and len(rhs_type.columns) > 0
             and isinstance(rhs_type.columns[0], tuple)
             and any(v[0] == rhs.attr for v in rhs_type.columns)
         ):

@@ -4822,6 +4822,38 @@ def test_unsupported_df_method():
         bodo.jit(test_impl)()
 
 
+@pytest.mark.slow
+def test_df_mem_usage(memory_leak_check):
+    """ Test DataFrame.memory_usage() with and w/o index"""
+
+    def impl1(df):
+        return df.memory_usage()
+
+    def impl2(df):
+        return df.memory_usage(index=False)
+
+    df = pd.DataFrame(
+        {"A": [1, 2, 3, 4, 5, 6], "B": [2.1, 3.2, 4.4, 5.2, 10.9, 6.8]},
+        index=pd.date_range(start="2018-04-24", end="2018-04-27", periods=6, name="A"),
+    )
+    py_out = pd.Series([48, 48, 48], index=["Index", "A", "B"])
+    check_func(impl1, (df,), py_output=py_out, is_out_distributed=False)
+    py_out = pd.Series([48, 48], index=["A", "B"])
+    check_func(impl2, (df,), py_output=py_out, is_out_distributed=False)
+    # Empty DataFrame
+    df = pd.DataFrame()
+    # StringIndex only. Bodo has different underlying arrays than Pandas
+    # Test sequential case
+    py_out = pd.Series([8], index=pd.Index(["Index"]))
+    check_func(impl1, (df,), only_seq=True, py_output=py_out, is_out_distributed=False)
+    # Test parallel case. Index is replicated across ranks
+    py_out = pd.Series([8 * bodo.get_size()], index=pd.Index(["Index"]))
+    check_func(impl1, (df,), only_1D=True, py_output=py_out, is_out_distributed=False)
+
+    # Empty and no index.
+    check_func(impl2, (df,), is_out_distributed=False)
+
+
 ############################# old tests ###############################
 
 

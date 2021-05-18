@@ -1965,6 +1965,32 @@ def overload_series_describe(
     return impl
 
 
+@overload_method(SeriesType, "memory_usage", inline="always", no_unliteral=True)
+def overload_series_memory_usage(S, index=True, deep=False):
+    """
+    Support S.memory_usage by getting nbytes from underlying array
+    index argument is supported
+    Pandas deep is related to object datatype which isn't available in Bodo.
+    Hence, deep argument is meaningless inside Bodo.
+    """
+
+    if is_overload_true(index):
+
+        def impl(S, index=True, deep=False):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            return arr.nbytes + index.nbytes
+
+        return impl
+    else:
+
+        def impl(S, index=True, deep=False):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            return arr.nbytes
+
+        return impl
+
+
 def str_fillna_inplace_series_impl(
     S,
     value=None,

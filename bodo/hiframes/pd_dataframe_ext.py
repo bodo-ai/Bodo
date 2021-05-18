@@ -2552,7 +2552,6 @@ dataframe_unsupported = {
     "applymap",
     "nlargest",
     "to_markdown",
-    "memory_usage",
     "rmul",
     "pad",
     "sparse",
