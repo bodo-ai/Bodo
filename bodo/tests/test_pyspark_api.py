@@ -1,11 +1,16 @@
 # Copyright (C) 2021 Bodo Inc. All rights reserved.
 """Tests for scipy.sparse.csr_matrix data structure
 """
+from datetime import date, datetime
 
+import pandas as pd
+import pytest
 from pyspark.sql import SparkSession
 from pyspark.sql.types import Row
 
+import bodo
 from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError
 
 
 def test_session_box():
@@ -94,3 +99,51 @@ def test_row_get_field():
     check_func(impl2, (r,))
     check_func(impl3, (r,))
     check_func(impl4, (r,))
+
+
+def test_create_dataframe():
+    """test spark.createDataFrame() calls"""
+    # pandas input
+    def impl(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        return sdf.toPandas()
+
+    # list of Rows input
+    def impl2():
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(
+            [
+                Row(
+                    a=1,
+                    b=2.0,
+                    c="string1",
+                    d=date(2000, 1, 1),
+                    e=datetime(2000, 1, 1, 12, 0),
+                ),
+                Row(
+                    a=2,
+                    b=3.0,
+                    c="string2",
+                    d=date(2000, 2, 1),
+                    e=datetime(2000, 1, 2, 12, 0),
+                ),
+                Row(
+                    a=4,
+                    b=5.0,
+                    c="string3",
+                    d=date(2000, 3, 1),
+                    e=datetime(2000, 1, 3, 12, 0),
+                ),
+            ]
+        )
+        return sdf.toPandas()
+
+    df = pd.DataFrame({"A": [1, 2, 3], "B": ["A", "B", "C"]})
+    check_func(impl, (df,), only_seq=True)
+    check_func(impl2, (), only_seq=True)
+    with pytest.raises(
+        BodoError,
+        match="createDataFrame\(\): 'data' should be a Pandas dataframe or list of Rows",
+    ):
+        bodo.jit(impl)(3)

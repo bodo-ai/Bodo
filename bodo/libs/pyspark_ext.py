@@ -7,7 +7,7 @@ from collections import namedtuple
 import numba
 import numba.cpython.tupleobj
 import pyspark
-from numba.core import types
+from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
 from numba.core.typing.templates import (
     AbstractTemplate,
@@ -19,6 +19,7 @@ from numba.extending import (
     box,
     intrinsic,
     lower_builtin,
+    make_attribute_wrapper,
     models,
     overload_method,
     register_model,
@@ -26,7 +27,9 @@ from numba.extending import (
     unbox,
 )
 
-from bodo.utils.typing import BodoError
+import bodo
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.utils.typing import BodoError, dtype_to_array_type
 
 # a sentinel value to designate anonymous Row field names
 ANON_SENTINEL = "bodo_field_"
@@ -257,3 +260,109 @@ class RowConstructor(AbstractTemplate):
 lower_builtin(pyspark.sql.types.Row, types.VarArg(types.Any))(
     numba.cpython.tupleobj.namedtuple_constructor
 )
+
+
+class SparkDataFrameType(types.Type):
+    """data type for Spark DataFrame object. It's just a wrapper around a Pandas
+    DataFrame in Bodo.
+    """
+
+    def __init__(self, df):
+        self.df = df
+        super(SparkDataFrameType, self).__init__(f"SparkDataFrame({df})")
+
+    @property
+    def key(self):
+        return self.df
+
+    def copy(self):
+        return SparkDataFrameType(self.df)
+
+
+@register_model(SparkDataFrameType)
+class SparkDataFrameModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [("df", fe_type.df)]
+        super(SparkDataFrameModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(SparkDataFrameType, "df", "_df")
+
+
+@intrinsic
+def init_spark_df(typingctx, df_typ=None):
+    """Create a Spark DataFrame value from a Pandas dataframe value"""
+
+    def codegen(context, builder, sig, args):
+        (df,) = args
+        spark_df = cgutils.create_struct_proxy(sig.return_type)(context, builder)
+        spark_df.df = df
+        context.nrt.incref(builder, sig.args[0], df)
+        return spark_df._getvalue()
+
+    return SparkDataFrameType(df_typ)(df_typ), codegen
+
+
+@overload_method(SparkSessionType, "createDataFrame", no_unliteral=True)
+def overload_create_df(
+    sp_session, data, schema=None, samplingRatio=None, verifySchema=True
+):
+    """create a Spark dataframe from Pandas DataFrame or list of Rows"""
+    # Pandas dataframe input
+    if isinstance(data, DataFrameType):
+
+        def impl_df(
+            sp_session, data, schema=None, samplingRatio=None, verifySchema=True
+        ):
+            return bodo.libs.pyspark_ext.init_spark_df(data)
+
+        return impl_df
+
+    # check for list(RowType)
+    if not (isinstance(data, types.List) and isinstance(data.dtype, RowType)):
+        raise BodoError(
+            f"createDataFrame(): 'data' should be a Pandas dataframe or list of Rows, not {data}"
+        )
+
+    columns = data.dtype.fields
+    n_cols = len(data.dtype.types)
+    func_text = "def impl(sp_session, data, schema=None, samplingRatio=None, verifySchema=True):\n"
+    func_text += f"  n = len(data)\n"
+
+    # allocate data arrays
+    arr_types = []
+    for i, t in enumerate(data.dtype.types):
+        arr_typ = dtype_to_array_type(t)
+        func_text += f"  A{i} = bodo.utils.utils.alloc_type(n, arr_typ{i}, (-1,))\n"
+        arr_types.append(arr_typ)
+
+    # fill data arrays
+    func_text += f"  for i in range(n):\n"
+    func_text += f"    r = data[i]\n"
+    for i in range(n_cols):
+        func_text += f"    A{i}[i] = bodo.utils.conversion.unbox_if_timestamp(r[{i}])\n"
+
+    data_args = "({}{})".format(
+        ", ".join(f"A{i}" for i in range(n_cols)), "," if len(columns) == 1 else ""
+    )
+
+    func_text += (
+        "  index = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)\n"
+    )
+    func_text += f"  pdf = bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, index, {columns})\n"
+    func_text += f"  return bodo.libs.pyspark_ext.init_spark_df(pdf)\n"
+    loc_vars = {}
+    _global = {"bodo": bodo}
+    for i in range(n_cols):
+        _global[f"arr_typ{i}"] = arr_types[i]
+    exec(func_text, _global, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
+@overload_method(SparkDataFrameType, "toPandas", no_unliteral=True)
+def overload_to_pandas(spark_df):
+    def impl(spark_df):  # pragma: no cover
+        return spark_df._df
+
+    return impl
