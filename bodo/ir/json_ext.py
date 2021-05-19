@@ -209,7 +209,7 @@ def _gen_json_reader_py(
     # check_java_installation is a check for hdfs that java is installed
     func_text += "  check_java_installation(fname)\n"
     # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += "  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)\n"
+    func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={parallel})\n"
     func_text += "  f_reader = bodo.ir.json_ext.json_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
     func_text += "    {}, {}, -1, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region) )\n".format(
         lines, parallel, compression

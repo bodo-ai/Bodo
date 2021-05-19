@@ -482,7 +482,7 @@ def find_file_name_or_handler(path, ftype):
     return is_handler, file_name_or_handler, f_size, fs
 
 
-def get_s3_bucket_region(s3_filepath, parallel=True):
+def get_s3_bucket_region(s3_filepath, parallel):
     """
     Get the region of the s3 bucket from a s3 url of type s3://<BUCKET_NAME>/<FILEPATH>.
     PyArrow's region detection only works for actual S3 buckets.
@@ -518,7 +518,7 @@ def get_s3_bucket_region(s3_filepath, parallel=True):
 
 
 @numba.njit()
-def get_s3_bucket_region_njit(s3_filepath, parallel=True):  # pragma: no cover
+def get_s3_bucket_region_njit(s3_filepath, parallel):  # pragma: no cover
     """
     njit wrapper around get_s3_bucket_region
     parallel: True when called on all processes (usually runtime),
@@ -541,7 +541,7 @@ def csv_write(path_or_buf, D, is_parallel=False):  # pragma: no cover
 def csv_write_overload(path_or_buf, D, is_parallel=False):
     def impl(path_or_buf, D, is_parallel=False):  # pragma: no cover
         # Assuming that path_or_buf is a string
-        bucket_region = get_s3_bucket_region_njit(path_or_buf)
+        bucket_region = get_s3_bucket_region_njit(path_or_buf, parallel=is_parallel)
         # TODO: support non-ASCII file names?
         utf8_str, utf8_len = unicode_to_utf8_and_len(D)
         offset = 0
