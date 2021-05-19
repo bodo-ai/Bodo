@@ -69,3 +69,28 @@ def test_row_constructor():
 
     check_func(impl, ())
     check_func(impl2, ())
+
+
+def test_row_get_field():
+    """test Row constructor calls"""
+    # getattr
+    def impl1(r):
+        return r.A
+
+    # getitem with name
+    def impl2(r):
+        return r["A"]
+
+    # getitem with int
+    def impl3(r):
+        return r[0]
+
+    # getitem with slice
+    def impl4(r):
+        return r[:2]
+
+    r = Row(A=3, B="AB", C=1.3)
+    check_func(impl1, (r,))
+    check_func(impl2, (r,))
+    check_func(impl3, (r,))
+    check_func(impl4, (r,))
