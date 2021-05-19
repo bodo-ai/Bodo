@@ -2,6 +2,7 @@
 """
 Support for PySpark APIs in Bodo JIT functions
 """
+import numba
 import pyspark
 from numba.core import types
 from numba.core.imputils import lower_constant
@@ -119,3 +120,73 @@ def lower_constant_spark_session(context, builder, ty, pyval):
     in computation.
     """
     return context.get_constant_null(spark_session_type)
+
+
+# NOTE: subclassing BaseNamedTuple to reuse some of Numba's namedtuple infrastructure
+# TODO(ehsan): make sure it fully conforms to Row semantics which is a subclass of tuple
+class RowType(types.BaseNamedTuple):
+    """data type for Spark Row object."""
+
+    def __init__(self, types, fields):
+
+        self.types = tuple(types)
+        self.count = len(self.types)
+        self.fields = tuple(fields)
+        name = "Row({})".format(
+            ", ".join(f"{f}:{t}" for f, t in zip(self.fields, self.types))
+        )
+        super(RowType, self).__init__(name)
+
+    @property
+    def key(self):
+        return self.fields, self.types
+
+    def __getitem__(self, i):
+        return self.types[i]
+
+    def __len__(self):
+        return len(self.types)
+
+    def __iter__(self):
+        return iter(self.types)
+
+
+@register_model(RowType)
+class RowModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [(f, t) for f, t in zip(fe_type.fields, fe_type.types)]
+        super(RowModel, self).__init__(dmm, fe_type, members)
+
+
+@typeof_impl.register(pyspark.sql.types.Row)
+def typeof_row(val, c):
+    return RowType(tuple(numba.typeof(v) for v in val), val.__fields__)
+
+
+@box(RowType)
+def box_row(typ, val, c):
+    """
+    Convert native value to Row object by calling Row constructor with kws
+    """
+    # e.g. call Row(a=3, b="A")
+    row_class_obj = c.pyapi.unserialize(c.pyapi.serialize_object(pyspark.sql.types.Row))
+
+    args = c.pyapi.tuple_pack([])
+
+    objects = []
+    kws_list = []
+    for i, t in enumerate(typ.types):
+        item = c.builder.extract_value(val, i)
+        obj = c.box(t, item)
+        kws_list.append((typ.fields[i], obj))
+        objects.append(obj)
+
+    kws = c.pyapi.dict_pack(kws_list)
+    res = c.pyapi.call(row_class_obj, args, kws)
+
+    for obj in objects:
+        c.pyapi.decref(obj)
+    c.pyapi.decref(row_class_obj)
+    c.pyapi.decref(args)
+    c.pyapi.decref(kws)
+    return res
