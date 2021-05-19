@@ -3,19 +3,31 @@
 Support for PySpark APIs in Bodo JIT functions
 """
 import numba
+import numba.cpython.tupleobj
 import pyspark
 from numba.core import types
 from numba.core.imputils import lower_constant
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    infer_global,
+    signature,
+)
 from numba.extending import (
     NativeValue,
     box,
     intrinsic,
+    lower_builtin,
     models,
     overload_method,
     register_model,
     typeof_impl,
     unbox,
 )
+
+from bodo.utils.typing import BodoError
+
+# a sentinel value to designate anonymous Row field names
+ANON_SENTINEL = "__bodo_f"
 
 
 class SparkSessionType(types.Opaque):
@@ -160,7 +172,13 @@ class RowModel(models.StructModel):
 
 @typeof_impl.register(pyspark.sql.types.Row)
 def typeof_row(val, c):
-    return RowType(tuple(numba.typeof(v) for v in val), val.__fields__)
+    """get Numba type for Row objects, could have field names or not"""
+    fields = (
+        val.__fields__
+        if hasattr(val, "__fields__")
+        else tuple(f"{ANON_SENTINEL}{i}" for i in range(len(val)))
+    )
+    return RowType(tuple(numba.typeof(v) for v in val), fields)
 
 
 @box(RowType)
@@ -170,6 +188,18 @@ def box_row(typ, val, c):
     """
     # e.g. call Row(a=3, b="A")
     row_class_obj = c.pyapi.unserialize(c.pyapi.serialize_object(pyspark.sql.types.Row))
+
+    # call Row constructor with positional values for anonymous field name cases
+    # e.g. Row(3, "A")
+    if all(f.startswith(ANON_SENTINEL) for f in typ.fields):
+        objects = [
+            c.box(t, c.builder.extract_value(val, i)) for i, t in enumerate(typ.types)
+        ]
+        res = c.pyapi.call_function_objargs(row_class_obj, objects)
+        for obj in objects:
+            c.pyapi.decref(obj)
+        c.pyapi.decref(row_class_obj)
+        return res
 
     args = c.pyapi.tuple_pack([])
 
@@ -190,3 +220,36 @@ def box_row(typ, val, c):
     c.pyapi.decref(args)
     c.pyapi.decref(kws)
     return res
+
+
+@infer_global(pyspark.sql.types.Row)
+class RowConstructor(AbstractTemplate):
+    def generic(self, args, kws):
+        if args and kws:
+            raise BodoError("Can not use both args " "and kwargs to create Row")
+
+        arg_names = ", ".join(f"arg{i}" for i in range(len(args)))
+        kw_names = ", ".join(f"{a} = ''" for a in kws)
+        func_text = f"def row_stub({arg_names}{kw_names}):\n"
+        func_text += "    pass\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        row_stub = loc_vars["row_stub"]
+        pysig = numba.core.utils.pysignature(row_stub)
+
+        # using positional args creates an anonymous field names
+        if args:
+            out_row = RowType(
+                args, tuple(f"{ANON_SENTINEL}{i}" for i in range(len(args)))
+            )
+            return signature(out_row, *args).replace(pysig=pysig)
+
+        kws = dict(kws)
+        out_row = RowType(tuple(kws.values()), tuple(kws.keys()))
+        return signature(out_row, *kws.values()).replace(pysig=pysig)
+
+
+# constructor lowering is identical to namedtuple
+lower_builtin(pyspark.sql.types.Row, types.VarArg(types.Any))(
+    numba.cpython.tupleobj.namedtuple_constructor
+)
