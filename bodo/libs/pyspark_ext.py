@@ -2,6 +2,8 @@
 """
 Support for PySpark APIs in Bodo JIT functions
 """
+from collections import namedtuple
+
 import numba
 import numba.cpython.tupleobj
 import pyspark
@@ -27,7 +29,7 @@ from numba.extending import (
 from bodo.utils.typing import BodoError
 
 # a sentinel value to designate anonymous Row field names
-ANON_SENTINEL = "__bodo_f"
+ANON_SENTINEL = "bodo_field_"
 
 
 class SparkSessionType(types.Opaque):
@@ -144,6 +146,8 @@ class RowType(types.BaseNamedTuple):
         self.types = tuple(types)
         self.count = len(self.types)
         self.fields = tuple(fields)
+        # set instance_class to reuse Numba's namedtuple support
+        self.instance_class = namedtuple("Row", fields)
         name = "Row({})".format(
             ", ".join(f"{f}:{t}" for f, t in zip(self.fields, self.types))
         )
