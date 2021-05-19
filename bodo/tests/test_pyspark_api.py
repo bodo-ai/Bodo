@@ -3,6 +3,7 @@
 """
 
 from pyspark.sql import SparkSession
+from pyspark.sql.types import Row
 
 from bodo.tests.utils import check_func
 
@@ -39,3 +40,18 @@ def test_session_const_lowering():
         return spark
 
     check_func(impl, ())
+
+
+def test_row_box():
+    """test boxing/unboxing for Row object"""
+    # just unbox
+    def impl(arg):
+        return True
+
+    # unbox and box
+    def impl2(arg):
+        return arg
+
+    r = Row(A=3, B="AB")
+    check_func(impl, (r,))
+    check_func(impl2, (r,))
