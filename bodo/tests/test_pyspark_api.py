@@ -55,3 +55,17 @@ def test_row_box():
     r = Row(A=3, B="AB")
     check_func(impl, (r,))
     check_func(impl2, (r,))
+
+
+def test_row_constructor():
+    """test Row constructor calls"""
+    # kws
+    def impl():
+        return Row(A=3, B="ABC")
+
+    # anonymous field names
+    def impl2():
+        return Row(3, "ABC")
+
+    check_func(impl, ())
+    check_func(impl2, ())
