@@ -1,5 +1,3 @@
-from collections import namedtuple
-
 import llvmlite.binding as ll
 import numba
 from numba.core import types
@@ -23,8 +21,6 @@ ll.add_symbol("get_stats_mi_alloc_pq", parquet_cpp.get_stats_mi_alloc)
 ll.add_symbol("get_stats_mi_free_pq", parquet_cpp.get_stats_mi_free)
 ll.add_symbol("get_stats_mi_alloc_qa", quantile_alg.get_stats_mi_alloc)
 ll.add_symbol("get_stats_mi_free_qa", quantile_alg.get_stats_mi_free)
-
-Mstats = namedtuple("Mstats", ["alloc", "free", "mi_alloc", "mi_free"])
 
 
 get_stats_alloc_arr = types.ExternalFunction(
@@ -120,17 +116,17 @@ def get_allocation_stats():  # pragma: no cover
     ]
     allocs, frees, mi_allocs, mi_frees = 0, 0, 0, 0
     for stat in stats:
-        allocs += stat.alloc
-        frees += stat.free
-        mi_allocs += stat.mi_alloc
-        mi_frees += stat.mi_free
-    return Mstats(allocs, frees, mi_allocs, mi_frees)
+        allocs += stat[0]
+        frees += stat[1]
+        mi_allocs += stat[2]
+        mi_frees += stat[3]
+    return (allocs, frees, mi_allocs, mi_frees)
 
 
 @numba.njit
 def get_allocation_stats_arr():  # pragma: no cover
     """get allocation stats for arrays allocated in Bodo's C++ array runtime"""
-    return Mstats(
+    return (
         get_stats_alloc_arr(),
         get_stats_free_arr(),
         get_stats_mi_alloc_arr(),
@@ -141,7 +137,7 @@ def get_allocation_stats_arr():  # pragma: no cover
 @numba.njit
 def get_allocation_stats_dec():  # pragma: no cover
     """get allocation stats for arrays allocated in Bodo's C++ decimal runtime"""
-    return Mstats(
+    return (
         get_stats_alloc_dec(),
         get_stats_free_dec(),
         get_stats_mi_alloc_dec(),
@@ -152,7 +148,7 @@ def get_allocation_stats_dec():  # pragma: no cover
 @numba.njit
 def get_allocation_stats_pq():  # pragma: no cover
     """get allocation stats for arrays allocated in Bodo's C++ parquet runtime"""
-    return Mstats(
+    return (
         get_stats_alloc_pq(),
         get_stats_free_pq(),
         get_stats_mi_alloc_pq(),
@@ -163,7 +159,7 @@ def get_allocation_stats_pq():  # pragma: no cover
 @numba.njit
 def get_allocation_stats_qa():  # pragma: no cover
     """get allocation stats for arrays allocated in Bodo's C++ qa runtime"""
-    return Mstats(
+    return (
         get_stats_alloc_qa(),
         get_stats_free_qa(),
         get_stats_mi_alloc_qa(),
