@@ -447,7 +447,7 @@ def _gen_pq_reader_py(
     comma = "," if extra_args else ""
     func_text = f"def pq_reader_py(fname,{extra_args}):\n"
     # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += "  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)\n"
+    func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={is_parallel})\n"
     func_text += (
         f'  filters = get_filters_pyobject("{filter_str}", ({extra_args}{comma}))\n'
     )

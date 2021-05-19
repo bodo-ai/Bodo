@@ -1963,7 +1963,7 @@ def to_parquet_overload(
     func_text += "    else:\n"
     func_text += "        name_ptr = 'null'\n"
     # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += "    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname)\n"
+    func_text += f"    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel=_is_parallel)\n"
     if partition_cols:
         # We need the values of the categories for any partition columns that
         # are categorical arrays, because they are used to generate the
@@ -2379,7 +2379,9 @@ def to_json_overload(
             )
 
         # Assuming that path_or_buf is a string
-        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(path_or_buf)
+        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(
+            path_or_buf, parallel=False
+        )
 
         if lines and orient == "records":
             bodo.hiframes.pd_dataframe_ext._json_write(
