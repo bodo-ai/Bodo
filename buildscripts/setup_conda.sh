@@ -63,7 +63,7 @@ then
    $CONDA_INSTALL mpi4py -c conda-forge
    $CONDA_INSTALL scikit-learn gcsfs -c conda-forge
    $CONDA_INSTALL matplotlib -c conda-forge
-   $CONDA_INSTALL pyspark -c conda-forge
+   $CONDA_INSTALL pyspark openjdk -c conda-forge
    $CONDA_INSTALL hdf5=*=*mpich* -c conda-forge
    $CONDA_INSTALL xlrd xlsxwriter openpyxl -c conda-forge
    if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
