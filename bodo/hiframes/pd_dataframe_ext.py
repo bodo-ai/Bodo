@@ -2627,7 +2627,6 @@ dataframe_unsupported = {
     "to_timestamp",
     "interpolate",
     "eq",
-    "info",
     "bool",
     "skew",
     "rdiv",

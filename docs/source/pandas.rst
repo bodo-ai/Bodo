@@ -560,6 +560,7 @@ Conversion:
 * :meth:`pandas.DataFrame.isnull`
 * :meth:`pandas.DataFrame.notna`
 * :meth:`pandas.DataFrame.notnull`
+* :meth:`pandas.DataFrame.info`
 
 Indexing, iteration:
 

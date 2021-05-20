@@ -3328,6 +3328,154 @@ def overload_dataframe_sample(
     )
 
 
+@numba.njit
+def _sizeof_fmt(num, size_qualifier=""):  # pragma: no cover
+    """
+    Return size in human readable format.
+    Copied from Pandas https://github.com/pandas-dev/pandas/blob/master/pandas/io/formats/info.py#L59
+    """
+    for x in ["bytes", "KB", "MB", "GB", "TB"]:
+        if num < 1024.0:
+            return f"{num:3.1f}{size_qualifier} {x}"
+        num /= 1024.0
+    return f"{num:3.1f}{size_qualifier} PB"
+
+
+@overload_method(DataFrameType, "info", no_unliteral=True)
+def overload_dataframe_info(
+    df,
+    verbose=None,
+    buf=None,
+    max_cols=None,
+    memory_usage=None,
+    show_counts=None,
+    null_counts=None,
+):
+    args_dict = {
+        "verbose": verbose,
+        "buf": buf,
+        "max_cols": max_cols,
+        "memory_usage": memory_usage,
+        "show_counts": show_counts,
+        "null_counts": null_counts,
+    }
+    args_default_dict = {
+        "verbose": None,
+        "buf": None,
+        "max_cols": None,
+        "memory_usage": None,
+        "show_counts": None,
+        "null_counts": None,
+    }
+    check_unsupported_args("DataFrame.info", args_dict, args_default_dict)
+    class_name = f"<class '{str(type(df)).split('.')[-1]}"
+    # Empty dataframe
+    if len(df.columns) == 0:
+
+        def _info_impl(
+            df,
+            verbose=None,
+            buf=None,
+            max_cols=None,
+            memory_usage=None,
+            show_counts=None,
+            null_counts=None,
+        ):  # pragma: no cover\n"
+            lines = class_name + "\n"
+            lines += "Index: 0 entries\n"
+            lines += "Empty DataFrame"
+            print(lines)
+
+        return _info_impl
+    else:
+        func_text = "def _info_impl(df, verbose=None, buf=None, max_cols=None, memory_usage=None, show_counts=None, null_counts=None): #pragma: no cover\n"
+        func_text += "    ncols = df.shape[1]\n"
+        func_text += f'    lines = "{class_name}\\n"\n'
+        func_text += f'    lines += "{df.index}: "\n'
+        func_text += (
+            "    index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
+        )
+        # total_number entries, start to end
+        if isinstance(df.index, bodo.hiframes.pd_index_ext.RangeIndexType):
+            func_text += '    lines += f"{len(index)} entries, {index.start} to {index.stop-1}\\n"\n'
+        # TODO: Remove when [BE-653] is fixed
+        elif isinstance(df.index, bodo.hiframes.pd_index_ext.StringIndexType):
+            func_text += '    lines += f"{len(index)} entries, {index[0]} to {index[len(index)-1]}\\n"\n'
+        else:
+            func_text += (
+                '    lines += f"{len(index)} entries, {index[0]} to {index[-1]}\\n"\n'
+            )
+        func_text += '    lines += f"Data columns (total {ncols} columns):\\n"\n'
+        # Formatting re-used from Dask (https://docs.dask.org/en/latest/_modules/dask/dataframe/core.html#DataFrame.info)
+        # Store max. length of column name (needed for formatting table in print)
+        func_text += f"    space = {max(len(str(k)) for k in df.columns) + 1}\n"
+        func_text += "    column_width = max(space, 7)\n"
+        # Table Header
+        func_text += '    column= "Column"\n'
+        func_text += '    underl= "------"\n'
+        func_text += (
+            '    lines += f"#   {column:<{column_width}} Non-Null Count  Dtype\\n"\n'
+        )
+        func_text += (
+            '    lines += f"--- {underl:<{column_width}} --------------  -----\\n"\n'
+        )
+        # Compute memory usage (sum nbytes for columns and index)
+        func_text += "    mem_size = 0\n"
+        # Arrays to store column information (name, non-null count, and dtype)
+        func_text += (
+            "    col_name = bodo.libs.str_arr_ext.pre_alloc_string_array(ncols, -1)\n"
+        )
+        func_text += "    non_null_count = bodo.libs.str_arr_ext.pre_alloc_string_array(ncols, -1)\n"
+        func_text += (
+            "    col_dtype = bodo.libs.str_arr_ext.pre_alloc_string_array(ncols, -1)\n"
+        )
+        # Dictionary to store how many column types in the df
+        dtype_count = dict()
+        # Loop over each column and get its nbytes, name, how many non-null, and dtype
+        for i in range(len(df.columns)):
+            func_text += f"    non_null_count[{i}] = str(bodo.libs.array_ops.array_op_count(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})))\n"
+            # Get type of column and rename Categorical and nullable int to match Pandas
+            dtype_name = f"{df.data[i].dtype}"
+            if isinstance(df.data[i], bodo.CategoricalArrayType):
+                dtype_name = "category"
+            elif isinstance(df.data[i], bodo.IntegerArrayType):
+                int_typ_name = bodo.libs.int_arr_ext.IntDtype(df.data[i].dtype).name
+                dtype_name = f"{int_typ_name[:-7]}"  # remove trailing "Dtype()"
+            func_text += f'    col_dtype[{i}] = "{dtype_name}"\n'
+
+            if dtype_name in dtype_count:
+                dtype_count[dtype_name] += 1
+            else:
+                dtype_count[dtype_name] = 1
+            func_text += f'    col_name[{i}] = "{df.columns[i]}"\n'
+            func_text += f"    mem_size += bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}).nbytes\n"
+        # Generate column information per line
+        func_text += "    column_info = [f'{i:^3} {name:<{column_width}} {count} non-null      {dtype}' for i, (name, count, dtype) in enumerate(zip(col_name, non_null_count, col_dtype))]\n"
+        func_text += "    for i in column_info:\n"
+        func_text += "        lines += f'{i}\\n'\n"
+
+        # TODO: [BE-652]
+        # Pandas: df.dtypes.value_counts().groupby(lambda x: x.name).sum()
+        # Workaround: build dictionary of dtypes at compile time
+        dtype_line = ", ".join(f"{k}({dtype_count[k]})" for k in sorted(dtype_count))
+        func_text += f"    lines += 'dtypes: {dtype_line}\\n'\n"
+        # Add index nbytes to memory usage
+        func_text += "    mem_size += df.index.nbytes\n"
+        # Format memory size to be in human readable format
+        func_text += "    total_size = _sizeof_fmt(mem_size)\n"
+        func_text += "    lines += f'memory usage: {total_size}'\n"
+        func_text += "    print(lines)\n"
+        loc_vars = {}
+        exec(
+            func_text,
+            {"_sizeof_fmt": _sizeof_fmt, "pd": pd, "bodo": bodo, "np": np},
+            loc_vars,
+        )
+        _info_impl = loc_vars["_info_impl"]
+
+        return _info_impl
+
+
 @overload_method(DataFrameType, "memory_usage", inline="always", no_unliteral=True)
 def overload_dataframe_memory_usage(df, index=True, deep=False):
     """Support df.memory_usage by getting nbytes from underlying arrays for each column
