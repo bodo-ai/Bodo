@@ -4841,6 +4841,74 @@ def test_unsupported_df_method():
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize(
+    "df",
+    [
+        # Simple test (RangeIndex)
+        pd.DataFrame({"A": [1, 2, 3], "B": [1.1, 2.2, np.nan]}),
+        # string index
+        pd.DataFrame(
+            {"A": [1, 2, 3], "B": [1.1, 2.2, np.nan]}, index=["x1", "x2", "x3"]
+        ),
+        # NumericIndex
+        pd.DataFrame(
+            {"A": [1, 2, 3], "B": [1.1, 2.2, np.nan], "C": [1, 2, 3]},
+            index=[1.2, 3.4, 5.6],
+        ),
+        # datetime
+        pd.DataFrame(
+            {"A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5)}
+        ),
+        # timedelta
+        pd.DataFrame({"D": pd.Series(pd.timedelta_range(start="1 day", periods=4))}),
+        # string
+        pd.DataFrame({"A": [1, 2, 3], "B": ["xx", "yy", np.nan]}),
+        # nullable int
+        pd.DataFrame({"A": pd.Series([1, 2] * 20, dtype="Int32"), "B": [2, 3] * 20}),
+        # categorical and boolean
+        pd.DataFrame(
+            {
+                "BCDEF": [1, 2, 3, 4, 5],
+                "LongNameTest": pd.Categorical([1, 2, 5, 3, 3], ordered=True),
+                "D": [1.1, 2.2, 3.3, 4.4, np.nan],
+                "E": [True, False, True, False, False],
+            }
+        ),
+        # empty dataframe
+        pd.DataFrame(),
+    ],
+)
+def test_df_info(df):
+    def impl(df):
+        df.info()
+
+    # Redirect print to a variable
+    import io
+
+    old_stdout = sys.stdout
+    new_stdout = io.StringIO()
+    sys.stdout = new_stdout
+
+    bodo.jit(impl)(df)
+    bodo_output = new_stdout.getvalue()
+    bodo_output = bodo_output.splitlines()
+
+    impl(df)
+    py_output = new_stdout.getvalue()
+    py_output = py_output.splitlines()
+
+    # Return to normal std out
+    sys.stdout = old_stdout
+    if bodo.get_rank() == 0:
+        # Assert first column information is the same
+        # Or empty dataframe
+        if len(df.columns) == 0:
+            assert bodo_output[2] == py_output[2]
+        else:
+            assert bodo_output[5] == py_output[5]
+
+
+@pytest.mark.slow
 def test_df_mem_usage(memory_leak_check):
     """ Test DataFrame.memory_usage() with and w/o index"""
 
