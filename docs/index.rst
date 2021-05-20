@@ -21,6 +21,7 @@ Bodo
    source/numpy
    source/ml
    source/dl
+   source/data_visualization
    source/caching
    source/not_supported
    source/advanced
