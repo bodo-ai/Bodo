@@ -1,0 +1,57 @@
+.. _May_2021:
+
+Bodo 2021.5 Release (Date: 5/19/2021)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This release includes many new features, optimizations, bug fixes and usability improvements.
+Overall, 70 code patches were merged since the last release.
+
+New Features and Improvements
+-----------------------------
+
+- Bodo is updated to use Arrow 4.0 (latest)
+
+- Connectors:
+
+    - Improved performance of ``pd.read_parquet`` significantly for large multi-file datasets
+      by optimizing Parquet metadata collection
+    - Bodo nows reads only the first few rows from a Parquet dataset if the program only requires
+      ``df.head(n)`` and/or ``df.shape``. This helps with exploring large datasets without
+      the need for a large cluster to load the full data in memory.
+
+- Visualization: Bodo now supports calling many Matplotlib plotting functions directly from JIT code.
+  See the "Data Visualization" section of our documentation for more details.
+  The current support gathers the data into one process but this will be avoided in future releases.
+
+- Improved compilation time for dataframe functions
+
+- Improved the performance and scalability of ``groupby.nunique``
+
+- Many improvements to error checking and reporting
+
+- Bodo now avoids printing empty slices of distributed data
+  to make print output easier to read.
+
+- Pandas coverage:
+
+    - Support for ``DataFrame.info()`` 
+    - Support for ``memory_usage()`` for DataFrame and Series
+    - Support for ``nbytes`` for array and Index types
+    - Support for ``df.describe()`` with datetime data (assumes `datetime_is_numeric=True`)
+    - Support for ``groupby.value_counts()``
+    - Support for ``pd.NamedAgg`` with ``nunique`` in groupby
+    - Initial support for CategoricalIndex type and categorical keys in groupby
+    - Support for groupby ``idxmin`` and ``idxmax`` with nullable Integer and Boolean arrays
+    - Support for timedelta64 in ``Groupby.agg``
+    - Support for ``bins`` and other optional arguments in ``Series.value_counts()``
+    - Support for ``df.dtypes``
+    - Support passing ``df.dtypes`` to ``df.astype()``, for example: ``df1.astype(df2.dtypes)``
+    - Support for boolean ``pd.Index``
+    - Support for ``Series.sort_index()``
+    - Support for ``Timestamp.day_name()`` and ``Series.dt.day_name()``
+    - Support for ``Series.quantile()`` with datetime
+    - Support for passing list of quantile values to ``Series.quantile()``
+    - Support for ``Series.to_frame()``
+    - Support for ``sum()`` method of Boolean Arrays
+    - Initial support for ``MultiIndex.from_product``
+    - String array comparison returns a Pandas nullable boolean array instead of a Numpy boolean array
