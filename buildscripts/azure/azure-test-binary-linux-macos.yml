@@ -156,7 +156,7 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y pyspark -c conda-forge
+      conda install -y pyspark openjdk -c conda-forge
     displayName: 'PySpark'
 
   - script: |

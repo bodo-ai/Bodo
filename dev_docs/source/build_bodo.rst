@@ -41,7 +41,7 @@ such as Numba on Ubuntu Linux::
     # The following is required for matplotlib Testing
     # conda install -c conda-forge matplotlib
     # for PySpark testing:
-    # conda install -c conda-forge pyspark
+    # conda install -c conda-forge pyspark openjdk
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo

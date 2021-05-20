@@ -16,6 +16,6 @@ conda install -y -c conda-forge boto3 botocore fsspec=0.8 s3fs
 conda install -y -c conda-forge pymysql sqlalchemy
 conda install -y -c conda-forge scikit-learn gcsfs
 conda install -y -c conda-forge matplotlib
-conda install -y -c conda-forge pyspark
+conda install -y -c conda-forge pyspark openjdk
 conda install -y flake8
 pip install pytest pytest-cov deltalake
