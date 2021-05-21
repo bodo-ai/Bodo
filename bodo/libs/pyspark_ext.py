@@ -233,7 +233,7 @@ def box_row(typ, val, c):
 class RowConstructor(AbstractTemplate):
     def generic(self, args, kws):
         if args and kws:
-            raise BodoError("Can not use both args " "and kwargs to create Row")
+            raise BodoError("pyspark.sql.types.Row: Cannot use both args and kwargs to create Row")
 
         arg_names = ", ".join(f"arg{i}" for i in range(len(args)))
         kw_names = ", ".join(f"{a} = ''" for a in kws)
@@ -321,7 +321,7 @@ def overload_create_df(
     # check for list(RowType)
     if not (isinstance(data, types.List) and isinstance(data.dtype, RowType)):
         raise BodoError(
-            f"createDataFrame(): 'data' should be a Pandas dataframe or list of Rows, not {data}"
+            f"SparkSession.createDataFrame(): 'data' should be a Pandas dataframe or list of Rows, not {data}"
         )
 
     columns = data.dtype.fields
@@ -354,6 +354,7 @@ def overload_create_df(
     loc_vars = {}
     _global = {"bodo": bodo}
     for i in range(n_cols):
+        # NOTE: may not work for categorical arrays
         _global[f"arr_typ{i}"] = arr_types[i]
     exec(func_text, _global, loc_vars)
     impl = loc_vars["impl"]

@@ -192,7 +192,7 @@ class UntypedPass:
                 return self._run_getattr(assign, rhs)
 
             if rhs.op == "make_function":
-                # HACK make globals availabe for typing in series.map()
+                # HACK make globals available for typing in series.map()
                 rhs.globals = self.func_ir.func_id.func.__globals__
 
         # handle copies lhs = f
