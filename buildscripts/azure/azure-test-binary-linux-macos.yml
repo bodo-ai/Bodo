@@ -152,6 +152,13 @@ jobs:
       conda install -y matplotlib -c conda-forge
     displayName: 'Matplotlib'
 
+ - script: |
+      set -eo pipefail
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
+      conda install -y pyspark openjdk -c conda-forge
+    displayName: 'PySpark'
+
   - script: |
       set -eo pipefail
       sudo chmod a+r $(testLicense.secureFilePath)

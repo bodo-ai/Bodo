@@ -1126,6 +1126,12 @@ def overload_unbox_if_timestamp(val):
             val.value
         )  # pragma: no cover
 
+    # unbox datetime.datetime to dt64
+    if val == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
+        return lambda val: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+            pd.Timestamp(val).value
+        )  # pragma: no cover
+
     # unbox Timedelta to timedelta64
     if val == bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type:
         return lambda val: bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(

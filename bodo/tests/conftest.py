@@ -60,14 +60,10 @@ def memory_leak_check():
     new_bodo = bodo.utils.allocation_tracking.get_allocation_stats()
     old_stats = [old, old_bodo]
     new_stats = [new, new_bodo]
-    total_alloc = sum([m.alloc for m in new_stats]) - sum([m.alloc for m in old_stats])
-    total_free = sum([m.free for m in new_stats]) - sum([m.free for m in old_stats])
-    total_mi_alloc = sum([m.mi_alloc for m in new_stats]) - sum(
-        [m.mi_alloc for m in old_stats]
-    )
-    total_mi_free = sum([m.mi_free for m in new_stats]) - sum(
-        [m.mi_free for m in old_stats]
-    )
+    total_alloc = sum([m[0] for m in new_stats]) - sum([m[0] for m in old_stats])
+    total_free = sum([m[1] for m in new_stats]) - sum([m[1] for m in old_stats])
+    total_mi_alloc = sum([m[2] for m in new_stats]) - sum([m[2] for m in old_stats])
+    total_mi_free = sum([m[3] for m in new_stats]) - sum([m[3] for m in old_stats])
     assert total_alloc == total_free
     assert total_mi_alloc == total_mi_free
 

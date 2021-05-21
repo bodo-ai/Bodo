@@ -68,6 +68,19 @@ try:
 except ImportError:
     pass
 
+
+# Flag to determine if pyspark is installed (used in untyped pass)
+_pyspark_installed = False
+try:
+    import pyspark  # noqa
+
+    import bodo.libs.pyspark_ext  # noqa
+
+    _pyspark_installed = True
+except ImportError:
+    pass
+
+
 import bodo.hiframes.dataframe_indexing  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_datetime_ext  # noqa # side effect: initialize Numba extensions
 import bodo.hiframes.datetime_timedelta_ext  # noqa # side effect: initialize Numba extensions
