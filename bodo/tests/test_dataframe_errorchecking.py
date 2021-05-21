@@ -667,7 +667,7 @@ def test_describe_args(memory_leak_check):
         return df.describe(exclude=[np.number])
 
     def impl_datetime_is_numeric(df):
-        return df.describe(datetime_is_numeric=True)
+        return df.describe(datetime_is_numeric=False)
 
     df = pd.DataFrame(
         {
@@ -702,8 +702,6 @@ def test_describe_args(memory_leak_check):
                         Decimal("0"),
                     ]
                 ),
-                # datetime
-                "B": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
                 # timedelta
                 "C": pd.Series(pd.timedelta_range(start="1 day", periods=5)),
                 # list
@@ -712,14 +710,6 @@ def test_describe_args(memory_leak_check):
                 "E": pd.Series([(1, 2), (3,), (5, 4, 6), (-1, 3, 4), (2,)]),
                 # Categorical
                 "F": pd.Categorical([1, 2, 5, 5, 3], ordered=True),
-                # Timestamp
-                "G": [
-                    pd.Timestamp("20130101 09:00:00"),
-                    pd.Timestamp("20130101 09:00:02"),
-                    pd.Timestamp("20130101 09:00:03"),
-                    pd.Timestamp("20130101 09:00:05"),
-                    pd.Timestamp("20130101 09:00:06"),
-                ],
                 # boolean Array
                 "H": [True, True, False, True, True],
                 # string
