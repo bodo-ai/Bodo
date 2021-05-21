@@ -29,7 +29,7 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.utils.typing import BodoError, dtype_to_array_type
+from bodo.utils.typing import BodoError, dtype_to_array_type, is_overload_true
 
 # a sentinel value to designate anonymous Row field names
 ANON_SENTINEL = "bodo_field_"
@@ -369,8 +369,15 @@ def overload_create_df(
 
 
 @overload_method(SparkDataFrameType, "toPandas", inline="always", no_unliteral=True)
-def overload_to_pandas(spark_df):
-    def impl(spark_df):  # pragma: no cover
+def overload_to_pandas(spark_df, _is_bodo_dist=False):
+    """toPandas() gathers input data by default to follow Spark semantics but the
+    user can specify distributed data
+    """
+    # no gather if dist flag is set in untyped pass
+    if is_overload_true(_is_bodo_dist):
+        return lambda spark_df, _is_bodo_dist=False: spark_df._df  # pragma: no cover
+
+    def impl(spark_df, _is_bodo_dist=False):  # pragma: no cover
         # gathering data to follow toPandas() semantics
         return bodo.gatherv(spark_df._df)
 

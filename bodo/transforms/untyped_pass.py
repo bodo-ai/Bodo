@@ -746,6 +746,18 @@ class UntypedPass:
         if fdef == ("BodoSQLContext", "bodosql"):  # pragma: no cover
             return self._handle_bodosql_BodoSQLContext(assign, lhs, rhs, label)
 
+        # add distributed flag input to SparkDataFrame.toPandas() if specified by user
+        if (
+            bodo.compiler._pyspark_installed
+            and func_name == "toPandas"
+            and isinstance(func_mod, ir.Var)
+            and lhs.name in self.metadata["distributed"]
+        ):
+            # avoid raising warning since flag is valid
+            self._return_varnames.add(lhs.name)
+            true_var = ir.Var(lhs.scope, mk_unique_var("true"), lhs.loc)
+            rhs.args.append(true_var)
+            return [ir.Assign(ir.Const(True, lhs.loc), true_var, lhs.loc), assign]
         return [assign]
 
     def _handle_np_where(self, assign, lhs, rhs):

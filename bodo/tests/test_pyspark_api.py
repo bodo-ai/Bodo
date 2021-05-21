@@ -3,13 +3,14 @@
 """
 from datetime import date, datetime
 
+import numpy as np
 import pandas as pd
 import pytest
 from pyspark.sql import SparkSession
 from pyspark.sql.types import Row
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.typing import BodoError
 
 
@@ -147,3 +148,19 @@ def test_create_dataframe():
         match="createDataFrame\(\): 'data' should be a Pandas dataframe or list of Rows",
     ):
         bodo.jit(impl)(3)
+
+
+def test_dataframe_distribution():
+    """make sure output of toPandas() is distributed if dist flag is et"""
+
+    @bodo.jit(distributed={"df", "df2"})
+    def f(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.toPandas()
+        return df2.A.sum()
+
+    # NOTE: not using check_func because of extra distributed flag, TODO: support
+    df = pd.DataFrame({"A": np.arange(11)})
+    df = _get_dist_arg(df)
+    assert f(df) == 55
