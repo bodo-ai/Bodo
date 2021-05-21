@@ -48,11 +48,11 @@ Currently, Bodo automatically supports the following plotting APIs.
 These, APIs have the following restrictions:
 
   * The data being plotted must be Numpy arrays and not Pandas data structures.
-  * Use of lists are not currently supported. If you need to plot multiple arrays
+  * Use of lists is not currently supported. If you need to plot multiple arrays
     use a tuple or a 2D Numpy array.
 
 **Warning**: These APIs gather the entire data onto a single process. If you have a large dataset that does not fit into a single machine's memory,
-consider sampling your data before plotting if you have a larger dataset.
+consider sampling your data before plotting.
 
 Formatting APIs
 ~~~~~~~~~~~~~~~
@@ -96,7 +96,7 @@ In addition to plotting, we also support a variety of formatting APIs to modify 
 In general these APIs support all arguments except for the restrictions specified.
 In addition, APIs have the following restrictions:
 
-    * Use of lists are not currently supported. If you need to provide a list, please use a tuple
+    * Use of lists is not currently supported. If you need to provide a list, please use a tuple
       instead.
     * Formatting functions execute on all ranks by default. If you need to execute further Matplotlib
       code on all of your processes, please close any figures you opened inside Bodo.
@@ -132,7 +132,7 @@ Working with Unsupported APIs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For other visualization functions, you can call them from regular Python and manually gather the data.
-If the data does not fit a single machine's memory, you may need to take a sample. The example code below demonstrates
+If the data does not fit in a single machine's memory, you may need to take a sample. The example code below demonstrates
 gathering a portion of data in Bodo and calling polar (which Bodo doesn't support yet)
 in regular Python::
 
