@@ -505,6 +505,17 @@ class DistributedAnalysis:
                         f" {rhs_typ.class_type.class_name} in"
                         f" {lhs} = {rhs.value.name}.{attr}"
                     )
+        elif (
+            bodo.compiler._pyspark_installed
+            and isinstance(rhs_typ, bodo.libs.pyspark_ext.SparkDataFrameType)
+            and attr == "_df"
+        ):
+            self._meet_array_dists(lhs, rhs.value.name, array_dists)
+            # enforce distributed semantics for Spark dataframes
+            if not _is_1D_or_1D_Var_arr(lhs, array_dists):
+                raise BodoError(
+                    f"Spark DataFrame data should be distributed (variable {lhs})"
+                )
 
     def _analyze_parfor(self, parfor, array_dists, parfor_dists):
         """analyze Parfor nodes for distribution. Parfor and its accessed arrays should
@@ -916,7 +927,7 @@ class DistributedAnalysis:
         if fdef == ("parallel_print", "bodo"):
             return
 
-        # input of gatherv should not be REP (likely a user mistake),
+        # input of gatherv should be distributed (likely a user mistake),
         # but the output is REP
         if fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo"):
             arg_no = 2 if fdef[0] == "gatherv" else 1
@@ -933,6 +944,7 @@ class DistributedAnalysis:
             self._set_REP(lhs, array_dists, "output of gatherv() is replicated")
             return
 
+        # input of scatterv should be REP (warn since likely a user mistake)
         if fdef == ("scatterv", "bodo"):
             # output of scatterv is 1D
             if lhs not in array_dists:
@@ -940,10 +952,15 @@ class DistributedAnalysis:
             elif is_REP(array_dists[lhs]):
                 raise BodoError("Output of scatterv should be a distributed array")
 
-            # input of scatterv should be replicated
-            self._set_REP(
-                rhs.args[0].name, array_dists, "input of scatterv() is replicated"
+            arg_no = 2
+            warn_flag = get_call_expr_arg(
+                fdef[0], rhs.args, kws, arg_no, "warn_if_dist", True
             )
+            if isinstance(warn_flag, ir.Var):
+                # warn if flag is not constant False.
+                warn_flag = not is_overload_false(self.typemap[warn_flag.name])
+            if warn_flag and _is_1D_or_1D_Var_arr(rhs.args[0].name, array_dists):
+                warnings.warn(BodoWarning("Input to scatterv() is distributed"))
             return
 
         if fdef == ("setna", "bodo.libs.array_kernels"):
@@ -1539,6 +1556,16 @@ class DistributedAnalysis:
             out_arrname = rhs.args[0].name
             in_arrname = rhs.args[2].name
             self._meet_array_dists(out_arrname, in_arrname, array_dists)
+            return
+
+        if fdef == ("init_spark_df", "bodo.libs.pyspark_ext"):
+            in_df_name = args[0].name
+            # enforce distributed semantics for Spark dataframes
+            if not _is_1D_or_1D_Var_arr(in_df_name, array_dists):
+                raise BodoError(
+                    f"Spark DataFrame data should be distributed (variable {in_df_name})"
+                )
+            self._meet_array_dists(lhs, in_df_name, array_dists)
             return
 
         # np.fromfile()
@@ -2785,6 +2812,14 @@ class DistributedAnalysis:
         if v in self.metadata["parfors"]["var_rename_map"]:
             return self.metadata["parfors"]["var_rename_map"][v]
         return v
+
+
+def _is_1D_or_1D_Var_arr(arr_name, array_dists):
+    """return True if arr_name is either 1D or 1D_Var distributed"""
+    return arr_name in array_dists and array_dists[arr_name] in (
+        Distribution.OneD,
+        Distribution.OneD_Var,
+    )
 
 
 def get_reduce_op(reduce_varname, reduce_nodes, func_ir, typemap):

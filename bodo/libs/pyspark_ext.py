@@ -29,7 +29,7 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.utils.typing import BodoError, dtype_to_array_type
+from bodo.utils.typing import BodoError, dtype_to_array_type, is_overload_true
 
 # a sentinel value to designate anonymous Row field names
 ANON_SENTINEL = "bodo_field_"
@@ -92,10 +92,12 @@ def overload_appName(A, s):
     return lambda A, s: A  # pragma: no cover
 
 
-@overload_method(SparkSessionBuilderType, "getOrCreate", no_unliteral=True)
+@overload_method(
+    SparkSessionBuilderType, "getOrCreate", inline="always", no_unliteral=True
+)
 def overload_getOrCreate(A):
     """returns a SparkSession value"""
-    return lambda A: init_session()  # pragma: no cover
+    return lambda A: bodo.libs.pyspark_ext.init_session()  # pragma: no cover
 
 
 @typeof_impl.register(pyspark.sql.session.SparkSession)
@@ -233,7 +235,9 @@ def box_row(typ, val, c):
 class RowConstructor(AbstractTemplate):
     def generic(self, args, kws):
         if args and kws:
-            raise BodoError("pyspark.sql.types.Row: Cannot use both args and kwargs to create Row")
+            raise BodoError(
+                "pyspark.sql.types.Row: Cannot use both args and kwargs to create Row"
+            )
 
         arg_names = ", ".join(f"arg{i}" for i in range(len(args)))
         kw_names = ", ".join(f"{a} = ''" for a in kws)
@@ -303,7 +307,9 @@ def init_spark_df(typingctx, df_typ=None):
     return SparkDataFrameType(df_typ)(df_typ), codegen
 
 
-@overload_method(SparkSessionType, "createDataFrame", no_unliteral=True)
+@overload_method(
+    SparkSessionType, "createDataFrame", inline="always", no_unliteral=True
+)
 def overload_create_df(
     sp_session, data, schema=None, samplingRatio=None, verifySchema=True
 ):
@@ -314,6 +320,8 @@ def overload_create_df(
         def impl_df(
             sp_session, data, schema=None, samplingRatio=None, verifySchema=True
         ):
+            # allow distributed input to createDataFrame() since doesn't break semantics
+            data = bodo.scatterv(data, warn_if_dist=False)
             return bodo.libs.pyspark_ext.init_spark_df(data)
 
         return impl_df
@@ -350,6 +358,7 @@ def overload_create_df(
         "  index = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)\n"
     )
     func_text += f"  pdf = bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, index, {columns})\n"
+    func_text += f"  pdf = bodo.scatterv(pdf)\n"
     func_text += f"  return bodo.libs.pyspark_ext.init_spark_df(pdf)\n"
     loc_vars = {}
     _global = {"bodo": bodo}
@@ -361,9 +370,17 @@ def overload_create_df(
     return impl
 
 
-@overload_method(SparkDataFrameType, "toPandas", no_unliteral=True)
-def overload_to_pandas(spark_df):
-    def impl(spark_df):  # pragma: no cover
-        return spark_df._df
+@overload_method(SparkDataFrameType, "toPandas", inline="always", no_unliteral=True)
+def overload_to_pandas(spark_df, _is_bodo_dist=False):
+    """toPandas() gathers input data by default to follow Spark semantics but the
+    user can specify distributed data
+    """
+    # no gather if dist flag is set in untyped pass
+    if is_overload_true(_is_bodo_dist):
+        return lambda spark_df, _is_bodo_dist=False: spark_df._df  # pragma: no cover
+
+    def impl(spark_df, _is_bodo_dist=False):  # pragma: no cover
+        # gathering data to follow toPandas() semantics
+        return bodo.gatherv(spark_df._df)
 
     return impl
