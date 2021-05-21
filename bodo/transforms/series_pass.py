@@ -847,6 +847,20 @@ class SeriesPass:
                 assign.value = sql_ctx_def.args[1]
                 return [assign]
 
+        # optimize out spark_df._df if possible
+        if (
+            bodo.compiler._pyspark_installed
+            and isinstance(rhs_type, bodo.libs.pyspark_ext.SparkDataFrameType)
+            and rhs.attr == "_df"
+        ):
+            rhs_def = guard(get_definition, self.func_ir, rhs.value)
+            if guard(find_callname, self.func_ir, rhs_def) == (
+                "init_spark_df",
+                "bodo.libs.pyspark_ext",
+            ):
+                assign.value = rhs_def.args[0]
+                return [assign]
+
         return [assign]
 
     def _run_binop(self, assign, rhs):

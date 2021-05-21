@@ -92,10 +92,12 @@ def overload_appName(A, s):
     return lambda A, s: A  # pragma: no cover
 
 
-@overload_method(SparkSessionBuilderType, "getOrCreate", no_unliteral=True)
+@overload_method(
+    SparkSessionBuilderType, "getOrCreate", inline="always", no_unliteral=True
+)
 def overload_getOrCreate(A):
     """returns a SparkSession value"""
-    return lambda A: init_session()  # pragma: no cover
+    return lambda A: bodo.libs.pyspark_ext.init_session()  # pragma: no cover
 
 
 @typeof_impl.register(pyspark.sql.session.SparkSession)
