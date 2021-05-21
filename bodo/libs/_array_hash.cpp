@@ -16,11 +16,25 @@
  * @param seed: the seed of the computation.
  *
  */
-template <class T>
-static void hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
-                             const uint32_t seed) {
+template <typename T>
+static typename std::enable_if<!std::is_floating_point<T>::value, void>::type
+hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
+                 const uint32_t seed) {
     for (size_t i = 0; i < n_rows; i++) {
         hash_inner_32<T>(&data[i], seed, &out_hashes[i]);
+    }
+}
+
+// Discussion on hashing floats:
+// https://stackoverflow.com/questions/4238122/hash-function-for-floats
+
+template <typename T>
+static typename std::enable_if<std::is_floating_point<T>::value, void>::type
+hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
+                 const uint32_t seed) {
+    for (size_t i = 0; i < n_rows; i++) {
+        Py_hash_t py_hash = _Py_HashDouble(data[i]);
+        hash_inner_32<Py_hash_t>(&py_hash, seed, &out_hashes[i]);
     }
 }
 
