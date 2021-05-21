@@ -55,14 +55,6 @@ from bodo.utils.utils import (
     is_expr,
 )
 
-# import bodosql's BodoSQLContextType if installed
-try:  # pragma: no cover
-    from bodosql.context_ext import BodoSQLContextType
-except:
-    # workaround: something that makes isinstance(type, BodoSQLContextType) always false
-    BodoSQLContextType = int
-
-
 # global flag indicating that we are in partial type inference, so that error checking
 # code can raise regular Exceptions that can potentially be handled here
 in_partial_typing = False
@@ -851,6 +843,15 @@ class TypingTransforms:
         return [inst]
 
     def _run_call(self, assign, rhs, label):
+
+        # import bodosql's BodoSQLContextType if installed
+        # avoiding top-level import to prevent circular import issues
+        try:  # pragma: no cover
+            from bodosql.context_ext import BodoSQLContextType
+        except:
+            # workaround: something that makes isinstance(type, BodoSQLContextType) always false
+            BodoSQLContextType = int
+
         fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
         if fdef is None:  # pragma: no cover
             # TODO: test coverage
