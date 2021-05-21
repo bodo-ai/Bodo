@@ -164,6 +164,10 @@ no_side_effect_call_tuples = {
     ("empty_inferred", "ndarray", "unsafe", numba),
     ("_slice_span", "unicode", numba),
     ("_normalize_slice", "unicode", numba),
+    # pyspark
+    ("init_session_builder", "pyspark_ext", "libs", bodo),
+    ("init_session", "pyspark_ext", "libs", bodo),
+    ("init_spark_df", "pyspark_ext", "libs", bodo),
     # hdf5
     ("h5size", "h5_api", "io", bodo),
     ("pre_alloc_struct_array", "struct_arr_ext", "libs", bodo),

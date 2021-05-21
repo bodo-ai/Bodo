@@ -1335,7 +1335,7 @@ def _get_scatterv_send_counts(send_counts, n_pes, n):
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def _scatterv_np(data, send_counts=None):
+def _scatterv_np(data, send_counts=None, warn_if_dist=True):
     """scatterv() implementation for numpy arrays, refactored here with
     no_cpython_wrapper=True to enable int128 data array of decimal arrays. Otherwise,
     Numba creates a wrapper and complains about unboxing int128.
@@ -1350,7 +1350,9 @@ def _scatterv_np(data, send_counts=None):
         dtype = np.dtype("timedelta64[ns]")
     zero_shape = (0,) * ndim
 
-    def scatterv_arr_impl(data, send_counts=None):  # pragma: no cover
+    def scatterv_arr_impl(
+        data, send_counts=None, warn_if_dist=True
+    ):  # pragma: no cover
         rank = bodo.libs.distributed_api.get_rank()
         n_pes = bodo.libs.distributed_api.get_size()
 
@@ -1486,7 +1488,7 @@ def get_value_for_type(dtype):  # pragma: no cover
     raise BodoError("get_value_for_type(dtype): Missing data type")
 
 
-def scatterv(data, send_counts=None):
+def scatterv(data, send_counts=None, warn_if_dist=True):
     """scatterv() distributes data from rank 0 to all ranks.
     Rank 0 passes the data but the other ranks just pass None.
     """
@@ -1506,18 +1508,18 @@ def scatterv(data, send_counts=None):
 
 
 @overload(scatterv)
-def scatterv_overload(data, send_counts=None):
+def scatterv_overload(data, send_counts=None, warn_if_dist=True):
     """support scatterv inside jit functions"""
-    return lambda data, send_counts=None: scatterv_impl(
+    return lambda data, send_counts=None, warn_if_dist=True: scatterv_impl(
         data, send_counts
     )  # pragma: no cover
 
 
 @numba.generated_jit(nopython=True)
-def scatterv_impl(data, send_counts=None):
+def scatterv_impl(data, send_counts=None, warn_if_dist=True):
     """nopython implementation of scatterv()"""
     if isinstance(data, types.Array):
-        return lambda data, send_counts=None: _scatterv_np(
+        return lambda data, send_counts=None, warn_if_dist=True: _scatterv_np(
             data, send_counts
         )  # pragma: no cover
 
@@ -1525,7 +1527,9 @@ def scatterv_impl(data, send_counts=None):
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
-        def scatterv_str_arr_impl(data, send_counts=None):  # pragma: no cover
+        def scatterv_str_arr_impl(
+            data, send_counts=None, warn_if_dist=True
+        ):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             n_pes = bodo.libs.distributed_api.get_size()
             n_all = bcast_scalar(len(data))
@@ -1629,7 +1633,9 @@ def scatterv_impl(data, send_counts=None):
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
-        def scatterv_array_item_impl(data, send_counts=None):  # pragma: no cover
+        def scatterv_array_item_impl(
+            data, send_counts=None, warn_if_dist=True
+        ):  # pragma: no cover
             in_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(data)
             in_data_arr = bodo.libs.array_item_arr_ext.get_data(data)
             in_null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(data)
@@ -1743,7 +1749,9 @@ def scatterv_impl(data, send_counts=None):
         if data == datetime_date_array_type:
             init_func = bodo.hiframes.datetime_date_ext.init_datetime_date_array
 
-        def scatterv_impl_int_arr(data, send_counts=None):  # pragma: no cover
+        def scatterv_impl_int_arr(
+            data, send_counts=None, warn_if_dist=True
+        ):  # pragma: no cover
             n_pes = bodo.libs.distributed_api.get_size()
 
             data_in = data._data
@@ -1784,7 +1792,9 @@ def scatterv_impl(data, send_counts=None):
 
     if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
         # TODO: support send_counts
-        def impl_range_index(data, send_counts=None):  # pragma: no cover
+        def impl_range_index(
+            data, send_counts=None, warn_if_dist=True
+        ):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             n_pes = bodo.libs.distributed_api.get_size()
 
@@ -1814,7 +1824,9 @@ def scatterv_impl(data, send_counts=None):
 
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
 
-        def impl_pd_index(data, send_counts=None):  # pragma: no cover
+        def impl_pd_index(
+            data, send_counts=None, warn_if_dist=True
+        ):  # pragma: no cover
             data_in = data._data
             name = data._name
             name = bcast_scalar(name)
@@ -1826,7 +1838,9 @@ def scatterv_impl(data, send_counts=None):
     # MultiIndex index
     if isinstance(data, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
         # TODO: handle `levels` and `codes` when available
-        def impl_multi_index(data, send_counts=None):  # pragma: no cover
+        def impl_multi_index(
+            data, send_counts=None, warn_if_dist=True
+        ):  # pragma: no cover
             all_data = bodo.libs.distributed_api.scatterv_impl(data._data, send_counts)
             name = bcast_scalar(data._name)
             names = bcast_tuple(data._names)
@@ -1838,7 +1852,7 @@ def scatterv_impl(data, send_counts=None):
 
     if isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
 
-        def impl_series(data, send_counts=None):  # pragma: no cover
+        def impl_series(data, send_counts=None, warn_if_dist=True):  # pragma: no cover
             # get data and index arrays
             arr = bodo.hiframes.pd_series_ext.get_series_data(data)
             index = bodo.hiframes.pd_series_ext.get_series_index(data)
@@ -1857,7 +1871,7 @@ def scatterv_impl(data, send_counts=None):
         data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
         col_var = bodo.utils.transform.gen_const_tup(data.columns)
 
-        func_text = "def impl_df(data, send_counts=None):\n"
+        func_text = "def impl_df(data, send_counts=None, warn_if_dist=True):\n"
         for i in range(n_cols):
             func_text += "  data_{} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {})\n".format(
                 i, i
@@ -1881,7 +1895,7 @@ def scatterv_impl(data, send_counts=None):
 
     if isinstance(data, CategoricalArrayType):
 
-        def impl_cat(data, send_counts=None):  # pragma: no cover
+        def impl_cat(data, send_counts=None, warn_if_dist=True):  # pragma: no cover
             codes = bodo.libs.distributed_api.scatterv_impl(data.codes, send_counts)
             return bodo.hiframes.pd_categorical_ext.init_categorical_array(
                 codes, data.dtype
@@ -1891,7 +1905,7 @@ def scatterv_impl(data, send_counts=None):
 
     # Tuple of data containers
     if isinstance(data, types.BaseTuple):
-        func_text = "def impl_tuple(data, send_counts=None):\n"
+        func_text = "def impl_tuple(data, send_counts=None, warn_if_dist=True):\n"
         func_text += "  return ({}{})\n".format(
             ", ".join(
                 "bodo.libs.distributed_api.scatterv_impl(data[{}], send_counts)".format(
@@ -1907,7 +1921,7 @@ def scatterv_impl(data, send_counts=None):
         return impl_tuple
 
     if data is types.none:  # pragma: no cover
-        return lambda data, send_counts=None: None
+        return lambda data, send_counts=None, warn_if_dist=True: None
 
     raise BodoError("scatterv() not available for {}".format(data))  # pragma: no cover
 
