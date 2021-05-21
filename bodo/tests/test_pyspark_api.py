@@ -14,7 +14,8 @@ from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.typing import BodoError
 
 
-def test_session_box():
+@pytest.mark.slow
+def test_session_box(memory_leak_check):
     """test boxing/unboxing for SparkSession object"""
     # just unbox
     def impl(arg):
@@ -29,7 +30,8 @@ def test_session_box():
     check_func(impl2, (spark,))
 
 
-def test_session_create():
+@pytest.mark.slow
+def test_session_create(memory_leak_check):
     """test creating SparkSession object"""
 
     def impl():
@@ -38,7 +40,8 @@ def test_session_create():
     check_func(impl, ())
 
 
-def test_session_const_lowering():
+@pytest.mark.slow
+def test_session_const_lowering(memory_leak_check):
     """test constant lowering for SparkSession object"""
     spark = SparkSession.builder.appName("TestSpark").getOrCreate()
 
@@ -48,7 +51,8 @@ def test_session_const_lowering():
     check_func(impl, ())
 
 
-def test_row_box():
+@pytest.mark.slow
+def test_row_box(memory_leak_check):
     """test boxing/unboxing for Row object"""
     # just unbox
     def impl(arg):
@@ -63,7 +67,8 @@ def test_row_box():
     check_func(impl2, (r,))
 
 
-def test_row_constructor():
+@pytest.mark.slow
+def test_row_constructor(memory_leak_check):
     """test Row constructor calls"""
     # kws
     def impl():
@@ -77,7 +82,8 @@ def test_row_constructor():
     check_func(impl2, ())
 
 
-def test_row_get_field():
+@pytest.mark.slow
+def test_row_get_field(memory_leak_check):
     """test Row constructor calls"""
     # getattr
     def impl1(r):
@@ -102,7 +108,8 @@ def test_row_get_field():
     check_func(impl4, (r,))
 
 
-def test_create_dataframe():
+@pytest.mark.slow
+def test_create_dataframe(memory_leak_check):
     """test spark.createDataFrame() calls"""
     # pandas input
     def impl(df):
@@ -150,7 +157,7 @@ def test_create_dataframe():
         bodo.jit(impl)(3)
 
 
-def test_dataframe_distribution():
+def test_dataframe_distribution(memory_leak_check):
     """make sure output of toPandas() is distributed if dist flag is et"""
 
     @bodo.jit(distributed={"df", "df2"})
