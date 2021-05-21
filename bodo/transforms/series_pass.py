@@ -114,14 +114,6 @@ from bodo.utils.utils import (
     is_whole_slice,
 )
 
-# import bodosql's BodoSQLContextType if installed
-try:  # pragma: no cover
-    from bodosql.context_ext import BodoSQLContextType
-except:
-    # workaround: something that makes isinstance(type, BodoSQLContextType) always false
-    BodoSQLContextType = int
-
-
 ufunc_names = set(f.__name__ for f in numba.core.typing.npydecl.supported_ufuncs)
 
 
@@ -609,6 +601,14 @@ class SeriesPass:
 
     def _run_getattr(self, assign, rhs):
         rhs_type = self.typemap[rhs.value.name]  # get type of rhs value "S"
+
+        # import bodosql's BodoSQLContextType if installed
+        # avoiding top-level import to prevent circular import issues
+        try:  # pragma: no cover
+            from bodosql.context_ext import BodoSQLContextType
+        except:
+            # workaround: something that makes isinstance(type, BodoSQLContextType) always false
+            BodoSQLContextType = int
 
         if isinstance(rhs_type, SeriesStrMethodType) and rhs.attr == "_obj":
             rhs_def = guard(get_definition, self.func_ir, rhs.value)
