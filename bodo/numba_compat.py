@@ -310,7 +310,8 @@ def find_potential_aliases(
                 if (
                     isinstance(expr, ir.Expr)
                     and expr.op == "getattr"
-                    and expr.attr in ("loc", "iloc", "iat", "_obj", "obj", "codes")
+                    and expr.attr
+                    in ("loc", "iloc", "iat", "_obj", "obj", "codes", "_df")
                 ):
                     _add_alias(lhs, expr.value.name, alias_map, arg_aliases)
                 # new code added to handle tuple/list/set of mutable data

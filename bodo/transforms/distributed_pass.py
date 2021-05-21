@@ -1512,6 +1512,13 @@ class DistributedPass:
             assign.value = rhs.args[0]
             return [assign]
 
+        # no need to scatter if input data is distributed
+        if (fdef == ("scatterv", "bodo")) and self._is_1D_or_1D_Var_arr(
+            rhs.args[0].name
+        ):
+            assign.value = rhs.args[0]
+            return [assign]
+
         if fdef == ("dist_return", "bodo.libs.distributed_api"):
             assign.value = rhs.args[0]
             return [assign]
