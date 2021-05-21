@@ -597,8 +597,10 @@ def overload_coerce_to_array(
 
 def _is_str_dtype(dtype):
     """return True if 'dtype' specifies a string data type."""
-    return (isinstance(dtype, types.Function) and dtype.key[0] == str) or (
-        is_overload_constant_str(dtype) and get_overload_const_str(dtype) == "str"
+    return (
+        isinstance(dtype, bodo.libs.str_arr_ext.StringDtype)
+        or (isinstance(dtype, types.Function) and dtype.key[0] == str)
+        or (is_overload_constant_str(dtype) and get_overload_const_str(dtype) == "str")
     )
 
 

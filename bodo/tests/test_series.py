@@ -907,10 +907,15 @@ def test_series_astype_str(series_val):
     if isinstance(series_val.dtype, pd.CategoricalDtype):
         return
 
-    def test_impl(S):
+    def test_impl1(S):
         return S.astype(str)
 
-    check_func(test_impl, (series_val,))
+    def test_impl2(S):
+        return S.astype(pd.StringDtype())
+
+    check_func(test_impl1, (series_val,))
+    # Bodo doesn't unbox string dtypes as pd.StringDtype(), so provide a py_output
+    check_func(test_impl2, (series_val,), py_output=series_val.astype(str))
 
 
 @pytest.mark.slow
