@@ -1242,6 +1242,8 @@ def struct_arr_getitem(arr, ind):
     if isinstance(ind, types.Integer):
         # TODO: warning if value is NA?
         def struct_arr_getitem_impl(arr, ind):  # pragma: no cover
+            if ind < 0:
+                ind += len(arr)
             return struct_array_get_struct(arr, ind)
 
         return struct_arr_getitem_impl

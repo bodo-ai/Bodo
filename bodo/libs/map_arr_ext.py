@@ -542,6 +542,8 @@ def map_arr_getitem(arr, ind):
     if isinstance(ind, types.Integer):
         # TODO: warning if value is NA?
         def map_arr_getitem_impl(arr, ind):  # pragma: no cover
+            if ind < 0:
+                ind += len(arr)
             out = dict()
             offsets = bodo.libs.array_item_arr_ext.get_offsets(arr._data)
             struct_arr = bodo.libs.array_item_arr_ext.get_data(arr._data)

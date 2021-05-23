@@ -114,6 +114,7 @@ def test_getitem_int(str_arr_value, memory_leak_check):
         return A[i]
 
     check_func(test_impl, (str_arr_value, 4))
+    check_func(test_impl, (str_arr_value, -1))
 
 
 def test_getitem_int_arr(str_arr_value, memory_leak_check):
