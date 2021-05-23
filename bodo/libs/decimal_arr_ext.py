@@ -737,7 +737,7 @@ def decimal_arr_getitem(A, ind):
         return
 
     # covered by test_series_iat_getitem , test_series_iloc_getitem_int
-    if isinstance(types.unliteral(ind), types.Integer):
+    if isinstance(ind, types.Integer):
         precision = A.precision
         scale = A.scale
         # XXX: cannot handle NA for scalar getitem since not type stable

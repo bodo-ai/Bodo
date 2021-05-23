@@ -811,10 +811,12 @@ def array_item_arr_getitem_array(arr, ind):
     if not isinstance(arr, ArrayItemArrayType):
         return
 
-    if isinstance(types.unliteral(ind), types.Integer):
+    if isinstance(ind, types.Integer):
         # returning empty array if NA due to type stability issues
         # TODO: warning if value is NA?
         def array_item_arr_getitem_impl(arr, ind):  # pragma: no cover
+            if ind < 0:
+                ind += len(arr)
             offsets = get_offsets(arr)
             data = get_data(arr)
             l_start_offset = offsets[ind]
