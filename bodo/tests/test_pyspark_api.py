@@ -171,3 +171,69 @@ def test_dataframe_distribution(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(11)})
     df = _get_dist_arg(df)
     assert f(df) == 55
+
+
+def test_dataframe_select(memory_leak_check):
+    """test basic column selection in SparkDataFrame.select()"""
+
+    # single column name
+    def impl1(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.select("A").toPandas()
+        return df2
+
+    # multiple column names
+    def impl2(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.select("A", "B").toPandas()
+        return df2
+
+    # list of column names
+    def impl3(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.select(["A", "B"]).toPandas()
+        return df2
+
+    # df column selection
+    def impl4(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.select(sdf.A).toPandas()
+        return df2
+
+    df = pd.DataFrame({"A": np.arange(7), "B": ["A", "B", "C", "D", "AB", "AC", "AD"]})
+    # NOTE: using pyout since Spark is slow and fails in multi-process case
+    py_out = df[["A"]]
+    check_func(
+        impl1,
+        (df,),
+        additional_compiler_arguments={"distributed": ["df2"]},
+        only_1D=True,
+        py_output=py_out,
+    )
+    py_out = df[["A", "B"]]
+    check_func(
+        impl2,
+        (df,),
+        additional_compiler_arguments={"distributed": ["df2"]},
+        only_1DVar=True,
+        py_output=py_out,
+    )
+    check_func(
+        impl3,
+        (df,),
+        additional_compiler_arguments={"distributed": ["df2"]},
+        only_1D=True,
+        py_output=py_out,
+    )
+    py_out = df[["A"]]
+    check_func(
+        impl4,
+        (df,),
+        additional_compiler_arguments={"distributed": ["df2"]},
+        only_1DVar=True,
+        py_output=py_out,
+    )

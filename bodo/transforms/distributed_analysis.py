@@ -961,6 +961,9 @@ class DistributedAnalysis:
                 warn_flag = not is_overload_false(self.typemap[warn_flag.name])
             if warn_flag and _is_1D_or_1D_Var_arr(rhs.args[0].name, array_dists):
                 warnings.warn(BodoWarning("Input to scatterv() is distributed"))
+            # scatterv() is no-op if input is dist, so output can be 1D_Var
+            if _is_1D_or_1D_Var_arr(rhs.args[0].name, array_dists):
+                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("setna", "bodo.libs.array_kernels"):

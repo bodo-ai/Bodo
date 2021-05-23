@@ -7,16 +7,18 @@ from collections import namedtuple
 import numba
 import numba.cpython.tupleobj
 import pyspark
-from numba.core import cgutils, types
+from numba.core import cgutils, ir_utils, types
 from numba.core.imputils import lower_constant
 from numba.core.typing.templates import (
     AbstractTemplate,
+    AttributeTemplate,
     infer_global,
     signature,
 )
 from numba.extending import (
     NativeValue,
     box,
+    infer_getattr,
     intrinsic,
     lower_builtin,
     make_attribute_wrapper,
@@ -29,7 +31,15 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.utils.typing import BodoError, dtype_to_array_type, is_overload_true
+from bodo.utils.typing import (
+    BodoError,
+    dtype_to_array_type,
+    get_overload_const_list,
+    get_overload_const_str,
+    is_overload_constant_list,
+    is_overload_constant_str,
+    is_overload_true,
+)
 
 # a sentinel value to designate anonymous Row field names
 ANON_SENTINEL = "bodo_field_"
@@ -384,3 +394,135 @@ def overload_to_pandas(spark_df, _is_bodo_dist=False):
         return bodo.gatherv(spark_df._df)
 
     return impl
+
+
+@infer_getattr
+class SparkDataFrameAttribute(AttributeTemplate):
+    key = SparkDataFrameType
+
+    def generic_resolve(self, sdf, attr):
+        """return Column object for column selection"""
+        if attr in sdf.df.columns:
+            return ColumnType(ExprType("col", (attr,)))
+
+
+# don't convert literal types to non-literal and rerun the typing template
+SparkDataFrameAttribute._no_unliteral = True
+
+
+# NOTE: inlining in SeriesPass since stararg is not supported in inline_closurecall()
+@overload_method(SparkDataFrameType, "select", no_unliteral=True)
+def overload_df_select(spark_df, *cols):
+    return _gen_df_select(spark_df, cols)
+
+
+def _gen_df_select(spark_df, cols, avoid_stararg=False):
+    """generate code for SparkDataFrame.select()
+    'avoid_stararg=True' avoids the unnecessary stararg argument to enable inlining in
+    SeriesPass
+    """
+    df_type = spark_df.df
+
+    # Numba passes a tuple of actual types, or a 1-tuple of StarArgTuple
+    if (
+        isinstance(cols, tuple)
+        and len(cols) == 1
+        and isinstance(cols[0], (types.StarArgTuple, types.StarArgUniTuple))
+    ):
+        cols = cols[0]
+
+    # user may pass a list
+    if len(cols) == 1 and is_overload_constant_list(cols[0]):
+        cols = get_overload_const_list(cols[0])
+
+    func_text = f"def impl(spark_df, {'' if avoid_stararg else '*cols'}):\n"
+    func_text += "  df = spark_df._df\n"
+
+    out_col_names = []
+    out_data = []
+    for col in cols:
+        col = get_overload_const_str(col) if is_overload_constant_str(col) else col
+        out_col_names.append(_get_col_name(col))
+        data, code = _gen_col_code(col, df_type)
+        func_text += code
+        out_data.append(data)
+
+    data_args = "({}{})".format(", ".join(out_data), "," if len(cols) == 1 else "")
+
+    length = "0" if not out_data else f"len({out_data[0]})"
+    func_text += f"  n = {length}\n"
+    func_text += (
+        "  index = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)\n"
+    )
+    func_text += f"  pdf = bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, index, {tuple(out_col_names)})\n"
+    func_text += f"  return bodo.libs.pyspark_ext.init_spark_df(pdf)\n"
+    loc_vars = {}
+    _global = {"bodo": bodo}
+    exec(func_text, _global, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
+class ColumnType(types.Type):
+    """data type for Spark Column object"""
+
+    def __init__(self, expr):
+        self.expr = expr
+        super(ColumnType, self).__init__(f"Column({expr})")
+
+    @property
+    def key(self):
+        return self.expr
+
+
+register_model(ColumnType)(models.OpaqueModel)
+
+
+class ExprType(types.Type):
+    """data type for Spark Column Expression"""
+
+    def __init__(self, op, children):
+        self.op = op
+        self.children = children
+        super(ExprType, self).__init__(f"{op}({children})")
+
+    @property
+    def key(self):
+        return self.op, self.children
+
+
+register_model(ExprType)(models.OpaqueModel)
+
+
+def _get_col_name(col):
+    """get output column name for Column value 'col'"""
+    if isinstance(col, str):
+        return col
+
+    # TODO: generate code for other Column exprs
+    _check_column(col)
+    assert col.expr.op == "col"
+    return col.expr.children[0]
+
+
+def _gen_col_code(col, df_type):
+    """generate code for Column value 'col' for dataframe 'df_type'"""
+
+    # TODO: generate code for other Column exprs
+    if isinstance(col, ColumnType):
+        assert col.expr.op == "col"
+        col = col.expr.children[0]
+
+    # str column name case
+    col_ind = df_type.columns.index(col)
+    i = ir_utils.next_label()
+    func_text = (
+        f"  A{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {col_ind})\n"
+    )
+    return f"A{i}", func_text
+
+
+def _check_column(col):
+    """raise error if 'col' is not a Column"""
+    if not isinstance(col, ColumnType):
+        raise BodoError("Column object expected")
