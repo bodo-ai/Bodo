@@ -1369,7 +1369,7 @@ def dt_timedelta_arr_getitem(A, ind):
     if A != datetime_timedelta_array_type:
         return
 
-    if isinstance(types.unliteral(ind), types.Integer):
+    if isinstance(ind, types.Integer):
 
         def impl_int(A, ind):
             # TODO: Eventually support handle case where value is marked as
