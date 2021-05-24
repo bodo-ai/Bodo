@@ -1607,6 +1607,8 @@ def str_arr_getitem_int(A, ind):
     if isinstance(ind, types.Integer):
         # kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
         def str_arr_getitem_impl(A, ind):  # pragma: no cover
+            if ind < 0:
+                ind += A.size
             start_offset = getitem_str_offset(A, ind)
             end_offset = getitem_str_offset(A, ind + 1)
             length = end_offset - start_offset

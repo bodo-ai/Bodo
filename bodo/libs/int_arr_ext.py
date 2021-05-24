@@ -480,7 +480,7 @@ def int_arr_getitem(A, ind):
     if not isinstance(A, IntegerArrayType):
         return
 
-    if isinstance(types.unliteral(ind), types.Integer):
+    if isinstance(ind, types.Integer):
         # XXX: cannot handle NA for scalar getitem since not type stable
         return lambda A, ind: A._data[ind]
 

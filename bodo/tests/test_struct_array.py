@@ -118,8 +118,8 @@ def test_getitem_int(struct_arr_value, memory_leak_check):
     def test_impl(A, i):
         return A[i]
 
-    i = 1
-    check_func(test_impl, (struct_arr_value, i), dist_test=False)
+    check_func(test_impl, (struct_arr_value, 1), dist_test=False)
+    check_func(test_impl, (struct_arr_value, -1), dist_test=False)
 
 
 def test_getitem_bool(struct_arr_value, memory_leak_check):
