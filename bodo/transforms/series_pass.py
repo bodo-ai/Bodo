@@ -2264,6 +2264,22 @@ class SeriesPass:
                     args,
                 )
 
+        # inline SparkDataFrame.select() here since inline_closurecall() cannot handle
+        # stararg yet. TODO: support
+        if (
+            bodo.compiler._pyspark_installed
+            and isinstance(func_mod, ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name], bodo.libs.pyspark_ext.SparkDataFrameType
+            )
+            and func_name == "select"
+        ):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            impl = bodo.libs.pyspark_ext._gen_df_select(
+                self.typemap[func_mod.name], arg_typs, True
+            )
+            return replace_func(self, impl, (func_mod,))
+
         # Replace str.format because we need to expand kwargs
         if isinstance(func_mod, ir.Var) and (
             self.typemap[func_mod.name] == bodo.string_type
