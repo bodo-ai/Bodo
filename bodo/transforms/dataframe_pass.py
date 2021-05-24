@@ -487,6 +487,9 @@ class DataFramePass:
         kws = dict(rhs.kws)
         func_var = get_call_expr_arg("apply", rhs.args, kws, 0, "func")
         func = get_overload_const_func(self.typemap[func_var.name])
+        # Handle functions that are currently make_function expressions from BodoSQL
+        if isinstance(func, ir.Expr) and func.op == "make_function":
+            func = numba.core.ir_utils.convert_code_obj_to_function(func, self.func_ir)
         out_typ = self.typemap[lhs.name]
         is_df_output = isinstance(out_typ, DataFrameType)
         out_arr_types = out_typ.data
