@@ -1104,6 +1104,12 @@ def timedelta64_to_integer(typingctx, val=None):
     return types.int64(val), codegen
 
 
+@lower_cast(bodo.timedelta64ns, types.int64)
+def cast_td64_to_integer(context, builder, fromty, toty, val):
+    # td64 is stored as int64 so just return value
+    return val
+
+
 @numba.njit
 def parse_datetime_str(val):  # pragma: no cover
     """Parse datetime string value to dt64
