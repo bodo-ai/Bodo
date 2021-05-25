@@ -4481,7 +4481,7 @@ def test_set_df_column_names(memory_leak_check):
     df = pd.DataFrame(
         {"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1], "C": [2, 3, 1, 5]}
     )
-    check_func(impl5, (df,))
+    check_func(impl5, (df,), reset_index=True, sort_output=True)
 
 
 def test_set_df_index(memory_leak_check):
