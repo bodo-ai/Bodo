@@ -152,7 +152,7 @@ jobs:
       conda install -y matplotlib -c conda-forge
     displayName: 'Matplotlib'
 
- - script: |
+  - script: |
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
