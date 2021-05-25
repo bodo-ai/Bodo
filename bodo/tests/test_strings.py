@@ -714,6 +714,24 @@ def test_binary_format_literal(memory_leak_check):
     check_func(test_impl, (-1,))
 
 
+def test_str_max(memory_leak_check):
+    """tests max between two string literals"""
+
+    def test_impl():
+        return max("hello", "world")
+
+    check_func(test_impl, ())
+
+
+def test_str_min(memory_leak_check):
+    """tests min between two string literals"""
+
+    def test_impl():
+        return min("hello", "world")
+
+    check_func(test_impl, ())
+
+
 @pytest.mark.slow
 def test_format_numbered_args(memory_leak_check):
     """tests format string with numbered args"""

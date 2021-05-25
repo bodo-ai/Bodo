@@ -1105,7 +1105,7 @@ def check_java_installation_(fname):
         raise BodoError(message)
 
 
-dt_err = """ 
+dt_err = """
         If you are trying to set NULL values for timedelta64 in regular Python, \n
         consider using np.timedelta64('nat') instead of None
         """
