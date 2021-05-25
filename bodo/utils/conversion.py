@@ -723,6 +723,17 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
 
     nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
 
+    # Matching data case
+    if do_copy and data.dtype == nb_dtype:
+        return (
+            lambda data, new_dtype, copy=None, nan_to_str=True: data.copy()
+        )  # pragma: no cover
+
+    if data.dtype == nb_dtype:
+        return (
+            lambda data, new_dtype, copy=None, nan_to_str=True: data
+        )  # pragma: no cover
+
     # nullable int array case
     if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
         _dtype = nb_dtype.dtype
@@ -774,18 +785,66 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
 
         return impl_bool
 
-    # Array case
-    if do_copy and data.dtype == nb_dtype:
-        return (
-            lambda data, new_dtype, copy=None, nan_to_str=True: data.copy()
-        )  # pragma: no cover
+    # Datetime64 case
+    if nb_dtype == bodo.datetime64ns:
+        # TODO: String arrays
+
+        if isinstance(data.dtype, types.Number) or data.dtype in [
+            bodo.timedelta64ns,
+            types.bool_,
+        ]:
+            # Nullable Integer/boolean/timedelta64 arrays
+            def impl_numeric(
+                data, new_dtype, copy=None, nan_to_str=True
+            ):  # pragma: no cover
+                n = len(data)
+                numba.parfors.parfor.init_prange()
+                out_arr = np.empty(n, dtype=np.dtype("datetime64[ns]"))
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(data, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
+                            np.int64(data[i])
+                        )
+                return out_arr
+
+            return impl_numeric
+
+    # Timedelta64 case
+    if nb_dtype == bodo.timedelta64ns:
+        # TODO: String arrays
+
+        if isinstance(data.dtype, types.Number) or data.dtype in [
+            bodo.datetime64ns,
+            types.bool_,
+        ]:
+            # Nullable Integer/boolean/datetime64 arrays
+            def impl_numeric(
+                data, new_dtype, copy=None, nan_to_str=True
+            ):  # pragma: no cover
+                n = len(data)
+                numba.parfors.parfor.init_prange()
+                out_arr = np.empty(n, dtype=np.dtype("timedelta64[ns]"))
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(data, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[
+                            i
+                        ] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                            np.int64(data[i])
+                        )
+                return out_arr
+
+            return impl_numeric
 
     if data.dtype != nb_dtype:
         return lambda data, new_dtype, copy=None, nan_to_str=True: data.astype(
             nb_dtype
         )  # pragma: no cover
 
-    return lambda data, new_dtype, copy=None, nan_to_str=True: data  # pragma: no cover
+    raise BodoError(f"Conversion from {data} to {new_dtype} not supported yet")
 
 
 def array_type_from_dtype(dtype):

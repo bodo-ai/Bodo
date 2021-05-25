@@ -975,6 +975,109 @@ def test_datetime_date_strftime(memory_leak_check):
     check_func(impl, (date, "%Y"))
 
 
+@pytest.fixture(
+    params=[
+        # Float values
+        pd.Series([1.5, 100.42, 214213.242, 242112.341, 3435423.543, np.nan] * 2),
+        pd.Series(
+            [1.5, 100.42, 214213.242, 242112.341, 3435423.543, np.nan] * 2,
+            dtype=np.float32,
+        ),
+        # Integer values
+        pd.Series([1, 6, 1, -4, 11, 12] * 2, dtype="int8"),
+        pd.Series([1, 6, 1, 4, 11, 12] * 2, dtype="uint8"),
+        pd.Series([1, 6, 1, -30000, 11, 12] * 2, dtype="int16"),
+        pd.Series([1, 6, 1, 40000, 11, 12] * 2, dtype="uint16"),
+        pd.Series([1, 6000000, 1, -40000, 11, 12] * 2, dtype="int32"),
+        pd.Series([1, 6000000, 1, 40000, 11, 12] * 2, dtype="uint32"),
+        pd.Series([1, 6000000, 1, -40000, 11, 12] * 2, dtype="int64"),
+        pd.Series([1, 6000000, 1, 40000, 11, 12] * 2, dtype="uint64"),
+        # Nullable values
+        pd.Series([1, 6, 1, -4, 11, None] * 2, dtype="Int8"),
+        pd.Series([1, 6, 1, 4, 11, None] * 2, dtype="UInt8"),
+        pd.Series([1, 6, 1, -30000, 11, None] * 2, dtype="Int16"),
+        pd.Series([1, 6, 1, 40000, 11, None] * 2, dtype="UInt16"),
+        pd.Series([1, 6000000, 1, -40000, 11, None] * 2, dtype="Int32"),
+        pd.Series([1, 6000000, 1, 40000, 11, None] * 2, dtype="UInt32"),
+        pd.Series([1, 6000000, 1, -40000, 11, None] * 2, dtype="Int64"),
+        pd.Series([1, 6000000, 1, 40000, 11, None] * 2, dtype="UInt64"),
+        # Boolean values
+        pd.Series([False, True, False, True, True, None] * 2, dtype="boolean"),
+        # Datetime64
+        pd.Series(np.append([None], pd.date_range("20200101", periods=11))).astype(
+            "datetime64[ns]"
+        ),
+        # Timedelta64
+        pd.Series(
+            np.append(
+                [None],
+                pd.timedelta_range(
+                    start="12 days", end="12 days 3 hours 2 seconds", periods=11
+                ),
+            )
+        ).astype("timedelta64[ns]"),
+    ]
+)
+def datetime_convertable_series(request):
+    return request.param
+
+
+@pytest.mark.slow
+def test_dt64_astype(datetime_convertable_series, memory_leak_check):
+    """
+    Test legal astype conversions to datetime64[ns]
+    """
+
+    def impl1(S):
+        return S.astype(np.dtype("datetime64[ns]"))
+
+    def impl2(S):
+        return S.astype("datetime64[ns]")
+
+    # Pandas can't handle null values in Nullable Boolean arrays.
+    if isinstance(datetime_convertable_series.dtype, pd.BooleanDtype):
+        py_output = datetime_convertable_series.astype("Int8").astype("datetime64[ns]")
+    # Conversion from td64 -> dt64 is supported in Numpy but not pandas
+    elif datetime_convertable_series.dtype == np.dtype("timedelta64[ns]"):
+        py_output = pd.Series(
+            datetime_convertable_series.values.astype("datetime64[ns]"),
+            index=datetime_convertable_series.index,
+        )
+    else:
+        py_output = None
+
+    check_func(impl1, (datetime_convertable_series,), py_output=py_output)
+    check_func(impl2, (datetime_convertable_series,), py_output=py_output)
+
+
+@pytest.mark.slow
+def test_td64_astype(datetime_convertable_series, memory_leak_check):
+    """
+    Test legal astype conversions to timedelta[ns]
+    """
+
+    def impl1(S):
+        return S.astype(np.dtype("timedelta64[ns]"))
+
+    def impl2(S):
+        return S.astype("timedelta64[ns]")
+
+    # Pandas can't handle null values, so we can't properly test them.
+    datetime_convertable_series = datetime_convertable_series.dropna()
+
+    # Conversion from dt64 -> td64 is supported in Numpy but not pandas
+    if datetime_convertable_series.dtype == np.dtype("datetime64[ns]"):
+        py_output = pd.Series(
+            datetime_convertable_series.values.astype("timedelta64[ns]"),
+            index=datetime_convertable_series.index,
+        )
+    else:
+        py_output = None
+
+    check_func(impl1, (datetime_convertable_series,), py_output=py_output)
+    check_func(impl2, (datetime_convertable_series,), py_output=py_output)
+
+
 # ------------------------- Test datetime.datetime ------------------------- #
 @pytest.mark.slow
 def test_datetime_datetime_construct(memory_leak_check):
