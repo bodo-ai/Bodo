@@ -161,6 +161,26 @@ def overload_unicode_to_utf8(s):
     return lambda s: unicode_to_utf8_and_len(s)[0]  # pragma: no cover
 
 
+@overload(max)
+def overload_builtin_max(lhs, rhs):
+    if lhs == types.unicode_type and rhs == types.unicode_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs > rhs else rhs
+
+        return impl
+
+
+@overload(min)
+def overload_builtin_min(lhs, rhs):
+    if lhs == types.unicode_type and rhs == types.unicode_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return lhs if lhs < rhs else rhs
+
+        return impl
+
+
 @intrinsic
 def memcmp(typingctx, dest_t, src_t, count_t=None):
     """call memcmp() in C"""
