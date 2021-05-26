@@ -939,6 +939,43 @@ void bodo_array_to_arrow(
         status = builder.Finish(&result);
         CHECK_ARROW(status, "builder.Finish")
         *out = std::make_shared<arrow::ChunkedArray>(result);
+    } else if (array->arr_type == bodo_array_type::LIST_STRING) {
+        schema_vector.push_back(
+            arrow::field(col_name, arrow::list(arrow::utf8())));
+        int64_t num_lists = array->length;
+        char *chars = (char *)array->data1;
+        int64_t *char_offsets = (int64_t *)array->data2;
+        int64_t *string_offsets = (int64_t *)array->data3;
+        arrow::ListBuilder list_builder(
+            pool, std::make_shared<arrow::StringBuilder>(pool));
+        arrow::StringBuilder &string_builder = *(
+            static_cast<arrow::StringBuilder *>(list_builder.value_builder()));
+        for (int64_t i = 0; i < num_lists; i++) {
+            bool is_null = !GetBit((uint8_t *)array->null_bitmask, i);
+            if (is_null) {
+                list_builder.AppendNull();
+            } else {
+                list_builder.Append();
+                int64_t l_string = string_offsets[i];
+                int64_t r_string = string_offsets[i + 1];
+                for (int64_t j = l_string; j < r_string; j++) {
+                    bool is_null =
+                        !GetBit((uint8_t *)array->sub_null_bitmask, j);
+                    if (is_null) {
+                        string_builder.AppendNull();
+                    } else {
+                        int64_t l_char = char_offsets[j];
+                        int64_t r_char = char_offsets[j + 1];
+                        int64_t length = r_char - l_char;
+                        string_builder.Append((uint8_t *)(chars + l_char),
+                                              length);
+                    }
+                }
+            }
+        }
+        std::shared_ptr<arrow::Array> result;
+        list_builder.Finish(&result);
+        *out = std::make_shared<arrow::ChunkedArray>(result);
     }
 }
 
