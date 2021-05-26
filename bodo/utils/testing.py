@@ -2,8 +2,12 @@
 import os
 import shutil
 from contextlib import contextmanager
+from pathlib import Path
 
 import bodo
+
+cwd = Path(__file__).resolve().parent
+datadir = cwd.parent / "tests" / "data"
 
 
 @bodo.jit
@@ -50,3 +54,23 @@ def ensure_clean_dir(dirname):
                 shutil.rmtree(dirname)
         except Exception as e:
             print("Exception on removing directory: {error}".format(error=e))
+
+
+@contextmanager
+def ensure_clean2(pathname):  # pragma: no cover
+    """deletes pathname if exists after test is done."""
+    try:
+        yield
+    finally:
+        barrier()
+        if get_rank() == 0:
+            try:
+                if os.path.exists(pathname) and os.path.isfile(pathname):
+                    os.remove(pathname)
+            except Exception as e:
+                print("Exception on removing file: {error}".format(error=e))
+            try:
+                if os.path.exists(pathname) and os.path.isdir(pathname):
+                    shutil.rmtree(pathname)
+            except Exception as e:
+                print("Exception on removing directory: {error}".format(error=e))
