@@ -165,3 +165,26 @@ def test_nested_str_tuples(memory_leak_check):
         return bodo.utils.conversion.coerce_to_array((("AA", "B"), ("C", "ABC")))
 
     check_func(impl, ())
+
+
+@pytest.mark.slow
+def test_nbytes(memory_leak_check):
+    """Test TupleArrayType nbytes"""
+
+    def impl(arr):
+        return arr.nbytes
+
+    tuple_value = np.array(
+        [
+            (1.1, 3.1),
+            (2.1, 1.1),
+            None,
+            (-1.1, -1.1),
+            (3.1, 4.1),
+            (-3.1, -1.1),
+            (5.1, 9.1),
+        ]
+    )
+    check_func(impl, (tuple_value,), py_output=113, only_seq=True)
+    py_out = 112 + bodo.get_size()  # one byte for null_bitmap per rank
+    check_func(impl, (tuple_value,), py_output=py_out, only_1DVar=True)

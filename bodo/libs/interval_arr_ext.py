@@ -211,6 +211,11 @@ def overload_interval_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
+@overload_attribute(IntervalArrayType, "nbytes")
+def overload_interval_arr_nbytes(A):
+    return lambda A: A._left.nbytes + A._right.nbytes  # pragma: no cover
+
+
 @overload_method(IntervalArrayType, "copy", no_unliteral=True)
 def overload_interval_arr_copy(A):
     return lambda A: bodo.libs.interval_arr_ext.init_interval_array(

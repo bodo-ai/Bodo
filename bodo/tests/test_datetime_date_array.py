@@ -124,3 +124,14 @@ def test_lower_constant_getitem(date_arr_value, memory_leak_check):
     bodo.jit(test_impl)(
         idx,
     )
+
+
+@pytest.mark.slow
+def test_nbytes(date_arr_value, memory_leak_check):
+    """Test DatetimeDateArrayType nbytes"""
+
+    def impl(arr):
+        return arr.nbytes
+
+    py_out = 139  # 136 for data, 3 for null_bitmap
+    check_func(impl, (date_arr_value,), py_output=py_out)

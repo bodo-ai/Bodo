@@ -901,6 +901,11 @@ def overload_datetime_date_arr_shape(A):
     return lambda A: (len(A._data),)
 
 
+@overload_attribute(DatetimeDateArrayType, "nbytes")
+def datetime_arr_nbytes_overload(A):
+    return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover
+
+
 def create_cmp_op_overload(op):
     """ create overload function for comparison operators with datetime_date_type. """
 
