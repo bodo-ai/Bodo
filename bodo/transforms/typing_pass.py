@@ -4,6 +4,7 @@ according to Bodo requirements (using partial typing).
 """
 import copy
 import itertools
+import re
 from collections import defaultdict
 
 import numba
@@ -1181,6 +1182,8 @@ class TypingTransforms:
             [sql_context_var],
             assign.target,
             self,
+            # BodoSQL Like functionality needs re module
+            extra_globals={"re": re},
             infer_types=False,
             run_untyped_pass=True,
             flags=self.flags,
