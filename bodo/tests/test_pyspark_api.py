@@ -148,8 +148,13 @@ def test_create_dataframe(memory_leak_check):
         return sdf.toPandas()
 
     df = pd.DataFrame({"A": [1, 2, 3], "B": ["A", "B", "C"]})
-    check_func(impl, (df,), only_seq=True)
-    check_func(impl2, (), only_seq=True)
+    # NOTE: using custom testing code since output is gathered on rank 0
+    df_out = bodo.jit(impl)(df)
+    if bodo.get_rank() == 0:
+        pd.testing.assert_frame_equal(df_out, df)
+    df_out = bodo.jit(impl2)()
+    if bodo.get_rank() == 0:
+        pd.testing.assert_frame_equal(df_out, impl2())
     with pytest.raises(
         BodoError,
         match="createDataFrame\(\): 'data' should be a Pandas dataframe or list of Rows",
