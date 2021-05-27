@@ -5,6 +5,7 @@
 import numpy as np
 import pytest
 
+import bodo
 from bodo.tests.utils import check_func
 
 
@@ -65,3 +66,29 @@ def test_dtype(map_arr_value, memory_leak_check):
         return A.dtype
 
     check_func(test_impl, (map_arr_value,))
+
+
+@pytest.mark.slow
+def test_nbytes(memory_leak_check):
+    """Test MapArrayType nbytes"""
+
+    def impl(arr):
+        return arr.nbytes
+
+    map_value = np.array(
+        [
+            {1: 1.4, 2: 3.1},
+            {7: -1.2},
+            None,
+            {11: 3.4, 21: 3.1, 9: 8.1},
+            {4: 9.4, 6: 4.1},
+            {7: -1.2},
+            {},
+            {8: 3.3, 5: 6.3},
+        ]
+    )
+    check_func(impl, (map_value,), py_output=253, only_seq=True)
+    py_out = 240 + 11 * bodo.get_size()
+    if bodo.get_size() == 1:
+        py_out += 2
+    check_func(impl, (map_value,), py_output=py_out, only_1DVar=True)

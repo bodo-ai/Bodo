@@ -1383,6 +1383,29 @@ def overload_struct_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
+@overload_attribute(StructArrayType, "nbytes")
+def overload_struct_arr_nbytes(A):
+    func_text = "def impl(A):\n"
+    func_text += "  total_nbytes = 0\n"
+    func_text += "  data = get_data(A)\n"
+    for i in range(len(A.data)):
+        func_text += f"  total_nbytes += data[{i}].nbytes\n"
+    func_text += "  total_nbytes += get_null_bitmap(A).nbytes\n"
+    func_text += "  return total_nbytes\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "get_data": get_data,
+            "get_null_bitmap": get_null_bitmap,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+
+    return impl
+
+
 @overload_method(StructArrayType, "copy", no_unliteral=True)
 def overload_struct_arr_copy(A):
     names = A.names

@@ -220,6 +220,11 @@ def overload_tuple_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
+@overload_attribute(TupleArrayType, "nbytes")
+def overload_tuple_arr_nbytes(A):
+    return lambda A: A._data.nbytes  # pragma: no cover
+
+
 @overload_method(TupleArrayType, "copy", no_unliteral=True)
 def overload_tuple_arr_copy(A):
     def copy_impl(A):  # pragma: no cover

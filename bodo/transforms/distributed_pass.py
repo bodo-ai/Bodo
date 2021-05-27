@@ -370,9 +370,18 @@ class DistributedPass:
                         bodo.IntegerArrayType,
                         bodo.DecimalArrayType,
                         bodo.CategoricalArrayType,
+                        bodo.libs.interval_arr_ext.IntervalArrayType,
+                        bodo.libs.struct_arr_ext.StructArrayType,
+                        bodo.libs.map_arr_ext.MapArrayType,
+                        bodo.libs.tuple_arr_ext.TupleArrayType,
                     ),
                 )
-                or self.typemap[rhs.value.name] == boolean_array
+                or self.typemap[rhs.value.name]
+                in (
+                    boolean_array,
+                    bodo.datetime_date_array_type,
+                    bodo.datetime_timedelta_array_type,
+                )
             )
             and self._is_1D_or_1D_Var_arr(rhs.value.name)
         ):

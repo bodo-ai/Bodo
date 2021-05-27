@@ -1610,6 +1610,16 @@ def overload_datetime_timedelta_arr_shape(A):
     return lambda A: (len(A._days_data),)
 
 
+@overload_attribute(DatetimeTimeDeltaArrayType, "nbytes")
+def timedelta_arr_nbytes_overload(A):
+    return (
+        lambda A: A._days_data.nbytes
+        + A._seconds_data.nbytes
+        + A._microseconds_data.nbytes
+        + A._null_bitmap.nbytes
+    )  # pragma: no cover
+
+
 def overload_datetime_timedelta_arr_sub(arg1, arg2):
 
     # datetime_timedelta_array - timedelta

@@ -122,3 +122,19 @@ def test_setitem_arr(timedelta_arr_value, memory_leak_check):
     check_func(
         test_impl, (timedelta_arr_value, idx, val), dist_test=False, copy_input=True
     )
+
+
+@pytest.mark.slow
+def test_nbytes(timedelta_arr_value, memory_leak_check):
+    """test DatetimeTimeDeltaArrayType nbytes"""
+
+    def impl(arr):
+        return arr.nbytes
+
+    py_out = (
+        264 + bodo.get_size()
+    )  # 88*3 = 264 for data (days, seconds, microseconds), one byte for null_bitmap per rank
+    check_func(impl, (timedelta_arr_value,), py_output=266, only_seq=True)
+    if bodo.get_size() == 1:  # np=1 has 2 bytes for null_bitmap
+        py_out += 1
+    check_func(impl, (timedelta_arr_value,), py_output=py_out, only_1DVar=True)

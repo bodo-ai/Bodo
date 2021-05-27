@@ -293,3 +293,26 @@ def test_setitem_none_int(memory_leak_check):
 
     i = 1
     check_func(test_impl, (A, i), copy_input=True, dist_test=False)
+
+
+@pytest.mark.slow
+def test_nbytes(memory_leak_check):
+    """Test StructArrayType nbytes"""
+
+    def impl(arr):
+        return arr.nbytes
+
+    struct_value = np.array(
+        [
+            {"X": 1, "Y": 3},
+            {"X": 2, "Y": 1},
+            None,
+            {"X": -1, "Y": -1},
+            {"X": 3, "Y": 4},
+            {"X": -3, "Y": -1},
+            {"X": 5, "Y": 9},
+        ]
+    )
+    check_func(impl, (struct_value,), py_output=115, only_seq=True)
+    py_out = 112 + 3 * bodo.get_size()
+    check_func(impl, (struct_value,), py_output=py_out, only_1DVar=True)

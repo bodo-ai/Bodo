@@ -534,6 +534,11 @@ def overload_map_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
+@overload_attribute(MapArrayType, "nbytes")
+def overload_map_arr_nbytes(A):
+    return lambda A: A._data.nbytes  # pragma: no cover
+
+
 @overload(operator.getitem, no_unliteral=True)
 def map_arr_getitem(arr, ind):
     if not isinstance(arr, MapArrayType):
