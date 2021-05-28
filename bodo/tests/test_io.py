@@ -965,12 +965,6 @@ def test_partition_cols():
             if "D" not in part_cols:
                 # TODO. can't write categorical to parquet currently because of metadata issue
                 del df_in["D"]
-            if bodo.get_rank() == 0:
-                # use pandas to create all the required directories since we don't
-                # create them yet
-                df_in.to_parquet(TEST_DIR, partition_cols=part_cols)
-                for f in glob.glob(TEST_DIR + "/**/*.parquet", recursive=True):
-                    os.remove(f)
             bodo.barrier()
             impl(_get_dist_arg(df_in, False), part_cols)
             bodo.barrier()

@@ -10,8 +10,24 @@ from bodo.tests.utils import (
     check_func,
     reduce_sum,
 )
+from bodo.utils.testing import ensure_clean2
 
 pytestmark = pytest.mark.hdfs
+
+
+def test_partition_cols(hdfs_datapath):
+    """Test hdfs to_parquet partition_cols."""
+    bd_fname = hdfs_datapath("bd_file.pq")
+    pd_fname = hdfs_datapath("pd_file.pq")
+    df = pd.DataFrame({"A": [0, 0, 0, 1, 1, 1], "B": [0, 1, 2, 3, 4, 5]})
+    part_cols = ["A"]
+    f = lambda df, part_cols: df.to_parquet(bd_fname, partition_cols=part_cols)
+    with ensure_clean2(bd_fname), ensure_clean2(pd_fname):
+        bodo.jit(f, distributed=["df"])(_get_dist_arg(df, False), part_cols)
+        df.to_parquet(pd_fname, partition_cols=part_cols)
+        bd_out = pd.read_parquet(bd_fname)
+        pd_out = pd.read_parquet(pd_fname)
+    pd.testing.assert_frame_equal(bd_out, pd_out)
 
 
 def test_hdfs_pq_groupby3(datapath, hdfs_datapath):
