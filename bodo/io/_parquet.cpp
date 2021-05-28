@@ -2,6 +2,7 @@
 #include <Python.h>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include "mpi.h"
@@ -990,6 +991,24 @@ struct partition_write_info {
     std::vector<int64_t> rows;  // rows in this partition
 };
 
+
+Bodo_Fs::FsEnum filesystem_type(const char *fname) {
+    Bodo_Fs::FsEnum fs_type;
+    if (strncmp(fname, "s3://", 5) == 0) {
+        fs_type = Bodo_Fs::s3;
+    } else if ((strncmp(fname, "abfs://", 7) == 0 ||
+                strncmp(fname, "abfss://", 8) == 0) ||
+               strncmp(fname, "hdfs://", 7) == 0) {
+        fs_type = Bodo_Fs::hdfs;
+    } else if ((strncmp(fname, "gcs://", 6) == 0) ||
+               (strncmp(fname, "gs://", 5) == 0)) {
+        fs_type = Bodo_Fs::gcs;
+    } else {  // local
+        fs_type = Bodo_Fs::posix;
+    }
+    return fs_type;
+}
+
 /*
  * Write the Bodo table (this process' chunk) to a partitioned directory of
  * parquet files. This process will write N files if it has N partitions in its
@@ -1100,6 +1119,13 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             RetrieveTable(new_table, p.rows, new_table->ncols());
         // NOTE: we pass is_parallel=False because we already took care of
         // is_parallel here
+        Bodo_Fs::FsEnum fs_type = filesystem_type(p.fpath.c_str());
+        if (fs_type == Bodo_Fs::FsEnum::posix) {
+            // s3 and hdfs create parent directories automatically when
+            // writing partitioned columns
+            std::filesystem::path path = p.fpath;
+            std::filesystem::create_directories(path.parent_path());
+        }
         pq_write(p.fpath.c_str(), part_table, col_names_arr_no_partitions,
                  nullptr, /*TODO*/ false, /*TODO*/ "", compression, false,
                  false, -1, -1, -1, /*TODO*/ "", bucket_region);

@@ -5,8 +5,26 @@ import pytest
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.utils.testing import ensure_clean2
 
 pytestmark = pytest.mark.s3
+
+
+def test_partition_cols(minio_server, s3_bucket):
+    """Test s3 to_parquet partition_cols."""
+    bd_fname = f"s3://{s3_bucket}/bd_file.pq"
+    df = pd.DataFrame({"A": [0, 0, 0, 1, 1, 1], "B": [0, 1, 2, 3, 4, 5]})
+    part_cols = ["A"]
+    write = lambda df: df.to_parquet(bd_fname, partition_cols=part_cols)
+    write_jit = bodo.jit(write, all_args_distributed_block=True)
+    with ensure_clean2(bd_fname):
+        write_jit(_get_dist_arg(df, False))
+        A0_actual = bodo.jit(lambda: pd.read_parquet(f"{bd_fname}/A=0"))()
+        A1_actual = bodo.jit(lambda: pd.read_parquet(f"{bd_fname}/A=1"))()
+    A0_expected = pd.DataFrame({"B": pd.Series([0, 1, 2], dtype="Int64")})
+    A1_expected = pd.DataFrame({"B": pd.Series([3, 4, 5], dtype="Int64")})
+    pd.testing.assert_frame_equal(A0_actual, A0_expected)
+    pd.testing.assert_frame_equal(A1_actual, A1_expected)
 
 
 @pytest.mark.parametrize(

@@ -177,6 +177,15 @@ void open_file_outstream(
     }
 }
 
+void posix_open_file_outstream(
+    const std::string &file_type, const std::string &fname,
+    std::shared_ptr<::arrow::io::OutputStream> *out_stream) {
+    arrow::Result<std::shared_ptr<arrow::io::OutputStream>> result =
+        arrow::io::FileOutputStream::Open(fname);
+    CHECK_ARROW_AND_ASSIGN(result, "FileOutputStream::Open", *out_stream,
+                           file_type)
+}
+
 void open_file_outstream_gcs(
     Bodo_Fs::FsEnum fs_option, const std::string &file_type,
     const std::string &fname, std::shared_ptr<arrow::py::fs::PyFileSystem> fs,
@@ -231,11 +240,9 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
             }
             std::filesystem::path out_path(dirname);
             out_path /= fname;  // append file name to output path
-            open_file_outstream(fs_option, file_type, out_path.string(), NULL,
-                                NULL, out_stream);
+            posix_open_file_outstream(file_type, out_path.string(), out_stream);
         } else {
-            open_file_outstream(fs_option, file_type, fname, NULL, NULL,
-                                out_stream);
+            posix_open_file_outstream(file_type, fname, out_stream);
         }
         return;
     } else if (fs_option == Bodo_Fs::s3) {
