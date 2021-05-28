@@ -242,3 +242,23 @@ def test_dataframe_select(memory_leak_check):
         only_1DVar=True,
         py_output=py_out,
     )
+
+
+def test_dataframe_show(memory_leak_check, capsys):
+    """test Spark dataframe.show()"""
+
+    def impl(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        sdf.show()
+
+    df = pd.DataFrame(
+        {"A": np.arange(7), "B": ["S1", "S2", "C", "D", "AB", "AC", "AD"]}
+    )
+    bodo.jit(distributed=["df"])(impl)(df)
+    captured = capsys.readouterr()
+    if bodo.get_rank() == 0:
+        assert "A" in captured.out
+        assert "B" in captured.out
+        assert "S1" in captured.out
+        assert "0" in captured.out
