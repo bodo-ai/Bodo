@@ -1102,6 +1102,14 @@ def overload_series_is_monotonic_decreasing(S):
     )
 
 
+@overload_attribute(SeriesType, "nbytes", inline="always")
+def overload_series_nbytes(S):
+    """ Support Series.nbytes. It returns nbytes for data only (without index) """
+    return lambda S: bodo.hiframes.pd_series_ext.get_series_data(
+        S
+    ).nbytes  # pragma: no cover
+
+
 @overload_method(SeriesType, "autocorr", inline="always", no_unliteral=True)
 def overload_series_autocorr(S, lag=1):
     return lambda S, lag=1: bodo.libs.array_kernels.autocorr(

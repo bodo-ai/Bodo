@@ -304,6 +304,7 @@ Attributes:
 * :attr:`pandas.Series.empty`
 * :attr:`pandas.Series.dtypes`
 * :attr:`pandas.Series.name`
+* :attr:`pandas.Series.nbytes`
 * :attr:`pandas.Series.is_monotonic`
 * :attr:`pandas.Series.is_monotonic_increasing`
 * :attr:`pandas.Series.is_monotonic_decreasing`

@@ -1005,7 +1005,6 @@ series_unsupported_attrs = (
     "at",
     "attrs",
     "axes",
-    "nbytes",
     "is_unique",
     "sparse",
 )
