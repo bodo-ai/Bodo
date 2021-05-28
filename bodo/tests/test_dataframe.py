@@ -1675,14 +1675,6 @@ def test_df_describe_mixed_dt(memory_leak_check):
         {
             "A": pd.date_range("2017-01-03", periods=6),
             "B": pd.date_range("2019-01-03", periods=6),
-            "C": [
-                pd.Timestamp("20130101 09:00:00"),
-                pd.Timestamp("20130101 09:00:02"),
-                pd.Timestamp("20130101 09:00:03"),
-                pd.Timestamp("20130101 09:00:05"),
-                pd.Timestamp("20130101 09:00:06"),
-                pd.Timestamp("20130101 09:00:07"),
-            ],
         }
     )
     check_func(test_impl, (df,), is_out_distributed=False)
