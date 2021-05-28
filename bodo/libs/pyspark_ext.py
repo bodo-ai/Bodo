@@ -6,6 +6,7 @@ from collections import namedtuple
 
 import numba
 import numba.cpython.tupleobj
+import numpy as np
 import pyspark
 import pyspark.sql.functions as F
 from numba.core import cgutils, ir_utils, types
@@ -394,7 +395,8 @@ def overload_to_pandas(spark_df, _is_bodo_dist=False):
 
     def impl(spark_df, _is_bodo_dist=False):  # pragma: no cover
         # gathering data to follow toPandas() semantics
-        return bodo.gatherv(spark_df._df)
+        # Spark dataframe may be replicated, e.g. sdf.select(F.sum(F.col("A")))
+        return bodo.gatherv(spark_df._df, warn_if_rep=False)
 
     return impl
 
@@ -460,7 +462,7 @@ def _gen_df_select(spark_df, cols, avoid_stararg=False):
     func_text += f"  pdf = bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, index, {tuple(out_col_names)})\n"
     func_text += f"  return bodo.libs.pyspark_ext.init_spark_df(pdf)\n"
     loc_vars = {}
-    _global = {"bodo": bodo}
+    _global = {"bodo": bodo, "np": np}
     exec(func_text, _global, loc_vars)
     impl = loc_vars["impl"]
     return impl
@@ -541,6 +543,31 @@ def overload_f_col(col):
     return lambda col: init_col_from_name(col)  # pragma: no cover
 
 
+@intrinsic
+def init_f_sum(typingctx, col=None):
+    """create a Column object for F.sum"""
+    col_type = ColumnType(ExprType("sum", (col.expr,)))
+
+    def codegen(context, builder, signature, args):
+        return context.get_constant_null(col_type)
+
+    return col_type(col), codegen
+
+
+@overload(F.sum, no_unliteral=True)
+def overload_f_sum(col):
+    """create a Column object for F.sum"""
+    if is_overload_constant_str(col):
+        return lambda col: init_f_sum(init_col_from_name(col))  # pragma: no cover
+
+    if not isinstance(col, ColumnType):
+        raise BodoError(
+            f"F.sum(): input should be a Column object or a constant string, not {col}"
+        )
+
+    return lambda col: init_f_sum(col)  # pragma: no cover
+
+
 def _get_col_name(col):
     """get output column name for Column value 'col'"""
     if isinstance(col, str):
@@ -548,20 +575,46 @@ def _get_col_name(col):
 
     # TODO: generate code for other Column exprs
     _check_column(col)
-    assert col.expr.op == "col"
-    return col.expr.children[0]
+    return _get_col_name_exr(col.expr)
+
+
+def _get_col_name_exr(expr):
+    """get output column name for Expr 'expr'"""
+
+    if expr.op == "sum":
+        return f"sum({_get_col_name_exr(expr.children[0])})"
+
+    assert expr.op == "col"
+    return expr.children[0]
 
 
 def _gen_col_code(col, df_type):
     """generate code for Column value 'col' for dataframe 'df_type'"""
+    if isinstance(col, str):
+        return _gen_col_code_colname(col, df_type)
 
+    _check_column(col)
+    return _gen_col_code_expr(col.expr, df_type)
+
+
+def _gen_col_code_expr(expr, df_type):
+    """generate code for Expr 'expr'"""
     # TODO: generate code for other Column exprs
-    if isinstance(col, ColumnType):
-        assert col.expr.op == "col"
-        col = col.expr.children[0]
 
+    if expr.op == "col":
+        return _gen_col_code_colname(expr.children[0], df_type)
+
+    if expr.op == "sum":
+        in_out, in_func_text = _gen_col_code_expr(expr.children[0], df_type)
+        i = ir_utils.next_label()
+        func_text = f"  A{i} = np.asarray([bodo.libs.array_ops.array_op_sum({in_out}, True, 0)])\n"
+        return f"A{i}", in_func_text + func_text
+
+
+def _gen_col_code_colname(col_name, df_type):
+    """generate code for referencing column name 'col_name' of dataframe 'df_type'"""
     # str column name case
-    col_ind = df_type.columns.index(col)
+    col_ind = df_type.columns.index(col_name)
     i = ir_utils.next_label()
     func_text = (
         f"  A{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {col_ind})\n"
