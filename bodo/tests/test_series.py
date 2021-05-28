@@ -5388,7 +5388,7 @@ def test_series_unsupported_error_checking(memory_leak_check):
     """make sure BodoError is raised for unsupported Series attributes and methods"""
     # test an example attribute
     def test_attr(S):
-        return S.nbytes
+        return S.axes
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_attr)(pd.Series([1, 2]))
@@ -5465,3 +5465,12 @@ def test_series_mem_usage(memory_leak_check):
 
     # Empty and no index.
     check_func(impl2, (S,), is_out_distributed=False)
+
+
+@pytest.mark.slow
+def test_series_nbytes(memory_leak_check):
+    def impl(S):
+        return S.nbytes
+
+    S = pd.Series([1, 2, 3, 4, 5, 6])
+    check_func(impl, (S,))
