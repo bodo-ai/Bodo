@@ -78,7 +78,12 @@ try:
     import bodo.libs.pyspark_ext  # noqa
 
     bodo.utils.transform.no_side_effect_call_tuples.update(
-        {("col", pyspark.sql.functions), (pyspark.sql.functions.col,)}
+        {
+            ("col", pyspark.sql.functions),
+            (pyspark.sql.functions.col,),
+            ("sum", pyspark.sql.functions),
+            (pyspark.sql.functions.sum,),
+        }
     )
 
     _pyspark_installed = True

@@ -510,12 +510,8 @@ class DistributedAnalysis:
             and isinstance(rhs_typ, bodo.libs.pyspark_ext.SparkDataFrameType)
             and attr == "_df"
         ):
+            # Spark dataframe may be replicated, e.g. sdf.select(F.sum(F.col("A")))
             self._meet_array_dists(lhs, rhs.value.name, array_dists)
-            # enforce distributed semantics for Spark dataframes
-            if not _is_1D_or_1D_Var_arr(lhs, array_dists):
-                raise BodoError(
-                    f"Spark DataFrame data should be distributed (variable {lhs})"
-                )
 
     def _analyze_parfor(self, parfor, array_dists, parfor_dists):
         """analyze Parfor nodes for distribution. Parfor and its accessed arrays should
@@ -1563,11 +1559,7 @@ class DistributedAnalysis:
 
         if fdef == ("init_spark_df", "bodo.libs.pyspark_ext"):
             in_df_name = args[0].name
-            # enforce distributed semantics for Spark dataframes
-            if not _is_1D_or_1D_Var_arr(in_df_name, array_dists):
-                raise BodoError(
-                    f"Spark DataFrame data should be distributed (variable {in_df_name})"
-                )
+            # Spark dataframe may be replicated, e.g. sdf.select(F.sum(F.col("A")))
             self._meet_array_dists(lhs, in_df_name, array_dists)
             return
 
