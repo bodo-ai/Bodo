@@ -384,6 +384,7 @@ ext_parquet = Extension(
         "bodo/libs/_array_utils.cpp",
         "bodo/libs/_array_hash.cpp",
         "bodo/libs/_murmurhash3.cpp",
+        "bodo/io/_gcs_reader.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
@@ -392,7 +393,7 @@ ext_parquet = Extension(
         "bodo/io/_parquet_reader.h",
         "bodo/libs/_murmurhash3.h",
     ],
-    libraries=pq_libs + np_compile_args["libraries"],
+    libraries=pq_libs + np_compile_args["libraries"] + ["arrow_python"],
     include_dirs=["."] + np_compile_args["include_dirs"] + ind + extra_hash_ind,
     define_macros=[],
     extra_compile_args=eca,

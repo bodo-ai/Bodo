@@ -811,9 +811,19 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
             message = (
                 "Couldn't import gcsfs, which is required for Google cloud access."
                 " gcsfs can be installed by calling"
-                " 'conda install -c conda-forge gcsfs.\n"
+                " 'conda install -c conda-forge gcsfs'.\n"
             )
             raise BodoError(message)
+
+    if fpath.startswith("http://"):
+        try:
+            import fsspec
+        except ImportError:
+            message = (
+                "Couldn't import fsspec, which is required for http access."
+                " fsspec can be installed by calling"
+                " 'conda install -c conda-forge fsspec'.\n"
+            )
 
     fs = []
 
@@ -830,6 +840,8 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
             # TODO pass storage_options to GCSFileSystem
             google_fs = gcsfs.GCSFileSystem(token=None)
             fs.append(google_fs)
+        elif fpath.startswith("http://"):
+            fs.append(fsspec.filesystem('http'))
         elif (
             fpath.startswith("hdfs://")
             or fpath.startswith("abfs://")
