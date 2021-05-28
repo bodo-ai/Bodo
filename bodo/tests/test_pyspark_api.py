@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 import numpy as np
 import pandas as pd
+import pyspark.sql.functions as F
 import pytest
 from pyspark.sql import SparkSession
 from pyspark.sql.types import Row
@@ -262,3 +263,35 @@ def test_dataframe_show(memory_leak_check, capsys):
         assert "B" in captured.out
         assert "S1" in captured.out
         assert "0" in captured.out
+
+
+def test_functions_col(memory_leak_check):
+    """test creating Column object using F.col()"""
+
+    def impl(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.select(F.col("A")).toPandas()
+        return df2
+
+    def impl_err(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.select(F.col(3)).toPandas()
+        return df2
+
+    df = pd.DataFrame({"A": np.arange(7), "B": ["A", "B", "C", "D", "AB", "AC", "AD"]})
+    # NOTE: using pyout since Spark is slow and fails in multi-process case
+    py_out = df[["A"]]
+    check_func(
+        impl,
+        (df,),
+        additional_compiler_arguments={"distributed": ["df2"]},
+        only_1D=True,
+        py_output=py_out,
+    )
+    with pytest.raises(
+        BodoError,
+        match="F\.col\(\): column name should be a constant string",
+    ):
+        bodo.jit(distributed=["df"])(impl_err)(df)
