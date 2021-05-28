@@ -33,6 +33,7 @@ import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.utils.typing import (
     BodoError,
+    check_unsupported_args,
     dtype_to_array_type,
     get_overload_const_list,
     get_overload_const_str,
@@ -460,6 +461,27 @@ def _gen_df_select(spark_df, cols, avoid_stararg=False):
     _global = {"bodo": bodo}
     exec(func_text, _global, loc_vars)
     impl = loc_vars["impl"]
+    return impl
+
+
+@overload_method(SparkDataFrameType, "show", inline="always", no_unliteral=True)
+def overload_show(spark_df, n=20, truncate=True, vertical=False):
+    """
+    Just print df.head() for now. TODO(ehsan): create accurate output based on
+    Spark's code:
+    https://github.com/apache/spark/blob/e8631660ecf316e4333210650d1f40b5912fb11b/python/pyspark/sql/dataframe.py#L442
+    https://github.com/apache/spark/blob/34284c06496cd621792c0f9dfc90435da0ab9eb5/sql/core/src/main/scala/org/apache/spark/sql/Dataset.scala#L335
+    """
+    unsupported_args = dict(
+        truncate=truncate,
+        vertical=vertical,
+    )
+    arg_defaults = dict(truncate=True, vertical=False)
+    check_unsupported_args("SparkDataFrameType.show", unsupported_args, arg_defaults)
+
+    def impl(spark_df, n=20, truncate=True, vertical=False):  # pragma: no cover
+        print(spark_df._df.head(n))
+
     return impl
 
 
