@@ -7,6 +7,7 @@ from collections import namedtuple
 import numba
 import numba.cpython.tupleobj
 import pyspark
+import pyspark.sql.functions as F
 from numba.core import cgutils, ir_utils, types
 from numba.core.imputils import lower_constant
 from numba.core.typing.templates import (
@@ -23,6 +24,7 @@ from numba.extending import (
     lower_builtin,
     make_attribute_wrapper,
     models,
+    overload,
     overload_method,
     register_model,
     typeof_impl,
@@ -514,6 +516,29 @@ class ExprType(types.Type):
 
 
 register_model(ExprType)(models.OpaqueModel)
+
+
+@intrinsic
+def init_col_from_name(typingctx, col=None):
+    """create Column object from column name"""
+    assert is_overload_constant_str(col)
+    col_str = get_overload_const_str(col)
+    col_type = ColumnType(ExprType("col", (col_str,)))
+
+    def codegen(context, builder, signature, args):
+        return context.get_constant_null(col_type)
+
+    return col_type(col), codegen
+
+
+@overload(F.col, no_unliteral=True)
+@overload(F.column, no_unliteral=True)
+def overload_f_col(col):
+    """create a Column object from column name"""
+    if not is_overload_constant_str(col):
+        raise BodoError(f"F.col(): column name should be a constant string, not {col}")
+
+    return lambda col: init_col_from_name(col)  # pragma: no cover
 
 
 def _get_col_name(col):
