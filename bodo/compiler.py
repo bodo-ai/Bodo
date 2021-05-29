@@ -73,8 +73,13 @@ except ImportError:
 _pyspark_installed = False
 try:
     import pyspark  # noqa
+    import pyspark.sql.functions  # noqa
 
     import bodo.libs.pyspark_ext  # noqa
+
+    bodo.utils.transform.no_side_effect_call_tuples.update(
+        {("col", pyspark.sql.functions), (pyspark.sql.functions.col,)}
+    )
 
     _pyspark_installed = True
 except ImportError:
