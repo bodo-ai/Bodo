@@ -295,3 +295,45 @@ def test_functions_col(memory_leak_check):
         match="F\.col\(\): column name should be a constant string",
     ):
         bodo.jit(distributed=["df"])(impl_err)(df)
+
+
+def test_functions_sum(memory_leak_check):
+    """test F.sum()"""
+
+    def impl1(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        return sdf.select(F.sum(F.col("A"))).toPandas()
+
+    def impl2(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        return sdf.select(F.sum("A")).toPandas()
+
+    def impl_err(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.select(F.sum(3)).toPandas()
+        return df2
+
+    df = pd.DataFrame({"A": np.arange(7), "B": ["A", "B", "C", "D", "AB", "AC", "AD"]})
+    # NOTE: using pyout since Spark is slow and fails in multi-process case
+    check_func(
+        impl1,
+        (df,),
+        only_1D=True,
+        py_output=pd.DataFrame({"sum(A)": [df.A.sum()]}),
+        is_out_distributed=False,
+    )
+    check_func(
+        impl2,
+        (df,),
+        only_1D=True,
+        py_output=pd.DataFrame({"sum(A)": [df.A.sum()]}),
+        is_out_distributed=False,
+    )
+    with pytest.raises(
+        BodoError,
+        match="F\.sum\(\): input should be a Column object or a constant string",
+    ):
+        bodo.jit(distributed=["df"])(impl_err)(df)
