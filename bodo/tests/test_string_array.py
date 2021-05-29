@@ -399,6 +399,16 @@ def test_ndim(memory_leak_check):
     check_func(test_impl, (pd.array(["AA", "B"] * 4),))
 
 
+def test_tolist(memory_leak_check):
+    def impl(A):
+        return A.tolist()
+
+    # NOTE: only Numpy array has tolist(), not Pandas arrays
+    check_func(impl, (np.array(["A", "BCD"] * 4),), only_seq=True)
+    check_func(impl, (np.arange(11),), only_seq=True)
+
+
+@pytest.mark.slow
 def test_astype_str(memory_leak_check):
     def test_impl(A):
         return A.astype(str)
