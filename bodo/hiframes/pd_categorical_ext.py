@@ -235,7 +235,25 @@ def unbox_categorical_array(typ, val, c):
     return NativeValue(cat_arr_val._getvalue())
 
 
+@lower_constant(CategoricalArrayType)
+def lower_constant_categorical_array(context, builder, typ, pyval):
+    """convert constant categorical array value to native value"""
+
+    codes_dtype = get_categories_int_type(typ.dtype)
+    codes_arr = context.get_constant_generic(
+        builder, types.Array(codes_dtype, 1, "C"), pyval.codes
+    )
+    cat_dtype = context.get_constant_generic(builder, typ.dtype, pyval.dtype)
+
+    # create CategoricalArrayType
+    cat_arr_val = cgutils.create_struct_proxy(typ)(context, builder)
+    cat_arr_val.codes = codes_arr
+    cat_arr_val.dtype = cat_dtype
+    return cat_arr_val._getvalue()
+
+
 def get_categories_int_type(cat_dtype):
+    """find smallest integer data type that can represent all categories in 'cat_dtype'"""
     dtype = types.int64
     # if categories are not known upfront, assume worst case int64 for codes
     if cat_dtype.categories is None:
