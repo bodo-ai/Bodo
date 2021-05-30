@@ -14,6 +14,7 @@ from numba.core.ir_utils import find_callname, guard
 
 import bodo
 from bodo.tests.utils import (
+    AnalysisTestPipeline,
     SeriesOptTestPipeline,
     _get_dist_arg,
     _test_equal,
@@ -5107,6 +5108,23 @@ def test_astype_call_warn(memory_leak_check):
         return S.astype("category").cat.codes
 
     bodo.jit(distributed=False)(impl)(pd.Series(["A", "B"]))
+
+
+def test_get_series_index_array_analysis():
+    """make sure shape equivalence for get_series_index() is applied correctly"""
+    import numba.tests.test_array_analysis
+
+    def impl(S):
+        B = S.index
+        return B
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    test_func(pd.Series(np.ones(4), index=[3, 2, 1, 3]))
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("S#0") == eq_set._get_ind("B#0")
 
 
 ############################### old tests ###############################
