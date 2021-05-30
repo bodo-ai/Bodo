@@ -532,6 +532,16 @@ def test_pd_categorical_compile_time():
     check_func(test_impl3, (S,), check_categorical=False)
 
 
+# TODO: fix memory leak and add memory_leak_check
+def test_constant_lowering():
+    arr = pd.Categorical(["A", "B", "A", "ABC", "B", None, "ABC", "D"])
+
+    def impl():
+        return arr
+
+    check_func(impl, (), check_categorical=False, only_seq=True)
+
+
 @pytest.mark.slow
 def test_categorical_nbytes():
     """Test CategoricalArrayType nbytes"""
