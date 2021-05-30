@@ -3638,6 +3638,23 @@ def test_get_dataframe_data_array_analysis():
     assert eq_set._get_ind("df#0") == eq_set._get_ind("B#0")
 
 
+def test_get_dataframe_index_array_analysis():
+    """make sure shape equivalence for get_dataframe_index() is applied correctly"""
+    import numba.tests.test_array_analysis
+
+    def impl(df):
+        B = df.index
+        return B
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    test_func(pd.DataFrame({"A": np.ones(10), "B": np.arange(10)}))
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("df#0") == eq_set._get_ind("B#0")
+
+
 def test_df_const_set_rm_index(memory_leak_check):
     """Make sure dataframe related variables like the index are removed correctly and
     parallelism warning is thrown when a column is being set using a constant.

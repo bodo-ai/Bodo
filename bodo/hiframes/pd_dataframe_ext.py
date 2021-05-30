@@ -706,6 +706,30 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_data
 )
 
 
+def get_dataframe_index_equiv(self, scope, equiv_set, loc, args, kws):
+    """array analysis for get_dataframe_index(). output Index has the same length as
+    input dataframe.
+    """
+    from bodo.hiframes.pd_index_ext import HeterogeneousIndexType
+
+    assert len(args) == 1 and not kws
+    var = args[0]
+
+    # avoid returning shape for tuple data (can result in Numba errors)
+    index_type = self.typemap[var.name].index
+    if isinstance(index_type, HeterogeneousIndexType):
+        return None
+
+    if equiv_set.has_shape(var):
+        return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(var)[0], pre=[])
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_index = (
+    get_dataframe_index_equiv
+)
+
+
 @intrinsic
 def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
     """set column data of a dataframe inplace"""
