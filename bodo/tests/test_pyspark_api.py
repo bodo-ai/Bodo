@@ -304,7 +304,7 @@ def test_functions_col(memory_leak_check):
     )
     with pytest.raises(
         BodoError,
-        match="F\.col\(\): column name should be a constant string",
+        match="functions\.col\(\): column name should be a constant string",
     ):
         bodo.jit(distributed=["df"])(impl_err)(df)
 
@@ -346,6 +346,6 @@ def test_functions_sum(memory_leak_check):
     )
     with pytest.raises(
         BodoError,
-        match="F\.sum\(\): input should be a Column object or a constant string",
+        match="functions\.sum\(\): input should be a Column object or a constant string",
     ):
         bodo.jit(distributed=["df"])(impl_err)(df)

@@ -553,7 +553,9 @@ def init_col_from_name(typingctx, col=None):
 def overload_f_col(col):
     """create a Column object from column name"""
     if not is_overload_constant_str(col):
-        raise BodoError(f"F.col(): column name should be a constant string, not {col}")
+        raise BodoError(
+            f"pyspark.sql.functions.col(): column name should be a constant string, not {col}"
+        )
 
     return lambda col: init_col_from_name(col)  # pragma: no cover
 
@@ -577,7 +579,7 @@ def overload_f_sum(col):
 
     if not isinstance(col, ColumnType):
         raise BodoError(
-            f"F.sum(): input should be a Column object or a constant string, not {col}"
+            f"pyspark.sql.functions.sum(): input should be a Column object or a constant string, not {col}"
         )
 
     return lambda col: init_f_sum(col)  # pragma: no cover
