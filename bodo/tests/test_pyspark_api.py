@@ -245,6 +245,18 @@ def test_dataframe_select(memory_leak_check):
     )
 
 
+def test_dataframe_columns(memory_leak_check):
+    """test 'columns' attribute of SparkDataFrame"""
+
+    def impl(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        return sdf.columns
+
+    df = pd.DataFrame({"A": np.arange(7), "B": ["A", "B", "C", "D", "AB", "AC", "AD"]})
+    assert bodo.jit(distributed=["df"])(impl)(df) == ["A", "B"]
+
+
 def test_dataframe_show(memory_leak_check, capsys):
     """test Spark dataframe.show()"""
 
