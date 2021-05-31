@@ -27,6 +27,7 @@ from numba.extending import (
     overload_method,
     register_model,
 )
+from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
@@ -372,8 +373,6 @@ def init_series_equiv(self, scope, equiv_set, loc, args, kws):
     return None
 
 
-from numba.parfors.array_analysis import ArrayAnalysis
-
 ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_init_series = (
     init_series_equiv
 )
@@ -462,10 +461,28 @@ def get_series_data_equiv(self, scope, equiv_set, loc, args, kws):
     return None
 
 
-from numba.parfors.array_analysis import ArrayAnalysis
-
 ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_get_series_data = (
     get_series_data_equiv
+)
+
+
+def get_series_index_equiv(self, scope, equiv_set, loc, args, kws):
+    """array analysis equivalence extension for get_series_index()"""
+    from bodo.hiframes.pd_index_ext import HeterogeneousIndexType
+
+    assert len(args) == 1 and not kws
+    var = args[0]
+    index_type = self.typemap[var.name].index
+    # avoid returning shape for tuple input (results in dimension mismatch error)
+    if isinstance(index_type, HeterogeneousIndexType):
+        return None
+    if equiv_set.has_shape(var):
+        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_series_ext_get_series_index = (
+    get_series_index_equiv
 )
 
 
