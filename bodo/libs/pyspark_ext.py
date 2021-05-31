@@ -26,6 +26,7 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
+    overload_attribute,
     overload_method,
     register_model,
     typeof_impl,
@@ -486,6 +487,20 @@ def overload_show(spark_df, n=20, truncate=True, vertical=False):
     def impl(spark_df, n=20, truncate=True, vertical=False):  # pragma: no cover
         print(spark_df._df.head(n))
 
+    return impl
+
+
+@overload_attribute(SparkDataFrameType, "columns", inline="always")
+def overload_dataframe_columns(spark_df):
+    """support 'columns' attribute which returns a string list of column names"""
+    # embedding column names in generated function instead of returning a freevar since
+    # there is no constant lowering for lists in Numba (TODO: support)
+    col_names = list(str(a) for a in spark_df.df.columns)
+    func_text = "def impl(spark_df):\n"
+    func_text += f"  return {col_names}\n"
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars["impl"]
     return impl
 
 
