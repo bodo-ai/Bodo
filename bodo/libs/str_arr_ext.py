@@ -940,6 +940,12 @@ def str_arr_nbytes_overload(str_arr):
     return lambda str_arr: str_arr._data.nbytes  # pragma: no cover
 
 
+@overload_method(types.Array, "tolist", no_unliteral=True)
+@overload_method(StringArrayType, "tolist", no_unliteral=True)
+def overload_to_list(arr):
+    return lambda arr: list(arr)  # pragma: no cover
+
+
 import llvmlite.binding as ll
 from llvmlite import ir as lir
 
