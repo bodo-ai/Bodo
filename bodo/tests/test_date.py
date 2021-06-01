@@ -1116,6 +1116,38 @@ def test_td64_str_astype(memory_leak_check):
     check_func(impl2, (S,))
 
 
+@pytest.mark.slow
+def test_td64_max(memory_leak_check):
+    def test_impl(S):
+        return S.max()
+
+    S = pd.Series(
+        [
+            np.timedelta64(10, "Y"),
+            np.timedelta64(9, "M"),
+            np.timedelta64(8, "W"),
+        ]
+        * 4
+    )
+    check_func(test_impl, (S,))
+
+
+@pytest.mark.slow
+def test_td64_min(memory_leak_check):
+    def test_impl(S):
+        return S.min()
+
+    S = pd.Series(
+        [
+            np.timedelta64(10, "Y"),
+            np.timedelta64(9, "M"),
+            np.timedelta64(8, "W"),
+        ]
+        * 4
+    )
+    check_func(test_impl, (S,))
+
+
 # ------------------------- Test datetime.datetime ------------------------- #
 @pytest.mark.slow
 def test_datetime_datetime_construct(memory_leak_check):
