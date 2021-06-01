@@ -26,6 +26,7 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
+    overload_attribute,
     overload_method,
     register_model,
     typeof_impl,
@@ -489,6 +490,20 @@ def overload_show(spark_df, n=20, truncate=True, vertical=False):
     return impl
 
 
+@overload_attribute(SparkDataFrameType, "columns", inline="always")
+def overload_dataframe_columns(spark_df):
+    """support 'columns' attribute which returns a string list of column names"""
+    # embedding column names in generated function instead of returning a freevar since
+    # there is no constant lowering for lists in Numba (TODO: support)
+    col_names = list(str(a) for a in spark_df.df.columns)
+    func_text = "def impl(spark_df):\n"
+    func_text += f"  return {col_names}\n"
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
 class ColumnType(types.Type):
     """data type for Spark Column object"""
 
@@ -538,7 +553,9 @@ def init_col_from_name(typingctx, col=None):
 def overload_f_col(col):
     """create a Column object from column name"""
     if not is_overload_constant_str(col):
-        raise BodoError(f"F.col(): column name should be a constant string, not {col}")
+        raise BodoError(
+            f"pyspark.sql.functions.col(): column name should be a constant string, not {col}"
+        )
 
     return lambda col: init_col_from_name(col)  # pragma: no cover
 
@@ -562,7 +579,7 @@ def overload_f_sum(col):
 
     if not isinstance(col, ColumnType):
         raise BodoError(
-            f"F.sum(): input should be a Column object or a constant string, not {col}"
+            f"pyspark.sql.functions.sum(): input should be a Column object or a constant string, not {col}"
         )
 
     return lambda col: init_f_sum(col)  # pragma: no cover

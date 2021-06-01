@@ -245,6 +245,18 @@ def test_dataframe_select(memory_leak_check):
     )
 
 
+def test_dataframe_columns(memory_leak_check):
+    """test 'columns' attribute of SparkDataFrame"""
+
+    def impl(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        return sdf.columns
+
+    df = pd.DataFrame({"A": np.arange(7), "B": ["A", "B", "C", "D", "AB", "AC", "AD"]})
+    assert bodo.jit(distributed=["df"])(impl)(df) == ["A", "B"]
+
+
 def test_dataframe_show(memory_leak_check, capsys):
     """test Spark dataframe.show()"""
 
@@ -292,7 +304,7 @@ def test_functions_col(memory_leak_check):
     )
     with pytest.raises(
         BodoError,
-        match="F\.col\(\): column name should be a constant string",
+        match="functions\.col\(\): column name should be a constant string",
     ):
         bodo.jit(distributed=["df"])(impl_err)(df)
 
@@ -334,6 +346,6 @@ def test_functions_sum(memory_leak_check):
     )
     with pytest.raises(
         BodoError,
-        match="F\.sum\(\): input should be a Column object or a constant string",
+        match="functions\.sum\(\): input should be a Column object or a constant string",
     ):
         bodo.jit(distributed=["df"])(impl_err)(df)
