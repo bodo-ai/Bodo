@@ -1024,6 +1024,16 @@ class DistributedAnalysis:
             # nunique doesn't affect input's distribution
             return
 
+        if fdef == ("series_str_dt64_astype", "bodo.hiframes.pd_timestamp_ext"):
+            # LHS should match RHS
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if fdef == ("series_str_td64_astype", "bodo.hiframes.pd_timestamp_ext"):
+            # LHS should match RHS
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("cat_replace", "bodo.hiframes.pd_categorical_ext"):
             # LHS should match RHS
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)

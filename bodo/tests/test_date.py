@@ -1051,6 +1051,24 @@ def test_dt64_astype(datetime_convertable_series, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_dt64_str_astype(memory_leak_check):
+    """
+    Test legal astype conversions from string to datetime64[ns]
+    """
+
+    def impl1(S):
+        return S.astype(np.dtype("datetime64[ns]"))
+
+    def impl2(S):
+        return S.astype("datetime64[ns]")
+
+    S = pd.Series(["3/11/2000", "nan", "3/13/2000", "5/31/2021 03:23:53.231"] * 3)
+
+    check_func(impl1, (S,))
+    check_func(impl2, (S,))
+
+
+@pytest.mark.slow
 def test_td64_astype(datetime_convertable_series, memory_leak_check):
     """
     Test legal astype conversions to timedelta[ns]
@@ -1076,6 +1094,26 @@ def test_td64_astype(datetime_convertable_series, memory_leak_check):
 
     check_func(impl1, (datetime_convertable_series,), py_output=py_output)
     check_func(impl2, (datetime_convertable_series,), py_output=py_output)
+
+
+@pytest.mark.slow
+def test_td64_str_astype(memory_leak_check):
+    """
+    Test legal astype conversions from string to timedelta64[ns]
+    """
+
+    def impl1(S):
+        return S.astype(np.dtype("timedelta64[ns]"))
+
+    def impl2(S):
+        return S.astype("timedelta64[ns]")
+
+    # TD64 seems to only work at converting strings of integers
+    # without units.
+    S = pd.Series(["2133421", "155", "32141", "-1542542"] * 3)
+
+    check_func(impl1, (S,))
+    check_func(impl2, (S,))
 
 
 # ------------------------- Test datetime.datetime ------------------------- #
