@@ -421,7 +421,7 @@ PyMODINIT_FUNC PyInit_hdist(void) {
         }
         // only print reminder on rank 0
         if (countdown_days < EXPIRATION_COUNTDOWN_DAYS && rank == 0) {
-            fprintf(stdout, "Reminder: Bodo License will expire in %d days.",
+            fprintf(stdout, "Reminder: Bodo License will expire in %d days.\n",
                     countdown_days);
         }
     }
