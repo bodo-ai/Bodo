@@ -1130,6 +1130,28 @@ def datetime_timedelta_to_timedelta64(val):  # pragma: no cover
 
 
 @numba.njit
+def series_str_dt64_astype(data):  # pragma: no cover
+    """convert string array to datetime64 array using
+    objmode and Series implementation."""
+    with numba.objmode(res="NPDatetime('ns')[::1]"):
+        # Convert to series to enable Pandas str parsing.
+        # This enables conversions not supported in just Numba.
+        res = pd.Series(data).astype("datetime64[ns]").values
+    return res
+
+
+@numba.njit
+def series_str_td64_astype(data):  # pragma: no cover
+    """convert string array to timedelta64 array using
+    objmode."""
+    with numba.objmode(res="NPTimedelta('ns')[::1]"):
+        # No need to use Series because Timedelta doesn't
+        # have extra parsing.
+        res = data.astype("timedelta64[ns]")
+    return res
+
+
+@numba.njit
 def datetime_datetime_to_dt64(val):  # pragma: no cover
     """convert datetime.datetime to np.datetime64"""
     with numba.objmode(res='NPDatetime("ns")'):

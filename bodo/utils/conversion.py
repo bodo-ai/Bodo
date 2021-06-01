@@ -787,7 +787,15 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
 
     # Datetime64 case
     if nb_dtype == bodo.datetime64ns:
-        # TODO: String arrays
+
+        if data.dtype == bodo.string_type:
+            # Support String Arrays using objmode
+            def impl_str(data, new_dtype, copy=None, nan_to_str=True):
+                # Keep the objmode in a separate function for
+                # inlining purposes.
+                return bodo.hiframes.pd_timestamp_ext.series_str_dt64_astype(data)
+
+            return impl_str
 
         if isinstance(data.dtype, types.Number) or data.dtype in [
             bodo.timedelta64ns,
@@ -813,7 +821,15 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
 
     # Timedelta64 case
     if nb_dtype == bodo.timedelta64ns:
-        # TODO: String arrays
+
+        if data.dtype == bodo.string_type:
+            # Support String Arrays using objmode
+            def impl_str(data, new_dtype, copy=None, nan_to_str=True):
+                # Keep the objmode in a separate function for
+                # inlining purposes.
+                return bodo.hiframes.pd_timestamp_ext.series_str_td64_astype(data)
+
+            return impl_str
 
         if isinstance(data.dtype, types.Number) or data.dtype in [
             bodo.datetime64ns,
