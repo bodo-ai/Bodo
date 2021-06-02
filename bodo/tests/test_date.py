@@ -1148,6 +1148,54 @@ def test_td64_min(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
+def test_dt64_astype_int64(memory_leak_check):
+    """
+    Test for astype from a dt64 Series to various numeric types.
+    """
+
+    def test_impl1(S):
+        return S.astype(np.int64)
+
+    def test_impl2(S):
+        return S.astype(np.int64, copy=False)
+
+    S = pd.Series(
+        [
+            np.datetime64("2007-01-01T03:30"),
+            np.datetime64("2020-12-01T13:56:03.172"),
+            np.datetime64("2021-03-03"),
+        ]
+        * 4
+    )
+    check_func(test_impl1, (S,))
+    check_func(test_impl2, (S,))
+
+
+@pytest.mark.slow
+def test_td64_astype_int64(memory_leak_check):
+    """
+    Test for astype from a td64 Series to various numeric types.
+    """
+
+    def test_impl1(S):
+        return S.astype(np.int64)
+
+    def test_impl2(S):
+        return S.astype(np.int64, copy=False)
+
+    S = pd.Series(
+        [
+            np.timedelta64(10, "Y"),
+            np.timedelta64(9, "M"),
+            np.timedelta64(8, "W"),
+        ]
+        * 4
+    )
+    check_func(test_impl1, (S,))
+    check_func(test_impl2, (S,))
+
+
 # ------------------------- Test datetime.datetime ------------------------- #
 @pytest.mark.slow
 def test_datetime_datetime_construct(memory_leak_check):

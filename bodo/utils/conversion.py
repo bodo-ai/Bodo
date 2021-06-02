@@ -835,25 +835,51 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
             bodo.datetime64ns,
             types.bool_,
         ]:
-            # Nullable Integer/boolean/datetime64 arrays
-            def impl_numeric(
-                data, new_dtype, copy=None, nan_to_str=True
-            ):  # pragma: no cover
-                n = len(data)
-                numba.parfors.parfor.init_prange()
-                out_arr = np.empty(n, dtype=np.dtype("timedelta64[ns]"))
-                for i in numba.parfors.parfor.internal_prange(n):
-                    if bodo.libs.array_kernels.isna(data, i):
-                        bodo.libs.array_kernels.setna(out_arr, i)
-                    else:
-                        out_arr[
-                            i
-                        ] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
-                            np.int64(data[i])
-                        )
-                return out_arr
+            if do_copy:
+                # Nullable Integer/boolean/datetime64 arrays
+                def impl_numeric(
+                    data, new_dtype, copy=None, nan_to_str=True
+                ):  # pragma: no cover
+                    n = len(data)
+                    numba.parfors.parfor.init_prange()
+                    out_arr = np.empty(n, dtype=np.dtype("timedelta64[ns]"))
+                    for i in numba.parfors.parfor.internal_prange(n):
+                        if bodo.libs.array_kernels.isna(data, i):
+                            bodo.libs.array_kernels.setna(out_arr, i)
+                        else:
+                            out_arr[
+                                i
+                            ] = bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(
+                                np.int64(data[i])
+                            )
+                    return out_arr
 
-            return impl_numeric
+                return impl_numeric
+
+            else:
+                return lambda data, new_dtype, copy=None, nan_to_str=True: data.view(
+                    "int64"
+                )  # pragma: no cover
+
+    # Pandas currently only supports dt64/td64 -> int64
+    if (nb_dtype == types.int64) and (
+        data.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
+    ):
+
+        def impl_datelike_to_integer(
+            data, new_dtype, copy=None, nan_to_str=True
+        ):  # pragma: no cover
+            n = len(data)
+            numba.parfors.parfor.init_prange()
+            A = np.empty(n, types.int64)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(data, i):
+                    bodo.libs.array_kernels.setna(A, i)
+                else:
+                    A[i] = np.int64(data[i])
+            return A
+
+        return impl_datelike_to_integer
 
     if data.dtype != nb_dtype:
         return lambda data, new_dtype, copy=None, nan_to_str=True: data.astype(
