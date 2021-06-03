@@ -1,5 +1,5 @@
 # Copyright (C) 2020 Bodo Inc. All rights reserved.
-""" 
+"""
     Test File for pd_timedelta types. Covers basic functionality of boxing, unboxing,
     lowering, fields and methods.
 """
@@ -306,12 +306,36 @@ def test_pd_timedelta_mult(timedelta_value, memory_leak_check):
     check_func(test_impl, (-4, timedelta_value))
 
 
+@pytest.mark.slow
+def test_pd_timedelta_mult_int_literal(timedelta_value, memory_leak_check):
+    def test_impl1(val):
+        return 3 * val
+
+    def test_impl2(val):
+        return val * -4
+
+    check_func(test_impl1, (timedelta_value,))
+    check_func(test_impl2, (timedelta_value,))
+
+
 def test_pd_timedelta_floordiv_int(timedelta_value, memory_leak_check):
     def test_impl(a, b):
         return a // b
 
     check_func(test_impl, (timedelta_value, 3))
     check_func(test_impl, (timedelta_value, -4))
+
+
+@pytest.mark.slow
+def test_pd_timedelta_floordiv_int_literal(timedelta_value, memory_leak_check):
+    def test_impl1(val):
+        return val // 3
+
+    def test_impl2(val):
+        return val // -4
+
+    check_func(test_impl1, (timedelta_value,))
+    check_func(test_impl2, (timedelta_value,))
 
 
 def test_pd_timedelta_floordiv_tds(memory_leak_check):
@@ -344,6 +368,18 @@ def test_pd_timedelta_truediv_int(timedelta_value, memory_leak_check):
 
     check_func(test_impl, (timedelta_value, 3))
     check_func(test_impl, (timedelta_value, -4))
+
+
+@pytest.mark.slow
+def test_pd_timedelta_truediv_int_literal(timedelta_value, memory_leak_check):
+    def test_impl1(val):
+        return val / 3
+
+    def test_impl2(val):
+        return val / -4
+
+    check_func(test_impl1, (timedelta_value,))
+    check_func(test_impl2, (timedelta_value,))
 
 
 def test_pd_timedelta_truediv_tds(memory_leak_check):

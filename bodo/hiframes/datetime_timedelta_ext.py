@@ -599,21 +599,21 @@ def overload_sub_operator_datetime_timedelta(lhs, rhs):
 
 
 def overload_mul_operator_timedelta(lhs, rhs):
-    if lhs == pd_timedelta_type and rhs == types.int64:
+    if lhs == pd_timedelta_type and isinstance(rhs, types.Integer):
 
         def impl(lhs, rhs):  # pragma: no cover
             return pd.Timedelta(lhs.value * rhs)
 
         return impl
 
-    elif lhs == types.int64 and rhs == pd_timedelta_type:
+    elif isinstance(lhs, types.Integer) and rhs == pd_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return pd.Timedelta(rhs.value * lhs)
 
         return impl
 
-    if lhs == datetime_timedelta_type and rhs == types.int64:
+    if lhs == datetime_timedelta_type and isinstance(rhs, types.Integer):
 
         def impl(lhs, rhs):  # pragma: no cover
             d = lhs.days * rhs
@@ -623,7 +623,7 @@ def overload_mul_operator_timedelta(lhs, rhs):
 
         return impl
 
-    elif lhs == types.int64 and rhs == datetime_timedelta_type:
+    elif isinstance(lhs, types.Integer) and rhs == datetime_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             d = lhs * rhs.days
@@ -642,7 +642,7 @@ def overload_floordiv_operator_pd_timedelta(lhs, rhs):
 
         return impl
 
-    elif lhs == pd_timedelta_type and rhs == types.int64:
+    elif lhs == pd_timedelta_type and isinstance(rhs, types.Integer):
 
         def impl(lhs, rhs):  # pragma: no cover
             return pd.Timedelta(lhs.value // rhs)
@@ -658,7 +658,7 @@ def overload_truediv_operator_pd_timedelta(lhs, rhs):
 
         return impl
 
-    elif lhs == pd_timedelta_type and rhs == types.int64:
+    elif lhs == pd_timedelta_type and isinstance(rhs, types.Integer):
 
         def impl(lhs, rhs):  # pragma: no cover
             return pd.Timedelta(int(lhs.value / rhs))
