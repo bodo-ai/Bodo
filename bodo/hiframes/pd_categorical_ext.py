@@ -45,7 +45,7 @@ from bodo.utils.typing import (
 
 # type for pd.CategoricalDtype objects in Pandas
 class PDCategoricalDtype(types.Opaque):
-    def __init__(self, categories, elem_type, ordered, data=None):
+    def __init__(self, categories, elem_type, ordered, data=None, int_type=None):
         # categories can be None since may not be known (e.g. Series.astype("category"))
         self.categories = categories
         # element type is necessary since categories may not be known
@@ -54,7 +54,9 @@ class PDCategoricalDtype(types.Opaque):
         # ordered may be None if unknown
         self.ordered = ordered
         self.data = _get_cat_index_type(elem_type) if data is None else data
-        name = f"PDCategoricalDtype({self.categories}, {self.elem_type}, {self.ordered}, {self.data})"
+        # int data type for codes is available in Parquet metadata, but not categories
+        self.int_type = types.int64 if int_type is None else int_type
+        name = f"PDCategoricalDtype({self.categories}, {self.elem_type}, {self.ordered}, {self.data}, {self.int_type})"
         super(PDCategoricalDtype, self).__init__(name=name)
 
 
@@ -255,9 +257,12 @@ def lower_constant_categorical_array(context, builder, typ, pyval):
 def get_categories_int_type(cat_dtype):
     """find smallest integer data type that can represent all categories in 'cat_dtype'"""
     dtype = types.int64
-    # if categories are not known upfront, assume worst case int64 for codes
+
+    # if categories are not known upfront, assume worst case int64 for codes or the
+    # provided "int_type" (in Parquet read case)
     if cat_dtype.categories is None:
-        return dtype
+        return cat_dtype.int_type
+
     n_cats = len(cat_dtype.categories)
     if n_cats < np.iinfo(np.int8).max:
         dtype = types.int8
