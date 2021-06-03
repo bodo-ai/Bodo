@@ -373,8 +373,12 @@ def mul_string_arr_and_int(lhs, rhs):
 
 
 def mul_timedelta_and_int(lhs, rhs):
-    lhs_td = lhs in [pd_timedelta_type, datetime_timedelta_type] and rhs == types.int64
-    rhs_td = rhs in [pd_timedelta_type, datetime_timedelta_type] and lhs == types.int64
+    lhs_td = lhs in [pd_timedelta_type, datetime_timedelta_type] and isinstance(
+        rhs, types.Integer
+    )
+    rhs_td = rhs in [pd_timedelta_type, datetime_timedelta_type] and isinstance(
+        lhs, types.Integer
+    )
 
     return lhs_td or rhs_td
 
@@ -426,7 +430,7 @@ def div_timedelta_and_int(lhs, rhs):
     """Helper function to check types for supported div operator in datetime_timedelta_ext."""
 
     deltas = lhs == pd_timedelta_type and rhs == pd_timedelta_type
-    delta_and_int = lhs == pd_timedelta_type and rhs == types.int64
+    delta_and_int = lhs == pd_timedelta_type and isinstance(rhs, types.Integer)
 
     return deltas or delta_and_int
 
