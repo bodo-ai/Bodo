@@ -34,6 +34,10 @@ from bodo.hiframes.datetime_date_ext import (
     datetime_date_array_type,
     datetime_date_type,
 )
+from bodo.hiframes.pd_categorical_ext import (
+    CategoricalArrayType,
+    PDCategoricalDtype,
+)
 from bodo.io import parquet_cpp
 from bodo.io.fs_io import get_hdfs_fs, get_s3_fs_from_path
 from bodo.libs.array import _lower_info_to_array_numpy, array_info_type
@@ -704,6 +708,7 @@ def compute_column_index(list_siz):
 
 
 def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
+    """return Bodo array type from pyarrow Field (column type)"""
     import pyarrow as pa
 
     if isinstance(pa_typ.type, pa.ListType):
@@ -757,6 +762,19 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
         # all null column
         null(): string_type,  # map it to string_type, handle differently at runtime
     }
+
+    # Categorical data type
+    if isinstance(pa_typ.type, pa.DictionaryType):
+        if pa_typ.type.value_type != pa.string():  # pragma: no cover
+            raise BodoError(
+                f"Parquet Categorical data type should be string, not {pa_typ.type.value_type}"
+            )
+        # data type for storing codes
+        int_type = _typ_map[pa_typ.type.index_type]
+        cat_dtype = PDCategoricalDtype(
+            None, bodo.string_type, pa_typ.type.ordered, int_type=int_type
+        )
+        return CategoricalArrayType(cat_dtype)
 
     if pa_typ.type not in _typ_map:
         raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
@@ -841,7 +859,7 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
             google_fs = gcsfs.GCSFileSystem(token=None)
             fs.append(google_fs)
         elif fpath.startswith("http://"):
-            fs.append(fsspec.filesystem('http'))
+            fs.append(fsspec.filesystem("http"))
         elif (
             fpath.startswith("hdfs://")
             or fpath.startswith("abfs://")
@@ -1118,10 +1136,8 @@ def _get_partition_cat_dtype(part_set):
     # right data type (e.g. string instead of int64)
     S = part_set.dictionary.to_pandas()
     elem_type = bodo.typeof(S).dtype
-    cat_dtype = bodo.hiframes.pd_categorical_ext.PDCategoricalDtype(
-        tuple(S), elem_type, False
-    )
-    return bodo.hiframes.pd_categorical_ext.CategoricalArrayType(cat_dtype)
+    cat_dtype = PDCategoricalDtype(tuple(S), elem_type, False)
+    return CategoricalArrayType(cat_dtype)
 
 
 _get_dataset_reader = types.ExternalFunction(
