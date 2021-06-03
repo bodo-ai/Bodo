@@ -111,7 +111,7 @@ int pq_read_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
     int64_t real_column_idx, int64_t column_idx, uint8_t* out_data,
     int out_dtype, int64_t start, int64_t count, uint8_t* out_nulls,
-    int64_t null_offset) {
+    int64_t null_offset, int is_categorical) {
     if (count == 0) {
         return 0;
     }
@@ -154,6 +154,9 @@ int pq_read_single_file(
             std::cerr << "invalid parquet number of array chunks" << std::endl;
         }
         std::shared_ptr<::arrow::Array> arr = chunked_arr->chunk(0);
+        if (is_categorical) {
+            arr = reinterpret_cast<arrow::DictionaryArray*>(arr.get())->indices();
+        }
         auto buffers = arr->data()->buffers;
         if (buffers.size() != 2) {
             std::cerr << "invalid parquet number of array buffers" << std::endl;
@@ -952,6 +955,8 @@ bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
     if (arrow_type->id() == Type::STRING && pq_type == Bodo_CTypes::STRING)
         return true;
     // TODO: add timestamp[ns]
+    if (arrow_type->id() == Type::DICTIONARY)
+        return true;
     return false;
 }
 

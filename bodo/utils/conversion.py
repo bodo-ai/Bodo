@@ -715,7 +715,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
             # TODO(ehsan): refactor to avoid long compilation time (too much inlining)
             cats = pd.Series(cats).dropna().sort_values().values
             cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(
-                bodo.utils.conversion.index_from_array(cats, None), False
+                bodo.utils.conversion.index_from_array(cats, None), False, None
             )
             return bodo.utils.conversion.fix_arr_dtype(data, cat_dtype, copy)
 
