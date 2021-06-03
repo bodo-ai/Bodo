@@ -70,7 +70,7 @@ int64_t get_pq_total_rows(DatasetReader *reader);
 int64_t get_pq_local_num_rows(DatasetReader *reader);
 int64_t pq_read(DatasetReader *reader, int64_t real_column_idx,
                 int64_t column_idx, uint8_t *out_data, int out_dtype,
-                uint8_t *out_nulls = nullptr);
+                uint8_t *out_nulls = nullptr, int is_categorical=0);
 int pq_read_string(DatasetReader *reader, int64_t real_column_idx,
                    int64_t column_idx, NRT_MemInfo **out_meminfo);
 int pq_read_list_string(DatasetReader *reader, int64_t real_column_idx,
@@ -406,7 +406,7 @@ int64_t get_pq_total_rows(DatasetReader *reader) {
 
 int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,
                 int64_t column_idx, uint8_t *out_data, int out_dtype,
-                uint8_t *out_nulls) {
+                uint8_t *out_nulls, int is_categorical) {
     try {
         if (ds_reader->count == 0) return 0;
 
@@ -428,7 +428,7 @@ int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,
 
             pq_read_single_file(file_reader, real_column_idx, column_idx,
                                 out_data + read_rows * dtype_size, out_dtype,
-                                start, rows_to_read, out_nulls, read_rows);
+                                start, rows_to_read, out_nulls, read_rows, is_categorical);
             read_rows += rows_to_read;
             start = 0;  // start becomes 0 after reading non-empty first chunk
         }

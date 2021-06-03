@@ -108,13 +108,14 @@ make_attribute_wrapper(PDCategoricalDtype, "ordered", "ordered")
 
 
 @intrinsic
-def init_cat_dtype(typingctx, categories_typ, ordered_typ=None):
+def init_cat_dtype(typingctx, categories_typ, ordered_typ, int_type=None):
     """Create a CategoricalDtype from categories array and ordered flag"""
     assert bodo.hiframes.pd_index_ext.is_index_type(categories_typ)
     assert is_overload_constant_bool(ordered_typ)
+    cat_int_type = types.int64 if is_overload_none(int_type) else int_type.dtype
 
     def codegen(context, builder, sig, args):
-        categories, ordered = args
+        categories, ordered, _ = args
         cat_dtype = cgutils.create_struct_proxy(sig.return_type)(context, builder)
         cat_dtype.categories = categories
         context.nrt.incref(builder, sig.args[0], categories)
@@ -123,9 +124,13 @@ def init_cat_dtype(typingctx, categories_typ, ordered_typ=None):
         return cat_dtype._getvalue()
 
     ret_type = PDCategoricalDtype(
-        None, categories_typ.dtype, is_overload_true(ordered_typ), categories_typ
+        None,
+        categories_typ.dtype,
+        is_overload_true(ordered_typ),
+        categories_typ,
+        cat_int_type,
     )
-    return ret_type(categories_typ, ordered_typ), codegen
+    return ret_type(categories_typ, ordered_typ, int_type), codegen
 
 
 @unbox(PDCategoricalDtype)
@@ -662,7 +667,7 @@ def cat_replace_overload(arr, to_replace, value):
             if len(categories_dict) == 0:
                 return init_categorical_array(
                     arr.codes.copy().astype(np.int64),
-                    init_cat_dtype(categories.copy(), _ordered),
+                    init_cat_dtype(categories.copy(), _ordered, None),
                 )
             # If we must edit the categories we need to preallocate a new
             # string array
@@ -686,7 +691,9 @@ def cat_replace_overload(arr, to_replace, value):
             cat_arr = alloc_categorical_array(
                 len(arr.codes),
                 init_cat_dtype(
-                    bodo.utils.conversion.index_from_array(new_categories), _ordered
+                    bodo.utils.conversion.index_from_array(new_categories),
+                    _ordered,
+                    None,
                 ),
             )
             # Update all of the codes
@@ -705,7 +712,7 @@ def cat_replace_overload(arr, to_replace, value):
         if len(categories_dict) == 0:
             return init_categorical_array(
                 arr.codes.copy().astype(np.int64),
-                init_cat_dtype(categories.copy(), _ordered),
+                init_cat_dtype(categories.copy(), _ordered, None),
             )
         n = len(categories)
         new_categories = bodo.utils.utils.alloc_type(n - num_deleted, _arr_type, None)
@@ -726,7 +733,7 @@ def cat_replace_overload(arr, to_replace, value):
         cat_arr = alloc_categorical_array(
             len(arr.codes),
             init_cat_dtype(
-                bodo.utils.conversion.index_from_array(new_categories), _ordered
+                bodo.utils.conversion.index_from_array(new_categories), _ordered, None
             ),
         )
         reassign_codes(cat_arr.codes, arr.codes, codes_map_arr)
@@ -825,7 +832,9 @@ def pd_categorical_overload(
             ordered = bodo.utils.conversion.false_if_none(ordered)
             data = bodo.utils.conversion.coerce_to_array(values)
             cats = bodo.utils.conversion.convert_to_index(categories)
-            cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(cats, ordered)
+            cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(
+                cats, ordered, None
+            )
             return bodo.utils.conversion.fix_arr_dtype(data, cat_dtype)
 
         return impl_cats

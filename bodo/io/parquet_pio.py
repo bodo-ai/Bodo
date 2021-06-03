@@ -547,6 +547,7 @@ def _gen_pq_reader_py(
 
     exec(func_text, glbs, loc_vars)
     pq_reader_py = loc_vars["pq_reader_py"]
+    print(func_text)
 
     jit_func = numba.njit(pq_reader_py, no_cpython_wrapper=True)
     return jit_func
@@ -610,16 +611,24 @@ def gen_column_read(
                 cname, c_ind_real, c_ind, c_siz, ret_type
             )
         )
+    elif isinstance(c_type, CategoricalArrayType):
+        # import pdb; pdb.set_trace()
+        # func_text += f"  cat_vals = read_parquet_cats(ds_reader, {c_ind_real}, {c_ind})"
+        func_text += f"  cat_vals = bodo.libs.str_arr_ext.str_arr_from_sequence(('A', 'B', 'ABC', 'C'))\n"
+        el_type = get_element_type(c_type.dtype.int_type)
+        func_text += f"  cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(bodo.utils.conversion.index_from_array(cat_vals, None), {c_type.dtype.ordered}, {el_type})\n"
+        func_text += f"  {cname} = bodo.hiframes.pd_categorical_ext.alloc_categorical_array(loc_size, cat_dtype)\n"
+        func_text += f"  {cname}_codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes({cname})\n"
+        c_dtype = bodo.utils.utils.numba_to_c_type(c_type.dtype.int_type)
+        func_text += f"  status = read_parquet(ds_reader, {c_ind_real}, {c_ind}, {cname}_codes, np.int32({c_dtype}), np.int32(1))\n"
     else:
         el_type = get_element_type(c_type.dtype)
         func_text += _gen_alloc(c_type, cname, "loc_size", el_type)
-        func_text += (
-            "  status = read_parquet(ds_reader, {}, {}, {}, np.int32({}))\n".format(
-                c_ind_real,
-                c_ind,
-                cname,
-                bodo.utils.utils.numba_to_c_type(c_type.dtype),
-            )
+        func_text += "  status = read_parquet(ds_reader, {}, {}, {}, np.int32({}), np.int32(0))\n".format(
+            c_ind_real,
+            c_ind,
+            cname,
+            bodo.utils.utils.numba_to_c_type(c_type.dtype),
         )
 
     return ret_type, func_text
@@ -1177,7 +1186,7 @@ ll.add_symbol("pq_gen_partition_column", parquet_cpp.pq_gen_partition_column)
 class ReadParquetInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        assert len(args) == 5
+        assert len(args) == 6
         if args[3] == types.intp:  # string read call, returns string array
             return signature(string_array_type, *unliteral_all(args))
         return signature(types.int64, *unliteral_all(args))
@@ -1248,6 +1257,7 @@ if bodo.utils.utils.has_pyarrow():
     types.intp,
     types.Array,
     types.int32,
+    types.int32,
 )
 def pq_read_lower(context, builder, sig, args):
     fnty = lir.FunctionType(
@@ -1259,6 +1269,7 @@ def pq_read_lower(context, builder, sig, args):
             lir.IntType(8).as_pointer(),
             lir.IntType(32),
             lir.IntType(8).as_pointer(),
+            lir.IntType(32),
         ],
     )
     out_array = make_array(sig.args[3])(context, builder, args[3])
@@ -1274,6 +1285,7 @@ def pq_read_lower(context, builder, sig, args):
             builder.bitcast(out_array.data, lir.IntType(8).as_pointer()),
             args[4],
             zero_ptr,
+            args[5],
         ],
     )
     bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
