@@ -54,8 +54,9 @@ class PDCategoricalDtype(types.Opaque):
         # ordered may be None if unknown
         self.ordered = ordered
         self.data = _get_cat_index_type(elem_type) if data is None else data
-        # int data type for codes is available in Parquet metadata, but not categories
-        self.int_type = types.int64 if int_type is None else int_type
+        # Parquet dictionary type may not use the minimum possible int data type so
+        # we need to set explicitly
+        self.int_type = int_type
         name = f"PDCategoricalDtype({self.categories}, {self.elem_type}, {self.ordered}, {self.data}, {self.int_type})"
         super(PDCategoricalDtype, self).__init__(name=name)
 
@@ -64,8 +65,10 @@ class PDCategoricalDtype(types.Opaque):
 def _typeof_pd_cat_dtype(val, c):
     cats = val.categories.to_list()
     elem_type = None if len(cats) == 0 else bodo.typeof(cats[0])
+    # we set _int_type in gen_column_read() of Parquet read to pass proper type info
+    int_type = getattr(val, "_int_type", None)
     return PDCategoricalDtype(
-        tuple(cats), elem_type, val.ordered, bodo.typeof(val.categories)
+        tuple(cats), elem_type, val.ordered, bodo.typeof(val.categories), int_type
     )
 
 
@@ -112,7 +115,7 @@ def init_cat_dtype(typingctx, categories_typ, ordered_typ, int_type=None):
     """Create a CategoricalDtype from categories array and ordered flag"""
     assert bodo.hiframes.pd_index_ext.is_index_type(categories_typ)
     assert is_overload_constant_bool(ordered_typ)
-    cat_int_type = types.int64 if is_overload_none(int_type) else int_type.dtype
+    cat_int_type = None if is_overload_none(int_type) else int_type.dtype
 
     def codegen(context, builder, sig, args):
         categories, ordered, _ = args
@@ -263,10 +266,13 @@ def get_categories_int_type(cat_dtype):
     """find smallest integer data type that can represent all categories in 'cat_dtype'"""
     dtype = types.int64
 
-    # if categories are not known upfront, assume worst case int64 for codes or the
-    # provided "int_type" (in Parquet read case)
-    if cat_dtype.categories is None:
+    # Parquet read case provides int data type explicitly (can differ from min possible)
+    if cat_dtype.int_type is not None:
         return cat_dtype.int_type
+
+    # if categories are not known upfront, assume worst case int64 for codes
+    if cat_dtype.categories is None:
+        return types.int64
 
     n_cats = len(cat_dtype.categories)
     if n_cats < np.iinfo(np.int8).max:
