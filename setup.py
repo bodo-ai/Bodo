@@ -128,14 +128,14 @@ ext_s3 = Extension(
 )
 
 
-gcs_reader_libraries = MPI_LIBS + ["arrow", "arrow_python"]
+fsspec_reader_libraries = MPI_LIBS + ["arrow", "arrow_python"]
 if "setup_centos7" in os.environ:
-    gcs_reader_libraries += ["boost_system"]
-ext_gcs = Extension(
-    name="bodo.io.gcs_reader",
-    sources=["bodo/io/_gcs_reader.cpp"],
+    fsspec_reader_libraries += ["boost_system"]
+ext_fsspec = Extension(
+    name="bodo.io.fsspec_reader",
+    sources=["bodo/io/_fsspec_reader.cpp"],
     depends=["bodo/io/_bodo_file_reader.h"],
-    libraries=gcs_reader_libraries,
+    libraries=fsspec_reader_libraries,
     include_dirs=ind + np_compile_args["include_dirs"],
     library_dirs=lid,
     define_macros=[],
@@ -384,7 +384,7 @@ ext_parquet = Extension(
         "bodo/libs/_array_utils.cpp",
         "bodo/libs/_array_hash.cpp",
         "bodo/libs/_murmurhash3.cpp",
-        "bodo/io/_gcs_reader.cpp",
+        "bodo/io/_fsspec_reader.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
@@ -423,7 +423,7 @@ _ext_mods = [
     ext_io,
     ext_arr,
     ext_s3,
-    ext_gcs,
+    ext_fsspec,
     ext_hdfs,
 ]
 
