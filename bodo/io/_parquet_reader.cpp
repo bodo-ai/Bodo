@@ -12,7 +12,7 @@
 #include "../libs/_bodo_common.h"
 #include "../libs/_datetime_ext.h"
 #include "_fs_io.h"
-#include "_gcs_reader.h"
+#include "_fsspec_reader.h"
 #include "_parquet_reader.h"
 #include "arrow/array.h"
 #include "arrow/io/hdfs.h"
@@ -837,10 +837,12 @@ void pq_init_reader(const char* file_name,
     auto pool = ::arrow::default_memory_pool();
     arrow::Status status;
 
+    size_t colon = f_name.find_first_of(':');
+    std::string protocol = f_name.substr(0, colon);
+    std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
     // HDFS if starts with hdfs://
     if (f_name.find("hdfs://") == 0 || f_name.find("abfs://") == 0 ||
         f_name.find("abfss://") == 0) {
-        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
         std::shared_ptr<::arrow::io::HdfsReadableFile> file;
         // get hdfs opener function
         import_fs_module(Bodo_Fs::hdfs, "parquet", f_mod);
@@ -858,7 +860,6 @@ void pq_init_reader(const char* file_name,
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
     } else if (f_name.find("s3://") == 0) {
-        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
         std::shared_ptr<::arrow::io::RandomAccessFile> file;
         // remove s3://
         f_name = f_name.substr(strlen("s3://"));
@@ -877,31 +878,15 @@ void pq_init_reader(const char* file_name,
         *a_reader = std::move(arrow_reader);
         Py_DECREF(f_mod);
         Py_DECREF(func_obj);
-    } else if (f_name.find("gcs://") == 0) {
-        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+    } else if (protocol == "gcs" || pyfs.count(protocol)) {
         std::shared_ptr<::arrow::io::RandomAccessFile> file;
-        // remove gcs://
-        f_name = f_name.substr(strlen("gcs://"));
-        // open Parquet file
-        gcs_open_file(f_name.c_str(), &file);
-        // create Arrow reader
-        status = parquet::arrow::FileReader::Make(
-            pool, ParquetFileReader::Open(file), &arrow_reader);
-        CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
-        *a_reader = std::move(arrow_reader);
-    } else if (f_name.find("http://") == 0) {
-        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
-        std::shared_ptr<::arrow::io::RandomAccessFile> file;
-        // open Parquet file
-        fsspec_open_file(f_name, &file);
-        // create Arrow reader
+        fsspec_open_file(f_name, protocol, &file);
         status = parquet::arrow::FileReader::Make(
             pool, ParquetFileReader::Open(file), &arrow_reader);
         CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
         *a_reader = std::move(arrow_reader);
     } else  // regular file system
     {
-        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
         status = parquet::arrow::FileReader::Make(
             pool, ParquetFileReader::OpenFile(f_name, false), &arrow_reader);
         CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
