@@ -461,6 +461,25 @@ def test_pq_array_item(datapath):
         check_func(test_impl, ("test_pq_list_item.pq",))
 
 
+def test_pq_categorical_read():
+    """test reading categorical data from Parquet files"""
+
+    def impl():
+        df = pd.read_parquet("test_cat.pq")
+        return df
+
+    try:
+        df = pd.DataFrame({"A": pd.Categorical(["A", "B", "AB", "A", "B"] * 4 + ["C"])})
+        if bodo.libs.distributed_api.get_rank() == 0:
+            df.to_parquet("test_cat.pq", row_group_size=4)
+        bodo.barrier()
+        check_func(impl, ())
+        bodo.barrier()
+    finally:
+        if bodo.libs.distributed_api.get_rank() == 0:
+            os.remove("test_cat.pq")
+
+
 @pytest.mark.slow
 def test_pq_unsupported_types(datapath, memory_leak_check):
     """test unsupported data types in unselected columns"""
@@ -953,8 +972,6 @@ def test_partition_cols():
             "G": range(8),
         }
     )
-
-    import glob
 
     import pyarrow.parquet as pq
 
