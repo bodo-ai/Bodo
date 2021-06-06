@@ -70,7 +70,7 @@ int64_t get_pq_total_rows(DatasetReader *reader);
 int64_t get_pq_local_num_rows(DatasetReader *reader);
 int64_t pq_read(DatasetReader *reader, int64_t real_column_idx,
                 int64_t column_idx, uint8_t *out_data, int out_dtype,
-                uint8_t *out_nulls = nullptr, int is_categorical=0);
+                uint8_t *out_nulls = nullptr, int is_categorical = 0);
 int pq_read_string(DatasetReader *reader, int64_t real_column_idx,
                    int64_t column_idx, NRT_MemInfo **out_meminfo);
 int pq_read_list_string(DatasetReader *reader, int64_t real_column_idx,

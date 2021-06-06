@@ -469,7 +469,9 @@ def test_pq_categorical_read():
         return df
 
     try:
-        df = pd.DataFrame({"A": pd.Categorical(["A", "B", "AB", "A", "B"] * 4 + ["C"])})
+        df = pd.DataFrame(
+            {"A": pd.Categorical(["A", "B", "AB", "A", None, "B"] * 4 + [None, "C"])}
+        )
         if bodo.libs.distributed_api.get_rank() == 0:
             df.to_parquet("test_cat.pq", row_group_size=4)
         bodo.barrier()
