@@ -87,6 +87,46 @@ inline void copy_nulls(uint8_t* out_nulls, const uint8_t* null_bitmap_buff,
     }
 }
 
+template <typename T>
+inline void copy_nulls_categorical_inner(uint8_t* out_data,
+                                         const uint8_t* null_bitmap_buff,
+                                         int64_t skip, int64_t num_values) {
+    T* data = (T*)out_data;
+    for (size_t i = 0; i < size_t(num_values); i++) {
+        auto bit = ::arrow::BitUtil::GetBit(null_bitmap_buff, skip + i);
+        if (!bit) data[i] = -1;
+    }
+}
+
+/**
+ * @brief set -1 code for null positions in categorical array from
+ * Arrow's null bitmap.
+ *
+ * @param out_data output codes array for categoricals
+ * @param null_bitmap_buff null bitmap from Arrow
+ * @param skip skip previous rows in null buffer
+ * @param num_values number of values to read
+ * @param out_dtype data type for codes array
+ */
+inline void copy_nulls_categorical(uint8_t* out_data,
+                                   const uint8_t* null_bitmap_buff,
+                                   int64_t skip, int64_t num_values,
+                                   int out_dtype) {
+    // codes array can only be signed int 8/16/32/64
+    if (out_dtype == Bodo_CTypes::INT8)
+        copy_nulls_categorical_inner<int8_t>(out_data, null_bitmap_buff, skip,
+                                             num_values);
+    if (out_dtype == Bodo_CTypes::INT16)
+        copy_nulls_categorical_inner<int16_t>(out_data, null_bitmap_buff, skip,
+                                              num_values);
+    if (out_dtype == Bodo_CTypes::INT32)
+        copy_nulls_categorical_inner<int32_t>(out_data, null_bitmap_buff, skip,
+                                              num_values);
+    if (out_dtype == Bodo_CTypes::INT64)
+        copy_nulls_categorical_inner<int64_t>(out_data, null_bitmap_buff, skip,
+                                              num_values);
+}
+
 int64_t pq_get_size_single_file(
     std::shared_ptr<parquet::arrow::FileReader> arrow_reader,
     int64_t column_idx) {
@@ -155,7 +195,8 @@ int pq_read_single_file(
         }
         std::shared_ptr<::arrow::Array> arr = chunked_arr->chunk(0);
         if (is_categorical) {
-            arr = reinterpret_cast<arrow::DictionaryArray*>(arr.get())->indices();
+            arr =
+                reinterpret_cast<arrow::DictionaryArray*>(arr.get())->indices();
         }
         auto buffers = arr->data()->buffers;
         if (buffers.size() != 2) {
@@ -170,10 +211,19 @@ int pq_read_single_file(
         int64_t rows_to_read =
             std::min(count - read_rows, nrows_in_group - rows_to_skip);
 
-        copy_data(out_data + read_rows * dtype_size, buff, rows_to_skip,
-                  rows_to_read, arrow_type, null_bitmap_buff, out_dtype);
+        uint8_t* data_ptr = out_data + read_rows * dtype_size;
+        copy_data(data_ptr, buff, rows_to_skip, rows_to_read, arrow_type,
+                  null_bitmap_buff, out_dtype);
         copy_nulls(out_nulls, null_bitmap_buff, rows_to_skip, rows_to_read,
                    read_rows + null_offset);
+
+        // Arrow uses nullable arrays for categorical codes, but we use
+        // regular numpy arrays and store -1 for null, so nulls have to be
+        // set in data array
+        if (is_categorical && arr->null_count() != 0) {
+            copy_nulls_categorical(data_ptr, null_bitmap_buff, rows_to_skip,
+                                   rows_to_read, out_dtype);
+        }
 
         skipped_rows += rows_to_skip;
         read_rows += rows_to_read;
@@ -955,8 +1005,10 @@ bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
     if (arrow_type->id() == Type::STRING && pq_type == Bodo_CTypes::STRING)
         return true;
     // TODO: add timestamp[ns]
-    if (arrow_type->id() == Type::DICTIONARY)
-        return true;
+
+    // Dictionary array's codes are always read into proper integer array type,
+    // so buffer data types are the same
+    if (arrow_type->id() == Type::DICTIONARY) return true;
     return false;
 }
 
