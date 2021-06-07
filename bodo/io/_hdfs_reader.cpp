@@ -29,12 +29,12 @@
 // a global singleton instance of HadoopFileSystem that is
 // initialized the first time it is needed and reused afterwards
 // if the config does not change
-std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
+static std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
 // a global singleton instance of HdfsConnectionConfig
 // used to check if a different HadoopFileSystem
 // needs to be initialized
 arrow::io::HdfsConnectionConfig hdfs_config;
-bool is_fs_initialized = false;
+bool is_hdfs_initialized = false;
 
 std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
     const std::string &uri_string) {
@@ -43,7 +43,7 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
     arrow::Status status;
 
     // check if libhdfs exists
-    if (!is_fs_initialized) {
+    if (!is_hdfs_initialized) {
         status = ::arrow::io::HaveLibHdfs();
         if (!status.ok()) {
             Bodo_PyErr_SetString(PyExc_RuntimeError, "libhdfs not found");
@@ -56,7 +56,7 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
     result = arrow::fs::HdfsOptions::FromUri(uri_string);
     CHECK_ARROW_AND_ASSIGN(result, "HdfsOptions::FromUri", options);
     // handle hdfs_config
-    if (!is_fs_initialized) {
+    if (!is_hdfs_initialized) {
         hdfs_config = options.connection_config;
     } else {
         // check host, port, user to determine
@@ -79,24 +79,24 @@ std::shared_ptr<::arrow::fs::HadoopFileSystem> get_hdfs_fs(
     options.ConfigureBlockSize(0);
     hdfs_fs = arrow::fs::HadoopFileSystem::Make(options).ValueOrDie();
 
-    is_fs_initialized = true;
+    is_hdfs_initialized = true;
     return hdfs_fs;
 }
 
 static int disconnect_hdfs() {
-    if (is_fs_initialized) {
+    if (is_hdfs_initialized) {
         hdfs_fs = nullptr;  // destructor calls Close, which calls Disconnect
-        is_fs_initialized = false;
+        is_hdfs_initialized = false;
     }
     return 0;
 }
 
-std::pair<std::string, int64_t> extract_file_name_size(
+std::pair<std::string, int64_t> hdfs_extract_file_name_size(
     const arrow::fs::FileInfo &file_stat) {
     return make_pair(file_stat.path(), file_stat.size());
 }
 
-bool sort_by_name(const std::pair<std::string, int64_t> &a,
+bool hdfs_sort_by_name(const std::pair<std::string, int64_t> &a,
                   const std::pair<std::string, int64_t> &b) {
     return (a.first < b.first);
 }
@@ -176,9 +176,9 @@ class HdfsDirectoryFileReader : public DirectoryFileReader {
         // assuming the directory contains files only, i.e. no subdirectory
         std::transform(this->file_stats.begin(), this->file_stats.end(),
                        std::back_inserter(this->file_names_sizes),
-                       extract_file_name_size);
+                       hdfs_extract_file_name_size);
         std::sort(this->file_names_sizes.begin(), this->file_names_sizes.end(),
-                  sort_by_name);
+                  hdfs_sort_by_name);
 
         this->findDirSizeFileSizesFileNames(_dirname, file_names_sizes);
     };
@@ -189,8 +189,6 @@ class HdfsDirectoryFileReader : public DirectoryFileReader {
         this->f_reader->csv_header_bytes = this->csv_header_bytes;
     };
 };
-
-extern "C" {
 
 void hdfs_get_fs(const std::string &uri_string,
                  std::shared_ptr<::arrow::fs::HadoopFileSystem> *fs) {
@@ -256,11 +254,7 @@ PyMODINIT_FUNC PyInit_hdfs_reader(void) {
                            PyLong_FromVoidPtr((void *)(&init_hdfs_reader)));
     PyObject_SetAttrString(m, "hdfs_get_fs",
                            PyLong_FromVoidPtr((void *)(&hdfs_get_fs)));
-    PyObject_SetAttrString(m, "hdfs_open_file",
-                           PyLong_FromVoidPtr((void *)(&hdfs_open_file)));
     PyObject_SetAttrString(m, "disconnect_hdfs",
                            PyLong_FromVoidPtr((void *)(&disconnect_hdfs)));
     return m;
 }
-
-}  // extern "C"

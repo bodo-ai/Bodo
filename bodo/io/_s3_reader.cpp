@@ -84,7 +84,7 @@ arrow::fs::S3ProxyOptions get_s3_proxy_options_from_env_vars() {
 
 // a global singleton instance of S3FileSystem that is
 // initialized the first time it is needed and reused afterwards
-std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
+static std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
 bool is_fs_initialized = false;
 bool is_fs_anonymous_mode = false;  // only valid when is_fs_initialized is true
 
@@ -251,8 +251,6 @@ class S3DirectoryFileReader : public DirectoryFileReader {
     };
 };
 
-extern "C" {
-
 void s3_get_fs(std::shared_ptr<arrow::fs::S3FileSystem> *fs,
                std::string bucket_region) {
     try {
@@ -306,9 +304,6 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
     PyObject_SetAttrString(m, "init_s3_reader",
                            PyLong_FromVoidPtr((void *)(&init_s3_reader)));
     // Only ever called from C++
-    PyObject_SetAttrString(m, "s3_open_file",
-                           PyLong_FromVoidPtr((void *)(&s3_open_file)));
-    // Only ever called from C++
     PyObject_SetAttrString(m, "s3_get_fs",
                            PyLong_FromVoidPtr((void *)(&s3_get_fs)));
     PyObject_SetAttrString(m, "finalize_s3",
@@ -318,5 +313,3 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
 
 #undef CHECK_ARROW
 #undef CHECK_ARROW_AND_ASSIGN
-
-}  // extern "C"

@@ -385,6 +385,8 @@ ext_parquet = Extension(
         "bodo/libs/_array_hash.cpp",
         "bodo/libs/_murmurhash3.cpp",
         "bodo/io/_fsspec_reader.cpp",
+        "bodo/io/_hdfs_reader.cpp",
+        "bodo/io/_s3_reader.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
