@@ -3071,12 +3071,6 @@ def create_explicit_binary_op_overload(op):
         ):
             ret_dtype = boolean_array
 
-        # Addition of NPDatetime("ns") and NPTimedelta("ns") seems to give
-        # an incorrect ret_dtype for our always ns requirement,
-        # so it fails in setitem
-        if ret_dtype == types.Array(types.NPDatetime(""), 1, "C"):
-            ret_dtype = types.Array(bodo.datetime64ns, 1, "C")
-
         def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)

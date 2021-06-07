@@ -3072,3 +3072,348 @@ if _check_numba_change:
         warnings.warn("unbox_dicttype has changed")
 
 numba.core.pythonapi._unboxers.functions[types.DictType] = unbox_dicttype
+
+
+#################   Start Timedelta Arithmetic Changes   ###################
+# The following changes are needed to support datetime64 arr + timedelta64
+# They are being merged into Numba in this PR:
+# https://github.com/numba/numba/pull/7082
+
+
+def mk_alloc(typemap, calltypes, lhs, size_var, dtype, scope, loc, lhs_typ):
+    """generate an array allocation with np.empty() and return list of nodes.
+    size_var can be an int variable or tuple of int variables.
+    """
+    # Imports to match Numba
+    import numpy
+    from numba.core import typing
+    from numba.core.ir_utils import (
+        convert_size_to_var,
+        get_np_ufunc_typ,
+        mk_unique_var,
+    )
+
+    out = []
+    ndims = 1
+    size_typ = types.intp
+    if isinstance(size_var, tuple):
+        if len(size_var) == 1:
+            size_var = size_var[0]
+            size_var = convert_size_to_var(size_var, typemap, scope, loc, out)
+        else:
+            # tuple_var = build_tuple([size_var...])
+            ndims = len(size_var)
+            tuple_var = ir.Var(scope, mk_unique_var("$tuple_var"), loc)
+            if typemap:
+                typemap[tuple_var.name] = types.containers.UniTuple(types.intp, ndims)
+            # constant sizes need to be assigned to vars
+            new_sizes = [
+                convert_size_to_var(s, typemap, scope, loc, out) for s in size_var
+            ]
+            tuple_call = ir.Expr.build_tuple(new_sizes, loc)
+            tuple_assign = ir.Assign(tuple_call, tuple_var, loc)
+            out.append(tuple_assign)
+            size_var = tuple_var
+            size_typ = types.containers.UniTuple(types.intp, ndims)
+    # g_np_var = Global(numpy)
+    g_np_var = ir.Var(scope, mk_unique_var("$np_g_var"), loc)
+    if typemap:
+        typemap[g_np_var.name] = types.misc.Module(numpy)
+    g_np = ir.Global("np", numpy, loc)
+    g_np_assign = ir.Assign(g_np, g_np_var, loc)
+    # attr call: empty_attr = getattr(g_np_var, empty)
+    empty_attr_call = ir.Expr.getattr(g_np_var, "empty", loc)
+    attr_var = ir.Var(scope, mk_unique_var("$empty_attr_attr"), loc)
+    if typemap:
+        typemap[attr_var.name] = get_np_ufunc_typ(numpy.empty)
+    attr_assign = ir.Assign(empty_attr_call, attr_var, loc)
+    # Assume str(dtype) returns a valid type
+    dtype_str = str(dtype)
+    # alloc call: lhs = empty_attr(size_var, typ_var)
+    typ_var = ir.Var(scope, mk_unique_var("$np_typ_var"), loc)
+    if typemap:
+        typemap[typ_var.name] = types.functions.NumberClass(dtype)
+    # BODO CHANGE
+    # If dtype is a datetime/timedelta with a unit,
+    # then it won't return a valid type and instead can be created
+    # with a string. i.e. "datetime64[ns]")
+    if isinstance(dtype, (types.NPDatetime, types.NPTimedelta)) and dtype.unit != "":
+        typename_const = ir.Const(dtype_str, loc)
+        typ_var_assign = ir.Assign(typename_const, typ_var, loc)
+    else:
+        if dtype_str == "bool":
+            # empty doesn't like 'bool' sometimes (e.g. kmeans example)
+            dtype_str = "bool_"
+        np_typ_getattr = ir.Expr.getattr(g_np_var, dtype_str, loc)
+        typ_var_assign = ir.Assign(np_typ_getattr, typ_var, loc)
+    alloc_call = ir.Expr.call(attr_var, [size_var, typ_var], (), loc)
+    if calltypes:
+        calltypes[alloc_call] = typemap[attr_var.name].get_call_type(
+            typing.Context(), [size_typ, types.functions.NumberClass(dtype)], {}
+        )
+    # signature(
+    #    types.npytypes.Array(dtype, ndims, 'C'), size_typ,
+    #    types.functions.NumberClass(dtype))
+
+    if lhs_typ.layout == "F":
+        empty_c_typ = lhs_typ.copy(layout="C")
+        empty_c_var = ir.Var(scope, mk_unique_var("$empty_c_var"), loc)
+        if typemap:
+            typemap[empty_c_var.name] = lhs_typ.copy(layout="C")
+        empty_c_assign = ir.Assign(alloc_call, empty_c_var, loc)
+
+        # attr call: asfortranarray = getattr(g_np_var, asfortranarray)
+        asfortranarray_attr_call = ir.Expr.getattr(g_np_var, "asfortranarray", loc)
+        afa_attr_var = ir.Var(scope, mk_unique_var("$asfortran_array_attr"), loc)
+        if typemap:
+            typemap[afa_attr_var.name] = get_np_ufunc_typ(numpy.asfortranarray)
+        afa_attr_assign = ir.Assign(asfortranarray_attr_call, afa_attr_var, loc)
+        # call asfortranarray
+        asfortranarray_call = ir.Expr.call(afa_attr_var, [empty_c_var], (), loc)
+        if calltypes:
+            calltypes[asfortranarray_call] = typemap[afa_attr_var.name].get_call_type(
+                typing.Context(), [empty_c_typ], {}
+            )
+
+        asfortranarray_assign = ir.Assign(asfortranarray_call, lhs, loc)
+
+        out.extend(
+            [
+                g_np_assign,
+                attr_assign,
+                typ_var_assign,
+                empty_c_assign,
+                afa_attr_assign,
+                asfortranarray_assign,
+            ]
+        )
+    else:
+        alloc_assign = ir.Assign(alloc_call, lhs, loc)
+        out.extend([g_np_assign, attr_assign, typ_var_assign, alloc_assign])
+
+    return out
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.ir_utils.mk_alloc)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "c7d3fcf16b7f268082614da52b3a9ba8cb3a9e41b63595f915aa6e7ed13cbe63"
+    ):  # pragma: no cover
+        print(hashlib.sha256(lines.encode()).hexdigest())
+        warnings.warn("mk_alloc has changed")
+
+numba.core.ir_utils.mk_alloc = mk_alloc
+# This function is imported in additional places
+numba.parfors.parfor.mk_alloc = mk_alloc
+
+
+def ufunc_find_matching_loop(ufunc, arg_types):
+    """Find the appropriate loop to be used for a ufunc based on the types
+    of the operands
+
+    ufunc        - The ufunc we want to check
+    arg_types    - The tuple of arguments to the ufunc, including any
+                   explicit output(s).
+    return value - A UFuncLoopSpec identifying the loop, or None
+                   if no matching loop is found.
+    """
+    # Imports to match Numba
+    import numpy as np
+    from numba.np import npdatetime_helpers
+    from numba.np.numpy_support import (
+        UFuncLoopSpec,
+        as_dtype,
+        from_dtype,
+        ufunc_can_cast,
+    )
+
+    # Separate logical input from explicit output arguments
+    input_types = arg_types[: ufunc.nin]
+    output_types = arg_types[ufunc.nin :]
+    assert len(input_types) == ufunc.nin
+
+    try:
+        np_input_types = [as_dtype(x) for x in input_types]
+    except NotImplementedError:
+        return None
+    try:
+        np_output_types = [as_dtype(x) for x in output_types]
+    except NotImplementedError:
+        return None
+
+    # Whether the inputs are mixed integer / floating-point
+    has_mixed_inputs = any(dt.kind in "iu" for dt in np_input_types) and any(
+        dt.kind in "cf" for dt in np_input_types
+    )
+
+    def choose_types(numba_types, ufunc_letters):
+        """
+        Return a list of Numba types representing *ufunc_letters*,
+        except when the letter designates a datetime64 or timedelta64,
+        in which case the type is taken from *numba_types*.
+        """
+        assert len(ufunc_letters) >= len(numba_types)
+        types = [
+            tp if letter in "mM" else from_dtype(np.dtype(letter))
+            for tp, letter in zip(numba_types, ufunc_letters)
+        ]
+        # Add missing types (presumably implicit outputs)
+        types += [
+            from_dtype(np.dtype(letter)) for letter in ufunc_letters[len(numba_types) :]
+        ]
+        return types
+
+    def set_output_dt_units(inputs, outputs, ufunc_inputs):
+        """
+        Sets the output unit of a datetime type based on the input units
+
+        Timedelta is a special dtype that requires the time unit to be
+        specified (day, month, etc). Not every operation with timedelta inputs
+        leads to an output of timedelta output. However, for those that do,
+        the unit of output must be inferred based on the units of the inputs.
+
+        At the moment this function takes care of two cases:
+        a) where all inputs are timedelta with the same unit (mm), and
+        therefore the output has the same unit.
+        This case is used for arr.sum, and for arr1+arr2 where all arrays
+        are timedeltas.
+        If in the future this needs to be extended to a case with mixed units,
+        the rules should be implemented in `npdatetime_helpers` and called
+        from this function to set the correct output unit.
+        b) where left operand is a timedelta, i.e. the "m?" case. This case
+        is used for division, eg timedelta / int.
+
+        At the time of writing, Numba does not support addition of timedelta
+        and other types, so this function does not consider the case "?m",
+        i.e. where timedelta is the right operand to a non-timedelta left
+        operand. To extend it in the future, just add another elif clause.
+        """
+
+        def make_specific(outputs, unit):
+            new_outputs = []
+            for out in outputs:
+                if isinstance(out, types.NPTimedelta) and out.unit == "":
+                    new_outputs.append(types.NPTimedelta(unit))
+                else:
+                    new_outputs.append(out)
+            return new_outputs
+
+        # BODO CHANGE 1:
+        def make_datetime_specific(outputs, dt_unit, td_unit):
+            new_outputs = []
+            for out in outputs:
+                if isinstance(out, types.NPDatetime) and out.unit == "":
+                    unit = npdatetime_helpers.combine_datetime_timedelta_units(
+                        dt_unit, td_unit
+                    )
+                    new_outputs.append(types.NPDatetime(unit))
+                else:
+                    new_outputs.append(out)
+            return new_outputs
+
+        if ufunc_inputs == "mm":
+            if all(inp.unit == inputs[0].unit for inp in inputs):
+                # Case with operation on same units. Operations on different
+                # units not adjusted for now but might need to be
+                # added in the future
+                unit = inputs[0].unit
+                new_outputs = make_specific(outputs, unit)
+            else:
+                return outputs
+            return new_outputs
+        elif ufunc_inputs == "mM":
+            # case where the left operand has timedelta type
+            # and the right operand has datetime
+            td_unit = inputs[0].unit
+            dt_unit = inputs[1].unit
+            return make_datetime_specific(outputs, dt_unit, td_unit)
+
+        elif ufunc_inputs == "Mm":
+            # case where the right operand has timedelta type
+            # and the left operand has datetime
+            dt_unit = inputs[0].unit
+            td_unit = inputs[1].unit
+            return make_datetime_specific(outputs, dt_unit, td_unit)
+
+        elif ufunc_inputs[0] == "m":
+            # case where the left operand has timedelta type
+            unit = inputs[0].unit
+            new_outputs = make_specific(outputs, unit)
+            return new_outputs
+
+    # In NumPy, the loops are evaluated from first to last. The first one
+    # that is viable is the one used. One loop is viable if it is possible
+    # to cast every input operand to the one expected by the ufunc.
+    # Also under NumPy 1.10+ the output must be able to be cast back
+    # to a close enough type ("same_kind").
+
+    for candidate in ufunc.types:
+        ufunc_inputs = candidate[: ufunc.nin]
+        ufunc_outputs = candidate[-ufunc.nout :] if ufunc.nout else []
+        if "O" in ufunc_inputs:
+            # Skip object arrays
+            continue
+        found = True
+        # Skip if any input or output argument is mismatching
+        for outer, inner in zip(np_input_types, ufunc_inputs):
+            # (outer is a dtype instance, inner is a type char)
+            if outer.char in "mM" or inner in "mM":
+                # For datetime64 and timedelta64, we want to retain
+                # precise typing (i.e. the units); therefore we look for
+                # an exact match.
+                if outer.char != inner:
+                    found = False
+                    break
+            elif not ufunc_can_cast(outer.char, inner, has_mixed_inputs, "safe"):
+                found = False
+                break
+        if found:
+            # Can we cast the inner result to the outer result type?
+            for outer, inner in zip(np_output_types, ufunc_outputs):
+                if outer.char not in "mM" and not ufunc_can_cast(
+                    inner, outer.char, has_mixed_inputs, "same_kind"
+                ):
+                    found = False
+                    break
+        if found:
+            # Found: determine the Numba types for the loop's inputs and
+            # outputs.
+            try:
+                inputs = choose_types(input_types, ufunc_inputs)
+                outputs = choose_types(output_types, ufunc_outputs)
+                # BODO CHANGE 2:
+                # if the left operand or both are timedeltas, or we have
+                # 1 datetime and 1 timedelta, then the output
+                # units need to be determined.
+                if ufunc_inputs[0] == "m" or ufunc_inputs == "Mm":
+                    outputs = set_output_dt_units(inputs, outputs, ufunc_inputs)
+
+            except NotImplementedError:
+                # One of the selected dtypes isn't supported by Numba
+                # (e.g. float16), try other candidates
+                continue
+            else:
+                return UFuncLoopSpec(inputs, outputs, candidate)
+
+    return None
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.np.numpy_support.ufunc_find_matching_loop)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "31d1c4f9c2fb0dd0642bc3717e64f79a846e0dc5fdeecd36392cf546e4d7d85b"
+    ):  # pragma: no cover
+        print(hashlib.sha256(lines.encode()).hexdigest())
+        warnings.warn("ufunc_find_matching_loop has changed")
+
+numba.np.numpy_support.ufunc_find_matching_loop = ufunc_find_matching_loop
+# This function is imported in additional places
+numba.core.typing.npydecl.ufunc_find_matching_loop = ufunc_find_matching_loop
+numba.np.ufunc.gufunc.ufunc_find_matching_loop = ufunc_find_matching_loop
+import numba.np.npyimpl
+
+numba.np.npyimpl.ufunc_find_matching_loop = ufunc_find_matching_loop
+
+#################   End Timedelta Arithmetic Changes   ###################
