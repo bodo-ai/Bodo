@@ -841,7 +841,7 @@ def get_parquet_dataset(
     attribute. Also, sets the number of rows per file as an attribute of
     ParquetDatasetPiece objects.
     'filters' are used for predicate pushdown which prunes the unnecessary pieces.
-    'read_categories': read categories of DictionaryArray and store in returned dateset
+    'read_categories': read categories of DictionaryArray and store in returned dataset
     object, used during typing.
     """
 
@@ -1059,17 +1059,26 @@ def _add_categories_to_pq_dataset(pq_dataset):
 
     comm = MPI.COMM_WORLD
     if bodo.get_rank() == 0:
-        # read categorical values from first row group of first file
-        pf = pq_dataset.pieces[0].open()
-        rg = pf.read_row_group(0, cat_col_names)
-        # NOTE: assuming DictionaryArray has only one chunk
-        category_info = {
-            c: tuple(rg.column(c).chunk(0).dictionary.to_pylist())
-            for c in cat_col_names
-        }
+        try:
+            # read categorical values from first row group of first file
+            pf = pq_dataset.pieces[0].open()
+            rg = pf.read_row_group(0, cat_col_names)
+            # NOTE: assuming DictionaryArray has only one chunk
+            category_info = {
+                c: tuple(rg.column(c).chunk(0).dictionary.to_pylist())
+                for c in cat_col_names
+            }
+            del pf, rg  # release I/O resources ASAP
+        except Exception as e:
+            comm.bcast(e)
+            raise e
+
         comm.bcast(category_info)
     else:
         category_info = comm.bcast(None)
+        if isinstance(category_info, Exception):  # pragma: no cover
+            error = category_info
+            raise error
 
     pq_dataset._category_info = category_info
 
