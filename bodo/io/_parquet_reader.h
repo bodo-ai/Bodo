@@ -15,7 +15,7 @@ int pq_read_single_file(std::shared_ptr<parquet::arrow::FileReader>,
                         int64_t real_column_idx, int64_t column_idx,
                         uint8_t *out_data, int out_dtype, int64_t start,
                         int64_t count, uint8_t *out_nulls = nullptr,
-                        int64_t null_offset = 0);
+                        int64_t null_offset = 0, int is_categorical = 0);
 
 int pq_read_string_single_file(std::shared_ptr<parquet::arrow::FileReader>,
                                int64_t real_column_idx, int64_t column_idx,
