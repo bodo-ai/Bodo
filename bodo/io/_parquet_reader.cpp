@@ -194,10 +194,14 @@ int pq_read_single_file(
             std::cerr << "invalid parquet number of array chunks" << std::endl;
         }
         std::shared_ptr<::arrow::Array> arr = chunked_arr->chunk(0);
+
+        // read the categorical codes for the DictionaryArray case
+        // category values are read during typing already
         if (is_categorical) {
             arr =
                 reinterpret_cast<arrow::DictionaryArray*>(arr.get())->indices();
         }
+
         auto buffers = arr->data()->buffers;
         if (buffers.size() != 2) {
             std::cerr << "invalid parquet number of array buffers" << std::endl;
