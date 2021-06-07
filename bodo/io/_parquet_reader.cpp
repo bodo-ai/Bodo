@@ -13,7 +13,9 @@
 #include "../libs/_datetime_ext.h"
 #include "_fs_io.h"
 #include "_fsspec_reader.h"
+#include "_hdfs_reader.h"
 #include "_parquet_reader.h"
+#include "_s3_reader.h"
 #include "arrow/array.h"
 #include "arrow/io/hdfs.h"
 #include "arrow/python/arrow_to_pandas.h"
@@ -60,13 +62,6 @@ void set_null_buff(uint8_t** out_nulls, const uint8_t* null_buff,
                               msg + " " + expr.ToString();                     \
         throw std::runtime_error(err_msg);                                     \
     }
-
-typedef void (*s3_opener_t)(const char*,
-                            std::shared_ptr<::arrow::io::RandomAccessFile>*,
-                            const char*, bool);
-
-typedef void (*hdfs_open_file_t)(
-    const char*, std::shared_ptr<::arrow::io::HdfsReadableFile>*);
 
 #define PQ_DT64_TYPE 3  // using INT96 value as dt64, TODO: refactor
 #define kNanosecondsInDay 86400000000000LL  // TODO: reuse from type_traits.h
@@ -843,13 +838,8 @@ void pq_init_reader(const char* file_name,
     // HDFS if starts with hdfs://
     if (f_name.find("hdfs://") == 0 || f_name.find("abfs://") == 0 ||
         f_name.find("abfss://") == 0) {
-        std::shared_ptr<::arrow::io::HdfsReadableFile> file;
-        // get hdfs opener function
-        import_fs_module(Bodo_Fs::hdfs, "parquet", f_mod);
-        PyObject* func_obj = PyObject_GetAttrString(f_mod, "hdfs_open_file");
-        CHECK(func_obj, "getting hdfs_open_file func_obj failed");
-        hdfs_open_file_t hdfs_open_file =
-            (hdfs_open_file_t)PyNumber_AsSsize_t(func_obj, NULL);
+        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+        std::shared_ptr<::arrow::io::RandomAccessFile> file;
         // open Parquet file
         hdfs_open_file(file_name, &file);
         // create Arrow reader
@@ -857,18 +847,11 @@ void pq_init_reader(const char* file_name,
             pool, ParquetFileReader::Open(file), &arrow_reader);
         CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
         *a_reader = std::move(arrow_reader);
-        Py_DECREF(f_mod);
-        Py_DECREF(func_obj);
     } else if (f_name.find("s3://") == 0) {
         std::shared_ptr<::arrow::io::RandomAccessFile> file;
         // remove s3://
         f_name = f_name.substr(strlen("s3://"));
         // get s3 opener function
-        import_fs_module(Bodo_Fs::s3, "parquet", f_mod);
-        PyObject* func_obj = PyObject_GetAttrString(f_mod, "s3_open_file");
-        CHECK(func_obj, "getting s3_open_file func_obj failed");
-        s3_opener_t s3_open_file =
-            (s3_opener_t)PyNumber_AsSsize_t(func_obj, NULL);
         // open Parquet file
         s3_open_file(f_name.c_str(), &file, bucket_region, s3fs_anon);
         // create Arrow reader
@@ -876,8 +859,6 @@ void pq_init_reader(const char* file_name,
             pool, ParquetFileReader::Open(file), &arrow_reader);
         CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
         *a_reader = std::move(arrow_reader);
-        Py_DECREF(f_mod);
-        Py_DECREF(func_obj);
     } else if (protocol == "gcs" || pyfs.count(protocol)) {
         std::shared_ptr<::arrow::io::RandomAccessFile> file;
         fsspec_open_file(f_name, protocol, &file);
