@@ -5,6 +5,7 @@
 """
 import datetime
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -288,6 +289,23 @@ def test_timestamp_timedelta_add(add_params, memory_leak_check):
     check_func(test_impl, (val2, val1))
 
 
+def test_pd_timedelta_series_add(timedelta_value, memory_leak_check):
+    def test_impl(a, b):
+        return a + b
+
+    S = pd.Series(
+        [
+            np.datetime64("2011-01-01"),
+            np.datetime64("1971-02-02"),
+            np.datetime64("2021-03-03"),
+            np.datetime64("2004-12-07"),
+        ]
+        * 3
+    )
+    check_func(test_impl, (S, timedelta_value))
+    check_func(test_impl, (timedelta_value, S))
+
+
 def test_pd_timedelta_sub(binary_params, memory_leak_check):
     def test_impl(a, b):
         return a - b
@@ -296,6 +314,22 @@ def test_pd_timedelta_sub(binary_params, memory_leak_check):
     val2 = binary_params[1]
 
     check_func(test_impl, (val2, val1))
+
+
+def test_pd_timedelta_series_sub(timedelta_value, memory_leak_check):
+    def test_impl(a, b):
+        return a - b
+
+    S = pd.Series(
+        [
+            np.datetime64("2011-01-01"),
+            np.datetime64("1971-02-02"),
+            np.datetime64("2021-03-03"),
+            np.datetime64("2004-12-07"),
+        ]
+        * 3
+    )
+    check_func(test_impl, (S, timedelta_value))
 
 
 def test_pd_timedelta_mult(timedelta_value, memory_leak_check):
