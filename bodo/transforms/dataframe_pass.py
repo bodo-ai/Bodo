@@ -6,6 +6,7 @@ Creates specialized IR nodes for complex operations like Join.
 """
 import operator
 import warnings
+from collections import defaultdict
 
 import numba
 import numpy as np
@@ -20,6 +21,7 @@ from numba.core.ir_utils import (
     guard,
     mk_unique_var,
 )
+from pandas.core.common import flatten
 
 import bodo
 import bodo.hiframes.dataframe_impl  # noqa # side effect: install DataFrame overloads
@@ -53,9 +55,7 @@ from bodo.utils.typing import (
     get_overload_const_list,
     get_overload_const_str,
     get_overload_const_tuple,
-    get_overload_constant_dict,
     is_literal_type,
-    is_overload_constant_dict,
     is_overload_constant_list,
     is_overload_constant_tuple,
     is_overload_none,
@@ -1403,63 +1403,69 @@ class DataFramePass:
         if func_name == "apply":
             return self._run_call_groupby_apply(assign, lhs, rhs, grp_var)
 
-        grp_typ = self.typemap[grp_var.name]
-        df_var = self._get_groupby_df_obj(grp_var)
-        df_type = self.typemap[df_var.name]
-        out_typ = self.typemap[lhs.name]
+        grp_typ = self.typemap[
+            grp_var.name
+        ]  # DataFrameGroupByType instance with initial typing info
+        df_var = self._get_groupby_df_obj(
+            grp_var
+        )  # IR Var associated with groupby input dataframe
+        df_type = self.typemap[df_var.name]  # Input dataframe type
+        out_typ = self.typemap[lhs.name]  # Type of df.groupby() output
 
         nodes = []
-        if func_name == "size":
-            in_cols = []
-        elif isinstance(out_typ, SeriesType) or func_name in ("agg", "aggregate"):
-            in_cols = grp_typ.selection
-        else:
-            in_cols = [c for c in grp_typ.selection if c in out_typ.columns]
-        if func_name in ("agg", "aggregate"):
-            kws = dict(rhs.kws)
-            func_var = get_call_expr_arg(func_name, rhs.args, kws, 0, "func", "")
-            # NamedAgg case, e.g. df.groupby("A").agg(C=pd.NamedAgg("B", "sum"))
-            # pd.NamedAgg() is replaced with regular tuple in untyped pass
-            if func_var == "":
-                in_cols = [
-                    get_literal_value(self.typemap[v.name])[0] for v in kws.values()
-                ]
-            else:
-                agg_func_typ = self.typemap[func_var.name]
-                if is_overload_constant_dict(agg_func_typ):
-                    func_dict = get_overload_constant_dict(agg_func_typ)
-                    # multi-function const dict case:
-                    # in this case, the input columns are the ones in the dict
-                    in_cols = [name for name in func_dict.keys()]
+
+        args = tuple([self.typemap[v.name] for v in rhs.args])
+        kws = {k: self.typemap[v.name] for k, v in rhs.kws}
+        # gb_info maps (in_col, func_name) -> out_col
+        _, gb_info = bodo.hiframes.pd_groupby_ext.resolve_gb(
+            grp_typ, args, kws, func_name, numba.core.registry.cpu_target.typing_context
+        )
+
+        # Populate gb_info_in and gb_info_out (to store in Aggregate node)
+        # gb_info_in: maps in_col -> list of (func, out_col)
+        # gb_info_out: maps out_col -> (in_col, func)
+        gb_info_in = defaultdict(list)
+        gb_info_out = {}
         agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
+        if not isinstance(agg_func, list):
+            # agg_func is SimpleNamespace or a Python function for UDFs
+            agg_funcs = [agg_func for _ in range(len(gb_info))]
+        else:
+            # TODO Might be possible to simplify get_agg_func by returning a flat list
+            agg_funcs = list(flatten(agg_func))
+
+        i = 0
+        for (in_col, fname), out_col in gb_info.items():
+            f = agg_funcs[i]
+            assert fname == f.fname
+            gb_info_in[in_col].append((f, out_col))
+            gb_info_out[out_col] = (in_col, f)
+            i += 1
+
         input_has_index = False
         same_index = False
         return_key = True
-        # allfuncs is the set of all functions used
-        allfuncs = bodo.ir.aggregate.gen_allfuncs(
-            agg_func, 1 if func_name == "size" else len(in_cols)
-        )
         # return_key is True if we return the keys from the table. In case
         # of aggregate on cumsum or other cumulative function, there is no such need.
         # same_index is True if we return the index from the table (which is the case for
         # cumulative operations not using RangeIndex)
-        for func in allfuncs:
-            # HA: pandas output has no index
-            if func.ftype in {"shift"}:
-                input_has_index = True
-                return_key = False
-                same_index = True
-            if func.ftype in list_cumulative:
-                input_has_index = True
-                same_index = True
-                return_key = False
-            if func.ftype in {"idxmin", "idxmax"}:
-                input_has_index = True
+        for funcs in gb_info_in.values():
+            for func, _ in funcs:
+                if func.ftype in (list_cumulative | {"shift"}):
+                    input_has_index = True
+                    same_index = True
+                    return_key = False
+                elif func.ftype in {"idxmin", "idxmax"}:
+                    input_has_index = True
         if same_index and isinstance(grp_typ.df_type.index, RangeIndexType):
             same_index = False
             input_has_index = False
 
-        df_in_vars = {c: self._get_dataframe_data(df_var, c, nodes) for c in in_cols}
+        df_in_vars = {
+            c: self._get_dataframe_data(df_var, c, nodes)
+            for c in gb_info_in.keys()
+            if c is not None
+        }
 
         in_key_arrs = [self._get_dataframe_data(df_var, c, nodes) for c in grp_typ.keys]
 
@@ -1520,13 +1526,14 @@ class DataFramePass:
 
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
-            df_var.name,
-            grp_typ.keys,
+            df_var.name,  # input dataframe var name
+            grp_typ.keys,  # name of key columns
+            gb_info_in,
+            gb_info_out,
             out_key_vars,
             df_out_vars,
             df_in_vars,
             in_key_arrs,
-            agg_func,
             input_has_index,
             same_index,
             return_key,
@@ -1586,7 +1593,7 @@ class DataFramePass:
                 len(grp_typ.selection) == 1
                 and grp_typ.explicit_select
                 and grp_typ.as_index
-            ) or (grp_typ.as_index and agg_func.ftype == "size")
+            ) or (grp_typ.as_index and func_name == "size")
             name_val = None if func_name == "size" else list(df_out_vars.keys())[0]
             name_var = ir.Var(lhs.scope, mk_unique_var("S_name"), lhs.loc)
             self.typemap[name_var.name] = (
@@ -2041,6 +2048,12 @@ class DataFramePass:
         pivot_arr = self._get_dataframe_data(df_var, columns, nodes)
         index_arr = self._get_dataframe_data(df_var, index, nodes)
         agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
+        gb_info_in = {}
+        for in_col in values:
+            # TODO: multiple functions
+            assert not isinstance(agg_func, list)
+            gb_info_in[in_col] = [(agg_func, list(pivot_values))]
+        gb_info_out = {col: (values, agg_func) for col in pivot_values}
 
         out_key_vars = []
         out_index_var = ir.Var(
@@ -2057,11 +2070,12 @@ class DataFramePass:
             lhs.name,
             df_var.name,
             [index],
+            gb_info_in,
+            gb_info_out,
             out_key_vars,
             df_out_vars,
             df_in_vars,
             [index_arr],
-            agg_func,
             input_has_index,
             same_index,
             return_key,
@@ -2134,6 +2148,8 @@ class DataFramePass:
 
         pivot_arr = columns
         agg_func = get_agg_func(self.func_ir, "count", rhs, typemap=self.typemap)
+        gb_info_in = {None: [(agg_func, list(pivot_values))]}
+        gb_info_out = {col: (None, agg_func) for col in pivot_values}
 
         # TODO: make out_key_var an index column
         input_has_index = False
@@ -2143,11 +2159,12 @@ class DataFramePass:
             lhs.name,
             "crosstab",
             ["index"],
+            gb_info_in,
+            gb_info_out,
             out_key_vars,
             df_out_vars,
             df_in_vars,
             [index],
-            agg_func,
             input_has_index,
             same_index,
             return_key,
