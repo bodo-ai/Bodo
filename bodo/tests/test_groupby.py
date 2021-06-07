@@ -2006,9 +2006,8 @@ def test_named_agg(memory_leak_check):
     def impl2(df):
         return df.groupby("A", as_index=False).agg(
             D=pd.NamedAgg(column="B", aggfunc=lambda A: A.sum()),
-            # TODO: support repeated input columns in output
-            # E=pd.NamedAgg(column="B", aggfunc="min"),
             F=pd.NamedAgg(column="C", aggfunc="max"),
+            E=pd.NamedAgg(column="B", aggfunc="min"),
         )
 
     df = pd.DataFrame(
@@ -4133,6 +4132,14 @@ def test_groupby_dead_col_multifunc(memory_leak_check):
         out_df = df.groupby("C").agg({"A": ["min", "max"], "B": "sum"})
         return len(out_df.iloc[:, 0])
 
+    def impl6(df):
+        out_df = df.groupby("A", as_index=False).agg(
+            B=pd.NamedAgg(column="B", aggfunc=lambda A: A.sum()),
+            E=pd.NamedAgg(column="B", aggfunc="min"),
+            F=pd.NamedAgg(column="C", aggfunc="max"),
+        )
+        return len(out_df.iloc[:, 0])
+
     df = pd.DataFrame(
         {
             "A": [0, 0, 1, 1, 0, 0, 1, 0],
@@ -4145,6 +4152,7 @@ def test_groupby_dead_col_multifunc(memory_leak_check):
     assert impl3(df) == bodo.jit(impl3)(df)
     assert impl4(df) == bodo.jit(impl4)(df)
     assert impl5(df) == bodo.jit(impl5)(df)
+    assert impl6(df) == bodo.jit(impl6)(df)
 
 
 def test_groupby_shift_cat():

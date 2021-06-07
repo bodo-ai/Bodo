@@ -264,6 +264,9 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
           functions can be applied.
     """
 
+    if func_name == "no_op":
+        raise BodoError("Unknown aggregation function used in groupby.")
+
     # FIXME: using float64 type as default to be compatible with old code
     # TODO: make groupby functions typed properly everywhere
     if series_type is None:
@@ -276,17 +279,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     # udfs at runtime (see gen_update_cb, gen_combine_cb and gen_eval_cb),
     # to know which columns in the table received from C++ library correspond
     # to udfs and which to builtin functions
-    if func_name == "no_op":
-        raise BodoError("Unknown aggregation function used in groupby.")
-
-    if func_name == "var":
-        func = pytypes.SimpleNamespace()
-        func.ftype = func_name
-        func.fname = func_name
-        func.ncols_pre_shuffle = 3
-        func.ncols_post_shuffle = 4
-        return func
-    if func_name == "std":
+    if func_name in {"var", "std"}:
         func = pytypes.SimpleNamespace()
         func.ftype = func_name
         func.fname = func_name
@@ -523,11 +516,12 @@ class Aggregate(ir.Stmt):
         df_out,
         df_in,
         key_names,
+        gb_info_in,
+        gb_info_out,
         out_key_vars,
         df_out_vars,  # NOTE: does not include output key vars (stored in out_key_vars)
         df_in_vars,
         key_arrs,
-        agg_func,
         input_has_index,
         same_index,
         return_key,
@@ -542,13 +536,25 @@ class Aggregate(ir.Stmt):
         self.df_in = df_in
         # key name (for printing)
         self.key_names = key_names
+        # Store full info on how input columns and aggregation functions map
+        # to output columns
+        # gb_info_in: maps in_col -> list of (func, out) where out is output
+        # column name for non-pivot/crosstab case or list of output columns otherwise
+        # Examples:
+        # For `df.groupby("A").agg({"B": "min", "C": "max"})`
+        # gb_info_in = {"B": [(min_func, "B")]}
+        # For `df.groupby("A").agg(
+        #    E=pd.NamedAgg(column="B", aggfunc=lambda A: A.sum()),
+        #    F=pd.NamedAgg(column="B", aggfunc="min"),
+        # )`
+        # gb_info_in = {"B": [(lambda_func, "E"), (min_func, "F")]}
+        self.gb_info_in = gb_info_in
+        # gb_info_out: maps out_col -> (in_col, func)
+        self.gb_info_out = gb_info_out
         self.out_key_vars = out_key_vars
-
         self.df_out_vars = df_out_vars
         self.df_in_vars = df_in_vars
         self.key_arrs = key_arrs
-
-        self.agg_func = agg_func
         self.input_has_index = input_has_index
         self.same_index = same_index
         self.return_key = return_key
@@ -577,6 +583,38 @@ class Aggregate(ir.Stmt):
         return "aggregate: {} = {} [key: {}:{}] {}".format(
             df_out_str, df_in_str, key_names, key_arrnames, pivot
         )
+
+    def remove_out_col(self, out_col_name):
+        """ Remove output column and associated input column if no longer needed """
+
+        self.df_out_vars.pop(out_col_name)
+
+        in_col, _ = self.gb_info_out.pop(out_col_name)
+        if in_col is None and not self.is_crosstab:
+            # size operation where output column doesn't have associated input column
+            return
+
+        outs = self.gb_info_in[in_col]
+        if self.pivot_arr is not None:
+            # pivot case, output corresponds to pivot values
+            self.pivot_values.remove(out_col_name)
+            # each (input_col, func) can produce multiple output columns
+            for i, (func, out_cols) in enumerate(outs):
+                try:
+                    out_cols.remove(out_col_name)
+                    if len(out_cols) == 0:
+                        outs.pop(i)
+                        break
+                except ValueError:  # not found
+                    continue
+        else:
+            for i, (func, out_col) in enumerate(outs):
+                if out_col == out_col_name:
+                    outs.pop(i)
+                    break
+        if len(outs) == 0:  # input column is no longer needed
+            self.gb_info_in.pop(in_col)
+            self.df_in_vars.pop(in_col)
 
 
 def aggregate_usedefs(aggregate_node, use_set=None, def_set=None):
@@ -609,85 +647,17 @@ def remove_dead_aggregate(
     aggregate_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
 ):
     """remove dead input/output columns and agg functions"""
-    dead_cols = []
-    in_col_names = list(aggregate_node.df_in_vars.keys())
 
     # find dead output columns
-    for col_name, col_var in aggregate_node.df_out_vars.items():
-        if col_var.name not in lives:
-            dead_cols.append(col_name)
+    dead_cols = [
+        col_name
+        for col_name, col_var in aggregate_node.df_out_vars.items()
+        if col_var.name not in lives
+    ]
 
     # remove dead output columns and their corresponding input columns/functions
     for cname in dead_cols:
-        aggregate_node.df_out_vars.pop(cname)
-
-        # pivot case, output corresponds to pivot values
-        if aggregate_node.pivot_arr is not None:
-            aggregate_node.pivot_values.remove(cname)
-            continue
-
-        # output key columns (from 'as_index=False') shouldn't be removed
-        if (
-            cname in aggregate_node.key_names
-            or isinstance(cname, tuple)
-            and cname[0] in aggregate_node.key_names
-        ):
-            continue
-
-        # output corresponds to input directly
-        if cname in aggregate_node.df_in_vars:
-            aggregate_node.df_in_vars.pop(cname)
-            # remove dead agg func (corresponding to dead column) from agg_func list
-            # e.g. df.groupby("A").agg({"B": "min", "C": "max"})
-            if isinstance(aggregate_node.agg_func, list):
-                c_ind = in_col_names.index(cname)
-                aggregate_node.agg_func.pop(c_ind)
-            in_col_names = list(aggregate_node.df_in_vars.keys())
-            continue
-
-        # groupby().size() doesn't use any input
-        if (
-            cname == "size"
-            and not isinstance(aggregate_node.agg_func, list)
-            and aggregate_node.agg_func.fname == "size"
-        ):
-            aggregate_node.agg_func = []  # no need to compute output
-            continue
-
-        # output of multi-func cases (dict and tuple)
-
-        # output name is a tuple for list of funcs in agg dict
-        # e.g. df.groupby("A").agg({"B": ["min", "max"], "C": "sum"})
-        if isinstance(cname, tuple) and len(cname) > 1:
-            c_ind = in_col_names.index(cname[0])
-            cname = cname[1]
-        else:
-            # tuple of funcs on a single input data column case
-            # e.g. df.groupby("A")["B"].agg(("min", "max"))
-            assert len(in_col_names) == 1, "invalid groupby multi-func case"
-            c_ind = 0
-
-        # remove dead agg func
-        funcs = aggregate_node.agg_func[c_ind]
-
-        # input column has a single func
-        # e.g. "C" in df.groupby("A").agg({"B": ["min", "max"], "C": "sum"})
-        if not isinstance(funcs, list):
-            assert funcs.fname == cname
-            aggregate_node.agg_func.pop(c_ind)
-            aggregate_node.df_in_vars.pop(in_col_names[c_ind])
-            in_col_names = list(aggregate_node.df_in_vars.keys())
-            continue
-
-        fnames = [f.fname for f in funcs]
-        assert cname in fnames, "invalid groupby multi-func output name"
-        f_ind = fnames.index(cname)
-        funcs.pop(f_ind)  # remove dead agg func
-        # input column is dead if all its agg funcs are removed
-        if funcs == []:
-            aggregate_node.agg_func.pop(c_ind)
-            aggregate_node.df_in_vars.pop(in_col_names[c_ind])
-            in_col_names = list(aggregate_node.df_in_vars.keys())
+        aggregate_node.remove_out_col(cname)
 
     out_key_vars = aggregate_node.out_key_vars
     if out_key_vars is not None and all(v.name not in lives for v in out_key_vars):
@@ -986,15 +956,34 @@ def agg_distributed_run(
     in_col_vars = [v for (n, v) in agg_node.df_in_vars.items()]
     out_col_vars = [v for (n, v) in agg_node.df_out_vars.items()]
     # get column types
-    in_col_typs = tuple(typemap[v.name] for v in in_col_vars)
+    # Type of input columns in the same order as passed to C++ and can include
+    # repetition. C++ receives one input column for each (in_col,func) pair
+    # and the same input column might not necessarily appear in consecutive
+    # positions in that list (see NamedAgg examples)
+    in_col_typs = []
+    funcs = []
+    # See comment about use of gb_info_in vs gb_info_out in gen_top_level_agg_func
+    # when laying out input columns and functions for C++
+    if agg_node.pivot_arr is not None:
+        for in_col, outs in agg_node.gb_info_in.items():
+            for func, _ in outs:
+                if in_col is not None:
+                    in_col_typs.append(typemap[agg_node.df_in_vars[in_col].name])
+                funcs.append(func)
+    else:
+        for in_col, func in agg_node.gb_info_out.values():
+            if in_col is not None:
+                in_col_typs.append(typemap[agg_node.df_in_vars[in_col].name])
+            funcs.append(func)
     out_col_typs = tuple(typemap[v.name] for v in out_col_vars)
 
     pivot_typ = (
         types.none if agg_node.pivot_arr is None else typemap[agg_node.pivot_arr.name]
     )
-    arg_typs = tuple(key_typs + in_col_typs + (pivot_typ,))
+    arg_typs = tuple(
+        key_typs + tuple(typemap[v.name] for v in in_col_vars) + (pivot_typ,)
+    )
 
-    return_key = agg_node.return_key
     glbs = {
         "bodo": bodo,
         "np": np,
@@ -1010,9 +999,8 @@ def agg_distributed_run(
         if isinstance(out_col_typ, bodo.CategoricalArrayType):
             glbs.update({f"out_cat_dtype_{i}": out_col_typ})
 
-    has_pivot_value = agg_node.pivot_arr is not None
     udf_func_struct = get_udf_func_struct(
-        agg_node.agg_func,
+        funcs,
         agg_node.input_has_index,
         in_col_typs,
         out_col_typs,
@@ -1024,20 +1012,10 @@ def agg_distributed_run(
     )
 
     top_level_func = gen_top_level_agg_func(
-        agg_node.key_names,
-        key_typs,
-        return_key,
+        agg_node,
         in_col_typs,
         out_col_typs,
-        agg_node.df_in_vars.keys(),
-        agg_node.df_out_vars.keys(),
-        agg_node.agg_func,
-        agg_node.input_has_index,
-        agg_node.same_index,
         parallel,
-        has_pivot_value,
-        agg_node.is_crosstab,
-        agg_node.pivot_values,
         udf_func_struct,
     )
     glbs.update(
@@ -1620,80 +1598,79 @@ def gen_general_udf_cb(
     return numba.cfunc(c_sig, nopython=True)(f)
 
 
-def gen_allfuncs(agg_func, nb_col):
-    if not isinstance(agg_func, list):
-        agg_func_work = [agg_func] * nb_col
-    else:
-        agg_func_work = agg_func
-    allfuncs = []
-    for f_val in agg_func_work:
-        if isinstance(f_val, list):
-            allfuncs += f_val
-        else:
-            allfuncs += [f_val]
-    return allfuncs
-
-
 def gen_top_level_agg_func(
-    key_names,
-    key_types,
-    return_key,
+    agg_node,
     in_col_typs,
     out_col_typs,
-    in_col_names,
-    out_col_names,
-    agg_func,
-    input_has_index,
-    same_index,
     parallel,
-    has_pivot_value,
-    is_crosstab,
-    pivot_values,
     udf_func_struct,
 ):
     """create the top level aggregation function by generating text"""
+    has_pivot_value = agg_node.pivot_arr is not None
     # If we output the index then we need to remove it from the list of variables.
-    if same_index:
-        assert input_has_index
-    if input_has_index:
-        in_col_typs = in_col_typs[0:-1]
-        in_col_names = list(in_col_names)[0:-1]
-    if pivot_values is None:
+    if agg_node.same_index:
+        assert agg_node.input_has_index
+    if agg_node.pivot_values is None:
         n_pivot = 1
     else:
-        n_pivot = len(pivot_values)
+        n_pivot = len(agg_node.pivot_values)
 
-    # arg names
-    key_names = tuple(sanitize_varname(c) for c in key_names)
-    in_names = tuple("in_{}".format(sanitize_varname(c)) for c in in_col_names)
-    out_names = []
-    for c in out_col_names:
-        out_names.append("out_" + sanitize_varname(c))
-    out_names = tuple(sanitize_varname(c) for c in out_names)
-    key_args = ", ".join("key_{}".format(c) for c in key_names)
+    # These are the names of arguments of agg_top function
+    # NOTE that input columns are not repeated in the arg list
+    key_arg_names = tuple("key_" + sanitize_varname(c) for c in agg_node.key_names)
+    in_arg_names = {
+        c: "in_{}".format(sanitize_varname(c))
+        for c in agg_node.gb_info_in.keys()
+        if c is not None
+    }
+    # out_names are the names of the output columns which are returned by agg_top
+    out_names = {c: "out_" + sanitize_varname(c) for c in agg_node.gb_info_out.keys()}
 
-    in_args = ", ".join(in_names)
+    n_keys = len(agg_node.key_names)
+    key_args = ", ".join(key_arg_names)
+    in_args = ", ".join(in_arg_names.values())
     if in_args != "":
         in_args = ", " + in_args
-
-    all_arrs = tuple("key_{}".format(c) for c in key_names) + in_names
-    n_keys = len(key_names)
     # If we put the index as argument, then it is the last argument of the
     # function.
     func_text = "def agg_top({}{}{}, pivot_arr):\n".format(
-        key_args, in_args, ", index_arg" if input_has_index else ""
+        key_args, in_args, ", index_arg" if agg_node.input_has_index else ""
     )
 
     # convert arrays to table
+    # For each unique function applied to a given input column (i.e. each
+    # (in_col, func) pair) we add the column to the table_info passed to C++
+    # (in other words input columns can be repeated in the table info)
+    if has_pivot_value:
+        # For pivot case we can't use gb_info_out because multiple output
+        # columns match to the same input column for a given function, but we
+        # only want to add one input per (input_col, func)
+        # Note that this path also works for df.groupby without NamedAggs
+        # It doesn't work for NamedAgg case because inputs might not be consecutive
+        in_names_all = []
+        for in_col, outs in agg_node.gb_info_in.items():
+            # in_col can be None in case of "size" operation
+            if in_col is not None:
+                for func, _ in outs:
+                    in_names_all.append(in_arg_names[in_col])
+    else:
+        # For NamedAgg case the order in which inputs are provided has to
+        # match the output order, so we use agg_node.gb_info_out instead
+        in_names_all = tuple(
+            in_arg_names[in_col]
+            for in_col, _ in agg_node.gb_info_out.values()
+            if in_col is not None
+        )
+    all_arrs = key_arg_names + tuple(in_names_all)
     func_text += "    info_list = [{}{}{}]\n".format(
         ", ".join("array_to_info({})".format(a) for a in all_arrs),
-        ", array_to_info(index_arg)" if input_has_index else "",
-        ", array_to_info(pivot_arr)" if is_crosstab else "",
+        ", array_to_info(index_arg)" if agg_node.input_has_index else "",
+        ", array_to_info(pivot_arr)" if agg_node.is_crosstab else "",
     )
     func_text += "    table = arr_info_list_to_table(info_list)\n"
 
-    for i in range(len(out_names)):
-        out_name = out_names[i] + "_dummy"
+    for i, c in enumerate(agg_node.gb_info_out.keys()):
+        out_name = out_names[c] + "_dummy"
         out_col_typ = out_col_typs[i]
         # Shift, Min, and Max maintain the same output and input type
         # We handle these separately with Categorical data because if a
@@ -1701,12 +1678,13 @@ def gen_top_level_agg_func(
         # we must associate it with another DType that has it's categories
         # set at runtime. The existing approach for other types just uses
         # Typerefs and those can't be resolved.
+        in_col, func = agg_node.gb_info_out[c]
         if (
-            isinstance(agg_func, pytypes.SimpleNamespace)
-            and agg_func.fname in ["min", "max", "shift"]
+            isinstance(func, pytypes.SimpleNamespace)
+            and func.fname in ["min", "max", "shift"]
             and isinstance(out_col_typ, bodo.CategoricalArrayType)
         ):
-            func_text += "    {} = {}\n".format(out_name, in_names[i])
+            func_text += "    {} = {}\n".format(out_name, in_arg_names[in_col])
         else:
             func_text += "    {} = {}\n".format(
                 out_name, _gen_dummy_alloc(out_col_typ, i, False)
@@ -1720,52 +1698,45 @@ def gen_top_level_agg_func(
     allfuncs = []
     # index of first function (in allfuncs) of input col i
     func_offsets = []
-    # map index of function i in allfuncs to its input col
+    # map index of function i in allfuncs to the column in input table
     func_idx_to_in_col = []
     # number of redvars for each udf function
     udf_ncols = []
-    if is_crosstab:
-        agg_func = [agg_func]
-    else:
-        if not isinstance(agg_func, list):
-            agg_func = [agg_func] * (
-                1 if agg_func.ftype == "size" else len(in_col_typs)
-            )
     skipdropna = False
     shift_periods = 1
     num_cum_funcs = 0
-    for in_col_idx, f_val in enumerate(agg_func):
-        # for each input column, a list of functions can be applied to it
+    if not has_pivot_value:
+        funcs = [func for _, func in agg_node.gb_info_out.values()]
+    else:
+        funcs = [func for func, _ in outs for outs in agg_node.gb_info_in.values()]
+    for f_idx, func in enumerate(funcs):
         func_offsets.append(len(allfuncs))
-        if not isinstance(f_val, list):
-            funcs = [f_val]
-        else:
-            funcs = f_val
-        for func in funcs:
-            if func.ftype in {"median", "nunique"}:
-                # these operations require shuffle at the beginning, so a
-                # local aggregation followed by combine is not necessary
-                do_combine = False
-            if func.ftype in list_cumulative:
-                num_cum_funcs += 1
-            if hasattr(func, "skipdropna"):
-                skipdropna = func.skipdropna
-            if func.ftype == "shift":
-                shift_periods = func.periods
-                do_combine = False  # See median/nunique note ^
-            allfuncs.append(func)
-            func_idx_to_in_col.append(in_col_idx)
-            if func.ftype == "udf":
-                udf_ncols.append(func.n_redvars)
-            elif func.ftype == "gen_udf":
-                udf_ncols.append(0)
-                do_combine = False
+        if func.ftype in {"median", "nunique"}:
+            # these operations require shuffle at the beginning, so a
+            # local aggregation followed by combine is not necessary
+            do_combine = False
+        if func.ftype in list_cumulative:
+            num_cum_funcs += 1
+        if hasattr(func, "skipdropna"):
+            skipdropna = func.skipdropna
+        if func.ftype == "shift":
+            shift_periods = func.periods
+            do_combine = False  # See median/nunique note ^
+        allfuncs.append(func)
+        func_idx_to_in_col.append(f_idx)
+        if func.ftype == "udf":
+            udf_ncols.append(func.n_redvars)
+        elif func.ftype == "gen_udf":
+            udf_ncols.append(0)
+            do_combine = False
     func_offsets.append(len(allfuncs))
-    if is_crosstab:
-        assert len(out_names) == n_pivot, "invalid number of groupby outputs for pivot"
+    if agg_node.is_crosstab:
+        assert (
+            len(agg_node.gb_info_out) == n_pivot
+        ), "invalid number of groupby outputs for pivot"
     else:
         assert (
-            len(out_names) == len(allfuncs) * n_pivot
+            len(agg_node.gb_info_out) == len(allfuncs) * n_pivot
         ), "invalid number of groupby outputs"
     if num_cum_funcs > 0:
         assert num_cum_funcs == len(
@@ -1831,7 +1802,7 @@ def gen_top_level_agg_func(
         udf_names_dummy = []
         redvar_offset = 0
         i = 0
-        for out_name, f in zip(out_names, allfuncs):
+        for out_name, f in zip(out_names.values(), allfuncs):
             if f.ftype in ("udf", "gen_udf"):
                 udf_names_dummy.append(out_name + "_dummy")
                 for j in range(redvar_offset, redvar_offset + udf_ncols[i]):
@@ -1917,45 +1888,45 @@ def gen_top_level_agg_func(
     # We pass the logical arguments to the function (skipdropna, return_key, same_index, ...)
 
     if has_pivot_value:
-        func_text += "    arr_type = coerce_to_array({})\n".format(pivot_values)
+        func_text += "    arr_type = coerce_to_array({})\n".format(
+            agg_node.pivot_values
+        )
         func_text += "    arr_info = array_to_info(arr_type)\n"
         func_text += "    dispatch_table = arr_info_list_to_table([arr_info])\n"
         func_text += "    pivot_info = array_to_info(pivot_arr)\n"
         func_text += "    dispatch_info = arr_info_list_to_table([pivot_info])\n"
         func_text += "    out_table = pivot_groupby_and_aggregate(table, {}, dispatch_table, dispatch_info, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
             n_keys,
-            input_has_index,
+            agg_node.input_has_index,
             parallel,
-            is_crosstab,
+            agg_node.is_crosstab,
             skipdropna,
-            return_key,
-            same_index,
+            agg_node.return_key,
+            agg_node.same_index,
         )
         func_text += "    delete_info_decref_array(pivot_info)\n"
         func_text += "    delete_info_decref_array(arr_info)\n"
     else:
         func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
             n_keys,
-            input_has_index,
+            agg_node.input_has_index,
             parallel,
             skipdropna,
             shift_periods,
-            return_key,
-            same_index,
+            agg_node.return_key,
+            agg_node.same_index,
         )
 
-    key_names = ["key_" + name for name in key_names]
     idx = 0
-    if return_key:
-        for i, key_name in enumerate(key_names):
+    if agg_node.return_key:
+        for i, key_name in enumerate(key_arg_names):
             func_text += (
                 "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
                     key_name, idx, key_name
                 )
             )
             idx += 1
-    for i in range(len(out_names)):
-        out_name = out_names[i]
+    for out_name in out_names.values():
         func_text += (
             "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
                 out_name, idx, out_name + "_dummy"
@@ -1963,7 +1934,7 @@ def gen_top_level_agg_func(
         )
         idx += 1
     # The index as last argument in output as well.
-    if same_index:
+    if agg_node.same_index:
         func_text += "    out_index_arg = info_to_array(info_from_table(out_table, {}), index_arg)\n".format(
             idx
         )
@@ -1973,11 +1944,11 @@ def gen_top_level_agg_func(
     func_text += "    delete_table_decref_arrays(udf_table_dummy)\n"
     func_text += "    delete_table(out_table)\n"
 
-    ret_names = out_names
-    if return_key:
-        ret_names += tuple(key_names)
+    ret_names = tuple(out_names.values())
+    if agg_node.return_key:
+        ret_names += tuple(key_arg_names)
     func_text += "    return ({},{})\n".format(
-        ", ".join(ret_names), " out_index_arg," if same_index else ""
+        ", ".join(ret_names), " out_index_arg," if agg_node.same_index else ""
     )
 
     loc_vars = {}
@@ -2376,13 +2347,6 @@ def get_udf_func_struct(
     pivot_values,
     is_crosstab,
 ):
-    # If input_has_index is True the index of the input dataframe will be the
-    # last element in the input columns passed to C++ groupby (used by groupby
-    # cumsum and other groupby operations). We remove it here from the list
-    # of input columns since no function is actually applied to it
-    if input_has_index:
-        in_col_types = in_col_types[:-1]
-
     if is_crosstab and len(in_col_types) == 0:
         # use dummy int input type for crosstab since doesn't have input
         in_col_types = [types.Array(types.intp, 1, "C")]
@@ -2390,22 +2354,9 @@ def get_udf_func_struct(
     # Construct list of (input col type, aggregation func)
     # If multiple functions will be applied to the same input column, that
     # input column will appear multiple times in the generated list
-    if isinstance(agg_func, list):
-        # 2 possible cases here:
-        # - Tuple function, for example: groupby.agg((f1, f2))
-        # - Constant dict case, for example: groupby.agg({"A": f1, "B": f2})
-        # agg_func is a list with the UDF function(s) to apply to each input column
-        typ_and_func = []
-        for in_typ, f_val in zip(in_col_types, agg_func):
-            if isinstance(f_val, list):
-                # multiple functions are applied to this input column
-                for func in f_val:
-                    typ_and_func.append((in_typ, func))
-            else:
-                # a single function is applied to this input column
-                typ_and_func.append((in_typ, f_val))
-    else:
-        typ_and_func = [(t, agg_func) for t in in_col_types]
+    typ_and_func = []
+    for t, f in zip(in_col_types, agg_func):
+        typ_and_func.append((t, f))
 
     # Create UDF code generators
     regular_udf_gen = RegularUDFGenerator(
