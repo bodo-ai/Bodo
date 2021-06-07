@@ -34,6 +34,10 @@ from bodo.hiframes.datetime_date_ext import (
     datetime_date_array_type,
     datetime_date_type,
 )
+from bodo.hiframes.pd_categorical_ext import (
+    CategoricalArrayType,
+    PDCategoricalDtype,
+)
 from bodo.io import parquet_cpp
 from bodo.io.fs_io import get_hdfs_fs, get_s3_fs_from_path
 from bodo.libs.array import _lower_info_to_array_numpy, array_info_type
@@ -498,6 +502,7 @@ def _gen_pq_reader_py(
             c_typ,
             c_name in parallel,
             is_all_null,
+            local_types,
         )
         if ret_type != None:
             local_types[ret_type] = c_typ
@@ -549,7 +554,15 @@ def _gen_pq_reader_py(
 
 
 def gen_column_read(
-    func_text, cname, c_ind_real, c_ind, c_siz, c_type, is_parallel, is_all_null
+    func_text,
+    cname,
+    c_ind_real,
+    c_ind,
+    c_siz,
+    c_type,
+    is_parallel,
+    is_all_null,
+    local_types,
 ):
     cname = sanitize_varname(cname)
     # Check if there was an error in the C++ code. If so, raise it.
@@ -606,16 +619,25 @@ def gen_column_read(
                 cname, c_ind_real, c_ind, c_siz, ret_type
             )
         )
+    elif isinstance(c_type, CategoricalArrayType):
+        func_text += f"  {cname} = bodo.hiframes.pd_categorical_ext.alloc_categorical_array(loc_size, {cname}_cat_dtype)\n"
+        func_text += f"  {cname}_codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes({cname})\n"
+        c_dtype = bodo.utils.utils.numba_to_c_type(c_type.dtype.int_type)
+        func_text += f"  status = read_parquet(ds_reader, {c_ind_real}, {c_ind}, {cname}_codes, np.int32({c_dtype}), np.int32(1))\n"
+        pd_cat_dtype = pd.CategoricalDtype(
+            c_type.dtype.categories, c_type.dtype.ordered
+        )
+        # set int_type to provide proper typing info, see _typeof_pd_cat_dtype()
+        pd_cat_dtype._int_type = c_type.dtype.int_type
+        local_types[f"{cname}_cat_dtype"] = pd_cat_dtype
     else:
         el_type = get_element_type(c_type.dtype)
         func_text += _gen_alloc(c_type, cname, "loc_size", el_type)
-        func_text += (
-            "  status = read_parquet(ds_reader, {}, {}, {}, np.int32({}))\n".format(
-                c_ind_real,
-                c_ind,
-                cname,
-                bodo.utils.utils.numba_to_c_type(c_type.dtype),
-            )
+        func_text += "  status = read_parquet(ds_reader, {}, {}, {}, np.int32({}), np.int32(0))\n".format(
+            c_ind_real,
+            c_ind,
+            cname,
+            bodo.utils.utils.numba_to_c_type(c_type.dtype),
         )
 
     return ret_type, func_text
@@ -703,14 +725,15 @@ def compute_column_index(list_siz):
     return list_cumsum
 
 
-def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
+def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, category_info):
+    """return Bodo array type from pyarrow Field (column type)"""
     import pyarrow as pa
 
     if isinstance(pa_typ.type, pa.ListType):
         return ArrayItemArrayType(
             # nullable_from_metadata is only used for non-nested Int arrays
             _get_numba_typ_from_pa_typ(
-                pa_typ.type.value_field, is_index, nullable_from_metadata
+                pa_typ.type.value_field, is_index, nullable_from_metadata, category_info
             )
         )
 
@@ -720,7 +743,9 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
         for field in pa_typ.flatten():
             field_names.append(field.name.split(".")[-1])
             child_types.append(
-                _get_numba_typ_from_pa_typ(field, is_index, nullable_from_metadata)
+                _get_numba_typ_from_pa_typ(
+                    field, is_index, nullable_from_metadata, category_info
+                )
             )
         return StructArrayType(tuple(child_types), tuple(field_names))
 
@@ -758,6 +783,23 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
         null(): string_type,  # map it to string_type, handle differently at runtime
     }
 
+    # Categorical data type
+    if isinstance(pa_typ.type, pa.DictionaryType):
+        # NOTE: non-string categories seems not possible as of Arrow 4.0
+        if pa_typ.type.value_type != pa.string():  # pragma: no cover
+            raise BodoError(
+                f"Parquet Categorical data type should be string, not {pa_typ.type.value_type}"
+            )
+        # data type for storing codes
+        int_type = _typ_map[pa_typ.type.index_type]
+        cat_dtype = PDCategoricalDtype(
+            category_info[pa_typ.name],
+            bodo.string_type,
+            pa_typ.type.ordered,
+            int_type=int_type,
+        )
+        return CategoricalArrayType(cat_dtype)
+
     if pa_typ.type not in _typ_map:
         raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
     dtype = _typ_map[pa_typ.type]
@@ -788,11 +830,19 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata):
     return arr_typ
 
 
-def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_options=None):
+def get_parquet_dataset(
+    fpath,
+    get_row_counts=True,
+    filters=None,
+    storage_options=None,
+    read_categories=False,
+):
     """get ParquetDataset object for 'fpath' and set the number of total rows as an
     attribute. Also, sets the number of rows per file as an attribute of
     ParquetDatasetPiece objects.
     'filters' are used for predicate pushdown which prunes the unnecessary pieces.
+    'read_categories': read categories of DictionaryArray and store in returned dataset
+    object, used during typing.
     """
 
     import pyarrow.parquet as pq
@@ -841,7 +891,7 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
             google_fs = gcsfs.GCSFileSystem(token=None)
             fs.append(google_fs)
         elif fpath.startswith("http://"):
-            fs.append(fsspec.filesystem('http'))
+            fs.append(fsspec.filesystem("http"))
         elif (
             fpath.startswith("hdfs://")
             or fpath.startswith("abfs://")
@@ -976,7 +1026,61 @@ def get_parquet_dataset(fpath, get_row_counts=True, filters=None, storage_option
             if not piece.path.startswith(prefix):
                 dataset._prefix = prefix
 
+    if read_categories:
+        _add_categories_to_pq_dataset(dataset)
+
     return dataset
+
+
+def _add_categories_to_pq_dataset(pq_dataset):
+    """adds categorical values for each categorical column to the Parquet dataset
+    as '_category_info' attribute
+    """
+    import pyarrow as pa
+    from mpi4py import MPI
+
+    # NOTE: shouldn't be possible
+    if len(pq_dataset.pieces) < 1:  # pragma: no cover
+        raise BodoError(
+            "No pieces found in Parquet dataset. Cannot get read categorical values"
+        )
+
+    pa_schema = pq_dataset.schema.to_arrow_schema()
+    cat_col_names = [
+        c
+        for c in pa_schema.names
+        if isinstance(pa_schema.field(c).type, pa.DictionaryType)
+    ]
+
+    # avoid more work if no categorical columns
+    if len(cat_col_names) == 0:
+        pq_dataset._category_info = {}
+        return
+
+    comm = MPI.COMM_WORLD
+    if bodo.get_rank() == 0:
+        try:
+            # read categorical values from first row group of first file
+            pf = pq_dataset.pieces[0].open()
+            rg = pf.read_row_group(0, cat_col_names)
+            # NOTE: assuming DictionaryArray has only one chunk
+            category_info = {
+                c: tuple(rg.column(c).chunk(0).dictionary.to_pylist())
+                for c in cat_col_names
+            }
+            del pf, rg  # release I/O resources ASAP
+        except Exception as e:
+            comm.bcast(e)
+            raise e
+
+        comm.bcast(category_info)
+    else:
+        category_info = comm.bcast(None)
+        if isinstance(category_info, Exception):  # pragma: no cover
+            error = category_info
+            raise error
+
+    pq_dataset._category_info = category_info
 
 
 def parquet_file_schema(file_name, selected_columns, storage_options=None):
@@ -991,6 +1095,7 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
         file_name,
         get_row_counts=False,
         storage_options=storage_options,
+        read_categories=True,
     )
     # not using 'partition_names' since the order may not match 'levels'
     partition_names = (
@@ -1049,7 +1154,10 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
 
     col_types_total = [
         _get_numba_typ_from_pa_typ(
-            pa_schema.field(c), c == index_col, nullable_from_metadata[c]
+            pa_schema.field(c),
+            c == index_col,
+            nullable_from_metadata[c],
+            pq_dataset._category_info,
         )
         for c in col_names
     ]
@@ -1118,10 +1226,8 @@ def _get_partition_cat_dtype(part_set):
     # right data type (e.g. string instead of int64)
     S = part_set.dictionary.to_pandas()
     elem_type = bodo.typeof(S).dtype
-    cat_dtype = bodo.hiframes.pd_categorical_ext.PDCategoricalDtype(
-        tuple(S), elem_type, False
-    )
-    return bodo.hiframes.pd_categorical_ext.CategoricalArrayType(cat_dtype)
+    cat_dtype = PDCategoricalDtype(tuple(S), elem_type, False)
+    return CategoricalArrayType(cat_dtype)
 
 
 _get_dataset_reader = types.ExternalFunction(
@@ -1161,7 +1267,7 @@ ll.add_symbol("pq_gen_partition_column", parquet_cpp.pq_gen_partition_column)
 class ReadParquetInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        assert len(args) == 5
+        assert len(args) == 6
         if args[3] == types.intp:  # string read call, returns string array
             return signature(string_array_type, *unliteral_all(args))
         return signature(types.int64, *unliteral_all(args))
@@ -1232,6 +1338,7 @@ if bodo.utils.utils.has_pyarrow():
     types.intp,
     types.Array,
     types.int32,
+    types.int32,
 )
 def pq_read_lower(context, builder, sig, args):
     fnty = lir.FunctionType(
@@ -1243,6 +1350,7 @@ def pq_read_lower(context, builder, sig, args):
             lir.IntType(8).as_pointer(),
             lir.IntType(32),
             lir.IntType(8).as_pointer(),
+            lir.IntType(32),
         ],
     )
     out_array = make_array(sig.args[3])(context, builder, args[3])
@@ -1258,6 +1366,7 @@ def pq_read_lower(context, builder, sig, args):
             builder.bitcast(out_array.data, lir.IntType(8).as_pointer()),
             args[4],
             zero_ptr,
+            args[5],
         ],
     )
     bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
@@ -1274,6 +1383,7 @@ def pq_read_lower(context, builder, sig, args):
     types.intp,
     IntegerArrayType,
     types.int32,
+    types.int32,
 )
 @lower_builtin(
     read_parquet,
@@ -1281,6 +1391,7 @@ def pq_read_lower(context, builder, sig, args):
     types.intp,
     types.intp,
     BooleanArrayType,
+    types.int32,
     types.int32,
 )
 @lower_builtin(
@@ -1290,6 +1401,7 @@ def pq_read_lower(context, builder, sig, args):
     types.intp,
     DecimalArrayType,
     types.int32,
+    types.int32,
 )
 @lower_builtin(
     read_parquet,
@@ -1297,6 +1409,7 @@ def pq_read_lower(context, builder, sig, args):
     types.intp,
     types.intp,
     datetime_date_array_type,
+    types.int32,
     types.int32,
 )
 def pq_read_int_arr_lower(context, builder, sig, args):
@@ -1309,6 +1422,7 @@ def pq_read_int_arr_lower(context, builder, sig, args):
             lir.IntType(8).as_pointer(),
             lir.IntType(32),
             lir.IntType(8).as_pointer(),
+            lir.IntType(32),
         ],
     )
     int_arr_typ = sig.args[3]
@@ -1333,6 +1447,7 @@ def pq_read_int_arr_lower(context, builder, sig, args):
             builder.bitcast(data_array.data, lir.IntType(8).as_pointer()),
             args[4],
             builder.bitcast(bitmap.data, lir.IntType(8).as_pointer()),
+            args[5],
         ],
     )
     bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)

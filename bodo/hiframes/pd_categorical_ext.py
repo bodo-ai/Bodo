@@ -45,7 +45,7 @@ from bodo.utils.typing import (
 
 # type for pd.CategoricalDtype objects in Pandas
 class PDCategoricalDtype(types.Opaque):
-    def __init__(self, categories, elem_type, ordered, data=None):
+    def __init__(self, categories, elem_type, ordered, data=None, int_type=None):
         # categories can be None since may not be known (e.g. Series.astype("category"))
         self.categories = categories
         # element type is necessary since categories may not be known
@@ -54,7 +54,10 @@ class PDCategoricalDtype(types.Opaque):
         # ordered may be None if unknown
         self.ordered = ordered
         self.data = _get_cat_index_type(elem_type) if data is None else data
-        name = f"PDCategoricalDtype({self.categories}, {self.elem_type}, {self.ordered}, {self.data})"
+        # Parquet dictionary type may not use the minimum possible int data type so
+        # we need to set explicitly
+        self.int_type = int_type
+        name = f"PDCategoricalDtype({self.categories}, {self.elem_type}, {self.ordered}, {self.data}, {self.int_type})"
         super(PDCategoricalDtype, self).__init__(name=name)
 
 
@@ -62,8 +65,10 @@ class PDCategoricalDtype(types.Opaque):
 def _typeof_pd_cat_dtype(val, c):
     cats = val.categories.to_list()
     elem_type = None if len(cats) == 0 else bodo.typeof(cats[0])
+    # we set _int_type in gen_column_read() of Parquet read to pass proper type info
+    int_type = getattr(val, "_int_type", None)
     return PDCategoricalDtype(
-        tuple(cats), elem_type, val.ordered, bodo.typeof(val.categories)
+        tuple(cats), elem_type, val.ordered, bodo.typeof(val.categories), int_type
     )
 
 
@@ -106,13 +111,14 @@ make_attribute_wrapper(PDCategoricalDtype, "ordered", "ordered")
 
 
 @intrinsic
-def init_cat_dtype(typingctx, categories_typ, ordered_typ=None):
+def init_cat_dtype(typingctx, categories_typ, ordered_typ, int_type=None):
     """Create a CategoricalDtype from categories array and ordered flag"""
     assert bodo.hiframes.pd_index_ext.is_index_type(categories_typ)
     assert is_overload_constant_bool(ordered_typ)
+    cat_int_type = None if is_overload_none(int_type) else int_type.dtype
 
     def codegen(context, builder, sig, args):
-        categories, ordered = args
+        categories, ordered, _ = args
         cat_dtype = cgutils.create_struct_proxy(sig.return_type)(context, builder)
         cat_dtype.categories = categories
         context.nrt.incref(builder, sig.args[0], categories)
@@ -121,9 +127,13 @@ def init_cat_dtype(typingctx, categories_typ, ordered_typ=None):
         return cat_dtype._getvalue()
 
     ret_type = PDCategoricalDtype(
-        None, categories_typ.dtype, is_overload_true(ordered_typ), categories_typ
+        None,
+        categories_typ.dtype,
+        is_overload_true(ordered_typ),
+        categories_typ,
+        cat_int_type,
     )
-    return ret_type(categories_typ, ordered_typ), codegen
+    return ret_type(categories_typ, ordered_typ, int_type), codegen
 
 
 @unbox(PDCategoricalDtype)
@@ -255,9 +265,15 @@ def lower_constant_categorical_array(context, builder, typ, pyval):
 def get_categories_int_type(cat_dtype):
     """find smallest integer data type that can represent all categories in 'cat_dtype'"""
     dtype = types.int64
+
+    # Parquet read case provides int data type explicitly (can differ from min possible)
+    if cat_dtype.int_type is not None:
+        return cat_dtype.int_type
+
     # if categories are not known upfront, assume worst case int64 for codes
     if cat_dtype.categories is None:
-        return dtype
+        return types.int64
+
     n_cats = len(cat_dtype.categories)
     if n_cats < np.iinfo(np.int8).max:
         dtype = types.int8
@@ -657,7 +673,7 @@ def cat_replace_overload(arr, to_replace, value):
             if len(categories_dict) == 0:
                 return init_categorical_array(
                     arr.codes.copy().astype(np.int64),
-                    init_cat_dtype(categories.copy(), _ordered),
+                    init_cat_dtype(categories.copy(), _ordered, None),
                 )
             # If we must edit the categories we need to preallocate a new
             # string array
@@ -681,7 +697,9 @@ def cat_replace_overload(arr, to_replace, value):
             cat_arr = alloc_categorical_array(
                 len(arr.codes),
                 init_cat_dtype(
-                    bodo.utils.conversion.index_from_array(new_categories), _ordered
+                    bodo.utils.conversion.index_from_array(new_categories),
+                    _ordered,
+                    None,
                 ),
             )
             # Update all of the codes
@@ -700,7 +718,7 @@ def cat_replace_overload(arr, to_replace, value):
         if len(categories_dict) == 0:
             return init_categorical_array(
                 arr.codes.copy().astype(np.int64),
-                init_cat_dtype(categories.copy(), _ordered),
+                init_cat_dtype(categories.copy(), _ordered, None),
             )
         n = len(categories)
         new_categories = bodo.utils.utils.alloc_type(n - num_deleted, _arr_type, None)
@@ -721,7 +739,7 @@ def cat_replace_overload(arr, to_replace, value):
         cat_arr = alloc_categorical_array(
             len(arr.codes),
             init_cat_dtype(
-                bodo.utils.conversion.index_from_array(new_categories), _ordered
+                bodo.utils.conversion.index_from_array(new_categories), _ordered, None
             ),
         )
         reassign_codes(cat_arr.codes, arr.codes, codes_map_arr)
@@ -820,7 +838,9 @@ def pd_categorical_overload(
             ordered = bodo.utils.conversion.false_if_none(ordered)
             data = bodo.utils.conversion.coerce_to_array(values)
             cats = bodo.utils.conversion.convert_to_index(categories)
-            cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(cats, ordered)
+            cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(
+                cats, ordered, None
+            )
             return bodo.utils.conversion.fix_arr_dtype(data, cat_dtype)
 
         return impl_cats

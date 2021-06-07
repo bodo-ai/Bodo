@@ -636,7 +636,7 @@ def _test_equal(
         # we return typed extension arrays like StringArray for all APIs but Pandas
         # doesn't return them by default in all APIs yet.
         if (
-            np.object in py_out.dtypes.values.tolist()
+            object in py_out.dtypes.values.tolist()
             or np.bool_ in py_out.dtypes.values.tolist()
         ):
             check_dtype = False
