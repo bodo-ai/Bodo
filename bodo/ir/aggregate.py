@@ -398,7 +398,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                 )
             else:
                 assert typemap is not None, "typemap is required for agg UDF handling"
-                func = _get_const_agg_func(t)
+                func = _get_const_agg_func(t, func_ir)
                 func.ftype = "udf"
                 func.fname = _get_udf_name(func)
                 # similar to _resolve_agg, TODO(ehsan): refactor
@@ -414,7 +414,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
 
     # typemap should be available for UDF case
     assert typemap is not None, "typemap is required for agg UDF handling"
-    func = _get_const_agg_func(typemap[rhs.args[0].name])
+    func = _get_const_agg_func(typemap[rhs.args[0].name], func_ir)
     func.ftype = "udf"
     func.fname = _get_udf_name(func)
     return func
@@ -439,7 +439,7 @@ def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
             f_val, (numba.core.registry.CPUDispatcher, types.Dispatcher)
         )
         assert typemap is not None, "typemap is required for agg UDF handling"
-        func = _get_const_agg_func(f_val)
+        func = _get_const_agg_func(f_val, func_ir)
         func.ftype = "udf"
         func.fname = _get_udf_name(func)
         return func
@@ -452,9 +452,9 @@ def _get_udf_name(func):
     return f_name
 
 
-def _get_const_agg_func(func_typ):
+def _get_const_agg_func(func_typ, func_ir):
     """get UDF function from its type. Wraps closures in functions."""
-    agg_func = get_overload_const_func(func_typ)
+    agg_func = get_overload_const_func(func_typ, func_ir)
 
     # convert agg_func to a function if it is a make_function object
     # TODO: more robust handling, maybe reuse Numba's inliner code if possible

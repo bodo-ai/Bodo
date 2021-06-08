@@ -1181,11 +1181,10 @@ class TypingTransforms:
             [sql_context_var],
             assign.target,
             self,
-            # BodoSQL Like functionality needs re module
-            extra_globals={"bodosql": bodosql},
             infer_types=False,
             run_untyped_pass=True,
             flags=self.flags,
+            replace_globals=False,
         )
 
     def _call_arg_list_to_tuple(self, rhs, func_name, arg_no, arg_name, nodes):
