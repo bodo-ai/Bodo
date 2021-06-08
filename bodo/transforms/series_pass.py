@@ -2794,7 +2794,7 @@ class SeriesPass:
                 pre_nodes=nodes,
             )
 
-        func = get_overload_const_func(func_type)
+        func = get_overload_const_func(func_type, self.func_ir)
 
         is_df_output = isinstance(self.typemap[lhs.name], DataFrameType)
         out_arr_types = self.typemap[lhs.name].data
@@ -2845,7 +2845,6 @@ class SeriesPass:
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         f = loc_vars["f"]
-
         map_func = bodo.compiler.udf_jit(func)
         glbs = {
             "numba": numba,
@@ -2956,7 +2955,7 @@ class SeriesPass:
             "combine", rhs.args, kws, 2, "fill_value", default=""
         )
 
-        func = get_overload_const_func(self.typemap[func_var.name])
+        func = get_overload_const_func(self.typemap[func_var.name], self.func_ir)
 
         nodes = []
         data = self._get_series_data(series_var, nodes)

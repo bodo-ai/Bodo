@@ -181,7 +181,7 @@ def _get_apply_func(f_type):
     """get UDF function from function type and jit it with Bodo's sequential pipeline to
     avoid parallel errors.
     """
-    func = get_overload_const_func(f_type)
+    func = get_overload_const_func(f_type, None)
     return bodo.compiler.udf_jit(func)
 
 

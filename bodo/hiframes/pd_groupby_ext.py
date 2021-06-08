@@ -524,7 +524,7 @@ def get_agg_typ(grp, args, func_name, context, func=None, kws=None):
                 if func_name == "agg":
                     # XXX Can we merge with get_const_func_output_type above?
                     udf_name = bodo.ir.aggregate._get_udf_name(
-                        bodo.ir.aggregate._get_const_agg_func(func)
+                        bodo.ir.aggregate._get_const_agg_func(func, None)
                     )
                     gb_info[(c, udf_name)] = c
                 else:
@@ -608,7 +608,7 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, context):
         else:
             f = f_val
         validate_udf("agg", f)
-        func = get_overload_const_func(f)
+        func = get_overload_const_func(f, None)
         code = func.code if hasattr(func, "code") else func.__code__
         f_name = code.co_name
         # run typer on a groupby with just column col

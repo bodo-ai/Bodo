@@ -1941,8 +1941,14 @@ def convert_code_obj_to_function(code_obj, caller_ir):
         free_var_names = [v.name for v in items]
 
     # bodo change: brought glbls upfront to be able to update with function globals
-    # globals are the same as those in the caller
+    # globals are the same as those in the caller.
     glbls = caller_ir.func_id.func.__globals__
+    # UDF globals may be available (set in untyped pass), needed for BodoSQL (CASE UDFs)
+    # Numba infrastructure returns a KeyError even if getattr has a default value.
+    try:
+        glbls = getattr(code_obj, "globals", glbls)
+    except KeyError:
+        pass
 
     # try and resolve freevars if they are consts in the caller's IR
     # these can be baked into the new function

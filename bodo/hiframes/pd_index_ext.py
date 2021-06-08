@@ -2908,7 +2908,7 @@ def overload_index_map(I, mapper, na_action=None):
 
     out_arr_type = get_udf_out_arr_type(f_return_type)
 
-    func = get_overload_const_func(mapper)
+    func = get_overload_const_func(mapper, None)
     func_text = "def f(I, mapper, na_action=None):\n"
     func_text += "  name = bodo.hiframes.pd_index_ext.get_index_name(I)\n"
     func_text += "  A = bodo.utils.conversion.coerce_to_array(I)\n"

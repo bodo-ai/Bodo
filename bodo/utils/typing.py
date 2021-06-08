@@ -10,7 +10,7 @@ from inspect import getfullargspec
 import numba
 import numpy as np
 import pandas as pd
-from numba.core import ir_utils, types
+from numba.core import ir, ir_utils, types
 from numba.core.errors import NumbaError
 from numba.core.registry import CPUDispatcher
 from numba.extending import (
@@ -621,10 +621,17 @@ def is_const_func_type(t):
     )
 
 
-def get_overload_const_func(val):
+def get_overload_const_func(val, func_ir):
     """get constant function object or ir.Expr.make_function from function type"""
     if isinstance(val, (types.MakeFunctionLiteral, bodo.utils.typing.FunctionLiteral)):
-        return val.literal_value
+        func = val.literal_value
+        # Handle functions that are currently make_function expressions from BodoSQL
+        if isinstance(func, ir.Expr) and func.op == "make_function":
+            assert (
+                func_ir is not None
+            ), "Function expression is make_function but there is no existing IR"
+            func = numba.core.ir_utils.convert_code_obj_to_function(func, func_ir)
+        return func
     if isinstance(val, types.Dispatcher):
         return val.dispatcher.py_func
     if isinstance(val, CPUDispatcher):

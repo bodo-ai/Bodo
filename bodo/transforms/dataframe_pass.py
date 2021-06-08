@@ -486,10 +486,7 @@ class DataFramePass:
         # get apply function
         kws = dict(rhs.kws)
         func_var = get_call_expr_arg("apply", rhs.args, kws, 0, "func")
-        func = get_overload_const_func(self.typemap[func_var.name])
-        # Handle functions that are currently make_function expressions from BodoSQL
-        if isinstance(func, ir.Expr) and func.op == "make_function":
-            func = numba.core.ir_utils.convert_code_obj_to_function(func, self.func_ir)
+        func = get_overload_const_func(self.typemap[func_var.name], self.func_ir)
         out_typ = self.typemap[lhs.name]
         is_df_output = isinstance(out_typ, DataFrameType)
         out_arr_types = out_typ.data
@@ -1647,7 +1644,7 @@ class DataFramePass:
         # get apply function
         kws = dict(rhs.kws)
         func_var = get_call_expr_arg("GroupBy.apply", rhs.args, kws, 0, "func")
-        func = get_overload_const_func(self.typemap[func_var.name])
+        func = get_overload_const_func(self.typemap[func_var.name], self.func_ir)
 
         extra_args = [] if len(rhs.args) < 2 else rhs.args[1:]
 
@@ -2012,7 +2009,7 @@ class DataFramePass:
         # get pipe function and args
         kws = dict(rhs.kws)
         func_var = get_call_expr_arg("pipe", rhs.args, kws, 0, "func")
-        func = get_overload_const_func(self.typemap[func_var.name])
+        func = get_overload_const_func(self.typemap[func_var.name], self.func_ir)
         extra_args = [] if len(rhs.args) < 2 else rhs.args[1:]
         args = [obj_var] + list(extra_args)
 
