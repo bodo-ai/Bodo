@@ -2569,6 +2569,27 @@ def test_pd_notnull(na_test_obj, memory_leak_check):
     check_func(impl, (obj,), is_out_distributed)
 
 
+@pytest.mark.slow
+def test_scalar_dataframe(memory_leak_check):
+    """
+    Tests returning intializing a DataFrame of scalars
+    using an index
+    """
+
+    def test_impl1():
+        return pd.DataFrame(
+            {"A": 12, "B": "cat", "C": True}, index=pd.RangeIndex(0, 20, 1)
+        )
+
+    def test_impl2():
+        return pd.DataFrame(
+            {"A": 12, "B": "cat", "C": True}, index=pd.RangeIndex(0, 1, 1)
+        )
+
+    check_func(test_impl1, ())
+    check_func(test_impl2, ())
+
+
 def test_pd_isna_getitem(memory_leak_check):
     """test support for NA check for array values, e.g. pd.isna(A[i]) pattern matching
     in SeriesPass

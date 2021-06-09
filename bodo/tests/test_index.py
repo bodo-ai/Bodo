@@ -60,6 +60,18 @@ def test_range_index_constructor(memory_leak_check, is_slow_run):
     assert bodo.jit(impl7)(r) == impl7(r)
 
 
+@pytest.mark.slow
+def test_distributed_range_index(memory_leak_check):
+    """
+    Tests returning a distributed range index.
+    """
+
+    def test_impl():
+        return pd.RangeIndex(0, 1, 1)
+
+    check_func(test_impl, ())
+
+
 @pytest.mark.parametrize(
     "data",
     [
