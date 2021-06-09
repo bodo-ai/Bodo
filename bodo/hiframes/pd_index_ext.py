@@ -1553,7 +1553,7 @@ def lower_constant_range_index(context, builder, ty, pyval):
     return range_val._getvalue()
 
 
-@overload(pd.RangeIndex, no_unliteral=True)
+@overload(pd.RangeIndex, no_unliteral=True, inline="always")
 def range_index_overload(
     start=None, stop=None, step=None, dtype=None, copy=False, name=None, fastpath=None
 ):
@@ -1599,7 +1599,6 @@ def range_index_overload(
     )
     loc_vars = {}
     exec(func_text, {"init_range_index": init_range_index}, loc_vars)
-    # print(func_text)
     _pd_range_index_imp = loc_vars["_pd_range_index_imp"]
     return _pd_range_index_imp
 

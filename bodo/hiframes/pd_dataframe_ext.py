@@ -1184,8 +1184,9 @@ def _get_df_len_from_info(
             df_len = "len({})".format(data_dict[c])
             break
 
-    if df_len is None and not index_is_none:
-        df_len = "len({})".format(index_arg)  # TODO: test
+    # If we haven't found a length, rely on the index
+    if df_len == "0" and not index_is_none:
+        df_len = f"len({index_arg})"
 
     return df_len
 
