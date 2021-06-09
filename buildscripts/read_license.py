@@ -2,12 +2,18 @@ import array
 import subprocess
 import sys
 
+# See gen_license.py and bodo/libs/_distributed.cpp for more information on license
+
 REGULAR_LIC_TYPE = 0
-PLATFORM_LIC_TYPE = 1
+PLATFORM_LIC_TYPE_AWS = 1
+PLATFORM_LIC_TYPE_AZURE = 2
 HEADER_LEN_MASK = 0xFFFF  # license file length is in second half of header
 # AWS instance id is 19 characters:
 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/resource-ids.html
-EC2_INSTANCE_ID_LEN = 19
+# Azure VM Unique ID is 36 characters:
+# https://azure.microsoft.com/en-us/blog/accessing-and-using-azure-vm-unique-id/
+instance_id_len = {PLATFORM_LIC_TYPE_AWS: 19, PLATFORM_LIC_TYPE_AZURE: 36}
+cloud_type = {PLATFORM_LIC_TYPE_AWS: "AWS", PLATFORM_LIC_TYPE_AZURE: "Azure"}
 
 
 def read_license(license_fname):
@@ -25,11 +31,11 @@ def read_license(license_fname):
         print(
             "License for", max_cores, "cores. Expires {}-{}-{}".format(year, month, day)
         )
-    elif license_type == PLATFORM_LIC_TYPE:
+    elif license_type in {PLATFORM_LIC_TYPE_AWS, PLATFORM_LIC_TYPE_AZURE}:
         license_id = msg[
-            header_arr.itemsize : header_arr.itemsize + EC2_INSTANCE_ID_LEN
+            header_arr.itemsize : header_arr.itemsize + instance_id_len[license_type]
         ]
-        print("License for EC2 instance", license_id.decode())
+        print(f"License for {cloud_type[license_type]} instance", license_id.decode())
     else:
         print("License type {} not recognized".format(license_type))
 

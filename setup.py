@@ -187,10 +187,10 @@ if os.environ.get("CHECK_LICENSE_EXPIRED", None) == "1":
 if os.environ.get("CHECK_LICENSE_CORE_COUNT", None) == "1":
     dist_macros.append(("CHECK_LICENSE_CORE_COUNT", "1"))
 
-if os.environ.get("CHECK_LICENSE_PLATFORM_AWS", None) == "1":
+if os.environ.get("CHECK_LICENSE_PLATFORM", None) == "1":
     assert os.environ.get("CHECK_LICENSE_EXPIRED", None) != "1"
     assert os.environ.get("CHECK_LICENSE_CORE_COUNT", None) != "1"
-    dist_macros.append(("CHECK_LICENSE_PLATFORM_AWS", "1"))
+    dist_macros.append(("CHECK_LICENSE_PLATFORM", "1"))
     dist_includes += ["bodo/libs/gason"]
     dist_sources += ["bodo/libs/gason/gason.cpp"]
     dist_libs += ["curl"]
