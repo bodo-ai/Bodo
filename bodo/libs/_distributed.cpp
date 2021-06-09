@@ -7,11 +7,11 @@
 #include <fstream>
 #include <vector>
 
+#if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT) || \
+    defined(CHECK_LICENSE_PLATFORM)
+
 #define FREE_MAX_CORES 4
 #define EXPIRATION_COUNTDOWN_DAYS 6
-
-#if defined(CHECK_LICENSE_EXPIRED) || defined(CHECK_LICENSE_CORE_COUNT) || \
-    defined(CHECK_LICENSE_PLATFORM_AWS)
 
 /*
  * A license consists of a header, content and signature.
@@ -20,19 +20,24 @@
  * some of these in the future for other purposes). The second 16 bits specify
  * the total length (in bytes) of the license.
  * The license content varies by license type.
- * - Type 1 (regular):
+ * - Type 0 (regular):
  *   The content is four 32-bit ints: max core count, expiration year,
  *   expiration month, expiration day
- * - Type 2 (Bodo Platform on AWS):
+ * - Type 1 (Bodo Platform on AWS):
  *   The content is the EC2 Instance ID (19 ASCII characters) licensed to run Bodo
- * The signature is obtained by getting a SHA-256 digest of the license content
- * and signing with a private key using RSA.
- * The license that is provided to customers is encoded in Base64
+ * - Type 2 (Bodo Platform on Azure):
+ *   The content is the Azure VM Unique ID (36 ASCII characters) licensed to run Bodo
+ * The signature is obtained by getting a SHA-256 digest of the license
+ * content and signing with a private key using RSA. The license that is
+ * provided to customers is encoded in Base64
  */
+
+#define REGULAR_LIC_TYPE 0
+#define PLATFORM_LIC_TYPE_AWS 1
+#define PLATFORM_LIC_TYPE_AZURE 2
 
 #define HEADER_LEN_MASK \
     0xffff  // mask to get the total license length from license header
-#define EC2_INSTANCE_ID_LEN 19  // number of characters in a EC2 instance ID
 
 // public key to verify signature of license file
 const char *pubkey =
@@ -132,12 +137,17 @@ static int verify_license(EVP_PKEY *key, const void *msg, const size_t mlen,
     return 1;  // verified correctly
 }
 
-#endif
+#endif  // CHECK_LICENSE_EXPIRED || CHECK_LICENSE_CORE_COUNT ||
+        // CHECK_LICENSE_PLATFORM
 
-#if defined(CHECK_LICENSE_PLATFORM_AWS)
+#if defined(CHECK_LICENSE_PLATFORM)
 
 #include <curl/curl.h>
 #include "gason.h"  // lightweight JSON parser: https://github.com/vivkin/gason
+
+#define EC2_INSTANCE_ID_LEN 19  // number of characters in a EC2 instance ID
+#define AZURE_INSTANCE_ID_LEN \
+    36  // number of characters in an Azure instance ID
 
 // license checking error codes
 #define LICENSE_ERR_DOWNLOAD \
@@ -145,38 +155,43 @@ static int verify_license(EVP_PKEY *key, const void *msg, const size_t mlen,
 #define LICENSE_ERR_JSON_PARSE 101  // Error parsing Identity Document
 #define LICENSE_ERR_INSTANCE_ID_NOT_FOUND \
     102  // Instance ID not found in Identity Document
-#define LICENSE_ERR_INVALID_INSTANCE \
-    103  // License is not for this EC2 instance
+#define LICENSE_ERR_INVALID_INSTANCE 103  // License is not for this instance
 #define LICENSE_ERR_INVALID_LICENSE \
     104  // Invalid license (for example tampered license, invalid/no signature,
          // etc.)
 #define LICENSE_ERR_INVALID_LICENSE_TYPE 105  // Invalid license type
 
 /**
- * Reads the license file, verifies the signature and makes sure that
- * the instance ID in the license matches the instance ID that is passed.
- * @param cur_instance_id: The Instance ID of the EC2 instance on which Bodo
- *                         is running.
+ * Reads the license file, verifies the signature and returns the instance ID
+ * contained in the license.
+ * @param[out] license_type: the license type (see PLATFORM_LIC_TYPE_X above)
+ * @param[out] lic_instance_id: the Instance ID contained in the license
  */
-static int read_verify_license(const char *cur_instance_id) {
+static int get_license_platform(int &license_type,
+                                std::string &lic_instance_id) {
     std::vector<char> data;   // store license
     bool b64_encoded = true;  // license encoded in Base64
     int read_license = read_license_common(data, b64_encoded);
     if (!read_license) return 0;
 
-    int license_type = ((int *)data.data())[0] >> 16;
-    if (license_type != 1) {
+    license_type = ((int *)data.data())[0] >> 16;
+    if (license_type != PLATFORM_LIC_TYPE_AWS &&
+        license_type != PLATFORM_LIC_TYPE_AZURE) {
         fprintf(stderr, "Could not verify license. Code %d\n",
                 LICENSE_ERR_INVALID_LICENSE_TYPE);
         return 0;
     }
 
-    std::string lic_instance_id(
-        data.begin() + sizeof(int),
-        data.begin() + sizeof(int) + EC2_INSTANCE_ID_LEN);
+    int instance_id_len;
+    if (license_type == PLATFORM_LIC_TYPE_AWS)
+        instance_id_len = EC2_INSTANCE_ID_LEN;
+    else if (license_type == PLATFORM_LIC_TYPE_AZURE)
+        instance_id_len = AZURE_INSTANCE_ID_LEN;
+
+    lic_instance_id.assign(data.begin() + sizeof(int),
+                           data.begin() + sizeof(int) + instance_id_len);
     std::vector<char> signature;  // to store signature contained in license
-    signature.assign(data.begin() + sizeof(int) + EC2_INSTANCE_ID_LEN,
-                     data.end());
+    signature.assign(data.begin() + sizeof(int) + instance_id_len, data.end());
 
     EVP_PKEY *key = get_public_key();
     if (!key) {
@@ -185,7 +200,7 @@ static int read_verify_license(const char *cur_instance_id) {
         return 0;
     }
 
-    if (!verify_license(key, lic_instance_id.c_str(), EC2_INSTANCE_ID_LEN,
+    if (!verify_license(key, lic_instance_id.c_str(), instance_id_len,
                         (unsigned char *)signature.data(), signature.size())) {
         // ERR_print_errors_fp(stderr);  // print ssl errors
         fprintf(stderr, "Could not verify license. Code %d\n",
@@ -194,11 +209,6 @@ static int read_verify_license(const char *cur_instance_id) {
     }
     EVP_PKEY_free(key);
 
-    if (strcmp(cur_instance_id, lic_instance_id.c_str()) != 0) {
-        fprintf(stderr, "Could not verify license. Code %d\n",
-                LICENSE_ERR_INVALID_INSTANCE);
-        return 0;
-    }
     return 1;
 }
 
@@ -219,12 +229,11 @@ std::size_t callback(const char *in, std::size_t size, std::size_t num,
 }  // namespace
 
 /**
- * Verify license for this EC2 instance. Will obtain the instance ID of the
- * instance that is running this. Then it will read the license file, verify
- * the signature on the license and make sure that the instance ID in the
- * license matches.
+ * Verify license for this EC2 instance. Obtains the instance ID of the
+ * instance that this is running on and compares it with the instance ID from
+ * the license.
  */
-static int verify_license_ec2() {
+static int verify_license_aws(std::string &lic_instance_id) {
     const std::string url(
         "http://169.254.169.254/latest/dynamic/instance-identity/document");
 
@@ -268,7 +277,13 @@ static int verify_license_ec2() {
         }
         for (auto i : value) {
             if (strcmp(i->key, "instanceId") == 0) {
-                return read_verify_license(i->value.toString());
+                std::string cur_instance_id = i->value.toString();
+                if (cur_instance_id != lic_instance_id) {
+                    fprintf(stderr, "Could not verify license. Code %d\n",
+                            LICENSE_ERR_INVALID_INSTANCE);
+                    return 0;
+                }
+                return 1;
             }
         }
         fprintf(stderr, "Could not verify license. Code %d\n",
@@ -281,7 +296,83 @@ static int verify_license_ec2() {
     }
 }
 
-#endif
+/**
+ * Verify license for this Azure instance. Obtains the instance ID of the
+ * instance that this is running on and compares it with the instance ID from
+ * the license.
+ */
+static int verify_license_azure(std::string &lic_instance_id) {
+    // Can get the Azure VM Unique ID with curl:
+    // https://docs.microsoft.com/en-us/azure/virtual-machines/windows/instance-metadata-service?tabs=linux#sample-1-tracking-vm-running-on-azure
+    // curl -H Metadata:true --noproxy "*"
+    // "http://169.254.169.254/metadata/instance/compute/vmId?api-version=2017-08-01&format=text"
+    const std::string url(
+        "http://169.254.169.254/metadata/instance/compute/"
+        "vmId?api-version=2017-08-01&format=text");
+
+    CURL *curl = curl_easy_init();
+
+    // Set remote URL
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+
+    // Don't use IPv6, which would increase DNS resolution time
+    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+
+    // Time out after 10 seconds
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10);
+
+    // set custom header "Metadata:true"
+    struct curl_slist *list = NULL;
+    list = curl_slist_append(list, "Metadata:true");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
+
+    // --noproxy "*"
+    curl_easy_setopt(curl, CURLOPT_NOPROXY, "*");
+
+    // Response information
+    int http_code = 0;
+    std::string http_data;
+
+    // Set data handling function
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
+
+    // Set data container (will be passed as the last parameter to the
+    // callback handling function)
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &http_data);
+
+    // Run HTTP GET command, capture HTTP response code, and clean up
+    curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(curl);
+    curl_slist_free_all(list);
+
+    if (http_code == 200) {
+        if (http_data != lic_instance_id) {
+            fprintf(stderr, "Could not verify license. Code %d\n",
+                    LICENSE_ERR_INVALID_INSTANCE);
+            return 0;
+        }
+        return 1;
+    } else {
+        fprintf(stderr, "Could not verify license. Code %d\n",
+                LICENSE_ERR_DOWNLOAD);
+        return 0;
+    }
+}
+
+static int verify_license_platform() {
+    int license_type;
+    std::string instance_id;
+    int rc = get_license_platform(license_type, instance_id);
+    if (rc == 0) return 0;
+
+    if (license_type == PLATFORM_LIC_TYPE_AWS)
+        return verify_license_aws(instance_id);
+    if (license_type == PLATFORM_LIC_TYPE_AZURE)
+        return verify_license_azure(instance_id);
+}
+
+#endif  // CHECK_LICENSE_PLATFORM
 
 MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 
@@ -309,33 +400,36 @@ static bool is_expired(int exp_year, int exp_month, int exp_day) {
     return false;
 }
 
-static int num_days_till_license_expiration(int exp_year, int exp_month, int exp_day) {
+static int num_days_till_license_expiration(int exp_year, int exp_month,
+                                            int exp_day) {
     /**
-     * Return the number of days between expiry and current day. Return -1 in case of error.
+     * Return the number of days between expiry and current day. Return -1 in
+     * case of error.
      * @param exp_year: expiration year
      * @param exp_month: expiration month
      * @param exp_day: expiration day
      * @return : number of days till expiration
      */
-    
-    // Copied from https://stackoverflow.com/questions/14218894/number-of-days-between-two-dates-c
 
-    struct std::tm exp = {0,0,0,exp_day,exp_month-1,exp_year-1900};
+    // Copied from
+    // https://stackoverflow.com/questions/14218894/number-of-days-between-two-dates-c
+
+    struct std::tm exp = {0, 0, 0, exp_day, exp_month - 1, exp_year - 1900};
     std::time_t expiration_ts = std::mktime(&exp);
     std::time_t now_ts = std::time(nullptr);  // get time now
 
     int num_days_left = 0;
-    
+
     if (expiration_ts != (std::time_t)(-1) && now_ts != (std::time_t)(-1)) {
-        num_days_left = (int)(std::difftime(expiration_ts, now_ts) / (60 * 60 * 24));
+        num_days_left =
+            (int)(std::difftime(expiration_ts, now_ts) / (60 * 60 * 24));
     } else {
         num_days_left = -1;
     }
     return num_days_left;
-
 }
 
-#endif
+#endif  // CHECK_LICENSE_EXPIRED) || CHECK_LICENSE_CORE_COUNT
 
 PyMODINIT_FUNC PyInit_hdist(void) {
     PyObject *m;
@@ -345,8 +439,8 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
 
-#if defined(CHECK_LICENSE_PLATFORM_AWS)
-    if (!verify_license_ec2()) {
+#if defined(CHECK_LICENSE_PLATFORM)
+    if (!verify_license_platform()) {
         PyErr_SetString(PyExc_RuntimeError, "Invalid license\n");
         return NULL;
     }
@@ -392,7 +486,8 @@ PyMODINIT_FUNC PyInit_hdist(void) {
         }
 
         if (!verify_license(key, msg.data(), msg.size() * sizeof(int),
-                            (unsigned char *)signature.data(), signature.size())) {
+                            (unsigned char *)signature.data(),
+                            signature.size())) {
             // ERR_print_errors_fp(stderr);  // print ssl errors
             PyErr_SetString(PyExc_RuntimeError, "Invalid license\n");
             return NULL;
@@ -416,7 +511,8 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     if ((num_pes > FREE_MAX_CORES)) {
         int countdown_days = num_days_till_license_expiration(year, month, day);
         if (countdown_days < 0) {
-            PyErr_SetString(PyExc_RuntimeError, "Error in license countdown check.");
+            PyErr_SetString(PyExc_RuntimeError,
+                            "Error in license countdown check.");
             return NULL;
         }
         // only print reminder on rank 0

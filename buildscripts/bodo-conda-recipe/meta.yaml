@@ -10,7 +10,7 @@ build:
   script_env:
   - CHECK_LICENSE_EXPIRED
   - CHECK_LICENSE_CORE_COUNT
-  - CHECK_LICENSE_PLATFORM_AWS
+  - CHECK_LICENSE_PLATFORM
 
 requirements:
   build:

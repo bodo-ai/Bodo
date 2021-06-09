@@ -2,6 +2,8 @@ import array
 import datetime
 import subprocess
 
+# See bodo/libs/_distributed.cpp for more information on license
+
 # The private key can be generated like this:
 # > openssl genpkey -algorithm RSA -out license_private.key -pkeyopt rsa_keygen_bits:2048
 #
@@ -12,10 +14,14 @@ import subprocess
 # the code in _distributed.cpp
 
 REGULAR_LIC_TYPE = 0
-PLATFORM_LIC_TYPE = 1
-# AWS instance id is 19 characters:
+PLATFORM_LIC_TYPE_AWS = 1
+PLATFORM_LIC_TYPE_AZURE = 2
+# AWS instance ID is 19 characters:
 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/resource-ids.html
 EC2_INSTANCE_ID_LEN = 19
+# Azure VM Unique ID is 36 characters:
+# https://azure.microsoft.com/en-us/blog/accessing-and-using-azure-vm-unique-id/
+AZURE_INSTANCE_ID_LEN = 36
 
 
 def generate_license(max_cores, year, month, day, private_key_path):
@@ -40,12 +46,21 @@ def generate_license(max_cores, year, month, day, private_key_path):
     subprocess.run(b64_encode_cmd, input=msg)
 
 
-def generate_license_platform_aws(instance_id, private_key_path):
-    # license consists of EC2 instance ID
+def generate_license_platform(cloud_type, instance_id, private_key_path):
+    # license consists of the instance ID
     if isinstance(instance_id, str):
         instance_id = instance_id.encode()  # convert to bytes
     assert isinstance(instance_id, bytes)
-    assert len(instance_id) == EC2_INSTANCE_ID_LEN, "Unexpected instance ID length"
+    if cloud_type == "aws":
+        assert len(instance_id) == EC2_INSTANCE_ID_LEN, "Unexpected instance ID length"
+        PLATFORM_LIC_TYPE = PLATFORM_LIC_TYPE_AWS
+    elif cloud_type == "azure":
+        assert (
+            len(instance_id) == AZURE_INSTANCE_ID_LEN
+        ), "Unexpected instance ID length"
+        PLATFORM_LIC_TYPE = PLATFORM_LIC_TYPE_AZURE
+    else:
+        raise ValueError(f"Unrecognized cloud type {cloud_type}")
 
     # sign the license with openssl, get the signature back
     sign_cmd = ["openssl", "dgst", "-sha256", "-sign", private_key_path]
@@ -74,6 +89,11 @@ if __name__ == "__main__":
         help="Generate a license for this EC2 instance",
     )
     p.add_argument(
+        "--azure-instance-id",
+        required=False,
+        help="Generate a license for this Azure instance",
+    )
+    p.add_argument(
         "--max-cores", required=False, metavar="count", help="Max cores for license"
     )
     p.add_argument(
@@ -96,8 +116,11 @@ if __name__ == "__main__":
     )
     args = p.parse_args()
     if args.ec2_instance_id is not None:
-        generate_license_platform_aws(args.ec2_instance_id, args.private_key)
+        generate_license_platform("aws", args.ec2_instance_id, args.private_key)
         print("Generated license for EC2 Instance ID", args.ec2_instance_id)
+    elif args.azure_instance_id is not None:
+        generate_license_platform("azure", args.azure_instance_id, args.private_key)
+        print("Generated license for Azure Instance ID", args.azure_instance_id)
     else:
         if args.expires is not None:
             year, month, day = [int(val) for val in args.expires.split("-")]
