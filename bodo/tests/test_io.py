@@ -530,7 +530,9 @@ def test_csv_infer_type_error(datapath):
     df = pd.DataFrame({"A": ints + strings})
     filepath = datapath("test_csv_infer_type_error.csv", check_exists=False)
     with ensure_clean(filepath):
-        df.to_csv(filepath, index=False)
+        if bodo.get_rank() == 0:
+            df.to_csv(filepath, index=False)
+        bodo.barrier()
         message = r"pd.read_csv\(\): Bodo could not infer dtypes correctly."
         with pytest.raises(TypeError, match=message):
             bodo.jit(lambda: pd.read_csv(filepath), all_returns_distributed=True)()
