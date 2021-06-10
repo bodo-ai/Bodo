@@ -673,7 +673,6 @@ def overload_alloc_type(n, t, s=None):
     needed for allocation.
     """
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
-
     if typ == string_array_type:
         return lambda n, t, s=None: bodo.libs.str_arr_ext.pre_alloc_string_array(
             n, s[0]
@@ -744,6 +743,7 @@ def overload_alloc_type(n, t, s=None):
         return lambda n, t, s=None: bodo.libs.bool_arr_ext.alloc_bool_array(
             n
         )  # pragma: no cover
+
     return lambda n, t, s=None: np.empty(n, dtype)  # pragma: no cover
 
 
