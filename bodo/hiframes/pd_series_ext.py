@@ -801,6 +801,14 @@ def pd_series_overload(
     if not is_overload_false(fastpath):
         raise BodoError("pd.Series(): 'fastpath' argument not supported.")
 
+    no_data = is_overload_none(data)
+    no_index = is_overload_none(index)
+    no_dtype = is_overload_none(dtype)
+    if no_data and no_index and no_dtype:
+        raise BodoError(
+            "pd.Series() requires at least 1 of data, index, and dtype to not be none"
+        )
+
     # heterogeneous tuple input case
     if is_heterogeneous_tuple_type(data) and is_overload_none(dtype):
 
@@ -817,25 +825,80 @@ def pd_series_overload(
         return impl_heter
 
     # support for series with no data
-    if is_overload_none(data):
+    if no_data:
+        if no_dtype:
 
-        def impl(
-            data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
-        ):  # pragma: no cover
-            name_t = bodo.utils.conversion.extract_name_if_none(data, name)
-            index_t = bodo.utils.conversion.extract_index_if_none(data, index)
+            def impl(
+                data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+            ):  # pragma: no cover
+                name_t = bodo.utils.conversion.extract_name_if_none(data, name)
+                index_t = bodo.utils.conversion.extract_index_if_none(data, index)
 
-            numba.parfors.parfor.init_prange()
-            n = len(index_t)
-            data_t = np.empty(n, np.float64)
-            for i in numba.parfors.parfor.internal_prange(n):
-                data_t[i] = np.nan
+                numba.parfors.parfor.init_prange()
+                n = len(index_t)
+                data_t = np.empty(n, np.float64)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    bodo.libs.array_kernels.setna(data_t, i)
 
-            return bodo.hiframes.pd_series_ext.init_series(
-                data_t, bodo.utils.conversion.convert_to_index(index_t), name_t
-            )
+                return bodo.hiframes.pd_series_ext.init_series(
+                    data_t, bodo.utils.conversion.convert_to_index(index_t), name_t
+                )
 
-        return impl
+            return impl
+
+        # If a dtype is provided we need to convert the passed dtype into an array_type
+        if bodo.utils.conversion._is_str_dtype(dtype):
+            _arr_dtype = bodo.string_array_type
+        else:
+            nb_dtype = bodo.utils.typing.parse_dtype(dtype)
+            if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
+                _arr_dtype = bodo.IntegerArrayType(nb_dtype.dtype)
+            elif nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
+                _arr_dtype = bodo.boolean_array
+            elif isinstance(nb_dtype, types.Number) or nb_dtype in [
+                bodo.datetime64ns,
+                bodo.timedelta64ns,
+            ]:
+                _arr_dtype = types.Array(nb_dtype, 1, "C")
+            else:
+                raise BodoError("pd.Series with dtype: {dtype} not currently supported")
+
+        if no_index:
+
+            def impl(
+                data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+            ):  # pragma: no cover
+                name_t = bodo.utils.conversion.extract_name_if_none(data, name)
+                # Index is empty.
+                # TODO: Replace with a valid matching empty index.
+                index_t = bodo.hiframes.pd_index_ext.init_range_index(0, 0, 1, None)
+
+                numba.parfors.parfor.init_prange()
+                n = len(index_t)
+                data_t = bodo.utils.utils.alloc_type(n, _arr_dtype, (-1,))
+                return bodo.hiframes.pd_series_ext.init_series(data_t, index_t, name_t)
+
+            return impl
+
+        else:
+
+            def impl(
+                data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
+            ):  # pragma: no cover
+                name_t = bodo.utils.conversion.extract_name_if_none(data, name)
+                index_t = bodo.utils.conversion.extract_index_if_none(data, index)
+
+                numba.parfors.parfor.init_prange()
+                n = len(index_t)
+                data_t = bodo.utils.utils.alloc_type(n, _arr_dtype, (-1,))
+                for i in numba.parfors.parfor.internal_prange(n):
+                    bodo.libs.array_kernels.setna(data_t, i)
+
+                return bodo.hiframes.pd_series_ext.init_series(
+                    data_t, bodo.utils.conversion.convert_to_index(index_t), name_t
+                )
+
+            return impl
 
     def impl(
         data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
