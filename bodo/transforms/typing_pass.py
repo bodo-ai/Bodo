@@ -887,7 +887,7 @@ class TypingTransforms:
             and isinstance(
                 self._get_method_obj_type(func_mod, rhs.func), BodoSQLContextType
             )
-            and func_name == "sql"
+            and func_name in ("sql", "_test_sql_unoptimized")
         ):  # pragma: no cover
             return self._run_call_bodosql_sql(assign, rhs, func_mod, func_name, label)
 
@@ -1144,6 +1144,13 @@ class TypingTransforms:
     ):  # pragma: no cover
         """inline BodoSQLContextType.sql() calls since the generated code cannot
         be handled in regular overloads (requires Bodo's untyped pass, typing pass)
+
+        This code is also used for _test_sql_unoptimized, which is an internal testing
+        API that generates Pandas code on the original non-optimized plan. We use the
+        testing function to check coverage of operators that would otherwise be
+        optimized out. We use this so our test suite can have simple cases but we can
+        have confidence in the complex cases when optimizations may not be possible
+        (i.e. testing scalar support using literals).
         """
         import bodosql
 
@@ -1153,7 +1160,9 @@ class TypingTransforms:
             return [assign]
 
         kws = dict(rhs.kws)
-        sql_var = get_call_expr_arg("BodoSQLContextType.sql", rhs.args, kws, 0, "sql")
+        sql_var = get_call_expr_arg(
+            f"BodoSQLContextType.{func_name}", rhs.args, kws, 0, "sql"
+        )
 
         # get constant value for variable if possible.
         # Otherwise, just skip, assuming that the issue may be fixed later or
@@ -1171,7 +1180,12 @@ class TypingTransforms:
             self._require_const[sql_var] = label
             return [assign]
 
-        impl = bodosql.context_ext._gen_pd_func_for_query(sql_context_type, sql_str)
+        if func_name == "sql":
+            impl = bodosql.context_ext._gen_pd_func_for_query(sql_context_type, sql_str)
+        elif func_name == "_test_sql_unoptimized":
+            impl = bodosql.context_ext._gen_pd_func_for_unoptimized_query(
+                sql_context_type, sql_str
+            )
         self.changed = True
         # BodoSQL generates df.columns setattr, which needs another transform to work
         # (See BodoSQL #189)
