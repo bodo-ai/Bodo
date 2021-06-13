@@ -545,8 +545,9 @@ def overload_coerce_to_array(
             scalar_to_arr_len=None,
         ):  # pragma: no cover
             n = scalar_to_arr_len
-            n_chars = n * bodo.libs.str_arr_ext.get_utf8_size(data)
-            A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, n_chars)
+            # NOTE: not using n to calculate n_chars since distributed pass will use
+            # the global value of n and cannot replace it with the local version
+            A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
             for i in numba.parfors.parfor.internal_prange(n):
                 A[i] = data
             return A
