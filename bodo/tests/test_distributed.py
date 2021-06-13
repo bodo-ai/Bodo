@@ -1462,6 +1462,22 @@ def test_sort_output_1D_Var_size(memory_leak_check):
     check_func(impl, (S,))
 
 
+def test_df_1D_Var_col_set_string(memory_leak_check):
+    """Test setting a new column of a 1D_Var dataframe to a string value, making sure
+    the number of characters for the local string array is correct
+    """
+
+    def impl(df):
+        df["B"] = "A"
+        return len(bodo.libs.array_item_arr_ext.get_data(df.B.values._data))
+
+    n = 11
+    df = pd.DataFrame({"A": np.arange(n)})
+    df_chunk = _get_dist_arg(df, var_length=True)
+    assert reduce_sum(bodo.jit(distributed={"df"})(impl)(df_chunk)) == n
+    assert count_array_OneD_Vars() > 0
+
+
 def _check_scatterv(data, n):
     """check the output of scatterv() on 'data'"""
     recv_data = bodo.scatterv(data)
