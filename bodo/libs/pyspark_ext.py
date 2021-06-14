@@ -453,7 +453,15 @@ def _gen_df_select(spark_df, cols, avoid_stararg=False):
         func_text += code
         out_data.append(data)
 
-    data_args = "({}{})".format(", ".join(out_data), "," if len(cols) == 1 else "")
+    return _gen_init_spark_df(func_text, out_data, out_col_names)
+
+
+def _gen_init_spark_df(func_text, out_data, out_col_names):
+    """generate code for initializing a new Spark dataframe and return the
+    implementation
+    """
+
+    data_args = "({}{})".format(", ".join(out_data), "," if len(out_data) == 1 else "")
 
     length = "0" if not out_data else f"len({out_data[0]})"
     func_text += f"  n = {length}\n"
@@ -488,6 +496,40 @@ def overload_show(spark_df, n=20, truncate=True, vertical=False):
         print(spark_df._df.head(n))
 
     return impl
+
+
+@overload_method(SparkDataFrameType, "withColumn", inline="always", no_unliteral=True)
+def overload_with_column(spark_df, colName, col):
+    """generate code for SparkDataFrame.withColumn(), which creates a new SparkDataFrame
+    with existing columns and a new column.
+    """
+
+    _check_column(col)
+    if not is_overload_constant_str(colName):
+        raise BodoError(
+            f"SparkDataFrame.withColumn(): 'colName' should be a constant string, not {colName}"
+        )
+
+    col_name = get_overload_const_str(colName)
+    curr_columns = spark_df.df.columns
+
+    new_columns = (
+        curr_columns if col_name in curr_columns else curr_columns + (col_name,)
+    )
+    new_col_var, new_col_code = _gen_col_code(col, spark_df.df)
+
+    out_data = [
+        new_col_var
+        if c == col_name
+        else f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {curr_columns.index(c)})"
+        for c in new_columns
+    ]
+
+    func_text = "def impl(spark_df, colName, col):\n"
+    func_text += "  df = spark_df._df\n"
+    func_text += new_col_code
+
+    return _gen_init_spark_df(func_text, out_data, new_columns)
 
 
 @overload_attribute(SparkDataFrameType, "columns", inline="always")

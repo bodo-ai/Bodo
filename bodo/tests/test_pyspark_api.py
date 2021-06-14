@@ -245,6 +245,43 @@ def test_dataframe_select(memory_leak_check):
     )
 
 
+def test_dataframe_with_columns(memory_leak_check):
+    """test SparkDataFrame.withColumns()"""
+
+    # existing column
+    def impl1(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.withColumn("A", sdf.B).toPandas()
+        return df2
+
+    # new column
+    def impl2(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.withColumn("C", sdf.B).toPandas()
+        return df2
+
+    df = pd.DataFrame({"A": np.arange(7), "B": ["A", "B", "C", "D", "AB", "AC", "AD"]})
+    # NOTE: using pyout since Spark is slow and fails in multi-process case
+    py_out = pd.DataFrame({"A": df.B.values, "B": df.B.values})
+    check_func(
+        impl1,
+        (df,),
+        additional_compiler_arguments={"distributed": ["df2"]},
+        only_1D=True,
+        py_output=py_out,
+    )
+    py_out = pd.DataFrame({"A": df.A.values, "B": df.B.values, "C": df.B.values})
+    check_func(
+        impl2,
+        (df,),
+        additional_compiler_arguments={"distributed": ["df2"]},
+        only_1DVar=True,
+        py_output=py_out,
+    )
+
+
 def test_dataframe_columns(memory_leak_check):
     """test 'columns' attribute of SparkDataFrame"""
 
