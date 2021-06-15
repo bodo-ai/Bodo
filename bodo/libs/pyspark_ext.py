@@ -402,6 +402,16 @@ def overload_to_pandas(spark_df, _is_bodo_dist=False):
     return impl
 
 
+@overload_method(SparkDataFrameType, "limit", inline="always", no_unliteral=True)
+def overload_limit(spark_df, num):
+    """returns the first `num` rows"""
+
+    def impl(spark_df, num):  # pragma: no cover
+        return bodo.libs.pyspark_ext.init_spark_df(spark_df._df.iloc[:num])
+
+    return impl
+
+
 @infer_getattr
 class SparkDataFrameAttribute(AttributeTemplate):
     key = SparkDataFrameType
