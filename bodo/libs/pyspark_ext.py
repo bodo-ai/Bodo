@@ -449,6 +449,16 @@ def overload_collect(spark_df):
     return impl
 
 
+@overload_method(SparkDataFrameType, "take", inline="always", no_unliteral=True)
+def overload_take(spark_df, num):
+    """returns the first `num` rows as a list of Rows"""
+
+    def impl(spark_df, num):  # pragma: no cover
+        return spark_df.limit(num).collect()
+
+    return impl
+
+
 @infer_getattr
 class SparkDataFrameAttribute(AttributeTemplate):
     key = SparkDataFrameType
