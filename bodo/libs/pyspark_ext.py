@@ -551,6 +551,8 @@ def overload_with_column_renamed(spark_df, existing, new):
     new_colname = get_overload_const_str(new)
     curr_columns = spark_df.df.columns
 
+    # this is a no-op if 'old_colname' is not in the schema
+    # 'new_colname' could be in the schema since Spark allows repeated column names
     new_columns = tuple(new_colname if c == old_colname else c for c in curr_columns)
 
     # data is the same as before
