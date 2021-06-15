@@ -1856,18 +1856,11 @@ def overload_series_isin(S, values):
     if not isinstance(values, (types.Set, types.List)):
         raise BodoError("Series.isin(): 'values' parameter should be a set or a list")
 
-    # TODO: use hash table for 'values' for faster check similar to Pandas
     def impl(S, values):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        numba.parfors.parfor.init_prange()
-        n = len(A)
-        out_arr = np.empty(n, np.bool_)
-        for i in numba.parfors.parfor.internal_prange(n):
-            # TODO: avoid Timestamp conversion for date comparisons if possible
-            out_arr[i] = bodo.utils.conversion.box_if_dt64(A[i]) in values
-
+        out_arr = bodo.libs.array_ops.array_op_isin(A, values)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl

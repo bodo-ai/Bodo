@@ -14,6 +14,8 @@ import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.utils.typing import (
+    element_type,
+    is_hashable_type,
     is_iterable_type,
     is_overload_true,
     is_overload_zero,
@@ -574,5 +576,56 @@ def overload_array_op_idxmin(arr, index):
     def impl(arr, index):  # pragma: no cover
         i = bodo.libs.array_kernels._nan_argmin(arr)
         return index[i]
+
+    return impl
+
+
+def _convert_isin_values(values, use_hash_impl):  # pragma: no cover
+    pass
+
+
+@overload(_convert_isin_values, no_unliteral=True)
+def overload_convert_isin_values(values, use_hash_impl):
+    if is_overload_true(use_hash_impl):
+
+        def impl(values, use_hash_impl):  # pragma: no cover
+            values_d = {}
+            for k in values:
+                values_d[bodo.utils.conversion.box_if_dt64(k)] = 0
+            return values_d
+
+        return impl
+    else:
+
+        def impl(values, use_hash_impl):  # pragma: no cover
+            return values
+
+        return impl
+
+
+def array_op_isin(arr, values):  # pragma: no cover
+    pass
+
+
+@overload(array_op_isin, inline="always")
+def overload_array_op_isin(arr, values):
+
+    # For now we're only using the hash implementation when the dtypes of values
+    # and the series are the same, and they are hashable.
+    # TODO Optimize this further by casting values to a common dtype if possible
+    # and optimal
+    use_hash_impl = (element_type(values) == element_type(arr)) and is_hashable_type(
+        element_type(values)
+    )
+
+    def impl(arr, values):  # pragma: no cover
+        values = bodo.libs.array_ops._convert_isin_values(values, use_hash_impl)
+        numba.parfors.parfor.init_prange()
+        n = len(arr)
+        out_arr = np.empty(n, np.bool_)
+        for i in numba.parfors.parfor.internal_prange(n):
+            # TODO: avoid Timestamp conversion for date comparisons if possible
+            out_arr[i] = bodo.utils.conversion.box_if_dt64(arr[i]) in values
+        return out_arr
 
     return impl
