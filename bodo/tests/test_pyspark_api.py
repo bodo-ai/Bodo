@@ -379,6 +379,23 @@ def test_dataframe_limit(memory_leak_check):
     )
 
 
+def test_dataframe_collect(memory_leak_check):
+    """test SparkDataFrame.collect()"""
+
+    # column name exists
+    def impl(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        return sdf.collect()
+
+    df = pd.DataFrame({"A": np.arange(7), "B": ["A", "B", "C", "D", "AB", "AC", "AD"]})
+    out_list = bodo.jit(impl)(df)
+    if bodo.get_rank() == 0:
+        A = df.A.values
+        B = df.B.values
+        assert out_list == [Row(A=A[i], B=B[i]) for i in range(len(df))]
+
+
 @pytest.mark.slow
 def test_functions_col(memory_leak_check):
     """test creating Column object using F.col()"""
