@@ -359,7 +359,6 @@ def test_dataframe_show(memory_leak_check, capsys):
 def test_dataframe_limit(memory_leak_check):
     """test SparkDataFrame.limit()"""
 
-    # column name exists
     def impl1(df, n):
         spark = SparkSession.builder.getOrCreate()
         sdf = spark.createDataFrame(df)
@@ -382,7 +381,6 @@ def test_dataframe_limit(memory_leak_check):
 def test_dataframe_collect(memory_leak_check):
     """test SparkDataFrame.collect()"""
 
-    # column name exists
     def impl(df):
         spark = SparkSession.builder.getOrCreate()
         sdf = spark.createDataFrame(df)
@@ -394,6 +392,23 @@ def test_dataframe_collect(memory_leak_check):
         A = df.A.values
         B = df.B.values
         assert out_list == [Row(A=A[i], B=B[i]) for i in range(len(df))]
+
+
+def test_dataframe_take(memory_leak_check):
+    """test SparkDataFrame.take()"""
+
+    def impl(df, n):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        return sdf.take(n)
+
+    df = pd.DataFrame({"A": np.arange(7), "B": ["A", "B", "C", "D", "AB", "AC", "AD"]})
+    n = 5
+    out_list = bodo.jit(impl)(df, n)
+    if bodo.get_rank() == 0:
+        A = df.A.values[:n]
+        B = df.B.values[:n]
+        assert out_list == [Row(A=A[i], B=B[i]) for i in range(len(A))]
 
 
 @pytest.mark.slow
