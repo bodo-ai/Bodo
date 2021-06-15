@@ -1158,6 +1158,38 @@ def types_equality_exists(t1, t2):
         return False
 
 
+def is_hashable_type(t):
+    """
+    Determines if hash is implemented for type t.
+    """
+    # Use a whitelist of known hashable types to optimize
+    # compilation time
+    # TODO Enumerate all possible cases
+    whitelist_types = (
+        types.UnicodeType,
+        types.StringLiteral,
+        types.UnicodeCharSeq,
+        types.Number,
+    )
+    whitelist_instances = (
+        types.bool_,
+        bodo.datetime64ns,
+        bodo.timedelta64ns,
+        bodo.pd_timestamp_type,
+        bodo.pd_timedelta_type,
+    )
+
+    if isinstance(t, whitelist_types) or (t in whitelist_instances):
+        return True
+
+    typing_context = numba.core.registry.cpu_target.typing_context
+    try:
+        typing_context.resolve_function_type(hash, (t,), {})
+        return True
+    except:  # pragma: no cover
+        return False
+
+
 def to_nullable_type(t):
     """Converts types that cannot hold NAs to corresponding nullable types.
     For example, boolean_array is returned for Numpy array(bool_) and IntegerArray is

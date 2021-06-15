@@ -3645,6 +3645,10 @@ def test_series_tail_zero(memory_leak_check):
             pd.Series([4, 9, 1, 2, 4], [3, 4, 2, 1, 0], name="A"),
             pd.Series([3, 4, 0, 2, 5]),
         ),
+        (
+            pd.Series([(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)], name="A"),
+            [(0, 1), (2, 1), (4, 5)],
+        ),
     ],
 )
 def test_series_isin(S, values, memory_leak_check):
