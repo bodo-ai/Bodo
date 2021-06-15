@@ -555,6 +555,18 @@ def overload_show(spark_df, n=20, truncate=True, vertical=False):
     return impl
 
 
+@overload_method(SparkDataFrameType, "printSchema", inline="always", no_unliteral=True)
+def overload_print_schema(spark_df):
+    """
+    Just print df.dtypes() for now. TODO(ehsan): create accurate output
+    """
+
+    def impl(spark_df):  # pragma: no cover
+        print(spark_df._df.dtypes)
+
+    return impl
+
+
 @overload_method(SparkDataFrameType, "withColumn", inline="always", no_unliteral=True)
 def overload_with_column(spark_df, colName, col):
     """generate code for SparkDataFrame.withColumn(), which creates a new SparkDataFrame
