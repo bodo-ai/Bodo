@@ -505,7 +505,7 @@ def overload_with_column(spark_df, colName, col):
     """
 
     _check_column(col)
-    if not is_overload_constant_str(colName):
+    if not is_overload_constant_str(colName):  # pragma: no cover
         raise BodoError(
             f"SparkDataFrame.withColumn(): 'colName' should be a constant string, not {colName}"
         )
@@ -528,6 +528,39 @@ def overload_with_column(spark_df, colName, col):
     func_text = "def impl(spark_df, colName, col):\n"
     func_text += "  df = spark_df._df\n"
     func_text += new_col_code
+
+    return _gen_init_spark_df(func_text, out_data, new_columns)
+
+
+@overload_method(
+    SparkDataFrameType, "withColumnRenamed", inline="always", no_unliteral=True
+)
+def overload_with_column_renamed(spark_df, existing, new):
+    """generate code for SparkDataFrame.withColumnRenamed(), which creates a new
+    SparkDataFrame with a column potentially renamed.
+    """
+
+    if not (
+        is_overload_constant_str(existing) and is_overload_constant_str(new)
+    ):  # pragma: no cover
+        raise BodoError(
+            f"SparkDataFrame.withColumnRenamed(): 'existing' and 'new' should be a constant strings, not ({existing}, {new})"
+        )
+
+    old_colname = get_overload_const_str(existing)
+    new_colname = get_overload_const_str(new)
+    curr_columns = spark_df.df.columns
+
+    new_columns = tuple(new_colname if c == old_colname else c for c in curr_columns)
+
+    # data is the same as before
+    out_data = [
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
+        for i in range(len(curr_columns))
+    ]
+
+    func_text = "def impl(spark_df, existing, new):\n"
+    func_text += "  df = spark_df._df\n"
 
     return _gen_init_spark_df(func_text, out_data, new_columns)
 
