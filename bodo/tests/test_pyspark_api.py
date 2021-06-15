@@ -282,6 +282,42 @@ def test_dataframe_with_columns(memory_leak_check):
     )
 
 
+def test_dataframe_with_columns_renamed(memory_leak_check):
+    """test SparkDataFrame.withColumnsRenamed()"""
+
+    # column name exists
+    def impl1(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.withColumnRenamed("A", "A123").toPandas()
+        return df2
+
+    # column name doesn't exist, no-op case
+    def impl2(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.withColumnRenamed("C", "A1").toPandas()
+        return df2
+
+    df = pd.DataFrame({"A": np.arange(7), "B": ["A", "B", "C", "D", "AB", "AC", "AD"]})
+    # NOTE: using pyout since Spark is slow and fails in multi-process case
+    py_out = df.rename(columns={"A": "A123"})
+    check_func(
+        impl1,
+        (df,),
+        additional_compiler_arguments={"distributed": ["df2"]},
+        only_1D=True,
+        py_output=py_out,
+    )
+    check_func(
+        impl2,
+        (df,),
+        additional_compiler_arguments={"distributed": ["df2"]},
+        only_1DVar=True,
+        py_output=df,
+    )
+
+
 def test_dataframe_columns(memory_leak_check):
     """test 'columns' attribute of SparkDataFrame"""
 
