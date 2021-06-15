@@ -163,6 +163,7 @@ def test_create_dataframe(memory_leak_check):
         bodo.jit(impl)(3)
 
 
+@pytest.mark.slow
 def test_dataframe_distribution(memory_leak_check):
     """make sure output of toPandas() is distributed if dist flag is et"""
 
@@ -179,6 +180,7 @@ def test_dataframe_distribution(memory_leak_check):
     assert f(df) == 55
 
 
+@pytest.mark.slow
 def test_dataframe_select(memory_leak_check):
     """test basic column selection in SparkDataFrame.select()"""
 
@@ -245,6 +247,7 @@ def test_dataframe_select(memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_dataframe_with_columns(memory_leak_check):
     """test SparkDataFrame.withColumns()"""
 
@@ -282,6 +285,7 @@ def test_dataframe_with_columns(memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_dataframe_with_columns_renamed(memory_leak_check):
     """test SparkDataFrame.withColumnsRenamed()"""
 
@@ -318,6 +322,7 @@ def test_dataframe_with_columns_renamed(memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_dataframe_columns(memory_leak_check):
     """test 'columns' attribute of SparkDataFrame"""
 
@@ -330,6 +335,7 @@ def test_dataframe_columns(memory_leak_check):
     assert bodo.jit(distributed=["df"])(impl)(df) == ["A", "B"]
 
 
+@pytest.mark.slow
 def test_dataframe_show(memory_leak_check, capsys):
     """test Spark dataframe.show()"""
 
@@ -350,6 +356,30 @@ def test_dataframe_show(memory_leak_check, capsys):
         assert "0" in captured.out
 
 
+def test_dataframe_limit(memory_leak_check):
+    """test SparkDataFrame.limit()"""
+
+    # column name exists
+    def impl1(df, n):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        df2 = sdf.limit(n).toPandas()
+        return df2
+
+    df = pd.DataFrame({"A": np.arange(7), "B": ["A", "B", "C", "D", "AB", "AC", "AD"]})
+    n = 5
+    # NOTE: using pyout since Spark is slow and fails in multi-process case
+    py_out = df.iloc[:n]
+    check_func(
+        impl1,
+        (df, n),
+        additional_compiler_arguments={"distributed": ["df2"]},
+        only_1D=True,
+        py_output=py_out,
+    )
+
+
+@pytest.mark.slow
 def test_functions_col(memory_leak_check):
     """test creating Column object using F.col()"""
 
@@ -382,6 +412,7 @@ def test_functions_col(memory_leak_check):
         bodo.jit(distributed=["df"])(impl_err)(df)
 
 
+@pytest.mark.slow
 def test_functions_sum(memory_leak_check):
     """test F.sum()"""
 
