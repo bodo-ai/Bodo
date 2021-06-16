@@ -2689,7 +2689,6 @@ dataframe_unsupported = {
     "get",
     "all",
     "plot",
-    "insert",
     "backfill",
     "stack",
     "where",
