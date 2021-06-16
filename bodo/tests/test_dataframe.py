@@ -537,6 +537,56 @@ def test_assign(memory_leak_check, is_slow_run):
     check_func(test_impl5, (df_twocol,))
 
 
+def test_df_insert(memory_leak_check, is_slow_run):
+    """Test df.insert()"""
+
+    # new column
+    def impl1(df):
+        df.insert(0, "B", 42)
+        return df
+
+    # duplicate column name
+    def impl2(df):
+        df.insert(1, "B", 2 * df["A"], True)
+        return df
+
+    # invalid column index
+    def impl3(df):
+        df.insert("C", "B", 2)
+        return df
+
+    # invalid column name
+    def impl4(df):
+        df.insert(0, [df], 2)
+        return df
+
+    # invalid allow_duplicates
+    def impl5(df):
+        df.insert(0, "B", 2, "C")
+        return df
+
+    # duplicate error
+    def impl6(df):
+        df.insert(0, "B", 2)
+        return df
+
+    with pytest.warns(
+        BodoWarning, match="input dataframe is passed as argument to JIT function"
+    ):
+        df = pd.DataFrame({"A": [1, 2, 3] * 2})
+        check_func(impl1, (df,), copy_input=True)
+        df = pd.DataFrame({"A": [1, 2, 3] * 2, "B": ["AA", "BBB", "CCCC"] * 2})
+        check_func(impl2, (df,), copy_input=True)
+    with pytest.raises(BodoError, match="should be a constant integer"):
+        bodo.jit(impl3)(df)
+    with pytest.raises(BodoError, match="should be a constant"):
+        bodo.jit(impl4)(df)
+    with pytest.raises(BodoError, match="should be a constant boolean"):
+        bodo.jit(impl5)(df)
+    with pytest.raises(BodoError, match="cannot insert"):
+        bodo.jit(impl6)(df)
+
+
 @pytest.mark.slow
 def test_unbox_df1(df_value, memory_leak_check):
     # just unbox

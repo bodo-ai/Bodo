@@ -568,6 +568,7 @@ Indexing, iteration:
 * :meth:`pandas.DataFrame.head` (including `n` argument)
 * :meth:`pandas.DataFrame.iat`
 * :meth:`pandas.DataFrame.iloc`
+* :meth:`pandas.DataFrame.insert` (`loc`, `column`, and `allow_duplicates` should be constant inputs)
 * :meth:`pandas.DataFrame.isin` (`values` can be a dataframe with matching index
   or a list or a set)
 * :meth:`pandas.DataFrame.itertuples`
