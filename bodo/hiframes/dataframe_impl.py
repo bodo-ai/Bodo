@@ -220,6 +220,12 @@ def overload_dataframe_assign(df, **kwargs):
     raise_bodo_error("Invalid df.assign() call")
 
 
+@overload_method(DataFrameType, "insert", no_unliteral=True)
+def overload_dataframe_insert(df, loc, column, value, allow_duplicates=False):
+    # raise error to let typing pass handle it, since it updates the dataframe inplace
+    raise_bodo_error("Invalid df.insert() call")
+
+
 def _get_dtype_str(dtype):
     """return string representation of dtype value
     'dtype' could be actual value or type. TODO(ehsan): refactor to be consistent.

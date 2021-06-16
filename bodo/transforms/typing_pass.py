@@ -4,6 +4,7 @@ according to Bodo requirements (using partial typing).
 """
 import copy
 import itertools
+import warnings
 from collections import defaultdict
 
 import numba
@@ -42,9 +43,15 @@ from bodo.utils.typing import (
     CONST_DICT_SENTINEL,
     BodoConstUpdatedError,
     BodoError,
+    BodoWarning,
+    get_literal_value,
+    get_overload_const_bool,
+    get_overload_const_int,
     is_const_func_type,
     is_list_like_index_type,
     is_literal_type,
+    is_overload_constant_bool,
+    is_overload_constant_int,
 )
 from bodo.utils.utils import (
     find_build_tuple,
@@ -966,6 +973,7 @@ class TypingTransforms:
             "select_dtypes": [(0, "include"), (1, "exclude")],
             "apply": [(0, "func"), (1, "axis")],
             "to_parquet": [(4, "partition_cols")],
+            "insert": [(0, "loc"), (1, "column"), (3, "allow_duplicates")],
         }
 
         if func_name in df_call_const_args:
@@ -979,6 +987,12 @@ class TypingTransforms:
         # transform df.assign() here since (**kwargs) is not supported in overload
         if func_name == "assign":
             return nodes + self._handle_df_assign(assign.target, rhs, df_var, assign)
+
+        # transform df.insert() here since it updates the dataframe inplace
+        if func_name == "insert":
+            return nodes + self._handle_df_insert(
+                assign.target, rhs, df_var, assign, label
+            )
 
         # handle calls that have inplace=True that changes the schema, by replacing the
         # dataframe variable instead of inplace change if possible
@@ -1043,6 +1057,101 @@ class TypingTransforms:
         )
         self.changed = True
         return compile_func_single_block(impl, [df_var] + list(kws.values()), lhs, self)
+
+    def _handle_df_insert(self, lhs, rhs, df_var, assign, label):
+        """replace df.insert() here since it changes dataframe type inplace"""
+
+        err_msg = "DataFrame.insert(): setting a new dataframe column inplace"
+        self._error_on_df_control_flow(df_var, label, err_msg)
+
+        kws = dict(rhs.kws)
+        loc_var = get_call_expr_arg("insert", rhs.args, kws, 0, "loc")
+        column_var = get_call_expr_arg("insert", rhs.args, kws, 1, "column")
+        value_var = get_call_expr_arg("insert", rhs.args, kws, 2, "value")
+        allow_duplicates_var = get_call_expr_arg(
+            "insert", rhs.args, kws, 3, "allow_duplicates", ""
+        )
+
+        df_type = self.typemap.get(df_var.name, None)
+        loc_type = self.typemap.get(loc_var.name, None)
+        column_type = self.typemap.get(column_var.name, None)
+        allow_duplicates_type = (
+            types.BooleanLiteral(False)
+            if allow_duplicates_var is ""
+            else self.typemap.get(allow_duplicates_var.name, None)
+        )
+        # cannot transform yet if input types are not available yet
+        if (
+            df_type is None
+            or loc_type is None
+            or column_type is None
+            or allow_duplicates_type is None
+        ):
+            return [assign]
+
+        loc, column = self._err_check_df_insert_args(
+            df_type, loc_type, column_type, allow_duplicates_type, lhs.loc
+        )
+
+        # raise warning if df is an argument and update inplace may be necessary
+        df_def = guard(get_definition, self.func_ir, df_var)
+        # TODO: consider dataframe alias cases where definition is not directly ir.Arg
+        # but dataframe has a parent object
+        if isinstance(df_def, ir.Arg):
+            warnings.warn(
+                BodoWarning(
+                    "df.insert(): input dataframe is passed as argument to JIT function, but Bodo does not update it for the caller since the data type changes"
+                )
+            )
+
+        new_columns = list(df_type.columns)
+        new_columns.insert(loc, column)
+
+        out_data = [
+            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
+            for i in range(len(df_type.columns))
+        ]
+        out_data.insert(loc, "new_arr")
+        out_data = ", ".join(out_data)
+
+        header = "def impl(df, value):\n"
+        header += "  new_arr = bodo.utils.conversion.coerce_to_array(value, scalar_to_arr_len=len(df))\n"
+        impl = bodo.hiframes.dataframe_impl._gen_init_df(
+            header, tuple(new_columns), out_data
+        )
+        self.changed = True
+
+        nodes = compile_func_single_block(impl, [df_var, value_var], None, self)
+        self.replace_var_dict[df_var.name] = nodes[-1].target
+        # output of 'insert' is just None
+        nodes.append(ir.Assign(ir.Const(None, lhs.loc), lhs, lhs.loc))
+        return nodes
+
+    def _err_check_df_insert_args(
+        self, df_type, loc_type, column_type, allow_duplicates_type, var_loc
+    ):
+        """error check df.insert() arguments and return the necessary constant values"""
+        if not is_overload_constant_int(loc_type):
+            raise BodoError("df.insert(): 'loc' should be a constant integer", var_loc)
+
+        if not is_literal_type(column_type):
+            raise BodoError("df.insert(): 'column' should be a constant", var_loc)
+
+        if not is_overload_constant_bool(allow_duplicates_type):
+            raise BodoError(
+                "df.insert(): 'allow_duplicates' should be a constant boolean", var_loc
+            )
+
+        loc = get_overload_const_int(loc_type)
+        column = get_literal_value(column_type)
+        allow_duplicates = get_overload_const_bool(allow_duplicates_type)
+
+        if column in df_type.columns and not allow_duplicates:
+            raise BodoError(
+                f"df.insert(): cannot insert {column}, already exists", var_loc
+            )
+
+        return loc, column
 
     def _run_call_df_groupby(self, assign, rhs, groupby_var, func_name, label):
         """Handle dataframe groupby calls that need transformation to meet Bodo
