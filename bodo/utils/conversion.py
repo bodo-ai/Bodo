@@ -590,6 +590,32 @@ def overload_coerce_to_array(
 
         return impl_list_timedelta
 
+    # Timestamp/Timedelta scalars to array
+    if not is_overload_none(scalar_to_arr_len) and data in [
+        bodo.pd_timestamp_type,
+        bodo.pd_timedelta_type,
+    ]:
+        _dtype = (
+            "datetime64[ns]" if data == bodo.pd_timestamp_type else "timedelta64[ns]"
+        )
+
+        def impl_timestamp(
+            data,
+            error_on_nonarray=True,
+            use_nullable_array=None,
+            scalar_to_arr_len=None,
+        ):  # pragma: no cover
+            n = scalar_to_arr_len
+            # NOTE: not using n to calculate n_chars since distributed pass will use
+            # the global value of n and cannot replace it with the local version
+            A = np.empty(n, _dtype)
+            data = bodo.utils.conversion.unbox_if_timestamp(data)
+            for i in numba.parfors.parfor.internal_prange(n):
+                A[i] = data
+            return A
+
+        return impl_timestamp
+
     # assuming can be ndarray
     return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.utils.conversion.coerce_to_ndarray(
         data, error_on_nonarray, use_nullable_array, scalar_to_arr_len
