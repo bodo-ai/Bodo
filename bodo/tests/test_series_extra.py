@@ -44,7 +44,7 @@ def test_series_empty_dtype(memory_leak_check):
     def test_impl10():
         return pd.Series(dtype=np.dtype("timedelta64[ns]"))
 
-    # Not need by BodoSQL but seems relevant for coverage
+    # Not needed by BodoSQL but seems relevant for coverage
     def test_impl11():
         return pd.Series(dtype=np.uint32)
 
@@ -80,5 +80,32 @@ def test_empty_dataframe(memory_leak_check):
                 "F": pd.Series(dtype=np.dtype("datetime64[ns]")),
             }
         )
+
+    check_func(test_impl, (), reset_index=True)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "val",
+    [
+        pd.Timestamp("2021-05-11"),
+        pd.Timedelta(days=13, seconds=-20),
+        np.int8(1),
+        np.uint8(1),
+        np.int16(1),
+        np.uint16(1),
+        np.int32(1),
+        np.uint32(1),
+        np.int64(1),
+        np.uint64(1),
+        np.float32(1.5),
+        np.float64(1.0),
+        "Bears",
+        True,
+    ],
+)
+def test_scalar_series(val, memory_leak_check):
+    def test_impl():
+        return pd.Series(val, pd.RangeIndex(0, 100, 1))
 
     check_func(test_impl, (), reset_index=True)
