@@ -110,6 +110,25 @@ types.storage_options_dict_type = storage_options_dict_type
 register_model(StorageOptionsDictType)(models.OpaqueModel)
 
 
+def adjust_nofiles_limit_py(num_files_req):
+    """Increase the nofiles (number of open files limit for this process) soft limit
+    to the hard limit if number of parquet files that we are going to open
+    exceeds the soft limit"""
+    try:
+        import resource
+
+        # get current soft and hard limit for this process
+        soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if num_files_req * 1.1 > soft_limit and num_files_req <= hard_limit:
+            # We can't be sure of how many files the process already has open,
+            # so we just set the soft limit to the hard limit
+            resource.setrlimit(resource.RLIMIT_NOFILE, (hard_limit, hard_limit))
+        # if num_files_req > hard_limit there is nothing we can do inside the
+        # process. Will get too many open files error
+    except:
+        pass  # This probably means we are on Windows
+
+
 @unbox(StorageOptionsDictType)
 def unbox_storage_options_dict_type(typ, val, c):
     # just return the Python object pointer

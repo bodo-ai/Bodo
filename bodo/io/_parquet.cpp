@@ -26,13 +26,13 @@
 #undef DEBUG_NESTED_PARQUET
 
 /**
- * This holds the filepaths and other information that this process needs
+ * This holds the arrow parquet readers and other information that this process needs
  * to read its chunk of a Parquet dataset.
  */
 struct DatasetReader {
-    // Filepaths, only for the files that this process has to read
-    std::vector<std::string> filepaths;
-    // for each file in filepaths, store the value of each partition
+    // Arrow parquet file readers, only for the files that this process has to read
+    std::vector<std::shared_ptr<parquet::arrow::FileReader>> readers;
+    // for each file in readers, store the value of each partition
     // column (value is stored as the categorical code). Note that a given
     // file has the same partition value for all of its rows
     std::vector<std::vector<int64_t>> part_vals;
@@ -278,6 +278,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
         // so we just read the necessary rows
         ds_reader->count = (tot_rows_to_read != -1) ? std::min(tot_rows_to_read, total_rows) : total_rows;
 
+        std::vector<std::string> file_paths;
         if (total_rows > 0) {
             // get filepath for every piece
             while ((piece = PyIter_Next(iterator))) {
@@ -289,9 +290,8 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                     // p = piece.path
                     PyObject *p = PyObject_GetAttrString(piece, "path");
                     const char *c_path = PyUnicode_AsUTF8(p);
-                    // store the filename for this piece
                     // prepend the prefix to the path
-                    ds_reader->filepaths.push_back(ds_reader->prefix + c_path);
+                    file_paths.emplace_back(ds_reader->prefix + std::string(c_path));
                     // for this parquet file: store partition value of each
                     // partition column in ds_reader
                     get_partition_info(ds_reader, piece);
@@ -302,6 +302,19 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
         }
 
         Py_DECREF(iterator);
+
+        pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
+        PyObject *num_files_py = PyLong_FromSsize_t(file_paths.size());
+        PyObject *ret = PyObject_CallMethod(pq_mod, "adjust_nofiles_limit_py", "O", num_files_py);
+        Py_DECREF(pq_mod);
+        Py_DECREF(num_files_py);
+        Py_DECREF(ret);
+        // open and store file readers for my pieces
+        for (auto& fpath : file_paths) {
+            std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
+            pq_init_reader(fpath.c_str(), &arrow_reader, bucket_region, ds_reader->s3fs_anon);
+            ds_reader->readers.push_back(arrow_reader);
+        }
 
         if (PyErr_Occurred()) return NULL;
         PyGILState_Release(gilstate);
@@ -334,6 +347,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
         }
     }
 
+    std::vector<std::string> file_paths;
     // get file paths only for the pieces that correspond to my chunk
     if (ds_reader->count > 0) {
         int64_t count_rows =
@@ -355,7 +369,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
             // chunk
             if ((num_rows_piece > 0) &&
                 (start_row_global < count_rows + num_rows_piece)) {
-                if (ds_reader->filepaths.size() == 0) {
+                if (file_paths.size() == 0) {
                     ds_reader->start_row_first_file =
                         start_row_global - count_rows;
                     num_rows_my_files +=
@@ -363,12 +377,11 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                 } else {
                     num_rows_my_files += num_rows_piece;
                 }
-
-                // open and store filepath for this piece
+                // open and store file reader for this piece
                 PyObject *p = PyObject_GetAttrString(piece, "path");
                 const char *c_path = PyUnicode_AsUTF8(p);
-                // prepend the prefix to the path and add it to filepaths
-                ds_reader->filepaths.push_back(ds_reader->prefix + c_path);
+                // prepend the prefix to the path
+                file_paths.emplace_back(ds_reader->prefix + std::string(c_path));
                 // for this parquet file: store partition value of each
                 // partition column in ds_reader
                 get_partition_info(ds_reader, piece);
@@ -384,6 +397,19 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
     }
 
     Py_DECREF(iterator);
+
+    pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
+    PyObject *num_files_py = PyLong_FromSsize_t(file_paths.size());
+    PyObject *ret = PyObject_CallMethod(pq_mod, "adjust_nofiles_limit_py", "O", num_files_py);
+    Py_DECREF(pq_mod);
+    Py_DECREF(num_files_py);
+    Py_DECREF(ret);
+    // open and store file readers for my pieces
+    for (auto& fpath : file_paths) {
+        std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
+        pq_init_reader(fpath.c_str(), &arrow_reader, bucket_region, ds_reader->s3fs_anon);
+        ds_reader->readers.push_back(arrow_reader);
+    }
 
     if (PyErr_Occurred()) return NULL;
     PyGILState_Release(gilstate);
@@ -414,13 +440,7 @@ int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,
 
         int64_t read_rows = 0;  // rows read so far
         int dtype_size = numpy_item_size[out_dtype];
-        for (auto filepath : ds_reader->filepaths) {
-            // open file reader for this piece
-            std::shared_ptr<parquet::arrow::FileReader> file_reader;
-            pq_init_reader(filepath.c_str(), &file_reader,
-                           ds_reader->bucket_region.c_str(),
-                           ds_reader->s3fs_anon);
-
+        for (auto file_reader : ds_reader->readers) {
             int64_t file_size =
                 pq_get_size_single_file(file_reader, column_idx);
             int64_t rows_to_read =
@@ -460,12 +480,7 @@ int pq_read_string(DatasetReader *ds_reader, int64_t real_column_idx,
         std::vector<bool> null_vec;
         offset_t last_offset = 0;
         int64_t read_rows = 0;  // rows read so far
-        for (auto filepath : ds_reader->filepaths) {
-            std::shared_ptr<parquet::arrow::FileReader> file_reader;
-            pq_init_reader(filepath.c_str(), &file_reader,
-                           ds_reader->bucket_region.c_str(),
-                           ds_reader->s3fs_anon);
-
+        for (auto file_reader : ds_reader->readers) {
             int64_t file_size =
                 pq_get_size_single_file(file_reader, column_idx);
             int64_t rows_to_read =
@@ -526,12 +541,7 @@ int pq_read_list_string(DatasetReader *ds_reader, int64_t real_column_idx,
         int64_t last_str_offset = 0;
         int64_t last_index_offset = 0;
         int64_t read_rows = 0;  // rows read so far
-        for (auto filepath : ds_reader->filepaths) {
-            std::shared_ptr<parquet::arrow::FileReader> file_reader;
-            pq_init_reader(filepath.c_str(), &file_reader,
-                           ds_reader->bucket_region.c_str(),
-                           ds_reader->s3fs_anon);
-
+        for (auto file_reader : ds_reader->readers) {
             int64_t file_size =
                 pq_get_size_single_file(file_reader, column_idx);
             int64_t rows_to_read =
@@ -604,12 +614,7 @@ int pq_read_arrow_array(DatasetReader *ds_reader, int64_t real_column_idx,
         std::vector<int> column_indices(column_siz);
         for (int64_t i = 0; i < column_siz; i++)
             column_indices[i] = column_idx + i;
-        for (auto filepath : ds_reader->filepaths) {
-            std::shared_ptr<parquet::arrow::FileReader> file_reader;
-            pq_init_reader(filepath.c_str(), &file_reader,
-                           ds_reader->bucket_region.c_str(),
-                           ds_reader->s3fs_anon);
-
+        for (auto file_reader : ds_reader->readers) {
             int64_t file_size =
                 pq_get_size_single_file(file_reader, column_idx);
             int64_t rows_to_read =
@@ -652,12 +657,7 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t real_column_idx,
         std::vector<bool> null_vec;
         int64_t last_offset = 0;
         int64_t read_rows = 0;  // rows read so far
-        for (auto filepath : ds_reader->filepaths) {
-            std::shared_ptr<parquet::arrow::FileReader> file_reader;
-            pq_init_reader(filepath.c_str(), &file_reader,
-                           ds_reader->bucket_region.c_str(),
-                           ds_reader->s3fs_anon);
-
+        for (auto file_reader : ds_reader->readers) {
             int64_t file_size =
                 pq_get_size_single_file(file_reader, column_idx);
             int64_t rows_to_read =
@@ -714,10 +714,8 @@ void pq_gen_partition_column_T(DatasetReader *ds_reader, int64_t part_col_idx,
     T *cur_offset = out_data;
     int64_t rows_filled = 0;
     int64_t start = ds_reader->start_row_first_file;
-    for (size_t i=0; i < ds_reader->filepaths.size(); i++) {
-        std::shared_ptr<parquet::arrow::FileReader> file_reader;
-        pq_init_reader(ds_reader->filepaths[i].c_str(), &file_reader,
-                       ds_reader->bucket_region.c_str(), ds_reader->s3fs_anon);
+    for (size_t i=0; i < ds_reader->readers.size(); i++) {
+        auto file_reader = ds_reader->readers[i];
         // XXX get number of rows from first column in parquet file
         int64_t file_size = pq_get_size_single_file(file_reader, 0);
         int64_t rows_to_fill =
