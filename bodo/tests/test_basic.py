@@ -784,7 +784,20 @@ def test_objmode_types():
             B = 2 * A
         return B
 
+    # complex type
+    def impl2():
+        with bodo.objmode(
+            df=bodo.DataFrameType(
+                (bodo.float64[::1], bodo.string_array_type),
+                bodo.RangeIndexType(bodo.none),
+                ("A", "B"),
+            )
+        ):
+            df = pd.DataFrame({"A": [1.1, 2.2, 3.3], "B": ["A1", "A22", "A33"]})
+        return df
+
     check_func(impl, (np.arange(11),))
+    check_func(impl2, (), only_seq=True)
 
 
 def test_unsupported_tz_dtype(memory_leak_check):

@@ -1448,7 +1448,7 @@ class NumTypeStaticGetItem(AbstractTemplate):
     def generic(self, args, kws):
         val, idx = args
         if isinstance(val, types.NumberClass) and isinstance(idx, slice):
-            return signature(types.TypeRef(val[idx]), *args)
+            return signature(types.TypeRef(val.instance_type[idx]), *args)
 
 
 @lower_builtin("static_getitem", types.NumberClass, types.SliceLiteral)

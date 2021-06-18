@@ -28,6 +28,7 @@ from numba.extending import (
     overload_attribute,
     overload_method,
     register_model,
+    type_callable,
 )
 
 import bodo
@@ -43,7 +44,11 @@ from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_ext import string_type
-from bodo.utils.transform import gen_const_tup
+from bodo.utils.transform import (
+    bodo_types_with_params,
+    gen_const_tup,
+    no_side_effect_call_tuples,
+)
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
@@ -3639,6 +3644,47 @@ def impl(
     exec(func_text, globals(), loc_vars)
     impl = loc_vars["impl"]
     return impl
+
+
+def typeref_to_type(v):
+    """convert TypeRef and NumberClass to a regular data type"""
+    if isinstance(v, types.BaseTuple):
+        return types.BaseTuple.from_types(tuple(typeref_to_type(a) for a in v))
+
+    return v.instance_type if isinstance(v, (types.TypeRef, types.NumberClass)) else v
+
+
+def _install_typer_for_type(type_name, typ):
+    """install typer for a bodo type call to be used inside jit
+    e.g. bodo.DataFrameType()
+    """
+
+    @type_callable(typ)
+    def type_call_type(context):
+        def typer(*args, **kws):
+            args = tuple(typeref_to_type(v) for v in args)
+            kws = {name: typeref_to_type(v) for name, v in kws.items()}
+            return types.TypeRef(typ(*args, **kws))
+
+        return typer
+
+    no_side_effect_call_tuples.add((type_name, bodo))
+    no_side_effect_call_tuples.add((typ,))
+    # TODO(ehsan): make lower_builtin work in case the type calls is not removed by
+    # dead code elimination for some reason
+    # lower_builtin(typ, types.VarArg(types.Any), types.StarArgTuple)(lambda c, b, s, a: c.get_dummy_value())
+
+
+def _install_type_call_typers():
+    """install typers for all bodo type calls to be used inside jit
+    e.g. bodo.DataFrameType()
+    """
+    for type_name in bodo_types_with_params:
+        typ = getattr(bodo, type_name)
+        _install_typer_for_type(type_name, typ)
+
+
+_install_type_call_typers()
 
 
 def set_df_col(df, cname, arr, inplace):  # pragma: no cover
