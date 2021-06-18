@@ -13,9 +13,12 @@ import pandas as pd
 from numba.core import ir, ir_utils, types
 from numba.core.errors import NumbaError
 from numba.core.registry import CPUDispatcher
+from numba.core.typing.templates import AbstractTemplate, signature
 from numba.extending import (
     NativeValue,
+    infer,
     intrinsic,
+    lower_builtin,
     lower_cast,
     models,
     overload,
@@ -1432,6 +1435,26 @@ def gen_objmode_method_overload(
     """
     overload_impl = _gen_objmode_overload(method, output_type, method_name, single_rank)
     overload_method(obj_type, method_name, no_unliteral=True)(overload_impl)
+
+
+@infer
+class NumTypeStaticGetItem(AbstractTemplate):
+    """typer for getitem on number types in JIT code
+    e.g. bodo.int64[::1] -> array(int64, 1, "C")
+    """
+
+    key = "static_getitem"
+
+    def generic(self, args, kws):
+        val, idx = args
+        if isinstance(val, types.NumberClass) and isinstance(idx, slice):
+            return signature(types.TypeRef(val[idx]), *args)
+
+
+@lower_builtin("static_getitem", types.NumberClass, types.SliceLiteral)
+def num_class_type_static_getitem(context, builder, sig, args):
+    # types don't have runtime values
+    return context.get_dummy_value()
 
 
 # dummy empty itertools implementation to avoid typing errors for series str

@@ -774,6 +774,19 @@ def test_updated_container_df_rename():
         bodo.jit(impl)()
 
 
+def test_objmode_types():
+    """
+    Test creating types in JIT code and passing to objmode
+    """
+
+    def impl(A):
+        with bodo.objmode(B=bodo.int64[::1]):
+            B = 2 * A
+        return B
+
+    check_func(impl, (np.arange(11),))
+
+
 def test_unsupported_tz_dtype(memory_leak_check):
     """make sure proper error is thrown when input is tz-aware datetime"""
 

@@ -478,6 +478,15 @@ def get_const_value_inner(
             var_def.attr,
         )
 
+    if is_expr(var_def, "getitem"):
+        value = get_const_value_inner(
+            func_ir, var_def.value, arg_types, typemap, updated_containers
+        )
+        index = get_const_value_inner(
+            func_ir, var_def.index, arg_types, typemap, updated_containers
+        )
+        return value[index]
+
     # list/set/dict cases
 
     # try dict.keys()

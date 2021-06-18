@@ -2860,6 +2860,99 @@ if _check_numba_change:
 numba.core.typing.context.BaseContext._get_global_type = _get_global_type
 
 
+def _legalize_args(self, func_ir, args, kwargs, loc, func_globals, func_closures):
+    """
+    Legalize arguments to the context-manager
+
+    Parameters
+    ----------
+    func_ir: FunctionIR
+    args: tuple
+        Positional arguments to the with-context call as IR nodes.
+    kwargs: dict
+        Keyword arguments to the with-context call as IR nodes.
+    loc: numba.core.ir.Loc
+        Source location of the with-context call.
+    func_globals: dict
+        The globals dictionary of the calling function.
+    func_closures: dict
+        The resolved closure variables of the calling function.
+    """
+    from numba.core import sigutils
+
+    from bodo.utils.transform import get_const_value_inner
+
+    if args:
+        raise errors.CompilerError(
+            "objectmode context doesn't take any positional arguments",
+        )
+    typeanns = {}
+
+    def report_error(varname, msg, loc):
+        raise errors.CompilerError(
+            f"Error handling objmode argument {varname!r}. {msg}",
+            loc=loc,
+        )
+
+    for k, v in kwargs.items():
+        # Bodo change: use get_const_value_inner to find constant type value to support
+        # more complex cases like bodo.int64[::1]
+        v_const = None
+        try:
+            # create a dummy var to pass to get_const_value_inner since v is an IR node
+            val_var = ir.Var(ir.Scope(None, loc), ir_utils.mk_unique_var("dummy"), loc)
+            func_ir._definitions[val_var.name] = [v]
+            v_const = get_const_value_inner(func_ir, val_var)
+            func_ir._definitions.pop(val_var.name)
+            if isinstance(v_const, str):
+                v_const = sigutils._parse_signature_string(v_const)
+            assert isinstance(v_const, types.Type)
+            typeanns[k] = v_const
+        except:
+            # recreate error messages similar to Numba
+            msg = (
+                "The value must be a compile-time constant either as "
+                "a non-local variable or an expression that "
+                "refers to a Bodo type."
+            )
+            if isinstance(v_const, ir.UndefinedType):
+                msg = f"not defined."
+                if isinstance(v, ir.Global):
+                    msg = f"Global {v.name!r} is not defined."
+                if isinstance(v, ir.FreeVar):
+                    msg = f"Freevar {v.name!r} is not defined."
+
+            if isinstance(v, ir.Expr) and v.op == "getattr":
+                msg = "Getattr cannot be resolved at compile-time."
+            report_error(
+                varname=k,
+                msg=msg,
+                loc=loc,
+            )
+
+    # Legalize the types for objmode
+    for name, typ in typeanns.items():
+        self._legalize_arg_type(name, typ, loc)
+
+    return typeanns
+
+
+if _check_numba_change:
+    lines = inspect.getsource(
+        numba.core.withcontexts._ObjModeContextType._legalize_args
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "867c9ba7f1bcf438be56c38e26906bb551f59a99f853a9f68b71208b107c880e"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.withcontexts._ObjModeContextType._legalize_args has changed"
+        )
+
+
+numba.core.withcontexts._ObjModeContextType._legalize_args = _legalize_args
+
+
 # Support for f-strings
 # TODO(ehsan): remove when Numba's #6608 is merged
 def op_FORMAT_VALUE_byteflow(self, state, inst):
