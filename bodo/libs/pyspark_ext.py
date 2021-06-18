@@ -402,6 +402,63 @@ def overload_to_pandas(spark_df, _is_bodo_dist=False):
     return impl
 
 
+@overload_method(SparkDataFrameType, "limit", inline="always", no_unliteral=True)
+def overload_limit(spark_df, num):
+    """returns the first `num` rows"""
+
+    def impl(spark_df, num):  # pragma: no cover
+        return bodo.libs.pyspark_ext.init_spark_df(spark_df._df.iloc[:num])
+
+    return impl
+
+
+def _df_to_rows(df):
+    pass
+
+
+@overload(_df_to_rows)
+def overload_df_to_rows(df):
+    """convert dataframe to list of Rows"""
+    func_text = "def impl(df):\n"
+    for i in range(len(df.columns)):
+        func_text += (
+            f"  A{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
+        )
+    func_text += "  n = len(df)\n"
+    func_text += "  out = []\n"
+    func_text += "  for i in range(n):\n"
+    row_in = ", ".join(f"{c}=A{i}[i]" for i, c in enumerate(df.columns))
+    func_text += f"    out.append(Row({row_in}))\n"
+    func_text += "  return out\n"
+
+    loc_vars = {}
+    _global = {"bodo": bodo, "Row": pyspark.sql.types.Row}
+    exec(func_text, _global, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
+@overload_method(SparkDataFrameType, "collect", inline="always", no_unliteral=True)
+def overload_collect(spark_df):
+    """returns all rows as a list of Rows"""
+
+    def impl(spark_df):  # pragma: no cover
+        data = bodo.gatherv(spark_df._df, warn_if_rep=False)
+        return _df_to_rows(data)
+
+    return impl
+
+
+@overload_method(SparkDataFrameType, "take", inline="always", no_unliteral=True)
+def overload_take(spark_df, num):
+    """returns the first `num` rows as a list of Rows"""
+
+    def impl(spark_df, num):  # pragma: no cover
+        return spark_df.limit(num).collect()
+
+    return impl
+
+
 @infer_getattr
 class SparkDataFrameAttribute(AttributeTemplate):
     key = SparkDataFrameType
