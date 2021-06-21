@@ -356,6 +356,25 @@ def test_dataframe_show(memory_leak_check, capsys):
         assert "0" in captured.out
 
 
+def test_dataframe_print_schema(memory_leak_check, capsys):
+    """test Spark dataframe.printSchema()"""
+
+    def impl(df):
+        spark = SparkSession.builder.getOrCreate()
+        sdf = spark.createDataFrame(df)
+        sdf.printSchema()
+
+    df = pd.DataFrame(
+        {"A": np.arange(7), "B": ["S1", "S2", "C", "D", "AB", "AC", "AD"]}
+    )
+    bodo.jit(distributed=["df"])(impl)(df)
+    captured = capsys.readouterr()
+    if bodo.get_rank() == 0:
+        assert "A" in captured.out
+        assert "int64" in captured.out
+        assert "B" in captured.out
+
+
 def test_dataframe_limit(memory_leak_check):
     """test SparkDataFrame.limit()"""
 
