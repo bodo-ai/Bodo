@@ -1122,12 +1122,12 @@ def _get_df_args(data, index, columns, dtype, copy):
         # TODO: error checking
         if not (isinstance(data, types.Array) and data.ndim == 2):  # pragma: no cover
             raise BodoError(
-                "pd.DataFrame() supports constant dictionary and ndarray input"
+                "pd.DataFrame() supports constant dictionary and array input"
             )
         if is_overload_none(columns):  # pragma: no cover
             raise BodoError(
-                "pd.DataFrame() column argument is required when"
-                "ndarray is passed as data"
+                "pd.DataFrame() 'columns' argument is required when"
+                " an array is passed as data"
             )
         copy_str = ".copy()" if copy else ""
         columns_consts = get_overload_const_list(columns)
