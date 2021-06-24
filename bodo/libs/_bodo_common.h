@@ -29,6 +29,8 @@ size_t get_stats_free();
 size_t get_stats_mi_alloc();
 size_t get_stats_mi_free();
 
+
+// NOTE: should match CTypeEnum in utils/utils.py
 struct Bodo_CTypes {
     enum CTypeEnum {
         INT8 = 0,
@@ -51,6 +53,7 @@ struct Bodo_CTypes {
         LIST_STRING = 17,
         LIST = 18,    // for nested datastructures, maps to Arrow List
         STRUCT = 19,  // for nested datastructures, maps to Arrow Struct
+        BINARY = 20,
         _numtypes
     };
 };

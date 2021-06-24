@@ -3552,6 +3552,7 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                               (double*)out_col->data1 + out_col->length, 1);
                     return;
                 case Bodo_CTypes::STRING:
+                case Bodo_CTypes::BINARY:
                 default:
                     Bodo_PyErr_SetString(PyExc_RuntimeError,
                                          "unsupported/not implemented");
@@ -3630,6 +3631,7 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                               std::numeric_limits<int64_t>::max());
                     return;
                 case Bodo_CTypes::STRING:
+                case Bodo_CTypes::BINARY:
                     // Nothing to initilize with in the case of strings.
                     return;
                 case Bodo_CTypes::LIST_STRING:
@@ -3713,6 +3715,7 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                               std::numeric_limits<int64_t>::min());
                     return;
                 case Bodo_CTypes::STRING:
+                case Bodo_CTypes::BINARY:
                     // nothing to initialize in the case of strings
                     return;
                 case Bodo_CTypes::LIST_STRING:

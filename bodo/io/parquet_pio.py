@@ -63,6 +63,7 @@ from bodo.utils.typing import (
     dtype_to_array_type,
     get_overload_const_str,
     get_overload_constant_dict,
+    is_overload_true,
 )
 from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
@@ -597,10 +598,12 @@ def gen_column_read(
         func_text += "  bodo.libs.str_arr_ext.set_null_bits_to_value({}, 0)\n".format(
             cname
         )
-    elif c_type == string_array_type:
+    elif c_type in (string_array_type, binary_array_type):
         # pass size for easier allocation and distributed analysis
-        func_text += "  {} = read_parquet_str(ds_reader, {}, {}, loc_size)\n".format(
-            cname, c_ind_real, c_ind
+        func_text += (
+            "  {} = read_parquet_str(ds_reader, {}, {}, loc_size, {})\n".format(
+                cname, c_ind_real, c_ind, c_type == binary_array_type
+            )
         )
     elif c_type == ArrayItemArrayType(string_array_type):
         # TODO does not support null strings?
@@ -1301,8 +1304,14 @@ class ReadParquetInfer(AbstractTemplate):
 class ReadParquetStrInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        assert len(args) == 4
-        return signature(string_array_type, *unliteral_all(args))
+        assert len(args) == 5
+        out_type = string_array_type
+        if is_overload_true(args[4]):
+            out_type = binary_array_type
+        return signature(out_type, *unliteral_all(args))
+
+
+ReadParquetStrInfer._no_unliteral = True
 
 
 @infer_global(read_parquet_list_str)
@@ -1482,11 +1491,16 @@ def pq_read_int_arr_lower(context, builder, sig, args):
 
 
 @lower_builtin(
-    read_parquet_str, types.Opaque("arrow_reader"), types.intp, types.intp, types.intp
+    read_parquet_str,
+    types.Opaque("arrow_reader"),
+    types.intp,
+    types.intp,
+    types.intp,
+    types.bool_,
 )
 def pq_read_string_lower(context, builder, sig, args):
 
-    string_array = context.make_helper(builder, string_array_type)
+    string_array = context.make_helper(builder, sig.return_type)
     array_item_data_type = ArrayItemArrayType(char_arr_type)
     array_item_array = context.make_helper(builder, array_item_data_type)
 
@@ -1689,7 +1703,7 @@ def pq_read_arrow_array_lower(context, builder, sig, args):
         elif isinstance(arr_typ, StructArrayType):
             # 1 for nulls + children buffer count
             return 1 + sum([get_num_infos(d) for d in arr_typ.data])
-        elif arr_typ == string_array_type:
+        elif arr_typ in (string_array_type, binary_array_type):
             # C++ will just use one array_info
             return 1
         else:

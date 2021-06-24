@@ -465,6 +465,7 @@ int pq_read_string(DatasetReader *ds_reader, int64_t real_column_idx,
         if (ds_reader->count == 0) {
             // This is to avoid segfaults in case of empty arrays on
             // some ranks
+            // TODO: set binary array type correctly using a flag
             array_info *out_arr = alloc_array(0, 0, -1, bodo_array_type::STRING,
                                               Bodo_CTypes::STRING, 0, 0);
             *out_meminfo = out_arr->meminfo;
@@ -916,28 +917,37 @@ void bodo_array_to_arrow(
             std::make_shared<arrow::ChunkedArray>(arrow::MakeArray(arr_data));
     } else if (array->arr_type == bodo_array_type::STRING) {
         arrow::Status status;
-        schema_vector.push_back(arrow::field(col_name, arrow::utf8()));
         // Create 16MB chunks for binary data
         constexpr int32_t kBinaryChunksize = 1 << 24;
-        ::arrow::internal::ChunkedStringBuilder builder(kBinaryChunksize, pool);
+        ::arrow::internal::ChunkedBinaryBuilder *builder;
+        if (array->dtype == Bodo_CTypes::BINARY) {
+            schema_vector.push_back(arrow::field(col_name, arrow::binary()));
+            builder = new ::arrow::internal::ChunkedBinaryBuilder(kBinaryChunksize, pool);
+        }
+        else
+        {
+            schema_vector.push_back(arrow::field(col_name, arrow::utf8()));
+            builder = new ::arrow::internal::ChunkedStringBuilder(kBinaryChunksize, pool);
+        }
         char *cur_str = array->data1;
         offset_t *offsets = (offset_t *)array->data2;
         for (int64_t i = 0; i < array->length; i++) {
             if (!GetBit((uint8_t *)array->null_bitmask, i)) {
-                status = builder.AppendNull();
-                CHECK_ARROW(status, "builder.AppendNull")
+                status = builder->AppendNull();
+                CHECK_ARROW(status, "builder->AppendNull")
             } else {
                 size_t len = offsets[i + 1] - offsets[i];
-                status = builder.Append((uint8_t *)cur_str, len);
-                CHECK_ARROW(status, "builder.Append")
+                status = builder->Append((uint8_t *)cur_str, len);
+                CHECK_ARROW(status, "builder->Append")
                 cur_str += len;
             }
         }
 
         ::arrow::ArrayVector result;
-        status = builder.Finish(&result);
-        CHECK_ARROW(status, "builder.Finish")
+        status = builder->Finish(&result);
+        CHECK_ARROW(status, "builder->Finish")
         *out = std::make_shared<arrow::ChunkedArray>(result);
+        delete builder;
     } else if (array->arr_type == bodo_array_type::LIST_STRING) {
         schema_vector.push_back(
             arrow::field(col_name, arrow::list(arrow::utf8())));
