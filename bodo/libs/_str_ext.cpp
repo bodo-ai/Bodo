@@ -47,7 +47,8 @@ int64_t get_str_len(std::string* str);
 void* np_array_from_string_array(int64_t no_strings,
                                  const offset_t* offset_table,
                                  const char* buffer,
-                                 const uint8_t* null_bitmap);
+                                 const uint8_t* null_bitmap,
+                                 const int is_bytes);
 void* pd_array_from_string_array(int64_t no_strings,
                                  const offset_t* offset_table,
                                  const char* buffer,
@@ -469,7 +470,8 @@ void inplace_int64_to_str(char* str, int64_t l, int64_t value) {
 void* np_array_from_string_array(int64_t no_strings,
                                  const offset_t* offset_table,
                                  const char* buffer,
-                                 const uint8_t* null_bitmap) {
+                                 const uint8_t* null_bitmap,
+                                 const int is_bytes) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -488,8 +490,13 @@ void* np_array_from_string_array(int64_t no_strings,
     CHECK(nan_obj, "getting np.nan failed");
 
     for (int64_t i = 0; i < no_strings; ++i) {
-        PyObject* s = PyUnicode_FromStringAndSize(
-            buffer + offset_table[i], offset_table[i + 1] - offset_table[i]);
+        PyObject* s;
+        if (is_bytes)
+            s = PyBytes_FromStringAndSize(
+                buffer + offset_table[i], offset_table[i + 1] - offset_table[i]);
+        else
+            s = PyUnicode_FromStringAndSize(
+                buffer + offset_table[i], offset_table[i + 1] - offset_table[i]);
         CHECK(s, "creating Python string/unicode object failed");
         auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
         CHECK(p, "getting offset in numpy array failed");

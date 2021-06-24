@@ -437,9 +437,10 @@ array_info* info_from_table(table_info* table, int64_t col_ind) {
  * strings
  *
  * @param obj numpy array of strings
+ * @param is_bytes whether the contents are bytes objects instead of str
  * @return NRT_MemInfo* meminfo of array(item) array containing string data
  */
-NRT_MemInfo* string_array_from_sequence(PyObject* obj) {
+NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -494,11 +495,20 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj) {
         } else {
             // set null bit to 1 (Arrow bin-util.h)
             null_bitmap[i / 8] |= kBitmask[i % 8];
-            // check string
-            CHECK(PyUnicode_Check(s), "expecting a string");
-            // convert to UTF-8 and get size
             Py_ssize_t size;
-            tmp_store[i] = PyUnicode_AsUTF8AndSize(s, &size);
+            if (is_bytes) {
+                // check bytes
+                CHECK(PyBytes_Check(s), "expecting a bytes object");
+                size = PyBytes_GET_SIZE(s);
+                // get buffer pointer
+                tmp_store[i] = PyBytes_AS_STRING(s);
+            }
+            else {
+                // check string
+                CHECK(PyUnicode_Check(s), "expecting a string");
+                // convert to UTF-8 and get size
+                tmp_store[i] = PyUnicode_AsUTF8AndSize(s, &size);
+            }
             CHECK(tmp_store[i], "string conversion failed");
             len += size;
         }
