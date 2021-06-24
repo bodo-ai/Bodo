@@ -418,7 +418,7 @@ int pq_read_string_single_file(
     std::vector<bool>* null_vec) {
     std::shared_ptr<arrow::DataType> arrow_type =
         get_arrow_type(arrow_reader, real_column_idx);
-    if (arrow_type->id() != Type::STRING)
+    if ((arrow_type->id() != Type::STRING) && (arrow_type->id() != Type::BINARY))
         std::cerr << "Invalid Parquet string data type: "
                   << arrow_type->ToString() << '\n';
 
@@ -973,6 +973,8 @@ bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
     if (arrow_type->id() == Type::DECIMAL && pq_type == Bodo_CTypes::DECIMAL)
         return true;
     if (arrow_type->id() == Type::STRING && pq_type == Bodo_CTypes::STRING)
+        return true;
+    if (arrow_type->id() == Type::BINARY && pq_type == Bodo_CTypes::BINARY)
         return true;
     // TODO: add timestamp[ns]
 

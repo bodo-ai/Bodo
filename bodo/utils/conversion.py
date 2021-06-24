@@ -428,12 +428,6 @@ def overload_coerce_to_array(
             data
         )  # pragma: no cover
 
-    # string array
-    if data == bodo.string_array_type:
-        return (
-            lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
-        )  # pragma: no cover
-
     # string list
     if isinstance(data, types.List) and data.dtype == bodo.string_type:
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.str_arr_ext.str_arr_from_sequence(
@@ -453,6 +447,8 @@ def overload_coerce_to_array(
         )  # pragma: no cover
 
     if data in (
+        bodo.string_array_type,
+        bodo.binary_array_type,
         bodo.libs.bool_arr_ext.boolean_array,
         bodo.hiframes.datetime_date_ext.datetime_date_array_type,
         bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,

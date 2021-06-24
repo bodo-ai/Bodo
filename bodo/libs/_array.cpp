@@ -274,9 +274,12 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
 
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
                                  char* offsets, char* null_bitmap,
-                                 NRT_MemInfo* meminfo) {
+                                 NRT_MemInfo* meminfo, int is_bytes) {
     // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, n_items,
+    auto dtype = Bodo_CTypes::STRING;
+    if (is_bytes)
+        dtype = Bodo_CTypes::BINARY;
+    return new array_info(bodo_array_type::STRING, dtype, n_items,
                           n_chars, -1, data, offsets, NULL, null_bitmap, NULL,
                           meminfo, NULL);
 }
@@ -437,9 +440,10 @@ array_info* info_from_table(table_info* table, int64_t col_ind) {
  * strings
  *
  * @param obj numpy array of strings
+ * @param is_bytes whether the contents are bytes objects instead of str
  * @return NRT_MemInfo* meminfo of array(item) array containing string data
  */
-NRT_MemInfo* string_array_from_sequence(PyObject* obj) {
+NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -494,11 +498,20 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj) {
         } else {
             // set null bit to 1 (Arrow bin-util.h)
             null_bitmap[i / 8] |= kBitmask[i % 8];
-            // check string
-            CHECK(PyUnicode_Check(s), "expecting a string");
-            // convert to UTF-8 and get size
             Py_ssize_t size;
-            tmp_store[i] = PyUnicode_AsUTF8AndSize(s, &size);
+            if (is_bytes) {
+                // check bytes
+                CHECK(PyBytes_Check(s), "expecting a bytes object");
+                size = PyBytes_GET_SIZE(s);
+                // get buffer pointer
+                tmp_store[i] = PyBytes_AS_STRING(s);
+            }
+            else {
+                // check string
+                CHECK(PyUnicode_Check(s), "expecting a string");
+                // convert to UTF-8 and get size
+                tmp_store[i] = PyUnicode_AsUTF8AndSize(s, &size);
+            }
             CHECK(tmp_store[i], "string conversion failed");
             len += size;
         }

@@ -1044,6 +1044,10 @@ def dtype_to_array_type(dtype):
     if dtype == bodo.string_type:
         return bodo.string_array_type
 
+    # binary array
+    if dtype == bodo.bytes_type:
+        return bodo.binary_array_type
+
     if bodo.utils.utils.is_array_typ(dtype, False):
         return bodo.ArrayItemArrayType(dtype)
 
