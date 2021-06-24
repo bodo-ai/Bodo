@@ -2103,6 +2103,7 @@ def unbox_str_series(typ, val, c):
     return NativeValue(string_array._getvalue(), is_error=is_error)
 
 
+@lower_constant(BinaryArrayType)
 @lower_constant(StringArrayType)
 def lower_constant_str_arr(context, builder, typ, pyval):
     """embed constant string array value by getting constant values for underlying
@@ -2121,7 +2122,7 @@ def lower_constant_str_arr(context, builder, typ, pyval):
         bodo.libs.int_arr_ext.set_bit_to_arr(nulls_arr, i, int(not is_na))
         if is_na:
             continue
-        str_chars = list(s.encode())
+        str_chars = list(s.encode()) if isinstance(s, str) else list(s)
         char_list.extend(str_chars)
         curr_offset += len(str_chars)
 

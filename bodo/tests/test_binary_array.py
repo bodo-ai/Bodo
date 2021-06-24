@@ -27,3 +27,41 @@ def test_unbox(binary_arr_value, memory_leak_check):
 
     check_func(impl, (binary_arr_value,))
     check_func(impl2, (binary_arr_value,))
+
+
+@pytest.mark.slow
+def test_len(binary_arr_value, memory_leak_check):
+    def test_impl(A):
+        return len(A)
+
+    check_func(test_impl, (binary_arr_value,))
+
+
+@pytest.mark.slow
+def test_shape(binary_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.shape
+
+    check_func(test_impl, (binary_arr_value,))
+
+
+@pytest.mark.slow
+def test_ndim(binary_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.ndim
+
+    check_func(test_impl, (binary_arr_value,))
+
+
+def test_copy(binary_arr_value, memory_leak_check):
+    def test_impl(A):
+        return A.copy()
+
+    check_func(test_impl, (binary_arr_value,))
+
+
+def test_constant_lowering(binary_arr_value):
+    def test_impl():
+        return binary_arr_value
+
+    check_func(test_impl, ())
