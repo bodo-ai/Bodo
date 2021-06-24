@@ -11,6 +11,7 @@ from bodo import master_mode
 numba.core.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_block"] = bool
 numba.core.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_varlength"] = bool
 numba.core.cpu.CPUTargetOptions.OPTIONS["all_returns_distributed"] = bool
+numba.core.cpu.CPUTargetOptions.OPTIONS["returns_maybe_distributed"] = bool
 numba.core.cpu.CPUTargetOptions.OPTIONS["distributed"] = set
 numba.core.cpu.CPUTargetOptions.OPTIONS["distributed_block"] = set
 numba.core.cpu.CPUTargetOptions.OPTIONS["threaded"] = set
@@ -19,6 +20,7 @@ numba.core.cpu.CPUTargetOptions.OPTIONS["h5_types"] = dict
 numba.core.compiler.Flags.OPTIONS["all_args_distributed_block"] = False
 numba.core.compiler.Flags.OPTIONS["all_args_distributed_varlength"] = False
 numba.core.compiler.Flags.OPTIONS["all_returns_distributed"] = False
+numba.core.compiler.Flags.OPTIONS["returns_maybe_distributed"] = False
 numba.core.compiler.Flags.OPTIONS["distributed"] = set()
 numba.core.compiler.Flags.OPTIONS["distributed_block"] = set()
 numba.core.compiler.Flags.OPTIONS["threaded"] = set()
@@ -42,6 +44,9 @@ def bodo_set_flags(self, flags):
 
     if kws.pop("all_returns_distributed", False):
         flags.set("all_returns_distributed")
+
+    if kws.pop("returns_maybe_distributed", False):
+        flags.set("returns_maybe_distributed")
 
     if "distributed" in kws:
         flags.set("distributed", kws.pop("distributed"))
