@@ -439,10 +439,13 @@ class DistributedAnalysis:
             self._analyze_arg(lhs, rhs, array_dists)
             return
         else:
+            msg = "unsupported expression in distributed analysis"
+            if isinstance(rhs, (ir.FreeVar, ir.Global)):
+                msg = "constant global values are replicated"
             self._set_REP(
                 inst.list_vars(),
                 array_dists,
-                "unsupported expression in distributed analysis",
+                msg,
             )
 
     def _analyze_getattr(self, lhs, rhs, array_dists):

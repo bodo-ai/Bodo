@@ -381,6 +381,7 @@ class DistributedPass:
                     boolean_array,
                     bodo.datetime_date_array_type,
                     bodo.datetime_timedelta_array_type,
+                    bodo.binary_array_type,
                 )
             )
             and self._is_1D_or_1D_Var_arr(rhs.value.name)

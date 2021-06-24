@@ -37,6 +37,7 @@ from bodo.libs.array_item_arr_ext import (
     np_offset_type,
     offset_type,
 )
+from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
@@ -1030,6 +1031,16 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             )
 
         return impl_struct_arr
+
+    if data == binary_array_type:
+        # gather the data array
+        def impl_bin_arr(
+            data, allgather=False, warn_if_rep=True, root=MPI_ROOT
+        ):  # pragma: no cover
+            all_data = bodo.gatherv(data._data, allgather, warn_if_rep, root)
+            return bodo.libs.binary_arr_ext.init_binary_arr(all_data)
+
+        return impl_bin_arr
 
     if isinstance(data, TupleArrayType):
         # gather the data array

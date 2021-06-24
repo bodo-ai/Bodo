@@ -47,6 +47,7 @@ from bodo.hiframes.series_indexing import SeriesIlocType
 from bodo.io import json_cpp
 from bodo.libs.array import arr_info_list_to_table, array_to_info
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.distributed_api import bcast_scalar
@@ -1800,6 +1801,9 @@ def gen_pandas_parquet_metadata(
                 pandas_type = "datetime"
         elif col_type == string_array_type:
             pandas_type = "unicode"
+            numpy_type = "object"
+        elif col_type == binary_array_type:
+            pandas_type = "bytes"
             numpy_type = "object"
         elif isinstance(col_type, DecimalArrayType):
             pandas_type = numpy_type = "object"

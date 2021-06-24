@@ -759,6 +759,7 @@ def test_read_write_parquet():
             "float64",
             "bool",
             "String",
+            "Binary",
             "Int8",
             "UInt8",
             "Int16",
@@ -779,6 +780,13 @@ def test_read_write_parquet():
             if dtype == "String":
                 # missing values every 5 elements
                 data = [str(x) * 3 if x % 5 != 0 else None for x in range(num_elements)]
+                df[col_name] = data
+            elif dtype == "Binary":
+                # missing values every 5 elements
+                data = [
+                    str(x).encode() * 3 if x % 5 != 0 else None
+                    for x in range(num_elements)
+                ]
                 df[col_name] = data
             elif dtype == "bool":
                 data = [True if x % 2 == 0 else False for x in range(num_elements)]

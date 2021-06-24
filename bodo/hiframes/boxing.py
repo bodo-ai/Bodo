@@ -29,6 +29,7 @@ from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.libs import hstr_ext
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import typeof_pd_int_dtype
 from bodo.libs.map_arr_ext import MapArrayType
@@ -434,6 +435,8 @@ def _infer_ndarray_obj_dtype(val):
     first_val = val[i]
     if isinstance(first_val, str):
         return string_array_type
+    elif isinstance(first_val, bytes):
+        return binary_array_type
     elif isinstance(first_val, bool):
         return bodo.libs.bool_arr_ext.boolean_array
     elif isinstance(first_val, (int, np.int32, np.int64)):
