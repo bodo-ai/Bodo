@@ -47,6 +47,7 @@ from bodo.libs.array_item_arr_ext import (
     define_array_item_dtor,
     offset_type,
 )
+from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.distributed_api import get_end, get_start
@@ -790,6 +791,7 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, categor
         pa.float64(): types.float64,
         # String
         pa.string(): string_type,
+        pa.binary(): bytes_type,
         # date
         pa.date32(): datetime_date_type,
         pa.date64(): types.NPDatetime("ns"),
@@ -825,6 +827,9 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, categor
 
     if dtype == datetime_date_type:
         return datetime_date_array_type
+
+    if dtype == bytes_type:
+        return binary_array_type
 
     arr_typ = string_array_type if dtype == string_type else types.Array(dtype, 1, "C")
 

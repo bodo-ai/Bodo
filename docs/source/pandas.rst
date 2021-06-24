@@ -89,6 +89,8 @@ The following table can be used to select the necessary Bodo Type based upon the
   * - ``bodo.DecimalArrayType(precision, scale)``
     - | Array of Apache Arrow Decimal128 values with the given precision and scale
       | e.g. ``bodo.DecimalArrayType(38, 18)``
+  * - ``bodo.binary_array_type``
+    - Array of nullable bytes values
   * - ``bodo.StructArrayType(data_types, field_names)``
     - | Array of a user defined struct with the given tuple of data types and field names
       | e.g. ``bodo.StructArrayType((bodo.int32[:], bodo.datetime64ns[:]), ("a", "b"))``

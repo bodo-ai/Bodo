@@ -307,6 +307,7 @@ def is_array_typ(var_typ, include_index_series=True):
         or var_typ
         in (
             string_array_type,
+            bodo.binary_array_type,
             bodo.hiframes.split_impl.string_array_split_view_type,
             bodo.hiframes.datetime_date_ext.datetime_date_array_type,
             bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,

@@ -64,4 +64,4 @@ def test_constant_lowering(binary_arr_value):
     def test_impl():
         return binary_arr_value
 
-    check_func(test_impl, ())
+    check_func(test_impl, (), only_seq=True)
