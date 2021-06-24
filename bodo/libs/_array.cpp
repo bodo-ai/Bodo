@@ -274,9 +274,12 @@ array_info* list_string_array_to_info(NRT_MemInfo* meminfo) {
 
 array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
                                  char* offsets, char* null_bitmap,
-                                 NRT_MemInfo* meminfo) {
+                                 NRT_MemInfo* meminfo, int is_bytes) {
     // TODO: better memory management of struct, meminfo refcount?
-    return new array_info(bodo_array_type::STRING, Bodo_CTypes::STRING, n_items,
+    auto dtype = Bodo_CTypes::STRING;
+    if (is_bytes)
+        dtype = Bodo_CTypes::BINARY;
+    return new array_info(bodo_array_type::STRING, dtype, n_items,
                           n_chars, -1, data, offsets, NULL, null_bitmap, NULL,
                           meminfo, NULL);
 }

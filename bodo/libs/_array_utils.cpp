@@ -1670,6 +1670,7 @@ std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::FLOAT32) return "FLOAT32";
     if (dtype == Bodo_CTypes::FLOAT64) return "FLOAT64";
     if (dtype == Bodo_CTypes::STRING) return "STRING";
+    if (dtype == Bodo_CTypes::BINARY) return "BINARY";
     if (dtype == Bodo_CTypes::_BOOL) return "_BOOL";
     if (dtype == Bodo_CTypes::DECIMAL) return "DECIMAL";
     if (dtype == Bodo_CTypes::DATE) return "DATE";

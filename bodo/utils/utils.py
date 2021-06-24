@@ -68,6 +68,7 @@ class CTypeEnum(Enum):
     # NOTE: 17 is used by LIST_STRING in bodo_common.h
     LIST = 18
     STRUCT = 19
+    BINARY = 20
 
 
 _numba_to_c_type_map = {

@@ -20,6 +20,7 @@ from bodo.libs.array_item_arr_ext import (
     define_array_item_dtor,
     offset_type,
 )
+from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -163,6 +164,8 @@ def array_to_info(typingctx, arr_type_t=None):
                     return get_types(arr_typ.dtype)
                 elif arr_typ == string_array_type:
                     return [CTypeEnum.STRING.value]
+                elif arr_typ == binary_array_type:
+                    return [CTypeEnum.BINARY.value]
                 elif isinstance(arr_typ, DecimalArrayType):
                     return [CTypeEnum.Decimal.value, arr_typ.precision, arr_typ.scale]
                 else:
@@ -210,6 +213,7 @@ def array_to_info(typingctx, arr_type_t=None):
                     boolean_array,
                     datetime_date_array_type,
                     string_array_type,
+                    binary_array_type,
                 ):
                     lengths = cgutils.pack_array(builder, [length])
                 else:
@@ -289,7 +293,7 @@ def array_to_info(typingctx, arr_type_t=None):
                         null_bitmap_arr.data, lir.IntType(8).as_pointer()
                     )
                     buffers = cgutils.pack_array(builder, [null_bitmap_ptr, data_ptr])
-                elif arr_typ == string_array_type:
+                elif arr_typ in (string_array_type, binary_array_type):
                     payload = _get_string_arr_payload(context, builder, arr)
                     offsets = context.make_helper(
                         builder, offset_arr_type, payload.offsets
@@ -396,8 +400,8 @@ def array_to_info(typingctx, arr_type_t=None):
             return ret
 
         # StringArray
-        if arr_type == string_array_type:
-            string_array = context.make_helper(builder, string_array_type, in_arr)
+        if arr_type in (string_array_type, binary_array_type):
+            string_array = context.make_helper(builder, arr_type, in_arr)
             array_item_data_type = ArrayItemArrayType(char_arr_type)
             array_item_array = context.make_helper(
                 builder, array_item_data_type, string_array.data
@@ -414,6 +418,9 @@ def array_to_info(typingctx, arr_type_t=None):
                 builder.load(builder.gep(offsets, [payload.n_arrays])),
                 lir.IntType(64),
             )
+            is_bytes = context.get_constant(
+                types.int32, int(arr_type == binary_array_type)
+            )
             fnty = lir.FunctionType(
                 lir.IntType(8).as_pointer(),
                 [
@@ -423,6 +430,7 @@ def array_to_info(typingctx, arr_type_t=None):
                     lir.IntType(offset_type.bitwidth).as_pointer(),
                     lir.IntType(8).as_pointer(),
                     lir.IntType(8).as_pointer(),
+                    lir.IntType(32),
                 ],
             )
             fn_tp = builder.module.get_or_insert_function(
@@ -437,6 +445,7 @@ def array_to_info(typingctx, arr_type_t=None):
                     offsets,
                     null_bitmap,
                     array_item_array.meminfo,
+                    is_bytes,
                 ],
             )
 
@@ -861,13 +870,13 @@ def nested_to_array(
     # TODO Categorical
 
     # StringArray
-    elif arr_typ == string_array_type:
+    elif arr_typ in (string_array_type, binary_array_type):
         infos = builder.load(array_infos_ptr)
         info_ptr = builder.bitcast(
             builder.extract_value(infos, infos_pos), ll_array_info_type
         )
 
-        string_array = context.make_helper(builder, string_array_type)
+        string_array = context.make_helper(builder, arr_typ)
         array_item_data_type = ArrayItemArrayType(char_arr_type)
         array_item_array = context.make_helper(builder, array_item_data_type)
         fnty = lir.FunctionType(
@@ -990,7 +999,7 @@ def info_to_array(typingctx, info_type, array_type):
                 elif isinstance(arr_typ, StructArrayType):
                     # 1 for nulls + children buffer count
                     return 1 + sum([get_num_infos(d) for d in arr_typ.data])
-                elif arr_typ == string_array_type:
+                elif arr_typ in (string_array_type, binary_array_type):
                     # C++ will just use one array_info
                     return 1
                 else:
@@ -1068,8 +1077,8 @@ def info_to_array(typingctx, info_type, array_type):
             return arr
 
         # StringArray
-        if arr_type == string_array_type:
-            string_array = context.make_helper(builder, string_array_type)
+        if arr_type in (string_array_type, binary_array_type):
+            string_array = context.make_helper(builder, arr_type)
             array_item_data_type = ArrayItemArrayType(char_arr_type)
             array_item_array = context.make_helper(builder, array_item_data_type)
             fnty = lir.FunctionType(
