@@ -66,6 +66,7 @@ from bodo.libs.distributed_api import (
 import bodo.hiframes.boxing
 import bodo.hiframes.pd_timestamp_ext
 from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.str_ext import string_type
 import bodo.libs.binops_ext
 import bodo.libs.array_ops
