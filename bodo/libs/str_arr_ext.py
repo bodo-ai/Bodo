@@ -47,6 +47,7 @@ from bodo.libs.array_item_arr_ext import (
     np_offset_type,
     offset_type,
 )
+from bodo.libs.binary_arr_ext import BinaryArrayType, binary_array_type
 from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
 from bodo.utils.typing import (
     BodoError,
@@ -101,6 +102,7 @@ def typeof_string_array(val, c):
     return string_array_type
 
 
+@register_model(BinaryArrayType)
 @register_model(StringArrayType)
 class StringArrayModel(models.StructModel):
     """Use array(uint8) array to store string array data"""
@@ -114,6 +116,7 @@ class StringArrayModel(models.StructModel):
 
 
 make_attribute_wrapper(StringArrayType, "data", "_data")
+make_attribute_wrapper(BinaryArrayType, "data", "_data")
 
 
 @intrinsic
@@ -1170,6 +1173,7 @@ def set_string_array_range(
     return sig, codegen
 
 
+@box(BinaryArrayType)
 @box(StringArrayType)
 def box_str_arr(typ, val, c):
     """box string array into numpy object array with string values"""
@@ -1178,9 +1182,10 @@ def box_str_arr(typ, val, c):
     payload = _get_array_item_arr_payload(
         c.context, c.builder, array_item_data_type, string_array.data
     )
+    is_bytes = c.context.get_constant(types.int32, int(typ == binary_array_type))
 
     box_fname = "np_array_from_string_array"
-    if use_pd_string_array:
+    if use_pd_string_array and typ != binary_array_type:
         box_fname = "pd_array_from_string_array"
 
     fnty = lir.FunctionType(
@@ -1190,6 +1195,7 @@ def box_str_arr(typ, val, c):
             lir.IntType(offset_type.bitwidth).as_pointer(),
             lir.IntType(8).as_pointer(),
             lir.IntType(8).as_pointer(),
+            lir.IntType(32),
         ],
     )
     fn_get = c.builder.module.get_or_insert_function(fnty, name=box_fname)
@@ -1209,6 +1215,7 @@ def box_str_arr(typ, val, c):
             offsets_ptr,
             data_ptr,
             null_bitmap_ptr,
+            is_bytes,
         ],
     )
 
@@ -2053,11 +2060,14 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t
     return types.int32(out_ptr_t, string_array_type, types.int64, out_dtype_t), codegen
 
 
+@unbox(BinaryArrayType)
 @unbox(StringArrayType)
 def unbox_str_series(typ, val, c):
     """
     Unbox a numpy object array with string object values.
     """
+
+    is_bytes = c.context.get_constant(types.int32, int(typ == binary_array_type))
 
     # TODO: check python errors
     # function signature: NRT_MemInfo* string_array_from_sequence(PyObject* obj)
@@ -2066,6 +2076,7 @@ def unbox_str_series(typ, val, c):
         lir.IntType(8).as_pointer(),
         [
             lir.IntType(8).as_pointer(),
+            lir.IntType(32),
         ],
     )
     fn = c.builder.module.get_or_insert_function(
@@ -2075,6 +2086,7 @@ def unbox_str_series(typ, val, c):
         fn,
         [
             val,
+            is_bytes,
         ],
     )
 
