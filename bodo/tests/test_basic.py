@@ -796,8 +796,16 @@ def test_objmode_types():
             df = pd.DataFrame({"A": [1.1, 2.2, 3.3], "B": ["A1", "A22", "A33"]})
         return df
 
+    f = lambda A: (A.view("datetime64[ns]"), A.view("timedelta64[ns]"))
+
+    def impl3(A):
+        with bodo.objmode(B=bodo.datetime64ns[::1], C=bodo.timedelta64ns[::1]):
+            B, C = f(A)
+        return B, C
+
     check_func(impl, (np.arange(11),))
     check_func(impl2, (), only_seq=True)
+    check_func(impl3, (np.arange(11),))
 
 
 def test_unsupported_tz_dtype(memory_leak_check):
