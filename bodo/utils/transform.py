@@ -58,6 +58,33 @@ ReplaceFunc = namedtuple(
 )
 
 
+# Bodo types that have parameters and need to be instantiated from class
+bodo_types_with_params = {
+    "ArrayItemArrayType",
+    "CSRMatrixType",
+    "CategoricalArrayType",
+    "CategoricalIndexType",
+    "DataFrameType",
+    "DatetimeIndexType",
+    "Decimal128Type",
+    "DecimalArrayType",
+    "IntegerArrayType",
+    "IntervalArrayType",
+    "IntervalIndexType",
+    "List",
+    "MapArrayType",
+    "NumericIndexType",
+    "PDCategoricalDtype",
+    "PeriodIndexType",
+    "RangeIndexType",
+    "SeriesType",
+    "StringIndexType",
+    "StructArrayType",
+    "TimedeltaIndexType",
+    "TupleArrayType",
+}
+
+
 no_side_effect_call_tuples = {
     # general python functions
     (int,),
@@ -181,7 +208,9 @@ no_side_effect_call_tuples = {
     ("pre_alloc_string_array", "str_arr_ext", "libs", bodo),
     (bodo.libs.str_arr_ext.pre_alloc_string_array,),
     ("prange", bodo),
-    (bodo.prange),
+    (bodo.prange,),
+    ("objmode", bodo),
+    (bodo.objmode,),
 }
 
 
@@ -478,6 +507,15 @@ def get_const_value_inner(
             var_def.attr,
         )
 
+    if is_expr(var_def, "getitem"):
+        value = get_const_value_inner(
+            func_ir, var_def.value, arg_types, typemap, updated_containers
+        )
+        index = get_const_value_inner(
+            func_ir, var_def.index, arg_types, typemap, updated_containers
+        )
+        return value[index]
+
     # list/set/dict cases
 
     # try dict.keys()
@@ -729,6 +767,25 @@ def get_const_value_inner(
             for a in var_def.kws
         }
         return getattr(val, call_name[0])(*args, **kws)
+
+    # bodo data type calls like bodo.DataFrameType()
+    if (
+        call_name is not None
+        and len(call_name) == 2
+        and call_name[1] == "bodo"
+        and call_name[0] in bodo_types_with_params
+    ):
+        args = tuple(
+            get_const_value_inner(func_ir, v, arg_types, typemap, updated_containers)
+            for v in var_def.args
+        )
+        kwargs = {
+            name: get_const_value_inner(
+                func_ir, v, arg_types, typemap, updated_containers
+            )
+            for name, v in dict(var_def.kws).items()
+        }
+        return getattr(bodo, call_name[0])(*args, **kwargs)
 
     raise GuardException("Constant value not found")
 

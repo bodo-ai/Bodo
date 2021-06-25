@@ -1077,7 +1077,7 @@ class TypingTransforms:
         column_type = self.typemap.get(column_var.name, None)
         allow_duplicates_type = (
             types.BooleanLiteral(False)
-            if allow_duplicates_var is ""
+            if allow_duplicates_var == ""
             else self.typemap.get(allow_duplicates_var.name, None)
         )
         # cannot transform yet if input types are not available yet

@@ -408,7 +408,7 @@ def test_groupby_apply_udf_non_numba_err(memory_leak_check):
     df = pd.DataFrame({"A": [1.0, 2, 3, 1.0, 5], "B": [4.0, 5, 6, 2, 1]})
     with pytest.raises(
         BodoError,
-        match=r"\'bodo\' is not defined",
+        match=r"The value must be a compile-time constant",
     ):
         main_func(df)
 
