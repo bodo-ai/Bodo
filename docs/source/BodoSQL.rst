@@ -251,6 +251,60 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
     Aliases are often used to make column names more readable. An alias only exists for the duration of the query.
 
 
+Supported Data Types
+--------------------
+BodoSQL uses Pandas DataFrames to represent SQL tables in memory and converts SQL types
+to corresponding Python types which are used by Bodo. Below is a table
+mapping SQL types used in BodoSQL to their respective Python types
+and Bodo data types.
+
+.. list-table::
+  :header-rows: 1
+
+  * - SQL Type(s)
+    - Equivalent Python Type
+    - Bodo Data Type
+  * - ``TINYINT``
+    - ``np.int8``
+    - ``bodo.int8``
+  * - ``SMALLINT``
+    - ``np.int16``
+    - ``bodo.int16``
+  * - ``INT``
+    - ``np.int32``
+    - ``bodo.int32``
+  * - ``BIGINT``
+    - ``np.int64``
+    - ``bodo.int64``
+  * - ``FLOAT``
+    - ``np.float32``
+    - ``bodo.float32``
+  * - ``DECIMAL``, ``DOUBLE``
+    - ``np.float64``
+    - ``bodo.float64``
+  * - ``VARCHAR``, ``CHAR``
+    - ``str``
+    - ``bodo.string_type``
+  * - ``TIMESTAMP``, ``DATE``
+    - ``np.datetime64[ns]``
+    - ``bodo.datetime64ns``
+  * - ``INTERVAL(day-time)``
+    - ``np.timedelta64[ns]``
+    - ``bodo.timedelta64ns``
+  * - ``BOOLEAN``
+    - ``np.bool_``
+    - ``bodo.bool_``
+
+Nullable and Unsigned Types
+~~~~~~~~~~~~~~~~~~~~~~~~~
+Although SQL does not explicitly support unsigned types,
+by default, BodoSQL maintains the exact types of the existing DataFrames
+registered in a `BodoSQLContext`, including unsigned and non-nullable type behavior.
+If an operation has the possibility of creating null values or requires
+casting data, BodoSQL will convert the input of that operation to a nullable,
+signed version of the type.
+
+
 Supported Literals
 ------------------
 
@@ -328,3 +382,4 @@ String Literal
     'char [ ... ]'
 
 Where char is a character literal in a Python string.
+signed version of the type.
