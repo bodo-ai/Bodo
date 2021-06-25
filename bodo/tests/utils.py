@@ -807,7 +807,7 @@ def _typeof(val):
         isinstance(val, np.ndarray)
         and val.dtype == np.dtype("O")
         and all(
-            (isinstance(a, np.float) and np.isnan(a)) or isinstance(a, int) for a in val
+            (isinstance(a, float) and np.isnan(a)) or isinstance(a, int) for a in val
         )
     ):
         # TODO: Should this check be fixed? It seems like all floats should
