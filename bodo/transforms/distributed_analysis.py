@@ -2619,6 +2619,18 @@ class DistributedAnalysis:
     def _analyze_return(self, var, array_dists):
         """analyze ir.Return nodes for distribution. Checks for user flags; sets to REP
         if no user flag found"""
+        if self.flags.returns_maybe_distributed:
+            is_1D_or_1D_Var = lambda d: d in (Distribution.OneD, Distribution.OneD_Var)
+            ret_dist = array_dists[var.name]
+            # untyped pass usually sets is_return_distributed but in this case
+            # distributions are not known until here, see _handle_dispatcher() for usage
+            self.metadata["is_return_distributed"] = (
+                [is_1D_or_1D_Var(d) for d in ret_dist]
+                if isinstance(ret_dist, list)
+                else is_1D_or_1D_Var(ret_dist)
+            )
+            return
+
         if self._is_dist_return_var(var):
             return
 

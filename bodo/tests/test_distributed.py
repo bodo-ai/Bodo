@@ -1171,6 +1171,53 @@ def test_dist_dict_setitem1(memory_leak_check):
     assert count_array_OneDs() >= 2
 
 
+def test_return_maybe_dist(memory_leak_check):
+    """test returns_maybe_distributed jit flag"""
+    # tuple return
+    def impl1(n):
+        df = pd.DataFrame({"A": np.arange(n), "B": np.ones(n)})
+        return df, df.sum()
+
+    # non-tuple return
+    def impl2(n):
+        df = pd.DataFrame({"A": np.arange(n), "B": np.ones(n)})
+        return df
+
+    # call another function with returns_maybe_distributed
+    f = bodo.jit(returns_maybe_distributed=True)(impl1)
+
+    def impl3(n):
+        df = f(n)[0]
+        return df
+
+    n = 11
+    bodo_func = bodo.jit(returns_maybe_distributed=True)(impl1)
+    bodo_ret = bodo_func(n)
+    pd_ret = impl1(n)
+    assert _test_equal_guard(bodo.allgatherv(bodo_ret[0]), pd_ret[0])
+    assert _test_equal_guard(bodo_ret[1], pd_ret[1])
+    assert bodo_func.overloads[bodo_func.signatures[0]].metadata[
+        "is_return_distributed"
+    ] == [True, False]
+
+    n = 11
+    bodo_func = bodo.jit(returns_maybe_distributed=True)(impl2)
+    assert _test_equal_guard(bodo.allgatherv(bodo_func(n)), impl2(n))
+    assert (
+        bodo_func.overloads[bodo_func.signatures[0]].metadata["is_return_distributed"]
+        == True
+    )
+
+    n = 11
+    bodo_func = bodo.jit(distributed=["df"])(impl3)
+    pd_ret = pd.DataFrame({"A": np.arange(n), "B": np.ones(n)})
+    assert _test_equal_guard(bodo.allgatherv(bodo_func(n)), pd_ret)
+    assert (
+        bodo_func.overloads[bodo_func.signatures[0]].metadata["is_return_distributed"]
+        == True
+    )
+
+
 # TODO: Add memory_leak_check when bug is solved
 def test_concat_reduction():
     """test dataframe concat reduction, which produces distributed output"""
