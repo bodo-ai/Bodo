@@ -10,8 +10,16 @@ as well as SQL to Pandas conversion for the first time.
 BodoSQL is in early stages and its capabilities are expanding rapidly.
 
 
+Getting Started
+---------------
+
+Installation
+~~~~~~~~~~~~
+Bodo SQL is currently in an Alpha release. Please us if you are interested
+in becoming a trial user.
+
 Using Bodo SQL
---------------
+~~~~~~~~~~~~~~
 
 The example below demonstrates using Bodo SQL in Python programs.
 It loads data into a dataframe, runs a SQL query on the data,
@@ -33,27 +41,48 @@ and runs Python/Pandas code on query results::
 
 
 This program is fully type checked, optimized and parallelized by Bodo end-to-end.
-`BodoSQLContext` creates a SQL environment with tables created from dataframes.
-`BodoSQLContext.sql()` runs a SQL query and returns the results as a dataframe.
-`BodoSQLContext` can be used outside Bodo JIT functions if necessary as well.
+``BodoSQLContext`` creates a SQL environment with tables created from dataframes.
+``BodoSQLContext.sql()`` runs a SQL query and returns the results as a dataframe.
+``BodoSQLContext`` can be used outside Bodo JIT functions if necessary as well.
+
+
+You can run this example by creating ``my_data.pq``::
+
+
+    import pandas as pd
+    import numpy as np
+
+    NUM_GROUPS = 30
+    NUM_ROWS = 20_000_000
+    df = pd.DataFrame({
+        "A": np.arange(NUM_ROWS) % NUM_GROUPS,
+        "B": np.arange(NUM_ROWS)
+    })
+    df.to_parquet("my_data.pq")
+
 
 
 SQL to Pandas Conversion
 ------------------------
 
-Bodo SQL can generate Pandas code from SQL queries automatically. For example::
+Bodo SQL can generate Pandas code from SQL queries automatically. To view the code generated,
+you can use the ``convert_to_pandas`` method, which returns the generated code as a string.
+For example::
 
-    bc.convert_to_pandas("SELECT A FROM table1 WHERE B > 4")
+    print(bc.convert_to_pandas("SELECT A FROM table1 WHERE B > 4"))
 
-returns::
+outputs::
 
-    df1 = table1[["A","B",]][(table1["B"] > 4)]
-    df2 = pd.DataFrame({"A": df1["A"], })
-    return df2
+    def impl(table1):
+        df1 = table1[(table1["B"] > np.int32(4))]
+        df2 = pd.DataFrame({"A": df1["A"], })
+        return df2
 
 
 Using Python/Pandas code instead of SQL can simplify existing data science applications
 and improve code maintenance.
+
+**Note**: ``convert_to_pandas`` can only be executed outside Bodo JIT functions.
 
 
 Supported Operations
