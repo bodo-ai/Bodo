@@ -249,3 +249,82 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
         FROM <TABLE_NAME>;
 
     Aliases are often used to make column names more readable. An alias only exists for the duration of the query.
+
+
+Supported Literals
+------------------
+
+BodoSQL supports the following literal types:
+  * :ref:`boolean_literal`
+  * :ref:`datetime_literal`
+  * :ref:`float_literal`
+  * :ref:`integer_literal`
+  * :ref:`interval_literal`
+  * :ref:`string_literal`
+
+
+.. _boolean_literal:
+
+Boolean Literal
+~~~~~~~~~~~~~~~
+**Syntax**::
+
+    TRUE | FALSE
+
+Boolean literals are case insensitive.
+
+.. _datetime_literal:
+
+Datetime Literal
+~~~~~~~~~~~~~~~~
+**Syntax**::
+
+    DATE 'yyyy-mm-dd' |
+    TIMESTAMP 'yyyy-mm-dd' |
+    TIMESTAMP 'yyyy-mm-dd HH:mm:ss'
+
+.. _float_literal:
+
+Float Literal
+~~~~~~~~~~~~~
+**Syntax**::
+
+    [ + | - ] { digit [ ... ] . [ digit [ ... ] ] | . digit [ ... ] }
+
+where digit is any numeral from 0 to 9
+
+.. _integer_literal:
+
+Integer Literal
+~~~~~~~~~~~~~~~
+**Syntax**::
+
+    [ + | - ] digit [ ... ]
+
+where digit is any numeral from 0 to 9
+
+.. _interval_literal:
+
+Interval Literal
+~~~~~~~~~~~~~~~~
+**Syntax**::
+
+    INTERVAL integer_literal interval_type
+
+Where integer_literal is a valid integer literal
+and interval type is one of::
+
+    DAY[S] |
+    HOUR[S] |
+    MINUTE[S] |
+    SECOND[S]
+
+.. _string_literal:
+
+String Literal
+~~~~~~~~~~~~~~
+**Syntax**::
+
+    'char [ ... ]'
+
+Where char is a character literal in a Python string.
