@@ -1447,7 +1447,13 @@ class NumTypeStaticGetItem(AbstractTemplate):
 
     def generic(self, args, kws):
         val, idx = args
-        if isinstance(val, types.NumberClass) and isinstance(idx, slice):
+        if isinstance(idx, slice) and (
+            isinstance(val, types.NumberClass)
+            or (
+                isinstance(val, types.TypeRef)
+                and isinstance(val.instance_type, (types.NPDatetime, types.NPTimedelta))
+            )
+        ):
             return signature(types.TypeRef(val.instance_type[idx]), *args)
 
 
