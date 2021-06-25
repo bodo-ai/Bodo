@@ -411,4 +411,17 @@ String Literal
     'char [ ... ]'
 
 Where char is a character literal in a Python string.
-signed version of the type.
+
+NULL SEMANTICS
+--------------
+
+Bodo SQL converts SQL queries to Pandas code that executes inside Bodo.
+As a result, NULL behavior aligns with Pandas and may be slightly different
+than other SQL systems. This is currently an area of active development to
+ensure compatibility with other SQL systems.
+
+Most operators with a NULL input return NULL. However,
+there a couple notable places where Bodo SQL may not match other SQL systems:
+
+    - `GROUP BY` clauses do not produce a NULL group
+    - Bodo SQL treats `NaN` the same as NULL
