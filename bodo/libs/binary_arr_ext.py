@@ -3,8 +3,11 @@
 It is equivalent to string array, except that it stores a 'bytes' object for each
 element instead of 'str'.
 """
+import operator
 
-from numba.core import types
+import numba
+from llvmlite import ir as lir
+from numba.core import cgutils, types
 from numba.extending import (
     intrinsic,
     overload,
@@ -13,6 +16,7 @@ from numba.extending import (
 )
 
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.utils.typing import BodoError, is_list_like_index_type
 
 bytes_type = types.Bytes(types.uint8, 1, "C", readonly=True)
 
@@ -80,6 +84,34 @@ def init_binary_arr(typingctx, data_typ=None):
     return binary_array_type(data_typ), codegen
 
 
+@intrinsic
+def init_bytes_type(typingctx, data_typ=None):
+    """create a new bytes array from input data array(uint8) data"""
+    assert data_typ == types.Array(types.uint8, 1, "C")
+
+    def codegen(context, builder, sig, args):
+        # Convert input/output to structs to reference fields
+        int_arr = cgutils.create_struct_proxy(sig.args[0])(
+            context, builder, value=args[0]
+        )
+        bytes_array = cgutils.create_struct_proxy(bytes_type)(context, builder)
+
+        # Initialize the fields of the byte array (mostly copied from Numba)
+        bytes_array.meminfo = context.nrt.meminfo_alloc(builder, int_arr.nitems)
+        bytes_array.nitems = int_arr.nitems
+        bytes_array.itemsize = lir.Constant(bytes_array.itemsize.type, 1)
+        bytes_array.data = context.nrt.meminfo_data(builder, bytes_array.meminfo)
+        bytes_array.parent = cgutils.get_null_value(bytes_array.parent.type)
+        bytes_array.shape = int_arr.shape
+        bytes_array.strides = int_arr.strides
+
+        # Memcpy the data from int array to bytes array
+        cgutils.memcpy(builder, bytes_array.data, int_arr.data, bytes_array.nitems)
+        return bytes_array._getvalue()
+
+    return bytes_type(data_typ), codegen
+
+
 @overload_method(BinaryArrayType, "copy", no_unliteral=True)
 def binary_arr_copy_overload(arr):
     """implement copy by copying internal array(item) array"""
@@ -88,3 +120,80 @@ def binary_arr_copy_overload(arr):
         return init_binary_arr(arr._data.copy())
 
     return copy_impl
+
+
+@overload_method(types.Bytes, "hex")
+def binary_arr_hex(arr):
+    def impl(arr):
+        parts = []
+        for i in range(len(arr)):
+            byte_num = arr[i]
+            parts.extend(int_to_hex_list(byte_num))
+        return "".join(parts)
+
+    return impl
+
+
+@overload(hex)
+def overload_hex(int_val):
+    if isinstance(int_val, types.Integer):
+
+        def impl(int_val):
+            return "".join(["0x"] + int_to_hex_list(int_val))
+
+        return impl
+
+
+@numba.njit
+def int_to_hex_list(int_val):
+    """
+    Convert an integer into a list of hex strings.
+    """
+    char_map = {
+        0: "0",
+        1: "1",
+        2: "2",
+        3: "3",
+        4: "4",
+        5: "5",
+        6: "6",
+        7: "7",
+        8: "8",
+        9: "9",
+        10: "a",
+        11: "b",
+        12: "c",
+        13: "d",
+        14: "e",
+        15: "f",
+    }
+    # TODO [BE-926]: Replace with a more efficient implementation
+    # that matches CPython
+    # Add default value for typing
+    result = [""]
+    while int_val > 0:
+        digit = int_val % 16
+        int_val = int_val // 16
+        result.append(char_map[digit])
+    return result[::-1]
+
+
+@overload(operator.getitem, no_unliteral=True)
+def binary_arr_getitem(arr, ind):
+    if arr != binary_array_type:
+        return
+
+    # Indexing is supported for any indexing support for ArrayItemArray
+    if isinstance(ind, types.Integer):
+        return lambda arr, ind: init_bytes_type(arr._data[ind])
+
+    # bool arr, int arr, and slice
+    if (
+        is_list_like_index_type(ind)
+        and (ind.dtype == types.bool_ or isinstance(ind.dtype, types.Integer))
+    ) or isinstance(ind, types.SliceType):
+        return lambda arr, ind: init_binary_arr(arr._data[ind])
+
+    raise BodoError(
+        f"getitem for Binary Array with indexing type {ind} not supported."
+    )  # pragma: no cover
