@@ -2,6 +2,7 @@
 """Test Bodo's binary array data type
 """
 import numpy as np
+import pandas as pd
 import pytest
 
 from bodo.tests.utils import check_func
@@ -65,3 +66,34 @@ def test_constant_lowering(binary_arr_value):
         return binary_arr_value
 
     check_func(test_impl, (), only_seq=True)
+
+
+def test_hex_method(binary_arr_value):
+    def test_impl(A):
+        return pd.Series(A).apply(lambda x: None if pd.isna(x) else x.hex())
+
+    check_func(test_impl, (binary_arr_value,))
+
+
+def test_get_item(binary_arr_value):
+    def test_impl(A, idx):
+        return A[idx]
+
+    np.random.seed(0)
+
+    # A single integer
+    # TODO [BE-927]: Fix distributed for integer
+    idx = 0
+    check_func(test_impl, (binary_arr_value, idx), dist_test=False)
+
+    # Array of integers
+    idx = np.random.randint(0, len(binary_arr_value), 11)
+    check_func(test_impl, (binary_arr_value, idx), dist_test=False)
+
+    # Array of booleans
+    idx = np.random.ranf(len(binary_arr_value)) < 0.2
+    check_func(test_impl, (binary_arr_value, idx), dist_test=False)
+
+    # Slice
+    idx = slice(1, 4)
+    check_func(test_impl, (binary_arr_value, idx), dist_test=False)

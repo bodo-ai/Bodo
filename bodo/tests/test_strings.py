@@ -20,6 +20,14 @@ from bodo.tests.utils import check_caching, check_func
 
 
 @pytest.mark.slow
+def test_int_hex(memory_leak_check):
+    def test_impl(int_val):
+        return hex(int_val)
+
+    check_func(test_impl, (999,))
+
+
+@pytest.mark.slow
 def test_string_float64_cast(memory_leak_check):
     def test_impl(_str):
         return np.float64(_str)
