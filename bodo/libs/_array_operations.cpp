@@ -308,13 +308,15 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         // than 2.0 then we trigger reshuffling. If not, we do not do anything.
         // This value may be adjusted in the future as it is an heuristic
         // constant.
-        const double crit_fraction = 2.0;
-        if (need_reshuffling(ret_table, crit_fraction)) {
-            table_info* table_shuffle_renorm =
-                shuffle_renormalization(ret_table, 0, -1, parallel);
-            delete_table(ret_table);
-            return table_shuffle_renorm;
-        }
+        // TODO(ehsan) [BE-949]: support automatic rebalacing after sort
+        // based on compiler heuristics
+        // const double crit_fraction = 2.0;
+        // if (need_reshuffling(ret_table, crit_fraction)) {
+        //     table_info* table_shuffle_renorm =
+        //         shuffle_renormalization(ret_table, 0, -1, parallel);
+        //     delete_table(ret_table);
+        //     return table_shuffle_renorm;
+        // }
         return ret_table;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
