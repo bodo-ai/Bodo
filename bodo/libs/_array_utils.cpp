@@ -887,7 +887,7 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                 size_t len1 = str1.size();
                 size_t len2 = str2.size();
                 size_t minlen = std::min(len1, len2);
-                int test = std::strncmp(str2.c_str(), str1.c_str(), minlen);
+                int test = std::memcmp(str2.c_str(), str1.c_str(), minlen);
                 if (test) return test;
                 // If not, we may be able to conclude via the string length.
                 if (len1 > len2) return -1;
@@ -1167,7 +1167,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
                     char* data1_2 = arr2->data1 + pos2_prev;
                     // We check the strings for comparison and check if we can
                     // conclude.
-                    int test = std::strncmp(data1_2, data1_1, minlen);
+                    int test = std::memcmp(data1_2, data1_1, minlen);
                     if (test) return test;
                     // If not, we may be able to conclude via their length
                     if (len1 > len2) return -1;
@@ -1202,7 +1202,7 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
             offset_t pos2_prev = data2_2[iRow2];
             char* data1_1 = (char*)arr1->data1 + pos1_prev;
             char* data1_2 = (char*)arr2->data1 + pos2_prev;
-            int test = std::strncmp(data1_2, data1_1, minlen);
+            int test = std::memcmp(data1_2, data1_1, minlen);
             if (test) return test;
             // If not, we may be able to conclude via the string length.
             if (len1 > len2) return -1;

@@ -98,7 +98,7 @@ struct multi_col_key {
                     if (c1_str_len != c2_str_len) return false;
                     char* c1_str = c1->data1 + c1_offsets[row];
                     char* c2_str = c2->data1 + c2_offsets[other.row];
-                    if (strncmp(c1_str, c2_str, c1_str_len) != 0) return false;
+                    if (memcmp(c1_str, c2_str, c1_str_len) != 0) return false;
                 }
                     continue;
                 case bodo_array_type::LIST_STRING:
@@ -147,7 +147,7 @@ struct multi_col_key {
                     char* c2_strB =
                         c2->data1 +
                         c2_data_offsets[c2_index_offsets[other.row]];
-                    if (strncmp(c1_strB, c2_strB, common_len) != 0)
+                    if (memcmp(c1_strB, c2_strB, common_len) != 0)
                         return false;
             }
         }

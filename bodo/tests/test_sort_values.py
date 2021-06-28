@@ -838,6 +838,34 @@ def test_list_string_arrow():
     check_func(f, (df1,))
 
 
+def test_sort_values_bytes_null(memory_leak_check):
+    """
+    Test sort_values(): for bytes keys with NULL char inside them to make sure value
+    comparison can handle NULLs.
+    """
+
+    def impl(df):
+        return df.sort_values(by="A")
+
+    df = pd.DataFrame(
+        {
+            "A": [
+                b"\x00abc",
+                b"\x00\x00fds",
+                b"\x00lkhs",
+                b"asbc",
+                b"qwer",
+                b"zxcv",
+                b"\x00pqw",
+                b"\x00\x00asdfg",
+                b"hiofgas",
+            ],
+            "B": np.arange(9),
+        }
+    )
+    check_func(impl, (df,))
+
+
 # ------------------------------ error checking ------------------------------ #
 
 
