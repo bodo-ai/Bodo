@@ -1920,7 +1920,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
                                           in_data_offsets[in_index_offsets[i1]];
             char* ptr2 = arr->data1 + sizeof(offset_t) *
                                           in_data_offsets[in_index_offsets[i2]];
-            return strncmp(ptr1, ptr2, len1) == 0;
+            return memcmp(ptr1, ptr2, len1) == 0;
         };
         UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                             std::function<bool(int64_t, int64_t)>>
@@ -1968,7 +1968,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
             if (len1 != len2) return false;
             char* ptr1 = arr->data1 + in_offsets[i1];
             char* ptr2 = arr->data1 + in_offsets[i2];
-            return strncmp(ptr1, ptr2, len1) == 0;
+            return memcmp(ptr1, ptr2, len1) == 0;
         };
         UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
                             std::function<bool(int64_t, int64_t)>>
