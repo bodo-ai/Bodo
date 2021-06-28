@@ -10,7 +10,9 @@ from bodo.tests.utils import check_func
 
 @pytest.fixture(
     params=[
-        np.array([b"abc", b"c", np.nan, b"ccdefg" b"abcde", b"poiu"] * 2, object),
+        np.array(
+            [b"abc", b"c", np.nan, b"ccdefg" b"abcde", b"poiu", bytes(3)] * 2, object
+        ),
     ]
 )
 def binary_arr_value(request):

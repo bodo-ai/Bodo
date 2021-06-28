@@ -22,6 +22,7 @@ from numba.extending import (
     models,
     overload,
     overload_attribute,
+    register_jitable,
     register_model,
 )
 from numba.parfors.array_analysis import ArrayAnalysis
@@ -45,6 +46,7 @@ def unliteral_all(args):
 ll.add_symbol("del_str", hstr_ext.del_str)
 ll.add_symbol("unicode_to_utf8", hstr_ext.unicode_to_utf8)
 ll.add_symbol("memcmp", hstr_ext.memcmp)
+ll.add_symbol("int_to_hex", hstr_ext.int_to_hex)
 
 
 string_type = types.unicode_type
@@ -668,3 +670,98 @@ def str_split(arr, pat, n):  # pragma: no cover
 
     index_offsets[l] = curr_ind
     return out_arr
+
+
+@overload(hex)
+def overload_hex(x):
+    if isinstance(x, types.Integer):
+        kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
+
+        def impl(x):
+            x = np.int64(x)
+            # If int_val < 0 we have a leading -0x, else 0x
+            if x < 0:
+                header = "-0x"
+                x = x * -1
+            else:
+                header = "0x"
+            # Algorithm is written for unsigned 64-bit integers
+            x = np.uint64(x)
+            # Allocate the string. We know for any integer,
+            # we need ceil(log16(x + 1)) numbers to store the result.
+            # The exception is 0, which also needs 1.
+            # TODO: Replace algorithm with a fast log 16
+            if x == 0:
+                int_len = 1
+            else:
+                int_len = fast_ceil_log2(x + 1)
+                # Ceiling divide the total result by 4 to convert to log16
+                int_len = (int_len + 3) // 4
+
+            length = len(header) + int_len
+            output = numba.cpython.unicode._empty_string(kind, length, 1)
+
+            # Copy the header
+            bodo.libs.str_arr_ext._memcpy(output._data, header._data, len(header), 1)
+            int_to_hex(output, int_len, len(header), x)
+            return output
+
+        return impl
+
+
+@register_jitable
+def fast_ceil_log2(x):
+    """
+    Computes ceil(log2) for unsigned 64 bit integers.
+    https://stackoverflow.com/questions/3272424/compute-fast-log-base-2-ceiling
+    """
+    # Add 1 if not currently a pow2 (ceil) or the value is 1
+    total = 0 if ((x & (x - 1)) == 0) else 1
+    # Create an array of mask, chunking the problem in half each mask.
+    masks = [
+        np.uint64(0xFFFFFFFF00000000),
+        np.uint64(0x00000000FFFF0000),
+        np.uint64(0x000000000000FF00),
+        np.uint64(0x00000000000000F0),
+        np.uint64(0x000000000000000C),
+        np.uint64(0x0000000000000002),
+    ]
+    # Use the masks to compute the length
+    log_add = 32
+    for i in range(len(masks)):
+        offset = 0 if ((x & masks[i]) == 0) else log_add
+        total = total + offset
+        x = x >> offset
+        log_add = log_add >> 1
+    return total
+
+
+@intrinsic
+def int_to_hex(typingctx, output, out_len, header_len, int_val):
+    """Call C implementation of bytes_to_hex"""
+
+    def codegen(context, builder, sig, args):
+        (output, out_len, header_len, int_val) = args
+        output_arr = cgutils.create_struct_proxy(sig.args[0])(
+            context, builder, value=output
+        )
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64),
+            ],
+        )
+        hex_func = builder.module.get_or_insert_function(fnty, name="int_to_hex")
+        # increment the arr ptr by the length of the header
+        data_arr = builder.inttoptr(
+            builder.add(
+                builder.ptrtoint(output_arr.data, lir.IntType(64)),
+                header_len,
+            ),
+            lir.IntType(8).as_pointer(),
+        )
+        builder.call(hex_func, (data_arr, out_len, int_val))
+
+    return types.void(output, out_len, header_len, int_val), codegen

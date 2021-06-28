@@ -20,6 +20,12 @@ extern "C" {
 static constexpr uint8_t kFlippedBitmask[] = {254, 253, 251, 247,
                                               239, 223, 191, 127};
 
+// Map of integers to hex values. Note we use an array because the keys are 0-15
+static constexpr char hex_values[] = {
+        '0', '1', '2', '3', '4', '5', '6','7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
+    };
+
+
 static inline void ClearBit(uint8_t* bits, int64_t i) {
     bits[i / 8] &= kFlippedBitmask[i % 8];
 }
@@ -90,6 +96,8 @@ void print_list_str_arr(uint64_t n, const char* data,
                         const offset_t* data_offsets,
                         const offset_t* index_offsets,
                         const uint8_t* null_bitmap);
+void bytes_to_hex(char *output, char *data, int64_t data_len);
+void int_to_hex(char* output, int64_t output_len, uint64_t int_val);
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject* m;
@@ -183,6 +191,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(m, "unbox_bool_array_obj",
                            PyLong_FromVoidPtr((void*)(&unbox_bool_array_obj)));
     PyObject_SetAttrString(m, "memcmp", PyLong_FromVoidPtr((void*)(&memcmp)));
+    PyObject_SetAttrString(m, "bytes_to_hex", PyLong_FromVoidPtr((void*)(&bytes_to_hex)));
+    PyObject_SetAttrString(m, "int_to_hex", PyLong_FromVoidPtr((void*)(&int_to_hex)));
     return m;
 }
 
@@ -403,7 +413,7 @@ int64_t str_to_int64(char* data, int64_t length) {
 }
 
 int64_t str_to_int64_base(char* data, int64_t length, int64_t base) {
-    /* Influenced by stack overflow: 
+    /* Influenced by stack overflow:
        https://stackoverflow.com/questions/194465/how-to-parse-a-string-to-an-int-in-c
        Base is at most 36 per strtlon requirements.
        Called with base=10 by default if no base was provided by a user.
@@ -729,5 +739,42 @@ void print_list_str_arr(uint64_t n, const char* data,
         std::cout << "\n";
     }
 }
+
+void bytes_to_hex(char* output, char *data, int64_t data_len) {
+    /*
+        Implementation of bytes.hex() which converts
+        each the bytes to a string hex representation.
+
+        This is handled in regular Python here:
+        https://github.com/python/cpython/blob/bb3e0c240bc60fe08d332ff5955d54197f79751c/Objects/clinic/bytesobject.c.h#L807
+        https://github.com/python/cpython/blob/bb3e0c240bc60fe08d332ff5955d54197f79751c/Objects/bytesobject.c#L2464
+        https://github.com/python/cpython/blob/bb3e0c240bc60fe08d332ff5955d54197f79751c/Python/pystrhex.c#L164
+        https://github.com/python/cpython/blob/bb3e0c240bc60fe08d332ff5955d54197f79751c/Python/pystrhex.c#L7
+
+        Note: We ignore sep and bytes_per_sep_group because sep is always NULL
+    */
+    // Note: We assume output is allocated to be 2 * data_len character
+    // and a null terminator at the end that is already set.
+    for (int i = 0; i < data_len; i++) {
+        char c = data[i];
+        output[2 * i] = hex_values[c >> 4];
+        output[(2 * i) + 1] = hex_values[c & 0x0f];
+    }
+}
+
+
+void int_to_hex(char* output, int64_t output_len, uint64_t int_val) {
+    /*
+        Implementation of hex(int) with a precomputed final length.
+        I could not find the source Python implementation
+    */
+    // Append characters in reverse order.
+    for (int i = output_len - 1; i >= 0; i--) {
+        output[i] = hex_values[int_val & 0x0F];
+        int_val = int_val >> 4;
+    }
+}
+
+
 
 }  // extern "C"
