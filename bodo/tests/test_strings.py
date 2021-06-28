@@ -25,6 +25,12 @@ def test_int_hex(memory_leak_check):
         return hex(int_val)
 
     check_func(test_impl, (999,))
+    check_func(test_impl, (0,))
+    check_func(test_impl, (11,))
+    check_func(test_impl, (16,))
+    check_func(test_impl, (256,))
+    check_func(test_impl, (-1313,))
+    check_func(test_impl, (256,))
 
 
 @pytest.mark.slow
