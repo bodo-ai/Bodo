@@ -173,24 +173,24 @@ def test_groupby_squeeze_false(memory_leak_check):
         bodo.jit(impl2)(df)
 
 
-def test_groupby_observed_false(memory_leak_check):
+def test_groupby_observed_true(memory_leak_check):
     """
-    Test groupby(): 'observed' cannot have values other than boolean value False
+    Test groupby(): 'observed' cannot have values other than boolean value True
     """
 
     def impl1(df):
-        return df.groupby(by=["A", "C"], observed=1)
+        return df.groupby(by=["A", "C"], observed=0)
 
     def impl2(df):
-        return df.groupby(by=["A", "C"], observed=True)
+        return df.groupby(by=["A", "C"], observed=False)
 
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
     with pytest.raises(
-        BodoError, match="observed parameter only supports default value False"
+        BodoError, match="observed parameter only supports default value True"
     ):
         bodo.jit(impl1)(df)
     with pytest.raises(
-        BodoError, match="observed parameter only supports default value False"
+        BodoError, match="observed parameter only supports default value True"
     ):
         bodo.jit(impl2)(df)
 

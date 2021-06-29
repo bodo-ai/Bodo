@@ -465,7 +465,7 @@ class DataFramePass:
                 *arg_typs, **kw_typs
             )
             stub = eval(
-                "lambda df, values=None, index=None, columns=None, aggfunc='mean', fill_value=None, margins=False, dropna=True, margins_name='All', observed=False, _pivot_values=None: None"
+                "lambda df, values=None, index=None, columns=None, aggfunc='mean', fill_value=None, margins=False, dropna=True, margins_name='All', observed=True, _pivot_values=None: None"
             )
             return replace_func(
                 self,

@@ -2632,7 +2632,7 @@ def overload_dataframe_groupby(
     sort=False,
     group_keys=True,
     squeeze=False,
-    observed=False,
+    observed=True,
     dropna=True,
 ):
 
@@ -2649,7 +2649,7 @@ def overload_dataframe_groupby(
         sort=False,
         group_keys=True,
         squeeze=False,
-        observed=False,
+        observed=True,
         dropna=True,
     ):  # pragma: no cover
         return bodo.hiframes.pd_groupby_ext.init_groupby(df, by, as_index)
@@ -2712,7 +2712,7 @@ def validate_groupby_spec(
         dropna=dropna,
     )
     args_defaults = dict(
-        sort=False, group_keys=True, squeeze=False, observed=False, dropna=True
+        sort=False, group_keys=True, squeeze=False, observed=True, dropna=True
     )
 
     check_unsupported_args("Dataframe.groupby", unsupported_args, args_defaults)
@@ -2729,7 +2729,7 @@ def overload_dataframe_pivot_table(
     margins=False,
     dropna=True,
     margins_name="All",
-    observed=False,
+    observed=True,
     _pivot_values=None,  # bodo argument
 ):
     unsupported_args = dict(
@@ -2740,7 +2740,7 @@ def overload_dataframe_pivot_table(
         observed=observed,
     )
     arg_defaults = dict(
-        fill_value=None, margins=False, dropna=True, margins_name="All", observed=False
+        fill_value=None, margins=False, dropna=True, margins_name="All", observed=True
     )
     check_unsupported_args("DataFrame.pivot_table", unsupported_args, arg_defaults)
 
@@ -2756,7 +2756,7 @@ def overload_dataframe_pivot_table(
             margins=False,
             dropna=True,
             margins_name="All",
-            observed=False,
+            observed=True,
             _pivot_values=None,
         ):  # pragma: no cover
 
@@ -2776,7 +2776,7 @@ def overload_dataframe_pivot_table(
         margins=False,
         dropna=True,
         margins_name="All",
-        observed=False,
+        observed=True,
         _pivot_values=None,
     ):  # pragma: no cover
 
