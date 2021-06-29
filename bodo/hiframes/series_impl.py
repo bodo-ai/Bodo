@@ -1695,7 +1695,7 @@ def overload_series_groupby(
     sort=True,
     group_keys=True,
     squeeze=False,
-    observed=False,
+    observed=True,
     dropna=True,
 ):
     unsupported_args = dict(
@@ -1706,7 +1706,7 @@ def overload_series_groupby(
         dropna=dropna,
     )
     arg_defaults = dict(
-        axis=0, group_keys=True, squeeze=False, observed=False, dropna=True
+        axis=0, group_keys=True, squeeze=False, observed=True, dropna=True
     )
     check_unsupported_args("Series.groupby", unsupported_args, arg_defaults)
 
@@ -1742,7 +1742,7 @@ def overload_series_groupby(
             sort=True,
             group_keys=True,
             squeeze=False,
-            observed=False,
+            observed=True,
             dropna=True,
         ):  # pragma: no cover
             arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -1784,7 +1784,7 @@ def overload_series_groupby(
         sort=True,
         group_keys=True,
         squeeze=False,
-        observed=False,
+        observed=True,
         dropna=True,
     ):  # pragma: no cover
         keys = bodo.utils.conversion.coerce_to_array(by)
