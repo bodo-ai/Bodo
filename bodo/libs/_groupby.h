@@ -44,6 +44,7 @@ void groupby_init();
  *        processes)
  * @param skipdropna: whether to drop NaN values or not from the computation
  *                    (dropna for nunique and skipna for median/cumsum/cumprod)
+ * @param transform_func: function number to use with transform operation.
  * @param return_key: whether to return the keys or not.
  * @param return_index: whether to return the index or not.
  * @param external 'update' function (a function pointer).
@@ -62,25 +63,24 @@ void groupby_init();
 table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
-    int64_t periods, bool return_key, bool return_index, void* update_cb,
-    void* combine_cb, void* eval_cb, void* general_udfs_cb,
+    int64_t periods, int64_t transform_func, bool return_key, bool return_index,
+    void* update_cb, void* combine_cb, void* eval_cb, void* general_udfs_cb,
     table_info* udf_dummy_table);
 
 table_info* pivot_groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, table_info* dispatch_table,
     table_info* dispatch_info, bool input_has_index, int* ftypes,
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool is_crosstab,
-    bool skipdropna, bool return_key, bool return_index,
-    void* update_cb, void* combine_cb, void* eval_cb,
-    table_info* udf_dummy_table);
+    bool skipdropna, bool return_key, bool return_index, void* update_cb,
+    void* combine_cb, void* eval_cb, table_info* udf_dummy_table);
 
 /**
  * @brief Get groupby labels for input key arrays
- * 
+ *
  * @param table a table of all key arrays
  * @param out_labels output array to fill
  * @return int64_t total number of groups
  */
-int64_t get_groupby_labels(table_info* table, int64_t *out_labels);
+int64_t get_groupby_labels(table_info* table, int64_t* out_labels);
 
 #endif  // _GROUPBY_H_INCLUDED

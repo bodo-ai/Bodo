@@ -1448,7 +1448,7 @@ class DataFramePass:
         # cumulative operations not using RangeIndex)
         for funcs in gb_info_in.values():
             for func, _ in funcs:
-                if func.ftype in (list_cumulative | {"shift"}):
+                if func.ftype in (list_cumulative | {"shift", "transform"}):
                     input_has_index = True
                     same_index = True
                     return_key = False

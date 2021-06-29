@@ -817,6 +817,15 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
             f"Groupby.{name_operation}", unsupported_args, arg_defaults
         )
         check_args_kwargs(name_operation, 4, args, kws)
+    elif name_operation == "transform":
+        kws = dict(kws)
+        # pop transform() unsupported keyword arguments from kws
+        transform_func = args[0] if len(args) > 0 else kws.pop("func", None)
+        engine = kws.pop("engine", None)
+        engine_kwargs = kws.pop("engine_kwargs", None)
+        unsupported_args = dict(engine=engine, engine_kwargs=engine_kwargs)
+        arg_defaults = dict(engine=None, engine_kwargs=None)
+        check_unsupported_args(f"Groupby.transform", unsupported_args, arg_defaults)
 
     gb_info = {}
     for c in grp.selection:
@@ -849,6 +858,21 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
                 raise BodoError(
                     f"column type of {data.dtype} is not supported in groupby built-in function shift.\n{dt_err}"
                 )
+        # Column output depends on the operation in transform.
+        if name_operation == "transform":
+            out_dtype, err_msg = get_groupby_output_dtype(
+                data, get_literal_value(transform_func), grp.df_type.index
+            )
+
+            if err_msg == "ok":
+                if out_dtype != ArrayItemArrayType(string_array_type):
+                    data = dtype_to_array_type(out_dtype)
+                else:
+                    data = out_dtype
+            else:
+                raise BodoError(
+                    f"column type of {data.dtype} is not supported by {args[0]} yet.\n"
+                )
         out_data.append(data)
     if len(out_data) == 0:
         raise BodoError("No columns in output.")
@@ -867,7 +891,7 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
 def resolve_gb(grp, args, kws, func_name, context, err_msg=""):
     """Given a groupby function returns 2-tuple with output signature
     and dict with mapping of (in_col, func_name) -> out_col"""
-    if func_name in set(list_cumulative) | {"shift"}:
+    if func_name in set(list_cumulative) | {"shift", "transform"}:
         return resolve_transformative(grp, args, kws, err_msg, func_name)
     elif func_name in {"agg", "aggregate"}:
         return resolve_agg(grp, args, kws, context)
@@ -978,6 +1002,13 @@ class DataframeGroupByAttribute(AttributeTemplate):
     @bound_function("groupby.pipe", no_unliteral=True)
     def resolve_pipe(self, grp, args, kws):
         return resolve_obj_pipe(self, grp, args, kws, "GroupBy")
+
+    @bound_function("groupby.transform", no_unliteral=True)
+    def resolve_transform(self, grp, args, kws):
+        msg = (
+            "Groupby.transform() only supports sum, count, min, max, or mean operations"
+        )
+        return resolve_gb(grp, args, kws, "transform", self.context, err_msg=msg)[0]
 
     @bound_function("groupby.apply", no_unliteral=True)
     def resolve_apply(self, grp, args, kws):
@@ -1526,7 +1557,6 @@ groupby_unsupported = {
     "sample",
     "sem",
     "tail",
-    "transform",
     "tshift",
 }
 

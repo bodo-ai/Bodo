@@ -1893,3 +1893,58 @@ def test_agg_unsupported_types(test_cumulatives_df, memory_leak_check):
 
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl1)(test_cumulatives_df)
+
+
+# ------------------------------ df.groupby().transform()------------------------------ #
+# TODO: @pytest.mark.slow
+def test_transform_args(memory_leak_check):
+    """ Test Groupby.transform with unsupported arguments """
+
+    # unsupported function
+    def impl_func(df):
+        A = df.groupby("A").transform("var")
+        return A
+
+    # keyword engine
+    def impl_engine(df):
+        A = df.groupby("A").transform("sum", engine="cython")
+        return A
+
+    # keyword engine_kwargs
+    def impl_engine_kwargs(df):
+        A = df.groupby("A").transform("sum", engine_kwargs={"nopython": False})
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [1.1, 2.2, 1.1, 3.3, 4.4, 3.2, 45.6, 10.0],
+        }
+    )
+
+    with pytest.raises(BodoError, match="unsupported transform function"):
+        bodo.jit(impl_func)(df)
+
+    err_msg = "parameter only supports default value"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_engine)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl_engine_kwargs)(df)
+
+
+# TODO: @pytest.mark.slow
+def test_transform_unsupported_type(memory_leak_check):
+    """ Test Groupby.transform('sum') with unsupported column type"""
+
+    def impl(df):
+        A = df.groupby("A").transform("sum")
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [True, False] * 4,
+        }
+    )
+    with pytest.raises(BodoError, match="column type of bool is not supported by"):
+        bodo.jit(impl)(df)
