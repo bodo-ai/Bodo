@@ -24,6 +24,7 @@ and parallelize.
       * :func:`numpy.true_divide`
       * :func:`numpy.floor_divide`
       * :func:`numpy.negative`
+      * :func:`numpy.positive`
       * :func:`numpy.power`
       * :func:`numpy.remainder`
       * :func:`numpy.mod`
@@ -44,7 +45,10 @@ and parallelize.
       * :func:`numpy.sqrt`
       * :func:`numpy.square`
       * :func:`numpy.reciprocal`
+      * :func:`numpy.gcd`
+      * :func:`numpy.lcm`
       * :func:`numpy.conjugate`
+      
 
     * Trigonometric functions: 
     
@@ -77,6 +81,25 @@ and parallelize.
       * :func:`numpy.left_shift`
       * :func:`numpy.right_shift`
 
+    * Comparison functions:
+
+      * :func:`numpy.logical_and`
+      * :func:`numpy.logical_or`
+      * :func:`numpy.logical_xor`
+      * :func:`numpy.logical_not`
+
+    * Floating functions:
+
+      * :func:`numpy.isfinite`
+      * :func:`numpy.isinf`
+      * :func:`numpy.signbit`
+      * :func:`numpy.ldexp`
+      * :func:`numpy.floor`
+      * :func:`numpy.ceil`
+      * :func:`numpy.trunc`
+
+
+
 #. Numpy reduction functions:
 
       * :func:`numpy.sum`
@@ -91,22 +114,28 @@ and parallelize.
 #. Numpy array creation functions:
 
     * :func:`numpy.empty`
+    * :func:`numpy.identity`
     * :func:`numpy.zeros`
     * :func:`numpy.ones`
     * :func:`numpy.empty_like`
     * :func:`numpy.zeros_like`
     * :func:`numpy.ones_like`
     * :func:`numpy.full_like`
+    * :func:`numpy.array`
+    * :func:`numpy.asarray`
     * :func:`numpy.copy`
     * :func:`numpy.arange`
     * :func:`numpy.linspace`
     * :func:`numpy.repeat` (only scalar `num_repeats`)
 
-#. :func:`numpy.reshape` (shape values cannot be -1).
 
 #. Numpy array manipulation functions:
 
+    * :func:`numpy.shape`
+    * :func:`numpy.reshape` (shape values cannot be -1).
     * :func:`numpy.sort`
+    * :func:`numpy.concatenate`
+    * :func:`numpy.append`
     * :func:`numpy.unique` the output is assumed to be "small" relative to input and is replicated.
     Use Series.drop_duplicates() if the output should remain distributed.
     * :func:`numpy.where` (1 and 3 arguments)
@@ -114,6 +143,17 @@ and parallelize.
     * :func:`numpy.intersect1d` (no distributed support yet)
     * :func:`numpy.setdiff1d` (no distributed support yet)
     * :func:`numpy.hstack` (concatenates elements on each rank without maintaining order) 
+
+
+#. Numpy mathematical and statistics functions:
+
+      * :func:`numpy.cumsum`
+      * :func:`numpy.diff`
+      * :func:`numpy.percentile`
+      * :func:`numpy.quantile`
+      * :func:`numpy.median`
+      * :func:`numpy.mean`
+      * :func:`numpy.std`
 
 
 #. Random number generator functions:
