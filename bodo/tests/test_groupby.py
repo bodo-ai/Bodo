@@ -4825,3 +4825,77 @@ def test_agg_supported_types(df, memory_leak_check):
         return A
 
     check_func(impl1, (df,), sort_output=True, check_dtype=False, reset_index=True)
+
+
+# TODO: @pytest.mark.slow
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(
+            {
+                "A": ["foo", "foo", "foo", "bar", "foo", "bar"],
+                "C": [1, 5, 5, 2, 5, 5],
+                "D": [2.0, 5.0, 8.0, 1.0, 2.0, 9.0],
+            }
+        ),
+        # StringIndex
+        pd.DataFrame(
+            {
+                "A": ["foo", "foo", "foo", "bar", "foo", "bar"],
+                "C": [1, 5, 5, 2, 5, 5],
+                "D": [2.0, 5.0, 8.0, 1.0, 2.0, 9.0],
+            },
+            pd.Index(["A", "BB", "ABC", "", "FF", "ABCDF"]),
+        ),
+    ],
+)
+def test_groupby_transform(df, memory_leak_check):
+    """ Test groupby.transform """
+
+    def impl_sum(df):
+        A = df.groupby("A").transform("sum")
+        return A
+
+    def impl_min(df):
+        A = df.groupby("A").transform("min")
+        return A
+
+    def impl_max(df):
+        A = df.groupby("A").transform("max")
+        return A
+
+    def impl_count(df):
+        A = df.groupby("A").transform("count")
+        return A
+
+    def impl_mean(df):
+        A = df.groupby("A").transform("mean")
+        return A
+
+    check_func(impl_sum, (df,))
+    check_func(impl_min, (df,))
+    check_func(impl_max, (df,))
+    check_func(impl_count, (df,))
+    check_func(impl_mean, (df,))
+
+
+# TODO: Test min/max/sum after fixing [BE-933]
+# TODO: @pytest.mark.slow
+def test_groupby_transform_count(memory_leak_check):
+    """ Test groupby().transform('count') with multiple datatypes"""
+
+    def impl_count(df):
+        A = df.groupby("A").transform("count")
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": ["foo", "foo", "foo", "bar", "foo", "bar"],
+            "B": pd.Series(pd.timedelta_range(start="1 day", periods=6)),
+            "C": [True, False, False, False, True, True],
+            "D": ["foo", "foo", "foo", "bar", "foo", "bar"],
+            "E": [-8.3, np.nan, 3.8, 1.3, 5.4, np.nan],
+            "G": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, 20]), dtype="Int8"),
+        }
+    )
+    check_func(impl_count, (df,))

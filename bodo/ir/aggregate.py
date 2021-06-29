@@ -227,6 +227,7 @@ AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype"])
 # Bodo_FTypes::FTypeEnum in _groupby.cpp
 supported_agg_funcs = [
     "no_op",  # needed to ensure that 0 value isn't matched with any function
+    "transform",
     "size",
     "shift",
     "sum",
@@ -249,6 +250,15 @@ supported_agg_funcs = [
     "std",
     "udf",
     "gen_udf",
+]
+# Currently supported operations with transform
+supported_transform_funcs = [
+    "no_op",
+    "sum",
+    "count",
+    "min",
+    "max",
+    "mean",
 ]
 
 
@@ -346,6 +356,21 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
             shift_periods_t = guard(find_const, func_ir, shift_periods_t)
         func.skipdropna = skipdropna
         func.periods = shift_periods_t
+        if func_name == "transform":
+            kws = dict(rhs.kws)
+            func_var = get_call_expr_arg(func_name, rhs.args, kws, 0, "func", "")
+            agg_func_typ = typemap[func_var.name]
+            f_name = None
+            if isinstance(agg_func_typ, str):
+                f_name = agg_func_typ
+            elif is_overload_constant_str(agg_func_typ):
+                f_name = get_overload_const_str(agg_func_typ)
+            if f_name not in bodo.ir.aggregate.supported_transform_funcs[::]:
+                raise BodoError(f"unsupported transform function {f_name}")
+            # TODO: It could be user-defined
+            func.transform_func = supported_agg_funcs.index(f_name)
+        else:
+            func.transform_func = supported_agg_funcs.index("no_op")
         return func
 
     # agg case
@@ -1705,6 +1730,8 @@ def gen_top_level_agg_func(
     skipdropna = False
     shift_periods = 1
     num_cum_funcs = 0
+    transform_func = 0
+
     if not has_pivot_value:
         funcs = [func for _, func in agg_node.gb_info_out.values()]
     else:
@@ -1721,6 +1748,9 @@ def gen_top_level_agg_func(
             skipdropna = func.skipdropna
         if func.ftype == "shift":
             shift_periods = func.periods
+            do_combine = False  # See median/nunique note ^
+        if func.ftype in {"transform"}:
+            transform_func = func.transform_func
             do_combine = False  # See median/nunique note ^
         allfuncs.append(func)
         func_idx_to_in_col.append(f_idx)
@@ -1907,12 +1937,13 @@ def gen_top_level_agg_func(
         func_text += "    delete_info_decref_array(pivot_info)\n"
         func_text += "    delete_info_decref_array(arr_info)\n"
     else:
-        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
+        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
             n_keys,
             agg_node.input_has_index,
             parallel,
             skipdropna,
             shift_periods,
+            transform_func,
             agg_node.return_key,
             agg_node.same_index,
         )

@@ -1756,7 +1756,7 @@ def pivot_groupby_and_aggregate(
     udf_table_dummy_t,
 ):
     """
-    Interface to groupby_and_aggregate function in C++ library for groupby
+    Interface to pivot_groupby_and_aggregate function in C++ library for groupby
     offloading.
     """
     assert table_t == table_type
@@ -1832,6 +1832,7 @@ def groupby_and_aggregate(
     is_parallel,
     skipdropna_t,
     shift_periods_t,
+    transform_func,
     return_keys,
     return_index,
     update_cb,
@@ -1860,6 +1861,7 @@ def groupby_and_aggregate(
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(64),  # shift_periods_t
+                lir.IntType(64),  # transform_func
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(8).as_pointer(),
@@ -1889,6 +1891,7 @@ def groupby_and_aggregate(
             types.boolean,
             types.boolean,
             types.int64,  # shift_periods
+            types.int64,  # transform_func
             types.boolean,
             types.boolean,
             types.voidptr,

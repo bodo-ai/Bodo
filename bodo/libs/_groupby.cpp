@@ -25,6 +25,7 @@ struct Bodo_FTypes {
     enum FTypeEnum {
         no_op = 0,  // To make sure ftypes[0] isn't accidently matched with any
                     // of the supported functions.
+        transform,
         size,
         shift,
         sum,
@@ -4603,6 +4604,158 @@ class ShiftColSet : public BasicColSet<ARRAY> {
     int64_t periods;
 };
 
+/**
+ * @update_col: [out] column that has the final result for all rows
+ * @tmp_col: [in] column that has the result per group
+ * @grouping_info: [in] structures used to get rows for each group
+ * Propagate value from the row in the tmp_col to all the rows in the
+ * group update_col.
+ *
+ * */
+template <typename ARRAY, typename T>
+void copy_values(ARRAY* update_col, ARRAY* tmp_col,
+                 const grouping_info& grp_info) {
+    size_t num_groups = grp_info.num_groups;
+    // Loop over tmp_col rows and copy result to corressponding group rows in
+    // update_col.
+    for (size_t igrp = 0; igrp < num_groups; igrp++) {
+        int64_t i = grp_info.group_to_first_row[igrp];
+        T& val = getv<ARRAY, T>(tmp_col, igrp);
+        while (true) {
+            if (i == -1) break;
+            T& val2 = getv<ARRAY, T>(update_col, i);
+            val2 = val;
+            i = grp_info.next_row_in_group[i];
+        }
+    }
+}
+// Add function declaration before usage in TransformColSet
+/**
+ * Construct and return a column set based on the ftype.
+ * @param groupby input column associated with this column set.
+ * @param ftype function type associated with this column set.
+ * @param do_combine whether GroupbyPipeline will perform combine operation
+ *        or not.
+ * @param skipna option used for nunique, cumsum, cumprod, cummin, cummax
+ * @param periods option used for shift
+ * @param transform_func option used for identifying transform function
+ *        (currently groupby operation that are already supported)
+ */
+template <typename ARRAY>
+BasicColSet<ARRAY>* makeColSet(
+    array_info* in_col, array_info* index_col, int ftype, bool do_combine,
+    bool skipna, int64_t periods, int64_t transform_func, int n_udf,
+    int* udf_n_redvars = nullptr, table_info* udf_table = nullptr,
+    int udf_table_idx = 0, table_info* nunique_table = nullptr,
+    bool nunique_shuffle_after_update = false, bool nunique_only = false);
+template <typename ARRAY>
+class TransformColSet : public BasicColSet<ARRAY> {
+   public:
+    TransformColSet(array_info* in_col, int ftype, int _func_num,
+                    bool do_combine)
+        : BasicColSet<ARRAY>(in_col, ftype, false), transform_func(_func_num) {
+        transform_op_col =
+            makeColSet<ARRAY>(in_col, nullptr, transform_func, do_combine,
+                              false, 0, transform_func, 0);
+    }
+    virtual ~TransformColSet() {
+        if (transform_op_col != nullptr) delete transform_op_col;
+    }
+
+    virtual void alloc_update_columns(size_t num_groups, size_t n_pivot,
+                                      bool is_crosstab,
+                                      std::vector<ARRAY*>& out_cols) {
+        // Allocate child column that does the actual computation
+        std::vector<ARRAY*> list_arr;
+        transform_op_col->alloc_update_columns(num_groups, n_pivot, is_crosstab,
+                                               list_arr);
+
+        // Get output column type based on transform_func and its in_col
+        // datatype
+        auto arr_type = this->in_col->arr_type;
+        auto dtype = this->in_col->dtype;
+        int64_t num_categories = this->in_col->num_categories;
+        bool is_combine = false;
+        get_groupby_output_dtype<ARRAY>(transform_func, arr_type, dtype, false,
+                                        is_combine, is_crosstab);
+        // NOTE: output size of transform is the same as input size
+        //       (NOT the number of groups)
+        out_cols.push_back(alloc_array_groupby<ARRAY>(this->in_col->length, 1,
+                                                      1, arr_type, dtype, 0,
+                                                      num_categories, n_pivot));
+        this->update_cols.push_back(out_cols.back());
+    }
+
+    // Call corresponding groupby function operation to compute
+    // transform_op_col column.
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
+        transform_op_col->update(grp_infos);
+        aggfunc_output_initialize(this->update_cols[0], transform_func);
+    }
+    // Fill the output column by copying values from the transform_op_col column
+    virtual void eval(const grouping_info& grp_info) {
+        // Needed to get final result for transform operation on
+        // transform_op_col
+        transform_op_col->eval(grp_info);
+        // copy_values need to know type of the data it'll copy.
+        // Hence we use switch case on the column dtype
+        ARRAY* child_out_col = this->transform_op_col->getOutputColumn();
+        switch (child_out_col->dtype) {
+            case Bodo_CTypes::_BOOL:
+                copy_values<ARRAY, bool>(this->update_cols[0], child_out_col,
+                                         grp_info);
+                break;
+            case Bodo_CTypes::INT8:
+                copy_values<ARRAY, int8_t>(this->update_cols[0], child_out_col,
+                                           grp_info);
+                break;
+            case Bodo_CTypes::UINT8:
+                copy_values<ARRAY, uint8_t>(this->update_cols[0], child_out_col,
+                                            grp_info);
+                break;
+            case Bodo_CTypes::INT16:
+                copy_values<ARRAY, int16_t>(this->update_cols[0], child_out_col,
+                                            grp_info);
+                break;
+            case Bodo_CTypes::UINT16:
+                copy_values<ARRAY, uint16_t>(this->update_cols[0],
+                                             child_out_col, grp_info);
+                break;
+            case Bodo_CTypes::INT32:
+                copy_values<ARRAY, int32_t>(this->update_cols[0], child_out_col,
+                                            grp_info);
+                break;
+            case Bodo_CTypes::UINT32:
+                copy_values<ARRAY, uint32_t>(this->update_cols[0],
+                                             child_out_col, grp_info);
+                break;
+            case Bodo_CTypes::DATE:
+            case Bodo_CTypes::DATETIME:
+            case Bodo_CTypes::TIMEDELTA:
+            case Bodo_CTypes::INT64:
+                copy_values<ARRAY, int64_t>(this->update_cols[0], child_out_col,
+                                            grp_info);
+                break;
+            case Bodo_CTypes::UINT64:
+                copy_values<ARRAY, uint64_t>(this->update_cols[0],
+                                             child_out_col, grp_info);
+                break;
+            case Bodo_CTypes::FLOAT32:
+                copy_values<ARRAY, float>(this->update_cols[0], child_out_col,
+                                          grp_info);
+                break;
+            case Bodo_CTypes::FLOAT64:
+                copy_values<ARRAY, double>(this->update_cols[0], child_out_col,
+                                           grp_info);
+                break;
+        }
+        free_array_groupby(child_out_col);
+    }
+
+   private:
+    int64_t transform_func;
+    BasicColSet<ARRAY>* transform_op_col = nullptr;
+};
 /* When transmitting data with shuffle, we have only functionality for
    array_info.
    For array_info, nothing needs to be done.
@@ -4677,6 +4830,51 @@ output_list_arrays(std::vector<array_info*>& ListArr, ARRAY* arr) {
 }
 
 template <typename ARRAY>
+BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
+                               int ftype, bool do_combine, bool skipna,
+                               int64_t periods, int64_t transform_func,
+                               int n_udf, int* udf_n_redvars,
+                               table_info* udf_table, int udf_table_idx,
+                               table_info* nunique_table,
+                               bool nunique_shuffle_after_update,
+                               bool nunique_only) {
+    switch (ftype) {
+        case Bodo_FTypes::udf:
+            return new UdfColSet<ARRAY>(in_col, do_combine, udf_table,
+                                        udf_table_idx, udf_n_redvars[n_udf]);
+        case Bodo_FTypes::gen_udf:
+            return new GeneralUdfColSet<ARRAY>(in_col, udf_table,
+                                               udf_table_idx);
+        case Bodo_FTypes::median:
+            return new MedianColSet<ARRAY>(in_col, skipna);
+        case Bodo_FTypes::nunique:
+            return new NUniqueColSet<ARRAY>(in_col, skipna, nunique_table,
+                                            nunique_shuffle_after_update,
+                                            nunique_only);
+        case Bodo_FTypes::cumsum:
+        case Bodo_FTypes::cummin:
+        case Bodo_FTypes::cummax:
+        case Bodo_FTypes::cumprod:
+            return new CumOpColSet<ARRAY>(in_col, ftype, skipna);
+        case Bodo_FTypes::mean:
+            return new MeanColSet<ARRAY>(in_col, do_combine);
+        case Bodo_FTypes::var:
+        case Bodo_FTypes::std:
+            return new VarStdColSet<ARRAY>(in_col, ftype, do_combine);
+        case Bodo_FTypes::idxmin:
+        case Bodo_FTypes::idxmax:
+            return new IdxMinMaxColSet<ARRAY>(in_col, index_col, ftype,
+                                              do_combine);
+        case Bodo_FTypes::shift:
+            return new ShiftColSet<ARRAY>(in_col, ftype, periods);
+        case Bodo_FTypes::transform:
+            return new TransformColSet<ARRAY>(in_col, ftype, transform_func,
+                                              do_combine);
+        default:
+            return new BasicColSet<ARRAY>(in_col, ftype, do_combine);
+    }
+}
+template <typename ARRAY>
 class GroupbyPipeline {
    public:
     /*
@@ -4704,7 +4902,8 @@ class GroupbyPipeline {
                     table_info* _udf_table, udf_table_op_fn update_cb,
                     udf_table_op_fn combine_cb, udf_eval_fn eval_cb,
                     udf_general_fn general_udfs_cb, bool skipna,
-                    int64_t periods, bool _return_key, bool _return_index)
+                    int64_t periods, int64_t transform_func, bool _return_key,
+                    bool _return_index)
         : in_table(_in_table),
           num_keys(_num_keys),
           dispatch_table(_dispatch_table),
@@ -4721,7 +4920,8 @@ class GroupbyPipeline {
             n_pivot = dispatch_table->nrows();
         udf_info = {udf_table, update_cb, combine_cb, eval_cb, general_udfs_cb};
         // if true, the last column is the index on input and output.
-        // this is relevant only to cumulative operation like cumsum.
+        // this is relevant only to cumulative operation like cumsum
+        // and transform.
         int index_i = int(input_has_index);
         // NOTE cumulative operations (cumsum, cumprod, etc.) cannot be mixed
         // with non cumulative ops. This is checked at compile time in
@@ -4745,7 +4945,8 @@ class GroupbyPipeline {
                        ftype == Bodo_FTypes::cumprod ||
                        ftype == Bodo_FTypes::cummin ||
                        ftype == Bodo_FTypes::cummax ||
-                       ftype == Bodo_FTypes::shift) {
+                       ftype == Bodo_FTypes::shift ||
+                       ftype == Bodo_FTypes::transform) {
                 // these operations first require shuffling the data to
                 // gather all rows with the same key in the same process
                 if (is_parallel) shuffle_before_update = true;
@@ -4758,6 +4959,7 @@ class GroupbyPipeline {
                     ftype == Bodo_FTypes::cummax)
                     cumulative_op = true;
                 if (ftype == Bodo_FTypes::shift) shift_op = true;
+                if (ftype == Bodo_FTypes::transform) transform_op = true;
                 break;
             } else
                 ftypes_count++;
@@ -4798,7 +5000,7 @@ class GroupbyPipeline {
                     for (auto a : in_table->columns) incref_array(a);
                     in_table =
                         shuffle_table_kernel(in_table, hashes, *comm_info_ptr);
-                    if (!(cumulative_op || shift_op)) {
+                    if (!(cumulative_op || shift_op || transform_op)) {
                         delete hashes;
                         delete comm_info_ptr;
                     }
@@ -4880,14 +5082,16 @@ class GroupbyPipeline {
                     (nunique_grp_shuffle_after || nunique_only)) {
                     array_info* nunique_col =
                         nunique_tables[i]->columns[num_keys];
-                    col_sets.push_back(makeColSet(
+                    col_sets.push_back(makeColSet<ARRAY>(
                         nunique_col, index_col, ftypes[j], do_combine, skipna,
-                        periods, n_udf, nunique_tables[i],
+                        periods, transform_func, n_udf, udf_n_redvars,
+                        udf_table, udf_table_idx, nunique_tables[i],
                         nunique_grp_shuffle_after, nunique_only));
                 } else {
-                    col_sets.push_back(makeColSet(col, index_col, ftypes[j],
-                                                  do_combine, skipna, periods,
-                                                  n_udf));
+                    col_sets.push_back(makeColSet<ARRAY>(
+                        col, index_col, ftypes[j], do_combine, skipna, periods,
+                        transform_func, n_udf, udf_n_redvars, udf_table,
+                        udf_table_idx));
                 }
                 if (ftypes[j] == Bodo_FTypes::udf ||
                     ftypes[j] == Bodo_FTypes::gen_udf) {
@@ -4904,9 +5108,10 @@ class GroupbyPipeline {
         // This is needed if aggregation was just size operation, it will skip
         // loop (ncols = num_keys + index_i)
         if (col_sets.size() == 0 && ftypes[0] == Bodo_FTypes::size) {
-            col_sets.push_back(makeColSet(in_table->columns[0], index_col,
-                                          ftypes[0], do_combine, skipna,
-                                          periods, n_udf));
+            col_sets.push_back(makeColSet<ARRAY>(
+                in_table->columns[0], index_col, ftypes[0], do_combine, skipna,
+                periods, transform_func, n_udf, udf_n_redvars, udf_table,
+                udf_table_idx));
         }
 
         in_table->id = 0;
@@ -4936,56 +5141,6 @@ class GroupbyPipeline {
 
    private:
     /**
-     * Construct and return a column set based on the ftype.
-     * @param groupby input column associated with this column set.
-     * @param ftype function type associated with this column set.
-     * @param do_combine whether GroupbyPipeline will perform combine operation
-     *        or not.
-     * @param skipna option used for nunique, cumsum, cumprod, cummin, cummax
-     * @param periods option used for shift
-     */
-    BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
-                                   int ftype, bool do_combine, bool skipna,
-                                   int64_t periods, int n_udf,
-                                   table_info* nunique_table = nullptr,
-                                   bool nunique_shuffle_after_update = false,
-                                   bool nunique_only = false) {
-        switch (ftype) {
-            case Bodo_FTypes::udf:
-                return new UdfColSet<ARRAY>(in_col, do_combine, udf_table,
-                                            udf_table_idx,
-                                            udf_n_redvars[n_udf]);
-            case Bodo_FTypes::gen_udf:
-                return new GeneralUdfColSet<ARRAY>(in_col, udf_table,
-                                                   udf_table_idx);
-            case Bodo_FTypes::median:
-                return new MedianColSet<ARRAY>(in_col, skipna);
-            case Bodo_FTypes::nunique:
-                return new NUniqueColSet<ARRAY>(in_col, skipna, nunique_table,
-                                                nunique_shuffle_after_update,
-                                                nunique_only);
-            case Bodo_FTypes::cumsum:
-            case Bodo_FTypes::cummin:
-            case Bodo_FTypes::cummax:
-            case Bodo_FTypes::cumprod:
-                return new CumOpColSet<ARRAY>(in_col, ftype, skipna);
-            case Bodo_FTypes::mean:
-                return new MeanColSet<ARRAY>(in_col, do_combine);
-            case Bodo_FTypes::var:
-            case Bodo_FTypes::std:
-                return new VarStdColSet<ARRAY>(in_col, ftype, do_combine);
-            case Bodo_FTypes::idxmin:
-            case Bodo_FTypes::idxmax:
-                return new IdxMinMaxColSet<ARRAY>(in_col, index_col, ftype,
-                                                  do_combine);
-            case Bodo_FTypes::shift:
-                return new ShiftColSet<ARRAY>(in_col, ftype, periods);
-            default:
-                return new BasicColSet<ARRAY>(in_col, ftype, do_combine);
-        }
-    }
-
-    /**
      * The update step groups rows in the input table based on keys, and
      * aggregates them based on the function to be applied to the columns.
      * More specifically, it will invoke the update method of each column set.
@@ -5001,7 +5156,7 @@ class GroupbyPipeline {
             tables.push_back(it->second);
 
         if (req_extended_group_info) {
-            bool consider_missing = cumulative_op || shift_op;
+            bool consider_missing = cumulative_op || shift_op || transform_op;
             get_group_info_iterate(tables, grp_infos, consider_missing);
         } else
             get_group_info(tables, grp_infos, true);
@@ -5013,7 +5168,7 @@ class GroupbyPipeline {
         grp_info.n_pivot = n_pivot;
 
         update_table = cur_table = new table_info();
-        if (cumulative_op || shift_op)
+        if (cumulative_op || shift_op || transform_op)
             num_keys = 0;  // there are no key columns in output of cumulative
                            // operations
         else
@@ -5062,7 +5217,7 @@ class GroupbyPipeline {
         DEBUG_PrintSetOfColumn(std::cout, shuf_table->columns);
         DEBUG_PrintRefct(std::cout, shuf_table->columns);
 #endif
-        if (!(cumulative_op || shift_op)) {
+        if (!(cumulative_op || shift_op || transform_op)) {
             delete hashes;
             delete comm_info_ptr;
         }
@@ -5134,7 +5289,7 @@ class GroupbyPipeline {
             output_list_arrays(out_table->columns, col_set->getOutputColumn());
         if (return_index)
             out_table->columns.push_back(cur_table->columns.back());
-        if ((cumulative_op || shift_op) && is_parallel) {
+        if ((cumulative_op || shift_op || transform_op) && is_parallel) {
             table_info* revshuf_table =
                 reverse_shuffle_table_kernel(out_table, hashes, *comm_info_ptr);
             delete hashes;
@@ -5307,10 +5462,11 @@ class GroupbyPipeline {
     int n_pivot;
     // shuffling before update requires more communication and is needed
     // when one of the groupby functions is
-    // median/nunique/cumsum/cumprod/cummin/cummax/shift
+    // median/nunique/cumsum/cumprod/cummin/cummax/shift/transform
     bool shuffle_before_update = false;
     bool cumulative_op = false;
     bool shift_op = false;
+    bool transform_op = false;
     bool req_extended_group_info = false;
     bool do_combine;
 
@@ -5927,8 +6083,9 @@ table_info* pivot_groupby_and_aggregate(
             udf_dummy_table, (udf_table_op_fn)update_cb,
             // TODO: general UDFs
             (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, 0, skipdropna, 0,
-            return_key,
-            return_index);  // periods=0. Not used in pivot operation.
+            0, return_key,
+            return_index);  // transform_func = periods=0. Not used in pivot
+                            // operation.
 
         table_info* ret_table = groupby.run();
         return ret_table;
@@ -5941,8 +6098,8 @@ table_info* pivot_groupby_and_aggregate(
 table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
-    int64_t periods, bool return_key, bool return_index, void* update_cb,
-    void* combine_cb, void* eval_cb, void* general_udfs_cb,
+    int64_t periods, int64_t transform_func, bool return_key, bool return_index,
+    void* update_cb, void* combine_cb, void* eval_cb, void* general_udfs_cb,
     table_info* udf_dummy_table) {
     try {
         int strategy =
@@ -5958,7 +6115,7 @@ table_info* groupby_and_aggregate(
                 udf_nredvars, udf_dummy_table, (udf_table_op_fn)update_cb,
                 (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
                 (udf_general_fn)general_udfs_cb, skipdropna, periods,
-                return_key, return_index);
+                transform_func, return_key, return_index);
 
             table_info* ret_table = groupby.run();
 
