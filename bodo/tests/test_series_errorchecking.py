@@ -214,7 +214,7 @@ def test_series_groupby_args(memory_leak_check):
         return S.groupby(group_keys=False).mean()
 
     def test_observed(S):
-        return S.groupby(observed=True).mean()
+        return S.groupby(observed=False).mean()
 
     def test_dropna(S):
         return S.groupby(dropna=False).mean()

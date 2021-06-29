@@ -360,7 +360,8 @@ Function application, GroupBy & Window:
 
 * :meth:`pandas.Series.apply` (`convert_dtype` not supported yet)
 * :meth:`pandas.Series.map` (only the `arg` argument, which should be a function or dictionary)
-* :meth:`pandas.Series.groupby` (pass array to `by` argument, or level=0 with regular Index)
+* :meth:`pandas.Series.groupby` (pass array to `by` argument, or level=0 with regular Index,
+  `sort=False` and `observed=True` are set by default)
 * :meth:`pandas.Series.rolling` (`window`, `min_periods` and `center` arguments supported)
 
 
@@ -589,7 +590,7 @@ Function application, GroupBy & Window:
   extra compilation time. Bodo uses heuristics to make a decision automatically if `_bodo_inline` is not provided.
 * :meth:`pandas.DataFrame.groupby` `by` should be a constant column label
   or column labels.
-  `sort=False` is set by default. `as_index` argument is supported.
+  `sort=False` and `observed=True` are set by default. `as_index` argument is supported.
 * :meth:`pandas.DataFrame.rolling` `window` argument should be integer or a time
   offset (as a constant string, pd.Timedelta, or datetime.timedelta).
   `min_periods`, `center` and `on` arguments are also supported.
