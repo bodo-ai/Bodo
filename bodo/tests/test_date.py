@@ -1274,12 +1274,26 @@ def test_datetime_datetime_now(memory_leak_check):
     def test_now():
         return datetime.datetime.now()
 
-    dt = datetime.datetime(2020, 1, 8, 11, 1, 30, 40)
     # cannot test whether two results are exactly same because they are different in
     # microseconds due to the run time.
     b = bodo.jit(test_now)()
     p = test_now()
     assert (p - b) < datetime.timedelta(seconds=5)
+
+
+def test_timestamp_now(memory_leak_check):
+    """
+    Test pd.Timestamp classmethod 'now'
+    """
+
+    def test_now():
+        return pd.Timestamp.now()
+
+    # cannot test whether two results are exactly same because they are different in
+    # microseconds due to the run time.
+    b = bodo.jit(test_now)()
+    p = test_now()
+    assert (p - b) < pd.Timedelta(seconds=5)
 
 
 def test_datetime_datetime_strptime(memory_leak_check):
