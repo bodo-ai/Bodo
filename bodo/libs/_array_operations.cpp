@@ -172,16 +172,48 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
 #endif
     std::vector<int64_t> ListIdx(n_rows);
     for (size_t i = 0; i < n_rows; i++) ListIdx[i] = i;
-    std::function<bool(size_t, size_t)> f = [&](size_t const& iRow1,
-                                                size_t const& iRow2) -> bool {
-        size_t shift_key1 = 0, shift_key2 = 0;
-        bool test = KeyComparisonAsPython(
-            n_key, vect_ascending, in_table->columns, shift_key1, iRow1,
-            in_table->columns, shift_key2, iRow2, na_position);
-        return test;
-    };
-    gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
-    //
+
+    // The comparison operator gets called many times by timsort so any overhead
+    // can influence the sort time significantly
+    if (n_key == 1) {
+        // comparison operator with less overhead than the general n_key > 1
+        // case. We call KeyComparisonAsPython_Column directly without looping
+        // through the keys, assume fixed values for some parameters and pass
+        // less parameters around
+        array_info* key_col = in_table->columns[0];
+        bool ascending = vect_ascending[0];
+        if (ascending) {
+            const bool na_position_bis = (!na_position) ^ ascending;
+            std::function<bool(size_t, size_t)> f =
+                [&](size_t const& iRow1, size_t const& iRow2) -> bool {
+                int test = KeyComparisonAsPython_Column(
+                    na_position_bis, key_col, iRow1, key_col, iRow2);
+                if (test) return test > 0;
+                return false;
+            };
+            gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
+        } else {
+            const bool na_position_bis = (!na_position) ^ ascending;
+            std::function<bool(size_t, size_t)> f =
+                [&](size_t const& iRow1, size_t const& iRow2) -> bool {
+                int test = KeyComparisonAsPython_Column(
+                    na_position_bis, key_col, iRow1, key_col, iRow2);
+                if (test) return test < 0;
+                return false;
+            };
+            gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
+        }
+    } else {
+        std::function<bool(size_t, size_t)> f =
+            [&](size_t const& iRow1, size_t const& iRow2) -> bool {
+            size_t shift_key1 = 0, shift_key2 = 0;
+            bool test = KeyComparisonAsPython(
+                n_key, vect_ascending, in_table->columns, shift_key1, iRow1,
+                in_table->columns, shift_key2, iRow2, na_position);
+            return test;
+        };
+        gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
+    }
     table_info* ret_table = RetrieveTable(in_table, ListIdx, -1);
 #ifdef DEBUG_SORT_LOCAL_SYMBOL
     std::cout << "OUTPUT (sort_values_table_local) in_table:\n";
@@ -199,23 +231,9 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, bool na_position,
                               bool parallel) {
     try {
-#ifdef DEBUG_SORT_SYMBOL
-        std::cout << "parallel=" << parallel << " na_position=" << na_position
-                  << "\n";
-        std::cout << "sort_values_table : in_table:\n";
-        DEBUG_PrintRefct(std::cout, in_table->columns);
-#ifdef DEBUG_SORT_FULL
-        DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-#endif
-#endif
         int64_t n_local = in_table->nrows();
         table_info* local_sort = sort_values_table_local(
             in_table, n_key_t, vect_ascending, na_position);
-#ifdef DEBUG_SORT_SYMBOL_SYMBOL
-        std::cout << "sort_values_table : local_sort:\n";
-        DEBUG_PrintRefct(std::cout, local_sort->columns);
-        DEBUG_PrintSetOfColumn(std::cout, local_sort->columns);
-#endif
         if (!parallel) return local_sort;
         // preliminary definitions.
         int n_pes, myrank;
@@ -225,26 +243,38 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         int64_t n_total;
         MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
                       MPI_COMM_WORLD);
-        int MIN_SAMPLES = 1000000;
-        int samplePointsPerPartitionHint = 20;
-        int sampleSize =
-            std::min(samplePointsPerPartitionHint * n_pes, MIN_SAMPLES);
-        double fraction =
-            std::min(double(sampleSize) / double(std::max(n_total, int64_t(1))),
-                     double(1));
-        int64_t n_loc_sample =
-            std::min(n_local, int64_t(ceil(fraction * n_local)));
-        //
-        // building the samples.
-        // We use here deterministic random sampling. This is better for
-        // debugging and makes life easier. This is ok because our work does not
-        // have to be cryptographically solid. If not replace std::mt19937
-        // gen(1234567890); by std::random_device rd; std::mt19937 gen(rd());
+        if (n_total == 0) return local_sort;
+
+        // Sample sort with random sampling (we use a fixed seed for the random
+        // generator for deterministic results across runs).
+        // With random sampling as described by Blelloch et al. [1], each
+        // processor divides its local sorted input into s blocks of size (N/ps)
+        // (where N is the global number of rows, p the number of processors,
+        // s is the oversampling ratio) and samples a random key in each block.
+        // The samples are gathered on rank 0 and rank 0 chooses the splitters
+        // by picking evenly spaced keys from the overall sample of size ps.
+        // We choose the global of number of samples according to this theorem:
+        // "With O(p log N / epsilon^2) samples overall, sample sort with
+        // random sampling achieves (1 + epsilon) load balance with high probability."
+        // [1] Guy E. Blelloch, Charles E. Leiserson, Bruce M Maggs, C Greg Plaxton, Stephen J
+        //     Smith, and Marco Zagha. 1998. An experimental analysis of parallel sorting
+        //     algorithms. Theory of Computing Systems 31, 2 (1998), 135-167.
         std::mt19937 gen(1234567890);
+        double epsilon = 0.1;
+        char* bodo_sort_epsilon = std::getenv("BODO_SORT_EPSILON");
+        if (bodo_sort_epsilon) {
+            epsilon = std::stod(bodo_sort_epsilon);
+        }
+        if (epsilon < 0) throw std::runtime_error("sort_values: epsilon < 0");
+        double n_global_sample = n_pes * log(n_total) / pow(epsilon, 2.0);
+        n_global_sample = std::min(std::max(n_global_sample, double(n_pes)), double(n_total));
+        int64_t n_loc_sample = std::min(n_global_sample / n_pes, double(n_local));
+        int64_t block_size = ceil(double(n_local) / n_loc_sample);
         std::vector<int64_t> ListIdx(n_loc_sample);
         for (int64_t i = 0; i < n_loc_sample; i++) {
-            size_t pos = std::uniform_int_distribution<>(0, n_local - 1)(gen);
-            ListIdx[i] = pos;
+            int64_t lo = std::min(i * block_size, n_local - 1);
+            int64_t hi = std::min((i + 1) * block_size - 1, n_local - 1);
+            ListIdx[i] = std::uniform_int_distribution<int64_t>(lo, hi)(gen);
         }
         for (int64_t i_key = 0; i_key < n_key_t; i_key++)
             incref_array(local_sort->columns[i_key]);
@@ -255,7 +285,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         table_info* all_samples = gather_table(samples, n_key_t, all_gather);
         delete_table(samples);
 
-        // Computing the bounds
+        // Computing the bounds (splitters) on root
         table_info* pre_bounds = nullptr;
         if (myrank == mpi_root) {
             table_info* all_samples_sort = sort_values_table_local(
@@ -271,6 +301,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             delete_table(all_samples_sort);
         }
         delete_table(all_samples);
+
         // broadcasting the bounds
         // The local_sort is used as reference for the data type of the array.
         // This is because pre_bounds is NULL for ranks != 0
@@ -293,30 +324,19 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             hashes_v[i] = node_id;
         }
         delete_table_decref_arrays(bounds);
-        // Now shuffling all the data
+
+        // Now shuffle all the data
         mpi_comm_info comm_info(local_sort->columns);
         comm_info.set_counts(hashes_v.data());
         table_info* collected_table =
             shuffle_table_kernel(local_sort, hashes_v.data(), comm_info);
         // NOTE: shuffle_table_kernel decrefs input arrays
         delete_table(local_sort);
-        // Now final local sorting from all the stuff we collected.
+
+        // Final local sorting
         table_info* ret_table = sort_values_table_local(
             collected_table, n_key_t, vect_ascending, na_position);
         delete_table(collected_table);
-        // If the maximum number of rows divided by its average is higher
-        // than 2.0 then we trigger reshuffling. If not, we do not do anything.
-        // This value may be adjusted in the future as it is an heuristic
-        // constant.
-        // TODO(ehsan) [BE-949]: support automatic rebalacing after sort
-        // based on compiler heuristics
-        // const double crit_fraction = 2.0;
-        // if (need_reshuffling(ret_table, crit_fraction)) {
-        //     table_info* table_shuffle_renorm =
-        //         shuffle_renormalization(ret_table, 0, -1, parallel);
-        //     delete_table(ret_table);
-        //     return table_shuffle_renorm;
-        // }
         return ret_table;
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
