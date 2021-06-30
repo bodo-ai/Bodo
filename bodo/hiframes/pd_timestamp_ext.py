@@ -1975,6 +1975,17 @@ def strftime(ts, format_str):
     return impl
 
 
+@register_jitable
+def now_impl():  # pragma: no cover
+    """Internal call to support pd.Timestamp.now().
+    Untyped pass replaces pd.Timestamp.now() with this call since class methods are
+    not supported in Numba's typing
+    """
+    with numba.objmode(d="pd_timestamp_type"):
+        d = pd.Timestamp.now()
+    return d
+
+
 # -- builtin operators for dt64 ----------------------------------------------
 # TODO: move to Numba
 
