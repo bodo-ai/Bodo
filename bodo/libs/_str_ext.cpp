@@ -21,10 +21,8 @@ static constexpr uint8_t kFlippedBitmask[] = {254, 253, 251, 247,
                                               239, 223, 191, 127};
 
 // Map of integers to hex values. Note we use an array because the keys are 0-15
-static constexpr char hex_values[] = {
-        '0', '1', '2', '3', '4', '5', '6','7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
-    };
-
+static constexpr char hex_values[] = {'0', '1', '2', '3', '4', '5', '6', '7',
+                                      '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
 static inline void ClearBit(uint8_t* bits, int64_t i) {
     bits[i / 8] &= kFlippedBitmask[i % 8];
@@ -52,8 +50,7 @@ int64_t get_str_len(std::string* str);
 
 void* np_array_from_string_array(int64_t no_strings,
                                  const offset_t* offset_table,
-                                 const char* buffer,
-                                 const uint8_t* null_bitmap,
+                                 const char* buffer, const uint8_t* null_bitmap,
                                  const int is_bytes);
 void* pd_array_from_string_array(int64_t no_strings,
                                  const offset_t* offset_table,
@@ -70,7 +67,8 @@ void set_string_array_range(offset_t* out_offsets, char* out_data,
                             int64_t start_str_ind, int64_t start_chars_ind,
                             int64_t num_strs, int64_t num_chars);
 void convert_len_arr_to_offset32(uint32_t* offsets, int64_t num_strs);
-void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets, int64_t num_strs);
+void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets,
+                               int64_t num_strs);
 
 int str_arr_to_int64(int64_t* out, offset_t* offsets, char* data,
                      int64_t index);
@@ -96,7 +94,7 @@ void print_list_str_arr(uint64_t n, const char* data,
                         const offset_t* data_offsets,
                         const offset_t* index_offsets,
                         const uint8_t* null_bitmap);
-void bytes_to_hex(char *output, char *data, int64_t data_len);
+void bytes_to_hex(char* output, char* data, int64_t data_len);
 void int_to_hex(char* output, int64_t output_len, uint64_t int_val);
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
@@ -113,9 +111,9 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     bodo_common_init();
 
     // All C functions, so they don't throw exceptions.
-    // In some cases, there are error conditions that we might want to handle using
-    // exceptions, but most of those occur in box/unbox which we don't know
-    // how to handle on the python side yet.
+    // In some cases, there are error conditions that we might want to handle
+    // using exceptions, but most of those occur in box/unbox which we don't
+    // know how to handle on the python side yet.
 
     PyObject_SetAttrString(m, "init_string_const",
                            PyLong_FromVoidPtr((void*)(&init_string_const)));
@@ -191,8 +189,10 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(m, "unbox_bool_array_obj",
                            PyLong_FromVoidPtr((void*)(&unbox_bool_array_obj)));
     PyObject_SetAttrString(m, "memcmp", PyLong_FromVoidPtr((void*)(&memcmp)));
-    PyObject_SetAttrString(m, "bytes_to_hex", PyLong_FromVoidPtr((void*)(&bytes_to_hex)));
-    PyObject_SetAttrString(m, "int_to_hex", PyLong_FromVoidPtr((void*)(&int_to_hex)));
+    PyObject_SetAttrString(m, "bytes_to_hex",
+                           PyLong_FromVoidPtr((void*)(&bytes_to_hex)));
+    PyObject_SetAttrString(m, "int_to_hex",
+                           PyLong_FromVoidPtr((void*)(&int_to_hex)));
     return m;
 }
 
@@ -205,7 +205,6 @@ void del_str(std::string* in_str) {
     delete in_str;
     return;
 }
-
 
 void dtor_str_arr_split_view(str_arr_split_view_payload* in_str_arr,
                              int64_t size, void* in) {
@@ -293,7 +292,6 @@ double str_to_float64(std::string* str) { return std::stod(*str); }
 
 float str_to_float32(std::string* str) { return std::stof(*str); }
 
-
 int64_t get_str_len(std::string* str) {
     // std::cout << "str len called: " << *str << " " <<
     // str->length()<<std::endl;
@@ -363,7 +361,8 @@ void convert_len_arr_to_offset32(uint32_t* offsets, int64_t num_strs) {
     offsets[num_strs] = curr_offset;
 }
 
-void convert_len_arr_to_offset(uint32_t* lens, uint64_t* offsets, int64_t num_strs) {
+void convert_len_arr_to_offset(uint32_t* lens, uint64_t* offsets,
+                               int64_t num_strs) {
     uint64_t curr_offset = 0;
     for (int64_t i = 0; i < num_strs; i++) {
         uint32_t length = lens[i];
@@ -372,7 +371,6 @@ void convert_len_arr_to_offset(uint32_t* lens, uint64_t* offsets, int64_t num_st
     }
     offsets[num_strs] = curr_offset;
 }
-
 
 int str_arr_to_int64(int64_t* out, offset_t* offsets, char* data,
                      int64_t index) {
@@ -418,12 +416,13 @@ int64_t str_to_int64_base(char* data, int64_t length, int64_t base) {
        Base is at most 36 per strtlon requirements.
        Called with base=10 by default if no base was provided by a user.
     */
-    char *end;
+    char* end;
     int64_t l;
     errno = 0;
-    char* buffer = (char *) malloc(length + 1);
+    char* buffer = (char*)malloc(length + 1);
     if (!buffer) {
-        std::cerr << "Failed to allocate space for string to int conversion" << std::endl;
+        std::cerr << "Failed to allocate space for string to int conversion"
+                  << std::endl;
         return -1;
     }
     buffer[length] = '\0';
@@ -439,14 +438,9 @@ int64_t str_to_int64_base(char* data, int64_t length, int64_t base) {
     return l;
 }
 
-void str_from_float32(char* s, float in) {
-    sprintf(s, "%f", in);
-}
+void str_from_float32(char* s, float in) { sprintf(s, "%f", in); }
 
-
-void str_from_float64(char* s, double in) {
-    sprintf(s, "%f", in);
-}
+void str_from_float64(char* s, double in) { sprintf(s, "%f", in); }
 
 /**
  * @brief convert int64 value to string and write to string pointer
@@ -479,8 +473,7 @@ void inplace_int64_to_str(char* str, int64_t l, int64_t value) {
 /// @param[in] buffer with concatenated strings (from StringArray)
 void* np_array_from_string_array(int64_t no_strings,
                                  const offset_t* offset_table,
-                                 const char* buffer,
-                                 const uint8_t* null_bitmap,
+                                 const char* buffer, const uint8_t* null_bitmap,
                                  const int is_bytes) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
@@ -503,10 +496,12 @@ void* np_array_from_string_array(int64_t no_strings,
         PyObject* s;
         if (is_bytes)
             s = PyBytes_FromStringAndSize(
-                buffer + offset_table[i], offset_table[i + 1] - offset_table[i]);
+                buffer + offset_table[i],
+                offset_table[i + 1] - offset_table[i]);
         else
             s = PyUnicode_FromStringAndSize(
-                buffer + offset_table[i], offset_table[i + 1] - offset_table[i]);
+                buffer + offset_table[i],
+                offset_table[i + 1] - offset_table[i]);
         CHECK(s, "creating Python string/unicode object failed");
         auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
         CHECK(p, "getting offset in numpy array failed");
@@ -740,7 +735,7 @@ void print_list_str_arr(uint64_t n, const char* data,
     }
 }
 
-void bytes_to_hex(char* output, char *data, int64_t data_len) {
+void bytes_to_hex(char* output, char* data, int64_t data_len) {
     /*
         Implementation of bytes.hex() which converts
         each the bytes to a string hex representation.
@@ -762,7 +757,6 @@ void bytes_to_hex(char* output, char *data, int64_t data_len) {
     }
 }
 
-
 void int_to_hex(char* output, int64_t output_len, uint64_t int_val) {
     /*
         Implementation of hex(int) with a precomputed final length.
@@ -774,7 +768,5 @@ void int_to_hex(char* output, int64_t output_len, uint64_t int_val) {
         int_val = int_val >> 4;
     }
 }
-
-
 
 }  // extern "C"
