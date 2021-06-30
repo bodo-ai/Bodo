@@ -2298,12 +2298,35 @@ def int_getitem(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
     return arr[ind]
 
 
+def transform_str_getitem_output(data, length):
+    """
+    Transform the final output of string/bytes data.
+    Strings need to decode utf8 values from the data array.
+    Bytes need to transform the final data from uint8 array to bytes array.
+    """
+
+
+@overload(transform_str_getitem_output)
+def overload_transform_str_getitem_output(data, length):
+    if data == bodo.string_type:
+        return lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
+            data._data, length
+        )  # pragma: no cover
+    if data == types.Array(types.uint8, 1, "C"):
+        return lambda data, length: bodo.libs.binary_arr_ext.init_bytes_type(
+            data
+        )  # pragma: no cover
+    raise BodoError(f"Internal Error: Expected String or Uint8 Array, found {data}")
+
+
 @overload(int_getitem, no_unliteral=True)
 def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
-    if arr == string_array_type:
+    if arr in [bodo.binary_array_type, string_array_type]:
         # TODO: other kinds, unicode
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
+        # Dtype used for allocating the empty data. Either string or bytes
+        _alloc_dtype = arr.dtype
 
         def str_getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
             if ind >= total_len:
@@ -2323,35 +2346,49 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
             size_tag = np.int32(10)
             tag = np.int32(11)
             send_size = np.zeros(1, np.int64)
-            send_val = ""
             # We send the value to the root first and then have the root broadcast
             # the value because we don't know which rank holds the data in the 1DVar
             # case.
             if arr_start <= ind < (arr_start + len(arr)):
                 ind = ind - arr_start
-                start_offset = bodo.libs.str_arr_ext.getitem_str_offset(arr, ind)
-                end_offset = bodo.libs.str_arr_ext.getitem_str_offset(arr, ind + 1)
+                data_arr = arr._data
+                start_offset = bodo.libs.array_item_arr_ext.get_offsets_ind(
+                    data_arr, ind
+                )
+                end_offset = bodo.libs.array_item_arr_ext.get_offsets_ind(
+                    data_arr, ind + 1
+                )
                 length = end_offset - start_offset
-                ptr = bodo.libs.str_arr_ext.get_data_ptr_ind(arr, start_offset)
+                ptr = data_arr[ind]
                 send_size[0] = length
                 isend(send_size, np.int32(1), root, size_tag, True)
                 isend(ptr, np.int32(length), root, tag, True)
 
             rank = bodo.libs.distributed_api.get_rank()
-            val = ""
+            # Allocate a dummy value for type inference. Note we allocate a value
+            # instead of doing constant lowering because Bytes need a uint8 array, and
+            # lowering an Array constant converts the type to read only.
+            val = bodo.libs.str_ext.alloc_empty_bytes_or_string_data(
+                _alloc_dtype, kind, 0, 1
+            )
             l = 0
             if rank == root:
                 l = recv(np.int64, ANY_SOURCE, size_tag)
-                val = numba.cpython.unicode._empty_string(kind, l, 1)
-                _recv(val._data, np.int32(l), char_typ_enum, ANY_SOURCE, tag)
+                val = bodo.libs.str_ext.alloc_empty_bytes_or_string_data(
+                    _alloc_dtype, kind, l, 1
+                )
+                data_ptr = bodo.libs.str_ext.get_unicode_or_numpy_data(val)
+                _recv(data_ptr, np.int32(l), char_typ_enum, ANY_SOURCE, tag)
 
             dummy_use(send_size)
-            dummy_use(send_val)
             l = bcast_scalar(l)
             if rank != root:
-                val = numba.cpython.unicode._empty_string(kind, l, 1)
-            c_bcast(val._data, np.int32(l), char_typ_enum, np.array([-1]).ctypes, 0)
-            val = bodo.libs.str_arr_ext.decode_utf8(val._data, l)
+                val = bodo.libs.str_ext.alloc_empty_bytes_or_string_data(
+                    _alloc_dtype, kind, l, 1
+                )
+            data_ptr = bodo.libs.str_ext.get_unicode_or_numpy_data(val)
+            c_bcast(data_ptr, np.int32(l), char_typ_enum, np.array([-1]).ctypes, 0)
+            val = transform_str_getitem_output(val, l)
             return val
 
         return str_getitem_impl

@@ -97,9 +97,8 @@ def test_get_item(binary_arr_value):
     np.random.seed(0)
 
     # A single integer
-    # TODO [BE-927]: Fix distributed for integer
     idx = 0
-    check_func(test_impl, (binary_arr_value, idx), dist_test=False)
+    check_func(test_impl, (binary_arr_value, idx))
 
     # Array of integers
     idx = np.random.randint(0, len(binary_arr_value), 11)
