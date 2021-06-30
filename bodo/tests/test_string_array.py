@@ -46,6 +46,15 @@ def test_np_sort(memory_leak_check):
     check_func(impl, (A,))
 
 
+def test_hash(str_arr_value, memory_leak_check):
+    def impl(S):
+        return S.map(lambda x: None if pd.isna(x) else hash(x))
+
+    # check_dtype=False because None converts the output to Float in Pandas
+    # dist_test = False because the randomness causes different inputs on each core.
+    check_func(impl, (pd.Series(str_arr_value),), check_dtype=False, dist_test=False)
+
+
 def test_np_repeat(str_arr_value, memory_leak_check):
     def impl(arr):
         return np.repeat(arr, 2)

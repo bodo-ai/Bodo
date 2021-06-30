@@ -11,7 +11,7 @@ from bodo.tests.utils import check_func
 @pytest.fixture(
     params=[
         np.array(
-            [b"abc", b"c", np.nan, b"ccdefg" b"abcde", b"poiu", bytes(3)] * 2, object
+            [b"", b"abc", b"c", np.nan, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2, object
         ),
     ]
 )
@@ -75,6 +75,19 @@ def test_hex_method(binary_arr_value):
         return pd.Series(A).apply(lambda x: None if pd.isna(x) else x.hex())
 
     check_func(test_impl, (binary_arr_value,))
+
+
+def test_bytes_hash(binary_arr_value):
+    """
+    Test support for Bytes.__hash using nunique.
+    """
+
+    def test_impl(A):
+        return pd.Series(A).map(lambda x: None if pd.isna(x) else hash(x))
+
+    # check_dtype=False because None converts the output to Float in Pandas
+    # dist_test = False because the randomness causes different inputs on each core.
+    check_func(test_impl, (binary_arr_value,), check_dtype=False, dist_test=False)
 
 
 def test_get_item(binary_arr_value):

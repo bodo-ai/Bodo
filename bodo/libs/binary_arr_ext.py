@@ -11,6 +11,8 @@ from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import (
     intrinsic,
+    lower_cast,
+    make_attribute_wrapper,
     overload,
     overload_attribute,
     overload_method,
@@ -21,7 +23,6 @@ from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.utils.typing import BodoError, is_list_like_index_type
 
 ll.add_symbol("bytes_to_hex", hstr_ext.bytes_to_hex)
-
 bytes_type = types.Bytes(types.uint8, 1, "C", readonly=True)
 
 
@@ -146,6 +147,26 @@ def binary_arr_hex(arr):
         output = numba.cpython.unicode._empty_string(kind, length, 1)
         bytes_to_hex(output, arr)
         return output
+
+    return impl
+
+
+# Support casting uint8ptr to void* for hash impl
+@lower_cast(types.CPointer(types.uint8), types.voidptr)
+def cast_uint8_array_to_voidptr(context, builder, fromty, toty, val):
+    return val
+
+
+# Support accessing data from jit functions
+make_attribute_wrapper(types.Bytes, "data", "_data")
+
+
+@overload_method(types.Bytes, "__hash__")
+def bytes_hash(arr):
+    def impl(arr):  # pragma: no cover
+        # Implement hash with _Py_HashBytes
+        # TODO: cache
+        return numba.cpython.hashing._Py_HashBytes(arr._data, len(arr))
 
     return impl
 
