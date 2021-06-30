@@ -765,3 +765,35 @@ def int_to_hex(typingctx, output, out_len, header_len, int_val):
         builder.call(hex_func, (data_arr, out_len, int_val))
 
     return types.void(output, out_len, header_len, int_val), codegen
+
+
+def alloc_empty_bytes_or_string_data(typ, kind, length, is_ascii=0):  # pragma: no cover
+    """Function used to allocate empty data in functions that reuse string array and binary array."""
+
+
+@overload(alloc_empty_bytes_or_string_data)
+def overload_alloc_empty_bytes_or_string_data(typ, kind, length, is_ascii=0):
+    typ = typ.instance_type if isinstance(typ, types.TypeRef) else typ
+    if typ == bodo.bytes_type:
+        return lambda typ, kind, length, is_ascii=0: np.empty(length, np.uint8)
+    if typ == string_type:
+        return (
+            lambda typ, kind, length, is_ascii=0: numba.cpython.unicode._empty_string(
+                kind, length, is_ascii
+            )
+        )  # pragma: no cover
+    raise BodoError(f"Internal Error: Expected Bytes or String type, found {typ}")
+
+
+def get_unicode_or_numpy_data(val):  # pragma: no cover
+    """Function used to extract the underlying 'data' element of the
+    model from both types.unicode and numpy arrays."""
+
+
+@overload(get_unicode_or_numpy_data)
+def overload_get_unicode_or_numpy_data(val):  # pragma: no cover
+    if val == string_type:
+        return lambda val: val._data  # pragma: no cover
+    if isinstance(val, types.Array):
+        return lambda val: val.ctypes  # pragma: no cover
+    raise BodoError(f"Internal Error: Expected String or Numpy Array, found {val}")

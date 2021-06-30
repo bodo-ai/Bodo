@@ -90,8 +90,8 @@ def init_binary_arr(typingctx, data_typ=None):
 
 
 @intrinsic
-def init_bytes_type(typingctx, data_typ=None):
-    """create a new bytes array from input data array(uint8) data"""
+def init_bytes_type(typingctx, data_typ):
+    """create a new bytes array from input data array(uint8) data."""
     assert data_typ == types.Array(types.uint8, 1, "C")
 
     def codegen(context, builder, sig, args):
@@ -99,11 +99,12 @@ def init_bytes_type(typingctx, data_typ=None):
         int_arr = cgutils.create_struct_proxy(sig.args[0])(
             context, builder, value=args[0]
         )
+        nitems = int_arr.nitems
         bytes_array = cgutils.create_struct_proxy(bytes_type)(context, builder)
 
         # Initialize the fields of the byte array (mostly copied from Numba)
-        bytes_array.meminfo = context.nrt.meminfo_alloc(builder, int_arr.nitems)
-        bytes_array.nitems = int_arr.nitems
+        bytes_array.meminfo = context.nrt.meminfo_alloc(builder, nitems)
+        bytes_array.nitems = nitems
         bytes_array.itemsize = lir.Constant(bytes_array.itemsize.type, 1)
         bytes_array.data = context.nrt.meminfo_data(builder, bytes_array.meminfo)
         bytes_array.parent = cgutils.get_null_value(bytes_array.parent.type)
@@ -111,7 +112,7 @@ def init_bytes_type(typingctx, data_typ=None):
         bytes_array.strides = int_arr.strides
 
         # Memcpy the data from int array to bytes array
-        cgutils.memcpy(builder, bytes_array.data, int_arr.data, bytes_array.nitems)
+        cgutils.memcpy(builder, bytes_array.data, int_arr.data, nitems)
         return bytes_array._getvalue()
 
     return bytes_type(data_typ), codegen
@@ -198,19 +199,19 @@ def bytes_to_hex(typingctx, output, arr):
 
 @overload(operator.getitem, no_unliteral=True)
 def binary_arr_getitem(arr, ind):
-    if arr != binary_array_type:
+    if arr != binary_array_type:  # pragma: no cover
         return
 
     # Indexing is supported for any indexing support for ArrayItemArray
     if isinstance(ind, types.Integer):
-        return lambda arr, ind: init_bytes_type(arr._data[ind])
+        return lambda arr, ind: init_bytes_type(arr._data[ind])  # pragma: no cover
 
     # bool arr, int arr, and slice
     if (
         is_list_like_index_type(ind)
         and (ind.dtype == types.bool_ or isinstance(ind.dtype, types.Integer))
     ) or isinstance(ind, types.SliceType):
-        return lambda arr, ind: init_binary_arr(arr._data[ind])
+        return lambda arr, ind: init_binary_arr(arr._data[ind])  # pragma: no cover
 
     raise BodoError(
         f"getitem for Binary Array with indexing type {ind} not supported."
