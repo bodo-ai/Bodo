@@ -4,7 +4,9 @@
 Installation
 ============
 
-Bodo is a Python package and can be installed in a Conda environment easily. See the section on :ref:`conda` if you don't already have Conda installed. Create a Conda environment, install Bodo and its dependencies as shown below::
+Bodo can be installed as a Python package using the ``conda`` command (See :ref:`conda`).
+We recommend creating a ``conda`` environment and installing
+Bodo and its dependencies in it as shown below::
 
     conda create -n Bodo python
     conda activate Bodo
@@ -12,17 +14,78 @@ Bodo is a Python package and can be installed in a Conda environment easily. See
 
 Bodo uses `MPI <https://en.wikipedia.org/wiki/Message_Passing_Interface>`_ for parallelization,
 which is automatically installed as part of
-the conda install command above. Note that this command installs Bodo Community Edition by default, which is free and works for up to 4 cores.
-See the section below on using the :ref:`enterprise`. For more information on Bodo Enterprise Edition and pricing, please `contact us <https://bodo.ai/contact/>`_ .
+the ``conda`` install command above. This command installs Bodo Community Edition by default, which is free and
+works on up to 4 cores. For information on Bodo Enterprise Edition and pricing, please `contact us <https://bodo.ai/contact/>`_ .
 
+- :ref:`conda`
+- :ref:`optionaldep`
+- :ref:`testinstall`
+- :ref:`jupyter`
+
+.. seealso:: :ref:`enterprise`
+
+.. _conda:
+
+How to Install Conda
+--------------------
+Install Conda using the instructions below.
+
+On Linux::
+
+    wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+    chmod +x miniconda.sh
+    ./miniconda.sh -b
+    export PATH=$HOME/miniconda3/bin:$PATH
+
+On macOS::
+
+    curl https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -L -o miniconda.sh
+    chmod +x miniconda.sh
+    ./miniconda.sh -b
+    export PATH=$HOME/miniconda3/bin:$PATH
+
+On Windows::
+
+    start /wait "" Miniconda3-latest-Windows-x86_64.exe /InstallationType=JustMe /RegisterPython=0 /S /D=%UserProfile%\Miniconda3
+
+Open the Anaconda Prompt (click Start, select Anaconda Prompt). You may use other Terminals if you have already added Anaconda to your PATH.
+
+.. _optionaldep:
+
+Optional Dependencies
+---------------------
+
+Some Bodo functionality may require other dependencies, as summarized in the table below.
+All optional dependencies except Hadoop can be
+installed using the commands ``conda install gcsfs sqlalchemy
+hdf5='*=*mpich*' openjdk -c conda-forge`` and ``pip install
+deltalake``.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Functionality
+     - Dependency
+   * - ``pd.read_sql / df.to_sql``
+     - ``sqlalchemy``
+   * - ``HDF5``
+     - ``hdf5 (MPI version)``
+   * - ``GCS I/O``
+     - ``gcsfs``
+   * - ``Delta Lake``
+     - ``deltalake``
+   * - ``HDFS or ADLS Gen2``
+     - `hadoop <http://hadoop.apache.org/docs/stable/>`_ (only the Hadoop client is needed)
+
+.. _testinstall :
 
 Testing your Installation
 --------------------------
 
-Once you have activated your Conda environment and installed Bodo in it, you can test it using the example program below.
+Once you have activated your ``conda`` environment and installed Bodo in it, you can test it using the example program below.
 This program has two functions:
 
-- The function ``gen_data`` creates a sample dataset with 20,000 rows, and writes to a parquet file called ``example1.pq``.
+- The function ``gen_data`` creates a sample dataset with 20,000 rows and writes to a parquet file called ``example1.pq``.
 - The function ``test`` reads ``example1.pq`` and performs multiple computations on it.
 
 .. code-block:: python3
@@ -59,144 +122,84 @@ Save this code in a file called ``example.py``, and run it on a single core as f
 
     python example.py
 
-To run the code on 4 cores, you can use ``mpiexec``::
+Alternatively, to run the code on four cores, you can use ``mpiexec``::
 
     $ mpiexec -n 4 python example.py
 
-You can benchmark this code against native Pandas by simply removing the ``@bodo.jit`` decorators before the functions.
-To learn more about benchmarking with Bodo, see the section on :ref:`performance`.
+You may need to delete ``example1.pq`` between consecutive runs.
 
-.. _conda:
+.. _jupyter:
 
-Installing Conda
-----------------
-Install Conda using the instructions below.
+Jupyter Notebook Setup
+----------------------
 
-On Linux::
+To use Bodo with Jupyter Notebook, install ``jupyter`` and ``ipyparallel``
+in your Bodo ``conda`` environment::
 
-    wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-    chmod +x miniconda.sh
-    ./miniconda.sh -b
-    export PATH=$HOME/miniconda3/bin:$PATH
+    conda install jupyter ipyparallel mpi4py -c conda-forge
 
-On macOS::
+Create an MPI profile for IPython::
 
-    curl https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -L -o miniconda.sh
-    chmod +x miniconda.sh
-    ./miniconda.sh -b
-    export PATH=$HOME/miniconda3/bin:$PATH
+    ipython profile create --parallel --profile=mpi
 
-On Windows::
+Edit the ``~/.ipython/profile_mpi/ipython_config.py`` file
+and add the following line::
 
-    start /wait "" Miniconda3-latest-Windows-x86_64.exe /InstallationType=JustMe /RegisterPython=0 /S /D=%UserProfile%\Miniconda3
+    c.IPClusterEngines.engine_launcher_class = 'MPIEngineSetLauncher'
 
-Open the Anaconda Prompt (click Start, select Anaconda Prompt). You may use other Terminals if you have already added Anaconda to your PATH.
+Start the Jupyter notebook in your Bodo ``conda`` environment::
 
-Optional Dependencies
----------------------
+    jupyter notebook
 
-Some Bodo functionality may require other dependencies as the table
-below summarizes. All optional dependencies except Hadoop can be
-installed using the commands ``conda install gcsfs sqlalchemy
-hdf5='*=*mpich*' openjdk -c conda-forge`` and ``pip install
-deltalake``.
+Go to the `IPython Clusters` tab, select the
+number of engines (i.e., cores) you'd like to use, and click `Start` next to the
+`mpi` profile. Alternatively, you can use ``ipcluster start -n 4 --profile=mpi``
+in a terminal to start the engines. Initialization of the engines can take several seconds.
 
-.. list-table::
-   :header-rows: 1
+Now you can start a new notebook and run the following code in a cell to set up the environment::
 
-   * - Functionality
-     - Dependency
-   * - ``pd.read_sql / df.to_sql``
-     - ``sqlalchemy``
-   * - ``HDF5``
-     - ``hdf5 (MPI version)``
-   * - ``GCS I/O``
-     - ``gcsfs``
-   * - ``Delta Lake``
-     - ``deltalake``
-   * - ``HDFS or ADLS Gen2``
-     - `hadoop <http://hadoop.apache.org/docs/stable/>`_ (only the Hadoop client is needed)
+    import ipyparallel as ipp
 
+    c = ipp.Client(profile='mpi')
+    view = c[:]
+    view.activate()
+    view.block = True  # equivalent to running with %%px --block
 
-.. _enterprise:
+    # Set the working directory:
+    import os
+    view["cwd"] = os.getcwd()
+    %px cd $cwd
 
-Bodo Enterprise Edition
------------------------
+This should complete without any errors. An error may appear if the cluster
+is not initialized yet (usually ``NoEnginesRegistered``).
+In this case, wait a few seconds and try again.
 
-Bodo Enterprise Edition allows unrestricted use of Bodo on any number of cores.
+To run Bodo functions on the execution engines, you use ``ipyparallel`` hooks such as ``%%px`` magic.
+For example, run this code in a cell::
 
-License key
-~~~~~~~~~~~
+    %%px
+    import bodo
+    import numpy as np
+    import time
 
-Bodo Enterprise Edition requires a license key to run. The key can be provided in two ways:
+    @bodo.jit
+    def calc_pi(n):
+        t1 = time.time()
+        x = 2 * np.random.ranf(n) - 1
+        y = 2 * np.random.ranf(n) - 1
+        pi = 4 * np.sum(x**2 + y**2 < 1) / n
+        print("Execution time:", time.time()-t1, "\nresult:", pi)
 
-- Through the environment variable ``BODO_LICENSE``
-
-- A file called ``bodo.lic`` in the current working directory
-
-In both cases, the file or environment variable must contain the key exactly
-as provided.
-
-If Bodo cannot find the license (environment variable does not exist or is empty,
-and no license file is found), you will only be able to run Bodo on up to 4 cores.
-If you try to run Bodo on more than 4 cores and if Bodo cannot find the license (environment variable does not exist or is empty, and no license file is found), it will exit with “Bodo license not found” error.
-
-If the key content is invalid Bodo will exit with "Invalid license"
-error. This typically means that the key is missing data or contains extraneous
-characters. Please make sure the license file has not been modified, or that
-the environment variable contains the key verbatim. Note that some shells might
-append extra characters when displaying the file contents. A valid way to export
-the key is this::
-
-    export BODO_LICENSE=`cat bodo.lic
+    calc_pi(2 * 10**8)
 
 
-Automated ``BODO_LICENSE`` environment variable Setup
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If you wish to run across multiple nodes, you can add the following to
+`ipcluster_config.py`::
 
-You can automate setting of the ``BODO_LICENSE`` environment variable in your ``~/.bashrc`` script (or the ``~/.zshrc`` script for macOS) using::
+    c.MPILauncher.mpi_args = ["-machinefile", "path_to_file/machinefile"]
 
-    echo 'export BODO_LICENSE="<COPY_PASTE_THE_LICENSE_HERE>"' >> ~/.bashrc
+Where ``machinefile`` (or ``hostfile``) is a file with the hostnames of available nodes that MPI can use.
+You can find more information about `machinefiles` `here <https://www.open-mpi.org/faq/?category=running#mpirun-hostfile>`_.
 
-
-For more fine grained control and usage with the ``Bodo`` conda environment as created above, we recommend the following steps to automate setting the ``BODO_LICENSE`` environment variable (closely follows `these <https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#macos-and-linux>`_ steps):
-
-1. Ensure that you're in the correct conda environment.
-
-2. Navigate to the ``$CONDA_PREFIX`` directory and create some additional conda environment activation and deactivation steps::
-
-        cd $CONDA_PREFIX
-        mkdir -p ./etc/conda/activate.d
-        mkdir -p ./etc/conda/deactivate.d
-        touch ./etc/conda/activate.d/env_vars.sh
-        touch ./etc/conda/deactivate.d/env_vars.sh
-
-3. Edit ``./etc/conda/activate.d/env_vars.sh`` as follows::
-
-        #!/bin/sh
-
-        export BODO_LICENSE="<COPY_PASTE_THE_LICENSE_HERE>"
-
-4. Similarly, edit ``./etc/conda/deactivate.d/env_vars.sh`` as follows::
-
-        #!/bin/sh
-
-        unset BODO_LICENSE
-
-5. Deactivate (``conda deactivate``) and reactivate the ``Bodo`` conda environment (``conda activate Bodo``) to ensure that the environment variable ``BODO_LICENSE`` is automatically added when the environment is activated.
-
-
-Using MPI in clusters with Bodo Enterprise Edition
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-MPI can be configured on clusters easily.
-The cluster nodes need to have passwordless SSH enabled between them,
-and there should be a host file listing their addresses
-(example tutorial `here <https://mpitutorial.com/tutorials/running-an-mpi-cluster-within-a-lan/>`_).For best performance, MPI usually needs to be configured to launch one process per physical core.
-This avoids potential resource contention between processes (due to high efficiency of MPI).
-For example, a cluster of four nodes, each with 16 physical cores, would use 64 MPI processes::
-
-    $ mpiexec -n 64 python example.py
-
-For cloud instances, one physical core usually corresponds to two vCPUs.
-For example, an instance with 32 vCPUs has 16 physical cores.
+It is important to note that other MPI systems and launchers (such as QSUB/PBS)
+may use a different user interface for the allocation of computational nodes.
