@@ -78,8 +78,6 @@ computation can also be parallelized with some communication across processors.
    source/advanced
    source/spark
    source/BodoSQL
-   source/jupyter
-   source/ipyparallel
    source/e3
 
 

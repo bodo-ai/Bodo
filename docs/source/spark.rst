@@ -1,7 +1,7 @@
 .. _spark:
 
 Migration from Spark
-============
+=====================
 
 
 Examples
@@ -71,7 +71,7 @@ With PySpark::
 .. _Display the Schema of the DataFrame:
 
 Display the Schema of the DataFrame
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 With Bodo::
 
@@ -89,7 +89,7 @@ With PySpark::
 .. _Change Data Types of the DataFrame:
 
 Change Data Types of the DataFrame
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  
 With Bodo::
 
@@ -121,7 +121,7 @@ With PySpark::
 .. _Display the Head of the DataFrame:
 
 Display the Head of the DataFrame
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 With Bodo::
 
@@ -140,7 +140,7 @@ With PySpark::
 .. _Select Columns from the DataFrame:
 
 Select Columns from the DataFrame
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 With Bodo::
 
@@ -159,7 +159,7 @@ With PySpark::
 .. _Show the Statistics of the DataFrame:
 
 Show the Statistics of the DataFrame
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 With Bodo::
 
@@ -196,7 +196,7 @@ With PySpark::
 .. _Missing Values:
 
 Missing Values (Count NA, Drop NA, Replace NA)
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 | Count NA :
 
@@ -288,7 +288,7 @@ With PySpark::
 .. _Filter Data Based on Conditions:
 
 Filter Data Based on Conditions
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 With Bodo::
 
@@ -307,7 +307,7 @@ With PySpark::
 .. _Aggregation Functions:
 
 Aggregation Functions: (sum, count, mean, max, min, etc)
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 With Bodo::
 
@@ -391,7 +391,7 @@ With PySpark::
 .. _User-Defined Functions:
 
 User-Defined Functions
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 With Bodo::
 
@@ -452,7 +452,7 @@ With PySpark::
 
 
 pyspark.sql.DataFrame
---------------------
+-----------------------
 The table below is a reference of Spark DataFrame methods and their equivalents in Python, 
 which are supported by Bodo.
 
@@ -516,7 +516,7 @@ which are supported by Bodo.
 
 
 pyspark.sql.functions
---------------------
+-----------------------
 
 The table below is a reference of Spark SQL functions and their equivalents in Python, 
 which are supported by Bodo.
