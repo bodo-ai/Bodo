@@ -894,7 +894,7 @@ class TypingTransforms:
             and isinstance(
                 self._get_method_obj_type(func_mod, rhs.func), BodoSQLContextType
             )
-            and func_name in ("sql", "_test_sql_unoptimized")
+            and func_name in ("sql", "_test_sql_unoptimized", "convert_to_pandas")
         ):  # pragma: no cover
             return self._run_call_bodosql_sql(assign, rhs, func_mod, func_name, label)
 
@@ -1295,6 +1295,11 @@ class TypingTransforms:
             impl = bodosql.context_ext._gen_pd_func_for_unoptimized_query(
                 sql_context_type, sql_str
             )
+        elif func_name == "convert_to_pandas":
+            impl = bodosql.context_ext._gen_pd_func_str_for_query(
+                sql_context_type, sql_str
+            )
+
         self.changed = True
         # BodoSQL generates df.columns setattr, which needs another transform to work
         # (See BodoSQL #189)
