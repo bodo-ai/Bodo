@@ -410,7 +410,7 @@ Bodo uses `Apache Arrow <https://arrow.apache.org/>`_ internally for read and wr
 
 Google Cloud Storage
 ~~~~~~~~~~~~~~~~~~~~
-Reading and writing :ref:`Parquet <aprquet-section>` files from and to Google Cloud is
+Reading and writing :ref:`Parquet <parquet-section>` files from and to Google Cloud is
 supported.
 
 The file path should start with ``gs://`` or ``gcs://``::

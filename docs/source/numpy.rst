@@ -136,8 +136,7 @@ and parallelize.
     * :func:`numpy.sort`
     * :func:`numpy.concatenate`
     * :func:`numpy.append`
-    * :func:`numpy.unique` the output is assumed to be "small" relative to input and is replicated.
-    Use Series.drop_duplicates() if the output should remain distributed.
+    * :func:`numpy.unique` the output is assumed to be "small" relative to input and is replicated. Use Series.drop_duplicates() if the output should remain distributed.
     * :func:`numpy.where` (1 and 3 arguments)
     * :func:`numpy.union1d`
     * :func:`numpy.intersect1d` (no distributed support yet)
@@ -190,8 +189,8 @@ and parallelize.
 
     A = np.array([i**2 for i in range(N)])
 
-#. Numpy I/O: :func:`numpy.ndarray.tofile` and :func:`numpy.fromfile`. 
-  The File I/O section contains :ref:`example usage and more system specific instructions <numpy-binary-section>`.
+#. Numpy I/O: :func:`numpy.ndarray.tofile` and :func:`numpy.fromfile`. The File I/O section contains :ref:`example usage and more system specific instructions <numpy-binary-section>`.
+
 
 Optional arguments are not supported unless if explicitly mentioned here.
 For operations on multi-dimensional arrays, automatic broadcast of

@@ -23,8 +23,7 @@ Bodo environment without CUDA support::
     conda install -c pytorch -c conda-forge -c defaults bokeh pytorch=1.5 torchvision=0.6
     pip install horovod[pytorch]
 
-For information on setting up Horovod in a conda environment with CUDA see
-`here <https://horovod.readthedocs.io/en/stable/conda.html>`_.
+For information on setting up Horovod in a conda environment with CUDA `see here <https://horovod.readthedocs.io/en/stable/conda.html>`_.
 
 How it works
 ------------

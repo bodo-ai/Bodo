@@ -12,11 +12,13 @@ New Features and Improvements
 - Bodo is updated to use Apache Arrow 2.0 (latest)
 
 - Performance and memory optimizations
+
     - Significant memory usage optimizations for several operations involving string arrays
     - Up to 2x speedup for many string operations such as ``Series.str.replace/get/contains`` and ``groupby.sum()``
 
 
 - User-defined functions (UDFs)
+
     - Support for returning datafarames from ``DataFrame.apply()`` and ``Series.apply()``
     - Support for returning nested arrays
 
@@ -30,6 +32,7 @@ New Features and Improvements
 
 
 - Pandas coverage:
+
     - Support for tuple values in Series and DataFrame columns
     - Improvements to error checking and handling
     - Automatic unrolling of loops over dataframe columns when necessary for type stability
@@ -51,6 +54,7 @@ New Features and Improvements
 
 - Scikit-learn:
   the following classes and functions are supported inside jit functions:
+
     - ``sklearn.linear_model.LinearRegression``
     - ``sklearn.linear_model.LogisticRegression``
     - ``sklearn.linear_model.Ridge``
@@ -63,12 +67,14 @@ New Features and Improvements
 
 - XGBoost:
   Training XGBoost model (with Scitkit-learn like API) is now supported inside jit functions:
+
     - ``xgboost.XGBClassifier``
     - ``xgboost.XGBRegressor``
 
   Visit https://docs.bodo.ai/latest/source/ml.html for more information about supported ML functions.
 
 - NumPy coverage:
+
     - Support for ``numpy.any`` and ``numpy.all`` for all array types
     - Support for ``numpy.cbrt``
     - Support for ``numpy.linspace`` arguments ``endpoint``, ``retstep``, and ``dtype``

@@ -20,8 +20,10 @@ To do so, simply factor out the code that needs to be compiled by Bodo and pass 
 This recommendation is similar to Numba's `What to compile <https://numba.pydata.org/numba-doc/dev/user/troubleshoot.html#what-to-compile>`_.
 
 
+.. _whycompilationerror:
+
 Compilation Errors
------------------------
+--------------------
 
 
 First of all, let's understand *Why doesn't the code compile*?
@@ -60,7 +62,7 @@ Supported APIs may not support all optional arguments. Supplying an unsupported 
 
 
 Type Instability Errors
-----------------------
+------------------------
 
 Ensuring `Dataframe schema stability <https://docs.bodo.ai/latest/source/user_guide.html#dataframe-schema-stability>`_ is important for type stability. Additionally, some arguments to functions should be constant to ensure type stability. In certain cases where it is possible, Bodo may infer the constant values. In other cases, it may throw an error indicating that the argument should be constant.
 For instance, attempting to extract a variable pattern::
@@ -82,7 +84,7 @@ Troubleshooting Compilation Errors
 
 Now that we understand what causes the error, let's fix it!
 
-For the first three of the limitations (not :ref:`Supported Pandas Operations <pandas>`, not :ref:`Supported NumPy Operations <numpy>`, and not supported datatypes) we discussed in the previous section, `Why Compilation error`_, try the following:
+For the first three of the limitations (not :ref:`Supported Pandas Operations <pandas>`, not :ref:`Supported NumPy Operations <numpy>`, and not supported datatypes) we discussed in the previous section, :ref:`whycompilationerror`, try the following:
     1. Make sure your code works in Python: A lot of the times, a Bodo decorated function doesn't compile, but it does not compile in Python, either.
     2. Rewrite your code with supported operations if possible. One example is what we mentioned earlier: :code:`Dictionary` containing heterogeneous values (e.g. :code:`thisdict = {"A": 1, "B": "a", "C": 0.1}` can be replaced with `namedtuple <https://docs.python.org/3/library/collections.html#collections.namedtuple>`_
     3. Refactor your code and use regular Python, explained in *Integration with non-Bodo APIs* of `Bodo tutorial <https://github.com/Bodo-inc/Bodo-tutorial/blob/master/bodo_tutorial.ipynb>`_
