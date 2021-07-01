@@ -1,7 +1,7 @@
 .. _ipyparallelsetup:
 
 Interactive Bodo Cluster Setup using Ipyparallel
-
+=================================================
 
 Bodo can be used with ``ipyparallel`` to allow interactive code execution on a
 remote cluster.
