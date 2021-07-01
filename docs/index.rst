@@ -56,6 +56,7 @@ computation can also be parallelized with some communication across processors.
    :caption: Get Started
 
    source/install
+   source/enterprise
    source/ipyparallel
    source/bodo_platform
 

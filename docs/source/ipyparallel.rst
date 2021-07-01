@@ -1,3 +1,5 @@
+.. _ipyparallelsetup:
+
 Interactive Bodo Cluster Setup using Ipyparallel
 ================================================
 
