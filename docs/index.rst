@@ -89,6 +89,7 @@ computation can also be parallelized with some communication across processors.
    source/caching
    source/performance
    source/compilation
+   source/troubleaws
 
 .. toctree::
    :maxdepth: 2
