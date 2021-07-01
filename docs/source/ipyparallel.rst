@@ -1,27 +1,23 @@
 .. _ipyparallelsetup:
 
 Interactive Bodo Cluster Setup using Ipyparallel
-================================================
+
 
 Bodo can be used with ``ipyparallel`` to allow interactive code execution on a
-remote cluster. The code can be sent from any client (for example an application
-or interactive console) and the client can reside on a different host than the cluster.
-An example use case is web applications (such as visualization) that require real-time
-processing of large data.
+remote cluster.
 
-An ipyparallel cluster consists of one *controller* and multiple *engines*.
-The engines are the workers that receive code from the controller and execute
-it in parallel using Bodo. You can have engines running simultaneously on multiple
-hosts to scale workloads to hundreds and thousands of cores.
+- :ref:`prereq`
+- :ref:`startingipcluster`
+- :ref:`setupverify`
+- :ref:`runbodoipcluster`
 
-In this guide we will explain how to set up an ipyparallel cluster with MPI
-and run Bodo code on it dynamically.
+.. _prereq:
 
 Prerequisites
 -------------
 
-- Install Bodo on every host (see :ref:`install`)
-- Install ipyparallel in your Bodo environment::
+- Install Bodo on every host (see :ref:`install`).
+- Install ``ipyparallel`` in your Bodo ``conda`` environment::
 
     conda install ipyparallel -c conda-forge
 
@@ -29,20 +25,20 @@ Prerequisites
 
     ipython profile create --parallel --profile=mpi
 
-Starting ipyparallel cluster
-----------------------------
 
-There are various ways to start an ipyparallel cluster.
-For a detailed guide please refer `here <https://ipyparallel.readthedocs.io/en/latest/process.html>`_.
+.. _startingipcluster:
 
-In this section we will describe two methods. The first is a simple way to start
-and use a cluster on your local host.
-The other is a more general approach that works in many scenarios.
+Starting an ``ipyparallel`` cluster
+-----------------------------------
+
+For a detailed guide on how to start an ``ipyparallel`` cluster,
+please refer `here <https://ipyparallel.readthedocs.io/en/latest/process.html>`_.
+
 
 Controller and engines on the same host
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Run this command to start a cluster on the same host::
+Run the following command to start a cluster on the same host::
 
     ipcluster start -n N --profile=mpi
 
@@ -51,20 +47,13 @@ Run this command to start a cluster on the same host::
 Multiple hosts
 ~~~~~~~~~~~~~~
 
-Although ``ipcluster`` can automate most of the process, it may not be
-directly applicable in all circumstances. If you want to start a remote cluster
-with ``ipcluster`` please refer to the ipyparallel
-`documentation <https://ipyparallel.readthedocs.io/en/latest/process.html>`_.
-Here we describe a manual approach that works in a wide range of scenarios:
-
-- If you have engines on different hosts you have to set up password-less
-  SSH between each of these hosts (this is needed for mpiexec).
-  Configuring this is outside the scope of this guide.
+- If you have engines on different hosts you have to set up passwordless
+  SSH between each of these hosts (this is needed for ``mpiexec``).
 
 - The controller must be able to connect to all engines via TCP on any port.
-  If you have a restricted network please refer to the ipyparallel
+  If you have a restricted network, please refer to the ``ipyparallel``
   `documentation <https://ipyparallel.readthedocs.io/en/latest/process.html>`_
-  for other options like SSH tunneling.
+  for other options such as SSH tunneling.
 
 - Start the controller (the controller can run on a different host than the
   engines)::
@@ -84,20 +73,28 @@ Here we describe a manual approach that works in a wide range of scenarios:
     # N: total number of engines to launch in your cluster
     # machinefile: constains list of IP addresses or host names where you want to launch engines.
 
-.. note::
+
+  .. note::
     Make sure your machinefile is in the following format::
 
-        ip1:N1
-        ip2:N2
+        ip_1:N_1
+        ip_2:N_2
         ...
 
-    where Ni is the number of engines that you want to run on host ``i``.
-    This is necessary for mpiexec to map MPI ranks to hosts in consecutive order.
+    where ``N_i`` is the number of engines that you want to run on host ``i``.
+    This is necessary for ``mpiexec`` to map MPI ranks to hosts in consecutive order.
 
-Verify setup
-------------
 
-You can use this simple test to verify that your cluster is set up correctly:
+If you want to start a remote cluster
+with ``ipcluster`` please refer to the ``ipyparallel``
+`documentation <https://ipyparallel.readthedocs.io/en/latest/process.html>`_.
+
+.. _setupverify:
+
+Verifying your setup
+---------------------
+
+To verify that your cluster is set up correctly, you can run the following code.
 
 .. code-block:: python
 
@@ -127,15 +124,16 @@ On a cluster with two hosts running 4 engines, the correct output is::
     Hello World from rank 3 on host B. total ranks=4
 
 
-Bodo example
-------------
+.. _runbodoipcluster:
 
-Before running Bodo code on your cluster it is highly recommended that you verify
-that the cluster is running correctly and MPI-enabled. Please refer to the
-section above for how to do this.
+Running Bodo code on your ``ipyparallel`` cluster
+-------------------------------------------------
 
-Now let's run some Bodo code on the cluster. The following will run the
-calculate Pi example in parallel on the cluster:
+
+Before running Bodo code on your cluster, ensure
+that the cluster is running correctly and MPI-enabled. Please refer to the above section on how to do this.
+
+Here's an example of Monte Carlo Pi calculation with Bodo.
 
 .. code-block:: python
 
@@ -152,43 +150,51 @@ calculate Pi example in parallel on the cluster:
         print("Execution time:", time.time() - t1, "\nresult:", pi)
         return pi
 
-    def bodo_exec(points):
-        return calc_pi(points)
-
-    def main():
-        client = ipp.Client(profile='mpi')
-        dview = client[:]
-
-        # remote code execution: import required modules on engines
-        dview.execute("import numpy as np")
-        dview.execute("import bodo")
-        dview.execute("import time")
-
-        # send code of Bodo functions to engines
-        bodo_funcs = [calc_pi]
-        for f in bodo_funcs:
-            # get source code of Bodo function
-            f_src = inspect.getsource(f)
-            # execute the source code thus defining the function on engines
-            dview.execute(f_src).get()
-
-        points = 200000000
-        ar = dview.apply(bodo_exec, points)
-        result = ar.get()
-        print("Result is", result)
-
-        client.close()
-
-    main()
 
 
-The first step consists of sending the import and code definitions to the engines.
-Note that no computation will happen yet. In this example this is done by
-using the ``execute`` method of ipyparallel's ``DirectView`` object. This sends
-source code to be executed at the engines.
 
-The final step is to start computation by actually calling the ``calc_pi``
-function (now defined on the engines) and returning the result to the client.
-We define a Python wrapper called ``bodo_exec`` which will be sent to the engines
-as part of the ``dview.apply`` call. This wrapper will call the Bodo function on the engines,
-collect the result and send it back to the client.
+- We define a Python wrapper for ``calc_pi`` called ``bodo_exec`` which will be sent to the engines to compute. This wrapper will call the Bodo function on the engines, collect the result and send it back to the client.
+
+    .. code-block:: python
+
+
+        def bodo_exec(points):
+            return calc_pi(points)
+
+- We can send the source code to be executed at the engines, using the ``execute`` method of ipyparallel's ``DirectView`` object.
+  After the imports and code definitions are sent to the engines, the computation is started by actually calling the ``calc_pi`` function (now defined on the engines) and returning the result to the client.
+
+
+     .. code-block:: python
+
+        def main():
+            client = ipp.Client(profile='mpi')
+            dview = client[:]
+
+            # remote code execution: import required modules on engines
+            dview.execute("import numpy as np")
+            dview.execute("import bodo")
+            dview.execute("import time")
+
+            # send code of Bodo functions to engines
+            bodo_funcs = [calc_pi]
+            for f in bodo_funcs:
+                # get source code of Bodo function
+                f_src = inspect.getsource(f)
+                # execute the source code thus defining the function on engines
+                dview.execute(f_src).get()
+
+            points = 200000000
+            ar = dview.apply(bodo_exec, points)
+            result = ar.get()
+            print("Result is", result)
+
+            client.close()
+
+        main()
+
+
+
+
+
+
