@@ -480,6 +480,7 @@ Datetime properties:
 * :meth:`pandas.Series.dt.ceil`
 * :meth:`pandas.Series.dt.day_name` (``locale`` not supported)
 * :meth:`pandas.Series.dt.floor`
+* :meth:`pandas.Series.dt.month_name` (``locale`` not supported)
 * :meth:`pandas.Series.dt.normalize`
 * :meth:`pandas.Series.dt.round`
 * :meth:`pandas.Series.dt.strftime`
@@ -868,6 +869,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
 * :meth:`pandas.Timestamp.floor`
 * :meth:`pandas.Timestamp.isocalendar`
 * :meth:`pandas.Timestamp.isoformat`
+* :meth:`pandas.Timestamp.month_name` (``locale`` not supported)
 * :meth:`pandas.Timestamp.normalize`
 * :meth:`pandas.Timestamp.round`
 * :meth:`pandas.Timestamp.strftime`

@@ -350,6 +350,7 @@ def test_timestamp_constant_lowering(memory_leak_check):
     assert val_ret == t
 
 
+@pytest.mark.slow
 def test_timestamp_weekday(memory_leak_check):
     def test_impl(ts):
         return ts.weekday()
@@ -359,12 +360,23 @@ def test_timestamp_weekday(memory_leak_check):
         check_func(test_impl, (ts,))
 
 
+@pytest.mark.slow
 def test_timestamp_day_name(memory_leak_check):
     def test_impl(ts):
         return ts.day_name()
 
     for i in range(1, 21):
         ts = pd.Timestamp("2021-06-" + ("0" + str(i) if i < 10 else str(i)))
+        check_func(test_impl, (ts,))
+
+
+@pytest.mark.slow
+def test_timestamp_month_name(memory_leak_check):
+    def test_impl(ts):
+        return ts.month_name()
+
+    for i in range(1, 12):
+        ts = pd.Timestamp(f"2021-{'0' + str(i) if i < 10 else str(i)}-27")
         check_func(test_impl, (ts,))
 
 
