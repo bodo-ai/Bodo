@@ -57,7 +57,7 @@ For example to use 8 processes, you would execute the command:
 
 .. code:: bash
 
-mpiexec -n 8 python -u E3.py video_args
+    mpiexec -n 8 python -u E3.py video_args
 
 The components of this command are:
 

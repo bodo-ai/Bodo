@@ -17,6 +17,7 @@ New Features and Improvements
         - ``sklearn.linear_model.SGDClassifier``
         - ``sklearn.linear_model.SGDRegressor``
         - ``sklearn.cluster.KMeans``
+
         For more information please refer to the documentation
         `here <https://docs.bodo.ai/latest/source/sklearn.html>`_
     - Improved scaling of ``RandomForestClassifier`` training

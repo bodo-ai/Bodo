@@ -60,7 +60,7 @@ In this example, we chose to manually parallelize the parameter array for simpli
 is compute-heavy and the parameter data is relatively small.
 
 Load Balancing Distributed Data
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Some computations such as ``filter``, ``join`` or ``groupby`` can result in imbalanced data chunks across cores for distributed data.
 This may result in some cores operating on nearly empty dataframes, and others on relatively large ones.

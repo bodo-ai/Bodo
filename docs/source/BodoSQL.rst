@@ -325,7 +325,7 @@ and Bodo data types.
     - ``bodo.bool_``
 
 Nullable and Unsigned Types
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Although SQL does not explicitly support unsigned types,
 by default, BodoSQL maintains the exact types of the existing DataFrames
 registered in a `BodoSQLContext`, including unsigned and non-nullable type behavior.

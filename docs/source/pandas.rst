@@ -719,6 +719,7 @@ Modifying and computations:
 * :meth:`pandas.Index.take`
 * :meth:`pandas.Index.min`
 * :meth:`pandas.Index.max`
+
 |  The min/max methods are supported for DatetimeIndex. They are supported without optional arguments
 |  (``NaT`` output for empty or all ``NaT`` input not supported yet):
 
