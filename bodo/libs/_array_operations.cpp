@@ -269,12 +269,14 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         double n_global_sample = n_pes * log(n_total) / pow(epsilon, 2.0);
         n_global_sample = std::min(std::max(n_global_sample, double(n_pes)), double(n_total));
         int64_t n_loc_sample = std::min(n_global_sample / n_pes, double(n_local));
-        int64_t block_size = ceil(double(n_local) / n_loc_sample);
+        double block_size = double(n_local) / n_loc_sample;
         std::vector<int64_t> ListIdx(n_loc_sample);
+        double cur_lo = 0;
         for (int64_t i = 0; i < n_loc_sample; i++) {
-            int64_t lo = std::min(i * block_size, n_local - 1);
-            int64_t hi = std::min((i + 1) * block_size - 1, n_local - 1);
+            int64_t lo = round(cur_lo);
+            int64_t hi = round(cur_lo + block_size) - 1;
             ListIdx[i] = std::uniform_int_distribution<int64_t>(lo, hi)(gen);
+            cur_lo += block_size;
         }
         for (int64_t i_key = 0; i_key < n_key_t; i_key++)
             incref_array(local_sort->columns[i_key]);
