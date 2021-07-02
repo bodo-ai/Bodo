@@ -367,6 +367,18 @@ class UntypedPass:
                     assign.target,
                 )
 
+        # replace bytes.fromhex() since class attributes are not supported in Numba
+        if (
+            rhs.attr == "fromhex"
+            and isinstance(val_def, ir.Global)
+            and val_def.value == bytes
+        ):
+            return compile_func_single_block(
+                eval("lambda: bodo.libs.binary_arr_ext.bytes_fromhex"),
+                (),
+                assign.target,
+            )
+
         return [assign]
 
     def _run_getitem(self, assign, rhs, label):

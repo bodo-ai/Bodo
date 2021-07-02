@@ -95,6 +95,8 @@ void print_list_str_arr(uint64_t n, const char* data,
                         const offset_t* index_offsets,
                         const uint8_t* null_bitmap);
 void bytes_to_hex(char* output, char* data, int64_t data_len);
+int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
+                      int64_t data_len);
 void int_to_hex(char* output, int64_t output_len, uint64_t int_val);
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
@@ -191,6 +193,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(m, "memcmp", PyLong_FromVoidPtr((void*)(&memcmp)));
     PyObject_SetAttrString(m, "bytes_to_hex",
                            PyLong_FromVoidPtr((void*)(&bytes_to_hex)));
+    PyObject_SetAttrString(m, "bytes_fromhex",
+                           PyLong_FromVoidPtr((void*)(&bytes_fromhex)));
     PyObject_SetAttrString(m, "int_to_hex",
                            PyLong_FromVoidPtr((void*)(&int_to_hex)));
     return m;
@@ -755,6 +759,52 @@ void bytes_to_hex(char* output, char* data, int64_t data_len) {
         output[2 * i] = hex_values[c >> 4];
         output[(2 * i) + 1] = hex_values[c & 0x0f];
     }
+}
+
+int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
+                      int64_t data_len) {
+    /*
+        Implementation of bytes.hex() which converts
+        a string hex representation to the bytes value.
+
+        Returns the number of bytes that are allocated for truncated the output.
+
+        This is handled in regular Python here:
+        https://github.com/python/cpython/blob/1d08d85cbe49c0748a8ee03aec31f89ab8e81496/Objects/bytesobject.c#L2359
+        We assume we have already error checked an allocated the data in Python.
+
+    */
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return -1;                     \
+    }
+    auto gilstate = PyGILState_Ensure();
+    unsigned int top, bot;
+    int64_t length = 0;
+    // Note: We assume output is allocated to be data_len // 2.
+    unsigned char* end = data + data_len;
+    while (data < end) {
+        // We will always break out of this loop because we assume
+        // data is null terminated
+        if (Py_ISSPACE(*data)) {
+            do {
+                data++;
+            } while (Py_ISSPACE(*data));
+            // This break is taken if we end with a space character
+            if (data >= end)
+                break;
+        }
+        CHECK((end - data) >= 2,
+              "bytes.fromhex, must provide two hex values per byte");
+        top = _PyLong_DigitValue[*data++];
+        bot = _PyLong_DigitValue[*data++];
+        CHECK(top < 16, "bytes.fromhex: unsupport character");
+        CHECK(bot < 16, "bytes.fromhex: unsupport character");
+        output[length++] = (unsigned char)((top << 4) + bot);
+    }
+    return length;
 }
 
 void int_to_hex(char* output, int64_t output_len, uint64_t int_val) {

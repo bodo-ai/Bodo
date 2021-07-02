@@ -2314,7 +2314,7 @@ def overload_transform_str_getitem_output(data, length):
         )  # pragma: no cover
     if data == types.Array(types.uint8, 1, "C"):
         return lambda data, length: bodo.libs.binary_arr_ext.init_bytes_type(
-            data
+            data, length
         )  # pragma: no cover
     raise BodoError(f"Internal Error: Expected String or Uint8 Array, found {data}")
 

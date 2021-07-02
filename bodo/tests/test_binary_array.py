@@ -11,7 +11,8 @@ from bodo.tests.utils import check_func
 @pytest.fixture(
     params=[
         np.array(
-            [b"", b"abc", b"c", np.nan, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2, object
+            [b"", b"abc", b"c", np.nan, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2,
+            object,
         ),
     ]
 )
@@ -111,3 +112,14 @@ def test_get_item(binary_arr_value):
     # Slice
     idx = slice(1, 4)
     check_func(test_impl, (binary_arr_value, idx), dist_test=False)
+
+
+def test_bytes_fromhex():
+    def impl(hex_val):
+        return bytes.fromhex(hex_val)
+
+    check_func(impl, ("121134a320",))
+    check_func(impl, ("1211 34a302",))
+    check_func(impl, (b"HELLO".hex(),))
+    # Test for a trailing space
+    check_func(impl, ("1e21\t",))
