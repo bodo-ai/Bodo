@@ -7,6 +7,7 @@ import operator
 
 import llvmlite.binding as ll
 import numba
+import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import (
@@ -18,11 +19,16 @@ from numba.extending import (
     overload_method,
 )
 
+import bodo
 from bodo.libs import hstr_ext
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.utils.typing import BodoError, is_list_like_index_type
 
+_bytes_fromhex = types.ExternalFunction(
+    "bytes_fromhex", types.int64(types.voidptr, types.voidptr, types.uint64)
+)
 ll.add_symbol("bytes_to_hex", hstr_ext.bytes_to_hex)
+ll.add_symbol("bytes_fromhex", hstr_ext.bytes_fromhex)
 bytes_type = types.Bytes(types.uint8, 1, "C", readonly=True)
 
 
@@ -90,32 +96,36 @@ def init_binary_arr(typingctx, data_typ=None):
 
 
 @intrinsic
-def init_bytes_type(typingctx, data_typ):
-    """create a new bytes array from input data array(uint8) data."""
+def init_bytes_type(typingctx, data_typ, length_type):
+    """create a new bytes array from input data array(uint8) data and length,
+    where it is assumed that length <= len(data)"""
     assert data_typ == types.Array(types.uint8, 1, "C")
+    assert length_type == types.int64
 
     def codegen(context, builder, sig, args):
         # Convert input/output to structs to reference fields
         int_arr = cgutils.create_struct_proxy(sig.args[0])(
             context, builder, value=args[0]
         )
-        nitems = int_arr.nitems
+        length = args[1]
         bytes_array = cgutils.create_struct_proxy(bytes_type)(context, builder)
 
         # Initialize the fields of the byte array (mostly copied from Numba)
-        bytes_array.meminfo = context.nrt.meminfo_alloc(builder, nitems)
-        bytes_array.nitems = nitems
+        bytes_array.meminfo = context.nrt.meminfo_alloc(builder, length)
+        bytes_array.nitems = length
         bytes_array.itemsize = lir.Constant(bytes_array.itemsize.type, 1)
         bytes_array.data = context.nrt.meminfo_data(builder, bytes_array.meminfo)
         bytes_array.parent = cgutils.get_null_value(bytes_array.parent.type)
-        bytes_array.shape = int_arr.shape
+        bytes_array.shape = cgutils.pack_array(
+            builder, [length], context.get_value_type(types.intp)
+        )
         bytes_array.strides = int_arr.strides
 
-        # Memcpy the data from int array to bytes array
-        cgutils.memcpy(builder, bytes_array.data, int_arr.data, nitems)
+        # Memcpy the data from int array to bytes array, truncating if necessary.
+        cgutils.memcpy(builder, bytes_array.data, int_arr.data, length)
         return bytes_array._getvalue()
 
-    return bytes_type(data_typ), codegen
+    return bytes_type(data_typ, length_type), codegen
 
 
 @overload_method(BinaryArrayType, "copy", no_unliteral=True)
@@ -204,7 +214,12 @@ def binary_arr_getitem(arr, ind):
 
     # Indexing is supported for any indexing support for ArrayItemArray
     if isinstance(ind, types.Integer):
-        return lambda arr, ind: init_bytes_type(arr._data[ind])  # pragma: no cover
+
+        def impl(arr, ind):  # pragma: no cover
+            data = arr._data[ind]
+            return init_bytes_type(data, len(data))
+
+        return impl
 
     # bool arr, int arr, and slice
     if (
@@ -216,3 +231,36 @@ def binary_arr_getitem(arr, ind):
     raise BodoError(
         f"getitem for Binary Array with indexing type {ind} not supported."
     )  # pragma: no cover
+
+
+def bytes_fromhex(hex_str):
+    """Internal call to support bytes.fromhex().
+    Untyped pass replaces bytes.fromhex() with this call since class
+    methods are not supported in Numba's typing
+    """
+
+
+@overload(bytes_fromhex)
+def overload_bytes_fromhex(hex_str):
+    """
+    Bytes.fromhex is implemented using the Python implementation:
+    https://github.com/python/cpython/blob/1d08d85cbe49c0748a8ee03aec31f89ab8e81496/Objects/bytesobject.c#L2359
+    """
+    # Use types.unliteral to avoid issues with string literals
+    hex_str = types.unliteral(hex_str)
+    if hex_str == bodo.string_type:
+        kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
+
+        def impl(hex_str):  # pragma: no cover
+            if not hex_str._is_ascii or hex_str._kind != kind:
+                raise TypeError("bytes.fromhex is only supported on ascii strings")
+            # Allocate 1 byte per 2 characters. This overestimates if we skip spaces
+            data_arr = np.empty(len(hex_str) // 2, np.uint8)
+            # Populate the array
+            length = _bytes_fromhex(data_arr.ctypes, hex_str._data, len(hex_str))
+            # Wrap the result in a Bytes obj, truncating if necessary
+            return init_bytes_type(data_arr, length)
+
+        return impl
+
+    raise BodoError(f"bytes.fromhex not supported with argument type {hex_str}")
