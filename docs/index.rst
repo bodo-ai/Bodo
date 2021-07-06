@@ -76,9 +76,15 @@ computation can also be parallelized with some communication across processors.
    source/data_visualization
    source/not_supported
    source/advanced
-   source/spark
    source/BodoSQL
    source/e3
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Migration from Spark
+
+   source/spark
+   source/sparkcheatsheet
 
 
 .. toctree::
