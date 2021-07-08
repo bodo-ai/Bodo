@@ -195,27 +195,17 @@ def test_groupby_observed_true(memory_leak_check):
         bodo.jit(impl2)(df)
 
 
-def test_groupby_dropna_true(memory_leak_check):
+def test_groupby_dropna(memory_leak_check):
     """
-    Test groupby(): 'dropna' cannot have values other than boolean value True
+    Test groupby(): 'dropna' cannot have values other than boolean values
     """
 
     def impl1(df):
         return df.groupby(by=["A", "C"], dropna=2)
 
-    def impl2(df):
-        return df.groupby(by=["A", "C"], dropna=False)
-
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
-    with pytest.raises(
-        BodoError, match="dropna parameter only supports default value True"
-    ):
+    with pytest.raises(BodoError, match="parameter must be a constant bool"):
         bodo.jit(impl1)(df)
-    df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
-    with pytest.raises(
-        BodoError, match="dropna parameter only supports default value True"
-    ):
-        bodo.jit(impl2)(df)
 
 
 # ------------------------------ Groupby._() ------------------------------ #

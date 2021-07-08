@@ -591,7 +591,7 @@ Function application, GroupBy & Window:
   extra compilation time. Bodo uses heuristics to make a decision automatically if `_bodo_inline` is not provided.
 * :meth:`pandas.DataFrame.groupby` `by` should be a constant column label
   or column labels.
-  `sort=False` and `observed=True` are set by default. `as_index` argument is supported.
+  `sort=False` and `observed=True` are set by default. `as_index`  and `dropna` arguments are supported.
 * :meth:`pandas.DataFrame.rolling` `window` argument should be integer or a time
   offset (as a constant string, pd.Timedelta, or datetime.timedelta).
   `min_periods`, `center` and `on` arguments are also supported.

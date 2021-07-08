@@ -1092,14 +1092,16 @@ struct aggfunc<
  * group mapping for every row based on its key. For every row in the tables,
  * this only does *one* lookup in the hash map.
  *
- * @param[in] the tables
- * @param[out] grouping_info structures that map row numbers to group numbers
- * @param[in] whether to check for null keys. If a key is null that row will
- *            not be mapped to any group
+ * @param[in] tables the tables
+ * @param[out] grp_infos is grouping_info structures that map row numbers to
+ * group numbers
+ * @param[in] check_for_null_keys whether to check for null keys. If a key is
+ * null and key_dropna=True that row will not be mapped to any group
+ * @param[in] key_dropna whether to allow NA values in group keys or not.
  */
 void get_group_info(std::vector<table_info*>& tables,
                     std::vector<grouping_info>& grp_infos,
-                    bool check_for_null_keys) {
+                    bool check_for_null_keys, bool key_dropna) {
     if (tables.size() == 0) {
         throw std::runtime_error("get_group_info: tables is empty");
     }
@@ -1122,9 +1124,10 @@ void get_group_info(std::vector<table_info*>& tables,
     if (check_for_null_keys) {
         key_is_nullable = does_keys_have_nulls(key_cols);
     }
+    bool key_drop_nulls = key_is_nullable && key_dropna;
 
     for (int64_t i = 0; i < table->nrows(); i++) {
-        if (key_is_nullable) {
+        if (key_drop_nulls) {
             if (does_row_has_nulls(key_cols, i)) {
                 grp_info.row_to_group.emplace_back(-1);
                 continue;
@@ -1155,9 +1158,11 @@ void get_group_info(std::vector<table_info*>& tables,
  *
  * @param table a table of all key arrays
  * @param out_labels output array to fill
+ * @param[in] key_dropna whether to allow NA values in group keys or not.
  * @return int64_t total number of groups
  */
-int64_t get_groupby_labels(table_info* table, int64_t* out_labels) {
+int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
+                           bool key_dropna) {
     // TODO(ehsan): refactor to avoid code duplication with get_group_info
     table->num_keys = table->columns.size();
     std::vector<array_info*> key_cols = table->columns;
@@ -1169,8 +1174,9 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels) {
         key_to_group;
     bool key_is_nullable = does_keys_have_nulls(key_cols);
 
+    bool key_drop_nulls = key_is_nullable && key_dropna;
     for (int64_t i = 0; i < table->nrows(); i++) {
-        if (key_is_nullable) {
+        if (key_drop_nulls) {
             if (does_row_has_nulls(key_cols, i)) {
                 out_labels[i] = -1;
                 continue;
@@ -1197,11 +1203,13 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels) {
  * @param           tables: the tables
  * @param[out]      grouping_info structures that map row numbers to group
  * numbers
- * @param consider_missing: whether to return the list of missing rows or not
+ * @param[in] consider_missing: whether to return the list of missing rows or
+ * not
+ * @param[in] key_dropna whether to allow NA values in group keys or not.
  */
 void get_group_info_iterate(std::vector<table_info*>& tables,
                             std::vector<grouping_info>& grp_infos,
-                            bool consider_missing) {
+                            bool consider_missing, bool key_dropna) {
     if (tables.size() == 0) {
         throw std::runtime_error("get_group_info: tables is empty");
     }
@@ -1218,6 +1226,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
     std::vector<int64_t> active_group_repr;
 
     bool key_is_nullable = does_keys_have_nulls(key_cols);
+    bool key_drop_nulls = key_is_nullable && key_dropna;
     // start at 1 because I'm going to use 0 to mean nothing was inserted yet
     // in the map (but note that the group values I record in the output go from
     // 0 to num_groups - 1)
@@ -1225,7 +1234,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
     UNORD_MAP_CONTAINER<multi_col_key, int64_t, multi_col_key_hash>
         key_to_group;
     for (int64_t i = 0; i < table->nrows(); i++) {
-        if (key_is_nullable) {
+        if (key_drop_nulls) {
             if (does_row_has_nulls(key_cols, i)) {
                 grp_info.row_to_group[i] = -1;
                 if (consider_missing) grp_info.list_missing.push_back(i);
@@ -1266,7 +1275,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
         active_group_repr.resize(num_groups);
 
         for (int64_t i = 0; i < table->nrows(); i++) {
-            if (key_is_nullable) {
+            if (key_drop_nulls) {
                 if (does_row_has_nulls(key_cols, i)) {
                     grp_info.row_to_group[i] = -1;
                     if (consider_missing) grp_info.list_missing.push_back(i);
@@ -4903,7 +4912,7 @@ class GroupbyPipeline {
                     udf_table_op_fn combine_cb, udf_eval_fn eval_cb,
                     udf_general_fn general_udfs_cb, bool skipna,
                     int64_t periods, int64_t transform_func, bool _return_key,
-                    bool _return_index)
+                    bool _return_index, bool _key_dropna)
         : in_table(_in_table),
           num_keys(_num_keys),
           dispatch_table(_dispatch_table),
@@ -4912,6 +4921,7 @@ class GroupbyPipeline {
           is_crosstab(_is_crosstab),
           return_key(_return_key),
           return_index(_return_index),
+          key_dropna(_key_dropna),
           udf_table(_udf_table),
           udf_n_redvars(_udf_nredvars) {
         if (dispatch_table == nullptr)
@@ -5157,9 +5167,10 @@ class GroupbyPipeline {
 
         if (req_extended_group_info) {
             bool consider_missing = cumulative_op || shift_op || transform_op;
-            get_group_info_iterate(tables, grp_infos, consider_missing);
+            get_group_info_iterate(tables, grp_infos, consider_missing,
+                                   key_dropna);
         } else
-            get_group_info(tables, grp_infos, true);
+            get_group_info(tables, grp_infos, true, key_dropna);
         grouping_info& grp_info = grp_infos[0];
         grp_info.dispatch_table = dispatch_table;
         grp_info.dispatch_info = dispatch_info;
@@ -5241,7 +5252,7 @@ class GroupbyPipeline {
         update_table->num_keys = num_keys;
         grp_infos.clear();
         std::vector<table_info*> tables = {update_table};
-        get_group_info(tables, grp_infos, false);
+        get_group_info(tables, grp_infos, false, key_dropna);
         grouping_info& grp_info = grp_infos[0];
         num_groups = grp_info.num_groups;
         grp_info.dispatch_table = dispatch_table;
@@ -5451,6 +5462,7 @@ class GroupbyPipeline {
     bool is_crosstab;
     bool return_key;
     bool return_index;
+    bool key_dropna;
     std::vector<BasicColSet<ARRAY>*> col_sets;
     std::vector<GeneralUdfColSet<ARRAY>*> gen_udf_col_sets;
     table_info* udf_table;
@@ -5900,9 +5912,17 @@ table_info* mpi_exscan_computation(array_info* cat_column, table_info* in_table,
     return nullptr;
 }
 
-// Basically assign index to each unique category
+/**
+ * Basically assign index to each unique category
+ * @param in_table : input table
+ * @param num_keys : number of keys
+ * @param is_parallel: whether we run in parallel or not.
+ * @param key_dropna: whether we drop null keys or not.
+ * @return key categorical array_info
+ */
 array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
-                                      bool is_parallel) {
+                                      bool is_parallel,
+                                      bool key_dropna = true) {
 #ifdef DEBUG_GROUPBY
     std::cout << "compute_categorical_index num_keys=" << num_keys
               << " is_parallel=" << is_parallel << "\n";
@@ -5912,7 +5932,7 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     for (int64_t i_key = 0; i_key < num_keys; i_key++)
         incref_array(in_table->columns[i_key]);
     table_info* red_table =
-        drop_duplicates_nonnull_keys(in_table, num_keys, is_parallel);
+        drop_duplicates_keys(in_table, num_keys, is_parallel, key_dropna);
     size_t n_rows_full, n_rows = red_table->nrows();
     if (is_parallel)
         MPI_Allreduce(&n_rows, &n_rows_full, 1, MPI_LONG_LONG_INT, MPI_SUM,
@@ -5984,7 +6004,7 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     for (size_t iRow = 0; iRow < n_rows_in; iRow++) {
         int32_t pos;
         if (has_nulls) {
-            if (does_row_has_nulls(key_cols, iRow))
+            if (key_dropna && does_row_has_nulls(key_cols, iRow))
                 pos = -1;
             else
                 pos = entSet[iRow + n_rows_full];
@@ -6084,8 +6104,9 @@ table_info* pivot_groupby_and_aggregate(
             // TODO: general UDFs
             (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, 0, skipdropna, 0,
             0, return_key,
-            return_index);  // transform_func = periods=0. Not used in pivot
-                            // operation.
+            // dropna = True for pivot operation
+            return_index, true);  // transform_func = periods=0. Not used in
+                                  // pivot operation.
 
         table_info* ret_table = groupby.run();
         return ret_table;
@@ -6099,8 +6120,8 @@ table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
     int64_t periods, int64_t transform_func, bool return_key, bool return_index,
-    void* update_cb, void* combine_cb, void* eval_cb, void* general_udfs_cb,
-    table_info* udf_dummy_table) {
+    bool key_dropna, void* update_cb, void* combine_cb, void* eval_cb,
+    void* general_udfs_cb, table_info* udf_dummy_table) {
     try {
         int strategy =
             determine_groupby_strategy(in_table, num_keys, ftypes, func_offsets,
@@ -6115,7 +6136,7 @@ table_info* groupby_and_aggregate(
                 udf_nredvars, udf_dummy_table, (udf_table_op_fn)update_cb,
                 (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
                 (udf_general_fn)general_udfs_cb, skipdropna, periods,
-                transform_func, return_key, return_index);
+                transform_func, return_key, return_index, key_dropna);
 
             table_info* ret_table = groupby.run();
 
@@ -6134,8 +6155,8 @@ table_info* groupby_and_aggregate(
             return implement_categorical_exscan(cat_column);
         }
         if (strategy == 2) {
-            array_info* cat_column =
-                compute_categorical_index(in_table, num_keys, is_parallel);
+            array_info* cat_column = compute_categorical_index(
+                in_table, num_keys, is_parallel, key_dropna);
             if (cat_column ==
                 nullptr) {  // It turns out that there are too many
                             // different keys for exscan to be ok.
