@@ -9,8 +9,8 @@
 
 #define PRIME 109345121  // prime number larger than n_pes
 // random integers from [0, PRIME-1], with SCALE > 0
-#define SCALE 30457  // 1 + random.randrange(PRIME - 1)
-#define SHIFT 84577466  // random.randrange(PRIME)
+#define SCALE 30457      // 1 + random.randrange(PRIME - 1)
+#define SHIFT 84577466   // random.randrange(PRIME)
 
 inline size_t hash_to_rank(uint32_t hash, int n_pes) {
     return (((size_t)hash * SCALE + SHIFT) % PRIME) % (size_t)n_pes;

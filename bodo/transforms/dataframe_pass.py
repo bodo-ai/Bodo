@@ -1535,6 +1535,7 @@ class DataFramePass:
             same_index,
             return_key,
             lhs.loc,
+            grp_typ.dropna,
         )
         nodes.append(agg_node)
 
@@ -1777,7 +1778,9 @@ class DataFramePass:
         func_text += f"    in_df, keys, shuffle_info = shuffle_dataframe(in_df, keys)\n"
 
         # get groupby info
-        func_text += f"  group_indices, ngroups = get_group_indices(keys)\n"
+        func_text += (
+            f"  group_indices, ngroups = get_group_indices(keys, {grp_typ.dropna})\n"
+        )
         # TODO(ehsan): more efficient sort like Pandas
         # https://github.com/pandas-dev/pandas/blob/aad85ad1e39568f87cdae38fece41cd2370234a7/pandas/core/sorting.py#L566
         func_text += "  sort_idx = group_indices.argsort(kind='mergesort')\n"
@@ -2063,6 +2066,7 @@ class DataFramePass:
         input_has_index = False
         same_index = False
         return_key = True
+        dropna = True
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
             df_var.name,
@@ -2077,6 +2081,7 @@ class DataFramePass:
             same_index,
             return_key,
             lhs.loc,
+            dropna,
             pivot_arr,
             pivot_values,
         )
@@ -2152,6 +2157,7 @@ class DataFramePass:
         input_has_index = False
         same_index = False
         return_key = True
+        dropna = True
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
             "crosstab",
@@ -2166,6 +2172,7 @@ class DataFramePass:
             same_index,
             return_key,
             lhs.loc,
+            dropna,
             pivot_arr,
             pivot_values,
             True,

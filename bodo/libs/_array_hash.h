@@ -2,8 +2,8 @@
 #ifndef _ARRAY_HASH_H_INCLUDED
 #define _ARRAY_HASH_H_INCLUDED
 
-#include "_bodo_common.h"
 #include "_array_utils.h"
+#include "_bodo_common.h"
 
 #define SEED_HASH_PARTITION 0xb0d01289
 #define SEED_HASH_MULTIKEY 0xb0d01288
@@ -13,6 +13,14 @@
 #define SEED_HASH_PIVOT_SHUFFLE 0xb0d01285
 #define SEED_HASH_CONTAINER 0xb0d01284
 
+/**
+ * Function for the computation of hashes for keys
+ *
+ * @param key_arrs: input keys to hashThe hashes on output.
+ * @param seed: the seed of the computation.
+ * @return hash keys
+ *
+ */
 uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
                     const uint32_t seed);
 
@@ -23,6 +31,15 @@ uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
 void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
                 const uint32_t seed);
 
+/**
+ * Function for the getting table keys and returning its hashes
+ *
+ * @param in_table: the input table
+ * @param num_keys : the number of keys
+ * @param seed: the seed of the computation.
+ * @return hash keys
+ *
+ */
 inline uint32_t* hash_keys_table(table_info* in_table, size_t num_keys,
                                  uint32_t seed) {
     std::vector<array_info*> key_arrs(in_table->columns.begin(),
@@ -147,8 +164,7 @@ struct multi_col_key {
                     char* c2_strB =
                         c2->data1 +
                         c2_data_offsets[c2_index_offsets[other.row]];
-                    if (memcmp(c1_strB, c2_strB, common_len) != 0)
-                        return false;
+                    if (memcmp(c1_strB, c2_strB, common_len) != 0) return false;
             }
         }
         return true;

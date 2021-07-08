@@ -8,20 +8,37 @@
 #undef DEBUG_HASH
 
 /**
+ * Computation of the NA value hash
+ * @param seed: the seed of the computation.
+ * @param[out] hash_value: The hashes on output.
+ * TODO: [BE-975] Use this to trigger with hash_array_inner.
+ */
+static void hash_na_val(const uint32_t seed, uint32_t* hash_value) {
+    int64_t val = 1;
+    hash_inner_32<int64_t>(&val, seed, hash_value);
+}
+/**
  * Computation of the inner hash of the functions. This covers the NUMPY case.
  *
  * @param out_hashes: The hashes on output.
- * @param array: the list of data in input.
+ * @param data: the list of data in input.
  * @param n_rows: the number of rows of the table.
  * @param seed: the seed of the computation.
+ * @param null_bitmask: the null_bitmask of the data.
  *
  */
 template <typename T>
 static typename std::enable_if<!std::is_floating_point<T>::value, void>::type
 hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
-                 const uint32_t seed) {
-    for (size_t i = 0; i < n_rows; i++) {
-        hash_inner_32<T>(&data[i], seed, &out_hashes[i]);
+                 const uint32_t seed, uint8_t* null_bitmask) {
+    if (null_bitmask) {
+        for (size_t i = 0; i < n_rows; i++) {
+            hash_inner_32<T>(&data[i], seed, &out_hashes[i]);
+            if (!GetBit(null_bitmask, i)) out_hashes[i]++;
+        }
+    } else {
+        for (size_t i = 0; i < n_rows; i++)
+            hash_inner_32<T>(&data[i], seed, &out_hashes[i]);
     }
 }
 
@@ -152,6 +169,15 @@ static void hash_array_list_string(uint32_t* out_hashes, char* data,
 }
 
 /**
+ * Computation of the NA string hash
+ * @param seed: the seed of the computation.
+ * @param[out] hash_value: The hashes on output.
+ */
+static void hash_na_string(const uint32_t seed, uint32_t* hash_value) {
+    char val_c = 1;
+    hash_string_32(&val_c, 1, seed, hash_value);
+}
+/**
  * Computation of the hashes for the case of strings array column. Covers STRING
  *
  * @param out_hashes: The hashes on output.
@@ -168,12 +194,19 @@ static void hash_array_string(uint32_t* out_hashes, char* data,
                               offset_t* offsets, uint8_t* null_bitmask,
                               size_t n_rows, const uint32_t seed) {
     offset_t start_offset = 0;
+    uint32_t na_hash;
+    hash_na_string(seed, &na_hash);
     for (size_t i = 0; i < n_rows; i++) {
         offset_t end_offset = offsets[i + 1];
         offset_t len = end_offset - start_offset;
         std::string val(&data[start_offset], len);
-        const char* val_chars = val.c_str();
-        hash_string_32(val_chars, (const int)len, seed, &out_hashes[i]);
+        // val is null
+        if (is_na(null_bitmask, i)) {
+            out_hashes[i] = na_hash;
+        } else {
+            const char* val_chars = val.c_str();
+            hash_string_32(val_chars, (const int)len, seed, &out_hashes[i]);
+        }
         start_offset = end_offset;
     }
 }
@@ -355,8 +388,8 @@ void hash_arrow_array(uint32_t* out_hashes,
  * Top function for the computation of the hashes. It calls all the other hash
  * functions.
  *
- * @param out_hashes: The hashes on output.
- * @param array: the list of columns in input
+ * @param[out] out_hashes: The hashes on output.
+ * @param[in] array: the list of columns in input
  * @param n_rows: the number of rows of the table.
  * @param seed: the seed of the computation.
  *
@@ -385,49 +418,59 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
     }
     if (array->dtype == Bodo_CTypes::_BOOL) {
         return hash_array_inner<bool>(out_hashes, (bool*)array->data1, n_rows,
-                                      seed);
+                                      seed, (uint8_t*)array->null_bitmask);
     }
     if (array->dtype == Bodo_CTypes::INT8) {
         return hash_array_inner<int8_t>(out_hashes, (int8_t*)array->data1,
-                                        n_rows, seed);
+                                        n_rows, seed,
+                                        (uint8_t*)array->null_bitmask);
     }
     if (array->dtype == Bodo_CTypes::UINT8) {
         return hash_array_inner<uint8_t>(out_hashes, (uint8_t*)array->data1,
-                                         n_rows, seed);
+                                         n_rows, seed,
+                                         (uint8_t*)array->null_bitmask);
     }
     if (array->dtype == Bodo_CTypes::INT16) {
         return hash_array_inner<int16_t>(out_hashes, (int16_t*)array->data1,
-                                         n_rows, seed);
+                                         n_rows, seed,
+                                         (uint8_t*)array->null_bitmask);
     }
     if (array->dtype == Bodo_CTypes::UINT16) {
         return hash_array_inner<uint16_t>(out_hashes, (uint16_t*)array->data1,
-                                          n_rows, seed);
+                                          n_rows, seed,
+                                          (uint8_t*)array->null_bitmask);
     }
     if (array->dtype == Bodo_CTypes::INT32) {
         return hash_array_inner<int32_t>(out_hashes, (int32_t*)array->data1,
-                                         n_rows, seed);
+                                         n_rows, seed,
+                                         (uint8_t*)array->null_bitmask);
     }
     if (array->dtype == Bodo_CTypes::UINT32) {
         return hash_array_inner<uint32_t>(out_hashes, (uint32_t*)array->data1,
-                                          n_rows, seed);
+                                          n_rows, seed,
+                                          (uint8_t*)array->null_bitmask);
     }
     if (array->dtype == Bodo_CTypes::INT64) {
         return hash_array_inner<int64_t>(out_hashes, (int64_t*)array->data1,
-                                         n_rows, seed);
+                                         n_rows, seed,
+                                         (uint8_t*)array->null_bitmask);
     }
     if (array->dtype == Bodo_CTypes::DECIMAL) {
         return hash_array_inner<decimal_value_cpp>(
-            out_hashes, (decimal_value_cpp*)array->data1, n_rows, seed);
+            out_hashes, (decimal_value_cpp*)array->data1, n_rows, seed,
+            (uint8_t*)array->null_bitmask);
     }
     if (array->dtype == Bodo_CTypes::UINT64) {
         return hash_array_inner<uint64_t>(out_hashes, (uint64_t*)array->data1,
-                                          n_rows, seed);
+                                          n_rows, seed,
+                                          (uint8_t*)array->null_bitmask);
     }
     if (array->dtype == Bodo_CTypes::DATE ||
         array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
         return hash_array_inner<int64_t>(out_hashes, (int64_t*)array->data1,
-                                         n_rows, seed);
+                                         n_rows, seed,
+                                         (uint8_t*)array->null_bitmask);
     }
     if (array->dtype == Bodo_CTypes::FLOAT32) {
         return hash_array_inner<float>(out_hashes, (float*)array->data1, n_rows,
@@ -486,9 +529,10 @@ static void hash_array_combine(uint32_t* out_hashes, array_info* array,
                                          (offset_t*)array->data2, n_rows, seed);
     }
     if (array->arr_type == bodo_array_type::LIST_STRING) {
-        return combine_hash_array_list_string(out_hashes, (char*)array->data1,
-            (offset_t*)array->data2, (offset_t*)array->data3,
-            (uint8_t*)array->null_bitmask,(uint8_t*)array->sub_null_bitmask, n_rows);
+        return combine_hash_array_list_string(
+            out_hashes, (char*)array->data1, (offset_t*)array->data2,
+            (offset_t*)array->data3, (uint8_t*)array->null_bitmask,
+            (uint8_t*)array->sub_null_bitmask, n_rows);
     }
     if (array->dtype == Bodo_CTypes::_BOOL) {
         return hash_array_combine_inner<bool>(out_hashes, (bool*)array->data1,

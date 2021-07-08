@@ -551,6 +551,7 @@ class Aggregate(ir.Stmt):
         same_index,
         return_key,
         loc,
+        dropna=True,
         pivot_arr=None,
         pivot_values=None,
         is_crosstab=False,
@@ -584,6 +585,7 @@ class Aggregate(ir.Stmt):
         self.same_index = same_index
         self.return_key = return_key
         self.loc = loc
+        self.dropna = dropna
         # pivot_table handling
         self.pivot_arr = pivot_arr
         self.pivot_values = pivot_values
@@ -1937,7 +1939,7 @@ def gen_top_level_agg_func(
         func_text += "    delete_info_decref_array(pivot_info)\n"
         func_text += "    delete_info_decref_array(arr_info)\n"
     else:
-        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
+        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
             n_keys,
             agg_node.input_has_index,
             parallel,
@@ -1946,6 +1948,7 @@ def gen_top_level_agg_func(
             transform_func,
             agg_node.return_key,
             agg_node.same_index,
+            agg_node.dropna,
         )
 
     idx = 0

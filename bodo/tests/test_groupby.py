@@ -4242,7 +4242,7 @@ def test_groupby_shift_unknown_cats():
     check_func(test_impl, (df6,), copy_input=True)
 
 
-@pytest.mark.skip(reason="TODO: Return nullable int")
+@pytest.mark.skip(reason="[BE-961] TODO: Return nullable int")
 def test_groupby_shift_int():
     """
     Test Groupby.shift(): a simple case
@@ -4899,3 +4899,175 @@ def test_groupby_transform_count(memory_leak_check):
         }
     )
     check_func(impl_count, (df,))
+
+
+# TODO: [BE-974] Fix memory_leak_check issue
+@pytest.mark.slow
+def test_groupby_apply_na_key():
+    """Test groupby.apply with NA keys"""
+
+    def impl_apply(df):
+        A = df.groupby("A", dropna=False).apply(
+            lambda x: 3.3,
+        )
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series([np.nan, 1, 2, 1, 2, np.nan, np.nan, 3, 3], dtype="Int64"),
+            "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
+        }
+    )
+    check_func(impl_apply, (df,), sort_output=True, check_dtype=False, reset_index=True)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "df",
+    [
+        # int
+        pd.DataFrame(
+            {
+                "A": [np.nan, 1, 2, 1, 2, np.nan, np.nan],
+                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
+            }
+        ),
+        # float
+        pd.DataFrame(
+            {
+                "A": [np.nan, 1.1, 2.2, 1.1, 2.2, np.nan, np.nan],
+                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
+            }
+        ),
+        # nullable int
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [np.nan, 1, 2, 1, 2, np.nan, np.nan, 3, 3], dtype="Int64"
+                ),
+                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
+            }
+        ),
+        # timedelta
+        pd.DataFrame(
+            {
+                "A": [
+                    datetime.timedelta(3, 3, 3),
+                    datetime.timedelta(2, 2, 2),
+                    datetime.timedelta(1, 1, 1),
+                    np.nan,
+                    datetime.timedelta(5, 5, 5),
+                    np.nan,
+                    np.nan,
+                ],
+                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
+            }
+        ),
+        # datetime
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    pd.date_range(start="2/1/2015", end="2/24/2021", periods=6)
+                ).append(pd.Series(data=[None])),
+                "B": [2.2, 5.5, 5.5, 11.1, 12.2, 5.5, 2.2],
+            }
+        ),
+        # String
+        pd.DataFrame(
+            {
+                "A": ["CC", "aa", "b", np.nan, "aa", np.nan, "aa", "CC"],
+                "B": [10.2, 11.1, 1.1, 2.2, 2.2, 1.3, 3.4, 4.5],
+            },
+        ),
+        # Boolean
+        pd.DataFrame(
+            {
+                "A": [np.nan, False, True, True, True],
+                "B": [1.0, 2.0, 2, 1, 3],
+            },
+        ),
+    ],
+)
+def test_groupby_na_key(df, memory_leak_check):
+    """
+    Test groupby(dropna=False)
+    """
+
+    # CumOpColSet
+    def impl_cumsum(df):
+        A = df.groupby("A", dropna=False).cumsum()
+        return A
+
+    check_func(
+        impl_cumsum, (df,), sort_output=True, check_dtype=False, reset_index=True
+    )
+
+    def impl_shift(df):
+        A = df.groupby("A", dropna=False).shift(2)
+        return A
+
+    check_func(impl_shift, (df,), sort_output=True, check_dtype=False, reset_index=True)
+
+    # TransformColSet
+    def impl_transform(df):
+        A = df.groupby("A", dropna=False).transform("sum")
+        return A
+
+    check_func(
+        impl_transform, (df,), sort_output=True, check_dtype=False, reset_index=True
+    )
+
+    # UdfColSet
+    def impl_agg(df):
+        A = df.groupby("A", dropna=False).agg(lambda x: x.max() - x.min())
+        return A
+
+    check_func(impl_agg, (df,), sort_output=True, check_dtype=False, reset_index=True)
+
+    # BasicColSet
+    def impl_max(df):
+        A = df.groupby("A", dropna=False).max()
+        return A
+
+    check_func(impl_max, (df,), sort_output=True, check_dtype=False, reset_index=True)
+
+    # MedianColSet
+    def impl_median(df):
+        A = df.groupby("A", dropna=False).median()
+        return A
+
+    check_func(
+        impl_median, (df,), sort_output=True, check_dtype=False, reset_index=True
+    )
+
+    # NUniqueColSet
+    def impl_nunique(df):
+        A = df.groupby("A", dropna=False).nunique()
+        return A
+
+    check_func(
+        impl_nunique, (df,), sort_output=True, check_dtype=False, reset_index=True
+    )
+
+    # MeanColSet
+    def impl_mean(df):
+        A = df.groupby("A", dropna=False).mean()
+        return A
+
+    check_func(impl_mean, (df,), sort_output=True, check_dtype=False, reset_index=True)
+
+    # VarStdColSet
+    def impl_std(df):
+        A = df.groupby("A", dropna=False).std()
+        return A
+
+    check_func(impl_std, (df,), sort_output=True, check_dtype=False, reset_index=True)
+
+    # IdxMinMaxColSet
+    def impl_idxmin(df):
+        A = df.groupby("A", dropna=False).idxmin()
+        return A
+
+    check_func(
+        impl_idxmin, (df,), sort_output=True, check_dtype=False, reset_index=True
+    )

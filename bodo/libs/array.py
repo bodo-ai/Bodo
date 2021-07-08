@@ -1835,6 +1835,7 @@ def groupby_and_aggregate(
     transform_func,
     return_keys,
     return_index,
+    dropna,
     update_cb,
     combine_cb,
     eval_cb,
@@ -1864,6 +1865,7 @@ def groupby_and_aggregate(
                 lir.IntType(64),  # transform_func
                 lir.IntType(1),
                 lir.IntType(1),
+                lir.IntType(1),  # groupby key dropna
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
@@ -1894,6 +1896,7 @@ def groupby_and_aggregate(
             types.int64,  # transform_func
             types.boolean,
             types.boolean,
+            types.boolean,  # dropna
             types.voidptr,
             types.voidptr,
             types.voidptr,
@@ -1906,7 +1909,7 @@ def groupby_and_aggregate(
 
 get_groupby_labels = types.ExternalFunction(
     "get_groupby_labels",
-    types.int64(table_type, types.voidptr),
+    types.int64(table_type, types.voidptr, types.boolean),
 )
 
 

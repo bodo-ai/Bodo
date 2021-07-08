@@ -47,6 +47,7 @@ void groupby_init();
  * @param transform_func: function number to use with transform operation.
  * @param return_key: whether to return the keys or not.
  * @param return_index: whether to return the index or not.
+ * @param key_dropna: whether to  allow NA values in group keys or not.
  * @param external 'update' function (a function pointer).
  *        For ftype=udf, the update step happens in external JIT-compiled code,
  *        which must initialize redvar columns and apply the update function.
@@ -64,8 +65,8 @@ table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
     int64_t periods, int64_t transform_func, bool return_key, bool return_index,
-    void* update_cb, void* combine_cb, void* eval_cb, void* general_udfs_cb,
-    table_info* udf_dummy_table);
+    bool key_dropna, void* update_cb, void* combine_cb, void* eval_cb,
+    void* general_udfs_cb, table_info* udf_dummy_table);
 
 table_info* pivot_groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, table_info* dispatch_table,
@@ -79,8 +80,10 @@ table_info* pivot_groupby_and_aggregate(
  *
  * @param table a table of all key arrays
  * @param out_labels output array to fill
+ * @param key_dropna: whether to include NA in key groups or not.
  * @return int64_t total number of groups
  */
-int64_t get_groupby_labels(table_info* table, int64_t* out_labels);
+int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
+                           bool key_dropna);
 
 #endif  // _GROUPBY_H_INCLUDED

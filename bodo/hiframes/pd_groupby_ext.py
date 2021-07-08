@@ -89,24 +89,32 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
     to aggregate node.
     """
 
-    def __init__(self, df_type, keys, selection, as_index, explicit_select=False):
+    def __init__(
+        self, df_type, keys, selection, as_index, dropna=True, explicit_select=False
+    ):
 
         self.df_type = df_type
         self.keys = keys
         self.selection = selection
         self.as_index = as_index
+        self.dropna = dropna
         self.explicit_select = explicit_select
 
         super(DataFrameGroupByType, self).__init__(
-            name="DataFrameGroupBy({}, {}, {}, {}, {})".format(
-                df_type, keys, selection, as_index, explicit_select
+            name="DataFrameGroupBy({}, {}, {}, {}, {}, {})".format(
+                df_type, keys, selection, as_index, dropna, explicit_select
             )
         )
 
     def copy(self):
         # XXX is copy necessary?
         return DataFrameGroupByType(
-            self.df_type, self.keys, self.selection, self.as_index, self.explicit_select
+            self.df_type,
+            self.keys,
+            self.selection,
+            self.as_index,
+            self.dropna,
+            self.explicit_select,
         )
 
 
@@ -136,7 +144,7 @@ def validate_udf(func_name, func):
 
 
 @intrinsic
-def init_groupby(typingctx, obj_type, by_type, as_index_type=None):
+def init_groupby(typingctx, obj_type, by_type, as_index_type=None, dropna_type=None):
     """Initialize a groupby object. The data object inside can be a DataFrame"""
 
     def codegen(context, builder, signature, args):
@@ -165,10 +173,14 @@ def init_groupby(typingctx, obj_type, by_type, as_index_type=None):
         # TODO: more robust fix or just check
         as_index = True
 
+    if is_overload_constant_bool(dropna_type):
+        dropna = is_overload_true(dropna_type)
+    else:
+        dropna = True
     groupby_type = DataFrameGroupByType(
-        obj_type, keys, tuple(selection), as_index, False
+        obj_type, keys, tuple(selection), as_index, dropna, False
     )
-    return groupby_type(obj_type, by_type, as_index_type), codegen
+    return groupby_type(obj_type, by_type, as_index_type, dropna_type), codegen
 
 
 # dummy lowering for groupby.size since it is used in Series.value_counts()
@@ -203,7 +215,7 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
                     )
                 selection = (idx,)
             ret_grp = DataFrameGroupByType(
-                grpby.df_type, grpby.keys, selection, grpby.as_index, True
+                grpby.df_type, grpby.keys, selection, grpby.as_index, grpby.dropna, True
             )
             return signature(ret_grp, *args)
 
@@ -598,7 +610,7 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, context):
             raise BodoError(f"unsupported aggregate function {f_name}")
         # run typer on a groupby with just column col
         ret_grp = DataFrameGroupByType(
-            grp.df_type, grp.keys, (col,), grp.as_index, True
+            grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True
         )
         out_tp = get_agg_typ(ret_grp, (), f_name, context)[0].return_type
     else:
@@ -613,7 +625,7 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, context):
         f_name = code.co_name
         # run typer on a groupby with just column col
         ret_grp = DataFrameGroupByType(
-            grp.df_type, grp.keys, (col,), grp.as_index, True
+            grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True
         )
         # out_tp is series because we are passing only one input column
         out_tp = get_agg_typ(ret_grp, (), "agg", context, f)[0].return_type
@@ -1126,7 +1138,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
                 )
             )
         return DataFrameGroupByType(
-            grpby.df_type, grpby.keys, (attr,), grpby.as_index, True
+            grpby.df_type, grpby.keys, (attr,), grpby.as_index, grpby.dropna, True
         )
 
 
@@ -1295,21 +1307,23 @@ def lower_crosstab_dummy(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
 
 
-def get_group_indices(keys):  # pragma: no cover
+def get_group_indices(keys, dropna):  # pragma: no cover
     return np.arange(len(keys))
 
 
 @overload(get_group_indices)
-def get_group_indices_overload(keys):
+def get_group_indices_overload(keys, dropna):
     """get group indices (labels) for a tuple of key arrays."""
-    func_text = "def impl(keys):\n"
+    func_text = "def impl(keys, dropna):\n"
     # convert arrays to table
     func_text += "    info_list = [{}]\n".format(
         ", ".join(f"array_to_info(keys[{i}])" for i in range(len(keys.types))),
     )
     func_text += "    table = arr_info_list_to_table(info_list)\n"
     func_text += "    group_labels = np.empty(len(keys[0]), np.int64)\n"
-    func_text += "    ngroups = get_groupby_labels(table, group_labels.ctypes)\n"
+    func_text += (
+        "    ngroups = get_groupby_labels(table, group_labels.ctypes, dropna)\n"
+    )
     func_text += "    delete_table_decref_arrays(table)\n"
     func_text += "    return group_labels, ngroups\n"
     loc_vars = {}

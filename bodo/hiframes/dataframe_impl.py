@@ -2652,7 +2652,7 @@ def overload_dataframe_groupby(
         observed=True,
         dropna=True,
     ):  # pragma: no cover
-        return bodo.hiframes.pd_groupby_ext.init_groupby(df, by, as_index)
+        return bodo.hiframes.pd_groupby_ext.init_groupby(df, by, as_index, dropna)
 
     return _impl
 
@@ -2703,17 +2703,22 @@ def validate_groupby_spec(
             ),
         )
 
+    # make sure dropna is of type bool
+    if not is_overload_constant_bool(dropna):
+        raise_const_error(
+            "groupby(): 'dropna' parameter must be a constant bool, not {}.".format(
+                dropna
+            ),
+        )
+
     # NOTE: sort default value is True in pandas. We opt to set it to False by default for performance
     unsupported_args = dict(
         sort=sort,
         group_keys=group_keys,
         squeeze=squeeze,
         observed=observed,
-        dropna=dropna,
     )
-    args_defaults = dict(
-        sort=False, group_keys=True, squeeze=False, observed=True, dropna=True
-    )
+    args_defaults = dict(sort=False, group_keys=True, squeeze=False, observed=True)
 
     check_unsupported_args("Dataframe.groupby", unsupported_args, args_defaults)
 

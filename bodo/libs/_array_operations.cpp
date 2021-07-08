@@ -255,10 +255,12 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         // by picking evenly spaced keys from the overall sample of size ps.
         // We choose the global of number of samples according to this theorem:
         // "With O(p log N / epsilon^2) samples overall, sample sort with
-        // random sampling achieves (1 + epsilon) load balance with high probability."
-        // [1] Guy E. Blelloch, Charles E. Leiserson, Bruce M Maggs, C Greg Plaxton, Stephen J
-        //     Smith, and Marco Zagha. 1998. An experimental analysis of parallel sorting
-        //     algorithms. Theory of Computing Systems 31, 2 (1998), 135-167.
+        // random sampling achieves (1 + epsilon) load balance with high
+        // probability." [1] Guy E. Blelloch, Charles E. Leiserson, Bruce M
+        // Maggs, C Greg Plaxton, Stephen J
+        //     Smith, and Marco Zagha. 1998. An experimental analysis of
+        //     parallel sorting algorithms. Theory of Computing Systems 31, 2
+        //     (1998), 135-167.
         std::mt19937 gen(1234567890);
         double epsilon = 0.1;
         char* bodo_sort_epsilon = std::getenv("BODO_SORT_EPSILON");
@@ -267,8 +269,10 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         }
         if (epsilon < 0) throw std::runtime_error("sort_values: epsilon < 0");
         double n_global_sample = n_pes * log(n_total) / pow(epsilon, 2.0);
-        n_global_sample = std::min(std::max(n_global_sample, double(n_pes)), double(n_total));
-        int64_t n_loc_sample = std::min(n_global_sample / n_pes, double(n_local));
+        n_global_sample =
+            std::min(std::max(n_global_sample, double(n_pes)), double(n_total));
+        int64_t n_loc_sample =
+            std::min(n_global_sample / n_pes, double(n_local));
         double block_size = double(n_local) / n_loc_sample;
         std::vector<int64_t> ListIdx(n_loc_sample);
         double cur_lo = 0;
@@ -350,18 +354,20 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 //   DROP DUPLICATES
 //
 
-/** This function is for dropping the non-null keys.
- * It is used for drop_duplicates_nonnull_keys and
+/** This function is for dropping duplicated keys.
+ * It is used for drop_duplicates_keys and
  * then transitively by compute_categorical_index
  *
  * External function used are "RetrieveTable" and "TestEqual"
  *
  * @param in_table : the input table
  * @param num_keys : the number of keys
+ * @param dropna: whether we drop null keys or not.
  * @return the table to be used.
  */
-static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table,
-                                                      int64_t num_keys) {
+static table_info* drop_duplicates_keys_inner(table_info* in_table,
+                                              int64_t num_keys,
+                                              bool dropna = true) {
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<array_info*> key_arrs(in_table->columns.begin(),
                                       in_table->columns.begin() + num_keys);
@@ -383,7 +389,7 @@ static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table,
     //
     std::vector<int64_t> ListRow;
     uint64_t next_ent = 0;
-    bool has_nulls = does_keys_have_nulls(key_arrs);
+    bool has_nulls = dropna && does_keys_have_nulls(key_arrs);
     auto is_ok = [&](size_t i_row) -> bool {
         if (!has_nulls) return true;
         return !does_row_has_nulls(key_arrs, i_row);
@@ -406,7 +412,7 @@ static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table,
     //
     delete[] hashes;
 #ifdef DEBUG_DD_SYMBOL
-    std::cout << "drop_duplicates_nonnull_keys_inner : OUTPUT:\n";
+    std::cout << "drop_duplicates_keys_inner : OUTPUT:\n";
     DEBUG_PrintRefct(std::cout, ret_table->columns);
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
 #endif
@@ -438,9 +444,8 @@ static table_info* drop_duplicates_nonnull_keys_inner(table_info* in_table,
  * of the operation after the rows have been merged on the computation
  * @return the table to be used.
  */
-table_info* drop_duplicates_table_inner(table_info* in_table,
-                                        int64_t num_keys, int64_t keep,
-                                        int step) {
+table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
+                                        int64_t keep, int step) {
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<array_info*> key_arrs(num_keys);
     for (size_t iKey = 0; iKey < size_t(num_keys); iKey++)
@@ -571,24 +576,24 @@ table_info* drop_duplicates_table_inner(table_info* in_table,
  * @param in_table : the input table
  * @param num_keys : the number of keys
  * @param is_parallel: whether we run in parallel or not.
+ * @param dropna: whether we drop null keys or not.
  * @return the vector of pointers to be used.
  */
-table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
-                                         bool is_parallel) {
+table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
+                                 bool is_parallel, bool dropna) {
 #ifdef DEBUG_DD
-    std::cout << "drop_duplicates_nonnull_keys : is_parallel=" << is_parallel
-              << "\n";
+    std::cout << "drop_duplicates_keys : is_parallel=" << is_parallel << "\n";
 #endif
     // serial case
     if (!is_parallel) {
-        return drop_duplicates_nonnull_keys_inner(in_table, num_keys);
+        return drop_duplicates_keys_inner(in_table, num_keys, dropna);
     }
     // parallel case
     // pre reduction of duplicates
     table_info* red_table =
-        drop_duplicates_nonnull_keys_inner(in_table, num_keys);
+        drop_duplicates_keys_inner(in_table, num_keys, dropna);
     // shuffling of values
-    table_info* shuf_table = shuffle_table(red_table, num_keys);
+    table_info* shuf_table = shuffle_table(red_table, num_keys, 0);
     // no need to decref since shuffle_table() steals a reference
     delete_table(red_table);
     // reduction after shuffling
@@ -597,7 +602,7 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
         drop_duplicates_table_inner(shuf_table, num_keys, keep, 1);
     delete_table(shuf_table);
 #ifdef DEBUG_DD
-    std::cout << "OUTPUT : drop_duplicates_nonnull_keys ret_table=\n";
+    std::cout << "OUTPUT : drop_duplicates_keys ret_table=\n";
     DEBUG_PrintRefct(std::cout, ret_table->columns);
     DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
 #endif
@@ -621,7 +626,8 @@ table_info* drop_duplicates_nonnull_keys(table_info* in_table, int64_t num_keys,
  * @return the vector of pointers to be used.
  */
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
-                                  int64_t num_keys, int64_t keep, int64_t total_cols) {
+                                  int64_t num_keys, int64_t keep,
+                                  int64_t total_cols) {
     try {
 #ifdef DEBUG_DD
         std::cout << "drop_duplicates_table : is_parallel=" << is_parallel
@@ -629,15 +635,13 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
 #endif
         // serial case
         if (!is_parallel) {
-            if (total_cols != -1)
-                num_keys = total_cols;
+            if (total_cols != -1) num_keys = total_cols;
             return drop_duplicates_table_inner(in_table, num_keys, keep, 1);
         }
         // parallel case
         // pre reduction of duplicates
-        table_info* red_table; 
-        if (total_cols == -1)
-            total_cols = num_keys;
+        table_info* red_table;
+        if (total_cols == -1) total_cols = num_keys;
         red_table = drop_duplicates_table_inner(in_table, total_cols, keep, 2);
         // shuffling of values
         table_info* shuf_table = shuffle_table(red_table, num_keys);
