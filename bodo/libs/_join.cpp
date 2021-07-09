@@ -18,8 +18,8 @@
 // There are several heuristic in this code:
 // ---We can use shuffle-join or broadcast-join. We have one constant for the
 // maximal
-//    size of the broadcasted table. It is set to 1024*1024, while in spark it
-//    is by default 10 * 1024 * 1024. Variable name "CritMemorySize".
+//    size of the broadcasted table. It is set to 10 MB by default (same as
+//    Spark). Variable name "CritMemorySize".
 // ---For the join, we need to construct one hash map for the keys. If we take
 // the left
 //    table and is_left=T then we need to build a more complicated hash-map.
@@ -121,8 +121,10 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             // Only if both tables are parallel is something needed
             int64_t left_total_memory = table_global_memory_size(left_table);
             int64_t right_total_memory = table_global_memory_size(right_table);
-            int CritMemorySize =
-                1024 * 1024;  // 1M in total is the critical size
+            int CritMemorySize = 10 * 1024 * 1024;  // in bytes
+            char* bcast_threshold = std::getenv("BODO_BCAST_JOIN_THRESHOLD");
+            if (bcast_threshold) CritMemorySize = std::stoi(bcast_threshold);
+            if (CritMemorySize < 0) throw std::runtime_error("hash_join: CritMemorySize < 0");
             bool all_gather = true;
             if (left_total_memory < right_total_memory &&
                 left_total_memory < CritMemorySize) {
