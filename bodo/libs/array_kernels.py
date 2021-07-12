@@ -195,6 +195,20 @@ def setna_overload(arr, ind, int_nan_const=0):
             arr._null_bitmap, ind, 0
         )  # pragma: no cover
 
+    # Binary Array
+    if arr == bodo.binary_array_type:
+
+        def impl_binary_arr(arr, ind, int_nan_const=0):  # pragma: no cover
+            # set offset
+            offsets = bodo.libs.array_item_arr_ext.get_offsets(arr._data)
+            offsets[ind + 1] = offsets[ind]
+            # set NA bitmask
+            bodo.libs.int_arr_ext.set_bit_to_arr(
+                bodo.libs.array_item_arr_ext.get_null_bitmap(arr._data), ind, 0
+            )
+
+        return impl_binary_arr
+
     if isinstance(arr, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
 
         def impl_arr_item(arr, ind, int_nan_const=0):  # pragma: no cover

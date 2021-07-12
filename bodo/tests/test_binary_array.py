@@ -123,3 +123,28 @@ def test_bytes_fromhex():
     check_func(impl, (b"HELLO".hex(),))
     # Test for a trailing space
     check_func(impl, ("1e21\t",))
+
+
+def test_binary_series_apply(binary_arr_value):
+    def test_impl1(S):
+        return S.apply(lambda x: None if pd.isna(x) else x)
+
+    def test_impl2(S):
+        return S.map(lambda x: None if pd.isna(x) else x)
+
+    S = pd.Series(binary_arr_value)
+    check_func(test_impl1, (S,), dist_test=False)
+    check_func(test_impl2, (S,), dist_test=False)
+
+
+def test_binary_dataframe_apply(binary_arr_value):
+    def test_impl(df):
+        return df.apply(lambda x: None if pd.isna(x["A"]) else x["A"], axis=1)
+
+    df = pd.DataFrame(
+        {
+            "A": binary_arr_value,
+            "B": 1,
+        }
+    )
+    check_func(test_impl, (df,), dist_test=False)

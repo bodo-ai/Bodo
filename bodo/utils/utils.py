@@ -680,6 +680,11 @@ def overload_alloc_type(n, t, s=None):
             n, s[0]
         )  # pragma: no cover
 
+    if typ == bodo.binary_array_type:
+        return lambda n, t, s=None: bodo.libs.binary_arr_ext.pre_alloc_binary_array(
+            n, s[0]
+        )  # pragma: no cover
+
     if isinstance(typ, bodo.libs.array_item_arr_ext.ArrayItemArrayType):
         dtype = typ.dtype
         return lambda n, t, s=None: bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
