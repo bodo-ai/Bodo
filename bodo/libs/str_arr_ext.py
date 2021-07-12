@@ -1026,7 +1026,7 @@ def set_all_offsets_to_0(typingctx, str_arr_typ=None):
     Set all the offsets of a string array to 0. Useful for
     all null columns.
     """
-    assert str_arr_typ == string_array_type
+    assert str_arr_typ in [string_array_type, binary_array_type]
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
@@ -1050,7 +1050,7 @@ def set_all_offsets_to_0(typingctx, str_arr_typ=None):
         cgutils.memset(builder, null_offsets_ptr, n_bytes, 0)
         return context.get_dummy_value()
 
-    return types.none(string_array_type), codegen
+    return types.none(str_arr_typ), codegen
 
 
 @numba.njit

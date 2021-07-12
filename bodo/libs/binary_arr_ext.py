@@ -10,6 +10,7 @@ import numba
 import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
+from numba.core.imputils import impl_ret_borrowed
 from numba.extending import (
     intrinsic,
     lower_cast,
@@ -78,6 +79,22 @@ def overload_bin_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
+@numba.njit
+def pre_alloc_binary_array(n_bytestrs, n_chars):  # pragma: no cover
+    if n_chars is None:
+        n_chars = -1
+    bin_arr = init_binary_arr(
+        bodo.libs.array_item_arr_ext.pre_alloc_array_item_array(
+            np.int64(n_bytestrs),
+            (np.int64(n_chars),),
+            bodo.libs.str_arr_ext.char_arr_type,
+        )
+    )
+    if n_chars == 0:
+        bodo.libs.str_arr_ext.set_all_offsets_to_0(bin_arr)
+    return bin_arr
+
+
 @intrinsic
 def init_binary_arr(typingctx, data_typ=None):
     """create a new binary array from input data array(char) array data"""
@@ -126,6 +143,18 @@ def init_bytes_type(typingctx, data_typ, length_type):
         return bytes_array._getvalue()
 
     return bytes_type(data_typ, length_type), codegen
+
+
+@intrinsic
+def cast_bytes_uint8array(typingctx, data_typ):
+    """cast a bytes array to array(uint8) for use in setitem."""
+    assert data_typ == bytes_type
+
+    def codegen(context, builder, sig, args):
+        # Bytes and uint8 have the same model.
+        return impl_ret_borrowed(context, builder, sig.return_type, args[0])
+
+    return types.Array(types.uint8, 1, "C")(data_typ), codegen
 
 
 @overload_method(BinaryArrayType, "copy", no_unliteral=True)
@@ -264,3 +293,32 @@ def overload_bytes_fromhex(hex_str):
         return impl
 
     raise BodoError(f"bytes.fromhex not supported with argument type {hex_str}")
+
+
+@overload(operator.setitem)
+def binary_arr_setitem(arr, ind, val):
+    if arr != binary_array_type:  # pragma: no cover
+        return
+
+    if val == types.none or isinstance(val, types.optional):  # pragma: no cover
+        # None/Optional goes through a separate step.
+        return
+
+    # # Indexing is supported for any indexing support for ArrayItemArray
+    # # NOTE: This should only be used on initialization, but it is needed
+    # # for map/apply
+    if val != bytes_type:
+        raise BodoError(f"setitem for Binary Array only supported with bytes value")
+    if isinstance(ind, types.Integer):
+
+        def impl(arr, ind, val):  # pragma: no cover
+            # TODO: Replace this cast with a direct memcpy into the data. This
+            # is not safe in the future since we expect the model for bytes to change
+            # and no longer be associated with Array.
+            arr._data[ind] = bodo.libs.binary_arr_ext.cast_bytes_uint8array(val)
+
+        return impl
+
+    raise BodoError(
+        f"setitem for Binary Array with indexing type {ind} not supported."
+    )  # pragma: no cover
