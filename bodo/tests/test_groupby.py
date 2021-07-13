@@ -996,6 +996,10 @@ def test_groupby_datetime_miss(memory_leak_check):
         A = df.groupby("A").last()
         return A
 
+    def test_impl5(df):
+        A = df.groupby("A").count()
+        return A
+
     random.seed(5)
 
     def get_small_list(shift, elen):
@@ -1033,6 +1037,7 @@ def test_groupby_datetime_miss(memory_leak_check):
     # TODO: solve the bug below. We should not need to have a reset_index=True
     check_func(test_impl3, (df1,), sort_output=True)
     check_func(test_impl4, (df1,), sort_output=True)
+    check_func(test_impl5, (df1,), sort_output=True)
 
 
 def test_agg_as_index_fast(memory_leak_check):
