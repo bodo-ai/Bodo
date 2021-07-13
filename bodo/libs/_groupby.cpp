@@ -2638,6 +2638,13 @@ void do_apply_to_column(ARR_I* in_col, ARR_O* out_col,
                 return apply_to_column<ARR_I, ARR_O, double, Bodo_FTypes::count,
                                        Bodo_CTypes::FLOAT64>(
                     in_col, out_col, aux_cols, grp_info);
+            case Bodo_CTypes::DATETIME:
+            case Bodo_CTypes::TIMEDELTA:
+                // data will only be used to check for NATs
+                return apply_to_column<ARR_I, ARR_O, int64_t,
+                                       Bodo_FTypes::count,
+                                       Bodo_CTypes::DATETIME>(
+                    in_col, out_col, aux_cols, grp_info);
             default:
                 // data will be ignored in this case, so type doesn't matter
                 return apply_to_column<ARR_I, ARR_O, int8_t, Bodo_FTypes::count,
