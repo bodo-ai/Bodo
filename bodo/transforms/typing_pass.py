@@ -4,6 +4,7 @@ according to Bodo requirements (using partial typing).
 """
 import copy
 import itertools
+import types as pytypes
 import warnings
 from collections import defaultdict
 
@@ -388,6 +389,31 @@ class TypingTransforms:
 
         if isinstance(rhs, ir.Expr) and rhs.op in ("getitem", "static_getitem"):
             return self._run_getitem(assign, rhs, label)
+
+        if isinstance(rhs, ir.Expr) and rhs.op == "make_function":
+            return self._run_make_function(assign, rhs)
+
+        # remove leftover data types for tuples of make_function values replaced above
+        # needed since _replace_arg_with_literal() cannot handle make_function values
+        # see test_groupby_agg_const_dict::impl18
+        # see test_groupby_agg_func_list
+        if isinstance(rhs, ir.Expr) and rhs.op in ("build_tuple", "build_list"):
+            tup_typ = self.typemap.get(assign.target.name, None)
+            is_func_literal = lambda t: isinstance(
+                t, types.MakeFunctionLiteral
+            ) or is_expr(t, "make_function")
+            # check for BaseTuple since could be types.unknown
+            if (
+                isinstance(tup_typ, (types.BaseTuple, types.LiteralList))
+                and any(is_func_literal(t) for t in tup_typ)
+            ) or (
+                isinstance(tup_typ, types.List)
+                and tup_typ.initial_value is not None
+                and any(is_func_literal(t) for t in tup_typ.initial_value)
+            ):
+                self.typemap.pop(assign.target.name, None)
+                # avoid list of func typing errors, see comment in _create_const_var
+                rhs.op = "build_tuple"
 
         # detect type unification errors in control flow
         # TODO(ehsan): update after #2258 is merged
@@ -1248,6 +1274,180 @@ class TypingTransforms:
 
         return nodes + [assign]
 
+    def _run_make_function(self, assign, rhs):
+        """convert ir.Expr.make_function into a JIT function if possible.
+        Replaces MakeFunctionToJitFunction of Numba, and also supports converting
+        non-constant freevars into UDF arguments if possible.
+        """
+        # mostly copied from Numba here:
+        # https://github.com/numba/numba/blob/1d50422ab84bef84391f895184e2bd48ba0fab03/numba/core/untyped_passes.py#L562
+        kw_default = guard(get_definition, self.func_ir, rhs.defaults)
+        ok = False
+        if kw_default is None or isinstance(kw_default, ir.Const):
+            ok = True
+        elif isinstance(kw_default, tuple):
+            ok = all(
+                [
+                    isinstance(guard(get_definition, self.func_ir, x), ir.Const)
+                    for x in kw_default
+                ]
+            )
+        elif isinstance(kw_default, ir.Expr):
+            if kw_default.op != "build_tuple":
+                return [assign]
+            ok = all(
+                [
+                    isinstance(guard(get_definition, self.func_ir, x), ir.Const)
+                    for x in kw_default.items
+                ]
+            )
+        if not ok:
+            return [assign]
+
+        nodes = []
+        try:
+            pyfunc = ir_utils.convert_code_obj_to_function(rhs, self.func_ir)
+        except BodoError:
+            # convert non-constant freevars to UDF arguments if possible and try again
+            guard(self._transform_make_function_freevars, assign, rhs, nodes)
+            pyfunc = ir_utils.convert_code_obj_to_function(rhs, self.func_ir)
+
+        func = bodo.jit(distributed=False)(pyfunc)
+        new_rhs = ir.Global(rhs.code.co_name, func, rhs.loc)
+        assign.value = new_rhs
+        self.typemap.pop(assign.target.name, None)
+        self.changed = True
+        nodes.append(assign)
+        return nodes
+
+    def _transform_make_function_freevars(self, assign, rhs, nodes):
+        """check if ir.Expr.make_function is only used in DataFrame/Series.apply()
+        and transform its free variables into arguments.
+        Raises GuardException if not possible.
+        """
+        # requiring rhs.closure to be set to the tuple of free variables in the IR,
+        # which seems to be always the case
+        require(rhs.closure)
+        # cannot handle default arguments yet since we append new args last
+        require(rhs.defaults is None)
+        # avoid potential complex arg corner cases
+        require(rhs.code.co_posonlyargcount == 0 and rhs.code.co_kwonlyargcount == 0)
+
+        # make sure there is only one use which is a DataFrame/Series.apply() call
+        apply_assign, args_var = self._ensure_apply_call_use(assign)
+
+        # find and remove free variables that cannot be converted to constants in the
+        # IR in convert_code_obj_to_function()
+        items = find_build_tuple(self.func_ir, rhs.closure)
+        new_args = []
+        freevar_names = []
+        freevar_inds = []
+        for i, freevar in enumerate(items):
+            freevar_def = guard(get_definition, self.func_ir, freevar)
+            if isinstance(freevar_def, (ir.Const, ir.Global, ir.FreeVar)) or is_expr(
+                freevar_def, "make_function"
+            ):
+                continue
+            freevar_inds.append(i)
+            new_args.append(freevar)
+            freevar_names.append(rhs.code.co_freevars[i])
+
+        code = rhs.code
+        # map freevar to its corresponding argument
+        freevar_arg_map = {
+            f_ind: code.co_argcount + i for i, f_ind in enumerate(freevar_inds)
+        }
+        new_code = _replace_load_deref_code(
+            code.co_code, freevar_arg_map, code.co_argcount
+        )
+
+        # we can now change the IR/code since all checks are done (including
+        # _replace_load_deref_code)
+        for i in freevar_inds:
+            items.pop(i)
+
+        new_co_varnames = (
+            code.co_varnames[: code.co_argcount]
+            + tuple(freevar_names)
+            + code.co_varnames[code.co_argcount :]
+        )
+        new_co_freevars = tuple(set(code.co_freevars) - set(freevar_names))
+        rhs.code = pytypes.CodeType(
+            code.co_argcount + len(freevar_names),
+            code.co_posonlyargcount,
+            code.co_kwonlyargcount,
+            code.co_nlocals + len(freevar_names),
+            code.co_stacksize,
+            code.co_flags,
+            new_code,
+            code.co_consts,
+            code.co_names,
+            new_co_varnames,
+            code.co_filename,
+            code.co_name,
+            code.co_firstlineno,
+            code.co_lnotab,
+            new_co_freevars,
+            code.co_cellvars,
+        )
+
+        # pass free variables as arguments
+        if args_var == "":
+            # create a tuple for new arguments to pass as 'args'
+            loc = rhs.loc
+            args_var = ir.Var(assign.target.scope, mk_unique_var("apply_args"), loc)
+            tuple_expr = ir.Expr.build_tuple(new_args, loc)
+            nodes.append(ir.Assign(tuple_expr, args_var, loc))
+            var_types = [self.typemap.get(v.name, None) for v in new_args]
+            if None not in var_types:
+                self.typemap[args_var.name] = types.Tuple(var_types)
+            self.func_ir._definitions[args_var.name] = [tuple_expr]
+            apply_assign.value.kws.append(("args", args_var))
+        else:
+            # guard check for find_build_tuple done in _ensure_apply_call_use
+            tup_list = find_build_tuple(self.func_ir, args_var)
+            tup_list.extend(new_args)
+            self.typemap.pop(args_var.name, None)
+            var_types = [self.typemap.get(v.name, None) for v in tup_list]
+            if None not in var_types:
+                self.typemap[args_var.name] = types.Tuple(var_types)
+
+    def _ensure_apply_call_use(self, assign):
+        """make sure output make_function of 'assign' has only one use which is a
+        DataFrame/Series.apply() call.
+        Return the apply() call assignment.
+        """
+        func_varname = assign.target.name
+        uses = []
+        # TODO(ehsan): use a DU-chain to avoid traversing the IR for similar cases?
+        for block in self.func_ir.blocks.values():
+            for stmt in block.body:
+                if stmt is assign:
+                    continue
+                if func_varname in {v.name for v in stmt.list_vars()}:
+                    uses.append(stmt)
+
+        require(len(uses) == 1 and is_call_assign(uses[0]))
+        apply_assign = uses[0]
+        fdef = find_callname(self.func_ir, apply_assign.value)
+        require(fdef)
+        fname, fvar = fdef
+        require(fname == "apply")
+        require(
+            isinstance(fvar, ir.Var)
+            and isinstance(
+                self.typemap.get(fvar.name, None), (DataFrameType, SeriesType)
+            )
+        )
+        apply_rhs = apply_assign.value
+        args_var = get_call_expr_arg(
+            "apply", apply_rhs.args, dict(apply_rhs.kws), 4, "args", default=""
+        )
+        # make sure 'args' tuple can be updated
+        if args_var != "":
+            find_build_tuple(self.func_ir, args_var)
+        return apply_assign, args_var
+
     def _run_call_bodosql_sql(
         self, assign, rhs, sql_context_var, func_name, label
     ):  # pragma: no cover
@@ -2005,7 +2205,10 @@ def _create_const_var(val, name, scope, loc, nodes):
         # list of functions cannot be typed properly in Numba yet, so we use tuple of
         # functions instead. The only place list of functions can be used is in
         # groupby.agg where list and tuple are equivalent.
-        if any(is_const_func_type(f) for f in val):
+        if any(
+            is_const_func_type(f) or isinstance(f, numba.core.dispatcher.Dispatcher)
+            for f in val
+        ):
             const_node = ir.Expr.build_tuple(
                 [_create_const_var(v, name, scope, loc, nodes) for v in val], loc
             )
@@ -2159,3 +2362,53 @@ def _set_updated_container(varname, update_func, updated_containers, equiv_vars)
     equiv_vars[varname].add(varname)
     for w in equiv_vars[varname]:
         updated_containers[w] = update_func
+
+
+def _replace_load_deref_code(code, freevar_arg_map, prev_argcount):
+    """replace load of free variables in byte code with load of new arguments and
+    adjust local variable indices due to new arguments in co_varnames.
+    # https://docs.python.org/3/library/dis.html#opcode-LOAD_FAST
+    # https://docs.python.org/3/library/inspect.html
+    # https://python-reference.readthedocs.io/en/latest/docs/code/varnames.html
+    raises GuardException if there is STORE_DEREF in input code (for setting freevars)
+    """
+    import dis
+
+    from numba.core.bytecode import ARG_LEN, CODE_LEN, NO_ARG_LEN
+
+    # assuming these constants are 1 to simplify the code, very unlikely to change
+    assert (
+        CODE_LEN == 1 and ARG_LEN == 1 and NO_ARG_LEN == 1
+    ), "invalid bytecode version"
+    # cannot handle cases that write to free variables
+    banned_ops = (dis.opname.index("STORE_DEREF"), dis.opname.index("LOAD_CLOSURE"))
+    # local variable access to be adjusted
+    local_varname_ops = (
+        dis.opname.index("LOAD_FAST"),
+        dis.opname.index("STORE_FAST"),
+        dis.opname.index("DELETE_FAST"),
+    )
+    n_new_args = len(freevar_arg_map)
+
+    new_code = np.empty(len(code), np.int8)
+    n = len(code)
+    i = 0
+    while i < n:
+        op = code[i]
+        arg = code[i + 1]
+        require(op not in banned_ops)
+
+        # adjust local variable access since index includes arguments
+        if op in local_varname_ops and arg >= prev_argcount:
+            arg += n_new_args
+
+        # replace free variable load
+        if op == dis.opname.index("LOAD_DEREF") and arg in freevar_arg_map:
+            op = dis.opname.index("LOAD_FAST")
+            arg = freevar_arg_map[arg]
+
+        new_code[i] = op
+        new_code[i + 1] = arg
+        i += 2
+
+    return bytes(new_code)

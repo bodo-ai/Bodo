@@ -1014,6 +1014,7 @@ It is recommended to pass additional variables to UDFs explicitly, instead of di
 values in the main function. The latter results in the "captured" variables case, which is
 often error-prone and may result in compilation errors. Therefore, arguments should be passed
 directly to either ``Series.apply()`` or ``DataFrame.apply()``.
+The Bodo compiler transforms the code to pass main function values as arguments to `apply()` automatically if possible.
 
 For example, consider a UDF that appends a variable suffix to each string
 in a Series of strings. The proper way to write this function through ``Series.apply()`` is::
