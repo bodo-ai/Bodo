@@ -1522,6 +1522,28 @@ def overload_to_datetime(
 
         return impl_cat_arr
 
+    # Timestamp input. This ignores other fields and just returns Timestamp
+    # TODO: Support useful fields like unit without objmode
+    if arg_a == pd_timestamp_type:
+
+        def impl_timestamp(
+            arg_a,
+            errors="raise",
+            dayfirst=False,
+            yearfirst=False,
+            utc=None,
+            format=None,
+            exact=True,
+            unit=None,
+            infer_datetime_format=False,
+            origin="unix",
+            cache=True,
+        ):  # pragma: no cover
+            # TODO: Support other args like unit
+            return arg_a
+
+        return impl_timestamp
+
     # TODO: input Type of a dataframe
     raise_bodo_error(f"pd.to_datetime(): cannot convert date type {arg_a}")
 
