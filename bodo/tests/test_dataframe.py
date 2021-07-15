@@ -3297,6 +3297,49 @@ def test_df_apply_func_case2(memory_leak_check):
     pd.testing.assert_series_equal(res, py_res)
 
 
+def test_df_apply_freevar(memory_leak_check):
+    """Test transforming freevars into apply() arguments"""
+
+    def impl1(df, b):
+        return df.apply(lambda r: r.A == b, axis=1)
+
+    # complex case with mix of constant and non-constant freevars, existing arguments,
+    # local variables in UDF
+    def impl2(df, a):
+        d = 1
+        e = 4
+        m = 3
+
+        def f(r, a):
+            cmp = d + e + a
+            m = 5  # name conflict with caller
+            if a == 0:
+                return False
+            return r.A == cmp
+
+        return df.apply(f, axis=1, args=(a,))
+
+    # storing to freevar cannot be handled
+    def impl3(df, a):
+        b = 3
+
+        def f(r):
+            nonlocal b
+            b = 4
+            return r.A == a
+
+        return df.apply(f, axis=1)
+
+    n = 4
+    df = pd.DataFrame({"A": np.arange(n)})
+    check_func(impl1, (df, 3))
+    check_func(impl2, (df, 7))
+    with pytest.raises(
+        BodoError, match="Inner function is using non-constant variable"
+    ):
+        bodo.jit(impl3)(df, 3)
+
+
 def test_df_apply_error_check():
     """make sure a proper error is raised when UDF is not supported (not compilable)"""
 

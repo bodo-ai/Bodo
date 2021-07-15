@@ -1928,6 +1928,8 @@ def convert_code_obj_to_function(code_obj, caller_ir):
     python function, caller_ir is the FunctionIR of the caller and is used for
     the resolution of freevars.
     """
+    import bodo
+
     fcode = code_obj.code
     nfree = len(fcode.co_freevars)
 
@@ -1952,6 +1954,12 @@ def convert_code_obj_to_function(code_obj, caller_ir):
 
     # try and resolve freevars if they are consts in the caller's IR
     # these can be baked into the new function
+    # Bodo change: new error message
+    msg = (
+        "Inner function is using non-constant variable '{}' from outer function. "
+        "Please pass as argument if possible. See "
+        "https://docs.bodo.ai/latest/source/pandas.html#user-defined-functions-udfs"
+    )
     freevars = []
     for x in free_var_names:
         # not using guard here to differentiate between multiple definition and
@@ -1959,11 +1967,7 @@ def convert_code_obj_to_function(code_obj, caller_ir):
         try:
             freevar_def = caller_ir.get_definition(x)
         except KeyError:
-            msg = (
-                "Cannot capture a constant value for variable '%s' as there "
-                "are multiple definitions present." % x
-            )
-            raise TypingError(msg, loc=code_obj.loc)
+            raise bodo.utils.typing.BodoError(msg.format(x), loc=code_obj.loc)
         # bodo change: support Global/FreeVar and function constants/strs
         if isinstance(freevar_def, (ir.Const, ir.Global, ir.FreeVar)):
             val = freevar_def.value
@@ -1982,11 +1986,7 @@ def convert_code_obj_to_function(code_obj, caller_ir):
             glbls[func_name] = numba.njit(nested_func)
             freevars.append(func_name)
         else:
-            msg = (
-                "Cannot capture the non-constant value associated with "
-                "variable '%s' in a function that will escape." % x
-            )
-            raise TypingError(msg, loc=code_obj.loc)
+            raise bodo.utils.typing.BodoError(msg.format(x), loc=code_obj.loc)
 
     func_env = "\n".join(["  c_%d = %s" % (i, x) for i, x in enumerate(freevars)])
     func_clo = ",".join(["c_%d" % i for i in range(nfree)])

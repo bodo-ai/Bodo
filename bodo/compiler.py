@@ -29,7 +29,11 @@ from numba.core.typed_passes import (
     ParforPass,
     PreParforPass,
 )
-from numba.core.untyped_passes import ReconstructSSA, WithLifting
+from numba.core.untyped_passes import (
+    MakeFunctionToJitFunction,
+    ReconstructSSA,
+    WithLifting,
+)
 
 import bodo
 import bodo.libs
@@ -163,6 +167,8 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
         # replace Numba's type inference pass with Bodo's version, which incorporates
         # constant inference using partial type inference
         replace_pass(pm, BodoTypeInference, NopythonTypeInference)
+        # remove make_function conversion pass since it is handled in typing pass now
+        remove_pass(pm, MakeFunctionToJitFunction)
 
         # Series pass should be before pre_parfor since
         # S.call to np.call transformation is invalid for
@@ -214,6 +220,22 @@ def replace_pass(pm, pass_cls, location):
     else:  # pragma: no cover
         raise bodo.utils.typing.BodoError("Could not find pass %s" % location)
     pm.passes[idx] = (pass_cls, str(pass_cls))
+    # if a pass has been added, it's not finalized
+    pm._finalized = False
+
+
+def remove_pass(pm, location):
+    """
+    Remove pass `location` in PassManager's compilation pipeline
+    """
+    assert pm.passes
+    pm._validate_pass(location)
+    for idx, (x, _) in enumerate(pm.passes):
+        if x == location:
+            break
+    else:  # pragma: no cover
+        raise bodo.utils.typing.BodoError("Could not find pass %s" % location)
+    pm.passes.pop(idx)
     # if a pass has been added, it's not finalized
     pm._finalized = False
 
