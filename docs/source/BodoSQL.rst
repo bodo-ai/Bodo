@@ -85,6 +85,23 @@ and improve code maintenance.
 **Note**: ``convert_to_pandas`` can only be executed outside Bodo JIT functions.
 
 
+Aliasing
+--------
+In all but the most trivial cases, Bodo SQL generates internal names to avoid conflicts in the
+intermediate dataframes. By default, Bodo SQL does not rename the columns for the final output
+of a query using a consistent approach. For example the query::
+
+    bc.sql("SELECT SUM(A) FROM table1 WHERE B > 4")
+
+Results in an output column named ``$EXPR0``. To reliably reference this column
+later in your code, we highly recommend using aliases for all columns that
+are the final outputs of a query, such as::
+
+    bc.sql("SELECT SUM(A) as sum_col FROM table1 WHERE B > 4")
+
+**Note**: BodoSQL supports using aliases generated in ``SELECT`` inside ``GROUP BY``
+and ``HAVING`` in the same query, but you cannot do so with ``WHERE``.
+
 Supported Operations
 --------------------
 We currently support the following SQL query statements and clauses with Bodo SQL, and are continuously adding support towards completeness. Note that
@@ -96,15 +113,30 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
         SELECT <COLUMN_NAMES> FROM <TABLE_NAME>
 
+    For Example::
+
+        SELECT A FROM TABLE1
+
     The ``SELECT DISTINCT`` statement is used to return only distinct (different) values::
 
         SELECT DISTINCT <COLUMN_NAMES> FROM <TABLE_NAME>
+
+    ``DISTINCT`` can be used in a SELECT statement or inside an aggregate function. For example::
+
+        SELECT DISTINCT A FROM TABLE1
+
+        SELECT COUNT DISTINCT A FROM TABLE1
+
 
 * `WHERE`
 
     The ``WHERE`` clause on columns can be used to filter records that satisfy specific conditions::
 
         SELECT <COLUMN_NAMES> FROM <TABLE_NAME> WHERE <CONDITION>
+
+    For Example::
+
+        SELECT A FROM TABLE1 WHERE B > 4
 
 
 * `ORDER BY`
@@ -116,19 +148,9 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
         FROM <TABLE_NAME>
         ORDER BY <ORDERED_COLUMN_NAMES> ASC|DESC
 
+    For Example::
 
-* Null Values
-
-    ``IS NULL`` and ``IS NOT NULL`` conditions check for null values::
-
-        SELECT <COLUMN_NAMES>
-        FROM <TABLE_NAME>
-        WHERE <COLUMN_NAME> IS NULL
-
-
-        SELECT <COLUMN_NAMES>
-        FROM <TABLE_NAME>
-        WHERE <COLUMN_NAME> IS NOT NULL
+        SELECT A, B FROM TABLE1 ORDER BY B, A DESC
 
 
 * `LIMIT`
@@ -140,60 +162,23 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
         WHERE <CONDITION>
         LIMIT <NUMBER>
 
+    For Example::
 
-* Aggregation Functions
-
-  - The ``MIN()``, and ``MAX()`` functions return the smallest and the largest value of the selected column respectively::
-
-        SELECT MIN(<COLUMN_NAME>)
-        FROM <TABLE_NAME>
-        WHERE <CONDITION>;
-
-        SELECT MAX(<COLUMN_NAME>)
-        FROM <TABLE_NAME>
-        WHERE <CONDITION>;
-
-  - The ``COUNT()`` function can be used to count the number of rows that match a condition::
-
-        SELECT COUNT(<COLUMN_NAME>)
-        FROM <TABLE_NAME>
-        WHERE <CONDITION>;
-
-  - The ``SUM()`` function returns the total sum of a column with numeric values::
-
-        SELECT SUM(<COLUMN_NAME>)
-        FROM <TABLE_NAME>
-        WHERE <CONDITION>;
-
-  - The AVG() function returns the average value of a numeric column::
-
-        SELECT AVG(<COLUMN_NAME>)
-        FROM <TABLE_NAME>
-        WHERE <CONDITION>;
-
-
-* `IN`
-
-    The ``IN`` keyword is used to pick specific values of a column in a ``WHERE`` clause::
-
-        SELECT <COLUMN_NAMES>
-        FROM <TABLE_NAME>
-        WHERE <COLUMN_NAME> IN <VALUES>;
-
-
-        SELECT <COLUMN_NAMES>
-        FROM <TABLE_NAME>
-        WHERE <COLUMN_NAME> IN (SELECT STATEMENT);
+        SELECT A FROM TABLE1 LIMIT 5
 
 
 * `BETWEEN`
 
-    The ``BETWEEN`` operator selects values within a given range. The values can be numbers, text, or dates.
+    The ``BETWEEN`` operator selects values within a given range. The values can be numbers, text, or datetimes.
     The ``BETWEEN`` operator is inclusive: begin and end values are included::
 
         SELECT <COLUMN_NAMES>
         FROM <TABLE_NAME>
-        WHERE <COLUMN_NAME> BETWEEN <VALUE1> AND <VALUE2>;
+        WHERE <COLUMN_NAME> BETWEEN <VALUE1> AND <VALUE2>
+
+    For example::
+
+        Select A from Table1 where A between 10 and 100
 
 
 * `JOIN`
@@ -203,7 +188,12 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
       SELECT <COLUMN_NAMES>
         FROM <LEFT_TABLE_NAME>
         <JOIN_TYPE> <RIGHT_TABLE_NAME>
-        ON <LEFT_TABLE_COLUMN_NAME> = <RIGHT_TABLE_COLUMN_NAME>;
+        ON <LEFT_TABLE_COLUMN_NAME> = <RIGHT_TABLE_COLUMN_NAME>
+
+
+    For example::
+
+        Select table1.A, table1.B from table1 join table2 on table1.A = table2.C
 
     Here are the different types of the joins in SQL:
 
@@ -212,45 +202,104 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
     - ``RIGHT (OUTER) JOIN``: returns all records from the right table, and the matched records from the left table
     - ``FULL (OUTER) JOIN``: returns all records when there is a match in either left or right table
 
-
-* `UNION`
-    The ``UNION`` operator is used to combine the result-set of two or more ``SELECT`` statements::
-
-        SELECT <COLUMN_NAMES> FROM <TABLE1>
-        UNION
-        SELECT <COLUMN_NAMES> FROM <TABLE2>;
-
-    Each ``SELECT`` statement within ``UNION`` must have the same number of columns.
-    The columns must also have similar data types, and columns in each ``SELECT`` statement must also be in the same order.
-
-
-    The ``UNION`` operator selects only distinct values by default. To allow duplicate values, use ``UNION ALL``::
-
-        SELECT <COLUMN_NAMES> FROM <TABLE1>
-        UNION ALL
-        SELECT <COLUMN_NAMES> FROM <TABLE2>;
+    Bodo SQL currently support inner join on all conditions, but all outer joins are only support on an
+    equality between columns.
 
 
 * `GROUP BY`
     The ``GROUP BY`` statement groups rows that have the same values into summary rows, like "find the number of customers in each country".
-    The ``GROUP BY`` statement is often used with aggregate functions (``COUNT``, ``MAX``, ``MIN``, ``SUM``, ``AVG``) to group the result-set by one or more columns::
+    The ``GROUP BY`` statement is often used with aggregate functions to group the result-set by one or more columns::
 
         SELECT <COLUMN_NAMES>
         FROM <TABLE_NAME>
         WHERE <CONDITION>
         GROUP BY <COLUMN_NAMES>
-        ORDER BY <COLUMN_NAMES>;
+        ORDER BY <COLUMN_NAMES>
+
+    For example::
+
+        Select MAX(A) from table1 Group By B
+
+    ``GROUP BY`` statements also referring to columns by alias or column number::
+
+        Select MAX(A), B - 1 as val from table1 Group By val
+        Select MAX(A), B from table1 Group By 2
 
 
 * `HAVING`
-    The `HAVING` clause was added to SQL because the WHERE keyword could not be used with aggregate functions::
+
+    The ``HAVING`` clause is used for filtering with ``GROUP BY``. ``HAVING``
+    applies the filter after generating the groups, whereas ``WHERE`` applies
+    the filter before generating any groups::
 
         SELECT column_name(s)
         FROM table_name
         WHERE condition
         GROUP BY column_name(s)
         HAVING condition
-        ORDER BY column_name(s);
+
+    For example::
+
+        Select MAX(A) from table1 Group By B HAVING C < 0
+
+    ``HAVING`` statements also referring to columns by aliases used in the ``GROUP BY``::
+
+        Select MAX(A), B - 1 as val from table1 Group By val having val > 5
+
+* `CASE`
+
+    The ``CASE`` statement goes through conditions and returns a value when the first condition is met::
+
+        SELECT CASE WHEN cond1 THEN value1 WHEN cond2 THEN value2 ... ELSE valueN END
+
+    For example::
+
+        Select (CASE WHEN A > 1 THEN A ELSE B) as mycol from table1
+
+* `LIKE`
+
+    The ``LIKE`` clause is used to select the strings in a column that matches a pattern::
+
+        SELECT column_name(s) FROM table_name WHERE column LIKE pattern
+
+    In the pattern we support the wildcards ``%`` and ``_``. For example::
+
+        Select A from table1 where B like '%py'
+
+
+* `GREATEST`
+
+    The ``GREATEST`` clause is used to return the greatest value from a list of columns::
+
+        SELECT GREATEST(col1, col2, ..., colN) from table_name
+
+    For example::
+
+        SELECT GREATEST(A, B, C) from table1
+
+* `With`
+
+    The ``WITH`` clause can be used to name subqueries::
+
+        WITH sub_table AS (SELECT column_name(s) FROM table_name)
+        SELECT column_name(s) FROM sub_table
+
+    For example::
+
+        WITH subtable as (Select Max(A) as max_al FROM table1 group by B)
+        Select Max(max_val) from subtable
+
+
+* Aliasing
+
+    SQL aliases are used to give a table, or a column in a table, a temporary name::
+
+        SELECT <COLUMN_NAME> AS <ALIAS>
+        FROM <TABLE_NAME>
+
+    For example::
+
+        Select SUM(A) as total from table1
 
 
 * Operators
@@ -260,6 +309,7 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
         - ``+`` (addition)
         - ``-`` (subtraction)
         - ``*`` (multiplication)
+        - ``/`` (true division)
 
     - Bodo SQL currently supports the following comparision operators on columns:
 
@@ -270,14 +320,114 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
         - ``<=`` (less than or equal to)
         - ``<>`` (not equal to)
 
-* Aliasing
+    - Bodo SQL currently supports the following logical operators on columms:
 
-    SQL aliases are used to give a table, or a column in a table, a temporary name::
+        - ``AND``
+        - ``OR``
+        - ``NOT``
 
-        SELECT <COLUMN_NAME> AS <ALIAS>
-        FROM <TABLE_NAME>;
 
-    Aliases are often used to make column names more readable. An alias only exists for the duration of the query.
+* Aggregation Functions
+
+    Bodo SQL Currently supports the following Aggregation Functions on all types:
+
+    - COUNT
+
+        Count the number of elements in a column or group.
+
+    In addition, Bodo SQL also supports the following functions on numeric types:
+
+    - AVG
+
+        Compute the mean for a column.
+
+    - MAX
+
+        Compute the max value for a column.
+
+    - MIN
+
+        Compute the min value for a column.
+
+    - STDDEV
+
+        Compute the standard deviation for a column with N - 1 degrees of freedom.
+
+    - STDDEV_SAMP
+
+        Compute the standard deviation for a column with N - 1 degrees of freedom.
+
+    - SUM
+
+        Compute the sum for a column.
+
+    - VARIANCE
+
+        Compute the variance for a column with N - 1 degrees of freedom.
+
+    - VAR_SAMP
+
+        Compute the variance for a column with N - 1 degrees of freedom.
+
+
+    All aggregate functions have the syntax::
+
+        SELECT AGGREGATE_FUNCTION(<COLUMN_EXPRESSION>)
+        FROM <TABLE_NAME>
+        GROUP BY <COLUMN_NAMES>
+
+
+    These functions can be used either in a groupby clause, where they will be computed
+    for each group, or by itself on an entire column expression. For example::
+
+        Select AVG(A) from table1 Group By B
+
+        Select Count(Distinct A) from table1
+
+
+* Timestamp Functions
+
+    Bodo SQL currently supports the following Timestamp functions:
+
+        - DATEDIFF(col1, col2)
+
+            Computes the difference in days between two Timestamp columns
+
+        - STR_TO_DATE(str_col, format_string)
+
+            Converts a string column to a Timestamp columns given a scalar
+            format string
+
+        - DATE_ADD(timestamp_col, interval)
+
+            Computes a timestamp column by adding an interval column/scalar
+            to a timestamp column
+
+        - DATE_SUB(timestamp_col, interval)
+
+            Computes a timestamp column by subtracting an interval column/scalar
+            from a timestamp column
+
+    For example::
+
+        SELECT datediff(A, B) as diff from table1
+
+
+* String Functions
+
+    Bodo SQL currently supports the following string functions:
+
+        - LOWER(col)
+
+            Converts the contents of the string column to lower case.
+
+        - UPPER(col)
+
+            Converts the contents of the string column to upper case.
+
+    For example::
+
+        SELECT upper(A) as upper_case from table1
 
 
 Supported Data Types
