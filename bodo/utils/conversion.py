@@ -820,6 +820,18 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
 
             return impl_str
 
+        if data == bodo.datetime_date_array_type:
+            # Support Date Arrays using objmode
+            # TODO: Replace with a native impl
+            def impl_date(
+                data, new_dtype, copy=None, nan_to_str=True
+            ):  # pragma: no cover
+                return bodo.hiframes.pd_timestamp_ext.datetime_date_arr_to_dt64_arr(
+                    data
+                )
+
+            return impl_date
+
         if isinstance(data.dtype, types.Number) or data.dtype in [
             bodo.timedelta64ns,
             types.bool_,
