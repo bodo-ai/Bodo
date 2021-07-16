@@ -1969,6 +1969,8 @@ def convert_code_obj_to_function(code_obj, caller_ir):
         except KeyError:
             raise bodo.utils.typing.BodoError(msg.format(x), loc=code_obj.loc)
         # bodo change: support Global/FreeVar and function constants/strs
+        from numba.core.registry import CPUDispatcher
+
         if isinstance(freevar_def, (ir.Const, ir.Global, ir.FreeVar)):
             val = freevar_def.value
             if isinstance(val, str):
@@ -1977,6 +1979,10 @@ def convert_code_obj_to_function(code_obj, caller_ir):
             if isinstance(val, pytypes.FunctionType):
                 func_name = ir_utils.mk_unique_var("nested_func").replace(".", "_")
                 glbls[func_name] = numba.njit(val)
+                val = func_name
+            if isinstance(val, CPUDispatcher):
+                func_name = ir_utils.mk_unique_var("nested_func").replace(".", "_")
+                glbls[func_name] = val
                 val = func_name
             freevars.append(val)
         # bodo change: support nested lambdas using recursive call
