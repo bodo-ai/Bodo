@@ -1090,6 +1090,19 @@ def test_dt64_str_astype(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_dt64_date_astype(memory_leak_check):
+    def impl1(S):
+        return S.astype(np.dtype("datetime64[ns]"))
+
+    def impl2(S):
+        return S.astype("datetime64[ns]")
+
+    S = pd.Series(np.append([None], pd.date_range("20200101", periods=11).date))
+    check_func(impl1, (S,))
+    check_func(impl2, (S,))
+
+
+@pytest.mark.slow
 def test_td64_astype(datetime_convertable_series, memory_leak_check):
     """
     Test legal astype conversions to timedelta[ns]
