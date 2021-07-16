@@ -42,6 +42,7 @@ from bodo.utils.typing import (
     is_iterable_type,
     is_list_like_index_type,
     is_overload_constant_str,
+    get_overload_const_str,
 )
 
 ll.add_symbol(
@@ -234,7 +235,16 @@ def pd_timedelta(
 
         return impl_timedelta_datetime
 
-    # Check that unit is always in ns
+    #if we reach this point, we need to extract the value of the unit argument, and get the
+    #multiplier such that value * multiplier == the correct number of nanoseconds
+    if not is_overload_constant_str(unit):  # pragma: no cover
+        raise BodoError("pd.to_timedelta(): unit should be a constant string")
+
+    # internal Pandas API that normalizes variations of unit. e.g. 'seconds' -> 's'
+    unit = pd._libs.tslibs.timedeltas.parse_timedelta_unit(get_overload_const_str(unit))
+    #we don't need the precicion value in this case
+    value_to_nanoseconds_multiplier, _ = pd._libs.tslibs.conversion.precision_from_unit(unit)
+
     def impl_timedelta(
         value=_no_input,
         unit="ns",
@@ -246,7 +256,7 @@ def pd_timedelta(
         hours=0,
         weeks=0,
     ):  # pragma: no cover
-        return init_pd_timedelta(value)
+        return init_pd_timedelta(value * value_to_nanoseconds_multiplier)
 
     return impl_timedelta
 
