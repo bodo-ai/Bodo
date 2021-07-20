@@ -214,9 +214,7 @@ class BodoTypeInference(PartialTypeInference):
             or return_type is None
             or state.func_ir.generator_info
         ):
-            # run regular type inference again with _raise_errors = True to set function
-            # return type and raise errors if any
-            # TODO: avoid this extra pass when possible in Numba
+            # run regular type inference again with _raise_errors=True to raise errors
             NopythonTypeInference().run_pass(state)
         else:
             # last return type check in Numba:
@@ -414,23 +412,6 @@ class TypingTransforms:
                 self.typemap.pop(assign.target.name, None)
                 # avoid list of func typing errors, see comment in _create_const_var
                 rhs.op = "build_tuple"
-
-        # detect type unification errors in control flow
-        # TODO(ehsan): update after #2258 is merged
-        if is_expr(rhs, "phi"):
-            if (
-                not rhs.incoming_values
-                or rhs.incoming_values[0].name not in self.typemap
-            ):  # pragma: no cover
-                return [assign]
-            first_type = self.typemap[rhs.incoming_values[0].name]
-            for v in rhs.incoming_values[1:]:
-                if (
-                    v.name not in self.typemap
-                    or self.typingctx.unify_pairs(first_type, self.typemap[v.name])
-                    is None
-                ):
-                    self.change_required = True
 
         return [assign]
 
