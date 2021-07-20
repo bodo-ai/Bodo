@@ -2597,6 +2597,17 @@ def test_pd_isna(na_test_obj, memory_leak_check):
     check_func(impl, (obj,), is_out_distributed)
 
 
+def test_pd_isna_optional(memory_leak_check):
+    """Test pd.isna() on Optional input"""
+
+    def impl(a):
+        b = None if a else 2
+        return pd.isna(b)
+
+    check_func(impl, (True,))
+    check_func(impl, (False,))
+
+
 @pytest.mark.slow
 def test_pd_notna(na_test_obj, memory_leak_check):
     obj = na_test_obj

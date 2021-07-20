@@ -1935,6 +1935,10 @@ def overload_isna_scalar(obj):
             bodo.hiframes.pd_timestamp_ext.integer_to_timedelta64(obj.value)
         )  # pragma: no cover
 
+    # OptionalType case
+    if isinstance(obj, types.Optional):
+        return lambda obj: obj is None  # pragma: no cover
+
     # TODO: catch other cases
     return lambda obj: unliteral_val(False)  # pragma: no cover
 
