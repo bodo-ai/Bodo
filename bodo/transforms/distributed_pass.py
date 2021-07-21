@@ -1409,7 +1409,9 @@ class DistributedPass:
         if fdef == ("nunique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
         ):
-            f = eval("lambda arr: bodo.libs.array_kernels.nunique_parallel(arr)")
+            f = eval(
+                "lambda arr, dropna: bodo.libs.array_kernels.nunique_parallel(arr, dropna)"
+            )
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
         if fdef == ("unique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(

@@ -56,6 +56,7 @@ from bodo.utils.typing import (
     is_common_scalar_dtype,
     is_iterable_type,
     is_literal_type,
+    is_overload_bool,
     is_overload_constant_bool,
     is_overload_constant_int,
     is_overload_constant_nan,
@@ -1902,10 +1903,12 @@ def overload_series_quantile(S, q=0.5, interpolation="linear"):
 
 @overload_method(SeriesType, "nunique", inline="always", no_unliteral=True)
 def overload_series_nunique(S, dropna=True):
-    # TODO: refactor, support NA, dt64
+    if not is_overload_bool(dropna):
+        raise BodoError("Series.nunique: dropna must be a boolean value")
+
     def impl(S, dropna=True):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        return bodo.libs.array_kernels.nunique(arr)
+        return bodo.libs.array_kernels.nunique(arr, dropna)
 
     return impl
 

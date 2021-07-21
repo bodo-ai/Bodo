@@ -869,11 +869,13 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
 
 @overload_method(DataFrameType, "nunique", inline="always", no_unliteral=True)
 def overload_dataframe_nunique(df, axis=0, dropna=True):
-    unsupported_args = dict(axis=0, dropna=dropna)
-    arg_defaults = dict(axis=0, dropna=True)
+    unsupported_args = dict(axis=0)
+    arg_defaults = dict(axis=0)
+    if not is_overload_bool(dropna):
+        raise BodoError("DataFrame.nunique: dropna must be a boolean value")
     check_unsupported_args("DataFrame.nunique", unsupported_args, arg_defaults)
     data_args = ", ".join(
-        f"bodo.libs.array_kernels.nunique(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}))"
+        f"bodo.libs.array_kernels.nunique(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), dropna)"
         for i in range(len(df.columns))
     )
     func_text = "def impl(df, axis=0, dropna=True):\n"

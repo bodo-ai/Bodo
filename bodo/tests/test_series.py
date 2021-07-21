@@ -3959,28 +3959,24 @@ def test_series_quantile_q(memory_leak_check):
 
 
 def test_series_nunique(series_val, memory_leak_check):
-    # not supported for Datetime.date yet, TODO: support and test
-    if isinstance(series_val.values[0], datetime.date):
-        return
-
-    # not supported for Decimal yet, TODO: support and test
-    if isinstance(series_val.values[0], Decimal):
-        return
-
-    # doesn't support NAs yet, TODO: support and test
-    if series_val.hasnans:
-        return
-
-    # not supported for dt64 yet, TODO: support and test
-    if series_val.dtype == np.dtype("datetime64[ns]"):
-        return
-
-    # BooleanArray can't be key in shuffle, TODO: handle
-    if series_val.dtype == np.bool_:
+    # Not supported for lists because they aren't hashable
+    if isinstance(series_val.values[0], list):
         return
 
     def test_impl(A):
         return A.nunique()
+
+    check_func(test_impl, (series_val,))
+
+
+@pytest.mark.slow
+def test_series_nunique_dropna_false(series_val, memory_leak_check):
+    # Not supported for lists because they aren't hashable
+    if isinstance(series_val.values[0], list):
+        return
+
+    def test_impl(A):
+        return A.nunique(dropna=False)
 
     check_func(test_impl, (series_val,))
 

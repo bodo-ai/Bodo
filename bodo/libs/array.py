@@ -1705,7 +1705,9 @@ def shuffle_renormalization_group(
 
 
 @intrinsic
-def drop_duplicates_table(typingctx, table_t, parallel_t, nkey_t, keep_t, ncols):
+def drop_duplicates_table(
+    typingctx, table_t, parallel_t, nkey_t, keep_t, ncols, dropna
+):
     """
     Interface to dropping duplicate entry in tables
     """
@@ -1720,6 +1722,7 @@ def drop_duplicates_table(typingctx, table_t, parallel_t, nkey_t, keep_t, ncols)
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
+                lir.IntType(1),
             ],
         )
         fn_tp = builder.module.get_or_insert_function(
@@ -1732,7 +1735,9 @@ def drop_duplicates_table(typingctx, table_t, parallel_t, nkey_t, keep_t, ncols)
         return ret
 
     return (
-        table_type(table_t, types.boolean, types.int64, types.int64, types.int64),
+        table_type(
+            table_t, types.boolean, types.int64, types.int64, types.int64, types.boolean
+        ),
         codegen,
     )
 
