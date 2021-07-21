@@ -66,7 +66,7 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
             arr2_b = in_arr;
             pos2_b = pos2 - len_values;
         }
-        return TestEqualColumn(arr1_b, pos1_b, arr2_b, pos2_b);
+        return TestEqualColumn(arr1_b, pos1_b, arr2_b, pos2_b, true);
     };
     std::function<size_t(int64_t)> hash_fct =
         [&](int64_t const& pos) -> size_t {

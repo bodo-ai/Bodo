@@ -929,8 +929,9 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
 }
 
 bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
-                     int64_t pos2) {
+                     int64_t pos2, bool is_na_equal) {
     if (arr1->arr_type == bodo_array_type::ARROW) {
+        // TODO: Handle is_na_equal in Arrow arrays
         int64_t pos1_s = pos1;
         int64_t pos1_e = pos1 + 1;
         int64_t pos2_s = pos2;
@@ -941,13 +942,25 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
                                   pos2_s, pos2_e, na_position_bis);
         return val == 0;
     }
-    if (arr1->arr_type == bodo_array_type::NUMPY ||
-        arr1->arr_type == bodo_array_type::CATEGORICAL) {
+    if (arr1->arr_type == bodo_array_type::NUMPY || arr1->arr_type == bodo_array_type::CATEGORICAL) {
         // In the case of NUMPY, we compare the values for concluding.
         uint64_t siztype = numpy_item_size[arr1->dtype];
         char* ptr1 = arr1->data1 + siztype * pos1;
         char* ptr2 = arr2->data1 + siztype * pos2;
         if (memcmp(ptr1, ptr2, siztype) != 0) return false;
+        // Check for null if NA is not considered equal
+        if (!is_na_equal) {
+            if (arr1->arr_type == bodo_array_type::CATEGORICAL) {
+                // Categorical null values are represented as -1
+                return !isnan_categorical_ptr(arr1->dtype, ptr1);
+            } else if (arr1->dtype == Bodo_CTypes::FLOAT32) {
+                return !isnan(*((float *) ptr1));
+            } else if (arr1->dtype == Bodo_CTypes::FLOAT64) {
+                return !isnan(*((double *) ptr1));
+            } else if (arr1->dtype == Bodo_CTypes::DATETIME || arr1->dtype == Bodo_CTypes::TIMEDELTA) {
+                return (*((int64_t *) ptr1)) != std::numeric_limits<int64_t>::min();
+            }
+        }
     }
     if (arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // NULLABLE case. We need to consider the bitmask and the values.
@@ -963,6 +976,8 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
             char* ptr1 = arr1->data1 + siztype * pos1;
             char* ptr2 = arr2->data1 + siztype * pos2;
             if (memcmp(ptr1, ptr2, siztype) != 0) return false;
+        } else {
+            return is_na_equal;
         }
     }
     if (arr1->arr_type == bodo_array_type::LIST_STRING) {
@@ -1007,6 +1022,8 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
             char* data1_2_comp = arr2->data1 + pos2_B;
             if (memcmp(data1_1_comp, data1_2_comp, tot_nb_char) != 0)
                 return false;
+        } else {
+            return is_na_equal;
         }
     }
     if (arr1->arr_type == bodo_array_type::STRING) {
@@ -1031,6 +1048,8 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
             char* data1_1 = arr1->data1 + pos1_prev;
             char* data1_2 = arr2->data1 + pos2_prev;
             if (memcmp(data1_1, data1_2, len1) != 0) return false;
+        } else {
+            return is_na_equal;
         }
     }
     return true;
