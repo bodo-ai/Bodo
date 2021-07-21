@@ -4832,7 +4832,7 @@ def test_agg_supported_types(df, memory_leak_check):
     check_func(impl1, (df,), sort_output=True, check_dtype=False, reset_index=True)
 
 
-# TODO: @pytest.mark.slow
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "df",
     [
@@ -4884,8 +4884,7 @@ def test_groupby_transform(df, memory_leak_check):
     check_func(impl_mean, (df,))
 
 
-# TODO: Test min/max/sum after fixing [BE-933]
-# TODO: @pytest.mark.slow
+@pytest.mark.slow
 def test_groupby_transform_count(memory_leak_check):
     """ Test groupby().transform('count') with multiple datatypes"""
 
@@ -4904,6 +4903,31 @@ def test_groupby_transform_count(memory_leak_check):
         }
     )
     check_func(impl_count, (df,))
+
+
+# TODO: @pytest.mark.slow
+def test_groupby_transform_nullable(memory_leak_check):
+    """ Test groupby().transform with nullable and string datatypes"""
+
+    def impl_min(df):
+        A = df.groupby("A").transform("min")
+        return A
+
+    def impl_sum(df):
+        A = df.groupby("A").transform("sum")
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": ["foo", "asd", "foo", "bar", "foo", "bar", "asd", "xyz"],
+            "D": ["fo", "foo", "test", "", "xfo", "xbar", "foo", "qwer"],
+            "G": pd.Series(
+                np.array([np.nan, 8, 2, np.nan, np.nan, 20, 30, -1]), dtype="Int8"
+            ),
+        }
+    )
+    check_func(impl_sum, (df,))
+    check_func(impl_min, (df,))
 
 
 # TODO: [BE-974] Fix memory_leak_check issue
