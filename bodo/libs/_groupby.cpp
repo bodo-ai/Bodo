@@ -4621,9 +4621,110 @@ class ShiftColSet : public BasicColSet<ARRAY> {
 };
 
 /**
- * @update_col: [out] column that has the final result for all rows
- * @tmp_col: [in] column that has the result per group
- * @grouping_info: [in] structures used to get rows for each group
+ * Copy nullable value from tmp_col to all the rows in the
+ * corresponding group update_col.
+ * @param update_col[out] output column
+ * @param tmp_col[in] input column (one value per group)
+ * @param grouping_info[in] structures used to get rows for each group
+ *
+ */
+template <typename ARRAY, typename T>
+typename std::enable_if<!(is_multiple_array<ARRAY>::value), void>::type
+copy_nullable_values_transform(ARRAY* update_col, ARRAY* tmp_col,
+                 const grouping_info& grp_info) {
+
+        int64_t nrows = update_col->length;
+        bool bit = false;
+        for(int64_t iRow = 0; iRow < nrows; iRow++){
+            int64_t igrp = grp_info.row_to_group[iRow];
+            bit = tmp_col->get_null_bit(igrp);
+            T val = tmp_col->template at<T>(igrp);
+            update_col->set_null_bit(iRow, bit);
+            update_col->template at<T>(iRow) = val;
+        }
+}
+template <typename ARRAY, typename T>
+typename std::enable_if<(is_multiple_array<ARRAY>::value), void>::type
+copy_nullable_values_transform(ARRAY* update_col, ARRAY* tmp_col,
+                 const grouping_info& grp_info) {
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "copy_nullable_values_transform multiple_array_info NULLABLE not supported yet.");
+                 }
+/**
+ * Propagate value from the row in the tmp_col to all the rows in the
+ * group update_col.
+ * @param update_col[out]: column that has the final result for all rows
+ * @param tmp_col[in]: column that has the result per group
+ * @param grouping_info[in]: structures used to get rows for each group
+ *
+ * */
+template <typename ARRAY>
+typename std::enable_if<!(is_multiple_array<ARRAY>::value), void>::type
+copy_string_values_transform(ARRAY* update_col , ARRAY* tmp_col,
+                 const grouping_info& grp_info) {
+    int64_t num_groups = grp_info.num_groups;
+    array_info* out_arr = NULL;
+    // first we have to deal with offsets first so we
+    // need one first loop to determine the needed length. In the second
+    // loop, the assignation is made. If the entries are missing then the
+    // bitmask is set to false.
+    bodo_array_type::arr_type_enum arr_type = tmp_col->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = tmp_col->dtype;
+    int64_t n_chars = 0;
+    int64_t nRowOut = update_col->length;
+    // Store size of data per row
+    std::vector<offset_t> ListSizes(nRowOut);
+    offset_t* in_offsets = (offset_t*)tmp_col->data2;
+    char* in_data1 = tmp_col->data1;
+    // 1. Determine needed length (total number of characters)
+    // and number of characters per element/row 
+    // All rows in same group gets same data
+    for (int64_t igrp = 0; igrp < num_groups; igrp++) {
+        offset_t size = 0;
+        offset_t start_offset = in_offsets[igrp];
+        offset_t end_offset = in_offsets[igrp+ 1];
+        size = end_offset - start_offset;
+        int64_t idx = grp_info.group_to_first_row[igrp];
+        while (true){
+                if ( idx == -1) break;
+                ListSizes[idx] = size;
+                n_chars += size;
+                idx = grp_info.next_row_in_group[idx];
+        }
+    }
+    out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
+    offset_t* out_offsets = (offset_t*)out_arr->data2;
+    char* out_data1 = out_arr->data1;
+    // keep track of output array position
+    offset_t pos = 0;
+    //2. Copy data from tmp_col to corresponding rows in out_arr 
+    bool bit = false;
+    for(int64_t iRow = 0; iRow < nRowOut; iRow++){
+        offset_t size = ListSizes[iRow];
+        int64_t igrp = grp_info.row_to_group[iRow];
+        offset_t start_offset = in_offsets[igrp];
+        char* in_ptr = in_data1 + start_offset;
+        char* out_ptr = out_data1 + pos;
+        out_offsets[iRow] = pos;
+        memcpy(out_ptr, in_ptr, size);
+        pos += size;
+        bit = tmp_col->get_null_bit(igrp);
+        out_arr->set_null_bit(iRow, bit);
+    }
+    out_offsets[nRowOut] = pos;
+    *update_col = std::move(*out_arr);
+    delete out_arr;
+}
+template <typename ARRAY>
+typename std::enable_if<(is_multiple_array<ARRAY>::value), void>::type
+copy_string_values_transform(ARRAY* update_col, ARRAY* tmp_col, const grouping_info& grp_info){
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "copy_string_values_transform multiple_array_info string not supported yet.");
+}
+/**
+ * @param update_col[out]: column that has the final result for all rows
+ * @param tmp_col[in]: column that has the result per group
+ * @param grouping_info[in]: structures used to get rows for each group
  * Propagate value from the row in the tmp_col to all the rows in the
  * group update_col.
  *
@@ -4631,6 +4732,11 @@ class ShiftColSet : public BasicColSet<ARRAY> {
 template <typename ARRAY, typename T>
 void copy_values(ARRAY* update_col, ARRAY* tmp_col,
                  const grouping_info& grp_info) {
+    if (tmp_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+        copy_nullable_values_transform<ARRAY, T>( update_col, tmp_col,
+                                         grp_info);
+        return;
+    }
     size_t num_groups = grp_info.num_groups;
     // Loop over tmp_col rows and copy result to corressponding group rows in
     // update_col.
@@ -4645,6 +4751,7 @@ void copy_values(ARRAY* update_col, ARRAY* tmp_col,
         }
     }
 }
+
 // Add function declaration before usage in TransformColSet
 /**
  * Construct and return a column set based on the ftype.
@@ -4762,6 +4869,10 @@ class TransformColSet : public BasicColSet<ARRAY> {
                 break;
             case Bodo_CTypes::FLOAT64:
                 copy_values<ARRAY, double>(this->update_cols[0], child_out_col,
+                                           grp_info);
+                break;
+            case Bodo_CTypes::STRING:
+                copy_string_values_transform<ARRAY>(this->update_cols[0], child_out_col,
                                            grp_info);
                 break;
         }
