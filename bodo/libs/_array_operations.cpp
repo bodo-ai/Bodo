@@ -445,7 +445,7 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
  * @return the table to be used.
  */
 table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
-                                        int64_t keep, int step) {
+                                        int64_t keep, int step, bool dropna) {
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<array_info*> key_arrs(num_keys);
     for (size_t iKey = 0; iKey < size_t(num_keys); iKey++)
@@ -494,27 +494,35 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
         entSet({}, hash_fct, equal_fct);
     // The loop over the short table.
     // entries are stored one by one and all of them are put even if identical
-    // in value.
+    // in value. The one exception is if we are dropping NA values
     //
     // In the first case we keep only one entry.
+    bool has_nulls = dropna && does_keys_have_nulls(key_arrs);
+    auto is_ok = [&](size_t i_row) -> bool {
+        if (!has_nulls) return true;
+        return !does_row_has_nulls(key_arrs, i_row);
+    };
     auto RetrieveListIdx1 = [&]() -> std::vector<int64_t> {
         std::vector<int64_t> ListRow;
         uint64_t next_ent = 0;
         for (size_t i_row = 0; i_row < n_rows; i_row++) {
-            size_t& group = entSet[i_row];
-            if (group == 0) {
-                next_ent++;
-                group = next_ent;
-                ListRow.emplace_back(i_row);
-            } else {
-                size_t pos = group - 1;
-                if (keep == 0) {  // keep first entry. So do nothing here
-                }
-                if (keep == 1) {  // keep last entry. So update the list
-                    ListRow[pos] = i_row;
-                }
-                if (keep == 2) {  // Case of False. So put it to -1.
-                    ListRow[pos] = -1;
+            // don't add if entry is NA and dropna=true
+            if (is_ok(i_row)) {
+                size_t& group = entSet[i_row];
+                if (group == 0) {
+                    next_ent++;
+                    group = next_ent;
+                    ListRow.emplace_back(i_row);
+                } else {
+                    size_t pos = group - 1;
+                    if (keep == 0) {  // keep first entry. So do nothing here
+                    }
+                    if (keep == 1) {  // keep last entry. So update the list
+                        ListRow[pos] = i_row;
+                    }
+                    if (keep == 2) {  // Case of False. So put it to -1.
+                        ListRow[pos] = -1;
+                    }
                 }
             }
         }
@@ -529,14 +537,17 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
         std::vector<std::pair<int64_t, int64_t>> ListRowPair;
         size_t next_ent = 0;
         for (size_t i_row = 0; i_row < n_rows; i_row++) {
-            size_t& group = entSet[i_row];
-            if (group == 0) {
-                next_ent++;
-                group = next_ent;
-                ListRowPair.push_back({i_row, -1});
-            } else {
-                size_t pos = group - 1;
-                ListRowPair[pos].second = i_row;
+            // don't add if entry is NA and dropna=true
+            if (is_ok(i_row)) {
+                size_t& group = entSet[i_row];
+                if (group == 0) {
+                    next_ent++;
+                    group = next_ent;
+                    ListRowPair.push_back({i_row, -1});
+                } else {
+                    size_t pos = group - 1;
+                    ListRowPair[pos].second = i_row;
+                }
             }
         }
         std::vector<int64_t> ListIdx;
@@ -598,8 +609,11 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
     delete_table(red_table);
     // reduction after shuffling
     int keep = 0;
+    // Set dropna=False for drop_duplicates_table_inner because
+    // drop_duplicates_keys_inner should have already removed any NA
+    // values
     table_info* ret_table =
-        drop_duplicates_table_inner(shuf_table, num_keys, keep, 1);
+        drop_duplicates_table_inner(shuf_table, num_keys, keep, 1, false);
     delete_table(shuf_table);
 #ifdef DEBUG_DD
     std::cout << "OUTPUT : drop_duplicates_keys ret_table=\n";
@@ -623,11 +637,13 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
  *        keep = 0 corresponds to the case of keep="first" keep first entry
  *        keep = 1 corresponds to the case of keep="last" keep last entry
  *        keep = 2 corresponds to the case of keep=False : remove all duplicates
+ * @param total_cols: number of columns to use identifying duplicates
+ * @param dropna: Should NA be included in the final table
  * @return the vector of pointers to be used.
  */
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
                                   int64_t num_keys, int64_t keep,
-                                  int64_t total_cols) {
+                                  int64_t total_cols, bool dropna) {
     try {
 #ifdef DEBUG_DD
         std::cout << "drop_duplicates_table : is_parallel=" << is_parallel
@@ -636,20 +652,24 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
         // serial case
         if (!is_parallel) {
             if (total_cols != -1) num_keys = total_cols;
-            return drop_duplicates_table_inner(in_table, num_keys, keep, 1);
+            return drop_duplicates_table_inner(in_table, num_keys, keep, 1,
+                                               dropna);
         }
         // parallel case
         // pre reduction of duplicates
         table_info* red_table;
         if (total_cols == -1) total_cols = num_keys;
-        red_table = drop_duplicates_table_inner(in_table, total_cols, keep, 2);
+        red_table =
+            drop_duplicates_table_inner(in_table, total_cols, keep, 2, dropna);
         // shuffling of values
         table_info* shuf_table = shuffle_table(red_table, num_keys);
         // no need to decref since shuffle_table() steals a reference
         delete_table(red_table);
         // reduction after shuffling
+        // We don't drop NA values again because the first
+        // drop_duplicates_table_inner should have already handled this
         table_info* ret_table =
-            drop_duplicates_table_inner(shuf_table, total_cols, keep, 1);
+            drop_duplicates_table_inner(shuf_table, total_cols, keep, 1, false);
         delete_table(shuf_table);
 #ifdef DEBUG_DD
         std::cout << "OUTPUT drop_duplicates_table. ret_table=\n";

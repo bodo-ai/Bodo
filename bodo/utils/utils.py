@@ -384,6 +384,36 @@ def is_distributable_tuple_typ(var_typ):
 
 
 @numba.generated_jit(nopython=True, cache=True)
+def build_set_seen_na(A):
+    """
+    Function to build a set from A, omitting
+    any NA values. This returns two values,
+    the newly created set, and if any NA values
+    were encountered. This separates avoids any
+    NA values in the set, including NA, NaN,
+    and NaT.
+    """
+    # TODO: Merge with build_set. These are currently
+    # separate because this is only used by nunique and
+    # build set is potentially used in many locations.
+
+    # TODO: use more efficient hash table optimized for addition and
+    # membership check
+    # XXX using dict for now due to Numba's #4577
+    def impl(A):  # pragma: no cover
+        s = dict()
+        seen_na = False
+        for i in range(len(A)):
+            if bodo.libs.array_kernels.isna(A, i):
+                seen_na = True
+                continue
+            s[A[i]] = 0
+        return s, seen_na
+
+    return impl
+
+
+@numba.generated_jit(nopython=True, cache=True)
 def build_set(A):
     # if isinstance(A, IntegerArrayType):
     #     #return lambda A: set(A._data)

@@ -1643,6 +1643,59 @@ def test_groupby_nunique(memory_leak_check):
     check_func(impl3, (df,), sort_output=True)
 
 
+def test_groupby_nunique_dropna(memory_leak_check):
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 4, 2, 2, 1],
+            # Nullable string
+            "D": ["AA", None, "BB", "B", "AA", "AA", "B"],
+            # Nullable float
+            "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, np.nan],
+            # Nullable int
+            "E": pd.Series([2, 1, 1, 4, None, 2, 1], dtype="Int32"),
+            # Nullable dt64
+            "G": pd.Series(
+                [
+                    pd.Timestamp(year=2021, month=6, day=1, hour=4),
+                    pd.Timestamp(year=2021, month=6, day=1),
+                    None,
+                    pd.Timestamp(year=2020, month=2, day=4, microsecond=40),
+                    pd.Timestamp(2020, 2, 4),
+                    pd.Timestamp(year=2020, month=2, day=4),
+                    None,
+                ]
+            ),
+            # Nullable td64
+            "F": pd.Series(
+                [
+                    pd.Timedelta(days=0),
+                    pd.Timedelta(days=0, seconds=14),
+                    None,
+                    pd.Timedelta(days=-1, hours=6),
+                    None,
+                    pd.Timedelta(days=-1, hours=6),
+                    pd.Timedelta(days=-1),
+                ]
+            ),
+            # Nullable boolean
+            "C": pd.Series([True, None, None, None, True, True, True], dtype="boolean"),
+        },
+    )
+
+    def impl0(df):
+        """ Test nunique dropna=False"""
+        df2 = df.groupby("A").nunique(dropna=False)
+        return df2
+
+    def impl1(df):
+        """ Test nunique dropna=True (the default)"""
+        df2 = df.groupby("A").nunique(dropna=True)
+        return df2
+
+    check_func(impl0, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True)
+
+
 def test_groupby_agg_caching(memory_leak_check):
     """Test compiling function that uses groupby.agg(udf) with cache=True
     and loading from cache"""

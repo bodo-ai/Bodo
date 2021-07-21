@@ -5168,7 +5168,7 @@ class GroupbyPipeline {
                         // we still need it for the code after C++ groupby
                         for (auto a : tmp->columns) incref_array(a);
                         table_info* tmp2 = drop_duplicates_table_inner(
-                            tmp, tmp->ncols(), 0, 1);
+                            tmp, tmp->ncols(), 0, 1, skipna);
                         delete tmp;
                         tmp = tmp2;
                         // NOTE: to improve scaling this spreads based on the

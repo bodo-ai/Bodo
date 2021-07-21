@@ -62,7 +62,7 @@ from bodo.utils.typing import (
     raise_bodo_error,
 )
 from bodo.utils.utils import (
-    build_set,
+    build_set_seen_na,
     check_and_propagate_cpp_exception,
     numba_to_c_type,
     unliteral_all,
@@ -803,7 +803,7 @@ def overload_drop_duplicates(data, ind_arr, parallel=False):
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
     # We keep the first entry in the drop_duplicates
     func_text += "  keep_i = 0\n"
-    func_text += "  out_table = drop_duplicates_table(table_total, parallel, {}, keep_i, -1)\n".format(
+    func_text += "  out_table = drop_duplicates_table(table_total, parallel, {}, keep_i, -1, False)\n".format(
         count
     )
     for i_col in range(count):
@@ -1304,38 +1304,37 @@ def overload_convert_to_nullable_tup(arr_tup):
     return convert_impl
 
 
-def nunique(A):  # pragma: no cover
+def nunique(A, dropna):  # pragma: no cover
     return len(set(A))
 
 
-def nunique_parallel(A):  # pragma: no cover
+def nunique_parallel(A, dropna):  # pragma: no cover
     return len(set(A))
 
 
 @overload(nunique, no_unliteral=True)
-def nunique_overload(A):
-    if A == boolean_array:
-        return lambda A: len(A.unique())
+def nunique_overload(A, dropna):
     # TODO: extend to other types like datetime?
-    def nunique_seq(A):
-        return len(build_set(A))
+    def nunique_seq(A, dropna):
+        s, seen_na = build_set_seen_na(A)
+        return len(s) + int(not dropna and seen_na)
 
     return nunique_seq
 
 
 @overload(nunique_parallel, no_unliteral=True)
-def nunique_overload_parallel(A):
+def nunique_overload_parallel(A, dropna):
     sum_op = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
-    def nunique_par(A):  # pragma: no cover
-        uniq_A = bodo.libs.array_kernels.unique(A, parallel=True)
+    def nunique_par(A, dropna):  # pragma: no cover
+        uniq_A = bodo.libs.array_kernels.unique(A, dropna, parallel=True)
         loc_nuniq = len(uniq_A)
         return bodo.libs.distributed_api.dist_reduce(loc_nuniq, np.int32(sum_op))
 
     return nunique_par
 
 
-def unique(A, parallel=False):  # pragma: no cover
+def unique(A, dropna=False, parallel=False):  # pragma: no cover
     return np.array([a for a in set(A)]).astype(A.dtype)
 
 
@@ -1390,12 +1389,15 @@ def cummax_overload(A):
 
 
 @overload(unique, no_unliteral=True)
-def unique_overload(A, parallel=False):
-    def unique_impl(A, parallel=False):  # pragma: no cover
+def unique_overload(A, dropna=False, parallel=False):
+    # Dropna is used by nunique which support dropna=True
+    def unique_impl(A, dropna=False, parallel=False):  # pragma: no cover
         input_table = arr_info_list_to_table([array_to_info(A)])
         n_key = 1
         keep_i = 0
-        out_table = drop_duplicates_table(input_table, parallel, n_key, keep_i, -1)
+        out_table = drop_duplicates_table(
+            input_table, parallel, n_key, keep_i, -1, dropna
+        )
         out_arr = info_to_array(info_from_table(out_table, 0), A)
         delete_table(input_table)
         delete_table(out_table)

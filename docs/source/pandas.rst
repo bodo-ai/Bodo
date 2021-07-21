@@ -405,7 +405,7 @@ unless support is explicitly mentioned.
 * :meth:`pandas.Series.skew` argument `skipna` supported
 * :meth:`pandas.Series.unique` the output is assumed to be "small" relative to input and is replicated.
   Use Series.drop_duplicates() if the output should remain distributed.
-* :meth:`pandas.Series.nunique`
+* :meth:`pandas.Series.nunique` all optional arguments are supported
 * :meth:`pandas.Series.value_counts` all optional arguments except `dropna` are supported.
 * :meth:`pandas.Series.between`
 * :meth:`pandas.Series.memory_usage` argument `index` supported
@@ -613,7 +613,7 @@ Computations / Descriptive Stats:
 * :meth:`pandas.DataFrame.mean`
 * :meth:`pandas.DataFrame.median`
 * :meth:`pandas.DataFrame.min`
-* :meth:`pandas.DataFrame.nunique` `dropna` argument not supported yet.
+* :meth:`pandas.DataFrame.nunique` all optional arguments are supported
 * :meth:`pandas.DataFrame.pct_change`
 * :meth:`pandas.DataFrame.pipe` `func` should be a function (not tuple)
 * :meth:`pandas.DataFrame.prod`
@@ -950,7 +950,7 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.var`
 * :meth:`pandas.core.groupby.DataFrameGroupBy.idxmin`
 * :meth:`pandas.core.groupby.DataFrameGroupBy.idxmax`
-* :meth:`pandas.core.groupby.DataFrameGroupBy.nunique`
+* :meth:`pandas.core.groupby.DataFrameGroupBy.nunique` all optional arguments are supported
 * :meth:`pandas.core.groupby.GroupBy.median`
 * :meth:`pandas.core.groupby.GroupBy.shift`
 * :meth:`pandas.core.groupby.GroupBy.size`
