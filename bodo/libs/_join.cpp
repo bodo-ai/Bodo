@@ -32,7 +32,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                             int64_t n_data_right_t, int64_t* vect_same_key,
                             int64_t* vect_need_typechange, bool is_left,
                             bool is_right, bool is_join, bool optional_col,
-                            bool indicator) {
+                            bool indicator, bool is_na_equal) {
     try {
         // Reading the MPI settings
         int n_pes, myrank;
@@ -124,7 +124,8 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             int CritMemorySize = 10 * 1024 * 1024;  // in bytes
             char* bcast_threshold = std::getenv("BODO_BCAST_JOIN_THRESHOLD");
             if (bcast_threshold) CritMemorySize = std::stoi(bcast_threshold);
-            if (CritMemorySize < 0) throw std::runtime_error("hash_join: CritMemorySize < 0");
+            if (CritMemorySize < 0)
+                throw std::runtime_error("hash_join: CritMemorySize < 0");
             bool all_gather = true;
             if (left_total_memory < right_total_memory &&
                 left_total_memory < CritMemorySize) {
@@ -346,7 +347,8 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 table_B = long_table;
                 jRowB = iRowB - short_table_rows;
             }
-            bool test = TestEqualJoin(table_A, table_B, jRowA, jRowB, n_key);
+            bool test = TestEqualJoin(table_A, table_B, jRowA, jRowB, n_key,
+                                      is_na_equal);
             return test;
         };
         // The entList contains the identical keys with the corresponding rows.

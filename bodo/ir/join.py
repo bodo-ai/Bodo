@@ -90,6 +90,7 @@ class Join(ir.Stmt):
         left_index,
         right_index,
         indicator,
+        is_na_equal,
     ):
         self.df_out = df_out
         self.left_df = left_df
@@ -109,6 +110,7 @@ class Join(ir.Stmt):
         self.left_index = left_index
         self.right_index = right_index
         self.indicator = indicator
+        self.is_na_equal = is_na_equal
         # keep the origin of output columns to enable proper dead code elimination
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_keys) & set(right_keys)
@@ -613,6 +615,7 @@ def join_distributed_run(
             [typemap[v.name] for v in merge_out],
             join_node.loc,
             join_node.indicator,
+            join_node.is_na_equal,
         )
     if join_node.how == "asof":
         for i in range(len(left_other_names)):
@@ -746,6 +749,7 @@ def _gen_local_hash_join(
     out_types,
     loc,
     indicator,
+    is_na_equal,
 ):
     # In some case the column in output has a type different from the one in input.
     # TODO: Unify those type changes between all cases.
@@ -842,7 +846,7 @@ def _gen_local_hash_join(
     func_text += "    vect_need_typechange = np.array([{}])\n".format(
         ",".join("1" if x else "0" for x in vect_need_typechange)
     )
-    func_text += "    out_table = hash_join_table(table_left, table_right, {}, {}, {}, {}, {}, vect_same_key.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {}, {})\n".format(
+    func_text += "    out_table = hash_join_table(table_left, table_right, {}, {}, {}, {}, {}, vect_same_key.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {}, {}, {})\n".format(
         left_parallel,
         right_parallel,
         n_keys,
@@ -853,6 +857,7 @@ def _gen_local_hash_join(
         is_join,
         optional_column,
         indicator,
+        is_na_equal,
     )
     func_text += "    delete_table(table_left)\n"
     func_text += "    delete_table(table_right)\n"

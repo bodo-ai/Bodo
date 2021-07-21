@@ -167,10 +167,11 @@ table_info* RetrieveTable(table_info* const& in_table,
  * @param iRow1 the row of the first key
  * @param arr2 the second columne for the comparison
  * @param iRow2 the row of the second key
+ * @param is_na_equal should na values be considered equal
  * @return True if they are equal and false otherwise.
  */
 bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
-                     int64_t pos2);
+                     int64_t pos2, bool is_na_equal);
 
 /* This function test if two rows of two arrow columns (which may or may not be
  * the same) are equal, greater or lower than the other.
@@ -211,7 +212,7 @@ inline bool TestEqual(std::vector<array_info*> const& columns,
     // iteration over the list of key for the comparison.
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         bool test = TestEqualColumn(columns[shift_key1 + iKey], iRow1,
-                                    columns[shift_key2 + iKey], iRow2);
+                                    columns[shift_key2 + iKey], iRow2, true);
         if (!test) return false;
     }
     // If all keys are equal then we are ok and the keys are equals.
@@ -229,15 +230,16 @@ inline bool TestEqual(std::vector<array_info*> const& columns,
  * @param iRow1 the row of the first key
  * @param iRow2 the row of the second key
  * @param n_key the number of keys considered for the comparison
+ * @param is_na_equal Are NA values considered equal
  * @return True if they are equal and false otherwise.
  */
 inline bool TestEqualJoin(table_info* table1, table_info* table2,
                           size_t const& iRow1, size_t const& iRow2,
-                          size_t const& n_key) {
+                          size_t const& n_key, bool is_na_equal) {
     // iteration over the list of key for the comparison.
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         bool test = TestEqualColumn(table1->columns[iKey], iRow1,
-                                    table2->columns[iKey], iRow2);
+                                    table2->columns[iKey], iRow2, is_na_equal);
         if (!test) return false;
     }
     // If all keys are equal then we are ok and the keys are equals.

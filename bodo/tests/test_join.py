@@ -2082,6 +2082,242 @@ def test_merge_asof_parallel(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize(
+    "df1, df2, expected_output",
+    [
+        (
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, None, 1, 0, None, 7] * 2, dtype="Int64"),
+                    "B1": pd.Series([1, 2, None, 3] * 3, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([2, 5, 6, 6, None, 1] * 2, dtype="Int64"),
+                    "B2": pd.Series([None, 2, 4, 3] * 3, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, 5, 5, 5, 1, 1, 1, 1], dtype="Int64"),
+                    "B1": pd.Series(
+                        [1, 1, None, None, None, None, 1, 1], dtype="Int64"
+                    ),
+                    "B2": pd.Series([2, 3, 2, 3, 2, 3, 2, 3], dtype="Int64"),
+                }
+            ),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, None, 1, 0, None, 7] * 2, dtype="float64"),
+                    "B1": pd.Series([1, 2, None, 3] * 3, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([2, 5, 6, 6, None, 1] * 2, dtype="float64"),
+                    "B2": pd.Series([None, 2, 4, 3] * 3, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, 5, 5, 5, 1, 1, 1, 1], dtype="float64"),
+                    "B1": pd.Series(
+                        [1, 1, None, None, None, None, 1, 1], dtype="Int64"
+                    ),
+                    "B2": pd.Series([2, 3, 2, 3, 2, 3, 2, 3], dtype="Int64"),
+                }
+            ),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, None, 1, 0, None, 7] * 2, dtype="float32"),
+                    "B1": pd.Series([1, 2, None, 3] * 3, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([2, 5, 6, 6, None, 1] * 2, dtype="float32"),
+                    "B2": pd.Series([None, 2, 4, 3] * 3, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, 5, 5, 5, 1, 1, 1, 1], dtype="float32"),
+                    "B1": pd.Series(
+                        [1, 1, None, None, None, None, 1, 1], dtype="Int64"
+                    ),
+                    "B2": pd.Series([2, 3, 2, 3, 2, 3, 2, 3], dtype="Int64"),
+                }
+            ),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [5, None, 1, 0, None, 7] * 2, dtype="datetime64[ns]"
+                    ),
+                    "B1": pd.Series([1, 2, None, 3] * 3, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([2, 5, 6, 6, None, 1] * 2, dtype="datetime64[ns]"),
+                    "B2": pd.Series([None, 2, 4, 3] * 3, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, 5, 5, 5, 1, 1, 1, 1], dtype="datetime64[ns]"),
+                    "B1": pd.Series(
+                        [1, 1, None, None, None, None, 1, 1], dtype="Int64"
+                    ),
+                    "B2": pd.Series([2, 3, 2, 3, 2, 3, 2, 3], dtype="Int64"),
+                }
+            ),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [5, None, 1, 0, None, 7] * 2, dtype="timedelta64[ns]"
+                    ),
+                    "B1": pd.Series([1, 2, None, 3] * 3, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([2, 5, 6, 6, None, 1] * 2, dtype="timedelta64[ns]"),
+                    "B2": pd.Series([None, 2, 4, 3] * 3, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, 5, 5, 5, 1, 1, 1, 1], dtype="timedelta64[ns]"),
+                    "B1": pd.Series(
+                        [1, 1, None, None, None, None, 1, 1], dtype="Int64"
+                    ),
+                    "B2": pd.Series([2, 3, 2, 3, 2, 3, 2, 3], dtype="Int64"),
+                }
+            ),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "A": pd.Series([True, None, False, False], dtype="boolean"),
+                    "B1": pd.Series([1, 2, None, 3], dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([False, False, None], dtype="boolean"),
+                    "B2": pd.Series([None, 2, 4], dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([False, False, False, False], dtype="boolean"),
+                    "B1": pd.Series([None, None, 3, 3], dtype="Int64"),
+                    "B2": pd.Series([None, 2, None, 2], dtype="Int64"),
+                }
+            ),
+        ),
+        # Test that int64 works the same as normal
+        (
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, 231, 1, 0, 231, 7] * 2, dtype="int64"),
+                    "B1": pd.Series([1, 2, None, 3] * 3, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([2, 5, 6, 6, 231, 1] * 2, dtype="int64"),
+                    "B2": pd.Series([None, 2, 4, 3] * 3, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [
+                            5,
+                            5,
+                            5,
+                            5,
+                            231,
+                            231,
+                            231,
+                            231,
+                            231,
+                            231,
+                            231,
+                            231,
+                            1,
+                            1,
+                            1,
+                            1,
+                        ],
+                        dtype="int64",
+                    ),
+                    "B1": pd.Series(
+                        [
+                            1,
+                            1,
+                            None,
+                            None,
+                            2,
+                            2,
+                            1,
+                            1,
+                            3,
+                            3,
+                            None,
+                            None,
+                            None,
+                            None,
+                            1,
+                            1,
+                        ],
+                        dtype="Int64",
+                    ),
+                    "B2": pd.Series(
+                        [2, 3, 2, 3, None, 4, None, 4, None, 4, None, 4, 2, 3, 2, 3],
+                        dtype="Int64",
+                    ),
+                }
+            ),
+        ),
+    ],
+)
+def test_merge_nan_ne(df1, df2, expected_output, memory_leak_check):
+    """
+    Test for Bodo Extension that marks keys that
+    are both NA as not equal.
+
+    This is implemented for nullable types (Int, Bool),
+    float, timedelta64, and datetime64.
+
+    For all other arrays, this parameter should have no impact.
+    """
+
+    def test_impl(df1, df2):
+        return df1.merge(df2, on="A", _bodo_na_equal=False)
+
+    # Using py_output because this extension doesn't exist
+    # in Pandas
+    check_func(
+        test_impl,
+        (df1, df2),
+        py_output=expected_output,
+        sort_output=True,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
 class TestJoin(unittest.TestCase):
     def test_join_parallel(self):
         """
