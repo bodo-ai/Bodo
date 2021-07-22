@@ -55,6 +55,7 @@ from bodo.utils.typing import (
     get_overload_const_list,
     get_overload_const_str,
     get_overload_const_tuple,
+    is_list_like_index_type,
     is_literal_type,
     is_overload_constant_list,
     is_overload_constant_tuple,
@@ -125,9 +126,16 @@ class DataFramePass:
 
         # inline DataFrame getitem
         if isinstance(target_typ, DataFrameType):
-            impl = bodo.hiframes.dataframe_indexing.df_getitem_overload(
-                target_typ, index_typ
-            )
+            # Check type for operations that separate
+            # typing from lowering
+            if is_list_like_index_type(index_typ) and index_typ.dtype == types.bool_:
+                impl = bodo.hiframes.dataframe_indexing.df_filter_getitem(
+                    target_typ, index_typ
+                )
+            else:
+                impl = bodo.hiframes.dataframe_indexing.df_getitem_overload(
+                    target_typ, index_typ
+                )
             return replace_func(self, impl, [target, index_var], pre_nodes=nodes)
 
         # inline DataFrame.iloc[] getitem

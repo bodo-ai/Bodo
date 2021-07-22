@@ -7,8 +7,10 @@ import operator
 import numpy as np
 import pandas as pd
 from numba.core import cgutils, types
+from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import (
     intrinsic,
+    lower_builtin,
     make_attribute_wrapper,
     models,
     overload,
@@ -31,6 +33,71 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     raise_bodo_error,
 )
+
+
+@infer_global(operator.getitem)
+class DataFrameGetItemTemplate(AbstractTemplate):
+    """
+    Split DataFrame GetItem into separate
+    Typing and Lowering to Reduce Compilation Time
+    Currently this is only implemented for boolean arrays/lists
+    to handle filtering use cases.
+
+    TODO: Extend to other getitem operations
+    """
+
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 2
+        df = args[0]
+        ind = args[1]
+        # Only supported on DataFrames in the boolean list/array case
+        # i.e. df1 = df[df.A > 5]
+        if not (
+            isinstance(df, DataFrameType)
+            and is_list_like_index_type(ind)
+            and ind.dtype == types.bool_
+        ):
+            return
+        data_type = df.data
+        index_type = (
+            bodo.hiframes.pd_index_ext.NumericIndexType(types.int64, df.index.name_typ)
+            if isinstance(df.index, bodo.hiframes.pd_index_ext.RangeIndexType)
+            else df.index
+        )
+        columns = df.columns
+        ret = DataFrameType(data_type, index_type, columns)
+        return ret(*args)
+
+
+# lowering is necessary since df filtering is used in the train_test_split()
+# implementation which is not inlined and uses the regular Numba pipeline
+# see bodo/tests/test_sklearn.py::test_train_test_split_df
+@lower_builtin(operator.getitem, DataFrameType, types.Array(types.bool_, 1, "C"))
+def getitem_df_bool(context, builder, sig, args):
+    impl = df_filter_getitem(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
+# DataFrame getitem for the filter case.
+# Used to separate typing and lowering
+def df_filter_getitem(df, ind):
+    # df1 = df[df.A > .5] or df[:n]
+    # implement using array filtering (not using the old Filter node)
+    # TODO: create an IR node for enforcing same dist for all columns and ind array
+    func_text = "def impl(df, ind):\n"
+    if not isinstance(ind, types.SliceType):
+        func_text += "  ind = bodo.utils.conversion.coerce_to_ndarray(ind)\n"
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[ind]"
+    new_data = ", ".join(
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[ind]".format(
+            df.columns.index(c)
+        )
+        for c in df.columns
+    )
+    return bodo.hiframes.dataframe_impl._gen_init_df(
+        func_text, df.columns, new_data, index
+    )
 
 
 # DataFrame getitem
@@ -101,25 +168,9 @@ def df_getitem_overload(df, ind):
             func_text, ind_columns, new_data, index
         )
 
-    # df1 = df[df.A > .5] or df[:n]
-    if (is_list_like_index_type(ind) and ind.dtype == types.bool_) or isinstance(
-        ind, types.SliceType
-    ):
-        # implement using array filtering (not using the old Filter node)
-        # TODO: create an IR node for enforcing same dist for all columns and ind array
-        func_text = "def impl(df, ind):\n"
-        if not isinstance(ind, types.SliceType):
-            func_text += "  ind = bodo.utils.conversion.coerce_to_ndarray(ind)\n"
-        index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[ind]"
-        new_data = ", ".join(
-            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[ind]".format(
-                df.columns.index(c)
-            )
-            for c in df.columns
-        )
-        return bodo.hiframes.dataframe_impl._gen_init_df(
-            func_text, df.columns, new_data, index
-        )
+    # df1 = df[:n] (boolean case is typed separately)
+    if isinstance(ind, types.SliceType):
+        return df_filter_getitem(df, ind)
 
     # TODO: error-checking test
     raise_bodo_error(
