@@ -4677,7 +4677,7 @@ copy_string_values_transform(ARRAY* update_col , ARRAY* tmp_col,
     offset_t* in_offsets = (offset_t*)tmp_col->data2;
     char* in_data1 = tmp_col->data1;
     // 1. Determine needed length (total number of characters)
-    // and number of characters per element/row 
+    // and number of characters per element/row
     // All rows in same group gets same data
     for (int64_t igrp = 0; igrp < num_groups; igrp++) {
         offset_t size = 0;
@@ -4697,7 +4697,7 @@ copy_string_values_transform(ARRAY* update_col , ARRAY* tmp_col,
     char* out_data1 = out_arr->data1;
     // keep track of output array position
     offset_t pos = 0;
-    //2. Copy data from tmp_col to corresponding rows in out_arr 
+    //2. Copy data from tmp_col to corresponding rows in out_arr
     bool bit = false;
     for(int64_t iRow = 0; iRow < nRowOut; iRow++){
         offset_t size = ListSizes[iRow];
@@ -5167,8 +5167,11 @@ class GroupbyPipeline {
                         // drop_duplicates_table_inner steals the reference but
                         // we still need it for the code after C++ groupby
                         for (auto a : tmp->columns) incref_array(a);
+                        // Set dropna to false because skipna is handled at a
+                        // later step. Setting dropna=True here removes NA from
+                        // the keys, which we do not want
                         table_info* tmp2 = drop_duplicates_table_inner(
-                            tmp, tmp->ncols(), 0, 1, skipna);
+                            tmp, tmp->ncols(), 0, 1, false);
                         delete tmp;
                         tmp = tmp2;
                         // NOTE: to improve scaling this spreads based on the

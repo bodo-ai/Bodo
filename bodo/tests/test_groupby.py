@@ -5128,7 +5128,11 @@ def test_groupby_na_key(df, memory_leak_check):
         return A
 
     check_func(
-        impl_nunique, (df,), sort_output=True, check_dtype=False, reset_index=True
+        impl_nunique,
+        (df,),
+        sort_output=True,
+        check_dtype=False,
+        reset_index=True,
     )
 
     # MeanColSet
