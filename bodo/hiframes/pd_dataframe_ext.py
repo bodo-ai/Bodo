@@ -562,29 +562,32 @@ def _get_dataframe_unboxed(typingctx, df_typ=None):
 
     n_cols = len(df_typ.columns)
     ret_typ = types.UniTuple(types.int8, n_cols + 1)
+    sig = signature(ret_typ, df_typ)
 
     def codegen(context, builder, signature, args):
         dataframe_payload = get_dataframe_payload(
             context, builder, signature.args[0], args[0]
         )
-        return impl_ret_borrowed(context, builder, ret_typ, dataframe_payload.unboxed)
+        return impl_ret_borrowed(
+            context, builder, signature.return_type, dataframe_payload.unboxed
+        )
 
-    sig = signature(ret_typ, df_typ)
     return sig, codegen
 
 
 @intrinsic
 def _get_dataframe_data(typingctx, df_typ=None):
-
     ret_typ = types.Tuple(df_typ.data)
+    sig = signature(ret_typ, df_typ)
 
     def codegen(context, builder, signature, args):
         dataframe_payload = get_dataframe_payload(
             context, builder, signature.args[0], args[0]
         )
-        return impl_ret_borrowed(context, builder, ret_typ, dataframe_payload.data)
+        return impl_ret_borrowed(
+            context, builder, signature.return_type, dataframe_payload.data
+        )
 
-    sig = signature(ret_typ, df_typ)
     return sig, codegen
 
 
@@ -603,16 +606,35 @@ def _get_dataframe_index(typingctx, df_typ=None):
     return sig, codegen
 
 
-# this function should be used for getting df._data for alias analysis to work
-# no_cpython_wrapper since Array(DatetimeDate) cannot be boxed
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def get_dataframe_data(df, i):
+def get_dataframe_data(df, i):  # pragma: no cover
+    return df[i]
+
+
+@infer_global(get_dataframe_data)
+class GetDataFrameDataInfer(AbstractTemplate):
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 2
+        assert is_overload_constant_int(args[1])
+        df = args[0]
+        i = get_overload_const_int(args[1])
+        ret = df.data[i]
+        return ret(*args)
+
+
+def get_dataframe_data_impl(df, i):
     def _impl(df, i):  # pragma: no cover
         if has_parent(df) and _get_dataframe_unboxed(df)[i] == 0:
             bodo.hiframes.boxing.unbox_dataframe_column(df, i)
         return _get_dataframe_data(df)[i]
 
     return _impl
+
+
+@lower_builtin(get_dataframe_data, DataFrameType, types.IntegerLiteral)
+def lower_get_dataframe_data(context, builder, sig, args):
+    impl = get_dataframe_data_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 # TODO: use separate index type instead of just storing array
