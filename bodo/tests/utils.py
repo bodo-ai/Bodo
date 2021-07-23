@@ -659,7 +659,20 @@ def _test_equal(
         # properly
         if py_out.dtype == np.dtype("O") and (
             bodo_out.dtype == np.dtype("O")
-            or isinstance(bodo_out.dtype, pd.BooleanDtype)
+            or isinstance(
+                bodo_out.dtype,
+                (
+                    pd.BooleanDtype,
+                    pd.Int8Dtype,
+                    pd.Int16Dtype,
+                    pd.Int32Dtype,
+                    pd.Int64Dtype,
+                    pd.UInt8Dtype,
+                    pd.UInt16Dtype,
+                    pd.UInt32Dtype,
+                    pd.UInt64Dtype,
+                ),
+            )
         ):
             # struct array needs special handling in nested case
             if len(py_out) > 0 and isinstance(py_out[0], dict):
