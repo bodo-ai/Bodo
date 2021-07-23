@@ -943,6 +943,18 @@ def test_series_astype_int_arr(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,))
 
 
+def test_series_astype_int_arr_nullable(memory_leak_check):
+    """Test for converting between nullable integer arrays
+    (TODO(ehsan): add nulls to numeric_series_val and remove this extra test)
+    """
+
+    def test_impl(S):
+        return S.astype("Int64")
+
+    S = pd.Series([1, 4, None, 5, 3, 1] * 2)
+    check_func(test_impl, (S,))
+
+
 @pytest.mark.parametrize(
     "S",
     [

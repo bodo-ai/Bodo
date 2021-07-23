@@ -778,17 +778,17 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
 
             return impl_float
         else:
-
+            # data is an integer array (nullable or non-nullable)
             def impl(data, new_dtype, copy=None, nan_to_str=True):  # pragma: no cover
                 n = len(data)
-                n_bytes = (n + 7) >> 3
-                bitmap = np.empty(n_bytes, np.uint8)
+                numba.parfors.parfor.init_prange()
+                B = bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
                 for i in numba.parfors.parfor.internal_prange(n):
-                    # TODO: use simple set_bit
-                    bodo.libs.int_arr_ext.set_bit_to_arr(bitmap, i, 1)
-                return bodo.libs.int_arr_ext.init_integer_array(
-                    data.astype(_dtype), bitmap
-                )
+                    if bodo.libs.array_kernels.isna(data, i):
+                        bodo.libs.array_kernels.setna(B, i)
+                    else:
+                        B[i] = data[i]
+                return B
 
             return impl
 
