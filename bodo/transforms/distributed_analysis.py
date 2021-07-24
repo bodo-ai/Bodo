@@ -2620,6 +2620,13 @@ class DistributedAnalysis:
         """analyze ir.Return nodes for distribution. Checks for user flags; sets to REP
         if no user flag found"""
         if self.flags.returns_maybe_distributed:
+            # no need to update metadata if the returned variable is not distributable
+            if var.name not in array_dists:
+                typ = self.typemap[var.name]
+                assert not (
+                    is_distributable_typ(typ) or is_distributable_tuple_typ(typ)
+                ), "Internal error: distributable type does not have assigned distribution at return"
+                return
             is_1D_or_1D_Var = lambda d: d in (Distribution.OneD, Distribution.OneD_Var)
             ret_dist = array_dists[var.name]
             # untyped pass usually sets is_return_distributed but in this case
