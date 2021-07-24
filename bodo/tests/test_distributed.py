@@ -415,14 +415,14 @@ def test_bodo_func_dist_call_tup2(memory_leak_check):
     """
 
     # two return values are distributable, but one is distributed
-    @bodo.jit(distributed=["B"])
+    @bodo.jit(distributed=["B"], returns_maybe_distributed=False)
     def f1(n):
         A = np.arange(3)
         B = np.ones(n)
         S = A, B, 3
         return S
 
-    @bodo.jit(distributed=["C"])
+    @bodo.jit(distributed=["C"], returns_maybe_distributed=False)
     def impl1(n):
         A, B, a = f1(n)
         C = B + A[0] + a
@@ -432,14 +432,14 @@ def test_bodo_func_dist_call_tup2(memory_leak_check):
     assert count_array_OneD_Vars() > 0
 
     # error checking case, caller's value can't be distributed
-    @bodo.jit(distributed=["B", "A"])
+    @bodo.jit(distributed=["B", "A"], returns_maybe_distributed=False)
     def f2(n):
         A = np.arange(n)
         B = np.ones(n)
         S = A, B, 3
         return S
 
-    @bodo.jit
+    @bodo.jit(returns_maybe_distributed=False)
     def impl2(n):
         A, B, a = f2(n)
         C = B + a
@@ -460,12 +460,12 @@ def test_diag_for_return_error(memory_leak_check):
     replicated args that conflict with distributed flag
     """
 
-    @bodo.jit(distributed=["A"])
+    @bodo.jit(distributed=["A"], returns_maybe_distributed=False)
     def f2(n):
         A = np.arange(n)
         return A
 
-    @bodo.jit
+    @bodo.jit(returns_maybe_distributed=False)
     def impl(n):
         A = f2(n)
         return A
@@ -1274,9 +1274,9 @@ def test_dist_warning2(memory_leak_check):
 
     if bodo.get_rank() == 0:  # warning is thrown only on rank 0
         with pytest.warns(BodoWarning, match="No parallelism found for function"):
-            bodo.jit(impl)(10)
+            bodo.jit(returns_maybe_distributed=False)(impl)(10)
     else:
-        bodo.jit(impl)(10)
+        bodo.jit(returns_maybe_distributed=False)(impl)(10)
 
 
 @pytest.mark.slow
@@ -1291,9 +1291,9 @@ def test_dist_warning3(memory_leak_check):
 
     if bodo.get_rank() == 0:  # warning is thrown only on rank 0
         with pytest.warns(BodoWarning, match="No parallelism found for function"):
-            bodo.jit(impl)(10)
+            bodo.jit(returns_maybe_distributed=False)(impl)(10)
     else:
-        bodo.jit(impl)(10)
+        bodo.jit(returns_maybe_distributed=False)(impl)(10)
 
 
 def test_getitem_bool_REP(memory_leak_check):
@@ -1307,9 +1307,9 @@ def test_getitem_bool_REP(memory_leak_check):
     n = 11
     if bodo.get_rank() == 0:  # warning is thrown only on rank 0
         with pytest.warns(BodoWarning, match="No parallelism found for function"):
-            bodo.jit(test_impl)(n)
+            bodo.jit(returns_maybe_distributed=False)(test_impl)(n)
     else:
-        bodo.jit(test_impl)(n)
+        bodo.jit(returns_maybe_distributed=False)(test_impl)(n)
 
 
 def test_df_filter_branch(memory_leak_check):
