@@ -205,6 +205,36 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
     Bodo SQL currently support inner join on all conditions, but all outer joins are only support on an
     equality between columns.
 
+* `UNION`
+
+    The UNION operator is used to combine the result-set of two SELECT statements::
+
+        SELECT <COLUMN_NAMES> FROM <TABLE1>
+        UNION
+        SELECT <COLUMN_NAMES> FROM <TABLE2>;
+
+    Each SELECT statement within the UNION caluse must have the same number of columns. The columns must also have similar
+    data types. The output of the UNION is the set of rows which are present in either of the input select statements.
+
+    The UNION operator selects only the distinct values from the inputs by default. To allow duplicate values, use UNION ALL::
+
+        SELECT <COLUMN_NAMES> FROM <TABLE1>
+        UNION ALL
+        SELECT <COLUMN_NAMES> FROM <TABLE2>;
+
+
+* `INTERSECT`
+
+    The INTERSECT operator is used to calculate the intersection of two SELECT statements::
+
+        SELECT <COLUMN_NAMES> FROM <TABLE1>
+        INTERSECT
+        SELECT <COLUMN_NAMES> FROM <TABLE2>;
+
+    Each SELECT statement within the INTERSECT clause must have the same number of columns.
+    The columns must also have similar data types. The output of the INTERSECT is the set of rows which are present in
+    both of the input select statements. The INTERSECT operator selects only the distinct values from the inputs.
+
 
 * `GROUP BY`
     The ``GROUP BY`` statement groups rows that have the same values into summary rows, like "find the number of customers in each country".
@@ -254,7 +284,18 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     For example::
 
-        Select (CASE WHEN A > 1 THEN A ELSE B) as mycol from table1
+        Select (CASE WHEN A > 1 THEN A ELSE B END) as mycol from table1
+
+    If the types of the possible return values are different, BodoSQL will attempt to cast them all to a common type,
+    which is currently undefined behavior. The last else clause can optionally be excluded, in which case, the
+    CASE statement will return null if none of the conditions are met. For example::
+
+        Select (CASE WHEN A < 0 THEN 0 END) as mycol from table1
+
+    is equivalent to::
+
+        Select (CASE WHEN A < 0 THEN 0 ELSE NULL END) as mycol from table1
+
 
 * `LIKE`
 
@@ -304,14 +345,14 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
 * Operators
 
-    - Bodo SQL currently supports the following arithmetic operators on columns:
+    - Bodo SQL currently supports the following arithmetic operators:
 
         - ``+`` (addition)
         - ``-`` (subtraction)
         - ``*`` (multiplication)
         - ``/`` (true division)
 
-    - Bodo SQL currently supports the following comparision operators on columns:
+    - Bodo SQL currently supports the following comparision operators:
 
         - ``=``	(equal to)
         - ``>``	(greater than)
@@ -319,12 +360,144 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
         - ``>=`` (greater than or equal t)o
         - ``<=`` (less than or equal to)
         - ``<>`` (not equal to)
+        - ``!=`` (not equal to)
 
-    - Bodo SQL currently supports the following logical operators on columms:
+    - Bodo SQL currently supports the following logical operators:
 
         - ``AND``
         - ``OR``
         - ``NOT``
+
+    - Bodo SQL currently supports the following string operators:
+
+        - ``||`` (string concatination)
+
+
+
+* Numeric Functions
+
+    Except where otherwise specified, the inputs to each of these functions can be any numeric
+    type, column or scalar. Here is an example using MOD::
+
+        SELECT MOD(12.2, A) FROM table1
+
+    Bodo SQL Currently supports the following Numeric Functions:
+
+    - ABS(n)
+
+        Returns the absolute value of n
+
+    - COS(n)
+
+        Calculates the Cosine of n
+
+    - SIN(n)
+
+        Calculates the Sine of n
+
+    - TAN(n)
+
+        Calculates the Tangent of n
+
+    - ACOS(n)
+
+        Calculates the Arccosine of n
+
+    - ASIN(n)
+
+        Calculates the Arcsine of n
+
+    - ATAN(n)
+
+        Calculates the Arctangent of n
+
+    - ATAN2(A, B)
+
+        Calculates the Arctangent of A divided by B
+
+    - COTAN(X)
+
+        Calculates the Cotangent of X
+
+    - CEIL(X)
+        Converts X to an integer, rounding towards positive infinity
+
+    - CEILING(X)
+
+        Equivalent to CEIL
+
+    - FLOOR(X)
+
+        Converts X to an integer, rounding towards negative infinity
+
+    - DEGREES(X)
+
+        Converts a value in radians to the corresponding value in degrees
+
+    - RADIANS(X)
+
+        Converts a value in radians to the corresponding value in degrees
+
+    - LOG10(X)
+
+        Computes Log base 10 of x. Returns NaN for negative inputs, and -inf for 0 inputs.
+
+    - LOG(X)
+
+        Equivalent to LOG10(x)
+
+    - LOG10(X)
+
+        Computes Log base 2 of x. Returns NaN for negative inputs, and -inf for 0 inputs.
+
+    - LN(X)
+
+        Computes the natural log of x. Returns NaN for negative inputs, and -inf for 0 inputs.
+
+    - MOD(A,B)
+
+        Computes A modulo B.
+
+    - CONV(X, current_base, new_base)
+
+        CONV takes a string representation of an integer value, it's current_base, and the base to convert that argument to.
+        CONV returns a new string, that represents the value in the new base. CONV is only supported for converting to/from
+        base 2, 8, 10, and 16.
+
+        For example::
+
+            CONV('10', 10, 2) ==> '1010'
+            CONV('10', 2, 10) ==> '2'
+            CONV('FA', 16, 10) ==> '250'
+
+
+    - SQRT(X)
+
+        Computes the square root of x. Returns NaN for negative inputs, and -inf for 0 inputs.
+
+    - PI()
+
+        Returns the value of PI
+
+    - POW(A, B), POWER(A, B)
+
+        Returns A to the power of B. Returns NaN if A is negative, and B is a float. POW(0,0) is 1
+
+    - EXP(X)
+
+        Returns e to the power of X
+
+    - SIGN(X)
+
+        Returns 1 if X > 0, -1 if X < 0, and 0 if X = 0
+
+    - ROUND(X, num_decimal_places)
+
+        Rounds X to the specified number of decimal places
+
+    - TRUNCATE(X, num_decimal_places)
+
+        Equivalent to ROUND(X, num_decimal_places)
 
 
 * Aggregation Functions
@@ -357,6 +530,10 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
         Compute the standard deviation for a column with N - 1 degrees of freedom.
 
+    - STDDEV_POP
+
+        Compute the standard deviation for a column with N degrees of freedom.
+
     - SUM
 
         Compute the sum for a column.
@@ -368,6 +545,10 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
     - VAR_SAMP
 
         Compute the variance for a column with N - 1 degrees of freedom.
+
+    - VAR_POP
+
+        Compute the variance for a column with N degrees of freedom.
 
 
     All aggregate functions have the syntax::
@@ -389,45 +570,345 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     Bodo SQL currently supports the following Timestamp functions:
 
-        - DATEDIFF(col1, col2)
+        - DATEDIFF(timestamp_val1, timestamp_val2)
 
-            Computes the difference in days between two Timestamp columns
+            Computes the difference in days between two Timestamp values
 
-        - STR_TO_DATE(str_col, format_string)
+        - STR_TO_DATE(str_val, literal_format_string)
 
-            Converts a string column to a Timestamp columns given a scalar
-            format string
+            Converts a string value to a Timestamp value given a literal
+            format string. If a year, month, and day value is not specified,
+            they default to 1900, 01, and 01 respectively. Will throw a runtime error
+            if the string cannot be parsed into the expected values. See DATE_FORMAT for
+            Recognized formatting characters.
 
-        - DATE_ADD(timestamp_col, interval)
+        For example::
+
+                STR_TO_DATE('2020 01 12', '%Y %m %d') ==> Timestamp '2020-01-12'
+                STR_TO_DATE('01 12', '%m %d') ==> Timestamp '1900-01-12'
+                STR_TO_DATE('hello world', '%Y %m %d') ==> RUNTIME ERROR
+
+        - DATE_FORMAT(timestamp_val, literal_format_string)
+
+            Converts a timestamp value to a String value given a scalar
+            format string.
+
+            Recognized formatting character:
+                - ``%i`` Minutes, zero padded (00 to 59)
+                - ``%M`` Full month name (January to December)
+                - ``%r`` Time in format in the format (hh:mm:ss AM/PM)
+                - ``%s`` Seconds, zero padded (00 to 59)
+                - ``%T`` Time in format in the format (hh:mm:ss)
+                - ``%T`` Time in format in the format (hh:mm:ss)
+                - ``%u`` week of year, where monday is the first day of the week (00 to 53)
+                - ``%a`` Abbreviated weekday name (sun-sat)
+                - ``%b`` Abbreviated month name (jan-dec)
+                - ``%f`` Microseconds, left padded with 0's, (000000 to 999999)
+                - ``%H`` Hour, zero padded (00 to 23)
+                - ``%j`` Day Of Year, left padded with 0's (001 to 366)
+                - ``%m`` Month number (00 to 12)
+                - ``%p`` AM or PM, depending on the time of day
+                - ``%d`` Day of month, zero padded (01 to 31)
+                - ``%Y`` Year as a 4 digit value
+                - ``%y`` Year as a 2 digit value, zero padded (00 to 99)
+                - ``%U`` Week of year where sunday is the first day of the week (00 to 53)
+                - ``%S`` Seconds, zero padded (00 to 59)
+
+            For example::
+
+                DATE_FORMAT(Timestamp '2020-01-12', '%Y %m %d') ==> '2020 01 12'
+                DATE_FORMAT(Timestamp '2020-01-12 13:39:12', 'The time was %T %p. It was a %u') ==> 'The time was 13:39:12 PM. It was a Sunday'
+
+
+        - DATE_ADD(timestamp_val, interval)
 
             Computes a timestamp column by adding an interval column/scalar
-            to a timestamp column
+            to a timestamp value
 
-        - DATE_SUB(timestamp_col, interval)
+        - DATE_SUB(timestamp_val, interval)
 
             Computes a timestamp column by subtracting an interval column/scalar
-            from a timestamp column
+            to a timestamp value
 
-    For example::
+        - NOW()
 
-        SELECT datediff(A, B) as diff from table1
+            Computes a timestamp equal to the current system time
+
+        - LOCALTIMESTAMP()
+
+            Equivalent to NOW
+
+        - CURDATE()
+
+            Computes a timestamp equal to the current system time, excluding the time information
+
+        - CURRENT_DATE()
+
+            Equivalent to CURDATE
+
+        - Extract(TimeUnit from timestamp_val)
+
+            Extracts the specified TimeUnit from the supplied date.
+
+            allowed TimeUnits are:
+                - MICROSECOND
+                - SECOND
+                - MINUTE
+                - HOUR
+                - DAY (Day of Month)
+                - DOY (Day of Year)
+                - DOW (Day of week)
+                - WEEK
+                - MONTH
+                - QUARTER
+                - YEAR
+
+            TimeUnits are not case sensitive.
+
+        - MICROSECOND(timestamp_val),
+
+            Equivalent to EXTRACT(MICROSECOND from timestamp_val)
+
+        - SECOND(timestamp_val)
+
+            Equivalent to EXTRACT(SECOND from timestamp_val)
+
+        - MINUTE(timestamp_val)
+
+            Equivalent to EXTRACT(MINUTE from timestamp_val)
+
+        - HOUR(timestamp_val)
+
+            Equivalent to EXTRACT(HOUR from timestamp_val)
+
+        - WEEK(timestamp_val)
+
+            Equivalent to EXTRACT(WEEK from timestamp_val)
+
+        - WEEKOFYEAR(timestamp_val)
+
+            Equivalent to EXTRACT(WEEK from timestamp_val)
+
+        - MONTH(timestamp_val)
+
+            Equivalent to EXTRACT(MONTH from timestamp_val)
+
+        - QUARTER(timestamp_val)
+
+            Equivalent to EXTRACT(QUARTER from timestamp_val)
+
+        - YEAR(timestamp_val)
+
+            Equivalent to EXTRACT(YEAR from timestamp_val)
+
+        - MAKEDATE(integer_years_val, integer_days_val)
+
+            Computes a timestamp value that is the specified number of days after the specified year.
+
+        - DAYNAME(timestamp_val)
+
+            Computes the string name of the day of the timestamp value.
+
+        - MONTHNAME(timestamp_val)
+
+            Computes the string name of the month of the timestamp value.
+
+        - TO_DAYS(timestamp_val)
+
+            Computes the difference in days between the input timestamp, and year 0 of the Gregorian calendar
+
+        - TO_SECONDS(timestamp_val)
+
+            Computes the number of seconds since year 0 of the Gregorian calendar
+
+        - FROM_DAYS(n)
+
+            Returns a timestamp values that is n days after year 0 of the Gregorian calendar
+
+        - UNIX_TIMESTAMP()
+
+            Computes the number of seconds since the unix epoch
+
+        - FROM_UNIXTIME(n)
+
+            Returns a Timestamp value that is n seconds after the unix epoch
 
 
 * String Functions
 
     Bodo SQL currently supports the following string functions:
 
-        - LOWER(col)
+        - LOWER(str)
 
-            Converts the contents of the string column to lower case.
+            Converts the string scalar/column to lower case.
 
-        - UPPER(col)
+        - LCASE(str)
 
-            Converts the contents of the string column to upper case.
+            Same as LOWER.
 
-    For example::
+        - UPPER(str)
 
-        SELECT upper(A) as upper_case from table1
+            Converts the string scalar/column to upper case.
+
+        - UCASE(str)
+
+            Same as UPPER.
+
+        - CONCAT(str_0, str_1, ...)
+
+            Concatinates the strings together. Requires at least two arguments.
+
+        - CONCAT_WS(str_separator, str_0, str_1, ...)
+
+            Concatinates the strings together, with the specified separator. Requires at least three arguments
+
+        - SUBSTRING(str, start_index, len)
+
+            Takes a substring of the specified string, starting at the specified index, of the specified length.
+            Start_index = 1 specfies the first character of the string, start_index = -1 specfies the last
+            character of the string. Start_index = 0 causes the function to return empty string. If start_index is positive and greater then the length of the string, returns
+            an empty string. If start_index is negative, and has an absolute value greater then the length of the string,
+            the behavior is equivalent to start_index = 1.
+
+            For example::
+
+                SUBSTRING('hello world', 1, 5) ==> 'hello'
+                SUBSTRING('hello world', -5, 7) ==> 'world'
+                SUBSTRING('hello world', -20, 8) ==> 'hello wo'
+                SUBSTRING('hello world', 0, 10) ==> ''
+
+
+        - MID(str, start_index, len)
+
+            Equivalent to SUBSTRING
+
+        - SUBSTR(str, start_index, len)
+
+            Equivalent to SUBSTRING
+
+        - LEFT(str, n)
+
+            Takes a substring of the specified string consisting of the leftmost n characters
+
+        - RIGHT(str, n)
+
+            Takes a substring of the specified string consisting of the rightmost n characters
+
+        - REPEAT(str, len)
+
+            Extends the specified string to the specified length by repeating the string. Will truncate the string
+            If the string's length is less then the len argument
+
+            For example::
+
+                REPEAT('abc', 7) ==> 'abcabca'
+                REPEAT('hello world', 5) ==> 'hello'
+
+        - STRCMP(str1, str2)
+
+            Compares the two strings lexographically.
+            If str1 > str2, return 1. If str1 < str2, returns -1. If str1 = str2, returns 0.
+
+        - REVERSE(str)
+
+            Returns the reversed string.
+
+        - ORD(str)
+
+            Returns the integer value of the unicode representation of the first charecter of the input string.
+            returns 0 when passed the empty string
+
+        - CHR(int)
+
+            Returns the charecter of the corresponding unicode value.
+            Currently only supported for ASCII charecters (0 to 127, inclusive)
+
+        - SPACE(int)
+
+            Returns a string containing the specified number of spaces.
+
+        - LTRIM(str)
+
+            returns the input string, will all spaces removed from the left of the string
+
+        - RTRIM(str)
+
+            returns the input string, will all spaces removed from the right of the string
+
+        - TRIM(str)
+
+            returns the input string, will all spaces removed from the left and right of the string
+
+        - SUBSTRING_INDEX(str, delimiter_str, n)
+
+            Returns a substring of the input string, which contains all characters that occur before
+            n occurances of the delimiter string. if n is negative, it will return all characters
+            that occur after the last n occurances of the delimiter string. If num_occurances is 0,
+            it will return the empty string
+
+            For example::
+
+                SUBSTRING_INDEX('1,2,3,4,5', ',', 2) ==> '1,2'
+                SUBSTRING_INDEX('1,2,3,4,5', ',', -2) ==> '4,5'
+                SUBSTRING_INDEX('1,2,3,4,5', ',', 0) ==> ''
+
+        - LPAD(string, len, padstring)
+
+            Extends the input string to the specified length, by appending copies of the padstring to the
+            left of the string. If the input string's length is less then the len argument, it will truncate
+            the input string.
+
+            For example::
+
+                LPAD('hello', 10, 'abc') ==> 'abcabhello'
+                LPAD('hello', 1, 'abc') ==> 'h'
+
+        - RPAD(string, len, padstring)
+
+            Extends the input string to the specified length, by appending copies of the padstring to the
+            right of the string. If the input string's length is less then the len argument, it will truncate
+            the input string.
+
+            For example::
+
+                LPAD('hello', 10, 'abc') ==> 'helloabcab'
+                LPAD('hello', 1, 'abc') ==> 'h'
+
+        - REPLACE(base_string, substring_to_remove, string_to_substitute)
+
+            Replaces all occurances of the specified substring with the substitute string.
+
+            For example::
+
+                REPLACE('hello world', 'hello' 'hi') ==> 'hi world'
+
+
+* Control flow Functions
+
+    - IF(Cond, TrueValue, FalseValue)
+
+        Returns TrueValue if cond is True, and FalseValue if cond is false. Loigcally equivalent to::
+
+            CASE WHEN Cond THEN TrueValue ELSE FalseValue END
+
+    - IFNULL(Arg0, Arg1)
+
+        Returns Arg1 if Arg0 is null, and otherwise returns Arg1. If Arguments do not have the same
+        type, Bodo SQL will attempt to cast them all to a common type, which is currently undefined behavior.
+
+    - NVL(Arg0, Arg1)
+
+        Equivalent to IFNULL
+
+    - NULLIF(Arg0, Arg1)
+
+        Returns null if the Arg0 evaluates to true, and otherwise returns Arg1
+
+    - COALESCE(A, B, C, ...)
+
+        Returns the first non NULL argument, or NULL if no non NULL argument is found. Requires at least
+        two arguments. If Arguments do noth have the same type, Bodo SQL will attempt to cast them to a
+        common datatype, which is currently undefined behavior.
 
 
 Supported Data Types
@@ -573,5 +1054,6 @@ ensure compatibility with other SQL systems.
 Most operators with a NULL input return NULL. However,
 there a couple notable places where Bodo SQL may not match other SQL systems:
 
-    - `GROUP BY` clauses do not produce a NULL group
     - Bodo SQL treats `NaN` the same as NULL
+    - Is (NOT) False and Is (NOT) True return NULL when used on a null expression
+    - AND will return NULL if any of the inputs is NULL
