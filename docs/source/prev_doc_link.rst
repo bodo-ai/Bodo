@@ -4,6 +4,8 @@ Previous Release Documentation
 ================================
 `Latest <../_static/redirect/latest.html>`_  
 
+`Bodo 2021.5 Release <../_static/redirect/2021_5.html>`_
+
 `Bodo 2021.4 Release <../_static/redirect/2021_4.html>`_
 
 `Bodo 2021.3 Release <../_static/redirect/2021_3.html>`_
