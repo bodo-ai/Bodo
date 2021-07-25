@@ -1229,7 +1229,9 @@ def test_concat_reduction():
 
         return df
 
-    check_func(impl, (11,), reset_index=True, check_dtype=False)
+    check_func(
+        impl, (11,), reset_index=True, check_dtype=False, is_out_distributed=False
+    )
 
 
 def test_series_concat_reduction():
@@ -1242,7 +1244,9 @@ def test_series_concat_reduction():
 
         return S
 
-    check_func(impl, (11,), reset_index=True, check_dtype=False)
+    check_func(
+        impl, (11,), reset_index=True, check_dtype=False, is_out_distributed=False
+    )
 
 
 def test_dist_warning1(memory_leak_check):
