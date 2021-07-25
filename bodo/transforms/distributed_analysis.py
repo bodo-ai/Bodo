@@ -611,6 +611,11 @@ class DistributedAnalysis:
 
         # run analysis recursively on parfor body
         if self.second_pass and out_dist in [Distribution.OneD, Distribution.OneD_Var]:
+            # reduction arrays of distributed parfors are replicated
+            # see test_basic.py::test_array_reduce
+            self._set_REP(
+                parfor.redvars, array_dists, "reduction arrays of distributed parfor"
+            )
             self.in_parallel_parfor = parfor.id
         blocks = wrap_parfor_blocks(parfor)
         for l, b in blocks.items():
