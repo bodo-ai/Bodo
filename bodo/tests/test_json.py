@@ -10,12 +10,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import (
-    _get_dist_arg,
-    _test_equal_guard,
-    check_func,
-    reduce_sum,
-)
+from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.testing import ensure_clean, ensure_clean_dir
 
 
@@ -175,8 +170,8 @@ def test_json_read_multiline_object(datapath, memory_leak_check):
             orient="records",
             lines=False,
             dtype={
-                "RecordNumber": np.int,
-                "Zipcode": np.int,
+                "RecordNumber": np.int64,
+                "Zipcode": np.int64,
                 "ZipCodeType": str,
                 "City": str,
                 "State": str,

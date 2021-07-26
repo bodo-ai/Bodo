@@ -1609,7 +1609,7 @@ def test_h5_read_seq(datapath, memory_leak_check):
 
     # passing function name as value to test value-based dispatch
     fname = datapath("lr.hdf5")
-    bodo_func = bodo.jit(test_impl)
+    bodo_func = bodo.jit(test_impl, returns_maybe_distributed=False)
     np.testing.assert_allclose(bodo_func(fname), test_impl(fname))
 
 
@@ -1756,7 +1756,7 @@ def test_h5_write(memory_leak_check):
     n = 11
     A = np.arange(n).astype(np.float64)
     with ensure_clean(fname):
-        bodo.jit(test_impl)(A, fname)
+        bodo.jit(test_impl, returns_maybe_distributed=False)(A, fname)
         f = h5py.File(fname, "r")
         A2 = f["A"][:]
         f.close()
@@ -1795,7 +1795,7 @@ def test_np_io1(datapath, memory_leak_check):
         A = np.fromfile(fname, np.float64)
         return A
 
-    bodo_func = bodo.jit(test_impl)
+    bodo_func = bodo.jit(test_impl, returns_maybe_distributed=False)
     np.testing.assert_almost_equal(bodo_func(), test_impl())
 
 
