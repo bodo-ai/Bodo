@@ -588,6 +588,16 @@ def cast_unicode_str_to_float32(context, builder, fromty, toty, val):
     return cast_str_to_float32(context, builder, std_str_type, toty, std_str)
 
 
+@lower_cast(string_type, types.int64)
+def cast_unicode_str_to_int64(context, builder, fromty, toty, val):
+    uni_str = cgutils.create_struct_proxy(string_type)(context, builder, value=val)
+    fnty = lir.FunctionType(
+        lir.IntType(64), [lir.IntType(8).as_pointer(), lir.IntType(64)]
+    )
+    fn = builder.module.get_or_insert_function(fnty, name="str_to_int64")
+    return builder.call(fn, (uni_str.data, uni_str.length))
+
+
 @infer_getattr
 class StringAttribute(AttributeTemplate):
     key = types.UnicodeType

@@ -61,6 +61,38 @@ def test_series_empty_dtype(memory_leak_check):
     check_func(test_impl11, (), reset_index=True)
 
 
+@pytest.mark.parametrize(
+    "type_name",
+    [
+        "Int8",
+        "UInt8",
+        "Int16",
+        "UInt16",
+        "Int32",
+        "UInt32",
+        "Int64",
+        "UInt64",
+    ],
+)
+def test_str_nullable_astype(type_name, memory_leak_check):
+    """
+    Checks that casting from a String Series to a
+    Nullable Integer works as expected.
+    """
+    # Generate the test code becuase the typename
+    # must be a string constant
+    def test_impl(S):
+        return S.astype(type_name)
+
+    # Avoid negative numbers to prevent undefined behavior
+    # for some types.
+    S = pd.Series(["0", "1", None, "123", "43", "32", None, "97"])
+    # Panda's doesn't support this conversion, so generate
+    # an expected output.
+    py_output = pd.Series([0, 1, None, 123, 43, 32, None, 97], dtype=type_name)
+    check_func(test_impl, (S,), py_output=py_output)
+
+
 @pytest.mark.slow
 def test_empty_dataframe(memory_leak_check):
     """
