@@ -778,7 +778,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
 
             return impl_float
         else:
-            # data is an integer array (nullable or non-nullable)
+            # data is a string array or integer array (nullable or non-nullable)
             def impl(data, new_dtype, copy=None, nan_to_str=True):  # pragma: no cover
                 n = len(data)
                 numba.parfors.parfor.init_prange()
@@ -787,7 +787,11 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
                     if bodo.libs.array_kernels.isna(data, i):
                         bodo.libs.array_kernels.setna(B, i)
                     else:
-                        B[i] = data[i]
+                        # Cast the data to support conversion for
+                        # string arrays. There may be an extra cast
+                        # for the setitem if the array is not int64,
+                        # but this should never impact correctness.
+                        B[i] = np.int64(data[i])
                 return B
 
             return impl
