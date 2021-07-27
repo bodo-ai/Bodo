@@ -4631,25 +4631,25 @@ class ShiftColSet : public BasicColSet<ARRAY> {
 template <typename ARRAY, typename T>
 typename std::enable_if<!(is_multiple_array<ARRAY>::value), void>::type
 copy_nullable_values_transform(ARRAY* update_col, ARRAY* tmp_col,
-                 const grouping_info& grp_info) {
-
-        int64_t nrows = update_col->length;
-        bool bit = false;
-        for(int64_t iRow = 0; iRow < nrows; iRow++){
-            int64_t igrp = grp_info.row_to_group[iRow];
-            bit = tmp_col->get_null_bit(igrp);
-            T val = tmp_col->template at<T>(igrp);
-            update_col->set_null_bit(iRow, bit);
-            update_col->template at<T>(iRow) = val;
-        }
+                               const grouping_info& grp_info) {
+    int64_t nrows = update_col->length;
+    bool bit = false;
+    for (int64_t iRow = 0; iRow < nrows; iRow++) {
+        int64_t igrp = grp_info.row_to_group[iRow];
+        bit = tmp_col->get_null_bit(igrp);
+        T val = tmp_col->template at<T>(igrp);
+        update_col->set_null_bit(iRow, bit);
+        update_col->template at<T>(iRow) = val;
+    }
 }
 template <typename ARRAY, typename T>
 typename std::enable_if<(is_multiple_array<ARRAY>::value), void>::type
 copy_nullable_values_transform(ARRAY* update_col, ARRAY* tmp_col,
-                 const grouping_info& grp_info) {
+                               const grouping_info& grp_info) {
     Bodo_PyErr_SetString(PyExc_RuntimeError,
-                         "copy_nullable_values_transform multiple_array_info NULLABLE not supported yet.");
-                 }
+                         "copy_nullable_values_transform multiple_array_info "
+                         "NULLABLE not supported yet.");
+}
 /**
  * Propagate value from the row in the tmp_col to all the rows in the
  * group update_col.
@@ -4660,8 +4660,8 @@ copy_nullable_values_transform(ARRAY* update_col, ARRAY* tmp_col,
  * */
 template <typename ARRAY>
 typename std::enable_if<!(is_multiple_array<ARRAY>::value), void>::type
-copy_string_values_transform(ARRAY* update_col , ARRAY* tmp_col,
-                 const grouping_info& grp_info) {
+copy_string_values_transform(ARRAY* update_col, ARRAY* tmp_col,
+                             const grouping_info& grp_info) {
     int64_t num_groups = grp_info.num_groups;
     array_info* out_arr = NULL;
     // first we have to deal with offsets first so we
@@ -4682,14 +4682,14 @@ copy_string_values_transform(ARRAY* update_col , ARRAY* tmp_col,
     for (int64_t igrp = 0; igrp < num_groups; igrp++) {
         offset_t size = 0;
         offset_t start_offset = in_offsets[igrp];
-        offset_t end_offset = in_offsets[igrp+ 1];
+        offset_t end_offset = in_offsets[igrp + 1];
         size = end_offset - start_offset;
         int64_t idx = grp_info.group_to_first_row[igrp];
-        while (true){
-                if ( idx == -1) break;
-                ListSizes[idx] = size;
-                n_chars += size;
-                idx = grp_info.next_row_in_group[idx];
+        while (true) {
+            if (idx == -1) break;
+            ListSizes[idx] = size;
+            n_chars += size;
+            idx = grp_info.next_row_in_group[idx];
         }
     }
     out_arr = alloc_array(nRowOut, n_chars, -1, arr_type, dtype, 0, 0);
@@ -4697,9 +4697,9 @@ copy_string_values_transform(ARRAY* update_col , ARRAY* tmp_col,
     char* out_data1 = out_arr->data1;
     // keep track of output array position
     offset_t pos = 0;
-    //2. Copy data from tmp_col to corresponding rows in out_arr
+    // 2. Copy data from tmp_col to corresponding rows in out_arr
     bool bit = false;
-    for(int64_t iRow = 0; iRow < nRowOut; iRow++){
+    for (int64_t iRow = 0; iRow < nRowOut; iRow++) {
         offset_t size = ListSizes[iRow];
         int64_t igrp = grp_info.row_to_group[iRow];
         offset_t start_offset = in_offsets[igrp];
@@ -4717,9 +4717,11 @@ copy_string_values_transform(ARRAY* update_col , ARRAY* tmp_col,
 }
 template <typename ARRAY>
 typename std::enable_if<(is_multiple_array<ARRAY>::value), void>::type
-copy_string_values_transform(ARRAY* update_col, ARRAY* tmp_col, const grouping_info& grp_info){
+copy_string_values_transform(ARRAY* update_col, ARRAY* tmp_col,
+                             const grouping_info& grp_info) {
     Bodo_PyErr_SetString(PyExc_RuntimeError,
-                         "copy_string_values_transform multiple_array_info string not supported yet.");
+                         "copy_string_values_transform multiple_array_info "
+                         "string not supported yet.");
 }
 /**
  * @param update_col[out]: column that has the final result for all rows
@@ -4733,22 +4735,17 @@ template <typename ARRAY, typename T>
 void copy_values(ARRAY* update_col, ARRAY* tmp_col,
                  const grouping_info& grp_info) {
     if (tmp_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        copy_nullable_values_transform<ARRAY, T>( update_col, tmp_col,
-                                         grp_info);
+        copy_nullable_values_transform<ARRAY, T>(update_col, tmp_col, grp_info);
         return;
     }
-    size_t num_groups = grp_info.num_groups;
-    // Loop over tmp_col rows and copy result to corressponding group rows in
+    // Copy result from tmp_col to corressponding group rows in
     // update_col.
-    for (size_t igrp = 0; igrp < num_groups; igrp++) {
-        int64_t i = grp_info.group_to_first_row[igrp];
+    int64_t nrows = update_col->length;
+    for (int64_t iRow = 0; iRow < nrows; iRow++) {
+        int64_t igrp = grp_info.row_to_group[iRow];
         T& val = getv<ARRAY, T>(tmp_col, igrp);
-        while (true) {
-            if (i == -1) break;
-            T& val2 = getv<ARRAY, T>(update_col, i);
-            val2 = val;
-            i = grp_info.next_row_in_group[i];
-        }
+        T& val2 = getv<ARRAY, T>(update_col, iRow);
+        val2 = val;
     }
 }
 
@@ -4872,8 +4869,8 @@ class TransformColSet : public BasicColSet<ARRAY> {
                                            grp_info);
                 break;
             case Bodo_CTypes::STRING:
-                copy_string_values_transform<ARRAY>(this->update_cols[0], child_out_col,
-                                           grp_info);
+                copy_string_values_transform<ARRAY>(this->update_cols[0],
+                                                    child_out_col, grp_info);
                 break;
         }
         free_array_groupby(child_out_col);

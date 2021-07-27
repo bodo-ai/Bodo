@@ -4958,7 +4958,7 @@ def test_groupby_transform_count(memory_leak_check):
     check_func(impl_count, (df,))
 
 
-# TODO: @pytest.mark.slow
+@pytest.mark.slow
 def test_groupby_transform_nullable(memory_leak_check):
     """ Test groupby().transform with nullable and string datatypes"""
 
