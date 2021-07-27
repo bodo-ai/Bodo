@@ -1545,6 +1545,11 @@ def test_bodo_meta(memory_leak_check, datapath):
     def impl2(df):
         return df
 
+    # df passed into JIT with dist meta
+    @bodo.jit
+    def impl3(df):
+        return df
+
     def check_dist_meta(df, dist):
         return (
             hasattr(df, "_bodo_meta")
@@ -1552,13 +1557,17 @@ def test_bodo_meta(memory_leak_check, datapath):
             and df._bodo_meta["dist"] == dist.value
         )
 
-    out_df = impl1(fname)
+    out_df1 = impl1(fname)
     assert count_array_OneDs() > 0
-    check_dist_meta(out_df, Distribution.OneD)
+    check_dist_meta(out_df1, Distribution.OneD)
 
-    out_df = impl2(pd.DataFrame({"A": np.arange(11)}))
+    out_df2 = impl2(pd.DataFrame({"A": np.arange(11)}))
     assert count_array_OneD_Vars() > 0
-    check_dist_meta(out_df, Distribution.OneD_Var)
+    check_dist_meta(out_df2, Distribution.OneD_Var)
+
+    out_df3 = impl3(out_df1)
+    assert count_array_OneDs() > 0
+    check_dist_meta(out_df3, Distribution.OneD)
 
 
 def _check_scatterv(data, n):

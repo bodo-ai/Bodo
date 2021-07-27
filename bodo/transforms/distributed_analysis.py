@@ -2587,9 +2587,17 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.Thread
         else:
-            dprint("replicated input ", rhs.name, lhs)
             typ = self.typemap[lhs]
+            # get distribution info from data type if available
+            # argument handling sets distribution from Bodo metadata in df/... objects
+            if hasattr(typ, "dist"):
+                array_dists[lhs] = typ.dist
+                if typ.dist != Distribution.REP:
+                    self._check_user_distributed_args(array_dists, lhs)
+                    return
+
             if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
+                dprint("replicated input ", rhs.name, lhs)
                 info = (
                     "Distributed analysis replicated argument '{0}' (variable "
                     "'{1}'). Set distributed flag for '{0}' if distributed partitions "
