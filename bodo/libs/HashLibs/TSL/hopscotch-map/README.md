@@ -23,6 +23,7 @@ A **benchmark** of `tsl::hopscotch_map` against other hash maps may be found [he
 - Possibility to store the hash value on insert for faster rehash and lookup if the hash or the key equal functions are expensive to compute (see the [StoreHash](https://tessil.github.io/hopscotch-map/classtsl_1_1hopscotch__map.html#details) template parameter).
 - If the hash is known before a lookup, it is possible to pass it as parameter to speed-up the lookup (see `precalculated_hash` parameter in [API](https://tessil.github.io/hopscotch-map/classtsl_1_1hopscotch__map.html#a74d83c67c50bc8385bb11f78142eaa86)).
 - The `tsl::bhopscotch_map` and `tsl::bhopscotch_set` provide a worst-case of O(log n) on lookups and deletions making these classes resistant to hash table Deny of Service (DoS) attacks (see [details](#deny-of-service-dos-attack) in example).
+- The library can be used with exceptions disabled (through `-fno-exceptions` option on Clang and GCC, without an `/EH` option on MSVC or simply by defining `TSL_NO_EXCEPTIONS`). `std::terminate` is used in replacement of the `throw` instruction when exceptions are disabled.
 - API closely similar to `std::unordered_map` and `std::unordered_set`.
 
 ### Differences compared to `std::unordered_map`
@@ -274,7 +275,7 @@ int main() {
 ```
 
 #### Deny of Service (DoS) attack
-In addition to `tsl::hopscotch_map` and `tsl::hopscotch_set`, the library provides two more "secure" options: `tsl::bhopscotch_map` and `tsl::bhopscotch_set` (all with their `pg` counterpars). 
+In addition to `tsl::hopscotch_map` and `tsl::hopscotch_set`, the library provides two more "secure" options: `tsl::bhopscotch_map` and `tsl::bhopscotch_set` (all with their `pg` counterparts). 
 
 These two additions have a worst-case asymptotic complexity of O(log n) for lookups and deletions and an amortized worst case of O(log n) for insertions (amortized due to the possibility of rehash which would be in O(n)). Even if the hash function maps all the elements to the same bucket, the O(log n) would still hold.
 
