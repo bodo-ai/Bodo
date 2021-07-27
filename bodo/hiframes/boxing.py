@@ -246,6 +246,10 @@ def box_dataframe(typ, val, c):
     pyapi.decref(meta_dict_obj)
     pyapi.decref(dist_val_obj)
 
+    # avoid pandas warnings for Bodo metadata setattr
+    if "_bodo_meta" not in pd.DataFrame._metadata:
+        pd.DataFrame._metadata.append("_bodo_meta")
+
     # decref() should be called on native value
     # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
     c.context.nrt.decref(c.builder, typ, val)
