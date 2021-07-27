@@ -56,6 +56,8 @@ for which the license is valid in ``TRIAL_DAYS`` or the day upon which the licen
 You must provide at least one of ``TRIAL_DAYS`` and ``EXPIRATION_DATE`` and
 if you provide both the license will by generated for the ``EXPIRATION_DATE``.
 
+NOTE: ``EXPIRATION_DATE`` should be of the format ``YYYY-MM-DD``.
+
 
 Generating AWS Platform Private Offers for Customers
 ----------------------------------------------------
