@@ -306,13 +306,11 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
          * If iRow < short_table_rows then it is in the first table.
          * If iRow >= short_table_rows then it is in the second table.
          *
-         * Note that the hash is size_t (so 8 bytes on x86-64) while
-         * the hashes array are int32_t (so 4 bytes)
-         *
          * @param iRow is the first row index for the comparison
          * @return true/false depending on the case.
          */
-        std::function<size_t(size_t)> hash_fct = [&](size_t iRow) -> size_t {
+        std::function<uint32_t(size_t)> hash_fct =
+            [&](size_t iRow) -> uint32_t {
             if (iRow < short_table_rows)
                 return short_table_hashes[iRow];
             else
@@ -324,6 +322,18 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
          * rows can be in the left or the right tables.
          * If iRow < short_table_rows then it is in the first table.
          * If iRow >= short_table_rows then it is in the second table.
+         *
+         * NOTE: Trying to minimize the overhead of this function does not
+         * show significant speedup in TPC-H. For example, if there is a single
+         * key column and the key array dtype is int64, doing this:
+         * `return colA->at<int64_t>(iRowA) == colB->at<int64_t>(iRowB);`
+         * only shows about 5% speedup in the portion of join that populates
+         * ListPairWrite, and it looks like trying to have multiple versions
+         * of equal_fct in a performance-correct way would significantly
+         * complicate the code. The most expensive part of the code in the
+         * computation of matching pairs is the loop over the long table,
+         * but it looks like the bottleneck right now is not the key equals
+         * function (equal_fct).
          *
          * @param iRowA is the first row index for the comparison
          * @param iRowB is the second row index for the comparison
@@ -353,17 +363,30 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         };
         // The entList contains the identical keys with the corresponding rows.
         // We address the entry by the row index. We store all the rows which
-        // are identical in the std::vector. If we need also to do
-        // short_table_work then we store an index in the first position of the
-        // std::vector
-        UNORD_MAP_CONTAINER<size_t, std::vector<size_t>,
-                            std::function<size_t(size_t)>,
-                            std::function<bool(size_t, size_t)>>
+        // are identical in a "group". The hashmap stores the group number
+        // and the groups are stored in the `groups` std::vector.
+        // NOTE: we don't store the group vectors in the map because it makes
+        // map (re)allocs and deallocation very expensive, and possibly also
+        // makes insertion and/or lookups slower.
+        // StoreHash=true speeds up join code overall in TPC-H.
+        // If we also need to do short_table_work then we store an index in the
+        // first position of the std::vector
+        UNORD_MAP_CONTAINER<size_t, size_t, std::function<uint32_t(size_t)>,
+                            std::function<bool(size_t, size_t)>,
+                            std::allocator<std::pair<size_t, size_t>>,
+                            true>  // StoreHash
             entList({}, hash_fct, equal_fct);
-        //
+        // reserving space is very important to avoid expensive reallocations
+        // (at the cost of using more memory)
+        entList.reserve(short_table_rows);
+        std::vector<std::vector<size_t>> groups;
+        groups.reserve(short_table_rows);
+
         // ListPairWrite is the table used for the output
         // It precises the index used for the writing of the output table.
         std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
+        // XXX: how much should we reserve?
+        ListPairWrite.reserve(long_table_rows);
         // Now running according to the short_table_work. The choice depends on
         // the initial choices that have been made.
         size_t n_bytes_long;
@@ -389,12 +412,15 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             // This code path will be selected whenever we have an OUTER merge.
             size_t pos_idx = 0;
             for (size_t i_short = 0; i_short < short_table_rows; i_short++) {
-                std::vector<size_t>& group = entList[i_short];
-                if (group.size() == 0) {
-                    group.emplace_back(pos_idx);
+                size_t& group_id = entList[i_short];
+                // group_id==0 means key doesn't exist in map
+                if (group_id == 0) {
+                    group_id = groups.size() + 1;
+                    groups.emplace_back();
+                    groups.back().emplace_back(pos_idx);
                     pos_idx++;
                 }
-                group.emplace_back(i_short);
+                groups[group_id - 1].emplace_back(i_short);
             }
 #ifdef DEBUG_JOIN_SYMBOL
             size_t nEnt = entList.size();
@@ -426,18 +452,19 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                         if (parallel_track_miss_long) {
                             SetBitTo(V_long_map.data(), i_long, false);
                         } else {
-                            ListPairWrite.push_back({-1, i_long});
+                            ListPairWrite.emplace_back(-1, i_long);
                         }
                     }
                 } else {
                     // If the short table entry are present in output as well,
                     // then we need to keep track whether they are used or not
                     // by the long table.
-                    size_t pos = iter->second[0];
+                    std::vector<size_t>& group = groups[iter->second - 1];
+                    size_t pos = group[0];
                     SetBitTo(V_short_map.data(), pos, true);
-                    for (size_t idx = 1; idx < iter->second.size(); idx++) {
-                        size_t j_short = iter->second[idx];
-                        ListPairWrite.push_back({j_short, i_long});
+                    for (size_t idx = 1; idx < group.size(); idx++) {
+                        size_t j_short = group[idx];
+                        ListPairWrite.emplace_back(j_short, i_long);
 #ifdef DEBUG_JOIN_SYMBOL
                         nb_short_long++;
 #endif
@@ -451,22 +478,23 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
 #endif
             if (parallel_track_miss_short) MPI_Allreduce_bool_or(V_short_map);
             int pos_short_disp = 0;
-            for (auto& group : entList) {
-                size_t pos = group.second[0];
+            for (auto& iter : entList) {
+                std::vector<size_t>& group = groups[iter.second - 1];
+                size_t pos = group[0];
                 bool bit = GetBit(V_short_map.data(), pos);
                 if (!bit) {
-                    for (size_t idx = 1; idx < group.second.size(); idx++) {
-                        size_t j_short = group.second[idx];
+                    for (size_t idx = 1; idx < group.size(); idx++) {
+                        size_t j_short = group[idx];
                         // For parallel_track_miss_short=T the output table is
                         // distributed. Since the table in input is replicated,
                         // we dispatch it by rank.
                         if (parallel_track_miss_short) {
                             int node = pos_short_disp % n_pes;
                             if (node == myrank)
-                                ListPairWrite.push_back({j_short, -1});
+                                ListPairWrite.emplace_back(j_short, -1);
                             pos_short_disp++;
                         } else {
-                            ListPairWrite.push_back({j_short, -1});
+                            ListPairWrite.emplace_back(j_short, -1);
                         }
 #ifdef DEBUG_JOIN_SYMBOL
                         nb_from_short++;
@@ -489,8 +517,13 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             // No need to keep track of the usage of the short table.
             // This code path is selected whenever INNER is true.
             for (size_t i_short = 0; i_short < short_table_rows; i_short++) {
-                std::vector<size_t>& group = entList[i_short];
-                group.emplace_back(i_short);
+                size_t& group_id = entList[i_short];
+                // group_id==0 means key doesn't exist in map
+                if (group_id == 0) {
+                    group_id = groups.size() + 1;
+                    groups.emplace_back();
+                }
+                groups[group_id - 1].emplace_back(i_short);
             }
 #ifdef DEBUG_JOIN_SYMBOL
             size_t nEnt = entList.size();
@@ -517,15 +550,16 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                         if (parallel_track_miss_long) {
                             SetBitTo(V_long_map.data(), i_long, false);
                         } else {
-                            ListPairWrite.push_back({-1, i_long});
+                            ListPairWrite.emplace_back(-1, i_long);
                         }
                     }
                 } else {
                     // If the short table entry are present in output as well,
                     // then we need to keep track whether they are used or not
                     // by the long table.
-                    for (auto& j_short : iter->second) {
-                        ListPairWrite.push_back({j_short, i_long});
+                    std::vector<size_t>& group = groups[iter->second - 1];
+                    for (auto& j_short : group) {
+                        ListPairWrite.emplace_back(j_short, i_long);
 #ifdef DEBUG_JOIN_SYMBOL
                         nb_short_long++;
 #endif
@@ -537,6 +571,14 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                       << " nb_short_long=" << nb_short_long << "\n";
 #endif
         }
+        // Data structures used during computation of the tuples can become
+        // quite large and their deallocation can take a non-negligible amount
+        // of time. We dealloc them here to free memory for the next stage and
+        // also to trace dealloc time
+        std::vector<std::vector<size_t>>().swap(
+            groups);  // force groups vector dealloc
+        entList.clear();
+        entList.reserve(0);  // try to force dealloc of hashmap
         // In replicated case, we put the long rows in distributed output
         if (long_table_work && parallel_track_miss_long) {
             MPI_Allreduce_bool_or(V_long_map);
@@ -547,11 +589,14 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 // distributed output.
                 if (!bit) {
                     int node = pos % n_pes;
-                    if (node == myrank) ListPairWrite.push_back({-1, i_long});
+                    if (node == myrank) ListPairWrite.emplace_back(-1, i_long);
                     pos++;
                 }
             }
         }
+        // TODO if we are tight on memory for the next phase and ListPairWrite
+        // capacity is much greater than its size, we could do a realloc+resize
+        // here
         std::vector<array_info*> out_arrs;
         // Computing the last time at which a column is used.
         // This is for the call to decref_array.
