@@ -62,7 +62,9 @@ def typeof_pd_dataframe(val, c):
     # using REP as default to be safe in distributed analysis
     dist = (
         Distribution(val._bodo_meta["dist"])
-        if hasattr(val, "_bodo_meta")
+        # check for None since df.copy() assigns None to DataFrame._metadata attributes
+        # for some reason
+        if hasattr(val, "_bodo_meta") and val._bodo_meta is not None
         else Distribution.REP
     )
 
