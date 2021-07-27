@@ -24,6 +24,7 @@ from bodo.tests.utils import (
     get_start_end,
     reduce_sum,
 )
+from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_call_assign
 
@@ -1527,6 +1528,37 @@ def test_df_1D_Var_col_set_string(memory_leak_check):
     df_chunk = _get_dist_arg(df, var_length=True)
     assert reduce_sum(bodo.jit(distributed={"df"})(impl)(df_chunk)) == n
     assert count_array_OneD_Vars() > 0
+
+
+def test_bodo_meta(memory_leak_check, datapath):
+    """Test Bodo metadata on data structures returned from JIT functions"""
+    fname = datapath("example.parquet")
+
+    # df created inside JIT function
+    @bodo.jit
+    def impl1(fname):
+        df = pd.read_parquet(fname)
+        return df
+
+    # df passed into JIT and returned
+    @bodo.jit(distributed=["df"])
+    def impl2(df):
+        return df
+
+    def check_dist_meta(df, dist):
+        return (
+            hasattr(df, "_bodo_meta")
+            and "dist" in df._bodo_meta
+            and df._bodo_meta["dist"] == dist.value
+        )
+
+    out_df = impl1(fname)
+    assert count_array_OneDs() > 0
+    check_dist_meta(out_df, Distribution.OneD)
+
+    out_df = impl2(pd.DataFrame({"A": np.arange(11)}))
+    assert count_array_OneD_Vars() > 0
+    check_dist_meta(out_df, Distribution.OneD_Var)
 
 
 def _check_scatterv(data, n):

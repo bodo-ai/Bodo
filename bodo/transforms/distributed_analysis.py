@@ -283,6 +283,13 @@ class DistributedAnalysis:
             self.diag_info,
             self.func_ir,
         )
+
+        # update distribution info of data types since necessary during return and for
+        # potentially replacing calls to other JIT functions
+        # TODO(ehsan): make sure Numba doesn't assume types are immutable objects
+        for vname, dist in array_dists.items():
+            self.typemap[vname].dist = dist
+
         return _dist_analysis_result(
             array_dists, parfor_dists, self._concat_reduce_vars
         )
