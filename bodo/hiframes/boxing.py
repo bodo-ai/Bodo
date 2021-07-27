@@ -224,6 +224,19 @@ def box_dataframe(typ, val, c):
     # issues, see test_dataframe.py::test_unbox_df_multi, test_box_repeated_names
     pyapi.object_setattr_string(df_obj, "columns", columns_obj)
     pyapi.decref(columns_obj)
+
+    # set Bodo metadata in output so the next JIT call knows data distribution
+    # e.g. df._bodo_meta = {"dist": 5}
+    meta_dict_obj = pyapi.dict_new(1)
+    # using the distribution number since easier to handle
+    dist_val_obj = pyapi.long_from_longlong(
+        lir.Constant(lir.IntType(64), typ.dist.value)
+    )
+    pyapi.dict_setitem_string(meta_dict_obj, "dist", dist_val_obj)
+    pyapi.object_setattr_string(df_obj, "_bodo_meta", meta_dict_obj)
+    pyapi.decref(meta_dict_obj)
+    pyapi.decref(dist_val_obj)
+
     # decref() should be called on native value
     # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
     c.context.nrt.decref(c.builder, typ, val)
