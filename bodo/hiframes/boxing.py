@@ -52,12 +52,21 @@ ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
 
 @typeof_impl.register(pd.DataFrame)
 def typeof_pd_dataframe(val, c):
+    from bodo.transforms.distributed_analysis import Distribution
+
     # convert "columns" from Index/MultiIndex to a tuple
     col_names = tuple(val.columns.to_list())
     col_types = get_hiframes_dtypes(val)
     index_typ = numba.typeof(val.index)
+    # set distribution from Bodo metadata of df object if available
+    # using REP as default to be safe in distributed analysis
+    dist = (
+        Distribution(val._bodo_meta["dist"])
+        if hasattr(val, "_bodo_meta")
+        else Distribution.REP
+    )
 
-    return DataFrameType(col_types, index_typ, col_names)
+    return DataFrameType(col_types, index_typ, col_names, dist)
 
 
 # register series types for import
