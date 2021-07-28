@@ -183,7 +183,16 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             return other
 
     def can_convert_to(self, typingctx, other):
-        return
+        from numba.core.typeconv import Conversion
+
+        if (
+            self.data == other.data
+            and self.index == other.index
+            and self.columns == other.columns
+            and self.dist != other.dist
+        ):
+            return Conversion.safe
+
         # overload resolution tries to convert for even get_dataframe_data()
         # TODO: find valid conversion possibilities
         # if (isinstance(other, DataFrameType)
