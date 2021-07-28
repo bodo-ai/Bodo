@@ -2987,6 +2987,18 @@ def overload_linear_regression_score(
     return parallel_score(m, X, y, sample_weight, _is_data_distributed)
 
 
+@overload_attribute(BodoRidgeType, "coef_")
+def get_ridge_coef(m):
+    """ Overload coef_ attribute to be accessible inside bodo.jit """
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="float64[:]"):
+            result = m.coef_
+        return result
+
+    return impl
+
+
 # ------------------------Linear Support Vector Classification-----------------
 # Support sklearn.svm.LinearSVC object mode of Numba
 # -----------------------------------------------------------------------------
