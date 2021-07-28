@@ -90,7 +90,7 @@ class Distribution(Enum):
 
 
 _dist_analysis_result = namedtuple(
-    "dist_analysis_result", "array_dists,parfor_dists,concat_reduce_varnames"
+    "dist_analysis_result", "array_dists,parfor_dists,concat_reduce_varnames,ret_type"
 )
 
 
@@ -218,11 +218,20 @@ class DistributedAnalysis:
     """
 
     def __init__(
-        self, func_ir, typemap, calltypes, typingctx, metadata, flags, arr_analysis
+        self,
+        func_ir,
+        typemap,
+        calltypes,
+        return_type,
+        typingctx,
+        metadata,
+        flags,
+        arr_analysis,
     ):
         self.func_ir = func_ir
         self.typemap = typemap
         self.calltypes = calltypes
+        self.return_type = return_type
         self.typingctx = typingctx
         self.metadata = metadata
         self.flags = flags
@@ -233,6 +242,8 @@ class DistributedAnalysis:
         # keep track of concat reduce vars to handle in concat analysis and
         # transforms properly
         self._concat_reduce_vars = set()
+        # keep return variables to help update return type
+        self.ret_vars = []
 
     def _init_run(self):
         """initialize data structures for distribution analysis"""
@@ -242,6 +253,7 @@ class DistributedAnalysis:
         self.second_pass = False
         self.in_parallel_parfor = -1
         self._concat_reduce_vars = set()
+        self.ret_vars = []
 
     def run(self):
         """run full distribution analysis pass over the IR.
@@ -286,12 +298,25 @@ class DistributedAnalysis:
 
         # update distribution info of data types since necessary during return and for
         # potentially replacing calls to other JIT functions
-        # TODO(ehsan): make sure Numba doesn't assume types are immutable objects
         for vname, dist in array_dists.items():
-            self.typemap[vname].dist = dist
+            typ = self.typemap.pop(vname)
+            # TODO: make sure all distributable types have a 'dist' attribute
+            if hasattr(typ, "dist"):
+                typ = typ.copy(dist=dist)
+            self.typemap[vname] = typ
+
+        # update return type since distribution hints may have changed (can cause
+        # lowering error otherwise)
+        ret_typ = self.return_type
+        if is_distributable_typ(self.return_type) or is_distributable_tuple_typ(
+            self.return_type
+        ):
+            ret_typ = self.typingctx.unify_types(
+                *tuple(self.typemap[v] for v in self.ret_vars)
+            )
 
         return _dist_analysis_result(
-            array_dists, parfor_dists, self._concat_reduce_vars
+            array_dists, parfor_dists, self._concat_reduce_vars, ret_typ
         )
 
     def _check_user_distributed_args(self, array_dists, name):
@@ -338,6 +363,7 @@ class DistributedAnalysis:
                 f = distributed_analysis_extensions[type(inst)]
                 f(inst, array_dists)
             elif isinstance(inst, ir.Return):
+                self.ret_vars.append(inst.value.name)
                 self._analyze_return(inst.value, array_dists)
             elif isinstance(inst, ir.SetAttr):
                 self._analyze_setattr(inst.target, inst.attr, inst.value, array_dists)
@@ -2091,18 +2117,9 @@ class DistributedAnalysis:
         # is_return_distributed is a list in tuple case which specifies distributions of
         # individual elements
         if isinstance(is_return_distributed, list):
-            if lhs not in array_dists:
-                self._set_var_dist(
-                    lhs,
-                    array_dists,
-                    [
-                        Distribution.OneD_Var if v else Distribution.REP
-                        for v in is_return_distributed
-                    ],
-                )
             # check distributions of tuple elements for errors
             for i, is_dist in enumerate(is_return_distributed):
-                if is_dist and is_REP(array_dists[lhs][i]):
+                if is_dist and lhs in array_dists and is_REP(array_dists[lhs][i]):
                     raise BodoError(
                         err_msg.format(
                             lhs,
@@ -2111,16 +2128,20 @@ class DistributedAnalysis:
                             "\n".join(self.diag_info),
                         )
                     )
+            self._set_var_dist(
+                lhs,
+                array_dists,
+                [
+                    Distribution.OneD_Var if v else Distribution.REP
+                    for v in is_return_distributed
+                ],
+            )
         else:
-            if lhs not in array_dists:
-                self._set_var_dist(
-                    lhs,
-                    array_dists,
-                    Distribution.OneD_Var
-                    if is_return_distributed
-                    else Distribution.REP,
-                )
-            if is_return_distributed and is_REP(array_dists[lhs]):
+            if (
+                is_return_distributed
+                and lhs in array_dists
+                and is_REP(array_dists[lhs])
+            ):
                 raise BodoError(
                     err_msg.format(
                         lhs,
@@ -2129,12 +2150,17 @@ class DistributedAnalysis:
                         "\n".join(self.diag_info),
                     )
                 )
+            self._set_var_dist(
+                lhs,
+                array_dists,
+                Distribution.OneD_Var if is_return_distributed else Distribution.REP,
+            )
 
     def _handle_dispatcher_args(self, dispatcher, rhs, array_dists, err_msg):
         """
         Get distributed flags of inputs and raise error if caller passes REP for an
         argument explicitly specified as distributed.
-        In autmatic distribution detection case, recompile if dispatcher signature
+        In automatic distribution detection case, recompile if dispatcher signature
         distributions don't match caller (except if dispatcher is OneD_Var and caller is
         OneD which is ok)
         """
@@ -2189,28 +2215,32 @@ class DistributedAnalysis:
                     )
                 )
 
-        # get signature args stored in 'overloads' in case 'dist' is not consistent
-        # when Numba copies types etc.
-        for sig in dispatcher.overloads.keys():
-            if arg_types == sig:
-                arg_types = sig
-                break
-
         # check arguments not flagged as distributed and recompile with correct
         # distributions if necessary
         metadata = dispatcher.overloads[arg_types].metadata
         recompile = False
+        new_arg_types = list(arg_types)
         for ind, vname in rep_inds.items():
             if metadata["args_maybe_distributed"]:
                 if vname not in array_dists:
                     continue
                 typ = arg_types[ind]
-                typ_dist = typ.dist if hasattr(typ, "dist") else None
+                if not hasattr(typ, "dist"):
+                    self._set_REP(
+                        vname,
+                        array_dists,
+                        f"input of another Bodo call without distributed flag (automatic distribution detection not supported for data type {typ})",
+                    )
+                    continue
                 var_dist = array_dists[vname]
-                if typ_dist != var_dist and not (
-                    typ_dist == Distribution.OneD_Var and var_dist == Distribution.OneD
+                # OneD can be passed as OneD_Var to avoid recompilation
+                if typ.dist != var_dist and not (
+                    typ.dist == Distribution.OneD_Var and var_dist == Distribution.OneD
                 ):
-                    typ.dist = var_dist
+                    new_typ = typ.copy(dist=var_dist)
+                    new_arg_types[ind] = new_typ
+                    self.typemap.pop(vname)
+                    self.typemap[vname] = new_typ
                     recompile = True
             else:
                 self._set_REP(
@@ -2222,7 +2252,13 @@ class DistributedAnalysis:
             self._add_diag_info(
                 f"Recompiling {dispatcher.__name__} since argument data distribution changed after analysis"
             )
-            dispatcher.recompile()
+            arg_types = tuple(new_arg_types)
+            self.calltypes.pop(rhs)
+            self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+                self.typingctx,
+                tuple(self.typemap[v.name] for v in rhs.args),
+                {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()},
+            )
 
         metadata = dispatcher.overloads[arg_types].metadata
         return metadata

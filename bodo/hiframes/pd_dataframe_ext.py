@@ -123,26 +123,26 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         self.columns = columns
         # 'dist' is the distribution of this dataframe, which may not be accurate in all
         # stages since distribution info is not available before distribution analysis.
-        # But it needs to be accurate for arguments before distribution analysis,
-        # and should become generally accurate afterwards (needed for returns,
-        # adjusting distributions in calls to other JIT functions in distributed pass).
+        # But it needs to be accurate for argument values before distribution analysis
+        # starts, and should become generally accurate afterwards (needed for returns,
+        # adjusting distributions in calls to other JIT functions).
         # Using OneD_Var as default to use when calling other JIT functions in type
         # inference stage. This will hopefully avoid extensive recompilation in
-        # distributed pass since distributed dataframes are the most common.
-        # NOTE: we need to be careful about how Numba handles, moves around and copy
-        # data types. We add 'dist' in 'copy' but not in 'key' since different
-        # distribution doesn't mean a different data type.
-        self.dist = Distribution.OneD_Var if dist is None else dist
+        # distributed analysis since distributed dataframes are the most common.
+        dist = Distribution.OneD_Var if dist is None else dist
+        self.dist = dist
         super(DataFrameType, self).__init__(
-            name=f"dataframe({data}, {index}, {columns})"
+            name=f"dataframe({data}, {index}, {columns}, {dist})"
         )
 
-    def copy(self, index=None):
+    def copy(self, index=None, dist=None):
         # XXX is copy necessary?
         if index is None:
             index = self.index.copy()
+        if dist is None:
+            dist = self.dist
         data = tuple(a.copy() for a in self.data)
-        return DataFrameType(data, index, self.columns, self.dist)
+        return DataFrameType(data, index, self.columns, dist)
 
     @property
     def as_array(self):
@@ -152,7 +152,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     @property
     def key(self):
         # needed?
-        return self.data, self.index, self.columns
+        return self.data, self.index, self.columns, self.dist
 
     def unify(self, typingctx, other):
         """unifies two possible dataframe types into a single type
@@ -1045,6 +1045,15 @@ def cast_df_to_df(context, builder, fromty, toty, val):
         )
         # TODO: fix casting refcount in Numba since Numba increfs value after cast
         return df
+
+    # trivial cast if only 'dist' is different (not need to change value)
+    if (
+        fromty.data == toty.data
+        and fromty.index == toty.index
+        and fromty.columns == toty.columns
+        and fromty.dist != toty.dist
+    ):
+        return val
 
     # only empty dataframe case supported from this point
     if not len(fromty.data) == 0:

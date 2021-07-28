@@ -147,13 +147,22 @@ class DistributedPass:
     """
 
     def __init__(
-        self, func_ir, typingctx, targetctx, typemap, calltypes, metadata, flags
+        self,
+        func_ir,
+        typingctx,
+        targetctx,
+        typemap,
+        calltypes,
+        return_type,
+        metadata,
+        flags,
     ):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.targetctx = targetctx
         self.typemap = typemap
         self.calltypes = calltypes
+        self.return_type = return_type
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
         self.metadata = metadata
@@ -200,6 +209,7 @@ class DistributedPass:
             self.func_ir,
             self.typemap,
             self.calltypes,
+            self.return_type,
             self.typingctx,
             self.metadata,
             self.flags,
@@ -237,6 +247,7 @@ class DistributedPass:
         # save data for debug and test
         global dist_analysis
         dist_analysis = self._dist_analysis
+        return self._dist_analysis.ret_type
 
     def _run_dist_pass(self, blocks, init_avail=None):
         # init liveness info

@@ -1756,7 +1756,9 @@ def test_h5_write(memory_leak_check):
     n = 11
     A = np.arange(n).astype(np.float64)
     with ensure_clean(fname):
-        bodo.jit(test_impl, returns_maybe_distributed=False)(A, fname)
+        bodo.jit(
+            test_impl, returns_maybe_distributed=False, args_maybe_distributed=False
+        )(A, fname)
         f = h5py.File(fname, "r")
         A2 = f["A"][:]
         f.close()

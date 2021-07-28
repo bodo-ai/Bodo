@@ -591,10 +591,13 @@ class BodoDistributedPass(FunctionPass):
             state.targetctx,
             state.type_annotation.typemap,
             state.type_annotation.calltypes,
+            state.return_type,
             state.metadata,
             state.flags,
         )
-        dist_pass.run()
+        # update in distributed analysis if distribution hint of return type changed
+        # (results in lowering error otherwise)
+        state.return_type = dist_pass.run()
         # Update the type annotation object for this function since the IR has changed
         # in our passes. Numba initializes the object after type inference so the
         # 'blocks' attribute is outdated. This can cause problems for caching during
