@@ -1570,6 +1570,39 @@ def test_bodo_meta(memory_leak_check, datapath):
     check_dist_meta(out_df3, Distribution.OneD)
 
 
+def test_bodo_meta_jit_calls(memory_leak_check):
+    """Test automatic distribution detection across JIT calls"""
+
+    # dist argument is passed but output is replicated
+    @bodo.jit
+    def g(df):
+        return df.sum()
+
+    @bodo.jit
+    def impl1(n):
+        df = pd.DataFrame({"A": np.arange(n)})
+        Y = g(df)
+        return Y
+
+    # replicated argument is passed
+    @bodo.jit
+    def g2(df):
+        return df + 1
+
+    @bodo.jit
+    def impl2(df):
+        Y = g2(df)
+        return Y
+
+    impl1(11)
+    assert count_array_REPs() > 0
+    assert count_array_OneDs() > 0
+    impl2(pd.DataFrame({"A": [1, 3, 5] * 2}))
+    assert count_array_REPs() > 0
+    assert count_array_OneDs() == 0
+    assert count_array_OneD_Vars() == 0
+
+
 def _check_scatterv(data, n):
     """check the output of scatterv() on 'data'"""
     recv_data = bodo.scatterv(data)
