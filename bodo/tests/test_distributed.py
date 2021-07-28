@@ -1486,7 +1486,7 @@ def test_diagnostics_not_compiled_error(memory_leak_check):
 def test_diagnostics_trace(capsys, memory_leak_check):
     """make sure distributed diagnostics trace info is printed in diagnostics dump"""
 
-    @bodo.jit
+    @bodo.jit(args_maybe_distributed=False)
     def f(A):
         return A.sum()
 
@@ -1498,7 +1498,7 @@ def test_diagnostics_trace(capsys, memory_leak_check):
     g.distributed_diagnostics()
     if bodo.get_rank() == 0:
         assert (
-            "input/output of another Bodo call without distributed flag"
+            "input of another Bodo call without distributed flag"
             in capsys.readouterr().out
         )
 
