@@ -1594,10 +1594,26 @@ def test_bodo_meta_jit_calls(memory_leak_check):
         Y = g2(df)
         return Y
 
+    # change argument distribution (recompile)
+    @bodo.jit
+    def g3(df):
+        return df + 2
+
+    @bodo.jit
+    def impl3(n):
+        df = pd.DataFrame({"A": np.arange(n)})
+        Y = g3(df)
+        df["B"] = [1, 2, 3]  # forces REP after g3 call
+        return Y, df
+
     impl1(11)
     assert count_array_REPs() > 0
     assert count_array_OneDs() > 0
     impl2(pd.DataFrame({"A": [1, 3, 5] * 2}))
+    assert count_array_REPs() > 0
+    assert count_array_OneDs() == 0
+    assert count_array_OneD_Vars() == 0
+    impl3(3)
     assert count_array_REPs() > 0
     assert count_array_OneDs() == 0
     assert count_array_OneD_Vars() == 0

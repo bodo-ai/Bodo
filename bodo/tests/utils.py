@@ -1474,7 +1474,9 @@ def check_caching(mod, testname, impl, args1, args2=None):
         if args2 is None:
             args2 = args1
         # compile impl in sequential mode with cache=True
-        bodo_func = bodo.jit(cache=True, returns_maybe_distributed=False)(impl)
+        bodo_func = bodo.jit(
+            cache=True, returns_maybe_distributed=False, args_maybe_distributed=False
+        )(impl)
         bodo_out1 = bodo_func(*args1)
         bodo.barrier()
         # get signature of compiled function
@@ -1489,7 +1491,9 @@ def check_caching(mod, testname, impl, args1, args2=None):
         engine._defined_symbols.clear()
         del engine, bodo_func
         # now get the function by loading from cache
-        bodo_func = bodo.jit(cache=True, returns_maybe_distributed=False)(impl)
+        bodo_func = bodo.jit(
+            cache=True, returns_maybe_distributed=False, args_maybe_distributed=False
+        )(impl)
         bodo_out2 = bodo_func(*args2)
         bodo.barrier()
         # assert that it was loaded from cache
