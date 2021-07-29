@@ -854,6 +854,43 @@ class TypingTransforms:
                 self.replace_var_dict[df_var.name] = nodes[-1].target
                 return nodes
 
+        # Series.index = arr
+        if isinstance(target_typ, SeriesType) and inst.attr == "index":
+            # check control flow error
+            series_var = inst.target
+            err_msg = "Series.index: setting dataframe index"
+            self._error_on_df_control_flow(series_var, label, err_msg)
+
+            # create output Series
+            self.changed = True
+            func_text = "def impl(S, new_index):\n"
+            func_text += "  data = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+            func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+            # convert to Index type if necessary
+            if bodo.hiframes.pd_index_ext.is_index_type(
+                self.typemap.get(inst.value.name, None)
+            ):
+                index = "new_index"
+            else:
+                index = "bodo.utils.conversion.index_from_array(bodo.utils.conversion.coerce_to_array(new_index, scalar_to_arr_len=len(S)))"
+            func_text += (
+                f"  return bodo.hiframes.pd_series_ext.init_series(data, {index}, name)"
+            )
+            loc_vars = {}
+            exec(
+                func_text,
+                {
+                    "bodo": bodo,
+                },
+                loc_vars,
+            )
+            impl = loc_vars["impl"]
+            nodes = compile_func_single_block(
+                impl, [series_var, inst.value], None, self
+            )
+            self.replace_var_dict[series_var.name] = nodes[-1].target
+            return nodes
+
         return [inst]
 
     def _run_call(self, assign, rhs, label):

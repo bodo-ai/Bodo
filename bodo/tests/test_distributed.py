@@ -1530,6 +1530,15 @@ def test_df_1D_Var_col_set_string(memory_leak_check):
     assert count_array_OneD_Vars() > 0
 
 
+def check_dist_meta(df, dist):
+    """return True if 'df' has Bodo metadata with same distribution as 'dist'"""
+    return (
+        hasattr(df, "_bodo_meta")
+        and "dist" in df._bodo_meta
+        and df._bodo_meta["dist"] == dist.value
+    )
+
+
 def test_bodo_meta(memory_leak_check, datapath):
     """Test Bodo metadata on data structures returned from JIT functions"""
     fname = datapath("example.parquet")
@@ -1550,12 +1559,11 @@ def test_bodo_meta(memory_leak_check, datapath):
     def impl3(df):
         return df
 
-    def check_dist_meta(df, dist):
-        return (
-            hasattr(df, "_bodo_meta")
-            and "dist" in df._bodo_meta
-            and df._bodo_meta["dist"] == dist.value
-        )
+    # Series created inside JIT function
+    @bodo.jit
+    def impl4(fname):
+        df = pd.read_parquet(fname)
+        return df.one
 
     out_df1 = impl1(fname)
     assert count_array_OneDs() > 0
@@ -1568,6 +1576,19 @@ def test_bodo_meta(memory_leak_check, datapath):
     out_df3 = impl3(out_df1)
     assert count_array_OneDs() > 0
     check_dist_meta(out_df3, Distribution.OneD)
+
+    # series input/output
+    out_S1 = impl4(fname)
+    assert count_array_OneDs() > 0
+    check_dist_meta(out_S1, Distribution.OneD)
+
+    out_S2 = impl2(pd.Series(np.arange(11)))
+    assert count_array_OneD_Vars() > 0
+    check_dist_meta(out_S2, Distribution.OneD_Var)
+
+    out_S3 = impl3(out_S1)
+    assert count_array_OneDs() > 0
+    check_dist_meta(out_S3, Distribution.OneD)
 
 
 def test_bodo_meta_jit_calls(memory_leak_check):
@@ -1606,6 +1627,25 @@ def test_bodo_meta_jit_calls(memory_leak_check):
         df["B"] = [1, 2, 3]  # forces REP after g3 call
         return Y, df
 
+    @bodo.jit
+    def g4(S):
+        return np.asarray([S.sum()])
+
+    # Series creation
+    @bodo.jit
+    def impl4(n):
+        S = pd.Series(np.arange(n))
+        Y = g4(S)
+        return Y
+
+    @bodo.jit
+    def impl5(n):
+        S = pd.Series(np.arange(n))
+        Y = g3(S)
+        S.index = [1, 2, 3]  # forces REP after g3 call
+        return Y, S
+
+    # dataframe tests
     impl1(11)
     assert count_array_REPs() > 0
     assert count_array_OneDs() > 0
@@ -1614,6 +1654,19 @@ def test_bodo_meta_jit_calls(memory_leak_check):
     assert count_array_OneDs() == 0
     assert count_array_OneD_Vars() == 0
     impl3(3)
+    assert count_array_REPs() > 0
+    assert count_array_OneDs() == 0
+    assert count_array_OneD_Vars() == 0
+
+    # Series tests
+    impl4(11)
+    assert count_array_REPs() > 0
+    assert count_array_OneDs() > 0
+    impl2(pd.Series([1, 3, 5] * 2))
+    assert count_array_REPs() > 0
+    assert count_array_OneDs() == 0
+    assert count_array_OneD_Vars() == 0
+    impl5(3)
     assert count_array_REPs() > 0
     assert count_array_OneDs() == 0
     assert count_array_OneD_Vars() == 0
