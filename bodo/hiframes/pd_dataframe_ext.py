@@ -1055,7 +1055,7 @@ def cast_df_to_df(context, builder, fromty, toty, val):
         # TODO: fix casting refcount in Numba since Numba increfs value after cast
         return df
 
-    # trivial cast if only 'dist' is different (not need to change value)
+    # trivial cast if only 'dist' is different (no need to change value)
     if (
         fromty.data == toty.data
         and fromty.index == toty.index

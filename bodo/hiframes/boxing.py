@@ -74,10 +74,18 @@ def typeof_pd_dataframe(val, c):
 # register series types for import
 @typeof_impl.register(pd.Series)
 def typeof_pd_series(val, c):
+    from bodo.transforms.distributed_analysis import Distribution
+
+    dist = (
+        Distribution(val._bodo_meta["dist"])
+        if hasattr(val, "_bodo_meta") and val._bodo_meta is not None
+        else Distribution.REP
+    )
     return SeriesType(
         _infer_series_dtype(val),
         index=numba.typeof(val.index),
         name_typ=numba.typeof(val.name),
+        dist=dist,
     )
 
 
@@ -236,17 +244,7 @@ def box_dataframe(typ, val, c):
     pyapi.object_setattr_string(df_obj, "columns", columns_obj)
     pyapi.decref(columns_obj)
 
-    # set Bodo metadata in output so the next JIT call knows data distribution
-    # e.g. df._bodo_meta = {"dist": 5}
-    meta_dict_obj = pyapi.dict_new(1)
-    # using the distribution number since easier to handle
-    dist_val_obj = pyapi.long_from_longlong(
-        lir.Constant(lir.IntType(64), typ.dist.value)
-    )
-    pyapi.dict_setitem_string(meta_dict_obj, "dist", dist_val_obj)
-    pyapi.object_setattr_string(df_obj, "_bodo_meta", meta_dict_obj)
-    pyapi.decref(meta_dict_obj)
-    pyapi.decref(dist_val_obj)
+    _set_bodo_meta(df_obj, pyapi, typ)
 
     # avoid pandas warnings for Bodo metadata setattr
     if "_bodo_meta" not in pd.DataFrame._metadata:
@@ -410,9 +408,30 @@ def box_series(typ, val, c):
     c.pyapi.decref(index_obj)
     c.pyapi.decref(name_obj)
 
+    _set_bodo_meta(res, c.pyapi, typ)
+
+    # avoid pandas warnings for Bodo metadata setattr
+    if "_bodo_meta" not in pd.Series._metadata:
+        pd.Series._metadata.append("_bodo_meta")
+
     c.pyapi.decref(pd_class_obj)
     c.context.nrt.decref(c.builder, typ, val)
     return res
+
+
+def _set_bodo_meta(obj, pyapi, typ):
+    """set Bodo metadata in output so the next JIT call knows data distribution
+    e.g. df._bodo_meta = {"dist": 5}
+    """
+    meta_dict_obj = pyapi.dict_new(1)
+    # using the distribution number since easier to handle
+    dist_val_obj = pyapi.long_from_longlong(
+        lir.Constant(lir.IntType(64), typ.dist.value)
+    )
+    pyapi.dict_setitem_string(meta_dict_obj, "dist", dist_val_obj)
+    pyapi.object_setattr_string(obj, "_bodo_meta", meta_dict_obj)
+    pyapi.decref(meta_dict_obj)
+    pyapi.decref(dist_val_obj)
 
 
 # --------------- typeof support for object arrays --------------------
