@@ -157,22 +157,32 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         """unifies two possible dataframe types into a single type
         see test_dataframe.py::test_df_type_unify_error
         """
+        from bodo.transforms.distributed_analysis import Distribution
+
         if (
             isinstance(other, DataFrameType)
             and len(other.data) == len(self.data)
             and other.columns == self.columns
         ):
-            new_index = self.index.unify(typingctx, other.index)
+            # NOTE: checking equality since Index types may not have unify() implemented
+            # TODO: add unify() to all Index types and remove this
+            new_index = (
+                self.index
+                if self.index == other.index
+                else self.index.unify(typingctx, other.index)
+            )
             data = tuple(
                 a.unify(typingctx, b) if a != b else a
                 for a, b in zip(self.data, other.data)
             )
+            # use the most conservative distribution
+            dist = Distribution(min(self.dist.value, other.dist.value))
             # NOTE: unification is an extreme corner case probably, since arrays can
             # be unified only if just their layout or alignment is different.
             # That doesn't happen in df case since all arrays are 1D and C layout.
             # see: https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/types/npytypes.py#L436
             if new_index is not None and None not in data:  # pragma: no cover
-                return DataFrameType(data, new_index, self.columns, self.dist)
+                return DataFrameType(data, new_index, self.columns, dist)
 
         # convert empty dataframe to any other dataframe to support important common
         # cases (see test_append_empty_df), even though it's not fully accurate.

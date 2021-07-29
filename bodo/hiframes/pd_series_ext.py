@@ -111,8 +111,18 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         return self.dtype, self.data, self.index, self.name_typ, self.dist
 
     def unify(self, typingctx, other):
+        from bodo.transforms.distributed_analysis import Distribution
+
         if isinstance(other, SeriesType):
-            new_index = self.index.unify(typingctx, other.index)
+            # NOTE: checking equality since Index types may not have unify() implemented
+            # TODO: add unify() to all Index types and remove this
+            new_index = (
+                self.index
+                if self.index == other.index
+                else self.index.unify(typingctx, other.index)
+            )
+            # use the most conservative distribution
+            dist = Distribution(min(self.dist.value, other.dist.value))
 
             # If dtype matches or other.dtype is undefined (inferred)
             if other.dtype == self.dtype or not other.dtype.is_precise():
@@ -120,7 +130,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
                     self.dtype,
                     self.data.unify(typingctx, other.data),
                     new_index,
-                    dist=self.dist,
+                    dist=dist,
                 )
 
         # XXX: unify Series/Array as Array
