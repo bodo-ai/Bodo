@@ -95,11 +95,14 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
     def copy(self, dtype=None, index=None, dist=None):
         # XXX is copy necessary?
         if index is None:
-            index = self.index.copy()
+            index = self.index
         if dist is None:
             dist = self.dist
-        dtype = dtype if dtype is not None else self.dtype
-        data = dtype_to_array_type(dtype)
+        if dtype is None:
+            dtype = self.dtype
+            data = self.data
+        else:
+            data = dtype_to_array_type(dtype)
         return SeriesType(dtype, data, index, self.name_typ, dist)
 
     @property
@@ -117,7 +120,7 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
                     self.dtype,
                     self.data.unify(typingctx, other.data),
                     new_index,
-                    self.dist,
+                    dist=self.dist,
                 )
 
         # XXX: unify Series/Array as Array
@@ -127,7 +130,8 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         from numba.core.typeconv import Conversion
 
         if (
-            self.dtype == other.dtype
+            isinstance(other, SeriesType)
+            and self.dtype == other.dtype
             and self.data == other.data
             and self.index == other.index
             and self.name_typ == other.name_typ
@@ -165,6 +169,7 @@ class HeterogeneousSeriesType(types.Type):
 
     def __init__(self, data=None, index=None, name_typ=None):
         from bodo.hiframes.pd_index_ext import RangeIndexType
+        from bodo.transforms.distributed_analysis import Distribution
 
         self.data = data
         name_typ = types.none if name_typ is None else name_typ
@@ -172,8 +177,9 @@ class HeterogeneousSeriesType(types.Type):
         # TODO(ehsan): add check for index type
         self.index = index  # index should be an Index type (not Array)
         self.name_typ = name_typ
+        self.dist = Distribution.REP  # cannot be distributed
         super(HeterogeneousSeriesType, self).__init__(
-            name="heter_series({}, {}, {})".format(data, index, name_typ)
+            name=f"heter_series({data}, {index}, {name_typ})"
         )
 
     def copy(self, index=None):
@@ -234,7 +240,7 @@ class SeriesPayloadType(types.Type):
     def __init__(self, series_type):
         self.series_type = series_type
         super(SeriesPayloadType, self).__init__(
-            name="SeriesPayloadType({})".format(series_type)
+            name=f"SeriesPayloadType({series_type})"
         )
 
 

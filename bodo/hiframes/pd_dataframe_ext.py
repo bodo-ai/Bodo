@@ -138,11 +138,10 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     def copy(self, index=None, dist=None):
         # XXX is copy necessary?
         if index is None:
-            index = self.index.copy()
+            index = self.index
         if dist is None:
             dist = self.dist
-        data = tuple(a.copy() for a in self.data)
-        return DataFrameType(data, index, self.columns, dist)
+        return DataFrameType(self.data, index, self.columns, dist)
 
     @property
     def as_array(self):
@@ -186,7 +185,8 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         from numba.core.typeconv import Conversion
 
         if (
-            self.data == other.data
+            isinstance(other, DataFrameType)
+            and self.data == other.data
             and self.index == other.index
             and self.columns == other.columns
             and self.dist != other.dist
