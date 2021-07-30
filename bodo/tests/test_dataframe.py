@@ -1014,7 +1014,8 @@ def test_df_index_range_index(memory_leak_check):
         df = pd.DataFrame({"A": [2, 3, 1]})
         return df.index
 
-    bodo_func = bodo.jit(impl)
+    # distributed=False necessary due to [BE-1112]
+    bodo_func = bodo.jit(distributed=False)(impl)
     pd.testing.assert_index_equal(bodo_func(), impl())
 
 
@@ -5103,7 +5104,7 @@ class TestDataFrame(unittest.TestCase):
             return df.A
 
         np.random.seed(5)
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
 
@@ -5113,7 +5114,7 @@ class TestDataFrame(unittest.TestCase):
             return df.A
 
         np.random.seed(5)
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
 
@@ -5125,7 +5126,7 @@ class TestDataFrame(unittest.TestCase):
             return df.A
 
         np.random.seed(5)
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
 
@@ -5134,7 +5135,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)}, columns=["B"])
             return df
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
 
@@ -5144,7 +5145,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)}, columns=list("AB"))
             return df
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
 
@@ -5157,7 +5158,7 @@ class TestDataFrame(unittest.TestCase):
             )
             return df
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
 
@@ -5169,7 +5170,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame(data, columns=["a", "b", "c"])
             return df
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
 
@@ -5191,7 +5192,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)}, columns=["B", "C"])
             return df
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         df1 = bodo_func(n)
         df2 = test_impl(n)
@@ -5247,7 +5248,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
             return df
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
 
@@ -5455,7 +5456,7 @@ class TestDataFrame(unittest.TestCase):
             df["A"] = np.arange(n)
             return df
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
 
@@ -5479,7 +5480,7 @@ class TestDataFrame(unittest.TestCase):
             df["A"] = np.arange(n)
             return df
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
 
@@ -5490,7 +5491,7 @@ class TestDataFrame(unittest.TestCase):
             df["C"] = np.arange(n)
             return df
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
 
@@ -5565,7 +5566,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
             return df.values
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         np.testing.assert_array_equal(bodo_func(n), test_impl(n))
 
@@ -5692,7 +5693,7 @@ class TestDataFrame(unittest.TestCase):
             )
             return df.pct_change(3)
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
 
