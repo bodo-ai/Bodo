@@ -11,6 +11,7 @@ from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import (
     intrinsic,
     lower_builtin,
+    lower_cast,
     make_attribute_wrapper,
     models,
     overload,
@@ -661,3 +662,19 @@ def overload_iat_setitem(I, idx, val):
     raise BodoError(
         "df.iat[] setitem using {} not supported".format(idx)
     )  # pragma: no cover
+
+
+@lower_cast(DataFrameIatType, DataFrameIatType)
+@lower_cast(DataFrameILocType, DataFrameILocType)
+@lower_cast(DataFrameLocType, DataFrameLocType)
+def cast_series_iat(context, builder, fromty, toty, val):
+    """cast indexing objects since 'dist' in Series/DataFrame data types can change
+    in distributed analysis.
+    See test_get_list_string
+    """
+    # just cast the underlying dataframe object
+    iat_val = cgutils.create_struct_proxy(fromty)(context, builder, val)
+    new_df = context.cast(builder, iat_val.obj, fromty.df_type, toty.df_type)
+    new_iat_val = cgutils.create_struct_proxy(toty)(context, builder)
+    new_iat_val.obj = new_df
+    return new_iat_val._getvalue()
