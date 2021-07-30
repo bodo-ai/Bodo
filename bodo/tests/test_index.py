@@ -24,40 +24,41 @@ def test_range_index_constructor(memory_leak_check, is_slow_run):
     def impl1():  # single literal
         return pd.RangeIndex(10)
 
-    pd.testing.assert_index_equal(bodo.jit(impl1)(), impl1())
+    check_func(impl1, (), only_seq=True)
+
     if not is_slow_run:
         return
 
     def impl2():  # two literals
         return pd.RangeIndex(3, 10)
 
-    pd.testing.assert_index_equal(bodo.jit(impl2)(), impl2())
+    check_func(impl2, (), only_seq=True)
 
     def impl3():  # three literals
         return pd.RangeIndex(3, 10, 2)
 
-    pd.testing.assert_index_equal(bodo.jit(impl3)(), impl3())
+    check_func(impl3, (), only_seq=True)
 
     def impl4(a):  # single arg
         return pd.RangeIndex(a, name="ABC")
 
-    pd.testing.assert_index_equal(bodo.jit(impl4)(5), impl4(5))
+    check_func(impl4, (5,), only_seq=True)
 
     def impl5(a, b):  # two args
         return pd.RangeIndex(a, b)
 
-    pd.testing.assert_index_equal(bodo.jit(impl5)(5, 10), impl5(5, 10))
+    check_func(impl5, (5, 10), only_seq=True)
 
     def impl6(a, b, c):  # three args
         return pd.RangeIndex(a, b, c)
 
-    pd.testing.assert_index_equal(bodo.jit(impl6)(5, 10, 2), impl6(5, 10, 2))
+    check_func(impl6, (5, 10, 2), only_seq=True)
 
     def impl7(r):  # unbox
         return r._start, r._stop, r._step
 
     r = pd.RangeIndex(3, 10, 2)
-    assert bodo.jit(impl7)(r) == impl7(r)
+    check_func(impl7, (r,), only_seq=True)
 
 
 @pytest.mark.slow
@@ -145,44 +146,45 @@ def test_numeric_index_constructor(memory_leak_check, is_slow_run):
     def impl1():  # list input
         return pd.Int64Index([10, 12])
 
-    pd.testing.assert_index_equal(bodo.jit(impl1)(), impl1())
+    check_func(impl1, (), only_seq=True)
+
     if not is_slow_run:
         return
 
     def impl2():  # list input with name
         return pd.Int64Index([10, 12], name="A")
 
-    pd.testing.assert_index_equal(bodo.jit(impl2)(), impl2())
+    check_func(impl2, (), only_seq=True)
 
     def impl3():  # array input
         return pd.Int64Index(np.arange(3))
 
-    pd.testing.assert_index_equal(bodo.jit(impl3)(), impl3())
+    check_func(impl3, (), only_seq=True)
 
     def impl4():  # array input different type
         return pd.Int64Index(np.ones(3, dtype=np.int32))
 
-    pd.testing.assert_index_equal(bodo.jit(impl4)(), impl4())
+    check_func(impl4, (), only_seq=True)
 
     def impl5():  # uint64: list input
         return pd.UInt64Index([10, 12])
 
-    pd.testing.assert_index_equal(bodo.jit(impl5)(), impl5())
+    check_func(impl5, (), only_seq=True)
 
     def impl6():  # uint64: array input different type
         return pd.UInt64Index(np.ones(3, dtype=np.int32))
 
-    pd.testing.assert_index_equal(bodo.jit(impl6)(), impl6())
+    check_func(impl6, (), only_seq=True)
 
     def impl7():  # float64: list input
         return pd.Float64Index([10.1, 12.1])
 
-    pd.testing.assert_index_equal(bodo.jit(impl7)(), impl7())
+    check_func(impl7, (), only_seq=True)
 
     def impl8():  # float64: array input different type
         return pd.Float64Index(np.ones(3, dtype=np.int32))
 
-    pd.testing.assert_index_equal(bodo.jit(impl8)(), impl8())
+    check_func(impl8, (), only_seq=True)
 
 
 def test_init_numeric_index_array_analysis(memory_leak_check):
