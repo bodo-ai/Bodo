@@ -953,7 +953,10 @@ def test_rebalance():
     pd.testing.assert_frame_equal(df_in_merge, df_out_dist_merge)
     # The replicated case
     bodo_rep = bodo.jit(
-        all_args_distributed_block=False, all_returns_distributed=False
+        all_args_distributed_block=False,
+        all_returns_distributed=False,
+        returns_maybe_distributed=False,
+        args_maybe_distributed=False,
     )(f)
     df_out_rep = bodo_rep(df_in_merge)
     pd.testing.assert_frame_equal(df_in_merge, df_out_rep)
@@ -2767,7 +2770,7 @@ def test_set_column_cond1(memory_leak_check):
             df["A"] = np.arange(n) + 2.0
         return df.A
 
-    bodo_func = bodo.jit(test_impl)
+    bodo_func = bodo.jit(distributed=False)(test_impl)
     n = 11
     pd.testing.assert_series_equal(bodo_func(n, True), test_impl(n, True))
     pd.testing.assert_series_equal(bodo_func(n, False), test_impl(n, False))
@@ -2783,7 +2786,7 @@ def test_set_column_cond2(memory_leak_check):
         return df2  # df2.A, TODO: pending set_dataframe_data() analysis fix
         # to avoid incorrect optimization
 
-    bodo_func = bodo.jit(test_impl)
+    bodo_func = bodo.jit(distributed=False)(test_impl)
     n = 11
     pd.testing.assert_frame_equal(bodo_func(n, True), test_impl(n, True))
     pd.testing.assert_frame_equal(bodo_func(n, False), test_impl(n, False))
