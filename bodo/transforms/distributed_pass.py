@@ -309,11 +309,14 @@ class DistributedPass:
                     elif isinstance(rhs, ir.Expr):
                         out_nodes = self._run_expr(inst, equiv_set, avail_vars)
                 elif isinstance(inst, (ir.StaticSetItem, ir.SetItem)):
+                    self._fix_set_node_sig(inst)
                     out_nodes = []
                     index_var = get_getsetitem_index_var(inst, self.typemap, out_nodes)
                     out_nodes += self._run_getsetitem(
                         inst.target, index_var, inst, inst, equiv_set, avail_vars
                     )
+                elif isinstance(inst, ir.SetAttr):
+                    self._fix_set_node_sig(inst)
                 elif isinstance(inst, ir.Return):
                     out_nodes = [inst]
                 elif isinstance(inst, ir.Print):
@@ -3828,6 +3831,25 @@ class DistributedPass:
             stmt.value = ir.Expr.build_tuple([total_len_var], stmt.loc)
 
         return read_size, total_len_var
+
+    def _fix_set_node_sig(self, inst):
+        """update call signature of setitem/static_setitem/setattr in calltypes
+        since distributed analysis can change distribution of dataframes/series types
+        example: test_series_loc_setitem_bool
+        """
+        # should not be possible but just in case
+        if inst not in self.calltypes:  # pragma: no cover
+            return
+
+        sig = self.calltypes.pop(inst)
+
+        # should not be possible but just in case
+        if sig is None:  # pragma: no cover
+            self.calltypes[inst] = None
+            return
+
+        sig = sig.replace(args=(self.typemap[inst.target.name],) + sig.args[1:])
+        self.calltypes[inst] = sig
 
     def _get_arr_ndim(self, arrname):
         if self.typemap[arrname] == string_array_type:
