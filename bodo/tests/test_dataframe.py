@@ -5685,7 +5685,7 @@ class TestDataFrame(unittest.TestCase):
             df = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
             return df.head(3)
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
         pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
 
