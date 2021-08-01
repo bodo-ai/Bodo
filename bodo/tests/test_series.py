@@ -789,8 +789,7 @@ def test_series_index_none(memory_leak_check):
         S = pd.Series([1, 4, 8])
         return S.index
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_index_equal(bodo_func(), test_impl())
+    check_func(test_impl, (), only_seq=True)
 
 
 @pytest.mark.slow
