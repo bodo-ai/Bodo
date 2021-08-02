@@ -296,13 +296,12 @@ class Obfuscator(ast.NodeTransformer):
     def obfuscate_local(self, name):
         """The obfuscation that uses random function.
         It is made sure that no collision happens and that reserved words are not used."""
-        if self.processing_pass == 1:
-            return name
         while True:
-            newname = random_string(3, 10)
+            newname = random_string(3, 5) + "__" + random_string(3, 5)
             if (
                 not newname in self.replacement_vars
                 and not newname in reserved_keywords
+                and not newname in self.fixed_names
             ):
                 self.replacement_vars.add(newname)
                 return newname
@@ -318,6 +317,11 @@ class Obfuscator(ast.NodeTransformer):
             return name
         if not name in self.replace_vars:
             return name
+        # Check to make sure the name isn't reserved (i.e. an import name or func)
+        # This must be done after the first pass to make sure there are no
+        # conflicts anywhere.
+        while self.replace_vars[name] in self.fixed_names:
+            self.replace_vars[name] = self.obfuscate_local(name)
         return self.replace_vars.get(name)
 
     def retrieve_assigned_name(self, node):
