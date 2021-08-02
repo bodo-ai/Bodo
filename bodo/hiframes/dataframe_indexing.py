@@ -51,61 +51,98 @@ class DataFrameGetItemTemplate(AbstractTemplate):
         assert len(args) == 2
         df = args[0]
         ind = args[1]
-        # Only supported on DataFrames in the boolean list/array case
-        # i.e. df1 = df[df.A > 5]
-        if not (
-            isinstance(df, DataFrameType)
-            and is_list_like_index_type(ind)
-            and ind.dtype == types.bool_
-        ):
+        if not isinstance(df, DataFrameType):
             return
-        data_type = df.data
-        index_type = (
-            bodo.hiframes.pd_index_ext.NumericIndexType(types.int64, df.index.name_typ)
-            if isinstance(df.index, bodo.hiframes.pd_index_ext.RangeIndexType)
-            else df.index
-        )
-        columns = df.columns
-        ret = DataFrameType(data_type, index_type, columns)
-        return ret(*args)
+        # A = df["column"]
+        if is_overload_constant_str(ind) or is_overload_constant_int(ind):
+            ind_val = (
+                get_overload_const_str(ind)
+                if is_overload_constant_str(ind)
+                else get_overload_const_int(ind)
+            )
+            # df with multi-level column names returns a lower level dataframe
+            if isinstance(df.columns[0], tuple):
+                new_names = []
+                new_data = []
+                for i, v in enumerate(df.columns):
+                    if v[0] != ind_val:
+                        continue
+                    # output names are str in 2 level case, not tuple
+                    # TODO: test more than 2 levels
+                    new_names.append(v[1] if len(v) == 2 else v[1:])
+                    new_data.append(df.data[i])
+                data_type = tuple(new_data)
+                index_type = df.index
+                columns = tuple(new_names)
+                ret = DataFrameType(data_type, index_type, columns)
+                return ret(*args)
+            # regular single level case
+            else:
+                if ind_val not in df.columns:
+                    raise_bodo_error(
+                        "dataframe {} does not include column {}".format(df, ind_val)
+                    )
+                col_num = df.columns.index(ind_val)
+                data_type = df.data[col_num]
+                dtype = data_type.dtype
+                index_type = df.index
+                name_typ = types.literal(df.columns[col_num])
+                ret = bodo.SeriesType(dtype, data_type, index_type, name_typ)
+                return ret(*args)
+        # df1 = df[df.A > 5] or df1 = df[:n]
+        if (is_list_like_index_type(ind) and ind.dtype == types.bool_) or isinstance(
+            ind, types.SliceType
+        ):
+            data_type = df.data
+            # Update index type for boolean indexing since that converts
+            # range to numeric
+            index_type = (
+                bodo.hiframes.pd_index_ext.NumericIndexType(
+                    types.int64, df.index.name_typ
+                )
+                if not isinstance(ind, types.SliceType)
+                and isinstance(df.index, bodo.hiframes.pd_index_ext.RangeIndexType)
+                else df.index
+            )
+            columns = df.columns
+            ret = DataFrameType(data_type, index_type, columns)
+            return ret(*args)
+        # A = df[["C1", "C2"]]
+        elif is_overload_constant_list(ind):
+            # Check that all columns named are in the dataframe
+            ind_columns = get_overload_const_list(ind)
+            for c in ind_columns:
+                if c not in df.columns:
+                    raise_bodo_error(
+                        "Column {} not found in dataframe columns {}".format(
+                            c, df.columns
+                        )
+                    )
+            columns = tuple(get_overload_const_list(ind))
+            data_type = tuple(df.data[df.columns.index(name)] for name in columns)
+            index_type = df.index
+            ret = DataFrameType(data_type, index_type, columns)
+            return ret(*args)
+        # TODO: error-checking test
+        raise_bodo_error(
+            "df[] getitem using {} not supported".format(ind)
+        )  # pragma: no cover
 
+
+DataFrameGetItemTemplate._no_unliteral = True
 
 # lowering is necessary since df filtering is used in the train_test_split()
 # implementation which is not inlined and uses the regular Numba pipeline
 # see bodo/tests/test_sklearn.py::test_train_test_split_df
-@lower_builtin(operator.getitem, DataFrameType, types.Array(types.bool_, 1, "C"))
-def getitem_df_bool(context, builder, sig, args):
-    impl = df_filter_getitem(*sig.args)
+@lower_builtin(operator.getitem, DataFrameType, types.Any)
+def getitem_df_lower(context, builder, sig, args):
+    impl = df_getitem_overload(*sig.args)
     return context.compile_internal(builder, impl, sig, args)
 
 
-# DataFrame getitem for the filter case.
-# Used to separate typing and lowering
-def df_filter_getitem(df, ind):
-    # df1 = df[df.A > .5] or df[:n]
-    # implement using array filtering (not using the old Filter node)
-    # TODO: create an IR node for enforcing same dist for all columns and ind array
-    func_text = "def impl(df, ind):\n"
-    if not isinstance(ind, types.SliceType):
-        func_text += "  ind = bodo.utils.conversion.coerce_to_ndarray(ind)\n"
-    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[ind]"
-    new_data = ", ".join(
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[ind]".format(
-            df.columns.index(c)
-        )
-        for c in df.columns
-    )
-    return bodo.hiframes.dataframe_impl._gen_init_df(
-        func_text, df.columns, new_data, index
-    )
-
-
-# DataFrame getitem
-@overload(operator.getitem, no_unliteral=True)
 def df_getitem_overload(df, ind):
     if not isinstance(df, DataFrameType):
         return
-
     # A = df["column"]
     if is_overload_constant_str(ind) or is_overload_constant_int(ind):
         ind_val = (
@@ -133,7 +170,6 @@ def df_getitem_overload(df, ind):
             return bodo.hiframes.dataframe_impl._gen_init_df(
                 func_text, new_names, ", ".join(new_data), index
             )
-
         # regular single level case
         if ind_val not in df.columns:
             raise_bodo_error(
@@ -145,7 +181,6 @@ def df_getitem_overload(df, ind):
             bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df),
             ind_val,
         )  # pragma: no cover
-
     # A = df[["C1", "C2"]]
     # TODO: support int names
     if is_overload_constant_list(ind):
@@ -168,9 +203,25 @@ def df_getitem_overload(df, ind):
             func_text, ind_columns, new_data, index
         )
 
-    # df1 = df[:n] (boolean case is typed separately)
-    if isinstance(ind, types.SliceType):
-        return df_filter_getitem(df, ind)
+    # df1 = df[df.A > .5] or df[:n]
+    if (is_list_like_index_type(ind) and ind.dtype == types.bool_) or isinstance(
+        ind, types.SliceType
+    ):
+        # implement using array filtering (not using the old Filter node)
+        # TODO: create an IR node for enforcing same dist for all columns and ind array
+        func_text = "def impl(df, ind):\n"
+        if not isinstance(ind, types.SliceType):
+            func_text += "  ind = bodo.utils.conversion.coerce_to_ndarray(ind)\n"
+        index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[ind]"
+        new_data = ", ".join(
+            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[ind]".format(
+                df.columns.index(c)
+            )
+            for c in df.columns
+        )
+        return bodo.hiframes.dataframe_impl._gen_init_df(
+            func_text, df.columns, new_data, index
+        )
 
     # TODO: error-checking test
     raise_bodo_error(

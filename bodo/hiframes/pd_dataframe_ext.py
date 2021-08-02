@@ -1247,14 +1247,6 @@ def df_len_overload(df):
     )  # pragma: no cover
 
 
-# dummy lowering for filter (TODO: use proper overload and avoid this)
-@lower_builtin(operator.getitem, DataFrameType, types.Array(types.bool_, 1, "C"))
-@lower_builtin(operator.getitem, DataFrameType, SeriesType)
-def lower_getitem_filter_dummy(context, builder, sig, args):
-    dataframe = cgutils.create_struct_proxy(sig.return_type)(context, builder)
-    return dataframe._getvalue()
-
-
 # handle getitem for Tuples because sometimes df._data[i] in
 # get_dataframe_data() doesn't translate to 'static_getitem' which causes
 # Numba to fail. See TestDataFrame.test_unbox1, TODO: find root cause in Numba
