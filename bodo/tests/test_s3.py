@@ -19,8 +19,12 @@ def test_partition_cols(minio_server, s3_bucket):
     write_jit = bodo.jit(write, all_args_distributed_block=True)
     with ensure_clean2(bd_fname):
         write_jit(_get_dist_arg(df, False))
-        A0_actual = bodo.jit(lambda: pd.read_parquet(f"{bd_fname}/A=0"))()
-        A1_actual = bodo.jit(lambda: pd.read_parquet(f"{bd_fname}/A=1"))()
+        A0_actual = bodo.jit(returns_maybe_distributed=False)(
+            lambda: pd.read_parquet(f"{bd_fname}/A=0")
+        )()
+        A1_actual = bodo.jit(returns_maybe_distributed=False)(
+            lambda: pd.read_parquet(f"{bd_fname}/A=1")
+        )()
     A0_expected = pd.DataFrame({"B": pd.Series([0, 1, 2], dtype="Int64")})
     A1_expected = pd.DataFrame({"B": pd.Series([3, 4, 5], dtype="Int64")})
     pd.testing.assert_frame_equal(A0_actual, A0_expected)
@@ -684,7 +688,7 @@ def test_s3_np_fromfile_seq_large_offset(minio_server, s3_bucket, test_np_arr):
         )
 
     with pytest.raises(ValueError, match="negative dimensions not allowed"):
-        bodo.jit(test_read)()
+        bodo.jit(distributed=False)(test_read)()
 
 
 def test_s3_np_fromfile_1D(minio_server, s3_bucket, test_np_arr):

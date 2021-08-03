@@ -117,9 +117,7 @@ def test_pq_RangeIndex(test_RangeIndex_input, pq_write_idx, memory_leak_check):
         if bodo.libs.distributed_api.get_rank() == 0:
             test_RangeIndex_input.to_parquet("test.pq", index=pq_write_idx)
         bodo.barrier()
-        bodo_func = bodo.jit(impl)
-        # TODO: Parallel Test
-        pd.testing.assert_frame_equal(bodo_func(), impl())
+        check_func(impl, (), only_seq=True)
         bodo.barrier()
     finally:
         if bodo.libs.distributed_api.get_rank() == 0:
@@ -140,9 +138,7 @@ def test_pq_select_column(
             test_RangeIndex_input.index.name = index_name
             test_RangeIndex_input.to_parquet("test.pq", index=pq_write_idx)
         bodo.barrier()
-        bodo_func = bodo.jit(impl)
-        # # TODO: Parallel Test
-        pd.testing.assert_frame_equal(bodo_func(), impl())
+        check_func(impl, (), only_seq=True)
         bodo.barrier()
     finally:
         if bodo.libs.distributed_api.get_rank() == 0:
@@ -280,11 +276,9 @@ def test_pq_pandas_date(datapath, memory_leak_check):
         df = pd.read_parquet(fname)
         return pd.DataFrame({"DT64": df.DT64, "col2": df.DATE})
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(), impl())
+    check_func(impl, (), only_seq=True)
 
 
-@pytest.mark.skip("Needs datetime.date() support in parquet for latest arrow")
 def test_pq_spark_date(datapath, memory_leak_check):
     fname = datapath("sdf_dt.pq")
 
@@ -292,8 +286,7 @@ def test_pq_spark_date(datapath, memory_leak_check):
         df = pd.read_parquet(fname)
         return pd.DataFrame({"DT64": df.DT64, "col2": df.DATE})
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(), impl())
+    check_func(impl, (), only_seq=True)
 
 
 # TODO: add memory_leak_check when tracking parquet allocs is possible
@@ -303,8 +296,7 @@ def test_pq_index(datapath):
 
     # passing function name as value to test value-based dispatch
     fname = datapath("index_test1.pq")
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_frame_equal(bodo_func(fname), test_impl(fname), check_dtype=False)
+    check_func(test_impl, (fname,), only_seq=True, check_dtype=False)
 
     # string index
     fname = datapath("index_test2.pq")
@@ -312,8 +304,7 @@ def test_pq_index(datapath):
     def test_impl2():
         return pd.read_parquet(fname)
 
-    bodo_func = bodo.jit(test_impl2)
-    pd.testing.assert_frame_equal(bodo_func(), test_impl2(), check_dtype=False)
+    check_func(test_impl2, (), only_seq=True, check_dtype=False)
 
 
 def test_pq_nullable_int_single(datapath, memory_leak_check):
@@ -354,6 +345,7 @@ def test_pq_schema(datapath):
         return df
 
     bodo_func = bodo.jit(
+        distributed=False,
         locals={
             "df": {
                 "one": bodo.float64[:],
@@ -362,7 +354,7 @@ def test_pq_schema(datapath):
                 "four": bodo.float64[:],
                 "five": bodo.string_array_type,
             }
-        }
+        },
     )(impl)
     pd.testing.assert_frame_equal(bodo_func(fname), impl(fname), check_dtype=False)
 
@@ -557,7 +549,11 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
         df = pd.read_csv(fname_gzipped, names=["A", "B", "C", "D"], compression="gzip")
         return df.C
 
-    bodo_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(impl)
+    bodo_func = numba.njit(
+        pipeline_class=DeadcodeTestPipeline,
+        parallel=True,
+        returns_maybe_distributed=False,
+    )(impl)
     pd.testing.assert_series_equal(bodo_func(), impl())
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     read_csv_found = False
@@ -573,7 +569,7 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
         subprocess.run(["gzip", "-k", "-f", fname])
     bodo.barrier()
     with ensure_clean(fname_gzipped):
-        check_func(impl2, ())
+        check_func(impl2, (), only_seq=True)
 
 
 @pytest.mark.smoke
@@ -1609,8 +1605,7 @@ def test_h5_read_seq(datapath, memory_leak_check):
 
     # passing function name as value to test value-based dispatch
     fname = datapath("lr.hdf5")
-    bodo_func = bodo.jit(test_impl)
-    np.testing.assert_allclose(bodo_func(fname), test_impl(fname))
+    check_func(test_impl, (fname,), only_seq=True)
 
 
 def test_h5_read_const_infer_seq(datapath, memory_leak_check):
@@ -1624,8 +1619,7 @@ def test_h5_read_const_infer_seq(datapath, memory_leak_check):
         f.close()
         return X
 
-    bodo_func = bodo.jit(test_impl)
-    np.testing.assert_allclose(bodo_func(), test_impl())
+    check_func(test_impl, (), only_seq=True)
 
 
 def test_h5_read_parallel(datapath, memory_leak_check):
@@ -1756,7 +1750,9 @@ def test_h5_write(memory_leak_check):
     n = 11
     A = np.arange(n).astype(np.float64)
     with ensure_clean(fname):
-        bodo.jit(test_impl)(A, fname)
+        bodo.jit(
+            test_impl, returns_maybe_distributed=False, args_maybe_distributed=False
+        )(A, fname)
         f = h5py.File(fname, "r")
         A2 = f["A"][:]
         f.close()
@@ -1795,7 +1791,7 @@ def test_np_io1(datapath, memory_leak_check):
         A = np.fromfile(fname, np.float64)
         return A
 
-    bodo_func = bodo.jit(test_impl)
+    bodo_func = bodo.jit(test_impl, returns_maybe_distributed=False)
     np.testing.assert_almost_equal(bodo_func(), test_impl())
 
 
@@ -1858,8 +1854,7 @@ def test_np_io5(datapath, memory_leak_check):
         A = np.fromfile(fname, np.float64, count=10)
         return A
 
-    bodo_func = bodo.jit(test_impl)
-    np.testing.assert_almost_equal(bodo_func(), test_impl())
+    check_func(test_impl, (), only_seq=True)
 
 
 def test_np_io6(datapath, memory_leak_check):
@@ -1870,8 +1865,7 @@ def test_np_io6(datapath, memory_leak_check):
         A = np.fromfile(fname, np.float64, count=100000000)
         return A
 
-    bodo_func = bodo.jit(test_impl)
-    np.testing.assert_almost_equal(bodo_func(), test_impl())
+    check_func(test_impl, (), only_seq=True)
 
 
 def test_np_io7(datapath, memory_leak_check):
@@ -1882,8 +1876,7 @@ def test_np_io7(datapath, memory_leak_check):
         A = np.fromfile(fname, np.float64, offset=10)
         return A
 
-    bodo_func = bodo.jit(test_impl)
-    np.testing.assert_almost_equal(bodo_func(), test_impl())
+    check_func(test_impl, (), only_seq=True)
 
 
 def test_np_io8(datapath, memory_leak_check):
@@ -1894,8 +1887,7 @@ def test_np_io8(datapath, memory_leak_check):
         A = np.fromfile(fname, np.float64, offset=10, count=10)
         return A
 
-    bodo_func = bodo.jit(test_impl)
-    np.testing.assert_almost_equal(bodo_func(), test_impl())
+    check_func(test_impl, (), only_seq=True)
 
 
 def test_np_io9(datapath, memory_leak_check):
@@ -2016,7 +2008,7 @@ def test_csv_header_none(datapath, memory_leak_check):
     def test_impl():
         return pd.read_csv(fname, header=None)
 
-    bodo_func = bodo.jit(test_impl)
+    bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
     b_df = bodo_func()
     p_df = test_impl()
     # convert column names from integer to string since Bodo only supports string names

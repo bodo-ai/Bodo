@@ -8,6 +8,7 @@ import numpy as np
 from numba.core import cgutils, types
 from numba.extending import (
     intrinsic,
+    lower_cast,
     make_attribute_wrapper,
     models,
     overload,
@@ -755,3 +756,19 @@ def overload_const_index_series_getitem(S, idx):
             return lambda S, idx: bodo.hiframes.pd_series_ext.get_series_data(S)[
                 arr_ind
             ]  # pragma: no cover
+
+
+@lower_cast(SeriesIatType, SeriesIatType)
+@lower_cast(SeriesIlocType, SeriesIlocType)
+@lower_cast(SeriesLocType, SeriesLocType)
+def cast_series_iat(context, builder, fromty, toty, val):
+    """cast indexing objects since 'dist' in Series/DataFrame data types can change
+    in distributed analysis.
+    See test_get_list_string
+    """
+    # just cast the underlying series/dataframe object
+    iat_val = cgutils.create_struct_proxy(fromty)(context, builder, val)
+    new_series = context.cast(builder, iat_val.obj, fromty.stype, toty.stype)
+    new_iat_val = cgutils.create_struct_proxy(toty)(context, builder)
+    new_iat_val.obj = new_series
+    return new_iat_val._getvalue()

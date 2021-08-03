@@ -64,8 +64,9 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
 
     ndim = 1
 
-    def __init__(self, dtype, data=None, index=None, name_typ=None):
+    def __init__(self, dtype, data=None, index=None, name_typ=None, dist=None):
         from bodo.hiframes.pd_index_ext import RangeIndexType
+        from bodo.transforms.distributed_analysis import Distribution
 
         # keeping data array in type since operators can make changes such
         # as making array unaligned etc.
@@ -79,8 +80,11 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         index = RangeIndexType(types.none) if index is None else index
         self.index = index  # index should be an Index type (not Array)
         self.name_typ = name_typ
+        # see comment on 'dist' in DataFrameType
+        dist = Distribution.OneD_Var if dist is None else dist
+        self.dist = dist
         super(SeriesType, self).__init__(
-            name="series({}, {}, {}, {})".format(dtype, data, index, name_typ)
+            name=f"series({dtype}, {data}, {index}, {name_typ}, {dist})"
         )
 
     @property
@@ -88,34 +92,63 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         # using types.undefined to avoid Array templates for binary ops
         return types.Array(types.undefined, 1, "C")
 
-    def copy(self, dtype=None, index=None):
+    def copy(self, dtype=None, index=None, dist=None):
         # XXX is copy necessary?
         if index is None:
-            index = self.index.copy()
-        dtype = dtype if dtype is not None else self.dtype
-        data = dtype_to_array_type(dtype)
-        return SeriesType(dtype, data, index, self.name_typ)
+            index = self.index
+        if dist is None:
+            dist = self.dist
+        if dtype is None:
+            dtype = self.dtype
+            data = self.data
+        else:
+            data = dtype_to_array_type(dtype)
+        return SeriesType(dtype, data, index, self.name_typ, dist)
 
     @property
     def key(self):
         # needed?
-        return self.dtype, self.data, self.index, self.name_typ
+        return self.dtype, self.data, self.index, self.name_typ, self.dist
 
     def unify(self, typingctx, other):
+        from bodo.transforms.distributed_analysis import Distribution
+
         if isinstance(other, SeriesType):
-            new_index = self.index.unify(typingctx, other.index)
+            # NOTE: checking equality since Index types may not have unify() implemented
+            # TODO: add unify() to all Index types and remove this
+            new_index = (
+                self.index
+                if self.index == other.index
+                else self.index.unify(typingctx, other.index)
+            )
+            # use the most conservative distribution
+            dist = Distribution(min(self.dist.value, other.dist.value))
 
             # If dtype matches or other.dtype is undefined (inferred)
             if other.dtype == self.dtype or not other.dtype.is_precise():
                 return SeriesType(
-                    self.dtype, self.data.unify(typingctx, other.data), new_index
+                    self.dtype,
+                    self.data.unify(typingctx, other.data),
+                    new_index,
+                    dist=dist,
                 )
 
         # XXX: unify Series/Array as Array
         return super(SeriesType, self).unify(typingctx, other)
 
-    # XXX too dangerous, is it needed?
-    # def can_convert_to(self, typingctx, other):
+    def can_convert_to(self, typingctx, other):
+        from numba.core.typeconv import Conversion
+
+        if (
+            isinstance(other, SeriesType)
+            and self.dtype == other.dtype
+            and self.data == other.data
+            and self.index == other.index
+            and self.name_typ == other.name_typ
+            and self.dist != other.dist
+        ):
+            return Conversion.safe
+
     #     # same as types.Array
     #     if (isinstance(other, SeriesType) and other.dtype == self.dtype):
     #         # called for overload selection sometimes
@@ -146,6 +179,7 @@ class HeterogeneousSeriesType(types.Type):
 
     def __init__(self, data=None, index=None, name_typ=None):
         from bodo.hiframes.pd_index_ext import RangeIndexType
+        from bodo.transforms.distributed_analysis import Distribution
 
         self.data = data
         name_typ = types.none if name_typ is None else name_typ
@@ -153,8 +187,9 @@ class HeterogeneousSeriesType(types.Type):
         # TODO(ehsan): add check for index type
         self.index = index  # index should be an Index type (not Array)
         self.name_typ = name_typ
+        self.dist = Distribution.REP  # cannot be distributed
         super(HeterogeneousSeriesType, self).__init__(
-            name="heter_series({}, {}, {})".format(data, index, name_typ)
+            name=f"heter_series({data}, {index}, {name_typ})"
         )
 
     def copy(self, index=None):
@@ -215,7 +250,7 @@ class SeriesPayloadType(types.Type):
     def __init__(self, series_type):
         self.series_type = series_type
         super(SeriesPayloadType, self).__init__(
-            name="SeriesPayloadType({})".format(series_type)
+            name=f"SeriesPayloadType({series_type})"
         )
 
 
@@ -544,6 +579,17 @@ def cast_series(context, builder, fromty, toty, val):
             context, builder, toty, series_payload.data, new_index, series_payload.name
         )
 
+    # trivial cast if only 'dist' is different (no need to change value)
+    if (
+        fromty.dtype == toty.dtype
+        and fromty.data == toty.data
+        and fromty.index == toty.index
+        and fromty.name_typ == toty.name_typ
+        and fromty.dist != toty.dist
+    ):
+        return val
+
+    # TODO(ehsan): is this safe?
     return val
 
 

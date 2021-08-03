@@ -12,6 +12,7 @@ numba.core.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_block"] = bool
 numba.core.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_varlength"] = bool
 numba.core.cpu.CPUTargetOptions.OPTIONS["all_returns_distributed"] = bool
 numba.core.cpu.CPUTargetOptions.OPTIONS["returns_maybe_distributed"] = bool
+numba.core.cpu.CPUTargetOptions.OPTIONS["args_maybe_distributed"] = bool
 numba.core.cpu.CPUTargetOptions.OPTIONS["distributed"] = set
 numba.core.cpu.CPUTargetOptions.OPTIONS["distributed_block"] = set
 numba.core.cpu.CPUTargetOptions.OPTIONS["threaded"] = set
@@ -20,7 +21,8 @@ numba.core.cpu.CPUTargetOptions.OPTIONS["h5_types"] = dict
 numba.core.compiler.Flags.OPTIONS["all_args_distributed_block"] = False
 numba.core.compiler.Flags.OPTIONS["all_args_distributed_varlength"] = False
 numba.core.compiler.Flags.OPTIONS["all_returns_distributed"] = False
-numba.core.compiler.Flags.OPTIONS["returns_maybe_distributed"] = False
+numba.core.compiler.Flags.OPTIONS["returns_maybe_distributed"] = True
+numba.core.compiler.Flags.OPTIONS["args_maybe_distributed"] = True
 numba.core.compiler.Flags.OPTIONS["distributed"] = set()
 numba.core.compiler.Flags.OPTIONS["distributed_block"] = set()
 numba.core.compiler.Flags.OPTIONS["threaded"] = set()
@@ -45,8 +47,11 @@ def bodo_set_flags(self, flags):
     if kws.pop("all_returns_distributed", False):
         flags.set("all_returns_distributed")
 
-    if kws.pop("returns_maybe_distributed", False):
-        flags.set("returns_maybe_distributed")
+    if not kws.pop("returns_maybe_distributed", True):
+        flags.unset("returns_maybe_distributed")
+
+    if not kws.pop("args_maybe_distributed", True):
+        flags.unset("args_maybe_distributed")
 
     if "distributed" in kws:
         flags.set("distributed", kws.pop("distributed"))
@@ -157,6 +162,14 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
     if "distributed" in options and isinstance(options["distributed"], bool):
         dist = options.pop("distributed")
         pipeline_class = pipeline_class if dist else bodo.compiler.BodoCompilerSeq
+
+    # turn off automatic distribution detection for args/returns if some distribution
+    # is manually specified by the user
+    if "distributed" in options or "distributed_block" in options:
+        if "args_maybe_distributed" not in options:
+            options["args_maybe_distributed"] = False
+        if "returns_maybe_distributed" not in options:
+            options["returns_maybe_distributed"] = False
 
     numba_jit = numba.jit(
         signature_or_function, pipeline_class=pipeline_class, **options

@@ -911,6 +911,7 @@ def test_jitclass(memory_leak_check):
             )
         },
         distributed=["df"],
+        returns_maybe_distributed=False,
     )
     class MyClass2:
         def __init__(self):

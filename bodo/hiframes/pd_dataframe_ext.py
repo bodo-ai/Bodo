@@ -109,27 +109,39 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
 
     ndim = 2
 
-    def __init__(self, data=None, index=None, columns=None):
+    def __init__(self, data=None, index=None, columns=None, dist=None):
         # data is tuple of Array types (not Series) or tuples (for df.describe)
         # index is Index obj (not Array type)
         # columns is a tuple of column names (strings, ints, or tuples in case of
         # MultiIndex)
+        from bodo.transforms.distributed_analysis import Distribution
 
         self.data = data
         if index is None:
             index = RangeIndexType(types.none)
         self.index = index
         self.columns = columns
+        # 'dist' is the distribution of this dataframe, which may not be accurate in all
+        # stages since distribution info is not available before distribution analysis.
+        # But it needs to be accurate for argument values before distribution analysis
+        # starts, and should become generally accurate afterwards (needed for returns,
+        # adjusting distributions in calls to other JIT functions).
+        # Using OneD_Var as default to use when calling other JIT functions in type
+        # inference stage. This will hopefully avoid extensive recompilation in
+        # distributed analysis since distributed dataframes are the most common.
+        dist = Distribution.OneD_Var if dist is None else dist
+        self.dist = dist
         super(DataFrameType, self).__init__(
-            name="dataframe({}, {}, {})".format(data, index, columns)
+            name=f"dataframe({data}, {index}, {columns}, {dist})"
         )
 
-    def copy(self, index=None):
+    def copy(self, index=None, dist=None):
         # XXX is copy necessary?
         if index is None:
-            index = self.index.copy()
-        data = tuple(a.copy() for a in self.data)
-        return DataFrameType(data, index, self.columns)
+            index = self.index
+        if dist is None:
+            dist = self.dist
+        return DataFrameType(self.data, index, self.columns, dist)
 
     @property
     def as_array(self):
@@ -139,28 +151,38 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     @property
     def key(self):
         # needed?
-        return self.data, self.index, self.columns
+        return self.data, self.index, self.columns, self.dist
 
     def unify(self, typingctx, other):
         """unifies two possible dataframe types into a single type
         see test_dataframe.py::test_df_type_unify_error
         """
+        from bodo.transforms.distributed_analysis import Distribution
+
         if (
             isinstance(other, DataFrameType)
             and len(other.data) == len(self.data)
             and other.columns == self.columns
         ):
-            new_index = self.index.unify(typingctx, other.index)
+            # NOTE: checking equality since Index types may not have unify() implemented
+            # TODO: add unify() to all Index types and remove this
+            new_index = (
+                self.index
+                if self.index == other.index
+                else self.index.unify(typingctx, other.index)
+            )
             data = tuple(
                 a.unify(typingctx, b) if a != b else a
                 for a, b in zip(self.data, other.data)
             )
+            # use the most conservative distribution
+            dist = Distribution(min(self.dist.value, other.dist.value))
             # NOTE: unification is an extreme corner case probably, since arrays can
             # be unified only if just their layout or alignment is different.
             # That doesn't happen in df case since all arrays are 1D and C layout.
             # see: https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/types/npytypes.py#L436
             if new_index is not None and None not in data:  # pragma: no cover
-                return DataFrameType(data, new_index, self.columns)
+                return DataFrameType(data, new_index, self.columns, dist)
 
         # convert empty dataframe to any other dataframe to support important common
         # cases (see test_append_empty_df), even though it's not fully accurate.
@@ -170,7 +192,17 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             return other
 
     def can_convert_to(self, typingctx, other):
-        return
+        from numba.core.typeconv import Conversion
+
+        if (
+            isinstance(other, DataFrameType)
+            and self.data == other.data
+            and self.index == other.index
+            and self.columns == other.columns
+            and self.dist != other.dist
+        ):
+            return Conversion.safe
+
         # overload resolution tries to convert for even get_dataframe_data()
         # TODO: find valid conversion possibilities
         # if (isinstance(other, DataFrameType)
@@ -193,7 +225,7 @@ class DataFramePayloadType(types.Type):
     def __init__(self, df_type):
         self.df_type = df_type
         super(DataFramePayloadType, self).__init__(
-            name="DataFramePayloadType({})".format(df_type)
+            name=f"DataFramePayloadType({df_type})"
         )
 
 
@@ -1032,6 +1064,15 @@ def cast_df_to_df(context, builder, fromty, toty, val):
         )
         # TODO: fix casting refcount in Numba since Numba increfs value after cast
         return df
+
+    # trivial cast if only 'dist' is different (no need to change value)
+    if (
+        fromty.data == toty.data
+        and fromty.index == toty.index
+        and fromty.columns == toty.columns
+        and fromty.dist != toty.dist
+    ):
+        return val
 
     # only empty dataframe case supported from this point
     if not len(fromty.data) == 0:

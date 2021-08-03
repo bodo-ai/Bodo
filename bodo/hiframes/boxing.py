@@ -52,21 +52,40 @@ ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
 
 @typeof_impl.register(pd.DataFrame)
 def typeof_pd_dataframe(val, c):
+    from bodo.transforms.distributed_analysis import Distribution
+
     # convert "columns" from Index/MultiIndex to a tuple
     col_names = tuple(val.columns.to_list())
     col_types = get_hiframes_dtypes(val)
     index_typ = numba.typeof(val.index)
+    # set distribution from Bodo metadata of df object if available
+    # using REP as default to be safe in distributed analysis
+    dist = (
+        Distribution(val._bodo_meta["dist"])
+        # check for None since df.copy() assigns None to DataFrame._metadata attributes
+        # for some reason
+        if hasattr(val, "_bodo_meta") and val._bodo_meta is not None
+        else Distribution.REP
+    )
 
-    return DataFrameType(col_types, index_typ, col_names)
+    return DataFrameType(col_types, index_typ, col_names, dist)
 
 
 # register series types for import
 @typeof_impl.register(pd.Series)
 def typeof_pd_series(val, c):
+    from bodo.transforms.distributed_analysis import Distribution
+
+    dist = (
+        Distribution(val._bodo_meta["dist"])
+        if hasattr(val, "_bodo_meta") and val._bodo_meta is not None
+        else Distribution.REP
+    )
     return SeriesType(
         _infer_series_dtype(val),
         index=numba.typeof(val.index),
         name_typ=numba.typeof(val.name),
+        dist=dist,
     )
 
 
@@ -224,6 +243,13 @@ def box_dataframe(typ, val, c):
     # issues, see test_dataframe.py::test_unbox_df_multi, test_box_repeated_names
     pyapi.object_setattr_string(df_obj, "columns", columns_obj)
     pyapi.decref(columns_obj)
+
+    _set_bodo_meta(df_obj, pyapi, typ)
+
+    # avoid pandas warnings for Bodo metadata setattr
+    if "_bodo_meta" not in pd.DataFrame._metadata:
+        pd.DataFrame._metadata.append("_bodo_meta")
+
     # decref() should be called on native value
     # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
     c.context.nrt.decref(c.builder, typ, val)
@@ -382,9 +408,30 @@ def box_series(typ, val, c):
     c.pyapi.decref(index_obj)
     c.pyapi.decref(name_obj)
 
+    _set_bodo_meta(res, c.pyapi, typ)
+
+    # avoid pandas warnings for Bodo metadata setattr
+    if "_bodo_meta" not in pd.Series._metadata:
+        pd.Series._metadata.append("_bodo_meta")
+
     c.pyapi.decref(pd_class_obj)
     c.context.nrt.decref(c.builder, typ, val)
     return res
+
+
+def _set_bodo_meta(obj, pyapi, typ):
+    """set Bodo metadata in output so the next JIT call knows data distribution
+    e.g. df._bodo_meta = {"dist": 5}
+    """
+    meta_dict_obj = pyapi.dict_new(1)
+    # using the distribution number since easier to handle
+    dist_val_obj = pyapi.long_from_longlong(
+        lir.Constant(lir.IntType(64), typ.dist.value)
+    )
+    pyapi.dict_setitem_string(meta_dict_obj, "dist", dist_val_obj)
+    pyapi.object_setattr_string(obj, "_bodo_meta", meta_dict_obj)
+    pyapi.decref(meta_dict_obj)
+    pyapi.decref(dist_val_obj)
 
 
 # --------------- typeof support for object arrays --------------------
