@@ -2161,8 +2161,7 @@ class DistributedAnalysis:
         Get distributed flags of inputs and raise error if caller passes REP for an
         argument explicitly specified as distributed.
         In automatic distribution detection case, recompile if dispatcher signature
-        distributions don't match caller (except if dispatcher is OneD_Var and caller is
-        OneD which is ok)
+        distributions are not compatible
         """
 
         dist_flag_vars = tuple(dispatcher.targetoptions.get("distributed", ())) + tuple(
@@ -2234,9 +2233,7 @@ class DistributedAnalysis:
                     continue
                 var_dist = array_dists[vname]
                 # OneD can be passed as OneD_Var to avoid recompilation
-                if typ.dist != var_dist and not (
-                    typ.dist == Distribution.OneD_Var and var_dist == Distribution.OneD
-                ):
+                if not _is_compat_dist(typ.dist, var_dist):
                     new_typ = typ.copy(dist=var_dist)
                     new_arg_types[ind] = new_typ
                     self.typemap.pop(vname)
@@ -2957,6 +2954,16 @@ def _is_1D_or_1D_Var_arr(arr_name, array_dists):
     return arr_name in array_dists and array_dists[arr_name] in (
         Distribution.OneD,
         Distribution.OneD_Var,
+    )
+
+
+def _is_compat_dist(dist1, dist2):
+    """return True if 'dist1' and 'dist2' are compatible: they are the same or
+    'dist1' is OneD_var and 'dist2' is OneD ('dist2' can be used in places that
+    require 'dist1')
+    """
+    return dist1 == dist2 or (
+        dist1 == Distribution.OneD_Var and dist2 == Distribution.OneD
     )
 
 
