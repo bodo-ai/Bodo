@@ -24,6 +24,7 @@ from bodo.tests.utils import (
     get_start_end,
     reduce_sum,
 )
+from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_call_assign
 
@@ -415,14 +416,14 @@ def test_bodo_func_dist_call_tup2(memory_leak_check):
     """
 
     # two return values are distributable, but one is distributed
-    @bodo.jit(distributed=["B"])
+    @bodo.jit(distributed=["B"], returns_maybe_distributed=False)
     def f1(n):
         A = np.arange(3)
         B = np.ones(n)
         S = A, B, 3
         return S
 
-    @bodo.jit(distributed=["C"])
+    @bodo.jit(distributed=["C"], returns_maybe_distributed=False)
     def impl1(n):
         A, B, a = f1(n)
         C = B + A[0] + a
@@ -432,14 +433,14 @@ def test_bodo_func_dist_call_tup2(memory_leak_check):
     assert count_array_OneD_Vars() > 0
 
     # error checking case, caller's value can't be distributed
-    @bodo.jit(distributed=["B", "A"])
+    @bodo.jit(distributed=["B", "A"], returns_maybe_distributed=False)
     def f2(n):
         A = np.arange(n)
         B = np.ones(n)
         S = A, B, 3
         return S
 
-    @bodo.jit
+    @bodo.jit(returns_maybe_distributed=False)
     def impl2(n):
         A, B, a = f2(n)
         C = B + a
@@ -460,12 +461,12 @@ def test_diag_for_return_error(memory_leak_check):
     replicated args that conflict with distributed flag
     """
 
-    @bodo.jit(distributed=["A"])
+    @bodo.jit(distributed=["A"], returns_maybe_distributed=False)
     def f2(n):
         A = np.arange(n)
         return A
 
-    @bodo.jit
+    @bodo.jit(returns_maybe_distributed=False)
     def impl(n):
         A = f2(n)
         return A
@@ -1229,7 +1230,9 @@ def test_concat_reduction():
 
         return df
 
-    check_func(impl, (11,), reset_index=True, check_dtype=False)
+    check_func(
+        impl, (11,), reset_index=True, check_dtype=False, is_out_distributed=False
+    )
 
 
 def test_series_concat_reduction():
@@ -1242,7 +1245,9 @@ def test_series_concat_reduction():
 
         return S
 
-    check_func(impl, (11,), reset_index=True, check_dtype=False)
+    check_func(
+        impl, (11,), reset_index=True, check_dtype=False, is_out_distributed=False
+    )
 
 
 def test_dist_warning1(memory_leak_check):
@@ -1274,9 +1279,9 @@ def test_dist_warning2(memory_leak_check):
 
     if bodo.get_rank() == 0:  # warning is thrown only on rank 0
         with pytest.warns(BodoWarning, match="No parallelism found for function"):
-            bodo.jit(impl)(10)
+            bodo.jit(returns_maybe_distributed=False)(impl)(10)
     else:
-        bodo.jit(impl)(10)
+        bodo.jit(returns_maybe_distributed=False)(impl)(10)
 
 
 @pytest.mark.slow
@@ -1291,9 +1296,9 @@ def test_dist_warning3(memory_leak_check):
 
     if bodo.get_rank() == 0:  # warning is thrown only on rank 0
         with pytest.warns(BodoWarning, match="No parallelism found for function"):
-            bodo.jit(impl)(10)
+            bodo.jit(returns_maybe_distributed=False)(impl)(10)
     else:
-        bodo.jit(impl)(10)
+        bodo.jit(returns_maybe_distributed=False)(impl)(10)
 
 
 def test_getitem_bool_REP(memory_leak_check):
@@ -1307,9 +1312,9 @@ def test_getitem_bool_REP(memory_leak_check):
     n = 11
     if bodo.get_rank() == 0:  # warning is thrown only on rank 0
         with pytest.warns(BodoWarning, match="No parallelism found for function"):
-            bodo.jit(test_impl)(n)
+            bodo.jit(returns_maybe_distributed=False)(test_impl)(n)
     else:
-        bodo.jit(test_impl)(n)
+        bodo.jit(returns_maybe_distributed=False)(test_impl)(n)
 
 
 def test_df_filter_branch(memory_leak_check):
@@ -1481,7 +1486,7 @@ def test_diagnostics_not_compiled_error(memory_leak_check):
 def test_diagnostics_trace(capsys, memory_leak_check):
     """make sure distributed diagnostics trace info is printed in diagnostics dump"""
 
-    @bodo.jit
+    @bodo.jit(args_maybe_distributed=False)
     def f(A):
         return A.sum()
 
@@ -1493,7 +1498,7 @@ def test_diagnostics_trace(capsys, memory_leak_check):
     g.distributed_diagnostics()
     if bodo.get_rank() == 0:
         assert (
-            "input/output of another Bodo call without distributed flag"
+            "input of another Bodo call without distributed flag"
             in capsys.readouterr().out
         )
 
@@ -1523,6 +1528,148 @@ def test_df_1D_Var_col_set_string(memory_leak_check):
     df_chunk = _get_dist_arg(df, var_length=True)
     assert reduce_sum(bodo.jit(distributed={"df"})(impl)(df_chunk)) == n
     assert count_array_OneD_Vars() > 0
+
+
+def check_dist_meta(df, dist):
+    """return True if 'df' has Bodo metadata with same distribution as 'dist'"""
+    return (
+        hasattr(df, "_bodo_meta")
+        and "dist" in df._bodo_meta
+        and df._bodo_meta["dist"] == dist.value
+    )
+
+
+def test_bodo_meta(memory_leak_check, datapath):
+    """Test Bodo metadata on data structures returned from JIT functions"""
+    fname = datapath("example.parquet")
+
+    # df created inside JIT function
+    @bodo.jit
+    def impl1(fname):
+        df = pd.read_parquet(fname)
+        return df
+
+    # df passed into JIT and returned
+    @bodo.jit(distributed=["df"])
+    def impl2(df):
+        return df
+
+    # df passed into JIT with dist meta
+    @bodo.jit
+    def impl3(df):
+        return df
+
+    # Series created inside JIT function
+    @bodo.jit
+    def impl4(fname):
+        df = pd.read_parquet(fname)
+        return df.one
+
+    out_df1 = impl1(fname)
+    assert count_array_OneDs() > 0
+    check_dist_meta(out_df1, Distribution.OneD)
+
+    out_df2 = impl2(pd.DataFrame({"A": np.arange(11)}))
+    assert count_array_OneD_Vars() > 0
+    check_dist_meta(out_df2, Distribution.OneD_Var)
+
+    out_df3 = impl3(out_df1)
+    assert count_array_OneDs() > 0
+    check_dist_meta(out_df3, Distribution.OneD)
+
+    # series input/output
+    out_S1 = impl4(fname)
+    assert count_array_OneDs() > 0
+    check_dist_meta(out_S1, Distribution.OneD)
+
+    out_S2 = impl2(pd.Series(np.arange(11)))
+    assert count_array_OneD_Vars() > 0
+    check_dist_meta(out_S2, Distribution.OneD_Var)
+
+    out_S3 = impl3(out_S1)
+    assert count_array_OneDs() > 0
+    check_dist_meta(out_S3, Distribution.OneD)
+
+
+def test_bodo_meta_jit_calls(memory_leak_check):
+    """Test automatic distribution detection across JIT calls"""
+
+    # dist argument is passed but output is replicated
+    @bodo.jit
+    def g(df):
+        return df.sum()
+
+    @bodo.jit
+    def impl1(n):
+        df = pd.DataFrame({"A": np.arange(n)})
+        Y = g(df)
+        return Y
+
+    # replicated argument is passed
+    @bodo.jit
+    def g2(df):
+        return df + 1
+
+    @bodo.jit
+    def impl2(df):
+        Y = g2(df)
+        return Y
+
+    # change argument distribution (recompile)
+    @bodo.jit
+    def g3(df):
+        return df + 2
+
+    @bodo.jit
+    def impl3(n):
+        df = pd.DataFrame({"A": np.arange(n)})
+        Y = g3(df)
+        df["B"] = [1, 2, 3]  # forces REP after g3 call
+        return Y, df
+
+    @bodo.jit
+    def g4(S):
+        return np.asarray([S.sum()])
+
+    # Series creation
+    @bodo.jit
+    def impl4(n):
+        S = pd.Series(np.arange(n))
+        Y = g4(S)
+        return Y
+
+    @bodo.jit
+    def impl5(n):
+        S = pd.Series(np.arange(n))
+        Y = g3(S)
+        S.index = [1, 2, 3]  # forces REP after g3 call
+        return Y, S
+
+    # dataframe tests
+    impl1(11)
+    assert count_array_REPs() > 0
+    assert count_array_OneDs() > 0
+    impl2(pd.DataFrame({"A": [1, 3, 5] * 2}))
+    assert count_array_REPs() > 0
+    assert count_array_OneDs() == 0
+    assert count_array_OneD_Vars() == 0
+    impl3(3)
+    assert count_array_REPs() > 0
+    assert count_array_OneDs() == 0
+    assert count_array_OneD_Vars() == 0
+
+    # Series tests
+    impl4(11)
+    assert count_array_REPs() > 0
+    assert count_array_OneDs() > 0
+    impl2(pd.Series([1, 3, 5] * 2))
+    assert count_array_REPs() > 0
+    assert count_array_OneDs() == 0
+    assert count_array_OneD_Vars() == 0
+    impl5(3)
+    assert count_array_REPs() > 0
+    assert count_array_OneDs() == 0
+    assert count_array_OneD_Vars() == 0
 
 
 def _check_scatterv(data, n):

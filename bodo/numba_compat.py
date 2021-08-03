@@ -2409,6 +2409,7 @@ def register_class_type(cls, spec, class_ctor, builder, **options):
 
     # Bodo change: get distribution spec
     dist_spec = _get_dist_spec_from_options(spec, **options)
+    returns_maybe_distributed = options.get("returns_maybe_distributed", True)
 
     # Normalize spec
     if spec is None:
@@ -2459,7 +2460,10 @@ def register_class_type(cls, spec, class_ctor, builder, **options):
             raise TypeError("deleter is not supported: {0}".format(k))
 
     # Bodo change: replace njit with bodo.jit
-    jit_methods = {k: bodo.jit(v) for k, v in methods.items()}
+    jit_methods = {
+        k: bodo.jit(returns_maybe_distributed=returns_maybe_distributed)(v)
+        for k, v in methods.items()
+    }
 
     jit_props = {}
     for k, v in props.items():

@@ -1899,6 +1899,11 @@ class UntypedPass:
         if "is_return_distributed" not in self.metadata:
             self.metadata["is_return_distributed"] = False
 
+        # store args_maybe_distributed to be used in distributed_analysis of a potential
+        # JIT caller
+        if "args_maybe_distributed" not in self.metadata:
+            self.metadata["args_maybe_distributed"] = self.flags.args_maybe_distributed
+
         # handle old input flags
         # e.g. {"A:input": "distributed"} -> "A"
         dist_inputs = {
@@ -1939,8 +1944,6 @@ class UntypedPass:
                 self.metadata["threaded"].add(v)
 
             self.locals.pop(v + ":return")
-
-        return
 
     def _run_return(self, ret_node):
         # TODO: handle distributed analysis, requires handling variable name
