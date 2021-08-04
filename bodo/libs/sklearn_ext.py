@@ -4313,3 +4313,218 @@ def overload_rf_classifier_model_fit(
         return m
 
     return _model_fit_impl
+
+
+# ----------------------------------------------------------------------------------------
+# ----------------------------------- CountVectorizer------------------------------------
+# Support for sklearn.feature_extraction.text.CountVectorizer
+# Currently fit_transform & get_feature_names functions are supported.
+# ----------------------------------------------------------------------------------------
+
+
+class BodoFExtractCountVectorizerType(types.Opaque):
+    def __init__(self):
+        super(BodoFExtractCountVectorizerType, self).__init__(
+            name="BodoFExtractCountVectorizerType"
+        )
+
+
+f_extract_count_vectorizer_type = BodoFExtractCountVectorizerType()
+types.f_extract_count_vectorizer_type = f_extract_count_vectorizer_type
+
+register_model(BodoFExtractCountVectorizerType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.feature_extraction.text.CountVectorizer)
+def typeof_f_extract_count_vectorizer(val, c):
+    return f_extract_count_vectorizer_type
+
+
+@box(BodoFExtractCountVectorizerType)
+def box_f_extract_count_vectorizer(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoFExtractCountVectorizerType)
+def unbox_f_extract_count_vectorizer(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.feature_extraction.text.CountVectorizer, no_unliteral=True)
+def sklearn_count_vectorizer_overload(
+    input="content",
+    encoding="utf-8",
+    decode_error="strict",
+    strip_accents=None,
+    lowercase=True,
+    preprocessor=None,
+    tokenizer=None,
+    stop_words=None,
+    token_pattern=r"(?u)\b\w\w+\b",
+    ngram_range=(1, 1),
+    analyzer="word",
+    max_df=1.0,
+    max_features=None,
+    vocabulary=None,
+    binary=False,
+    dtype=np.int64,
+):
+    """
+    Provide implementation for __init__ functions of CountVectorizer.
+    We simply call sklearn in objmode.
+    """
+
+    def _sklearn_count_vectorizer_impl(
+        input="content",
+        encoding="utf-8",
+        decode_error="strict",
+        strip_accents=None,
+        lowercase=True,
+        preprocessor=None,
+        tokenizer=None,
+        stop_words=None,
+        token_pattern=r"(?u)\b\w\w+\b",
+        ngram_range=(1, 1),
+        analyzer="word",
+        max_df=1.0,
+        max_features=None,
+        vocabulary=None,
+        binary=False,
+        dtype=np.int64,
+    ):  # pragma: no cover
+
+        with numba.objmode(m="f_extract_count_vectorizer_type"):
+            m = sklearn.feature_extraction.text.CountVectorizer(
+                input=input,
+                encoding=encoding,
+                decode_error=decode_error,
+                strip_accents=strip_accents,
+                lowercase=lowercase,
+                preprocessor=preprocessor,
+                tokenizer=tokenizer,
+                stop_words=stop_words,
+                token_pattern=token_pattern,
+                ngram_range=ngram_range,
+                analyzer=analyzer,
+                max_df=max_df,
+                max_features=max_features,
+                vocabulary=vocabulary,
+                binary=binary,
+                dtype=dtype,
+            )
+        return m
+
+    return _sklearn_count_vectorizer_impl
+
+
+@overload_attribute(BodoFExtractCountVectorizerType, "vocabulary_")
+def get_cv_vocabulary_(m):
+    """ Overload vocabulary_ attribute to be accessible inside bodo.jit """
+
+    types.dict_string_int = types.DictType(types.unicode_type, types.int64)
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="dict_string_int"):
+            result = m.vocabulary_
+        return result
+
+    return impl
+
+
+def _cv_fit_transform_helper(m, X):
+    """ Initial fit computation to get vocabulary if user didn't provide it"""
+    change_voc = False
+    local_vocabulary = m.vocabulary
+    if m.vocabulary is None:
+        m.fit(X)
+        local_vocabulary = m.vocabulary_
+        change_voc = True
+    return change_voc, local_vocabulary
+
+
+@overload_method(BodoFExtractCountVectorizerType, "fit_transform", no_unliteral=True)
+def overload_count_vectorizer_fit_transform(
+    m,
+    X,
+    y=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """
+    Provide implementation for the fit_transform function.
+    If distributed, run fit to get vocabulary on each rank locally and gather it.
+    Then, run fit_transform with combined vocabulary
+    If replicated, simply call fit_transform on each rank.
+    """
+    types.csr_matrix_int64_int64 = CSRMatrixType(types.int64, types.int64)
+    if is_overload_true(_is_data_distributed):
+        types.dict_str_int = types.DictType(types.unicode_type, types.int64)
+
+        def _count_vectorizer_fit_transform_impl(
+            m,
+            X,
+            y=None,
+            _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+        ):  # pragma: no cover
+
+            with numba.objmode(local_vocabulary="dict_str_int", changeVoc="bool_"):
+                changeVoc, local_vocabulary = _cv_fit_transform_helper(m, X)
+            # Gather vocabulary from each rank and generate its integer indices (alphabetical order)
+            if changeVoc:
+                local_vocabulary = bodo.utils.conversion.coerce_to_array(
+                    list(local_vocabulary.keys())
+                )
+                all_vocabulary = bodo.libs.array_kernels.unique(
+                    local_vocabulary, parallel=True
+                )
+                all_vocabulary = bodo.allgatherv(all_vocabulary, False)
+                all_vocabulary = bodo.libs.array_kernels.sort(
+                    all_vocabulary, ascending=True, inplace=True
+                )
+                new_data = {}
+                for i in range(len(all_vocabulary)):
+                    new_data[all_vocabulary[i]] = i
+            else:
+                new_data = local_vocabulary
+            # Run fit_transform with generated vocabulary_
+            with numba.objmode(transformed_X="csr_matrix_int64_int64"):
+                if changeVoc:
+                    m.vocabulary = new_data
+                transformed_X = m.fit_transform(X, y)
+                transformed_X.indices = transformed_X.indices.astype(np.int64)
+                transformed_X.indptr = transformed_X.indptr.astype(np.int64)
+            return transformed_X
+
+        return _count_vectorizer_fit_transform_impl
+    else:
+        # If replicated, then just call sklearn
+        def _count_vectorizer_fit_transform_impl(
+            m,
+            X,
+            y=None,
+            _is_data_distributed=False,
+        ):  # pragma: no cover
+            with numba.objmode(transformed_X="csr_matrix_int64_int64"):
+                transformed_X = m.fit_transform(X, y)
+                transformed_X.indices = transformed_X.indices.astype(np.int64)
+                transformed_X.indptr = transformed_X.indptr.astype(np.int64)
+            return transformed_X
+
+        return _count_vectorizer_fit_transform_impl
+
+
+@overload_method(
+    BodoFExtractCountVectorizerType, "get_feature_names", no_unliteral=True
+)
+def overload_count_vectorizer_get_feature_names(m):
+    """Array mapping from feature integer indices to feature name."""
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result=bodo.string_array_type):
+            result = m.get_feature_names()
+        return result
+
+    return impl

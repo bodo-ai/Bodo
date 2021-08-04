@@ -541,6 +541,7 @@ class DistributedPass:
                 (
                     bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,
                     bodo.libs.sklearn_ext.BodoFExtractHashingVectorizerType,
+                    bodo.libs.sklearn_ext.BodoFExtractCountVectorizerType,
                 ),
             )
         ):

@@ -218,6 +218,13 @@ Feature Extraction
 Methods:
   * :any:`sklearn.feature_extraction.text.HashingVectorizer.fit_transform`
 
+:class:`sklearn.feature_extraction.text.CountVectorizer`
+
+  This class provides CountVectorizer support to convert a collection of text documents to a matrix of token counts.
+
+Methods:
+  * :any:`sklearn.feature_extraction.text.CountVectorizer.fit_transform`
+  * :any:`sklearn.feature_extraction.text.CountVectorizer.get_feature_names`
 
 Model Selection
 ***************

@@ -11,7 +11,7 @@ from sklearn import datasets
 from sklearn.cluster import KMeans
 from sklearn.datasets import make_classification, make_regression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.feature_extraction.text import HashingVectorizer
+from sklearn.feature_extraction.text import CountVectorizer, HashingVectorizer
 from sklearn.linear_model import (
     Lasso,
     LinearRegression,
@@ -2005,3 +2005,63 @@ def test_rf_regressor():
     )
     sklearn_score = test_score(X_train, y_train, X_test, y_test)
     assert np.allclose(sklearn_score, bodo_score, atol=0.1)
+
+
+def test_count_vectorizer():
+    """Test CountVectorizer's vocabulary and fit_transform"""
+
+    cat_in_the_hat_docs = [
+        "One Cent, Two Cents, Old Cent, New Cent: All About Money (Cat in the Hat's Learning Library",
+        "Inside Your Outside: All About the Human Body (Cat in the Hat's Learning Library)",
+        "Oh, The Things You Can Do That Are Good for You: All About Staying Healthy (Cat in the Hat's Learning Library)",
+        "On Beyond Bugs: All About Insects (Cat in the Hat's Learning Library)",
+        "There's No Place Like Space: All About Our Solar System (Cat in the Hat's Learning Library)",
+    ]
+    df = pd.DataFrame({"A": cat_in_the_hat_docs})
+
+    def impl(df):
+        v = CountVectorizer()
+        v.fit_transform(df["A"])
+        ans = v.get_feature_names()
+        return ans
+
+    check_func(impl, (df,))
+
+    # Test vocabulary_ and stop_words
+    def impl2(df):
+        v = CountVectorizer(stop_words="english")
+        v.fit_transform(df["A"])
+        return sorted(v.vocabulary_)
+
+    check_func(impl2, (df,))
+
+    # Test user-defined vocabulary
+    # https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/feature_extraction/tests/test_text.py#L315
+    def impl3(docs, vocab):
+        v = CountVectorizer(vocabulary=vocab)
+        ans = v.fit_transform(docs)
+        return ans
+
+    JUNK_FOOD_DOCS = (
+        "the pizza pizza beer copyright",
+        "the pizza burger beer copyright",
+        "the the pizza beer beer copyright",
+        "the burger beer beer copyright",
+        "the coke burger coke copyright",
+        "the coke burger burger",
+    )
+    vocab = {"pizza": 0, "beer": 1}
+    result = bodo.jit(
+        impl3,
+        all_args_distributed_block=True,
+        all_returns_distributed=True,
+    )(_get_dist_arg(np.array(JUNK_FOOD_DOCS), False), vocab)
+    X = bodo.allgatherv(result)
+    terms = set(vocab.keys())
+    assert X.shape[1] == len(terms)
+    # assert same values in both sklearn and Bodo
+    X_sk = impl3(JUNK_FOOD_DOCS, vocab)
+    assert np.array_equal(X.todense(), X_sk.todense())
+
+    # Test replicated
+    check_func(impl3, (JUNK_FOOD_DOCS, vocab), only_seq=True)
