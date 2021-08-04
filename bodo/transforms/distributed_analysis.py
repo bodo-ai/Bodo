@@ -831,7 +831,10 @@ class DistributedAnalysis:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                (bodo.libs.sklearn_ext.BodoFExtractHashingVectorizerType,),
+                (
+                    bodo.libs.sklearn_ext.BodoFExtractHashingVectorizerType,
+                    bodo.libs.sklearn_ext.BodoFExtractCountVectorizerType,
+                ),
             )
         ):
             if func_name == "fit_transform":
