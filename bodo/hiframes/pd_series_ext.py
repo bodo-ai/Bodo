@@ -192,7 +192,15 @@ class HeterogeneousSeriesType(types.Type):
             name=f"heter_series({data}, {index}, {name_typ})"
         )
 
-    def copy(self, index=None):
+    def copy(self, index=None, dist=None):
+        # 'dist' argument is necessary since distributed analysis calls copy() for
+        # potential distribution updates (with hasattr(typ, "dist") check)
+        from bodo.transforms.distributed_analysis import Distribution
+
+        assert (
+            dist == Distribution.REP
+        ), "invalid distribution for HeterogeneousSeriesType"
+
         if index is None:
             index = self.index.copy()
         return HeterogeneousSeriesType(self.data, index, self.name_typ)
