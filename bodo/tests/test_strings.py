@@ -993,7 +993,7 @@ class TestString(unittest.TestCase):
             df = pd.read_parquet(fname)
             return df.five
 
-        bodo_func = bodo.jit(test_impl)
+        bodo_func = bodo.jit(distributed=False)(test_impl)
         # XXX just checking isna() since Pandas uses None in this case
         # instead of nan for some reason
         np.testing.assert_array_equal(bodo_func().isna(), test_impl().isna())

@@ -18,7 +18,6 @@ from bodo.tests.utils import (
 )
 from bodo.utils.typing import BodoError
 
-
 _cov_corr_series = [
     (pd.Series(x), pd.Series(y))
     for x, y in [
@@ -1104,8 +1103,7 @@ class TestSeries(unittest.TestCase):
             S = df.points
             return S.sort_values()
 
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_array_equal(bodo_func(), test_impl())
+        check_func(test_impl, (), only_seq=True, sort_output=True)
 
     def test_series_shift_default1(self):
         def test_impl(S):
