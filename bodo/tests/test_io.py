@@ -2818,8 +2818,7 @@ class TestIO(unittest.TestCase):
         def test_impl():
             return pd.read_parquet(fname, columns=["three", "five"])
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
+        check_func(test_impl, (), only_seq=True, check_dtype=False)
 
     def test_pq_str_with_nan_seq(self):
         fname = os.path.join("bodo", "tests", "data", "example.parquet")
@@ -2903,8 +2902,7 @@ class TestIO(unittest.TestCase):
                 dtype={"A": np.int, "B": np.float, "C": np.float, "D": np.int},
             )
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        check_func(test_impl, (), only_seq=True)
 
     def test_csv_keys1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
@@ -2913,8 +2911,7 @@ class TestIO(unittest.TestCase):
             dtype = {"A": np.int, "B": np.float, "C": np.float, "D": np.int}
             return pd.read_csv(fname, names=list(dtype.keys()), dtype=dtype)
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        check_func(test_impl, (), only_seq=True)
 
     def test_csv_const_dtype1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
@@ -2923,8 +2920,7 @@ class TestIO(unittest.TestCase):
             dtype = {"A": "int", "B": "float64", "C": "float", "D": "int64"}
             return pd.read_csv(fname, names=list(dtype.keys()), dtype=dtype)
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        check_func(test_impl, (), only_seq=True)
 
     def test_csv_infer1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_infer1.csv")
@@ -2932,8 +2928,7 @@ class TestIO(unittest.TestCase):
         def test_impl():
             return pd.read_csv(fname)
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
+        check_func(test_impl, (), only_seq=True, check_dtype=False)
 
     def test_csv_infer_parallel1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_infer1.csv")
@@ -2952,8 +2947,7 @@ class TestIO(unittest.TestCase):
             df = pd.read_csv(fname)
             return df
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
+        check_func(test_impl, (), only_seq=True, check_dtype=False)
 
     def test_csv_skip1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
@@ -2975,8 +2969,7 @@ class TestIO(unittest.TestCase):
         def test_impl():
             return pd.read_csv(fname, skiprows=2)
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
+        check_func(test_impl, (), only_seq=True, check_dtype=False)
 
     def test_csv_infer_skip_parallel1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_infer1.csv")
@@ -2999,8 +2992,7 @@ class TestIO(unittest.TestCase):
             )
             return df.B.values
 
-        bodo_func = bodo.jit(test_impl)
-        np.testing.assert_array_equal(bodo_func(), test_impl())
+        check_func(test_impl, (), only_seq=True)
 
     def test_csv_date1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_date1.csv")
@@ -3013,8 +3005,7 @@ class TestIO(unittest.TestCase):
                 parse_dates=[2],
             )
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        check_func(test_impl, (), only_seq=True)
 
     def test_csv_str1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_date1.csv")
@@ -3026,8 +3017,7 @@ class TestIO(unittest.TestCase):
                 dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
             )
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
+        check_func(test_impl, (), only_seq=True, check_dtype=False)
 
     def test_csv_index_name1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_date1.csv")
@@ -3040,9 +3030,7 @@ class TestIO(unittest.TestCase):
                 index_col="A",
             )
 
-        bodo_func = bodo.jit(test_impl)
-        pd_expected = test_impl()
-        pd.testing.assert_frame_equal(bodo_func(), pd_expected, check_dtype=False)
+        check_func(test_impl, (), only_seq=True, check_dtype=False)
 
     def test_csv_index_ind0(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_date1.csv")
@@ -3055,9 +3043,7 @@ class TestIO(unittest.TestCase):
                 index_col=0,
             )
 
-        bodo_func = bodo.jit(test_impl)
-        pd_expected = test_impl()
-        pd.testing.assert_frame_equal(bodo_func(), pd_expected, check_dtype=False)
+        check_func(test_impl, (), only_seq=True, check_dtype=False)
 
     def test_csv_index_ind1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_date1.csv")
@@ -3070,9 +3056,7 @@ class TestIO(unittest.TestCase):
                 index_col=1,
             )
 
-        bodo_func = bodo.jit(test_impl)
-        pd_expected = test_impl()
-        pd.testing.assert_frame_equal(bodo_func(), pd_expected, check_dtype=False)
+        check_func(test_impl, (), only_seq=True, check_dtype=False)
 
     def test_csv_parallel1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
@@ -3108,8 +3092,7 @@ class TestIO(unittest.TestCase):
         def test_impl():
             return pd.read_csv(fname, names=["C"], dtype={"C": np.float}, usecols=[2])
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        check_func(test_impl, (), only_seq=True)
 
     def test_csv_usecols2(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
@@ -3117,8 +3100,7 @@ class TestIO(unittest.TestCase):
         def test_impl():
             return pd.read_csv(fname, names=["B", "C"], usecols=[1, 2])
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        check_func(test_impl, (), only_seq=True)
 
     def test_csv_usecols3(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data2.csv")
@@ -3126,8 +3108,7 @@ class TestIO(unittest.TestCase):
         def test_impl():
             return pd.read_csv(fname, sep="|", names=["B", "C"], usecols=[1, 2])
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        check_func(test_impl, (), only_seq=True)
 
     def test_csv_cat2(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_cat1.csv")
@@ -3141,8 +3122,7 @@ class TestIO(unittest.TestCase):
             )
             return df
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
+        check_func(test_impl, (), only_seq=True, check_dtype=False)
 
     def test_csv_single_dtype1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_dtype1.csv")
@@ -3151,8 +3131,7 @@ class TestIO(unittest.TestCase):
             df = pd.read_csv(fname, names=["C1", "C2"], dtype=np.float64)
             return df
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        check_func(test_impl, (), only_seq=True)
 
     def write_csv(self, data_structure):
         # only run on a single processor
