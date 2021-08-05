@@ -22,6 +22,7 @@ from numba.core.imputils import (
     lower_constant,
 )
 from numba.core.typing.templates import signature
+from numba.core.unsafe.bytes import memcpy_region
 from numba.extending import (
     NativeValue,
     box,
@@ -498,6 +499,26 @@ def get_data_ptr_ind(typingctx, str_arr_typ, int_t=None):
         return impl_ret_borrowed(context, builder, data_ctypes_type, res)
 
     return data_ctypes_type(string_array_type, types.intp), codegen
+
+
+@intrinsic
+def copy_single_char(typingctx, dst_ptr_t, dst_ind_t, src_ptr_t, src_ind_t=None):
+    """copy a single character value from src_ptr[src_ind] to dst_ptr[dst_ind]"""
+
+    def codegen(context, builder, sig, args):
+        dst_ptr, dst_ind, src_ptr, src_ind = args
+        dst = builder.bitcast(
+            builder.gep(dst_ptr, [dst_ind]), lir.IntType(8).as_pointer()
+        )
+        src = builder.bitcast(
+            builder.gep(src_ptr, [src_ind]), lir.IntType(8).as_pointer()
+        )
+
+        char_val = builder.load(src)
+        builder.store(char_val, dst)
+        return context.get_dummy_value()
+
+    return types.void(types.voidptr, types.intp, types.voidptr, types.intp), codegen
 
 
 @intrinsic
@@ -1637,6 +1658,8 @@ def str_arr_getitem_int(A, ind):
     if is_list_like_index_type(ind) and ind.dtype == types.bool_:
 
         def bool_impl(A, ind):  # pragma: no cover
+            # convert potential Series to array
+            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
             n = len(A)
             n_strs = 0
             n_chars = 0
@@ -1644,15 +1667,45 @@ def str_arr_getitem_int(A, ind):
                 if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
                     n_strs += 1
                     n_chars += get_str_arr_item_length(A, i)
+
             out_arr = pre_alloc_string_array(n_strs, n_chars)
+            out_data_ptr = get_data_ptr(out_arr).data
+            in_data_ptr = get_data_ptr(A).data
             str_ind = 0
+            curr_offset = 0
+            setitem_str_offset(out_arr, 0, 0)
             for i in range(n):
                 if not bodo.libs.array_kernels.isna(ind, i) and ind[i]:
-                    _str = A[i]
-                    out_arr[str_ind] = _str
+                    # copy buffers directly and avoid extra string buffer allocation
+                    # which impacts performance significantly (see TPC-H Q1)
+                    # _str = A[i]
+                    # out_arr[str_ind] = _str
+                    char_len = get_str_arr_item_length(A, i)
+                    # optimize single char case since common (~10% faster)
+                    if char_len == 1:
+                        copy_single_char(
+                            out_data_ptr,
+                            curr_offset,
+                            in_data_ptr,
+                            getitem_str_offset(A, i),
+                        )
+                    else:
+                        memcpy_region(
+                            out_data_ptr,
+                            curr_offset,
+                            in_data_ptr,
+                            getitem_str_offset(A, i),
+                            char_len,
+                            1,
+                        )
+
+                    curr_offset += char_len
+                    setitem_str_offset(out_arr, str_ind + 1, curr_offset)
                     # set NA
                     if str_arr_is_na(A, i):
                         str_arr_set_na(out_arr, str_ind)
+                    else:
+                        str_arr_set_not_na(out_arr, str_ind)
                     str_ind += 1
             return out_arr
 
