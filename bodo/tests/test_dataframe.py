@@ -3369,6 +3369,25 @@ def test_df_apply_error_check():
         bodo.jit(test_impl)(df)
 
 
+def test_df_apply_heterogeneous_series(memory_leak_check):
+    """
+    Test calling another JIT function in apply() UDF when row series is heterogeneous
+    Tests [BE-1135]
+    """
+
+    @bodo.jit
+    def apply_f(x):
+        return x["A"] + 1
+
+    @bodo.jit
+    def test_impl(df):
+        return df.apply(lambda x: apply_f(x), axis=1)
+
+    df = pd.DataFrame({0: ["go", "to", "bed", "a", "b"], "A": [1, 2, 3, 4, 1]})
+    # not using check_func since calling apply_f from non-jit fails
+    pd.testing.assert_series_equal(test_impl(df), df.A + 1, check_names=False)
+
+
 @pytest.mark.slow
 def test_df_apply_df_output(memory_leak_check):
     """test DataFrame.apply() with dataframe output 1 column"""
