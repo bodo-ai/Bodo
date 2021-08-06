@@ -15,8 +15,9 @@ Getting Started
 
 Installation
 ~~~~~~~~~~~~
-Bodo SQL is currently in an Alpha release. Please us if you are interested
-in becoming a trial user.
+Bodo SQL is currently in Beta. Install it using::
+
+    conda install bodosql -c bodo.ai -c conda-forge
 
 Using Bodo SQL
 ~~~~~~~~~~~~~~

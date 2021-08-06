@@ -58,6 +58,8 @@ computation can also be parallelized with some communication across processors.
    source/install
    source/enterprise
    source/ipyparallel
+   source/bodo_platform_aws
+   source/bodo_platform_azure
    source/bodo_platform
 
 
@@ -95,6 +97,7 @@ computation can also be parallelized with some communication across processors.
    source/performance
    source/compilation
    source/troubleaws
+   source/troubleazure
 
 .. toctree::
    :maxdepth: 2
