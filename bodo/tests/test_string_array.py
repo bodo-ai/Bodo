@@ -30,7 +30,7 @@ from bodo.utils.typing import BodoError
             marks=pytest.mark.slow,
         ),
         # ASCII array
-        pd.array(["AB", "", "ABC", pd.NA, "C", "D", "abcd"]),
+        pd.array(["AB", "", "ABC", pd.NA, "C", "D", "abcd", "ABCD"]),
     ]
 )
 def str_arr_value(request):
