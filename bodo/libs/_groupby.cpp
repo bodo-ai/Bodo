@@ -1087,19 +1087,120 @@ struct aggfunc<
     }
 };
 
+// TODO which load factor to use?
+#define ROBIN_MAP_MAX_LOAD_FACTOR 0.5
+#define HOPSCOTCH_MAP_MAX_LOAD_FACTOR 0.9
+
+bool calc_use_robin_map(size_t nunique_hashes) {
+    // If the number of groups is very large, we should avoid very small load
+    // factors because the map will use too much memory, and also allocation
+    // and deallocation will become very expensive
+    bool use_robin_map = true;
+    if (nunique_hashes > 1000000) {  // TODO which threshold is best?
+        double robin_map_load_factor = -1;
+        double hopscotch_map_load_factor = -1;
+        int64_t bucket_size = 1;
+        while (true) {
+            if (bucket_size > nunique_hashes) {
+                // robin_map works best with load_factor <= 0.5, otherwise
+                // hopscotch is better:
+                // https://tessil.github.io/2016/08/29/benchmark-hopscotch-map.html
+                double load_factor = nunique_hashes / double(bucket_size);
+                if (load_factor <= ROBIN_MAP_MAX_LOAD_FACTOR &&
+                    robin_map_load_factor < 0)
+                    robin_map_load_factor = load_factor;
+                if (load_factor < HOPSCOTCH_MAP_MAX_LOAD_FACTOR &&
+                    hopscotch_map_load_factor < 0)
+                    hopscotch_map_load_factor = load_factor;
+                if (robin_map_load_factor > 0 &&
+                    hopscotch_map_load_factor > 0) {
+                    if (robin_map_load_factor >
+                        0.35)  // TODO which threshold is best?
+                        use_robin_map = true;
+                    else if (hopscotch_map_load_factor >
+                             robin_map_load_factor + 0.1)
+                        use_robin_map = false;
+                    break;
+                }
+            }
+            // tsl::robin_map and tsl::hopscotch_map uses a power of 2 growth
+            // policy by default (for faster hash to bucket calculation)
+            bucket_size = bucket_size << 1;
+        }
+    }
+    return use_robin_map;
+}
+
+/**
+ * The main get_group_info loop which populates a grouping_info structure
+ * (map rows from input to their group number, and store the first input row
+ * for each group).
+ *
+ * @param[in,out] key_to_group: The hash map used to populate the grouping_info
+ * structure, maps row index from input data to group numbers (the group numbers
+ * in the map are the real group number + 1)
+ * @param[in] key_cols: key columns
+ * @param[in,out] grp_info: The grouping_info structure that we are populating
+ * @param key_drop_nulls : whether to drop null keys
+ * @param nrows : number of input rows
+ */
+template <typename T>
+static void get_group_info_loop(T& key_to_group,
+                                std::vector<array_info*>& key_cols,
+                                grouping_info& grp_info,
+                                const bool key_drop_nulls,
+                                const int64_t nrows) {
+    // Start at 1 because I'm going to use 0 to mean nothing was inserted yet
+    // in the map (but note that the group values recorded in grp_info go from
+    // 0 to num_groups - 1)
+    int64_t next_group = 1;
+    // There are two versions of the loop because a `if (key_drop_nulls)`
+    // branch inside the loop has a bit of a performance hit and
+    // `get_group_info_loop` is one of the most expensive computations.
+    // To not duplicate code, we put the common portion of the loop in
+    // MAIN_LOOP_BODY macro
+
+#define MAIN_LOOP_BODY \
+    int64_t& group = key_to_group[i]; /* this inserts 0 into the map if key doesn't exist */ \
+    if (group == 0) { \
+        group = next_group++;  /* this updates the value in the map without another lookup */ \
+        grp_info.group_to_first_row.emplace_back(i); \
+    } \
+    grp_info.row_to_group[i] = group - 1
+
+    if (!key_drop_nulls) {
+        for (int64_t i = 0; i < nrows; i++) {
+            MAIN_LOOP_BODY;
+        }
+    } else {
+        for (int64_t i = 0; i < nrows; i++) {
+            if (does_row_has_nulls(key_cols, i)) {
+                grp_info.row_to_group[i] = -1;
+                continue;
+            }
+            MAIN_LOOP_BODY;
+        }
+    }
+}
+
 /**
  * Given a set of tables with n key columns, this function calculates the row to
  * group mapping for every row based on its key. For every row in the tables,
  * this only does *one* lookup in the hash map.
  *
  * @param[in] tables the tables
+ * @param[in] hashes hashes if they have already been calculated. nullptr
+ * otherwise
+ * @param[in] nunique_hashes estimated number of unique hashes if hashes are
+ * provided
  * @param[out] grp_infos is grouping_info structures that map row numbers to
  * group numbers
  * @param[in] check_for_null_keys whether to check for null keys. If a key is
  * null and key_dropna=True that row will not be mapped to any group
  * @param[in] key_dropna whether to allow NA values in group keys or not.
  */
-void get_group_info(std::vector<table_info*>& tables,
+void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
+                    size_t nunique_hashes,
                     std::vector<grouping_info>& grp_infos,
                     bool check_for_null_keys, bool key_dropna) {
     if (tables.size() == 0) {
@@ -1108,49 +1209,142 @@ void get_group_info(std::vector<table_info*>& tables,
     table_info* table = tables[0];
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table->columns.begin(), table->columns.begin() + table->num_keys);
-    const uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
-    uint32_t* hashes = hash_keys(key_cols, seed);
-
+    if (hashes == nullptr) {
+        hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE);
+        nunique_hashes = get_nunique_hashes(hashes, table->nrows());
+    }
     grp_infos.emplace_back();
     grouping_info& grp_info = grp_infos.back();
-    grp_info.row_to_group.reserve(table->nrows());
-    // start at 1 because I'm going to use 0 to mean nothing was inserted yet
-    // in the map (but note that the group values I record in the output go from
-    // 0 to num_groups - 1)
-    int next_group = 1;
-    UNORD_MAP_CONTAINER<multi_col_key, int64_t, multi_col_key_hash>
-        key_to_group;
+    const int64_t n_keys = table->num_keys;
+
+    std::function<uint32_t(int64_t)> hash_fct = [&](int64_t iRow) -> uint32_t {
+        return hashes[iRow];
+    };
+
+    // XXX make this faster? Currently, attempting to reduce the overhead
+    // of this function doesn't make much of an impact
+    std::function<bool(int64_t, int64_t)> equal_fct =
+        [&](int64_t iRowA, int64_t iRowB) -> bool {
+        return TestEqualJoin(table, table, iRowA, iRowB, n_keys, true);
+    };
+
+    // TODO I saw cases where hopscotch ended up growing the map much more
+    // than necessary (which is bad for performance). The only explanation
+    // seems to be because of rehashing. This is linked to NeighborhoodSize=30
+    // instead of 62, but NeighborhoodSize=30 should be fine with a good hash
+    // function, so maybe it was an issue with using bad seeds for hash function
+    // (maybe I used same seed for shuffling and groupby).
+    // We need to look at this again
+    typedef tsl::hopscotch_map<
+        int64_t, int64_t, std::function<uint32_t(int64_t)>,
+        std::function<bool(int64_t, int64_t)>,
+        std::allocator<std::pair<int64_t, int64_t>>,
+        30,    // NeighborhoodSize (NeighborhoodSize <= 30 with StoreHash=true)
+        true>  // StoreHash
+        hs_t;
+
+    typedef tsl::robin_map<int64_t, int64_t, std::function<uint32_t(int64_t)>,
+                           std::function<bool(int64_t, int64_t)>,
+                           std::allocator<std::pair<int64_t, int64_t>>,
+                           true>  // StoreHash
+        rob_t;
+
+    bool use_robin_map = calc_use_robin_map(nunique_hashes);
+    rob_t key_to_group_rob({}, hash_fct, equal_fct);
+    hs_t key_to_group_hs({}, hash_fct, equal_fct);
+    if (use_robin_map) {
+        key_to_group_rob.max_load_factor(ROBIN_MAP_MAX_LOAD_FACTOR);
+        key_to_group_rob.reserve(nunique_hashes);
+    } else {
+        key_to_group_hs.max_load_factor(HOPSCOTCH_MAP_MAX_LOAD_FACTOR);
+        key_to_group_hs.reserve(nunique_hashes);
+    }
+    // XXX Don't want to initialize data (just reserve and set size) but
+    // std::vector doesn't support this. Since we know the size of the vector,
+    // doing this is better than reserving and then doing emplace_backs in
+    // get_group_info_loop, which are slower than [] operator
+    grp_info.row_to_group.resize(table->nrows());
+    grp_info.group_to_first_row.reserve(nunique_hashes * 1.1);
+
     bool key_is_nullable = false;
     if (check_for_null_keys) {
         key_is_nullable = does_keys_have_nulls(key_cols);
     }
     bool key_drop_nulls = key_is_nullable && key_dropna;
 
-    for (int64_t i = 0; i < table->nrows(); i++) {
-        if (key_drop_nulls) {
-            if (does_row_has_nulls(key_cols, i)) {
-                grp_info.row_to_group.emplace_back(-1);
-                continue;
-            }
-        }
-        multi_col_key key(hashes[i], table, i);
-        int64_t& group = key_to_group[key];  // this inserts 0 into the map if
-                                             // key doesn't exist
-        if (group == 0) {
-            group = next_group++;  // this updates the value in the map without
-                                   // another lookup
-            grp_info.group_to_first_row.emplace_back(i);
-        }
-        grp_info.row_to_group.emplace_back(group - 1);
-    }
-    delete[] hashes;
+    if (use_robin_map)
+        get_group_info_loop<rob_t>(key_to_group_rob, key_cols, grp_info,
+                                   key_drop_nulls, table->nrows());
+    else
+        get_group_info_loop<hs_t>(key_to_group_hs, key_cols, grp_info,
+                                  key_drop_nulls, table->nrows());
     grp_info.num_groups = grp_info.group_to_first_row.size();
+
+    delete[] hashes;
+    hashes = nullptr;  // updates hashes ptr at caller
+    if (use_robin_map) {
+        key_to_group_rob.clear();
+        key_to_group_rob.reserve(0);  // try to force dealloc of hash map
+    } else {
+        key_to_group_hs.clear();
+        key_to_group_hs.reserve(0);  // try to force dealloc of hash map
+    }
 
     if (tables.size() > 1) {
         // This case is not currently used
         throw std::runtime_error(
             "get_group_info not implemented for multiple tables");
     }
+}
+
+template <typename T>
+static int64_t get_groupby_labels_loop(T& key_to_group,
+                                       std::vector<array_info*>& key_cols,
+                                       int64_t* row_to_group,
+                                       int64_t* sort_idx,
+                                       const bool key_drop_nulls,
+                                       const int64_t nrows) {
+    // Start at 1 because I'm going to use 0 to mean nothing was inserted yet
+    // in the map (but note that the group values recorded in grp_info go from
+    // 0 to num_groups - 1)
+    int64_t next_group = 1;
+    // There are two versions of the loop because a `if (key_drop_nulls)`
+    // branch inside the loop has a bit of a performance hit and
+    // this loop is one of the most expensive computations.
+    // To not duplicate code, we put the common portion of the loop in
+    // MAIN_LOOP_BODY macro
+
+    std::vector<std::vector<int64_t>> group_rows;
+
+#define MAIN_LOOP_BODY \
+    int64_t& group = key_to_group[i]; /* this inserts 0 into the map if key doesn't exist */ \
+    if (group == 0) { \
+        group = next_group++;  /* this updates the value in the map without another lookup */ \
+        group_rows.emplace_back(); \
+    } \
+    group_rows[group - 1].push_back(i); \
+    row_to_group[i] = group - 1
+
+    if (!key_drop_nulls) {
+        for (int64_t i = 0; i < nrows; i++) {
+            MAIN_LOOP_BODY;
+        }
+    } else {
+        for (int64_t i = 0; i < nrows; i++) {
+            if (does_row_has_nulls(key_cols, i)) {
+                row_to_group[i] = -1;
+                continue;
+            }
+            MAIN_LOOP_BODY;
+        }
+    }
+    int64_t pos = 0;
+    for (size_t i = 0; i < group_rows.size(); i++) {
+        memcpy(sort_idx + pos, group_rows[i].data(),
+               group_rows[i].size() * sizeof(int64_t));
+        pos += group_rows[i].size();
+    }
+    return next_group - 1;
 }
 
 /**
@@ -1165,44 +1359,71 @@ void get_group_info(std::vector<table_info*>& tables,
 int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
                            int64_t* sort_idx, bool key_dropna) {
     // TODO(ehsan): refactor to avoid code duplication with get_group_info
+    // This function is similar to get_group_info. See that function for
+    // more comments
     table->num_keys = table->columns.size();
     std::vector<array_info*> key_cols = table->columns;
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
     uint32_t* hashes = hash_keys(key_cols, seed);
+    size_t nunique_hashes = get_nunique_hashes(hashes, table->nrows());
+    const int64_t n_keys = table->num_keys;
 
-    int next_group = 1;
-    UNORD_MAP_CONTAINER<multi_col_key, int64_t, multi_col_key_hash>
-        key_to_group;
+    std::function<uint32_t(int64_t)> hash_fct = [&](int64_t iRow) -> uint32_t {
+        return hashes[iRow];
+    };
+
+    std::function<bool(int64_t, int64_t)> equal_fct =
+        [&](int64_t iRowA, int64_t iRowB) -> bool {
+        return TestEqualJoin(table, table, iRowA, iRowB, n_keys, true);
+    };
+
+    typedef tsl::hopscotch_map<
+        int64_t, int64_t, std::function<uint32_t(int64_t)>,
+        std::function<bool(int64_t, int64_t)>,
+        std::allocator<std::pair<int64_t, int64_t>>,
+        30,    // NeighborhoodSize (NeighborhoodSize <= 30 with StoreHash=true)
+        true>  // StoreHash
+        hs_t;
+
+    typedef tsl::robin_map<int64_t, int64_t, std::function<uint32_t(int64_t)>,
+                           std::function<bool(int64_t, int64_t)>,
+                           std::allocator<std::pair<int64_t, int64_t>>,
+                           true>  // StoreHash
+        rob_t;
+
+    bool use_robin_map = calc_use_robin_map(nunique_hashes);
+    rob_t key_to_group_rob({}, hash_fct, equal_fct);
+    hs_t key_to_group_hs({}, hash_fct, equal_fct);
+    if (use_robin_map) {
+        key_to_group_rob.max_load_factor(ROBIN_MAP_MAX_LOAD_FACTOR);
+        key_to_group_rob.reserve(nunique_hashes);
+    } else {
+        key_to_group_hs.max_load_factor(HOPSCOTCH_MAP_MAX_LOAD_FACTOR);
+        key_to_group_hs.reserve(nunique_hashes);
+    }
     bool key_is_nullable = does_keys_have_nulls(key_cols);
-
     bool key_drop_nulls = key_is_nullable && key_dropna;
-    std::vector<std::vector<int64_t>> group_rows;
-    for (int64_t i = 0; i < table->nrows(); i++) {
-        if (key_drop_nulls) {
-            if (does_row_has_nulls(key_cols, i)) {
-                out_labels[i] = -1;
-                continue;
-            }
-        }
-        multi_col_key key(hashes[i], table, i);
-        int64_t& group = key_to_group[key];  // this inserts 0 into the map if
-                                             // key doesn't exist
-        if (group == 0) {
-            group = next_group++;  // this updates the value in the map without
-                                   // another lookup
-            group_rows.emplace_back();
-        }
-        group_rows[group - 1].push_back(i);
-        out_labels[i] = group - 1;
-    }
-    int64_t pos = 0;
-    for (size_t i = 0; i < group_rows.size(); i++) {
-        memcpy(sort_idx + pos, group_rows[i].data(),
-               group_rows[i].size() * sizeof(int64_t));
-        pos += group_rows[i].size();
-    }
+
+    int64_t num_groups;
+    if (use_robin_map)
+        num_groups = get_groupby_labels_loop<rob_t>(key_to_group_rob, key_cols,
+                                                    out_labels, sort_idx, key_drop_nulls,
+                                                    table->nrows());
+    else
+        num_groups =
+            get_groupby_labels_loop<hs_t>(key_to_group_hs, key_cols, out_labels,
+                                          sort_idx, key_drop_nulls, table->nrows());
+
     delete[] hashes;
-    return next_group - 1;
+    if (use_robin_map) {
+        key_to_group_rob.clear();
+        key_to_group_rob.reserve(0);  // try to force dealloc of hash map
+    } else {
+        key_to_group_hs.clear();
+        key_to_group_hs.reserve(0);  // try to force dealloc of hash map
+    }
+
+    return num_groups;
 }
 
 /**
@@ -1211,38 +1432,59 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
  * this only does *one* lookup in the hash map.
  *
  * @param           tables: the tables
+ * @param[in] hashes hashes for first table in tables, if they have already
+ * been calculated. nullptr otherwise
+ * @param[in] nunique_hashes estimated number of unique hashes if hashes are
+ * provided (for first table)
  * @param[out]      grouping_info structures that map row numbers to group
  * numbers
  * @param[in] consider_missing: whether to return the list of missing rows or
  * not
  * @param[in] key_dropna whether to allow NA values in group keys or not.
  */
-void get_group_info_iterate(std::vector<table_info*>& tables,
+void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
+                            size_t nunique_hashes,
                             std::vector<grouping_info>& grp_infos,
-                            bool consider_missing, bool key_dropna) {
+                            const bool consider_missing, bool key_dropna) {
     if (tables.size() == 0) {
         throw std::runtime_error("get_group_info: tables is empty");
     }
     table_info* table = tables[0];
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table->columns.begin(), table->columns.begin() + table->num_keys);
-    const uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
-    uint32_t* hashes = hash_keys(key_cols, seed);
-
+    // TODO: if |tables| > 1 then we probably need to use hashes from all the
+    // tables to get an accurate nunique_hashes estimate. We can do it, but
+    // it would mean calculating all hashes in advance
+    if (hashes == nullptr) {
+        hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE);
+        nunique_hashes = get_nunique_hashes(hashes, table->nrows());
+    }
     grp_infos.emplace_back();
     grouping_info& grp_info = grp_infos.back();
+
+    int64_t max_rows = 0;
+    for (table_info* table : tables)
+        max_rows = std::max(max_rows, table->nrows());
+    grp_info.row_to_group.reserve(max_rows);
     grp_info.row_to_group.resize(table->nrows());
+    grp_info.next_row_in_group.reserve(max_rows);
     grp_info.next_row_in_group.resize(table->nrows(), -1);
+    grp_info.group_to_first_row.reserve(nunique_hashes * 1.1);
     std::vector<int64_t> active_group_repr;
+    active_group_repr.reserve(nunique_hashes * 1.1);
+
+    // TODO Incorporate or adapt other optimizations from `get_group_info`
 
     bool key_is_nullable = does_keys_have_nulls(key_cols);
     bool key_drop_nulls = key_is_nullable && key_dropna;
-    // start at 1 because I'm going to use 0 to mean nothing was inserted yet
-    // in the map (but note that the group values I record in the output go from
+
+    // Start at 1 because I'm going to use 0 to mean nothing was inserted yet
+    // in the map (but note that the group values recorded in grp_info go from
     // 0 to num_groups - 1)
-    int next_group = 1;
+    int64_t next_group = 1;
     UNORD_MAP_CONTAINER<multi_col_key, int64_t, multi_col_key_hash>
         key_to_group;
+    key_to_group.reserve(nunique_hashes);
     for (int64_t i = 0; i < table->nrows(); i++) {
         if (key_drop_nulls) {
             if (does_row_has_nulls(key_cols, i)) {
@@ -1267,6 +1509,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
         grp_info.row_to_group[i] = group - 1;
     }
     delete[] hashes;
+    hashes = nullptr;
     grp_info.num_groups = grp_info.group_to_first_row.size();
 
     for (size_t j = 1; j < tables.size(); j++) {
@@ -1276,7 +1519,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
         table = tables[j];
         key_cols = std::vector<array_info*>(
             table->columns.begin(), table->columns.begin() + table->num_keys);
-        hashes = hash_keys(key_cols, seed);
+        hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE);
         grp_infos.emplace_back();
         grouping_info& grp_info = grp_infos.back();
         grp_info.row_to_group.resize(table->nrows());
@@ -1314,6 +1557,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables,
             grp_info.row_to_group[i] = group - 1;
         }
         delete[] hashes;
+        hashes = nullptr;
         grp_info.num_groups = grp_info.group_to_first_row.size();
     }
 
@@ -5065,6 +5309,7 @@ class GroupbyPipeline {
         int table_id_counter;
         int ftypes_count = 0;  // count if we have groupby operations that
                                // requires shuffle after update
+        bool has_udf = false;
         for (int i = 0;
              i < func_offsets[in_table->ncols() - num_keys - index_i]; i++) {
             int ftype = ftypes[i];
@@ -5072,6 +5317,7 @@ class GroupbyPipeline {
                 shuffle_before_update = true;
             // Don't break out of loop to see if there are other groupby
             // operations that require shuffling before update
+            if (ftype == Bodo_FTypes::udf) has_udf = true;
             if (ftype == Bodo_FTypes::nunique) {
                 if (is_parallel) nunique_op = true;
                 req_extended_group_info = true;
@@ -5099,6 +5345,40 @@ class GroupbyPipeline {
             } else
                 ftypes_count++;
         }
+
+        hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION);
+
+        if (is_parallel && (dispatch_table == nullptr) && !has_udf && !shuffle_before_update) {
+            // If the estimated number of groups (given by nunique_hashes)
+            // is similar to the number of input rows, then it's better to
+            // shuffle first instead of doing a local reduction
+
+            // TODO To do this with UDF functions we need to generate
+            // two versions of UDFs at compile time (one for
+            // shuffle_before_update=true and one for
+            // shuffle_before_update=false
+
+            int num_ranks;
+            MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+            nunique_hashes = get_nunique_hashes(hashes, in_table->nrows());
+            int shuffle_before_update_count_s = 0;
+            int shuffle_before_update_count;
+            double groups_in_nrows_ratio = double(nunique_hashes) / in_table->nrows();
+            if (groups_in_nrows_ratio < 0.9)  // XXX what threshold is best?
+                shuffle_before_update_count_s = 1;
+            MPI_Allreduce(&shuffle_before_update_count_s,
+                          &shuffle_before_update_count, 1, MPI_INT, MPI_SUM,
+                          MPI_COMM_WORLD);
+            // TODO Need a better threshold or cost model to decide when
+            // to shuffle
+            if (shuffle_before_update_count >= num_ranks * 0.5) {
+                shuffle_before_update = true;
+                nunique_grp_shuffle_before = true;
+            }
+        } else if (!is_parallel) {
+            nunique_hashes = get_nunique_hashes(hashes, in_table->nrows());
+        }
+
         if (nunique_op) {
             if (nunique_grp_shuffle_before)
                 nunique_mode = 1;
@@ -5122,13 +5402,11 @@ class GroupbyPipeline {
             case 1:   // nunique + groupby function that requires shuffle
                       // before update.
                 if (shuffle_before_update) {
-                    // Code below is equivalent to
-                    // table_info* shuf_table = shuffle_table(update_table,
-                    // num_keys); We do this more complicated construction
-                    // because we may need later the hashes and comm_info.
+                    // Code below is equivalent to:
+                    // table_info* in_table = shuffle_table(in_table, num_keys)
+                    // We do this more complicated construction because we may
+                    // need later the hashes and comm_info.
                     comm_info_ptr = new mpi_comm_info(in_table->columns);
-                    hashes = hash_keys_table(in_table, num_keys,
-                                             SEED_HASH_PARTITION);
                     comm_info_ptr->set_counts(hashes);
                     // shuffle_table_kernel steals the reference but we still
                     // need it for the code after C++ groupby
@@ -5138,7 +5416,12 @@ class GroupbyPipeline {
                     if (!(cumulative_op || shift_op || transform_op)) {
                         delete hashes;
                         delete comm_info_ptr;
+                    } else {
+                        // preserve input table hashes for reverse shuffle at
+                        // the end
+                        in_hashes = hashes;
                     }
+                    hashes = nullptr;
                 }
                 break;
             case 0:  // nunique operation only. Drop duplicates
@@ -5192,6 +5475,14 @@ class GroupbyPipeline {
                         tmp2->num_keys = num_keys;
                         tmp2->id = table_id_counter++;
                         nunique_tables[c] = tmp2;
+
+                        if (nunique_only) {
+                            // in the case of nunique_only the hashes that we
+                            // calculated above are not valid, since we have
+                            // shuffled all of the input columns
+                            delete[] hashes;
+                            hashes = nullptr;
+                        }
                     }
                 }
                 break;
@@ -5257,6 +5548,7 @@ class GroupbyPipeline {
 
     ~GroupbyPipeline() {
         for (auto col_set : col_sets) delete col_set;
+        if (hashes != nullptr) delete[] hashes;
     }
 
     /**
@@ -5295,10 +5587,11 @@ class GroupbyPipeline {
 
         if (req_extended_group_info) {
             bool consider_missing = cumulative_op || shift_op || transform_op;
-            get_group_info_iterate(tables, grp_infos, consider_missing,
-                                   key_dropna);
+            get_group_info_iterate(tables, hashes, nunique_hashes, grp_infos,
+                                   consider_missing, key_dropna);
         } else
-            get_group_info(tables, grp_infos, true, key_dropna);
+            get_group_info(tables, hashes, nunique_hashes, grp_infos, true,
+                           key_dropna);
         grouping_info& grp_info = grp_infos[0];
         grp_info.dispatch_table = dispatch_table;
         grp_info.dispatch_info = dispatch_info;
@@ -5346,20 +5639,12 @@ class GroupbyPipeline {
      * shuffled table.
      */
     void shuffle() {
-        comm_info_ptr = new mpi_comm_info(update_table->columns);
-        hashes = hash_keys_table(update_table, num_keys, SEED_HASH_PARTITION);
-        comm_info_ptr->set_counts(hashes);
-        table_info* shuf_table =
-            shuffle_table_kernel(update_table, hashes, *comm_info_ptr);
+        table_info* shuf_table = shuffle_table(update_table, num_keys);
 #ifdef DEBUG_GROUPBY
         std::cout << "After shuffle_table_kernel. shuf_table=\n";
         DEBUG_PrintSetOfColumn(std::cout, shuf_table->columns);
         DEBUG_PrintRefct(std::cout, shuf_table->columns);
 #endif
-        if (!(cumulative_op || shift_op || transform_op)) {
-            delete hashes;
-            delete comm_info_ptr;
-        }
         // NOTE: shuffle_table_kernel decrefs input arrays
         delete_table(update_table);
         update_table = cur_table = shuf_table;
@@ -5380,7 +5665,8 @@ class GroupbyPipeline {
         update_table->num_keys = num_keys;
         grp_infos.clear();
         std::vector<table_info*> tables = {update_table};
-        get_group_info(tables, grp_infos, false, key_dropna);
+        get_group_info(tables, hashes, nunique_hashes, grp_infos, false,
+                       key_dropna);
         grouping_info& grp_info = grp_infos[0];
         num_groups = grp_info.num_groups;
         grp_info.dispatch_table = dispatch_table;
@@ -5429,9 +5715,9 @@ class GroupbyPipeline {
         if (return_index)
             out_table->columns.push_back(cur_table->columns.back());
         if ((cumulative_op || shift_op || transform_op) && is_parallel) {
-            table_info* revshuf_table =
-                reverse_shuffle_table_kernel(out_table, hashes, *comm_info_ptr);
-            delete hashes;
+            table_info* revshuf_table = reverse_shuffle_table_kernel(
+                out_table, in_hashes, *comm_info_ptr);
+            delete in_hashes;
             delete comm_info_ptr;
             delete_table(out_table);
             out_table = revshuf_table;
@@ -5638,8 +5924,10 @@ class GroupbyPipeline {
     std::vector<grouping_info> grp_infos;
     size_t num_groups;
     // shuffling stuff
-    uint32_t* hashes;
+    uint32_t* in_hashes = nullptr;
     mpi_comm_info* comm_info_ptr = nullptr;
+    uint32_t* hashes = nullptr;
+    size_t nunique_hashes = 0;
 };
 
 // MPI_Exscan: https://www.mpich.org/static/docs/v3.1.x/www3/MPI_Exscan.html

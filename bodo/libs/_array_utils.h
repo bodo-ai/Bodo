@@ -4,9 +4,15 @@
 
 #include "_bodo_common.h"
 #include "_decimal_ext.h"
+#include "hyperloglog.hpp"
 
 // ------------------------------------------------
-// Choose implementation for unordered map and set
+// Always include robin and hopscotch maps because they are used regardless of
+// default hash map implementation
+#include <include/tsl/robin_map.h>
+#include <include/tsl/hopscotch_map.h>
+
+// Choose default implementation for unordered map and set
 #undef USE_STD
 #define USE_TSL_ROBIN
 #undef USE_TSL_SPARSE
@@ -18,20 +24,21 @@
 #define UNORD_MAP_CONTAINER std::unordered_map
 #define UNORD_SET_CONTAINER std::unordered_set
 #endif
+
 #ifdef USE_TSL_ROBIN
-#include <include/tsl/robin_map.h>
 #include <include/tsl/robin_set.h>
 #define UNORD_MAP_CONTAINER tsl::robin_map
 #define UNORD_SET_CONTAINER tsl::robin_set
 #endif
+
 #ifdef USE_TSL_SPARSE
 #include <include/tsl/sparse_map.h>
 #include <include/tsl/sparse_set.h>
 #define UNORD_MAP_CONTAINER tsl::sparse_map
 #define UNORD_SET_CONTAINER tsl::sparse_set
 #endif
+
 #ifdef USE_TSL_HOPSCOTCH
-#include <include/tsl/hopscotch_map.h>
 #include <include/tsl/hopscotch_set.h>
 #define UNORD_MAP_CONTAINER tsl::hopscotch_map
 #define UNORD_SET_CONTAINER tsl::hopscotch_set
@@ -580,6 +587,23 @@ inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
         }
     }
     return false;
+}
+
+/**
+ * Given an array of hashes, returns estimate of number of unique hashes.
+ * @param hashes: pointer to array of hashes
+ * @param len: number of hashes
+ */
+inline size_t get_nunique_hashes(uint32_t* hashes, size_t len) {
+    // Passing bit width = 20 to HyperLogLog (impacts accuracy and execution
+    // time). 30 is extremely slow. 20 seems to be about as fast as 10 and
+    // more accurate. With 20 it is pretty fast, faster than calculating
+    // the hashes with our MurmurHash3_x64_32
+    hll::HyperLogLog hll(20);
+    for (size_t i=0; i < len; i++)
+        hll.add(hashes[i]);
+    size_t est = std::min(size_t(hll.estimate()), len);
+    return est;
 }
 
 #endif  // _ARRAY_UTILS_H_INCLUDED
