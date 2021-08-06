@@ -2960,8 +2960,7 @@ class TestIO(unittest.TestCase):
                 skiprows=2,
             )
 
-        bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        check_func(test_impl, (), only_seq=True)
 
     def test_csv_infer_skip1(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_infer1.csv")
