@@ -585,9 +585,7 @@ class DistributedAnalysis:
         # nested parfors are replicated
         if self.in_parallel_parfor != -1:
             self._add_diag_info(
-                "Parfor {} set to REP since it is inside another distributed Parfor".format(
-                    parfor.id
-                )
+                f"Parfor {parfor.id} set to REP since it is inside another distributed Parfor"
             )
             out_dist = Distribution.REP
 
@@ -630,7 +628,9 @@ class DistributedAnalysis:
                 out_dist = Distribution(min(out_dist.value, array_dists[arr].value))
 
         # analyze reductions like concat that can affect parfor distribution
-        out_dist = self._get_parfor_reduce_dists(parfor, out_dist, array_dists)
+        out_dist, non_concat_redvars = self._get_parfor_reduce_dists(
+            parfor, out_dist, array_dists
+        )
 
         parfor_dists[parfor.id] = out_dist
         for arr in parfor_arrs:
@@ -646,8 +646,11 @@ class DistributedAnalysis:
         if self.second_pass and out_dist in [Distribution.OneD, Distribution.OneD_Var]:
             # reduction arrays of distributed parfors are replicated
             # see test_basic.py::test_array_reduce
+            # concat reduce variables should stay distributed
             self._set_REP(
-                parfor.redvars, array_dists, "reduction arrays of distributed parfor"
+                non_concat_redvars,
+                array_dists,
+                "reduction arrays of distributed parfor",
             )
             self.in_parallel_parfor = parfor.id
         blocks = wrap_parfor_blocks(parfor)
@@ -664,7 +667,7 @@ class DistributedAnalysis:
         """analyze parfor reductions like concat that can affect parfor distribution
         TODO: support other similar reductions?
         """
-
+        non_concat_redvars = []
         for reduce_varname, (_init_val, reduce_nodes, _op) in sorted(
             parfor.reddict.items()
         ):
@@ -675,9 +678,7 @@ class DistributedAnalysis:
                 # if output array is replicated, parfor should be replicated too
                 if is_REP(array_dists[reduce_varname]):
                     self._add_diag_info(
-                        "Parfor {} set to REP since its concat reduction variable is REP".format(
-                            parfor.id
-                        )
+                        f"Parfor {parfor.id} set to REP since its concat reduction variable is REP"
                     )
                     out_dist = Distribution.REP
                 else:
@@ -703,8 +704,10 @@ class DistributedAnalysis:
                     self._concat_reduce_vars |= concat_reduce_vars
                 else:
                     self._concat_reduce_vars -= concat_reduce_vars
+            else:
+                non_concat_redvars.append(reduce_varname)
 
-        return out_dist
+        return out_dist, non_concat_redvars
 
     def _analyze_call(self, lhs, rhs, func_var, args, kws, equiv_set, array_dists):
         """analyze array distributions in function calls"""

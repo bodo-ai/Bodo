@@ -1231,7 +1231,7 @@ def test_concat_reduction():
         return df
 
     check_func(
-        impl, (11,), reset_index=True, check_dtype=False, is_out_distributed=False
+        impl, (11,), reset_index=True, check_dtype=False, is_out_distributed=True
     )
 
 
@@ -1246,7 +1246,7 @@ def test_series_concat_reduction():
         return S
 
     check_func(
-        impl, (11,), reset_index=True, check_dtype=False, is_out_distributed=False
+        impl, (11,), reset_index=True, check_dtype=False, is_out_distributed=True
     )
 
 
