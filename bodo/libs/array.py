@@ -1917,7 +1917,7 @@ def groupby_and_aggregate(
 
 get_groupby_labels = types.ExternalFunction(
     "get_groupby_labels",
-    types.int64(table_type, types.voidptr, types.boolean),
+    types.int64(table_type, types.voidptr, types.voidptr, types.boolean),
 )
 
 

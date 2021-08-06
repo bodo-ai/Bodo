@@ -1157,12 +1157,13 @@ void get_group_info(std::vector<table_info*>& tables,
  * @brief Get groupby labels for input key arrays
  *
  * @param table a table of all key arrays
- * @param out_labels output array to fill
+ * @param[out] out_labels output array to fill
+ * @param[out] sort_idx sorted group indices
  * @param[in] key_dropna whether to allow NA values in group keys or not.
  * @return int64_t total number of groups
  */
 int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
-                           bool key_dropna) {
+                           int64_t* sort_idx, bool key_dropna) {
     // TODO(ehsan): refactor to avoid code duplication with get_group_info
     table->num_keys = table->columns.size();
     std::vector<array_info*> key_cols = table->columns;
@@ -1175,6 +1176,7 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
     bool key_is_nullable = does_keys_have_nulls(key_cols);
 
     bool key_drop_nulls = key_is_nullable && key_dropna;
+    std::vector<std::vector<int64_t>> group_rows;
     for (int64_t i = 0; i < table->nrows(); i++) {
         if (key_drop_nulls) {
             if (does_row_has_nulls(key_cols, i)) {
@@ -1188,8 +1190,16 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
         if (group == 0) {
             group = next_group++;  // this updates the value in the map without
                                    // another lookup
+            group_rows.emplace_back();
         }
+        group_rows[group - 1].push_back(i);
         out_labels[i] = group - 1;
+    }
+    int64_t pos = 0;
+    for (size_t i = 0; i < group_rows.size(); i++) {
+        memcpy(sort_idx + pos, group_rows[i].data(),
+               group_rows[i].size() * sizeof(int64_t));
+        pos += group_rows[i].size();
     }
     delete[] hashes;
     return next_group - 1;

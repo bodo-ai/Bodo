@@ -1321,11 +1321,10 @@ def get_group_indices_overload(keys, dropna):
     )
     func_text += "    table = arr_info_list_to_table(info_list)\n"
     func_text += "    group_labels = np.empty(len(keys[0]), np.int64)\n"
-    func_text += (
-        "    ngroups = get_groupby_labels(table, group_labels.ctypes, dropna)\n"
-    )
+    func_text += "    sort_idx = np.empty(len(keys[0]), np.int64)\n"
+    func_text += "    ngroups = get_groupby_labels(table, group_labels.ctypes, sort_idx.ctypes, dropna)\n"
     func_text += "    delete_table_decref_arrays(table)\n"
-    func_text += "    return group_labels, ngroups\n"
+    func_text += "    return sort_idx, group_labels, ngroups\n"
     loc_vars = {}
     exec(
         func_text,

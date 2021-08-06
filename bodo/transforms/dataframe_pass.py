@@ -1780,12 +1780,9 @@ class DataFramePass:
         func_text += f"    in_df, keys, shuffle_info = shuffle_dataframe(in_df, keys)\n"
 
         # get groupby info
-        func_text += (
-            f"  group_indices, ngroups = get_group_indices(keys, {grp_typ.dropna})\n"
-        )
-        # TODO(ehsan): more efficient sort like Pandas
-        # https://github.com/pandas-dev/pandas/blob/aad85ad1e39568f87cdae38fece41cd2370234a7/pandas/core/sorting.py#L566
-        func_text += "  sort_idx = group_indices.argsort(kind='mergesort')\n"
+        func_text += f"  sort_idx, group_indices, ngroups = get_group_indices(keys, {grp_typ.dropna})\n"
+        # TODO This can be done in C++ as well.
+        # This will avoid returning group_indices back.
         func_text += (
             "  starts, ends = generate_slices(group_indices[sort_idx], ngroups)\n"
         )
