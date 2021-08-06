@@ -33,7 +33,7 @@ Registration
    in the platform. Please only use this namespace if you are testing the platform or you need access
    to development features. To signup for each of these namespaces, follow the steps to **Create a new organization**,
    as described on `this wiki <https://github.com/Bodo-inc/bodo-platform-auth/wiki/Registration-and-Organization-Initialization>`_.
-   Then, using your signup link, follow the signup instructions on the `platform documentation <https://docs.bodo.ai/latest/source/bodo_platform.html>`_.
+   Then, using your signup link, follow the signup instructions on the `platform documentation <https://docs.bodo.ai/latest/source/bodo_platform_aws.html>`_.
 
 Bodo Background
 ~~~~~~~~~~~~~~~
