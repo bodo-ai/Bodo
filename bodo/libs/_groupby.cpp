@@ -5364,7 +5364,7 @@ class GroupbyPipeline {
             int shuffle_before_update_count_s = 0;
             int shuffle_before_update_count;
             double groups_in_nrows_ratio = double(nunique_hashes) / in_table->nrows();
-            if (groups_in_nrows_ratio < 0.9)  // XXX what threshold is best?
+            if (groups_in_nrows_ratio >= 0.9)  // XXX what threshold is best?
                 shuffle_before_update_count_s = 1;
             MPI_Allreduce(&shuffle_before_update_count_s,
                           &shuffle_before_update_count, 1, MPI_INT, MPI_SUM,
