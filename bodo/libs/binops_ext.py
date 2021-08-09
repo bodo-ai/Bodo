@@ -133,7 +133,7 @@ def overload_sub_operator(lhs, rhs):
     raise_error_if_not_numba_supported(operator.sub, lhs, rhs)
 
 
-## arith ops
+## arith operators
 def create_overload_arith_op(op):
     """ Create overloads for arithmetic operators. """
 
@@ -142,7 +142,11 @@ def create_overload_arith_op(op):
 
         ## ---- start off with redirecting common overloads to some or common to all arith ops:
 
-        # integer array
+        # non null integer array op pandas timedelta
+        if args_td_and_int_array(lhs, rhs):
+            return bodo.libs.int_arr_ext.get_int_array_op_pd_td(op)(lhs, rhs)
+
+        # nullable integer array case
         if isinstance(lhs, IntegerArrayType) or isinstance(rhs, IntegerArrayType):
             return bodo.libs.int_arr_ext.create_op_overload(op, 2)(lhs, rhs)
 
@@ -379,7 +383,6 @@ def mul_timedelta_and_int(lhs, rhs):
     rhs_td = rhs in [pd_timedelta_type, datetime_timedelta_type] and isinstance(
         lhs, types.Integer
     )
-
     return lhs_td or rhs_td
 
 
@@ -559,6 +562,19 @@ def time_series_operation(lhs, rhs):
         or dt64series_lhs
         or dt64series_rhs
     )
+
+
+def args_td_and_int_array(lhs, rhs):
+    """helper function to check if the operands consist of a pandas timedelta, and an initeger array"""
+    one_op_array = (
+        isinstance(lhs, IntegerArrayType)
+        or (isinstance(lhs, types.Array) and isinstance(lhs.dtype, types.Integer))
+    ) or (
+        isinstance(rhs, IntegerArrayType)
+        or (isinstance(rhs, types.Array) and isinstance(rhs.dtype, types.Integer))
+    )
+    one_op_pd_td = lhs in [pd_timedelta_type] or rhs in [pd_timedelta_type]
+    return one_op_array and one_op_pd_td
 
 
 ## Checks for Numba support
