@@ -13,7 +13,7 @@ Optional arguments are not supported unless specified.
 Linear Classifiers
 ******************
 
-:class:`sklearn.linear_model.LogisticRegression`
+:class:`sklearn.linear_model.LogisticRegression` :sup:`*`
 
   This class provides logistic regression classifier.
 
@@ -53,7 +53,7 @@ Methods:
 Linear Regressors 
 *****************
 
-:class:`sklearn.linear_model.LinearRegression`
+:class:`sklearn.linear_model.LinearRegression` :sup:`*`
 
   This class provides linear regression support.
   Note: Multilabel targets are not currently supported.
@@ -64,7 +64,7 @@ Methods:
   * :any:`sklearn.linear_model.LinearRegression.predict`
   * :any:`sklearn.linear_model.LinearRegression.score`
 
-:class:`sklearn.linear_model.Ridge`
+:class:`sklearn.linear_model.Ridge` :sup:`*`
 
   This class provides ridge regression support.
 
@@ -94,7 +94,7 @@ Methods:
   * :any:`sklearn.linear_model.SGDRegressor.score`
 
 
-:class:`sklearn.linear_model.Lasso`
+:class:`sklearn.linear_model.Lasso` :sup:`*`
 
   This class provides Lasso regression support.
 
@@ -103,6 +103,15 @@ Methods:
   * :any:`sklearn.linear_model.Lasso.fit`
   * :any:`sklearn.linear_model.Lasso.predict`
   * :any:`sklearn.linear_model.Lasso.score`
+
+
+**\***
+To enable distributed training across multiple nodes, Bodo uses Stochastic Gradient Descent (SGD) to train these model types. This provides a model that has similar performance as the corresponding sequential version.
+
+  To achieve that, it is highly recommended to scale your data using `StandardScaler` before training and/or testing the model.
+
+  See scikit-learn for more tips on how to tune model parameters for SGD `here <https://scikit-learn.org/stable/modules/sgd.html#tips-on-practical-use>`_.
+
 
 Clustering
 **********
