@@ -38,6 +38,7 @@ ll.add_symbol("mask_arr_to_bitmap", hstr_ext.mask_arr_to_bitmap)
 ll.add_symbol("is_pd_int_array", array_ext.is_pd_int_array)
 ll.add_symbol("int_array_from_sequence", array_ext.int_array_from_sequence)
 
+from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.utils.indexing import (
     array_getitem_bool_index,
     array_getitem_int_index,
@@ -1019,7 +1020,7 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
     #         or bodo.libs.array_kernels.isna(rhs, i)):
     #       bodo.libs.array_kernels.setna(out_arr, i)
     #       continue
-    #     out_arr[i] = op(lhs[i], rhs[i])
+    #     out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(op(lhs[i], rhs[i]))
     #   return out_arr
     access_str1 = "lhs" if is_lhs_scalar else "lhs[i]"
     access_str2 = "rhs" if is_rhs_scalar else "rhs[i]"
@@ -1028,7 +1029,7 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
     func_text = "def impl(lhs, rhs):\n"
     func_text += "  n = len({})\n".format("lhs" if not is_lhs_scalar else "rhs")
     if inplace:
-        func_text += "  out_arr = lhs\n"
+        func_text += "  out_arr = {}\n".format("lhs" if not is_lhs_scalar else "rhs")
     else:
         func_text += "  out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, None)\n"
     func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
@@ -1036,7 +1037,9 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
     func_text += "        or {}):\n".format(na_str2)
     func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
     func_text += "      continue\n"
-    func_text += "    out_arr[i] = op({}, {})\n".format(access_str1, access_str2)
+    func_text += "    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(op({}, {}))\n".format(
+        access_str1, access_str2
+    )
     func_text += "  return out_arr\n"
     loc_vars = {}
     exec(
@@ -1051,4 +1054,45 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
         loc_vars,
     )
     impl = loc_vars["impl"]
+    return impl
+
+
+def get_int_array_op_pd_td(op):
+    def impl(lhs, rhs):
+        """generate implementation for binary operation on nullable integer array op timdelta"""
+        # either the lhs or the rhs must be scalar, can't have an array of pd_timedelta types
+        is_lhs_scalar = lhs in [pd_timedelta_type]
+        is_rhs_scalar = rhs in [pd_timedelta_type]
+
+        if is_lhs_scalar:
+
+            def impl(lhs, rhs):  # pragma: no cover
+                n = len(rhs)
+                out_arr = np.empty(n, "timedelta64[ns]")
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(rhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                        continue
+                    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(
+                        op(lhs, rhs[i])
+                    )
+                return out_arr
+
+            return impl
+        elif is_rhs_scalar:
+
+            def impl(lhs, rhs):  # pragma: no cover
+                n = len(lhs)
+                out_arr = np.empty(n, "timedelta64[ns]")
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(lhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                        continue
+                    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(
+                        op(lhs[i], rhs)
+                    )
+                return out_arr
+
+            return impl
+
     return impl

@@ -35,6 +35,38 @@ def timedelta_value(request):
     return request.param
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(pd.Series([pd.Timedelta(days=10), pd.NaT, pd.Timedelta(10000)])),
+    ]
+)
+def timedelta_series_value(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        np.array([1, -3, 2, 3, 10], np.int8),
+        pd.arrays.IntegerArray(
+            np.array([1, -3, 2, 3, 10], np.int8),
+            np.array([False, True, True, False, False]),
+        ),
+    ]
+)
+def int_arr_value(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(pd.Series([1, 2, 3, 4], dtype="int64")),
+        pytest.param(pd.Series([5, None, 7, 8], dtype="Int64")),
+    ]
+)
+def int_series_value(request):
+    return request.param
+
+
 @pytest.mark.slow
 def test_constant_lowering(timedelta_value, memory_leak_check):
     def test_impl():
@@ -648,3 +680,21 @@ def test_pd_timedelta_range():
         actual = bodo.jit(test)()
         expected = test()
         pd.testing.assert_index_equal(actual, expected)
+
+
+def test_pd_timedelta_mult_int_series(
+    int_series_value, timedelta_value, memory_leak_check
+):
+    def impl(td, A):
+        td * A
+
+    check_func(impl, (timedelta_value, int_series_value))
+    check_func(impl, (int_series_value, timedelta_value))
+
+
+@pytest.mark.slow
+def test_pd_timedelta_mult_int_array(int_arr_value, timedelta_value, memory_leak_check):
+    def impl(td, A):
+        td * A
+
+    check_func(impl, (timedelta_value, int_arr_value))

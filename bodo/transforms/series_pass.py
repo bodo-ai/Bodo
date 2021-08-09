@@ -1111,6 +1111,14 @@ class SeriesPass:
                 )
                 return replace_func(self, impl, [arg1, arg2])
 
+        if bodo.libs.binops_ext.args_td_and_int_array(typ1, typ2):
+            # Manually inline MUL with pd.Timedelta.
+            # Failure to inline seems to produce issues in parfor pass in Numba
+            # due to how MUL with timedelta64 is handled.
+
+            impl = bodo.libs.int_arr_ext.get_int_array_op_pd_td(rhs.fn)(typ1, typ2)
+            return replace_func(self, impl, [arg1, arg2])
+
         # inline Integer array ops
         if (
             rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
