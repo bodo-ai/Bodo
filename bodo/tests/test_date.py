@@ -1405,12 +1405,6 @@ def test_dt_extract(series_value, date_fields, memory_leak_check):
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
-    if date_fields in ["week", "weekofyear"]:
-        # Pandas has bugs returning the correct week at the end of some years,
-        # so skip those values
-        if len(np.nonzero(series_value.dt.dayofyear.values > 360)) > 0:
-            return
-
     check_func(impl, (series_value, date_fields), check_dtype=False)
 
 
