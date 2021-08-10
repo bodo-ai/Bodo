@@ -639,13 +639,16 @@ def overload_pd_dayofweek(ptt):
 @overload_attribute(PandasTimestampType, "weekofyear")
 def overload_week_number(ptt):
     def pd_week_number(ptt):
+        # In the Gregorian calendar, week 1 is considered the week of the first Thursday
+        # of the month. https://en.wikipedia.org/wiki/ISO_week_date#First_week
+        # As a result, we need special handling depending on the first day of the year.
+
+        # https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L161
+
         # Offset the day of the year by the (day of the week of jan 1st) and add 1 week because 1 indexed
         # Year starting on a Monday should be 7
-        return (
-            get_day_of_year(ptt.year, ptt.month, ptt.day)
-            + get_day_of_week(ptt.year, 1, 1)
-            + 6
-        ) // 7
+        _, week, _ = get_isocalendar(ptt.year, ptt.month, ptt.day)
+        return week
 
     return pd_week_number
 
