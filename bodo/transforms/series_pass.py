@@ -894,6 +894,15 @@ class SeriesPass:
             )
             return replace_func(self, f, [arg1, arg2])
 
+        # inline string binary comparison ops
+        if rhs.fn in _string_array_comp_ops and bodo.libs.binops_ext.binary_array_cmp(
+            typ1, typ2
+        ):
+            f = bodo.libs.binary_arr_ext.create_binary_cmp_op_overload(rhs.fn)(
+                self.typemap[rhs.lhs.name], self.typemap[rhs.rhs.name]
+            )
+            return replace_func(self, f, [arg1, arg2])
+
         # optimize string array element comparison to operate inplace and avoid string
         # allocation overhead
         # A[i] == val -> inplace_eq(A, i, val)

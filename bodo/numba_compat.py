@@ -3526,3 +3526,124 @@ import numba.np.npyimpl
 numba.np.npyimpl.ufunc_find_matching_loop = ufunc_find_matching_loop
 
 #################   End Timedelta Arithmetic Changes   ###################
+
+
+#################   Start Bytes Changes   ##################
+
+# Bodo Change, Update Numpy_rules_ufunc to ignore Bytes from ArrayCompatible.
+# The correct change is probably to update Bytes to no longer extend ArrayCompatible,
+# but this would require a lot of changes to update every place that imports types.Bytes,
+# so we will wait to fully fix this inside Numba.
+
+
+def _Numpy_Rules_ufunc_handle_inputs(cls, ufunc, args, kws):
+    """
+    Process argument types to a given *ufunc*.
+    Returns a (base types, explicit outputs, ndims, layout) tuple where:
+    - `base types` is a tuple of scalar types for each input
+    - `explicit outputs` is a tuple of explicit output types (arrays)
+    - `ndims` is the number of dimensions of the loop and also of
+        any outputs, explicit or implicit
+    - `layout` is the layout for any implicit output to be allocated
+    """
+    nin = ufunc.nin
+    nout = ufunc.nout
+    nargs = ufunc.nargs
+
+    # preconditions
+    assert nargs == nin + nout
+
+    if len(args) < nin:
+        msg = "ufunc '{0}': not enough arguments ({1} found, {2} required)"
+        raise TypingError(msg=msg.format(ufunc.__name__, len(args), nin))
+
+    if len(args) > nargs:
+        msg = "ufunc '{0}': too many arguments ({1} found, {2} maximum)"
+        raise TypingError(msg=msg.format(ufunc.__name__, len(args), nargs))
+
+    # Hack: Bodo change to not match on Bytes
+    args = [
+        a.as_array
+        if (isinstance(a, types.ArrayCompatible) and not isinstance(a, types.Bytes))
+        else a
+        for a in args
+    ]
+    # Hack: Bodo change to not match on Bytes
+    arg_ndims = [
+        a.ndim
+        if (isinstance(a, types.ArrayCompatible) and not isinstance(a, types.Bytes))
+        else 0
+        for a in args
+    ]
+    ndims = max(arg_ndims)
+
+    # explicit outputs must be arrays (no explicit scalar return values supported)
+    explicit_outputs = args[nin:]
+
+    # all the explicit outputs must match the number max number of dimensions
+    if not all(d == ndims for d in arg_ndims[nin:]):
+        msg = "ufunc '{0}' called with unsuitable explicit output arrays."
+        raise TypingError(msg=msg.format(ufunc.__name__))
+
+    # Hack: Bodo change to not match on Bytes
+    if not all(
+        (
+            isinstance(output, types.ArrayCompatible)
+            and not isinstance(output, types.Bytes)
+        )
+        for output in explicit_outputs
+    ):
+        msg = "ufunc '{0}' called with an explicit output that is not an array"
+        raise TypingError(msg=msg.format(ufunc.__name__))
+
+    if not all(output.mutable for output in explicit_outputs):
+        msg = "ufunc '{0}' called with an explicit output that is read-only"
+        raise TypingError(msg=msg.format(ufunc.__name__))
+
+    # Hack: Bodo change to not match on Bytes
+    # find the kernel to use, based only in the input types (as does NumPy)
+    base_types = [
+        x.dtype
+        if isinstance(x, types.ArrayCompatible) and not isinstance(x, types.Bytes)
+        else x
+        for x in args
+    ]
+
+    # Figure out the output array layout, if needed.
+    layout = None
+    if ndims > 0 and (len(explicit_outputs) < ufunc.nout):
+        layout = "C"
+        # Hack: Bodo change to not match on Bytes
+        layouts = [
+            x.layout
+            if isinstance(x, types.ArrayCompatible) and not isinstance(x, types.Bytes)
+            else ""
+            for x in args
+        ]
+
+        # Prefer C contig if any array is C contig.
+        # Next, prefer F contig.
+        # Defaults to C contig if not layouts are C/F.
+        if "C" not in layouts and "F" in layouts:
+            layout = "F"
+
+    return base_types, explicit_outputs, ndims, layout
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.np.numpy_support.ufunc_find_matching_loop)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "4b97c64ad9c3d50e082538795054f35cf6d2fe962c3ca40e8377a4601b344d5c"
+    ):  # pragma: no cover
+        print(hashlib.sha256(lines.encode()).hexdigest())
+        warnings.warn("ufunc_find_matching_loop has changed")
+
+numba.core.typing.npydecl.Numpy_rules_ufunc._handle_inputs = (
+    _Numpy_Rules_ufunc_handle_inputs
+)
+numba.np.ufunc.dufunc.npydecl.Numpy_rules_ufunc._handle_inputs = (
+    _Numpy_Rules_ufunc_handle_inputs
+)
+
+#################   End Bytes Changes   ##################
