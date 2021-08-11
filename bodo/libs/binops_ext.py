@@ -36,6 +36,7 @@ from bodo.hiframes.pd_offsets_ext import (
 )
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.hiframes.series_impl import SeriesType
+from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -326,6 +327,9 @@ def create_overload_cmp_operator(op):
         if isinstance(lhs, IntegerArrayType) or isinstance(rhs, IntegerArrayType):
             return bodo.libs.int_arr_ext.create_op_overload(op, 2)(lhs, rhs)
 
+        if binary_array_cmp(lhs, rhs):
+            return bodo.libs.binary_arr_ext.create_binary_cmp_op_overload(op)(lhs, rhs)
+
         # if supported by Numba, pass
         if cmp_op_supported_by_numba(lhs, rhs):
             return
@@ -537,6 +541,13 @@ def helper_time_series_checks(operand):
         in [datetime_timedelta_type, datetime_datetime_type, pd_timestamp_type]
     )
     return ret
+
+
+def binary_array_cmp(lhs, rhs):
+    """return True if lhs and rhs are both binary array types or one binary array and the other bytes"""
+    return (lhs == binary_array_type and rhs in [bytes_type, binary_array_type]) or (
+        lhs in [bytes_type, binary_array_type] and rhs == binary_array_type
+    )
 
 
 def time_series_operation(lhs, rhs):

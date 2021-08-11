@@ -288,7 +288,8 @@ def overload_bytes_fromhex(hex_str):
             # Populate the array
             length = _bytes_fromhex(data_arr.ctypes, hex_str._data, len(hex_str))
             # Wrap the result in a Bytes obj, truncating if necessary
-            return init_bytes_type(data_arr, length)
+            result = init_bytes_type(data_arr, length)
+            return result
 
         return impl
 
@@ -322,3 +323,37 @@ def binary_arr_setitem(arr, ind, val):
     raise BodoError(
         f"setitem for Binary Array with indexing type {ind} not supported."
     )  # pragma: no cover
+
+
+def create_binary_cmp_op_overload(op):
+    """
+    create overloads for comparison operators for binary arrays with bytes values
+    """
+
+    def overload_binary_cmp(lhs, rhs):
+        is_array_lhs = lhs == binary_array_type
+        is_array_rhs = rhs == binary_array_type
+        # At least 1 input is an array
+        array_name = "lhs" if is_array_lhs else "rhs"
+        func_text = "def impl(lhs, rhs):\n"
+        func_text += "  numba.parfors.parfor.init_prange()\n"
+        func_text += f"  n = len({array_name})\n"
+        func_text += "  out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)\n"
+        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+        null_checks = []
+        if is_array_lhs:
+            null_checks.append("bodo.libs.array_kernels.isna(lhs, i)")
+        if is_array_rhs:
+            null_checks.append("bodo.libs.array_kernels.isna(rhs, i)")
+        func_text += f"    if {' or '.join(null_checks)}:\n"
+        func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
+        func_text += "      continue\n"
+        left_arg = "lhs[i]" if is_array_lhs else "lhs"
+        right_arg = "rhs[i]" if is_array_rhs else "rhs"
+        func_text += f"    out_arr[i] = op({left_arg}, {right_arg})\n"
+        func_text += "  return out_arr\n"
+        local_vars = {}
+        exec(func_text, {"bodo": bodo, "numba": numba, "op": op}, local_vars)
+        return local_vars["impl"]
+
+    return overload_binary_cmp
