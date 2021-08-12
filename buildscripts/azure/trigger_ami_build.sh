@@ -36,7 +36,7 @@ if [[ "$CHANNEL_NAME" == "bodo.ai-platform" ]] && [[ "$OS_DIR" == "linux-64"* ]]
     -X POST \
     -H "Accept: application/vnd.github.v3+json" \
     -H "Authorization: token $bot_token" \
-    https://api.github.com/repos/Bodo-inc/bodo-ami/actions/workflows/build_publish_amis.yml/dispatches \
+    https://api.github.com/repos/Bodo-inc/bodo-ami/actions/workflows/build_publish_images.yml/dispatches \
     -d '{"ref":"refs/tags/'$release_tag'", "inputs":{"bodoVersion":"'$BODO_VERSION'","onlyDev":"'$ONLY_DEV'"}}'
 
 else
