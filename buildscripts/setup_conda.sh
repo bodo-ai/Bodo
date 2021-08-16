@@ -57,7 +57,7 @@ then
    # We lock fsspec at version 0.8 because in 0.9 it
    # caused us import errors with s3fs for Pandas tests.
    $CONDA_INSTALL fsspec=0.8 -c conda-forge
-   $CONDA_INSTALL pandas='1.2.*' -c conda-forge
+   $CONDA_INSTALL pandas='1.3.*' -c conda-forge
    $CONDA_INSTALL numba=0.53.0 -c conda-forge
    $CONDA_INSTALL cython -c conda-forge
    $CONDA_INSTALL mpi4py -c conda-forge

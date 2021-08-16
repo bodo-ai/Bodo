@@ -973,7 +973,15 @@ def test_series_isin_true(series_val):
     else:
         py_output = None
     # TODO: Check distributed
-    check_func(test_impl, (series_val, values), py_output=py_output, dist_test=False)
+    # setting check_dtype to False because as bodo returns a series with non-nullable boolean type
+    # as opposed to nullable pandas type. See [BE-1162]
+    check_func(
+        test_impl,
+        (series_val, values),
+        py_output=py_output,
+        dist_test=False,
+        check_dtype=False,
+    )
 
 
 @pytest.mark.slow
@@ -1201,11 +1209,23 @@ def test_series_append_multi(series_val, ignore_index, memory_leak_check):
 
 
 def test_series_quantile(numeric_series_val, memory_leak_check):
+
+    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+        # as of Pandas 1.3, quantile throws an error when called on nullable integer Series
+        # In bodo, this doesn't cause an error at the moment.
+        py_out = (
+            numeric_series_val.dropna()
+            .astype(numeric_series_val.dtype.numpy_dtype)
+            .quantile(0.30)
+        )
+    else:
+        py_out = None
+
     def test_impl(A):
         return A.quantile(0.30)
 
     # TODO: needs np.testing.assert_almost_equal?
-    check_func(test_impl, (numeric_series_val,))
+    check_func(test_impl, (numeric_series_val,), py_output=py_out)
 
 
 def test_series_quantile_q(memory_leak_check):
