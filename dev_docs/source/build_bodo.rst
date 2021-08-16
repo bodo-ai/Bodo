@@ -22,6 +22,7 @@ such as Numba on Ubuntu Linux::
     # If you don't want to install Numba from source: conda install numba=0.53.0 -c conda-forge
     # For development/debugging purposes, it's best to install Numba from source instead
     # START OF BUILD NUMBA FROM SOURCE
+    conda install llvmlite -c conda-forge
     git clone https://github.com/numba/numba.git
     # make sure you checkout version 0.53.0. numba's master may not work with Bodo master
     # if you need to remove any numba in your miniconda env before rebuilding from source try:
