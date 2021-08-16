@@ -730,9 +730,11 @@ def test_np_random_multivariate_normal(memory_leak_check):
         pytest.param(pd.Categorical(["AA", "BB", "", "AA", None] * 2)),
         pytest.param(
             pd.Categorical(
-                np.append(pd.date_range("2020-01-14", "2020-01-22").date, [None])
-            ),
-            marks=pytest.mark.slow,
+                np.array(
+                    ["2020-01-14", "2020-01-15", "2020-01-16", "2020-01-17", "NAT"],
+                    dtype="datetime64[ns]",
+                )
+            )
         ),
         pytest.param(
             pd.Categorical(

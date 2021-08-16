@@ -56,9 +56,11 @@ def test_unbox_dtype(dtype, memory_leak_check):
         ),
         pytest.param(
             pd.Categorical(
-                np.append(pd.date_range("2020-01-14", "2020-01-17").date, [None])
-            ),
-            marks=pytest.mark.slow,
+                np.array(
+                    ["2020-01-14", "2020-01-15", "2020-01-16", "2020-01-17", "NAT"],
+                    dtype="datetime64[ns]",
+                )
+            )
         ),
         pytest.param(
             pd.Categorical(
@@ -171,7 +173,7 @@ def test_setitem_cat_array_runtime(cat_arr_value):
 
     # Set ordered to false so the dtypes at compile/runtime match
     cat_arr_value = cat_arr_value.astype(
-        pd.Categorical(cat_arr_value.dtype.categories, ordered=False)
+        pd.CategoricalDtype(cat_arr_value.dtype.categories, ordered=False)
     )
 
     val = pd.Series(cat_arr_value.categories)
@@ -199,7 +201,7 @@ def test_setitem_cat_array_runtime_err(cat_arr_value):
 
     # Set ordered to false so the dtypes at compile time match
     cat_arr_value = cat_arr_value.astype(
-        pd.Categorical(cat_arr_value.dtype.categories, ordered=False)
+        pd.CategoricalDtype(cat_arr_value.dtype.categories, ordered=False)
     )
 
     val = pd.Series(cat_arr_value.categories)[:3]

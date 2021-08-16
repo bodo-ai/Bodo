@@ -294,6 +294,11 @@ def test_agg_set_error(memory_leak_check):
 
 @pytest.mark.slow
 def test_sum_string(memory_leak_check):
+
+    assert re.compile(r"1.3.*").match(
+        pd.__version__
+    ), "String sum will raise a TypeError in a later Pandas version."
+
     def impl(df):
         A = df.groupby("A").sum()
         return A
@@ -302,6 +307,8 @@ def test_sum_string(memory_leak_check):
         {
             "A": [1, 1, 1, 2, 3, 3, 4, 0, 5, 0, 11],
             "B": ["a", "b", "c", "d", "", "AA", "ABC", "AB", "c", "F", "GG"],
+            # String cols are dropped for sum, so we need an extra column to avoid empty output in that case
+            "C": [1] * 11,
         }
     )
     check_func(impl, (df1,), sort_output=True)
@@ -403,6 +410,11 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
 
 
 def test_random_string_sum_min_max_first_last(memory_leak_check):
+
+    assert re.compile(r"1.3.*").match(
+        pd.__version__
+    ), "String sum will raise a TypeError in a later Pandas version."
+
     def impl1(df):
         A = df.groupby("A").sum()
         return A
@@ -427,13 +439,16 @@ def test_random_string_sum_min_max_first_last(memory_leak_check):
         random.seed(5)
         eList_A = []
         eList_B = []
+        # String cols are dropped for sum, so we need an extra column to avoid empty output in that case
+        eList_C = []
         for i in range(n):
             len_str = random.randint(1, 10)
             val_A = random.randint(1, 10)
             val_B = "".join(random.choices(string.ascii_uppercase, k=len_str))
             eList_A.append(val_A)
             eList_B.append(val_B)
-        return pd.DataFrame({"A": eList_A, "B": eList_B})
+            eList_C.append(1)
+        return pd.DataFrame({"A": eList_A, "B": eList_B, "C": eList_C})
 
     df1 = random_dataframe(100)
     check_func(impl1, (df1,), sort_output=True)
@@ -445,8 +460,13 @@ def test_random_string_sum_min_max_first_last(memory_leak_check):
 
 def test_groupby_missing_entry(is_slow_run, memory_leak_check):
     """The columns which cannot be processed cause special problems as they are
-    sometimes dropped instead of failing
+    sometimes dropped instead of failing. This behavior is expected to raise an error
+    in future versions of Pandas.
     """
+
+    assert re.compile(r"1.3.*").match(
+        pd.__version__
+    ), "String sum will raise a TypeError in a later Pandas version."
 
     def test_drop_sum(df):
         return df.groupby("A").sum()
@@ -465,7 +485,11 @@ def test_groupby_missing_entry(is_slow_run, memory_leak_check):
         }
     )
     df3 = pd.DataFrame(
-        {"A": [3, 2, 3, 1, 11] * 3, "B": ["aa", "bb", "cc", "", "AA"] * 3}
+        {
+            "A": [3, 2, 3, 1, 11] * 3,
+            "B": ["aa", "bb", "cc", "", "AA"] * 3,
+            "C": [3, 1, 2, 0, -3] * 3,
+        }
     )
     check_func(test_drop_sum, (df1,), sort_output=True, check_typing_issues=False)
     if not is_slow_run:
@@ -856,6 +880,10 @@ def test_sum_max_min_list_string_random(memory_leak_check):
     We have to use as_index=False since list of strings are mutable
     and index are immutable so cannot be an index"""
 
+    assert re.compile(r"1.3.*").match(
+        pd.__version__
+    ), "String sum will raise a TypeError in a later Pandas version."
+
     def test_impl1(df1):
         df2 = df1.groupby("A", as_index=False).sum()
         return df2
@@ -895,6 +923,8 @@ def test_sum_max_min_list_string_random(memory_leak_check):
         {
             "A": gen_random_list_string_array(2, n),
             "B": gen_random_list_string_array(2, n),
+            # String cols are now dropped for sum, so we need an extra column to avoid empty output
+            "C": [1] * n,
         }
     )
 
@@ -3466,9 +3496,9 @@ def test_std_one_col(test_df, memory_leak_check):
     This is due to a bug in pandas. See
     https://github.com/pandas-dev/pandas/issues/35516
     """
-    assert re.compile(r"1.2.*").match(
+    assert re.compile(r"1.3.*").match(
         pd.__version__
-    ), "revisit the df.groupby(A)[B].std() issue at next pandas version"
+    ), "revisit the df.groupby(A)[B].std() issue at next pandas version."
 
     def impl1(df):
         #        A = df.groupby("A")["B"].std()

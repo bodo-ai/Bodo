@@ -13,10 +13,14 @@ from bodo.tests.utils import check_func
 
 @pytest.fixture(
     params=[
-        np.array([[1, 3, None], [2], None, [4, None, 5, 6], [], [1, 1], None] * 2),
+        np.array(
+            [[1, 3, None], [2], None, [4, None, 5, 6], [], [1, 1], None] * 2,
+            dtype=object,
+        ),
         pytest.param(
             np.array(
-                [[2.0, -3.2], [2.2, 1.3], None, [4.1, np.nan, 6.3], [], [1.1, 1.2]] * 2
+                [[2.0, -3.2], [2.2, 1.3], None, [4.1, np.nan, 6.3], [], [1.1, 1.2]] * 2,
+                dtype=object,
             ),
             marks=pytest.mark.slow,
         ),
@@ -30,7 +34,8 @@ from bodo.tests.utils import check_func
                     [],
                     [True, True],
                 ]
-                * 2
+                * 2,
+                dtype=object,
             ),
             marks=pytest.mark.slow,
         ),
@@ -44,7 +49,8 @@ from bodo.tests.utils import check_func
                     [],
                     [datetime.date(2020, 11, 17)],
                 ]
-                * 2
+                * 2,
+                dtype=object,
             ),
             marks=pytest.mark.slow,
         ),
@@ -59,7 +65,8 @@ from bodo.tests.utils import check_func
                     np.array([], np.int32),
                     np.array([1, 1], np.int32),
                 ]
-                * 2
+                * 2,
+                dtype=object,
             ),
             marks=pytest.mark.slow,
         ),
@@ -85,7 +92,8 @@ from bodo.tests.utils import check_func
                     [],
                     [[1], None, [1, 4], []],
                 ]
-                * 2
+                * 2,
+                dtype=object,
             ),
             marks=pytest.mark.slow,
         ),
@@ -105,7 +113,8 @@ from bodo.tests.utils import check_func
                     [],
                     [[[], [1]], None, [[1, 4]], []],
                 ]
-                * 2
+                * 2,
+                dtype=object,
             ),
             marks=pytest.mark.slow,
         ),
@@ -119,7 +128,8 @@ from bodo.tests.utils import check_func
                     [{"A": 10, "B": 20}, {"A": 100, "B": 200}],
                     [{"A": 30, "B": 40}],
                     [{"A": 50, "B": 60}, {"A": 500, "B": 600}, {"A": 5000, "B": 6000}],
-                ]
+                ],
+                dtype=object,
             ),
             marks=pytest.mark.slow,
         ),
