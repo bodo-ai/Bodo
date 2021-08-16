@@ -404,6 +404,13 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
     return _str_replace_noregex_impl
 
 
+@numba.njit
+def series_contains_regex(S, pat, case, flags, na, regex):  # pragma: no cover
+    with numba.objmode(out_arr=bodo.boolean_array):
+        out_arr = S.array._str_contains(pat, case, flags, na, regex)
+    return out_arr
+
+
 @overload_method(SeriesStrMethodType, "contains", no_unliteral=True)
 def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, regex=True):
     not_supported_arg_check("contains", "na", na, np.nan)
@@ -435,31 +442,22 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
     func_text += "  arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
     func_text += "  index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
     func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
-    func_text += "  numba.parfors.parfor.init_prange()\n"
-
-    if is_overload_true(regex):
-        if is_overload_false(case):
-            # Modify re flag to ignore case
-            func_text += "  flags |= re_ignorecase_value\n"
-        func_text += "  e = re.compile(pat, flags)\n"
-
     func_text += "  l = len(arr)\n"
     func_text += "  out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
 
-    # Only needed for the non-regex case-insensitive case
-    if is_overload_false(regex) and is_overload_false(case):
-        func_text += "  upper_pat = pat.upper()\n"
-
-    func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
-    func_text += "      if bodo.libs.array_kernels.isna(arr, i):\n"
-    func_text += "          bodo.libs.array_kernels.setna(out_arr, i)\n"
-    func_text += "      else:\n"
-
     if is_overload_true(regex):
-        func_text += (
-            "          out_arr[i] = bodo.libs.str_ext.contains_regex(e, arr[i])\n"
-        )
+        func_text += "  out_arr = bodo.hiframes.series_str_impl.series_contains_regex(S, pat, case, flags, na, regex)\n"
+
     else:
+        func_text += "  numba.parfors.parfor.init_prange()\n"
+        # Only needed for the non-regex case-insensitive case
+        if is_overload_false(case):
+            func_text += "  upper_pat = pat.upper()\n"
+
+        func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
+        func_text += "      if bodo.libs.array_kernels.isna(arr, i):\n"
+        func_text += "          bodo.libs.array_kernels.setna(out_arr, i)\n"
+        func_text += "      else: \n"
         if is_overload_true(case):
             func_text += "          out_arr[i] = pat in arr[i]\n"
         else:
