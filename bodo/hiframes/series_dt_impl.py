@@ -1000,7 +1000,7 @@ def create_cmp_op_overload(op):
                     if dt64_2 == nat_int or lhs.value == nat_int:
                         ret_val = default_value
                     else:
-                        ret_val = op(dt64_2, lhs.value)
+                        ret_val = op(lhs.value, dt64_2)
                     out_arr[i] = ret_val
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 

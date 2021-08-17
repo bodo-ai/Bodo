@@ -141,3 +141,26 @@ def test_scalar_series(val, memory_leak_check):
         return pd.Series(val, pd.RangeIndex(0, 100, 1))
 
     check_func(test_impl, (), reset_index=True)
+
+
+def test_timestamp_ge(memory_leak_check):
+    """
+    Tests for comparing a Timestamp value with a dt64 series.
+    This ensure that operators that don't commute handle Timestamp
+    on the lhs and rhs.
+    """
+
+    def test_impl(val1, val2):
+        return val1 >= val2
+
+    S = pd.Series(
+        [
+            pd.Timestamp(2021, 11, 21),
+            pd.Timestamp(2022, 1, 12),
+            pd.Timestamp(2021, 3, 3),
+        ]
+        * 4
+    )
+    ts = pd.Timestamp(2021, 8, 16)
+    check_func(test_impl, (S, ts))
+    check_func(test_impl, (ts, S))
