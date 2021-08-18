@@ -32,7 +32,7 @@ Starting an ``ipyparallel`` cluster
 -----------------------------------
 
 For a detailed guide on how to start an ``ipyparallel`` cluster,
-please refer `here <https://ipyparallel.readthedocs.io/en/latest/process.html>`_.
+please refer `here <https://ipyparallel.readthedocs.io/en/latest/tutorial/process.html>`_.
 
 
 Controller and engines on the same host

@@ -83,13 +83,15 @@ for the Bodo Platform Application.
     :align: center
     :alt: Assign SP a Role
 
+.. seealso:: :ref:`required_az_resource_providers`
+
 Once you have created the service principal and assigned a role to it, you are now ready to fill the *Settings* Form on the Bodo Platform.
 
-#. Enter your Azure Subscription ID in the **Subscription ID** field. You can find this in the *Subscription Overview*. 
+#. Enter your Azure subscription ID in the **Subscription ID** field. You can find this in the *Subscription Overview*. 
 
     .. image:: platform_onboarding_screenshots/az-subscription-id.png
         :align: center
-        :alt: Azure Subscription ID
+        :alt: Azure subscription ID
 
 #. Enter your Azure Tenant ID in the **Tenant ID** field. You can find this in *Azure AD*.
 
@@ -106,8 +108,28 @@ Once you have created the service principal and assigned a role to it, you are n
 
 #. Click on ``SAVE``.
 
-**Note:** It is highly recommended that you ensure sufficient limits on your Azure Subscription to launch
+**Note:** It is highly recommended that you ensure sufficient limits on your Azure subscription to launch
 resources. See :ref:`resources_created_in_azure_env` for the resources required for Bodo Cloud Platform.
+
+
+.. _required_az_resource_providers:
+
+Required Resource Providers on Azure subscription
+-------------------------------------------------
+
+Ensure that the following resource providers are registered on your Azure subscription:
+
+* Microsoft.Authorization
+* Microsoft.Compute
+* Microsoft.KeyVault
+* Microsoft.ManagedIdentity
+* Microsoft.Network
+* Microsoft.Resources
+* Microsoft.Storage
+
+.. image:: platform_onboarding_screenshots/az-resource-providers.png
+  :align: center
+  :alt: Azure Required Resource Providers
 
 
 .. seealso:: :ref:`bodo_platform`
