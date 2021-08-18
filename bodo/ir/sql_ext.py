@@ -182,8 +182,6 @@ def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, db_type, paral
         "{}='{}'".format(s_cname, _get_dtype_str(t))
         for s_cname, t in zip(sanitized_cnames, col_typs)
     ]
-    rank = bodo.libs.distributed_api.get_rank()
-    n_pes = bodo.libs.distributed_api.get_size()
     # Method below is incorrect if the data is required to be ordered.
     # It is left here as historical record.
     #
@@ -197,14 +195,14 @@ def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, db_type, paral
     if bodo.sql_access_method == "multiple_access_by_block":
         func_text = "def sql_reader_py(sql_request,conn):\n"
         func_text += "  sqlalchemy_check()\n"
+        func_text += "  rank = bodo.libs.distributed_api.get_rank()\n"
+        func_text += "  n_pes = bodo.libs.distributed_api.get_size()\n"
         func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
         func_text += "    list_df_block = []\n"
         func_text += "    block_size = 50000\n"
         func_text += "    iter = 0\n"
         func_text += "    while(True):\n"
-        func_text += "      offset = (iter * {} + {}) * block_size\n".format(
-            n_pes, rank
-        )
+        func_text += "      offset = (iter * n_pes + rank) * block_size\n"
         func_text += "      sql_cons = 'select * from (' + sql_request + ') x LIMIT ' + str(block_size) + ' OFFSET ' + str(offset)\n"
         func_text += "      df_block = pd.read_sql(sql_cons, conn)\n"
         func_text += "      if df_block.size == 0:\n"
@@ -240,19 +238,18 @@ def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, db_type, paral
         func_text = "def sql_reader_py(sql_request, conn):\n"
         func_text += "  sqlalchemy_check()\n"
         if parallel:
+            func_text += "  rank = bodo.libs.distributed_api.get_rank()\n"
             func_text += '  with objmode(nb_row="int64"):\n'
-            if rank == MPI_ROOT:
-                func_text += (
-                    "    sql_cons = 'select count(*) from (' + sql_request + ') x'\n"
-                )
-                func_text += "    frame = pd.read_sql(sql_cons, conn)\n"
-                func_text += "    nb_row = frame.iat[0,0]\n"
-            else:
-                func_text += "    nb_row = 0\n"
+            func_text += f"    if rank == {MPI_ROOT}:\n"
+            func_text += (
+                "      sql_cons = 'select count(*) from (' + sql_request + ') x'\n"
+            )
+            func_text += "      frame = pd.read_sql(sql_cons, conn)\n"
+            func_text += "      nb_row = frame.iat[0,0]\n"
+            func_text += "    else:\n"
+            func_text += "      nb_row = 0\n"
             func_text += "  nb_row = bcast_scalar(nb_row)\n"
             func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
-            func_text += "    rank = {}\n".format(rank)
-            func_text += "    n_pes = {}\n".format(n_pes)
             func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
             # Snowflake doesn't provide consistent output in different processes with
             # LIMIT/OFFSET case and row_number() is recommended instead
