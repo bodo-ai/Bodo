@@ -50,6 +50,22 @@ ll.add_symbol("array_size", hstr_ext.array_size)
 ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
 
 
+def _set_bodo_meta_in_pandas():
+    """
+    Avoid pandas warnings for Bodo metadata setattr in boxing of Series/DataFrame.
+    Has to run in import instead of somewhere in the compiler pipeline since user
+    function may be loaded from cache.
+    """
+    if "_bodo_meta" not in pd.Series._metadata:
+        pd.Series._metadata.append("_bodo_meta")
+
+    if "_bodo_meta" not in pd.DataFrame._metadata:
+        pd.DataFrame._metadata.append("_bodo_meta")
+
+
+_set_bodo_meta_in_pandas()
+
+
 @typeof_impl.register(pd.DataFrame)
 def typeof_pd_dataframe(val, c):
     from bodo.transforms.distributed_analysis import Distribution
@@ -246,10 +262,6 @@ def box_dataframe(typ, val, c):
 
     _set_bodo_meta(df_obj, pyapi, typ)
 
-    # avoid pandas warnings for Bodo metadata setattr
-    if "_bodo_meta" not in pd.DataFrame._metadata:
-        pd.DataFrame._metadata.append("_bodo_meta")
-
     # decref() should be called on native value
     # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
     c.context.nrt.decref(c.builder, typ, val)
@@ -409,10 +421,6 @@ def box_series(typ, val, c):
     c.pyapi.decref(name_obj)
 
     _set_bodo_meta(res, c.pyapi, typ)
-
-    # avoid pandas warnings for Bodo metadata setattr
-    if "_bodo_meta" not in pd.Series._metadata:
-        pd.Series._metadata.append("_bodo_meta")
 
     c.pyapi.decref(pd_class_obj)
     c.context.nrt.decref(c.builder, typ, val)
