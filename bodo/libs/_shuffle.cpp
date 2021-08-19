@@ -6,13 +6,10 @@
 #include "_array_utils.h"
 #include "_distributed.h"
 
-#undef DEBUG_SHUFFLE
 #undef DEBUG_REVERSE_SHUFFLE
 #undef DEBUG_GATHER
 #undef DEBUG_BROADCAST
 #undef DEBUG_BOUND_INFO
-#undef DEBUG_COMP_HASH
-#undef DEBUG_ARROW_SHUFFLE
 
 mpi_comm_info::mpi_comm_info(std::vector<array_info*>& _arrays)
     : arrays(_arrays) {
@@ -1462,13 +1459,6 @@ table_info* coherent_shuffle_table(table_info* in_table, table_info* ref_table,
         Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
         return NULL;
     }
-#ifdef DEBUG_SHUFFLE
-    std::cout << "IN_TABLE (COHERENT SHUFFLE):\n";
-    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-    DEBUG_PrintRefct(std::cout, in_table->columns);
-    std::cout << "REF_TABLE (COHERENT SHUFFLE):\n";
-    DEBUG_PrintRefct(std::cout, ref_table->columns);
-#endif
     mpi_comm_info comm_info(in_table->columns);
     // computing the hash data structure
     uint32_t* hashes = coherent_hash_keys_table(in_table, ref_table, n_keys,
@@ -1476,11 +1466,6 @@ table_info* coherent_shuffle_table(table_info* in_table, table_info* ref_table,
     comm_info.set_counts(hashes);  // Prereq to calling shuffle_table_kernel
     table_info* table = shuffle_table_kernel(in_table, hashes, comm_info);
     delete[] hashes;
-#ifdef DEBUG_REVERSE_SHUFFLE
-    std::cout << "RET_TABLE (SHUFFLE):\n";
-    DEBUG_PrintSetOfColumn(std::cout, table->columns);
-    DEBUG_PrintRefct(std::cout, table->columns);
-#endif
     return table;
 }
 

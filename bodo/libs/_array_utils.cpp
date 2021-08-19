@@ -189,8 +189,6 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
     }
 }
 
-#undef DEBUG_RETRIEVE
-
 template <typename F>
 array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
                                          size_t nRowOut) {
@@ -467,9 +465,6 @@ array_info* RetrieveArray_TwoColumns(
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
     int const& ChoiceColumn, bool const& map_integer_type) {
     size_t nRowOut = ListPairWrite.size();
-#ifdef DEBUG_RETRIEVE
-    std::cout << "nRowOut=" << nRowOut << "\n";
-#endif
     array_info* out_arr = NULL;
     /* The function for computing the returning values
      * In the output is the column index to use and the row index to use.
@@ -496,9 +491,6 @@ array_info* RetrieveArray_TwoColumns(
     bodo_array_type::arr_type_enum arr_type = ref_column->arr_type;
     Bodo_CTypes::CTypeEnum dtype = ref_column->dtype;
     if (arr_type == bodo_array_type::LIST_STRING) {
-#ifdef DEBUG_RETRIEVE
-        std::cout << "Case of LIST_STRING\n";
-#endif
         // In the first case of STRING, we have to deal with offsets first so we
         // need one first loop to determine the needed length. In the second
         // loop, the assignation is made. If the entries are missing then the
@@ -572,9 +564,6 @@ array_info* RetrieveArray_TwoColumns(
         out_index_offsets[nRowOut] = pos_index;
     }
     if (arr_type == bodo_array_type::STRING) {
-#ifdef DEBUG_RETRIEVE
-        std::cout << "Case of STRING\n";
-#endif
         // In the first case of STRING, we have to deal with offsets first so we
         // need one first loop to determine the needed length. In the second
         // loop, the assignation is made. If the entries are missing then the
@@ -616,9 +605,6 @@ array_info* RetrieveArray_TwoColumns(
         out_offsets[nRowOut] = pos;
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-#ifdef DEBUG_RETRIEVE
-        std::cout << "Case of NULLABLE_INT_BOOL\n";
-#endif
         // In the case of NULLABLE array, we do a single loop for
         // assigning the arrays.
         // We do not need to reassign the pointers, only their size
@@ -641,9 +627,6 @@ array_info* RetrieveArray_TwoColumns(
         }
     }
     if (arr_type == bodo_array_type::CATEGORICAL) {
-#ifdef DEBUG_RETRIEVE
-        std::cout << "Case of CATEGORICAL\n";
-#endif
         // In the case of CATEGORICAL array we have only to put a single
         // entry. For the NaN entry the value is -1.
         uint64_t siztype = numpy_item_size[dtype];
@@ -664,9 +647,6 @@ array_info* RetrieveArray_TwoColumns(
         }
     }
     if (arr_type == bodo_array_type::NUMPY) {
-#ifdef DEBUG_RETRIEVE
-        std::cout << "Case of NUMPY\n";
-#endif
         // In the case of NUMPY array we have only to put a single
         // entry.
         // In the case of missing data we have to assign a NaN and that is
@@ -710,9 +690,6 @@ array_info* RetrieveArray_TwoColumns(
         }
     }
     if (arr_type == bodo_array_type::ARROW) {
-#ifdef DEBUG_RETRIEVE
-        std::cout << "Case of ARROW\n";
-#endif
         // Arrow builder for output array. builds it dynamically (buffer
         // sizes are not known in advance)
         std::unique_ptr<arrow::ArrayBuilder> builder;
@@ -942,7 +919,8 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
                                   pos2_s, pos2_e, na_position_bis);
         return val == 0;
     }
-    if (arr1->arr_type == bodo_array_type::NUMPY || arr1->arr_type == bodo_array_type::CATEGORICAL) {
+    if (arr1->arr_type == bodo_array_type::NUMPY ||
+        arr1->arr_type == bodo_array_type::CATEGORICAL) {
         // In the case of NUMPY, we compare the values for concluding.
         uint64_t siztype = numpy_item_size[arr1->dtype];
         char* ptr1 = arr1->data1 + siztype * pos1;
@@ -954,11 +932,13 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
                 // Categorical null values are represented as -1
                 return !isnan_categorical_ptr(arr1->dtype, ptr1);
             } else if (arr1->dtype == Bodo_CTypes::FLOAT32) {
-                return !isnan(*((float *) ptr1));
+                return !isnan(*((float*)ptr1));
             } else if (arr1->dtype == Bodo_CTypes::FLOAT64) {
-                return !isnan(*((double *) ptr1));
-            } else if (arr1->dtype == Bodo_CTypes::DATETIME || arr1->dtype == Bodo_CTypes::TIMEDELTA) {
-                return (*((int64_t *) ptr1)) != std::numeric_limits<int64_t>::min();
+                return !isnan(*((double*)ptr1));
+            } else if (arr1->dtype == Bodo_CTypes::DATETIME ||
+                       arr1->dtype == Bodo_CTypes::TIMEDELTA) {
+                return (*((int64_t*)ptr1)) !=
+                       std::numeric_limits<int64_t>::min();
             }
         }
     }
