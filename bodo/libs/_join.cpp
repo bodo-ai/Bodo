@@ -5,15 +5,8 @@
 #include "_distributed.h"
 #include "_shuffle.h"
 
-// If the test below is selected then many symbolic information are printed out.
-// But it will not flood the logs even if you have millions of rows
-#undef DEBUG_JOIN_SYMBOL
-// This set of print statement can definitely flood your logs.
-#undef DEBUG_JOIN_FULL
-
-#ifdef DEBUG_JOIN_SYMBOL
-#include <chrono>
-#endif
+// An overview of the join design can be found on Confluence:
+// https://bodo.atlassian.net/wiki/spaces/B/pages/821624833/Join+Code+Design
 
 // There are several heuristic in this code:
 // ---We can use shuffle-join or broadcast-join. We have one constant for the
@@ -39,54 +32,16 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
         // Doing checks and basic assignments.
-#ifdef DEBUG_JOIN_SYMBOL
-        std::chrono::time_point<std::chrono::system_clock> time1 =
-            std::chrono::system_clock::now();
-        std::cout << "---------------------------------------------------------"
-                     "--------------\n";
-        std::cout << "hash_join_table. LEFT_TABLE):\n";
-        DEBUG_PrintRefct(std::cout, left_table->columns);
-#ifdef DEBUG_JOIN_FULL
-        DEBUG_PrintSetOfColumn(std::cout, left_table->columns);
-#endif
-        std::cout << "hash_join_table. RIGHT_TABLE):\n";
-        DEBUG_PrintRefct(std::cout, right_table->columns);
-#ifdef DEBUG_JOIN_FULL
-        DEBUG_PrintSetOfColumn(std::cout, right_table->columns);
-#endif
-#endif
         size_t n_key = size_t(n_key_t);
         size_t n_data_left = size_t(n_data_left_t);
         size_t n_data_right = size_t(n_data_right_t);
         size_t n_tot_left = n_key + n_data_left;
         size_t n_tot_right = n_key + n_data_right;
-        for (size_t iKey = 0; iKey < n_key; iKey++)
+        for (size_t iKey = 0; iKey < n_key; iKey++) {
+            // Check that all of the key pairs have matching types.
             CheckEqualityArrayType(left_table->columns[iKey],
                                    right_table->columns[iKey]);
-#ifdef DEBUG_JOIN_SYMBOL
-        if (size_t(left_table->ncols()) != n_tot_left) {
-            throw std::runtime_error(
-                "Error in join.cpp::hash_join_table: incoherent dimensions for "
-                "left tabče.");
         }
-        if (size_t(right_table->ncols()) != n_tot_right) {
-            throw std::runtime_error(
-                "Error in join.cpp::hash_join_table: incoherent dimensions for "
-                "right tabče.");
-        }
-        std::cout << "n_key_t=" << n_key_t << "\n";
-        for (size_t iKey = 0; iKey < n_key; iKey++) {
-            int64_t val = vect_same_key[iKey];
-            std::cout << "iKey=" << iKey << "/" << n_key_t
-                      << " vect_same_key[iKey]=" << val << "\n";
-        }
-        std::cout << "left_parallel=" << left_parallel
-                  << " right_parallel=" << right_parallel << "\n";
-        std::cout << "n_data_left_t=" << n_data_left_t
-                  << " n_data_right_t=" << n_data_right_t << "\n";
-        std::cout << "is_left=" << is_left << " is_right=" << is_right << "\n";
-        std::cout << "optional_col=" << optional_col << "\n";
-#endif
         // in the case of merging on index and one column, it can only be one
         // column
         if (n_key_t > 1 && optional_col) {
@@ -112,106 +67,118 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         //    if one table is much smaller. Still making a table replicated
         //    should give pause to users.
         //
-        // Both algorithm requires the construction of a hash map for the keys.
+        // Both algorithms require the construction of a hash map for the keys.
         //
         table_info *work_left_table, *work_right_table;
         bool free_work_left = false, free_work_right = false;
-        bool left_replicated, right_replicated;
+        // Default replicated values are opposite of parallel. These
+        // are updated if we broadcast a table.
+        bool left_replicated = !left_parallel,
+             right_replicated = !right_parallel;
         if (left_parallel && right_parallel) {
-            // Only if both tables are parallel is something needed
+            // If both tables are parallel then we need to decide between
+            // shuffle and broadcast join.
+
+            // Determine the memory size of each table
             int64_t left_total_memory = table_global_memory_size(left_table);
             int64_t right_total_memory = table_global_memory_size(right_table);
+            // Determine the threshold for brodcast join. We default to 10MB,
+            // which matches Spark, unless to user specifies a specific
+            // threshold for their infrastructure.
             int CritMemorySize = 10 * 1024 * 1024;  // in bytes
             char* bcast_threshold = std::getenv("BODO_BCAST_JOIN_THRESHOLD");
-            if (bcast_threshold) CritMemorySize = std::stoi(bcast_threshold);
-            if (CritMemorySize < 0)
+            if (bcast_threshold) {
+                CritMemorySize = std::stoi(bcast_threshold);
+            }
+            if (CritMemorySize < 0) {
                 throw std::runtime_error("hash_join: CritMemorySize < 0");
+            }
             bool all_gather = true;
+            // We always broadcast the smaller table
             if (left_total_memory < right_total_memory &&
                 left_total_memory < CritMemorySize) {
                 work_left_table = gather_table(left_table, -1, all_gather);
                 free_work_left = true;
                 work_right_table = right_table;
                 left_replicated = true;
-                right_replicated = false;
             } else if (right_total_memory <= left_total_memory &&
                        right_total_memory < CritMemorySize) {
                 work_left_table = left_table;
                 work_right_table = gather_table(right_table, -1, all_gather);
                 free_work_right = true;
-                left_replicated = false;
                 right_replicated = true;
             } else {
+                // If the smaller table is larger than the threshold
+                // we do a shuffle-join. To shuffle the tables we build
+                // a hash table (ensuring that comparable
+                // types hash to the same values).
                 work_left_table =
                     coherent_shuffle_table(left_table, right_table, n_key);
                 work_right_table =
                     coherent_shuffle_table(right_table, left_table, n_key);
                 free_work_left = true;
                 free_work_right = true;
-                left_replicated = false;
-                right_replicated = false;
             }
         } else {
+            // If either table is already replicated then we
+            // always do a broadcast-join (without the broadcast)
             work_left_table = left_table;
             work_right_table = right_table;
-            left_replicated = !left_parallel;
-            right_replicated = !right_parallel;
         }
-#ifdef DEBUG_JOIN_SYMBOL
-        std::cout << "left_replicated=" << left_replicated
-                  << " right_replicated=" << right_replicated << "\n";
-#endif
+        // At this point we always refer to the work tables, which abstracts
+        // away the original left and right tables. We cannot garbage
+        // collect either table because they may be reused in the Python code,
+        // so we must store both the original table and the shuffled/broadcast
+        // table.
+
         size_t n_rows_left = work_left_table->nrows();
         size_t n_rows_right = work_right_table->nrows();
-#ifdef DEBUG_JOIN_SYMBOL
-        std::cout << "hash_join_table. WORK LEFT_TABLE):\n";
-        DEBUG_PrintRefct(std::cout, work_left_table->columns);
-#ifdef DEBUG_JOIN_FULL
-        DEBUG_PrintSetOfColumn(std::cout, work_left_table->columns);
-#endif
-        std::cout << "hash_join_table. WORK_RIGHT_TABLE):\n";
-        DEBUG_PrintRefct(std::cout, work_right_table->columns);
-#ifdef DEBUG_JOIN_FULL
-        DEBUG_PrintSetOfColumn(std::cout, work_right_table->columns);
-#endif
-#endif
         //
-        // Now computing the hashes that will be used in the hash map.
+        // Now computing the hashes that will be used in the hash map
+        // or compared to the hash map.
         //
         uint32_t* hashes_left =
             hash_keys_table(work_left_table, n_key, SEED_HASH_JOIN);
         uint32_t* hashes_right =
             hash_keys_table(work_right_table, n_key, SEED_HASH_JOIN);
+        // Compute the ratio of the table sizes on the current rank.
+        // This is used when determining which table populates the
+        // hash map.
         double quot1 = double(n_rows_left) / double(n_rows_right);
         double quot2 = double(n_rows_right) / double(n_rows_left);
-#ifdef DEBUG_JOIN_SYMBOL
-        std::cout << "n_rows_left=" << n_rows_left
-                  << " n_rows_right=" << n_rows_right << "\n";
-        std::cout << " quot1=" << quot1 << " quot2=" << quot2 << "\n";
-#endif
+
         // In the computation of the join we are building some hash map on one
-        // of the tables. Which one we choose influence the running time of
-        // course.
-        // --- Selecting the smaller table is a good heuristic for the
-        // construction, the smaller the table, the smaller the hash map.
-        // --- Selecting one table for going into the hash-map while its values
-        // show up in the output for example via an outer merge means that we
-        // need to keep track of which keys have been used or not. This
-        // complexifies the data structure.
+        // of the tables. Which one we choose influences the running time of
+        // course. The parameters to weigh are:
         //
-        // Thus we use what we have to make the best choice about the
-        // computational technique.
-        int MethodChoice;  // 1: by number of rows.
-                           // 2: by the is_left / is_right values
+        // --- Selecting the smaller table. The smaller the table,
+        // the smaller the hash map, so this is usually a good heuristic
+        // --- Which tables require an outer merge. Outer merges require
+        // tracking which rows found matches in the other table. This
+        // complicates the data structure as we now need to track if
+        // a row is used.
+        //
+        // To make this decision, we compare
+        int MethodChoice;  // 1: Populate the hash map with the table with fewer
+                           // rows. 2: Populate the hash map with the table that
+                           // uniquely
+                           //    requires an outer join (i.e. is_left/is_right).
         if (is_left == is_right) {
-            // In that case we are doing either inner or outer merge
-            // This means that the is_left / is_right argument do not apply.
-            // Thus we simply have to use the number of rows for the choice
+            // In that case we are doing either inner or full outer merge
+            // the only relevant metric is table size.
             MethodChoice = 1;
         } else {
-            // In the case of is_left <> is_right we have a conflict regarding
-            // how to choose We decide to set up an heuristic about this for
-            // making the decision
+            // In the case of is_left <> is_right we must decide if the size
+            // of the tables or the outer join property are more important.
+            // To do this, we set a threshhold K (CritQuotientNrows) and compare
+            // the size of the table. If either table is has K times more rows
+            // we will always make the smaller table the table that populates
+            // the hash map, regardless of if that table needs an outer join.
+            // If the ratio of rows is less than K, then populate the hash map
+            // with the table that doesn't require an outer join.
+            //
+            // TODO: Justify our threshhold of 1 table being 6x larger than
+            // the other.
             double CritQuotientNrows = 6.0;
             if (quot2 < CritQuotientNrows && quot1 < CritQuotientNrows)
                 // In that case the large table is not so large comparable to
@@ -223,8 +190,10 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 // therefore the choice by the number of rows is the best here.
                 MethodChoice = 1;
         }
-        // We have chosen our method of choice and now we implement it.
-        // Both choice method are considered in sequence.
+        // We have chosen our criteria for selecting our table to populate
+        // the hash map, now we map this to a variable selecting the table.
+        // 0: left table
+        // 1: right table
         int ChoiceOpt;
         if (MethodChoice == 1) {
             // We choose by the number of rows.
@@ -234,34 +203,31 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 ChoiceOpt = 1;
             }
         } else {
-            // This case may happen only if is_left <> is_right
-            // Thus we can make a choice such that
-            // short_table_work = false which led to a simpler hash map.
+            // When is_left <> is_right
+            // and the tables are similarly sized
+            // we take the table without the outer join.
+            // to avoid tracking if a row has a match in the hash table.
             if (is_right) {  // Thus is_left = false
                 ChoiceOpt = 0;
             } else {
                 ChoiceOpt = 1;
             }
         }
-        // Now setting up pointers and values accordingly
-#ifdef DEBUG_JOIN_SYMBOL
-        std::cout << "MethodChoice=" << MethodChoice
-                  << " ChoiceOpt=" << ChoiceOpt << "\n";
-#endif
-        // Now that we have made a choice opt, we set what is the "short" table
-        // and the "long" one. For the short table we construct a hash map, for
+        // Select the "short" and "long" table based upon the choice opt
+        // that we just set. For the short table we construct a hash map, for
         // the long table, we simply iterate over the rows and see if the keys
         // are in the hash map.
         size_t short_table_rows, long_table_rows;  // the number of rows
         uint32_t *short_table_hashes, *long_table_hashes;
-        // This corresponds to is_left/is_right
-        bool short_table_work, long_table_work;
+        // This corresponds to is_left/is_right and determines
+        // if the short/long tables are outer joins.
+        bool short_table_outer, long_table_outer;
         table_info *short_table, *long_table;
         bool short_replicated, long_replicated;
         if (ChoiceOpt == 0) {
             // short = left and long = right
-            short_table_work = is_left;
-            long_table_work = is_right;
+            short_table_outer = is_left;
+            long_table_outer = is_right;
             short_table = work_left_table;
             long_table = work_right_table;
             short_table_rows = n_rows_left;
@@ -272,8 +238,8 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             long_replicated = right_replicated;
         } else {
             // short = right and long = left
-            short_table_work = is_right;
-            long_table_work = is_left;
+            short_table_outer = is_right;
+            long_table_outer = is_left;
             short_table = work_right_table;
             long_table = work_left_table;
             short_table_rows = n_rows_right;
@@ -283,28 +249,24 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             short_replicated = right_replicated;
             long_replicated = left_replicated;
         }
-        // If one table (say left one) is replicated and the other is
-        // distributed and is_left=T then we need to keep track of how the rows
-        // of the left table are matched.
-        bool parallel_track_miss_short =
-            short_table_work && short_replicated && !long_replicated;
-        bool parallel_track_miss_long =
-            long_table_work && long_replicated && !short_replicated;
-#ifdef DEBUG_JOIN_SYMBOL
-        std::cout << "parallel_track_miss_short=" << parallel_track_miss_short
-                  << "\n";
-        std::cout << "parallel_track_miss_long=" << parallel_track_miss_long
-                  << "\n";
-        std::cout << "short_table_rows=" << short_table_rows
-                  << " long_table_rows=" << long_table_rows << "\n";
-#endif
+        // If exactly one table is replicated and that table uses an outer
+        // join (i.e. is_left), we do not have enough information in one
+        // rank to determine that a row has no matches. As a result,
+        // these variables track if we will need to perform a reduction
+        // or if a row has a match.
+        bool short_miss_needs_reduction =
+            short_table_outer && short_replicated && !long_replicated;
+        bool long_miss_needs_reduction =
+            long_table_outer && long_replicated && !short_replicated;
         /* This is a function for comparing the rows.
          * This is the first lambda used as argument for the unordered map
          * container.
          *
-         * rows can be in the left or the right tables.
-         * If iRow < short_table_rows then it is in the first table.
-         * If iRow >= short_table_rows then it is in the second table.
+         * A row can refer to either the short or the long table.
+         * If iRow < short_table_rows then it is in the short table
+         *    at index iRow.
+         * If iRow >= short_table_rows then it is in the long table
+         *    at index (iRow - short_table_rows).
          *
          * @param iRow is the first row index for the comparison
          * @return true/false depending on the case.
@@ -319,9 +281,11 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         /* This is a function for testing equality of rows.
          * This is used as second argument for the unordered map container.
          *
-         * rows can be in the left or the right tables.
-         * If iRow < short_table_rows then it is in the first table.
-         * If iRow >= short_table_rows then it is in the second table.
+         * A row can refer to either the short or the long table.
+         * If iRow < short_table_rows then it is in the short table
+         *    at index iRow.
+         * If iRow >= short_table_rows then it is in the long table
+         *    at index (iRow - short_table_rows).
          *
          * NOTE: Trying to minimize the overhead of this function does not
          * show significant speedup in TPC-H. For example, if there is a single
@@ -365,11 +329,18 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         // We address the entry by the row index. We store all the rows which
         // are identical in a "group". The hashmap stores the group number
         // and the groups are stored in the `groups` std::vector.
+        //
+        // The groups are stored in the hash map from values 1 to n,
+        // although the groups indices are still 0 to n - 1.
+        // This is because 0 is a reserved value that we use to indicate
+        // that a value is not found in the hash map when inserting the short
+        // table.
+        //
         // NOTE: we don't store the group vectors in the map because it makes
         // map (re)allocs and deallocation very expensive, and possibly also
         // makes insertion and/or lookups slower.
         // StoreHash=true speeds up join code overall in TPC-H.
-        // If we also need to do short_table_work then we store an index in the
+        // If we also need to do short_table_outer then we store an index in the
         // first position of the std::vector
         UNORD_MAP_CONTAINER<size_t, size_t, std::function<uint32_t(size_t)>,
                             std::function<bool(size_t, size_t)>,
@@ -378,6 +349,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             entList({}, hash_fct, equal_fct);
         // reserving space is very important to avoid expensive reallocations
         // (at the cost of using more memory)
+        // [BE-1078]: Should this use statistics to influence how much we reserve?
         entList.reserve(short_table_rows);
         std::vector<std::vector<size_t>> groups;
         groups.reserve(short_table_rows);
@@ -385,52 +357,49 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         // ListPairWrite is the table used for the output
         // It precises the index used for the writing of the output table.
         std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
-        // XXX: how much should we reserve?
+        // [BE-1078]: how much should we reserve?
         ListPairWrite.reserve(long_table_rows);
-        // Now running according to the short_table_work. The choice depends on
-        // the initial choices that have been made.
-        size_t n_bytes_long;
-        if (parallel_track_miss_long) {
+
+        // If we will need to perform a reduction on long table matches,
+        // specify an allocation size for the vector.
+        size_t n_bytes_long = 0;
+        if (long_miss_needs_reduction) {
             n_bytes_long = (long_table_rows + 7) >> 3;
-        } else {
-            n_bytes_long = 0;
         }
         // V_long_map and V_short_map takes similar roles.
         // They indicate if an entry in the short or long table
         // has been matched to the other side.
-        // This is needed only if said table in replicated which occurs
-        // in the case of the broadcast join for example.
+        // This is needed only if said table is replicated
+        // (i.e long_miss_needs_reduction/short_miss_needs_reduction).
         std::vector<uint8_t> V_long_map(n_bytes_long, 255);
-        if (short_table_work) {
-#ifdef DEBUG_JOIN_SYMBOL
-            std::cout << "SECOND SCHEME when we have short entries=true\n";
-#endif
+        if (short_table_outer) {
             // The loop over the short table.
-            // entries are stored one by one and all of them are put even if
-            // identical in value.
+            // entries are stored one by one and all of them are put in a group
+            // even if they are identical in value.
             // The first entry is going to be the index for the boolean array.
             // This code path will be selected whenever we have an OUTER merge.
             size_t pos_idx = 0;
             for (size_t i_short = 0; i_short < short_table_rows; i_short++) {
+                // Check if the group already exists, if it doesn't this will
+                // insert a value.
                 size_t& group_id = entList[i_short];
                 // group_id==0 means key doesn't exist in map
                 if (group_id == 0) {
+                    // Update the value of group_id stored in the hash map
+                    // as well since its pass by reference.
                     group_id = groups.size() + 1;
                     groups.emplace_back();
+                    // The first entry is going to be the index for the boolean
+                    // array, that tracks if the group matches any rows in the
+                    // long table. We add that initial value to the group here.
                     groups.back().emplace_back(pos_idx);
+                    // pos_idx is used to track how many groups
+                    // require allocations in the short table vector that
+                    // track matches.
                     pos_idx++;
                 }
                 groups[group_id - 1].emplace_back(i_short);
             }
-#ifdef DEBUG_JOIN_SYMBOL
-            size_t nEnt = entList.size();
-            double uniq_frac = double(nEnt) / double(short_table_rows);
-            std::cout << "nEnt=" << nEnt << " uniq_frac=" << uniq_frac << "\n";
-            if (nEnt != pos_idx) {
-                std::cout << "nEnt=" << nEnt << " pos_idx=" << pos_idx << "\n";
-                std::cout << "Error between nEnt and pos_idx\n";
-            }
-#endif
             //
             // Now iterating and determining how many entries we have to do.
             //
@@ -438,18 +407,12 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             std::vector<uint8_t> V_short_map(n_bytes, 0);
             // We now iterate over all entries of the long table in order to get
             // the entries in the ListPairWrite.
-#ifdef DEBUG_JOIN_SYMBOL
-            size_t nb_from_long = 0, nb_short_long = 0;
-#endif
             for (size_t i_long = 0; i_long < long_table_rows; i_long++) {
                 size_t i_long_shift = i_long + short_table_rows;
                 auto iter = entList.find(i_long_shift);
                 if (iter == entList.end()) {
-                    if (long_table_work) {
-#ifdef DEBUG_JOIN_SYMBOL
-                        nb_from_long++;
-#endif
-                        if (parallel_track_miss_long) {
+                    if (long_table_outer) {
+                        if (long_miss_needs_reduction) {
                             SetBitTo(V_long_map.data(), i_long, false);
                         } else {
                             ListPairWrite.emplace_back(-1, i_long);
@@ -465,18 +428,13 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                     for (size_t idx = 1; idx < group.size(); idx++) {
                         size_t j_short = group[idx];
                         ListPairWrite.emplace_back(j_short, i_long);
-#ifdef DEBUG_JOIN_SYMBOL
-                        nb_short_long++;
-#endif
                     }
                 }
             }
-            // if short_table is in output then we need to check
-            // if they are used by the long table and if so use them on output.
-#ifdef DEBUG_JOIN_SYMBOL
-            size_t nb_from_short = 0;
-#endif
-            if (parallel_track_miss_short) MPI_Allreduce_bool_or(V_short_map);
+            // Perform the reduction on short table misses if necessary
+            if (short_miss_needs_reduction) {
+                MPI_Allreduce_bool_or(V_short_map);
+            }
             int pos_short_disp = 0;
             for (auto& iter : entList) {
                 std::vector<size_t>& group = groups[iter.second - 1];
@@ -485,10 +443,10 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 if (!bit) {
                     for (size_t idx = 1; idx < group.size(); idx++) {
                         size_t j_short = group[idx];
-                        // For parallel_track_miss_short=T the output table is
-                        // distributed. Since the table in input is replicated,
-                        // we dispatch it by rank.
-                        if (parallel_track_miss_short) {
+                        // For short_miss_needs_reduction=True, the output table
+                        // is distributed. Since the table in input is
+                        // replicated, we dispatch it by rank.
+                        if (short_miss_needs_reduction) {
                             int node = pos_short_disp % n_pes;
                             if (node == myrank)
                                 ListPairWrite.emplace_back(j_short, -1);
@@ -496,58 +454,41 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                         } else {
                             ListPairWrite.emplace_back(j_short, -1);
                         }
-#ifdef DEBUG_JOIN_SYMBOL
-                        nb_from_short++;
-#endif
                     }
                 }
             }
-#ifdef DEBUG_JOIN_SYMBOL
-            std::cout << "nb_from_short=" << nb_from_short
-                      << " nb_from_long=" << nb_from_long
-                      << " nb_short_long=" << nb_short_long << "\n";
-#endif
         } else {
-#ifdef DEBUG_JOIN_SYMBOL
-            std::cout << "FIRST SCHEME when we have short entries=false\n";
-#endif
             // The loop over the short table.
             // entries are stored one by one and all of them are put even if
             // identical in value.
             // No need to keep track of the usage of the short table.
-            // This code path is selected whenever INNER is true.
+            // This code path is selected whenever the short table is an inner
+            // join.
             for (size_t i_short = 0; i_short < short_table_rows; i_short++) {
+                // Check if the group already exists, if it doesn't this will
+                // insert a value.
                 size_t& group_id = entList[i_short];
                 // group_id==0 means key doesn't exist in map
                 if (group_id == 0) {
+                    // Update the value of group_id stored in the hash map
+                    // as well since its pass by reference.
                     group_id = groups.size() + 1;
                     groups.emplace_back();
                 }
                 groups[group_id - 1].emplace_back(i_short);
             }
-#ifdef DEBUG_JOIN_SYMBOL
-            size_t nEnt = entList.size();
-            double uniq_frac = double(nEnt) / double(short_table_rows);
-            std::cout << "nEnt=" << nEnt << " uniq_frac=" << uniq_frac << "\n";
-#endif
             //
             // Now iterating and determining how many entries we have to do.
             //
 
             // We now iterate over all entries of the long table in order to get
             // the entries in the ListPairWrite.
-#ifdef DEBUG_JOIN_SYMBOL
-            size_t nb_from_long = 0, nb_short_long = 0;
-#endif
             for (size_t i_long = 0; i_long < long_table_rows; i_long++) {
                 size_t i_long_shift = i_long + short_table_rows;
                 auto iter = entList.find(i_long_shift);
                 if (iter == entList.end()) {
-                    if (long_table_work) {
-#ifdef DEBUG_JOIN_SYMBOL
-                        nb_from_long++;
-#endif
-                        if (parallel_track_miss_long) {
+                    if (long_table_outer) {
+                        if (long_miss_needs_reduction) {
                             SetBitTo(V_long_map.data(), i_long, false);
                         } else {
                             ListPairWrite.emplace_back(-1, i_long);
@@ -560,16 +501,9 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                     std::vector<size_t>& group = groups[iter->second - 1];
                     for (auto& j_short : group) {
                         ListPairWrite.emplace_back(j_short, i_long);
-#ifdef DEBUG_JOIN_SYMBOL
-                        nb_short_long++;
-#endif
                     }
                 }
             }
-#ifdef DEBUG_JOIN_SYMBOL
-            std::cout << "nb_from_long=" << nb_from_long
-                      << " nb_short_long=" << nb_short_long << "\n";
-#endif
         }
         // Data structures used during computation of the tuples can become
         // quite large and their deallocation can take a non-negligible amount
@@ -580,7 +514,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         entList.clear();
         entList.reserve(0);  // try to force dealloc of hashmap
         // In replicated case, we put the long rows in distributed output
-        if (long_table_work && parallel_track_miss_long) {
+        if (long_table_outer && long_miss_needs_reduction) {
             MPI_Allreduce_bool_or(V_long_map);
             int pos = 0;
             for (size_t i_long = 0; i_long < long_table_rows; i_long++) {
@@ -603,6 +537,15 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         // There are many cases to cover, so it is better to preprocess
         // first to determine last usage before creating the return
         // table.
+        // last_col_use_left/right can be assigned many different values.
+        // Here are there meanings.
+        // 0 - Default value. This means the column is not used in the output at
+        // all. 1 - Column is the output of converting an index to the output
+        // data columns. 2 - Column is a key column with the same name in the
+        // left and right tables. 3 - Column is in the left table and is not a
+        // matching key with the right table. 4 - Column is in the right table,
+        // is not a matching key with the left table,
+        //        and the operation is not a join in Pandas.
         std::vector<uint8_t> last_col_use_left(n_tot_left, 0);
         std::vector<uint8_t> last_col_use_right(n_tot_right, 0);
         if (optional_col) {
@@ -612,9 +555,11 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         }
         for (size_t i = 0; i < n_tot_left; i++) {
             if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
+                // Key is shared by both tables
                 last_col_use_left[i] = 2;
                 last_col_use_right[i] = 2;
             } else {
+                // Column is only in the left table.
                 last_col_use_left[i] = 3;
             }
         }
@@ -625,9 +570,12 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             if (i >= n_key ||
                 (i < n_key && vect_same_key[i < n_key ? i : 0] == 0 &&
                  !is_join)) {
+                // TODO: Why do we check !is_join?
+                // Column is only in the right table.
                 last_col_use_right[i] = 4;
             }
         }
+        // If the arrays aren't used in the output decref immediately.
         for (size_t i = 0; i < n_tot_left; i++) {
             if (last_col_use_left[i] == 0) {
                 array_info* left_arr = work_left_table->columns[i];
@@ -640,6 +588,9 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 decref_array(right_arr);
             }
         }
+        // Construct the output tables. This merges the results in the left and
+        // right tables. We resume using work_left_table and work_right_table to
+        // ensure we match the expected column order (as opposed to short/long).
 
         // Inserting the optional column in the case of merging on column and
         // index.
@@ -655,6 +606,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 out_arrs.push_back(RetrieveArray_TwoColumns(
                     right_arr, left_arr, ListPairWrite, 2, map_integer_type));
             }
+            // After adding the optional collect decref the original values
             if (last_col_use_left[i] == 1) {
                 decref_array(left_arr);
             }
@@ -662,10 +614,6 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 decref_array(right_arr);
             }
         }
-#ifdef DEBUG_JOIN_SYMBOL
-        std::cout << "After optional_col construction optional_col="
-                  << optional_col << "\n";
-#endif
 
         // Inserting the Left side of the table
         int idx = 0;
@@ -685,6 +633,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                         right_arr, left_arr, ListPairWrite, 2,
                         map_integer_type));
                 }
+                // Decref columns that are no longer used
                 if (last_col_use_left[i] == 2) {
                     decref_array(left_arr);
                 }
@@ -707,6 +656,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                         right_arr, left_arr, ListPairWrite, 1,
                         map_integer_type));
                 }
+                // Decref columns that are no longer used
                 if (last_col_use_left[i] == 3) {
                     decref_array(left_arr);
                 }
@@ -734,6 +684,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                         map_integer_type));
                 }
                 idx++;
+                // Decref columns that are no longer used
                 if (last_col_use_right[i] == 4) {
                     decref_array(right_arr);
                 }
@@ -771,24 +722,6 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         if (free_work_right) {
             delete_table(work_right_table);
         }
-#ifdef DEBUG_JOIN_SYMBOL
-        std::cout << "hash_join_table, output information. OUT_ARRS:\n";
-        DEBUG_PrintRefct(std::cout, out_arrs);
-#ifdef DEBUG_JOIN_FULL
-        DEBUG_PrintSetOfColumn(std::cout, out_arrs);
-#endif
-        std::cout << "Finally leaving\n";
-        std::chrono::time_point<std::chrono::system_clock> time2 =
-            std::chrono::system_clock::now();
-        std::cout << "Join C++ : time2 - time1="
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(
-                         time2 - time1)
-                         .count()
-                  << "\n";
-        std::cout << "---------------------------------------------------------"
-                     "-----\n";
-#endif
-        //
         delete[] hashes_left;
         delete[] hashes_right;
         return new table_info(out_arrs);

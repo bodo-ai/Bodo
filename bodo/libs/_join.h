@@ -12,14 +12,13 @@
  * The first stage is the partitioning of the data by using hashes array
  * and unordered map array.
  *
- * Afterwards, secondary partitioning is done is the hashes match.
+ * Afterwards, secondary partitioning is done if the hashes match.
  * Then the pairs of left/right origins are created for subsequent
  * work. If a left key has no matching on the right, then value -1
  * is put (thus the std::ptrdiff_t type is used).
  *
- * External function used are "RetrieveArray" and "TestEqual"
  *
- * We need to merge all the arrays in input because we could not
+ * We need to merge all of the arrays in input because we cannot
  * have empty arrays.
  *
  * is_left and is_right correspond
@@ -40,15 +39,16 @@
  * @param vect_need_typechange : a vector specifying whether a column needs to
  * be changed or not. This usage is due to the need to support categorical
  * array.
- * @param is_left : whether we do merging on the left
- * @param is_right : whether we do merging on the right.
- * @param is_join ;: whether the call is a join or not.
+ * @param is_left : whether we do an inner or outer merge on the left.
+ * @param is_right : whether we do an inner or outer merge on the right.
+ * @param is_join : whether the call is a join in Pandas or not (as opposed to
+ * merge).
  * @param optional_col : When doing a merge on column and index, the key
  *    is put also in output, so we need one additional column in that case.
  * @param indicator: When doing a merge, if indicator=True outputs an additional
  *    Categorical column with name _merge that says if the data source is from
  * left_only, right_only, or both.
- * @param is_na_equal: When doing a merge, are NA values considered equal
+ * @param is_na_equal: When doing a merge, are NA values considered equal.
  * @return the returned table used in the code.
  */
 table_info* hash_join_table(table_info* left_table, table_info* right_table,
