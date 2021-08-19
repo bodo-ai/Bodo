@@ -1666,10 +1666,8 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
                              "or list string case");
         return;
     }
-    auto cum_computation =
-        [&](std::function<std::pair<bool, T>(int64_t)> const& get_entry,
-            std::function<void(int64_t, std::pair<bool, T> const&)> const&
-                set_entry) -> void {
+    auto cum_computation = [&](auto const& get_entry,
+                               auto const& set_entry) -> void {
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             int64_t i = grp_info.group_to_first_row[igrp];
             T initVal;
@@ -2064,8 +2062,7 @@ median_computation(array_info* arr, array_info* out_arr,
                              "There is no median for the datetime case");
         return;
     }
-    auto median_operation =
-        [&](std::function<bool(size_t)> const& isnan_entry) -> void {
+    auto median_operation = [&](auto const& isnan_entry) -> void {
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             int64_t i = grp_info.group_to_first_row[igrp];
             std::vector<double> ListValue;
@@ -6056,7 +6053,7 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
     for (int j = start; j != end; j++) {
         array_info* work_col = out_arrs[j];
         int ftype = ftypes[j];
-        auto apply_oper = [&](std::function<T(T, T)> oper) -> void {
+        auto apply_oper = [&](auto const& oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
                 Tkey idx = cat_column->at<Tkey>(i_row);
                 if (idx == miss_idx) {
@@ -6112,7 +6109,7 @@ void mpi_exscan_computation_numpy_T(std::vector<array_info*>& out_arrs,
         //   correctly whether val is a NaN or not.
         // For !skipdropna:
         //   the cumulative can be a NaN. The sum also works correctly.
-        auto apply_oper = [&](std::function<T(T, T)> oper) -> void {
+        auto apply_oper = [&](auto const& oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
                 Tkey idx = cat_column->at<Tkey>(i_row);
                 if (idx != miss_idx) {
@@ -6174,7 +6171,7 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
     for (int j = start; j != end; j++) {
         array_info* work_col = out_arrs[j];
         int ftype = ftypes[j];
-        auto apply_oper = [&](std::function<T(T, T)> oper) -> void {
+        auto apply_oper = [&](auto const& oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
                 Tkey idx = cat_column->at<Tkey>(i_row);
                 if (idx == miss_idx) {
@@ -6239,7 +6236,7 @@ void mpi_exscan_computation_nullable_T(std::vector<array_info*>& out_arrs,
     for (int j = start; j != end; j++) {
         array_info* work_col = out_arrs[j];
         int ftype = ftypes[j];
-        auto apply_oper = [&](std::function<T(T, T)> oper) -> void {
+        auto apply_oper = [&](auto const& oper) -> void {
             for (int64_t i_row = 0; i_row < n_rows; i_row++) {
                 Tkey idx = cat_column->at<Tkey>(i_row);
                 if (idx != miss_idx) {
