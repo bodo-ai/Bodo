@@ -185,8 +185,8 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
         bool ascending = vect_ascending[0];
         if (ascending) {
             const bool na_position_bis = (!na_position) ^ ascending;
-            std::function<bool(size_t, size_t)> f =
-                [&](size_t const& iRow1, size_t const& iRow2) -> bool {
+            const auto f = [&](size_t const& iRow1,
+                               size_t const& iRow2) -> bool {
                 int test = KeyComparisonAsPython_Column(
                     na_position_bis, key_col, iRow1, key_col, iRow2);
                 if (test) return test > 0;
@@ -195,8 +195,8 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
             gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
         } else {
             const bool na_position_bis = (!na_position) ^ ascending;
-            std::function<bool(size_t, size_t)> f =
-                [&](size_t const& iRow1, size_t const& iRow2) -> bool {
+            const auto f = [&](size_t const& iRow1,
+                               size_t const& iRow2) -> bool {
                 int test = KeyComparisonAsPython_Column(
                     na_position_bis, key_col, iRow1, key_col, iRow2);
                 if (test) return test < 0;
@@ -205,8 +205,7 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
             gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
         }
     } else {
-        std::function<bool(size_t, size_t)> f =
-            [&](size_t const& iRow1, size_t const& iRow2) -> bool {
+        const auto f = [&](size_t const& iRow1, size_t const& iRow2) -> bool {
             size_t shift_key1 = 0, shift_key2 = 0;
             bool test = KeyComparisonAsPython(
                 n_key, vect_ascending, in_table->columns, shift_key1, iRow1,
@@ -364,6 +363,52 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 //   DROP DUPLICATES
 //
 
+namespace {
+/**
+ * Look up a hash in a table.
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct HashDropDuplicates {
+    /* This is a function for computing the hash (here returning computed value)
+     * This is the first function passed as argument for the map function.
+     *
+     * Note that the hash is a size_t (as requested by standard and so 8 bytes
+     * on x86-64) but our hashes are int32_t
+     *
+     * @param iRow is the first row index for the comparison
+     * @return the hash itself
+     */
+    size_t operator()(size_t const iRow) const {
+        return static_cast<size_t>(hashes[iRow]);
+    }
+    uint32_t* hashes;
+};
+
+/**
+ * Check if keys are equal by lookup in a table.
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct KeyEqualDropDuplicates {
+    /* This is a function for testing equality of rows.
+     * This is the second lambda passed to the map function.
+     *
+     * We use the TestEqual function precedingly defined.
+     *
+     * @param iRowA is the first row index for the comparison
+     * @param iRowB is the second row index for the comparison
+     * @return true/false depending on the case.
+     */
+    bool operator()(size_t const iRowA, size_t const iRowB) const {
+        size_t shift_A = 0, shift_B = 0;
+        return TestEqual(*key_arrs, num_keys, shift_A, iRowA, shift_B, iRowB);
+    }
+    std::vector<array_info*>* key_arrs;
+    int64_t num_keys;
+};
+}  // namespace
+
 /** This function is for dropping duplicated keys.
  * It is used for drop_duplicates_keys and
  * then transitively by compute_categorical_index
@@ -383,18 +428,10 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
                                       in_table->columns.begin() + num_keys);
     uint32_t seed = SEED_HASH_CONTAINER;
     uint32_t* hashes = hash_keys(key_arrs, seed);
-    std::function<size_t(size_t)> hash_fct = [&](size_t const& iRow) -> size_t {
-        return size_t(hashes[iRow]);
-    };
-    std::function<bool(size_t, size_t)> equal_fct =
-        [&](size_t const& iRowA, size_t const& iRowB) -> bool {
-        size_t shift_A = 0, shift_B = 0;
-        bool test =
-            TestEqual(key_arrs, num_keys, shift_A, iRowA, shift_B, iRowB);
-        return test;
-    };
-    UNORD_MAP_CONTAINER<size_t, size_t, std::function<size_t(size_t)>,
-                        std::function<bool(size_t, size_t)>>
+    HashDropDuplicates hash_fct{hashes};
+    KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
+    UNORD_MAP_CONTAINER<size_t, size_t, HashDropDuplicates,
+                        KeyEqualDropDuplicates>
         entSet({}, hash_fct, equal_fct);
     //
     std::vector<int64_t> ListRow;
@@ -475,38 +512,10 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
 
     uint32_t seed = SEED_HASH_CONTAINER;
     uint32_t* hashes = hash_keys(key_arrs, seed);
-    /* This is a function for computing the hash (here returning computed value)
-     * This is the first function passed as argument for the map function.
-     *
-     * Note that the hash is a size_t (as requested by standard and so 8 bytes
-     * on x86-64) but our hashes are int32_t
-     *
-     * @param iRow is the first row index for the comparison
-     * @return the hash itself
-     */
-    std::function<size_t(size_t)> hash_fct = [&](size_t const& iRow) -> size_t {
-        return size_t(hashes[iRow]);
-    };
-    /* This is a function for testing equality of rows.
-     * This is the second lambda passed to the map function.
-     *
-     * We use the TestEqual function precedingly defined.
-     *
-     * @param iRowA is the first row index for the comparison
-     * @param iRowB is the second row index for the comparison
-     * @return true/false depending on the case.
-     */
-    std::function<bool(size_t, size_t)> equal_fct =
-        [&](size_t const& iRowA, size_t const& iRowB) -> bool {
-        size_t shift_A = 0, shift_B = 0;
-        bool test =
-            TestEqual(key_arrs, num_keys, shift_A, iRowA, shift_B, iRowB);
-        return test;
-    };
-    // The entSet contains the hash of the table.
-    // We address the entry by the row index.
-    UNORD_MAP_CONTAINER<size_t, size_t, std::function<size_t(size_t)>,
-                        std::function<bool(size_t, size_t)>>
+    HashDropDuplicates hash_fct{hashes};
+    KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
+    UNORD_MAP_CONTAINER<size_t, size_t, HashDropDuplicates,
+                        KeyEqualDropDuplicates>
         entSet({}, hash_fct, equal_fct);
     // The loop over the short table.
     // entries are stored one by one and all of them are put even if identical
