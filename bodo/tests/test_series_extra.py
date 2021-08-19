@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import bodo
 from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
@@ -164,3 +166,134 @@ def test_timestamp_ge(memory_leak_check):
     ts = pd.Timestamp(2021, 8, 16)
     check_func(test_impl, (S, ts))
     check_func(test_impl, (ts, S))
+
+
+def test_series_apply_method_str(memory_leak_check):
+    """
+    Test running series.apply with a string literal that
+    matches a Series method.
+    """
+
+    def impl1(S):
+        # Test a Series method
+        return S.apply("nunique")
+
+    def impl2(S):
+        # Test a Series method that conflicts with a numpy function
+        return S.apply("sum")
+
+    def impl3(S):
+        # Test a Series method that returns a Series
+        return S.apply("abs")
+
+    S = pd.Series(list(np.arange(100) + list(np.arange(100))))
+    # Used for abs test
+    S[0] = -150
+
+    check_func(impl1, (S,))
+    check_func(impl2, (S,))
+    check_func(impl3, (S,))
+
+
+def test_series_apply_numpy_str(memory_leak_check):
+    """
+    Test running series.apply with a string literal that
+    matches a Numpy function.
+    """
+
+    def impl1(S):
+        return S.apply("sin")
+
+    def impl2(S):
+        return S.apply("log")
+
+    S = pd.Series(list(np.arange(100) + list(np.arange(100))))
+    # Used for abs test
+    S[0] = -150
+
+    check_func(impl1, (S,))
+    check_func(impl2, (S,))
+
+
+@pytest.mark.slow
+def test_series_apply_no_func(memory_leak_check):
+    """
+    Test running series.apply with a string literal that
+    doesn't match a method or Numpy function raises an
+    Exception.
+    """
+
+    def impl1(S):
+        # This function doesn't exist in Numpy or as a
+        # Series method.
+        return S.apply("concat")
+
+    S = pd.Series(list(np.arange(100) + list(np.arange(100))))
+    with pytest.raises(BodoError, match="user-defined function not supported"):
+        bodo.jit(impl1)(S)
+
+
+@pytest.mark.slow
+def test_series_apply_pandas_unsupported_method(memory_leak_check):
+    """
+    Test running series.apply with a string literal that
+    matches an unsupported Series method raises an appropriate
+    exception.
+    """
+
+    def impl1(S):
+        return S.apply("argmin")
+
+    S = pd.Series(list(np.arange(100) + list(np.arange(100))))
+    with pytest.raises(BodoError, match="user-defined function not supported"):
+        bodo.jit(impl1)(S)
+
+
+@pytest.mark.slow
+def test_series_apply_numpy_unsupported_ufunc(memory_leak_check):
+    """
+    Test running series.apply with a string literal that
+    matches an unsupported ufunc raises an appropriate
+    exception.
+    """
+
+    def impl1(S):
+        return S.apply("cbrt")
+
+    S = pd.Series(list(np.arange(100) + list(np.arange(100))))
+    with pytest.raises(BodoError, match="user-defined function not supported"):
+        bodo.jit(impl1)(S)
+
+
+@pytest.mark.slow
+def test_series_apply_pandas_unsupported_type(memory_leak_check):
+    """
+    Test running series.apply with a string literal that
+    matches a method but has an unsupported type
+    raises an appropriate exception.
+    """
+
+    def impl1(S):
+        # Mean is unsupported for string types
+        return S.apply("mean")
+
+    S = pd.Series(["abc", "342", "41"] * 100)
+    with pytest.raises(BodoError, match="user-defined function not supported"):
+        bodo.jit(impl1)(S)
+
+
+@pytest.mark.slow
+def test_series_apply_numpy_unsupported_type(memory_leak_check):
+    """
+    Test running series.apply with a string literal that
+    matches a Numpy ufunc but has an unsupported type
+    raises an appropriate exception.
+    """
+
+    def impl1(S):
+        # radians is unsupported for string types
+        return S.apply("radians")
+
+    S = pd.Series(["abc", "342", "41"] * 100)
+    with pytest.raises(BodoError, match="user-defined function not supported"):
+        bodo.jit(impl1)(S)

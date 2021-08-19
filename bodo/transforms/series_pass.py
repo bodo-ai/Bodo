@@ -97,6 +97,7 @@ from bodo.utils.typing import (
     BodoError,
     get_literal_value,
     get_overload_const_func,
+    get_overload_const_str,
     get_overload_const_tuple,
     is_literal_type,
     is_overload_constant_str,
@@ -2810,6 +2811,27 @@ class SeriesPass:
                 extra_globals=glbs,
                 pre_nodes=nodes,
             )
+
+        # Handle builtin functions passed by strings.
+        if is_overload_constant_str(func_type):
+            func_name = get_overload_const_str(func_type)
+            # Manually inline the implementation for efficiency
+            impl = bodo.utils.transform.get_pandas_method_str_impl(
+                self.typemap[series_var.name],
+                func_name,
+                self.typingctx,
+                "Series.apply",
+            )
+            if impl is not None:
+                return replace_func(
+                    self,
+                    impl,
+                    [series_var],
+                    pysig=numba.core.utils.pysignature(impl),
+                    kws=dict(),
+                )
+            else:
+                return self._handle_ufuncs(func_name, (series_var,))
 
         func = get_overload_const_func(func_type, self.func_ir)
 
