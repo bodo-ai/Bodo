@@ -300,6 +300,7 @@ class StrToFloat(AbstractTemplate):
 ll.add_symbol("init_string_const", hstr_ext.init_string_const)
 ll.add_symbol("get_c_str", hstr_ext.get_c_str)
 ll.add_symbol("str_to_int64", hstr_ext.str_to_int64)
+ll.add_symbol("str_to_uint64", hstr_ext.str_to_uint64)
 ll.add_symbol("str_to_int64_base", hstr_ext.str_to_int64_base)
 ll.add_symbol("str_to_float64", hstr_ext.str_to_float64)
 ll.add_symbol("str_to_float32", hstr_ext.str_to_float32)
@@ -317,6 +318,10 @@ init_string_from_chars = types.ExternalFunction(
 _str_to_int64 = types.ExternalFunction(
     "str_to_int64", signature(types.int64, types.voidptr, types.int64)
 )
+_str_to_uint64 = types.ExternalFunction(
+    "str_to_uint64", signature(types.uint64, types.voidptr, types.int64)
+)
+
 _str_to_int64_base = types.ExternalFunction(
     "str_to_int64_base", signature(types.int64, types.voidptr, types.int64, types.int64)
 )
@@ -589,12 +594,30 @@ def cast_unicode_str_to_float32(context, builder, fromty, toty, val):
 
 
 @lower_cast(string_type, types.int64)
+@lower_cast(string_type, types.int32)
+@lower_cast(string_type, types.int16)
+@lower_cast(string_type, types.int8)
 def cast_unicode_str_to_int64(context, builder, fromty, toty, val):
+    # Support all signed integers with "str_to_int64", casting the output.
     uni_str = cgutils.create_struct_proxy(string_type)(context, builder, value=val)
     fnty = lir.FunctionType(
-        lir.IntType(64), [lir.IntType(8).as_pointer(), lir.IntType(64)]
+        lir.IntType(toty.bitwidth), [lir.IntType(8).as_pointer(), lir.IntType(64)]
     )
     fn = builder.module.get_or_insert_function(fnty, name="str_to_int64")
+    return builder.call(fn, (uni_str.data, uni_str.length))
+
+
+@lower_cast(string_type, types.uint64)
+@lower_cast(string_type, types.uint32)
+@lower_cast(string_type, types.uint16)
+@lower_cast(string_type, types.uint8)
+def cast_unicode_str_to_uint64(context, builder, fromty, toty, val):
+    # Support all unsigned integers with "str_to_uint64", casting the output.
+    uni_str = cgutils.create_struct_proxy(string_type)(context, builder, value=val)
+    fnty = lir.FunctionType(
+        lir.IntType(toty.bitwidth), [lir.IntType(8).as_pointer(), lir.IntType(64)]
+    )
+    fn = builder.module.get_or_insert_function(fnty, name="str_to_uint64")
     return builder.call(fn, (uni_str.data, uni_str.length))
 
 
