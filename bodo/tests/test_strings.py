@@ -41,6 +41,26 @@ def test_string_float64_cast(memory_leak_check):
     check_func(test_impl, ("12.2",))
 
 
+@pytest.mark.parametrize(
+    "cast_func",
+    [
+        pytest.param(np.int64, marks=pytest.mark.slow),
+        np.uint64,
+        pytest.param(np.int32, marks=pytest.mark.slow),
+        pytest.param(np.uint32, marks=pytest.mark.slow),
+        pytest.param(np.int16, marks=pytest.mark.slow),
+        pytest.param(np.uint16, marks=pytest.mark.slow),
+        pytest.param(np.int8, marks=pytest.mark.slow),
+        pytest.param(np.uint8, marks=pytest.mark.slow),
+    ],
+)
+def test_string_integer_cast(cast_func, memory_leak_check):
+    def test_impl(_str):
+        return cast_func(_str)
+
+    check_func(test_impl, ("13",))
+
+
 @pytest.mark.slow
 def test_float_str_0_cast(memory_leak_check):
     def test_impl(_float):

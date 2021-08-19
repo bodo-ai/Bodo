@@ -43,6 +43,7 @@ void str_arr_split_view_impl(str_arr_split_view_payload* out_view,
 const char* get_c_str(std::string* s);
 
 int64_t str_to_int64(char* data, int64_t length);
+uint64_t str_to_uint64(char* data, int64_t length);
 int64_t str_to_int64_base(char* data, int64_t length, int64_t base);
 double str_to_float64(std::string* str);
 float str_to_float32(std::string* str);
@@ -133,6 +134,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
 
     PyObject_SetAttrString(m, "str_to_int64",
                            PyLong_FromVoidPtr((void*)(&str_to_int64)));
+    PyObject_SetAttrString(m, "str_to_uint64",
+                           PyLong_FromVoidPtr((void*)(&str_to_uint64)));
     PyObject_SetAttrString(m, "str_to_int64_base",
                            PyLong_FromVoidPtr((void*)(&str_to_int64_base)));
     PyObject_SetAttrString(m, "str_to_float64",
@@ -407,6 +410,16 @@ int str_arr_to_float64(double* out, offset_t* offsets, char* data,
 int64_t str_to_int64(char* data, int64_t length) {
     try {
         return boost::lexical_cast<int64_t>(data, (std::size_t)length);
+    } catch (const boost::bad_lexical_cast&) {
+        std::cerr << "invalid string to int conversion" << std::endl;
+        return -1;
+    }
+    return -1;
+}
+
+uint64_t str_to_uint64(char* data, int64_t length) {
+    try {
+        return boost::lexical_cast<uint64_t>(data, (std::size_t)length);
     } catch (const boost::bad_lexical_cast&) {
         std::cerr << "invalid string to int conversion" << std::endl;
         return -1;
