@@ -1188,6 +1188,33 @@ static void get_group_info_loop(T& key_to_group,
     }
 }
 
+namespace {
+/**
+ * Look up a hash in a table.
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct HashLookupIn32bitTable {
+  uint32_t operator()(const int64_t iRow) const {
+    return hashes[iRow];
+  }
+  uint32_t* hashes;
+};
+
+/**
+ * Check if keys are equal by lookup in a table.
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct KeyEqualLookupIn32bitTable {
+    bool operator()(const int64_t iRowA, const int64_t iRowB) const {
+        return TestEqualJoin(table, table, iRowA, iRowB, n_keys, true);
+    }
+    int64_t n_keys;
+    table_info* table;
+};
+}  // namespace
+
 /**
  * Given a set of tables with n key columns, this function calculates the row to
  * group mapping for every row based on its key. For every row in the tables,
@@ -1225,16 +1252,8 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
     grouping_info& grp_info = grp_infos.back();
     const int64_t n_keys = table->num_keys;
 
-    std::function<uint32_t(int64_t)> hash_fct = [&](int64_t iRow) -> uint32_t {
-        return hashes[iRow];
-    };
-
-    // XXX make this faster? Currently, attempting to reduce the overhead
-    // of this function doesn't make much of an impact
-    std::function<bool(int64_t, int64_t)> equal_fct =
-        [&](int64_t iRowA, int64_t iRowB) -> bool {
-        return TestEqualJoin(table, table, iRowA, iRowB, n_keys, true);
-    };
+    HashLookupIn32bitTable hash_fct{hashes};
+    KeyEqualLookupIn32bitTable equal_fct{n_keys, table};
 
     // TODO I saw cases where hopscotch ended up growing the map much more
     // than necessary (which is bad for performance). The only explanation
@@ -1243,16 +1262,16 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
     // function, so maybe it was an issue with using bad seeds for hash function
     // (maybe I used same seed for shuffling and groupby).
     // We need to look at this again
-    typedef tsl::hopscotch_map<
-        int64_t, int64_t, std::function<uint32_t(int64_t)>,
-        std::function<bool(int64_t, int64_t)>,
-        std::allocator<std::pair<int64_t, int64_t>>,
-        30,    // NeighborhoodSize (NeighborhoodSize <= 30 with StoreHash=true)
-        true>  // StoreHash
+    typedef tsl::hopscotch_map<int64_t, int64_t, HashLookupIn32bitTable,
+                               KeyEqualLookupIn32bitTable,
+                               std::allocator<std::pair<int64_t, int64_t>>,
+                               30,  // NeighborhoodSize (NeighborhoodSize <= 30
+                                    // with StoreHash=true)
+                               true>  // StoreHash
         hs_t;
 
-    typedef tsl::robin_map<int64_t, int64_t, std::function<uint32_t(int64_t)>,
-                           std::function<bool(int64_t, int64_t)>,
+    typedef tsl::robin_map<int64_t, int64_t, HashLookupIn32bitTable,
+                           KeyEqualLookupIn32bitTable,
                            std::allocator<std::pair<int64_t, int64_t>>,
                            true>  // StoreHash
         rob_t;
@@ -1405,25 +1424,18 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
     const int64_t n_keys = table->num_keys;
 
-    std::function<uint32_t(int64_t)> hash_fct = [&](int64_t iRow) -> uint32_t {
-        return hashes[iRow];
-    };
-
-    std::function<bool(int64_t, int64_t)> equal_fct =
-        [&](int64_t iRowA, int64_t iRowB) -> bool {
-        return TestEqualJoin(table, table, iRowA, iRowB, n_keys, true);
-    };
+    HashLookupIn32bitTable hash_fct{hashes};
+    KeyEqualLookupIn32bitTable equal_fct{n_keys, table};
 
     typedef tsl::hopscotch_map<
-        int64_t, int64_t, std::function<uint32_t(int64_t)>,
-        std::function<bool(int64_t, int64_t)>,
+        int64_t, int64_t, HashLookupIn32bitTable, KeyEqualLookupIn32bitTable,
         std::allocator<std::pair<int64_t, int64_t>>,
         30,    // NeighborhoodSize (NeighborhoodSize <= 30 with StoreHash=true)
         true>  // StoreHash
         hs_t;
 
-    typedef tsl::robin_map<int64_t, int64_t, std::function<uint32_t(int64_t)>,
-                           std::function<bool(int64_t, int64_t)>,
+    typedef tsl::robin_map<int64_t, int64_t, HashLookupIn32bitTable,
+                           KeyEqualLookupIn32bitTable,
                            std::allocator<std::pair<int64_t, int64_t>>,
                            true>  // StoreHash
         rob_t;
