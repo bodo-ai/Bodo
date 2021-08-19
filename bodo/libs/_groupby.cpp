@@ -2132,6 +2132,144 @@ median_computation(array_info* arr, ARRAY* out_arr,
                          "the functionality is missing right now");
 }
 
+namespace {
+/**
+ * Compute hash for numpy or nullable_int_bool bodo types
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct HashNuniqueComputationNumpyOrNullableIntBool {
+    size_t operator()(const int64_t i) const {
+        char* ptr = arr->data1 + i * siztype;
+        size_t retval = 0;
+        memcpy(&retval, ptr, std::min(siztype, sizeof(size_t)));
+        return retval;
+    }
+    array_info* arr;
+    size_t siztype;
+};
+
+/**
+ * Key comparison for numpy or nullable_int_bool bodo types
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct KeyEqualNuniqueComputationNumpyOrNullableIntBool {
+    bool operator()(const int64_t i1, const int64_t i2) const {
+        char* ptr1 = arr->data1 + i1 * siztype;
+        char* ptr2 = arr->data1 + i2 * siztype;
+        return memcmp(ptr1, ptr2, siztype) == 0;
+    }
+
+    array_info* arr;
+    size_t siztype;
+};
+
+/**
+ * Compute hash for list string bodo types.
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct HashNuniqueComputationListString {
+    size_t operator()(const int64_t i) const {
+        // We do not put the lengths and bitmask in the hash
+        // computation. after all, it is just a hash
+        char* val_chars = arr->data1 + in_data_offsets[in_index_offsets[i]];
+        int len = in_data_offsets[in_index_offsets[i + 1]] -
+                  in_data_offsets[in_index_offsets[i]];
+        uint32_t val;
+        hash_string_32(val_chars, len, seed, &val);
+        return static_cast<size_t>(val);
+    }
+    array_info* arr;
+    offset_t* in_index_offsets;
+    offset_t* in_data_offsets;
+    uint32_t seed;
+};
+
+/**
+ * Key comparison for list string bodo types
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct KeyEqualNuniqueComputationListString {
+    bool operator()(const int64_t i1, const int64_t i2) const {
+        bool bit1 = arr->get_null_bit(i1);
+        bool bit2 = arr->get_null_bit(i2);
+        if (bit1 != bit2)
+            return false;  // That first case, might not be necessary.
+        size_t len1 = in_index_offsets[i1 + 1] - in_index_offsets[i1];
+        size_t len2 = in_index_offsets[i2 + 1] - in_index_offsets[i2];
+        if (len1 != len2) return false;
+        for (size_t u = 0; u < len1; u++) {
+            offset_t len_str1 = in_data_offsets[in_index_offsets[i1] + 1] -
+                                in_data_offsets[in_index_offsets[i1]];
+            offset_t len_str2 = in_data_offsets[in_index_offsets[i2] + 1] -
+                                in_data_offsets[in_index_offsets[i2]];
+            if (len_str1 != len_str2) return false;
+            bool bit1 = GetBit(sub_null_bitmask, in_index_offsets[i1]);
+            bool bit2 = GetBit(sub_null_bitmask, in_index_offsets[i2]);
+            if (bit1 != bit2) return false;
+        }
+        offset_t nb_char1 = in_data_offsets[in_index_offsets[i1 + 1]] -
+                            in_data_offsets[in_index_offsets[i1]];
+        offset_t nb_char2 = in_data_offsets[in_index_offsets[i2 + 1]] -
+                            in_data_offsets[in_index_offsets[i2]];
+        if (nb_char1 != nb_char2) return false;
+        char* ptr1 = arr->data1 +
+                     sizeof(offset_t) * in_data_offsets[in_index_offsets[i1]];
+        char* ptr2 = arr->data1 +
+                     sizeof(offset_t) * in_data_offsets[in_index_offsets[i2]];
+        return memcmp(ptr1, ptr2, len1) == 0;
+    }
+
+    array_info* arr;
+    offset_t* in_index_offsets;
+    offset_t* in_data_offsets;
+    uint8_t* sub_null_bitmask;
+    uint32_t seed;
+};
+
+/**
+ * Compute hash for string bodo types.
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct HashNuniqueComputationString {
+    size_t operator()(const int64_t i) const {
+        char* val_chars = arr->data1 + in_offsets[i];
+        size_t len = in_offsets[i + 1] - in_offsets[i];
+        uint32_t val;
+        hash_string_32(val_chars, len, seed, &val);
+        return size_t(val);
+    }
+    array_info* arr;
+    offset_t* in_offsets;
+    uint32_t seed;
+};
+
+/**
+ * Key comparison for string bodo types
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct KeyEqualNuniqueComputationString {
+    bool operator()(const int64_t i1, const int64_t i2) const {
+        size_t len1 = in_offsets[i1 + 1] - in_offsets[i1];
+        size_t len2 = in_offsets[i2 + 1] - in_offsets[i2];
+        if (len1 != len2) {
+            return false;
+        }
+        char* ptr1 = arr->data1 + in_offsets[i1];
+        char* ptr2 = arr->data1 + in_offsets[i2];
+        return memcmp(ptr1, ptr2, len1) == 0;
+    }
+
+    array_info* arr;
+    offset_t* in_offsets;
+};
+}  // namespace
+
 /**
  * The nunique_computation function. It uses the symbolic information to compute
  * the nunique results.
@@ -2173,20 +2311,12 @@ nunique_computation(array_info* arr, array_info* out_arr,
         };
         const size_t siztype = numpy_item_size[arr->dtype];
 
-        std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
-            char* ptr = arr->data1 + i * siztype;
-            size_t retval = 0;
-            memcpy(&retval, ptr, std::min(siztype, sizeof(size_t)));
-            return retval;
-        };
-        std::function<bool(int64_t, int64_t)> equal_fct =
-            [&](int64_t i1, int64_t i2) -> bool {
-            char* ptr1 = arr->data1 + i1 * siztype;
-            char* ptr2 = arr->data1 + i2 * siztype;
-            return memcmp(ptr1, ptr2, siztype) == 0;
-        };
-        UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
-                            std::function<bool(int64_t, int64_t)>>
+        HashNuniqueComputationNumpyOrNullableIntBool hash_fct{arr, siztype};
+        KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{arr,
+                                                                   siztype};
+        UNORD_SET_CONTAINER<int64_t,
+                            HashNuniqueComputationNumpyOrNullableIntBool,
+                            KeyEqualNuniqueComputationNumpyOrNullableIntBool>
             eset({}, hash_fct, equal_fct);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(0.4);
@@ -2220,48 +2350,12 @@ nunique_computation(array_info* arr, array_info* out_arr,
         uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
         const uint32_t seed = SEED_HASH_CONTAINER;
 
-        std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
-            // We do not put the lengths and bitmask in the hash
-            // computation. after all, it is just a hash
-            char* val_chars = arr->data1 + in_data_offsets[in_index_offsets[i]];
-            int len = in_data_offsets[in_index_offsets[i + 1]] -
-                      in_data_offsets[in_index_offsets[i]];
-            uint32_t val;
-            hash_string_32(val_chars, len, seed, &val);
-            return size_t(val);
-        };
-        std::function<bool(int64_t, int64_t)> equal_fct =
-            [&](int64_t i1, int64_t i2) -> bool {
-            bool bit1 = arr->get_null_bit(i1);
-            bool bit2 = arr->get_null_bit(i2);
-            if (bit1 != bit2)
-                return false;  // That first case, might not be necessary.
-            size_t len1 = in_index_offsets[i1 + 1] - in_index_offsets[i1];
-            size_t len2 = in_index_offsets[i2 + 1] - in_index_offsets[i2];
-            if (len1 != len2) return false;
-            for (size_t u = 0; u < len1; u++) {
-                offset_t len_str1 = in_data_offsets[in_index_offsets[i1] + 1] -
-                                    in_data_offsets[in_index_offsets[i1]];
-                offset_t len_str2 = in_data_offsets[in_index_offsets[i2] + 1] -
-                                    in_data_offsets[in_index_offsets[i2]];
-                if (len_str1 != len_str2) return false;
-                bool bit1 = GetBit(sub_null_bitmask, in_index_offsets[i1]);
-                bool bit2 = GetBit(sub_null_bitmask, in_index_offsets[i2]);
-                if (bit1 != bit2) return false;
-            }
-            offset_t nb_char1 = in_data_offsets[in_index_offsets[i1 + 1]] -
-                                in_data_offsets[in_index_offsets[i1]];
-            offset_t nb_char2 = in_data_offsets[in_index_offsets[i2 + 1]] -
-                                in_data_offsets[in_index_offsets[i2]];
-            if (nb_char1 != nb_char2) return false;
-            char* ptr1 = arr->data1 + sizeof(offset_t) *
-                                          in_data_offsets[in_index_offsets[i1]];
-            char* ptr2 = arr->data1 + sizeof(offset_t) *
-                                          in_data_offsets[in_index_offsets[i2]];
-            return memcmp(ptr1, ptr2, len1) == 0;
-        };
-        UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
-                            std::function<bool(int64_t, int64_t)>>
+        HashNuniqueComputationListString hash_fct{arr, in_index_offsets,
+                                                  in_data_offsets, seed};
+        KeyEqualNuniqueComputationListString equal_fct{
+            arr, in_index_offsets, in_data_offsets, sub_null_bitmask, seed};
+        UNORD_SET_CONTAINER<int64_t, HashNuniqueComputationListString,
+                            KeyEqualNuniqueComputationListString>
             eset({}, hash_fct, equal_fct);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(0.4);
@@ -2292,24 +2386,10 @@ nunique_computation(array_info* arr, array_info* out_arr,
         offset_t* in_offsets = (offset_t*)arr->data2;
         const uint32_t seed = SEED_HASH_CONTAINER;
 
-        std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
-            char* val_chars = arr->data1 + in_offsets[i];
-            size_t len = in_offsets[i + 1] - in_offsets[i];
-            uint32_t val;
-            hash_string_32(val_chars, len, seed, &val);
-            return size_t(val);
-        };
-        std::function<bool(int64_t, int64_t)> equal_fct =
-            [&](int64_t i1, int64_t i2) -> bool {
-            size_t len1 = in_offsets[i1 + 1] - in_offsets[i1];
-            size_t len2 = in_offsets[i2 + 1] - in_offsets[i2];
-            if (len1 != len2) return false;
-            char* ptr1 = arr->data1 + in_offsets[i1];
-            char* ptr2 = arr->data1 + in_offsets[i2];
-            return memcmp(ptr1, ptr2, len1) == 0;
-        };
-        UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
-                            std::function<bool(int64_t, int64_t)>>
+        HashNuniqueComputationString hash_fct{arr, in_offsets, seed};
+        KeyEqualNuniqueComputationString equal_fct{arr, in_offsets};
+        UNORD_SET_CONTAINER<int64_t, HashNuniqueComputationString,
+                            KeyEqualNuniqueComputationString>
             eset({}, hash_fct, equal_fct);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(0.4);
@@ -2338,20 +2418,12 @@ nunique_computation(array_info* arr, array_info* out_arr,
 
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         const size_t siztype = numpy_item_size[arr->dtype];
-        std::function<size_t(int64_t)> hash_fct = [&](int64_t i) -> size_t {
-            char* ptr = arr->data1 + i * siztype;
-            size_t retval = 0;
-            memcpy(&retval, ptr, std::min(siztype, sizeof(size_t)));
-            return retval;
-        };
-        std::function<bool(int64_t, int64_t)> equal_fct =
-            [&](int64_t i1, int64_t i2) -> bool {
-            char* ptr1 = arr->data1 + i1 * siztype;
-            char* ptr2 = arr->data1 + i2 * siztype;
-            return memcmp(ptr1, ptr2, siztype) == 0;
-        };
-        UNORD_SET_CONTAINER<int64_t, std::function<size_t(int64_t)>,
-                            std::function<bool(int64_t, int64_t)>>
+        HashNuniqueComputationNumpyOrNullableIntBool hash_fct{arr, siztype};
+        KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{arr,
+                                                                   siztype};
+        UNORD_SET_CONTAINER<int64_t,
+                            HashNuniqueComputationNumpyOrNullableIntBool,
+                            KeyEqualNuniqueComputationNumpyOrNullableIntBool>
             eset({}, hash_fct, equal_fct);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
         eset.max_load_factor(0.4);
