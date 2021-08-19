@@ -525,7 +525,12 @@ def overload_series_mad(S, axis=None, skipna=True, level=None):
 
 @overload_method(SeriesType, "mean", inline="always", no_unliteral=True)
 def overload_series_mean(S, axis=None, skipna=None, level=None, numeric_only=None):
-
+    # Mean is supported for integer, float, datetime, and boolean Series
+    if not isinstance(S.dtype, (types.Number)) and S.dtype not in [
+        bodo.datetime64ns,
+        types.bool_,
+    ]:
+        raise BodoError(f"Series.mean(): Series with type '{S}' not supported")
     unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
     arg_defaults = dict(skipna=None, level=None, numeric_only=None)
     check_unsupported_args("Series.mean", unsupported_args, arg_defaults)

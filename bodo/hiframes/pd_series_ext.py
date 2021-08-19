@@ -42,6 +42,7 @@ from bodo.utils.typing import (
     check_unsupported_args,
     create_unsupported_overload,
     dtype_to_array_type,
+    get_overload_const_str,
     get_overload_const_tuple,
     get_udf_error_msg,
     get_udf_out_arr_type,
@@ -636,6 +637,9 @@ class SeriesAttribute(AttributeTemplate):
             kws = {}
         return_nullable = False
 
+        # Is the function a UDF or a builtin
+        is_udf = True
+
         # Series.map() supports dictionary input
         if fname == "map" and isinstance(func, types.DictType):
             # TODO(ehsan): make sure dict key is comparable with input data type
@@ -643,36 +647,55 @@ class SeriesAttribute(AttributeTemplate):
             return_nullable = True
         else:
             try:
-                f_return_type = get_const_func_output_type(
-                    func, in_types, kws, self.context
-                )
+                if types.unliteral(func) == types.unicode_type:
+                    if not is_overload_constant_str(func):
+                        raise BodoError(
+                            f"Series.apply(): string argument (for builtins) must be a compile time constant"
+                        )
+                    f_return_type = bodo.utils.transform.get_udf_str_return_type(
+                        ary,
+                        get_overload_const_str(func),
+                        self.context,
+                        "Series.apply",
+                    )
+                    is_udf = False
+
+                else:
+                    f_return_type = get_const_func_output_type(
+                        func, in_types, kws, self.context
+                    )
             except Exception as e:
                 raise BodoError(get_udf_error_msg(f"Series.{fname}()", e))
 
-        if (
-            isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
-            and f_return_type.const_info is None
-        ):
-            raise BodoError(
-                "Invalid Series output in UDF (Series with constant length and constant Index value expected)"
-            )
+        if is_udf:
+            if (
+                isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
+                and f_return_type.const_info is None
+            ):
+                raise BodoError(
+                    "Invalid Series output in UDF (Series with constant length and constant Index value expected)"
+                )
 
-        # output is dataframe if UDF returns a Series
-        if isinstance(f_return_type, HeterogeneousSeriesType):
-            # NOTE: get_const_func_output_type() adds const_info attribute for Series
-            # output
-            _, index_vals = f_return_type.const_info
-            arrs = tuple(dtype_to_array_type(t) for t in f_return_type.data.types)
-            ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
-        elif isinstance(f_return_type, SeriesType):
-            n_cols, index_vals = f_return_type.const_info
-            arrs = tuple(
-                dtype_to_array_type(f_return_type.dtype) for _ in range(n_cols)
-            )
-            ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
+            # output is dataframe if UDF returns a Series
+            if isinstance(f_return_type, HeterogeneousSeriesType):
+                # NOTE: get_const_func_output_type() adds const_info attribute for Series
+                # output
+                _, index_vals = f_return_type.const_info
+                arrs = tuple(dtype_to_array_type(t) for t in f_return_type.data.types)
+                ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
+            elif isinstance(f_return_type, SeriesType):
+                n_cols, index_vals = f_return_type.const_info
+                arrs = tuple(
+                    dtype_to_array_type(f_return_type.dtype) for _ in range(n_cols)
+                )
+                ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
+            else:
+                data_arr = get_udf_out_arr_type(f_return_type, return_nullable)
+                ret_type = SeriesType(data_arr.dtype, data_arr, ary.index, ary.name_typ)
         else:
-            data_arr = get_udf_out_arr_type(f_return_type, return_nullable)
-            ret_type = SeriesType(data_arr.dtype, data_arr, ary.index, ary.name_typ)
+            # If apply just calls a builtin function we just return the type of that
+            # function.
+            ret_type = f_return_type
 
         return signature(ret_type, (func,)).replace(pysig=pysig)
 

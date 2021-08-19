@@ -1339,3 +1339,79 @@ def get_type_alloc_counts(t):
         return sum(get_type_alloc_counts(d) for d in t.types)
 
     return 0
+
+
+def find_udf_str_name(obj_dtype, func_name, typing_context, caller_name):
+    """
+    Given an obj_dtype, func_name, and a typing_context, this function
+    finds a matching implementation to use inside apply.
+
+    caller_name refers to the function calling this helper
+    function and is used solely for error messages.
+
+    Mimicing Pandas behavior, we first try and find a matching implementation
+    which is method for obj_dtype. If there is no matching implementation
+    then we attempt to find a matching Numpy function. If no match exists we
+    raise a Bodo Error.
+
+    https://github.com/pandas-dev/pandas/blob/8e07787bc1030e5d13d3ad5e83b5d060a519ef67/pandas/core/apply.py#L564
+
+    If the Pandas method is not currently supported we may not match Pandas behavior.
+    When the method is supported but not with the current type, we rely on the Bodo Error
+    inside the implementation. If a method has no implementation we may incorrectly try
+    and use a Numpy function.
+
+    This function returns a 'return_type', which can be used to check typing, extract
+    a return type, and find an implementation.
+    """
+    result = typing_context.resolve_getattr(obj_dtype, func_name)
+    if result is None:
+        # Find a Numpy implementation or raise an error
+        numpy_mod = types.misc.Module(np)
+        try:
+            result = typing_context.resolve_getattr(numpy_mod, func_name)
+        except AttributeError:
+            # Numpy tries to look up getattr on func_name. If this doesn't exist the
+            # error message is less clear
+            result = None
+        if result is None:
+            raise BodoError(
+                f"{caller_name}(): No Pandas method or Numpy function found with the name '{func_name}'."
+            )
+    return result
+
+
+def get_udf_str_return_type(obj_dtype, func_name, typing_context, caller_name):
+    """
+    Given an obj_dtype, func_name, and a typing_context, this function returns
+    the return type for the implementation used inside apply.
+
+    This function uses find_udf_str_name to find the correct overload and simply calls
+    the function with the given types.
+    """
+    result = find_udf_str_name(obj_dtype, func_name, typing_context, caller_name)
+    if isinstance(result, types.BoundFunction):
+        # Methods are Bound Functions
+        sig = result.get_call_type(typing_context, (), dict())
+    else:
+        # Functions require passing obj_dtype as an argument
+        sig = result.get_call_type(typing_context, (obj_dtype,), dict())
+    return sig.return_type
+
+
+def get_pandas_method_str_impl(obj_dtype, func_name, typing_context, caller_name):
+    """
+    Given an obj_dtype, func_name, and a typing_context, this function returns
+    the function used that implements the provided Pandas method.
+
+    This function uses find_udf_str_name to find the correct
+    function and uses its internal information to find the implementation.
+    If the function is a Numpy udf instead it returns None.
+    """
+    result = find_udf_str_name(obj_dtype, func_name, typing_context, caller_name)
+    if isinstance(result, types.BoundFunction):
+        # Methods are Bound Functions
+        template = result.template
+        # TODO: Handle situations where we don't have an overload?
+        return template._overload_func(obj_dtype)
+    return None
