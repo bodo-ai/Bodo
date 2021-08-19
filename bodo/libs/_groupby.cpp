@@ -6489,6 +6489,57 @@ table_info* mpi_exscan_computation(array_info* cat_column, table_info* in_table,
     return nullptr;
 }
 
+namespace {
+/**
+ * Compute hash for `compute_categorical_index`
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct HashComputeCategoricalIndex {
+    size_t operator()(size_t const iRow) const {
+        if (iRow < n_rows_full) {
+            return static_cast<size_t>(hashes_full[iRow]);
+        } else {
+            return static_cast<size_t>(hashes_in_table[iRow - n_rows_full]);
+        }
+    }
+    uint32_t* hashes_full;
+    uint32_t* hashes_in_table;
+    size_t n_rows_full;
+};
+
+/**
+ * Key comparison for `compute_categorical_index`
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct HashEqualComputeCategoricalIndex {
+    bool operator()(size_t const iRowA, size_t const iRowB) const {
+        size_t jRowA, jRowB, shift_A, shift_B;
+        if (iRowA < n_rows_full) {
+            shift_A = 0;
+            jRowA = iRowA;
+        } else {
+            shift_A = num_keys;
+            jRowA = iRowA - n_rows_full;
+        }
+        if (iRowB < n_rows_full) {
+            shift_B = 0;
+            jRowB = iRowB;
+        } else {
+            shift_B = num_keys;
+            jRowB = iRowB - n_rows_full;
+        }
+        bool test =
+            TestEqual(*concat_column, num_keys, shift_A, jRowA, shift_B, jRowB);
+        return test;
+    }
+    int64_t num_keys;
+    size_t n_rows_full;
+    std::vector<array_info*>* concat_column;
+};
+}  // namespace
+
 /**
  * Basically assign index to each unique category
  * @param in_table : input table
@@ -6541,35 +6592,13 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
         full_table->columns.begin(), full_table->columns.begin() + num_keys);
     concat_column.insert(concat_column.end(), in_table->columns.begin(),
                          in_table->columns.begin() + num_keys);
-    std::function<size_t(size_t)> hash_fct = [&](size_t const& iRow) -> size_t {
-        if (iRow < n_rows_full)
-            return size_t(hashes_full[iRow]);
-        else
-            return size_t(hashes_in_table[iRow - n_rows_full]);
-    };
-    std::function<bool(size_t, size_t)> equal_fct =
-        [&](size_t const& iRowA, size_t const& iRowB) -> bool {
-        size_t jRowA, jRowB, shift_A, shift_B;
-        if (iRowA < n_rows_full) {
-            shift_A = 0;
-            jRowA = iRowA;
-        } else {
-            shift_A = num_keys;
-            jRowA = iRowA - n_rows_full;
-        }
-        if (iRowB < n_rows_full) {
-            shift_B = 0;
-            jRowB = iRowB;
-        } else {
-            shift_B = num_keys;
-            jRowB = iRowB - n_rows_full;
-        }
-        bool test =
-            TestEqual(concat_column, num_keys, shift_A, jRowA, shift_B, jRowB);
-        return test;
-    };
-    UNORD_MAP_CONTAINER<size_t, size_t, std::function<size_t(size_t)>,
-                        std::function<bool(size_t, size_t)>>
+
+    HashComputeCategoricalIndex hash_fct{hashes_full, hashes_in_table,
+                                         n_rows_full};
+    HashEqualComputeCategoricalIndex equal_fct{num_keys, n_rows_full,
+                                               &concat_column};
+    UNORD_MAP_CONTAINER<size_t, size_t, HashComputeCategoricalIndex,
+                        HashEqualComputeCategoricalIndex>
         entSet({}, hash_fct, equal_fct);
     for (size_t iRow = 0; iRow < size_t(n_rows_full); iRow++)
         entSet[iRow] = iRow;
