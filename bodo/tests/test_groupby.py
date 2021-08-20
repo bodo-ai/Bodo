@@ -4915,7 +4915,7 @@ def test_agg_supported_types(df, memory_leak_check):
     check_func(impl1, (df,), sort_output=True, check_dtype=False, reset_index=True)
 
 
-@pytest.mark.slow
+# @pytest.mark.slow
 @pytest.mark.parametrize(
     "df",
     [
