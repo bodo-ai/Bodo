@@ -259,6 +259,7 @@ supported_transform_funcs = [
     "min",
     "max",
     "mean",
+    "std",
 ]
 
 
