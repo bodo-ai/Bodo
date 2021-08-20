@@ -483,16 +483,42 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid data type for hash");
 }
 
+// ------- boost hash combine function for 32-bit hashes -------
+
+// https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L60
+#if defined(_MSC_VER)
+#   define BOOST_FUNCTIONAL_HASH_ROTL32(x, r) _rotl(x,r)
+#else
+#   define BOOST_FUNCTIONAL_HASH_ROTL32(x, r) (x << r) | (x >> (32 - r))
+#endif
+
+// https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L316
+static inline void hash_combine_boost(uint32_t& h1, uint32_t k1) {
+    // This is a single 32-bit murmur iteration.
+    // See this comment and its discussion for more information:
+    // https://stackoverflow.com/a/50978188
+
+    const uint32_t c1 = 0xcc9e2d51;
+    const uint32_t c2 = 0x1b873593;
+
+    k1 *= c1;
+    k1 = BOOST_FUNCTIONAL_HASH_ROTL32(k1,15);
+    k1 *= c2;
+
+    h1 ^= k1;
+    h1 = BOOST_FUNCTIONAL_HASH_ROTL32(h1,13);
+    h1 = h1*5+0xe6546b64;
+}
+
+// -------------------------------------------------------------
+
 template <class T>
 static void hash_array_combine_inner(uint32_t* out_hashes, T* data,
                                      size_t n_rows, const uint32_t seed) {
-    // hash combine code from boost
-    // https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L313
     for (size_t i = 0; i < n_rows; i++) {
         uint32_t out_hash = 0;
         hash_inner_32<T>(&data[i], seed, &out_hash);
-        out_hashes[i] ^=
-            out_hash + 0x9e3779b9 + (out_hashes[i] << 6) + (out_hashes[i] >> 2);
+        hash_combine_boost(out_hashes[i], out_hash);
     }
 }
 
@@ -509,8 +535,7 @@ static void hash_array_combine_string(uint32_t* out_hashes, char* data,
 
         const char* val_chars = val.c_str();
         hash_string_32(val_chars, (const int)len, seed, &out_hash);
-        out_hashes[i] ^=
-            out_hash + 0x9e3779b9 + (out_hashes[i] << 6) + (out_hashes[i] >> 2);
+        hash_combine_boost(out_hashes[i], out_hash);
         start_offset = end_offset;
     }
 }
@@ -779,8 +804,7 @@ void coherent_hash_array_combine_inner_uint64(uint32_t* out_hashes,
         for (size_t i = 0; i < n_rows; i++) {
             uint64_t val = data[i];
             hash_inner_32<uint64_t>(&val, seed, &out_hash);
-            out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i] << 6) +
-                             (out_hashes[i] >> 2);
+            hash_combine_boost(out_hashes[i], out_hash);
         }
     } else {  // We are in NULLABLE_INT_BOOL
         uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
@@ -788,8 +812,7 @@ void coherent_hash_array_combine_inner_uint64(uint32_t* out_hashes,
             uint64_t val = data[i];
             hash_inner_32<uint64_t>(&val, seed, &out_hash);
             if (!GetBit(null_bitmask, i)) out_hash++;
-            out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i] << 6) +
-                             (out_hashes[i] >> 2);
+            hash_combine_boost(out_hashes[i], out_hash);
         }
     }
 }
@@ -805,8 +828,7 @@ void coherent_hash_array_combine_inner_int64(uint32_t* out_hashes,
             int64_t val = data[i];
             hash_inner_32<int64_t>(&val, seed, &out_hash);
             // For numpy, all entries are true, no need to increment.
-            out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i] << 6) +
-                             (out_hashes[i] >> 2);
+            hash_combine_boost(out_hashes[i], out_hash);
         }
     } else {  // We are in NULLABLE_INT_BOOL
         uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
@@ -814,8 +836,7 @@ void coherent_hash_array_combine_inner_int64(uint32_t* out_hashes,
             int64_t val = data[i];
             hash_inner_32<int64_t>(&val, seed, &out_hash);
             if (!GetBit(null_bitmask, i)) out_hash++;
-            out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i] << 6) +
-                             (out_hashes[i] >> 2);
+            hash_combine_boost(out_hashes[i], out_hash);
         }
     }
 }
@@ -831,8 +852,7 @@ void coherent_hash_array_combine_inner_double(uint32_t* out_hashes,
         for (size_t i = 0; i < n_rows; i++) {
             double val = get_value(data[i]);
             hash_inner_32<double>(&val, seed, &out_hash);
-            out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i] << 6) +
-                             (out_hashes[i] >> 2);
+            hash_combine_boost(out_hashes[i], out_hash);
         }
     } else {  // We are in NULLABLE_INT_BOOL
         uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
@@ -844,8 +864,7 @@ void coherent_hash_array_combine_inner_double(uint32_t* out_hashes,
             else
                 val = std::nan("");
             hash_inner_32<double>(&val, seed, &out_hash);
-            out_hashes[i] ^= out_hash + 0x9e3779b9 + (out_hashes[i] << 6) +
-                             (out_hashes[i] >> 2);
+            hash_combine_boost(out_hashes[i], out_hash);
         }
     }
 }
