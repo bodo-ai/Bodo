@@ -198,6 +198,10 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
     """
     A helper function used to test json write correctness
     """
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
     # get pandas output
     if bodo.get_rank() == 0:
         test_impl(df, "df_pd.json")
@@ -217,28 +221,45 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
         with ensure_clean(fname_arg), ensure_clean_dir(fname_arg):
             func(df_arg, fname_arg)
             bodo.barrier()
-            if bodo.get_rank() == 0:
-                if os.path.isfile(fname_arg):
-                    pd.testing.assert_frame_equal(read_impl(fname_arg), pd_res)
-                else:
-                    # pandas read single each json file in directory then concat
-                    json_files = os.listdir(fname_arg)
-                    assert len(json_files) > 0
-                    bodo_res = pd.concat(
-                        [
+            try:
+                if bodo.get_rank() == 0:
+                    if os.path.isfile(fname_arg):
+                        pd.testing.assert_frame_equal(read_impl(fname_arg), pd_res)
+                    else:
+                        # pandas read single each json file in directory then concat
+                        json_files = os.listdir(fname_arg)
+                        assert len(json_files) > 0
+                        results = [
                             read_impl(os.path.join(fname_arg, fname))
                             for fname in json_files
                         ]
-                    )
-                    if reset_index:
-                        pd.testing.assert_frame_equal(
-                            bodo_res.sort_values(sort_col).reset_index(drop=True),
-                            pd_res.sort_values(sort_col).reset_index(drop=True),
+                        bodo_res = pd.concat(
+                            [
+                                read_impl(os.path.join(fname_arg, fname))
+                                for fname in json_files
+                            ]
                         )
-                    else:
-                        pd.testing.assert_frame_equal(
-                            bodo_res.sort_values(sort_col), pd_res.sort_values(sort_col)
-                        )
+                        if reset_index:
+                            pd.testing.assert_frame_equal(
+                                bodo_res.sort_values(sort_col).reset_index(drop=True),
+                                pd_res.sort_values(sort_col).reset_index(drop=True),
+                            )
+                        else:
+                            pd.testing.assert_frame_equal(
+                                bodo_res.sort_values(sort_col),
+                                pd_res.sort_values(sort_col),
+                            )
+                errors = comm.allgather(None)
+            except Exception as e:
+                # The typing issue typically occurs on only a subset of processes,
+                # because the process got a chunk of data from Python that is empty
+                # or that we cannot currently type correctly.
+                # To avoid a hang, we need to notify every rank of the error.
+                comm.allgather(e)
+                raise
+            for e in errors:
+                if isinstance(e, Exception):
+                    raise e
 
     if bodo.get_rank() == 0:
         if os.path.exists("df_pd.json") and os.path.isfile("df_pd.json"):
@@ -295,7 +316,11 @@ def test_json_write_simple_df_records(test_df, memory_leak_check):
         df.to_json(fname, orient="records", lines=False)
 
     def read_impl(fname):
-        return pd.read_json(fname, orient="records", lines=False)
+        # Supply D has a boolean dtype because there are null values.
+        # Pandas by default will convert boolean with null values to float.
+        return pd.read_json(
+            fname, orient="records", lines=False, dtype={"D": "boolean"}
+        )
 
     json_write_test(test_impl, read_impl, test_df, "C", reset_index=True)
 
