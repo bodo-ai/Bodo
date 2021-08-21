@@ -416,16 +416,27 @@ class TypingTransforms:
         return [assign]
 
     def _run_getitem(self, assign, rhs, label):
+        """Handle getitem if necessary.
+        df[], df.iloc[], df.loc[] may need constant index values
+        """
         target = rhs.value
         target_typ = self.typemap.get(target.name, None)
         nodes = []
         idx = get_getsetitem_index_var(rhs, self.typemap, nodes)
         idx_typ = self.typemap.get(idx.name, None)
 
-        # find constant index for df["A"] or df[["A", "B"]] cases
-        if isinstance(target_typ, DataFrameType) and idx_typ in (
-            bodo.string_type,
-            types.List(bodo.string_type),
+        # find constant index for df["A"], df[["A", "B"]] or df.groupby("A")["B"] cases
+        # constant index can be string, int or non-bool list
+        if (
+            isinstance(target_typ, (DataFrameType, DataFrameGroupByType))
+            and not is_literal_type(idx_typ)
+            and (
+                idx_typ == bodo.string_type
+                or isinstance(idx_typ, types.Integer)
+                or (
+                    isinstance(idx_typ, types.List) and not idx_typ.dtype == types.bool_
+                )
+            )
         ):
             # static_getitem has the values embedded
             if rhs.op == "static_getitem":
