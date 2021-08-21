@@ -125,9 +125,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
             ret = DataFrameType(data_type, index_type, columns)
             return ret(*args)
         # TODO: error-checking test
-        raise_bodo_error(
-            "df[] getitem using {} not supported".format(ind)
-        )  # pragma: no cover
+        raise_bodo_error(f"df[] getitem using {ind} not supported")  # pragma: no cover
 
 
 DataFrameGetItemTemplate._no_unliteral = True

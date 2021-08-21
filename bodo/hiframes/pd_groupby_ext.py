@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Support for Pandas Groupby operations
 """
+import operator
 from enum import Enum
 
 import numba
@@ -193,7 +194,7 @@ def lower_groupby_count_dummy(context, builder, sig, args):
 
 
 @infer
-class GetItemDataFrameGroupBy(AbstractTemplate):
+class StaticGetItemDataFrameGroupBy(AbstractTemplate):
     key = "static_getitem"
 
     def generic(self, args, kws):
@@ -220,8 +221,26 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
             return signature(ret_grp, *args)
 
 
+@infer_global(operator.getitem)
+class GetItemDataFrameGroupBy(AbstractTemplate):
+    """typing pass may force getitem index on df groupby value to be constant, but the
+    getitem type won't change to 'static_getitem' so needs handling here.
+    """
+
+    def generic(self, args, kws):
+        grpby, idx = args
+        # df.groupby('A')['B', 'C']
+        if isinstance(grpby, DataFrameGroupByType) and is_literal_type(idx):
+            # just call typer for 'static_getitem'
+            ret_grp = StaticGetItemDataFrameGroupBy.generic(
+                self, (grpby, get_literal_value(idx)), {}
+            ).return_type
+            return signature(ret_grp, *args)
+
+
 # dummy lowering for groupby getitem to avoid errors (e.g. test_series_groupby_arr)
 @lower_builtin("static_getitem", DataFrameGroupByType, types.Any)
+@lower_builtin(operator.getitem, DataFrameGroupByType, types.Any)
 def static_getitem_df_groupby(context, builder, sig, args):
     return impl_ret_borrowed(context, builder, sig.return_type, args[0])
 
