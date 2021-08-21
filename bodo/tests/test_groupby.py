@@ -4118,6 +4118,10 @@ def test_literal_args():
     def impl3(df, keys, as_index):
         return df.groupby(by=keys + ["B"], as_index=as_index).sum()
 
+    # getitem index
+    def impl4(df, idx):
+        return df.groupby("A")[idx].sum()
+
     df = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
@@ -4130,6 +4134,8 @@ def test_literal_args():
     check_func(impl2, (df, "A", False), sort_output=True, reset_index=True)
     check_func(impl2, (df, ["A", "B"], True), sort_output=True)
     check_func(impl3, (df, ["A"], True), sort_output=True)
+    check_func(impl4, (df, "B"), sort_output=True)
+    check_func(impl4, (df, ["B", "C"]), sort_output=True)
 
 
 def test_schema_change(memory_leak_check):
