@@ -955,7 +955,7 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.shift`
 * :meth:`pandas.core.groupby.GroupBy.size`
 * :meth:`pandas.core.groupby.SeriesGroupBy.value_counts`
-* :meth:`pandas.core.groupby.DataFrameGroupBy.transform` (only `'count'`, `'min'`, `'max'`, `'mean'`, and `'sum'` operations are supported)
+* :meth:`pandas.core.groupby.DataFrameGroupBy.transform` (only `'count'`, `'min'`, `'max'`, `'mean'`, `'std'`, and `'sum'` operations are supported)
 
 
 Offsets

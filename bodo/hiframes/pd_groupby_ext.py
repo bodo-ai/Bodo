@@ -1017,9 +1017,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.transform", no_unliteral=True)
     def resolve_transform(self, grp, args, kws):
-        msg = (
-            "Groupby.transform() only supports sum, count, min, max, or mean operations"
-        )
+        msg = "Groupby.transform() only supports sum, count, min, max, mean, and std operations"
         return resolve_gb(grp, args, kws, "transform", self.context, err_msg=msg)[0]
 
     @bound_function("groupby.apply", no_unliteral=True)
