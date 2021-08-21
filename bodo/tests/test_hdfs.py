@@ -4,12 +4,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import (
-    _get_dist_arg,
-    _test_equal_guard,
-    check_func,
-    reduce_sum,
-)
+from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.testing import ensure_clean2
 
 pytestmark = pytest.mark.hdfs

@@ -17,7 +17,7 @@ such as Numba on Ubuntu Linux::
     export PATH=$HOME/miniconda3/bin:$PATH
     conda create -n DEV python numpy scipy pandas='1.3.*' boost-cpp cmake h5py mpich mpi -c conda-forge
     source activate DEV
-    # Linux: conda install gcc_linux-64 gxx_linux-64 -c conda-forge
+    # Linux: conda install 'gcc_linux-64>=9' 'gxx_linux-64>=9' -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 -c conda-forge
     # If you don't want to install Numba from source: conda install numba=0.53.0 -c conda-forge
     # For development/debugging purposes, it's best to install Numba from source instead
@@ -32,7 +32,7 @@ such as Numba on Ubuntu Linux::
     cd ..
     # END OF BUILD NUMBA FROM SOURCE
     conda install mpi4py pytest cython -c conda-forge
-    conda install -c conda-forge hdf5='*=*mpich*' pyarrow=4.0.0 pymysql sqlalchemy
+    conda install -c conda-forge hdf5='*=*mpich*' pyarrow=5.0.0 pymysql sqlalchemy
     # Required for IO with S3
     conda install -c conda-forge fsspec
     # The following is required for s3 related development and tests
@@ -92,7 +92,7 @@ On Windows
     conda activate DEV
     conda install numba=0.53.0 -c conda-forge
     conda install mpi4py msmpi cython -c conda-forge
-    conda install -c conda-forge pyarrow=4.0.0
+    conda install -c conda-forge pyarrow=5.0.0
     # Required for IO with S3
     conda install -c conda-forge fsspec
     # The following is required for s3 related development and tests

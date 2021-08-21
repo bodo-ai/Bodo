@@ -154,7 +154,7 @@ def test_read_parquet_from_deltalake(memory_leak_check):
 
 
 def test_pq_multiIdx_errcheck(memory_leak_check):
-    """ Remove this test when multi index is supported for read_parquet """
+    """Remove this test when multi index is supported for read_parquet"""
     np.random.seed(0)
 
     def impl():
