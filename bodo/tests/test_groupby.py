@@ -4960,11 +4960,16 @@ def test_groupby_transform(df, memory_leak_check):
         A = df.groupby("A").transform("mean")
         return A
 
+    def impl_std(df):
+        A = df.groupby("A").transform("std")
+        return A
+
     check_func(impl_sum, (df,))
     check_func(impl_min, (df,))
     check_func(impl_max, (df,))
     check_func(impl_count, (df,))
     check_func(impl_mean, (df,))
+    check_func(impl_std, (df,))
 
 
 @pytest.mark.slow
