@@ -42,7 +42,7 @@ source activate $CONDA_ENV
 
 # ---- install compilers ----
 if [[ "$unamestr" == 'Linux' ]]; then
-    $CONDA_INSTALL -c conda-forge "gcc_linux-64>=9.0" "gxx_linux-64>=9.0"
+    $CONDA_INSTALL -c conda-forge 'gcc_linux-64>=9' 'gxx_linux-64>=9'
 elif [[ "$unamestr" == 'Darwin' ]]; then
     $CONDA_INSTALL -c conda-forge clang_osx-64 clangxx_osx-64
 else
@@ -53,7 +53,7 @@ fi
 # ---- Conda installs for source build ----
 if [ "$RUN_NIGHTLY" != "yes" ];
 then
-   $CONDA_INSTALL -c conda-forge pyarrow=4.0.0
+   $CONDA_INSTALL -c conda-forge pyarrow=5.0.0
    # We lock fsspec at version 0.8 because in 0.9 it
    # caused us import errors with s3fs for Pandas tests.
    $CONDA_INSTALL fsspec=0.8 -c conda-forge
@@ -70,12 +70,17 @@ then
 else
    if [ "$RUNTIME" != "yes" ];
     then
-       $CONDA_INSTALL pytorch=1.8 -c pytorch -c conda-forge -c defaults
+       conda clean -a -y
+       $CONDA_INSTALL pytorch=1.9 pyarrow=5.0.0 -c pytorch -c conda-forge -c defaults
+       conda clean -a -y
        $CONDA_INSTALL bokeh=2.3 -c pytorch -c conda-forge -c defaults
-       $CONDA_INSTALL torchvision=0.9 -c pytorch -c conda-forge -c defaults
+       conda clean -a -y
+       $CONDA_INSTALL torchvision=0.10 -c pytorch -c conda-forge -c defaults
+       conda clean -a -y
        # Install h5py and hd5f directly because otherwise tensorflow
        # installs a non-mpi version.
        $CONDA_INSTALL tensorflow h5py hdf5=*=*mpich* -c conda-forge
+       conda clean -a -y
        pip install horovod;
     fi
    pip install credstash
