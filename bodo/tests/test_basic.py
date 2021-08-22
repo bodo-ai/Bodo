@@ -822,6 +822,22 @@ def test_unsupported_tz_dtype(memory_leak_check):
 
 
 # TODO: Add memory_leak_check after memory leak is solved.
+def test_literal_list_cast():
+    """test when literal list needs to be cast to regular list"""
+
+    # groupby forces 'a' to become a literal list, for loop forces cast to regular list
+    def impl(df, a):
+        df2 = df.groupby(a).sum()
+        new_a = []
+        for v in a:
+            new_a.append(f"{v}_2")
+        return df2.B.sum(), new_a
+
+    df = pd.DataFrame({"A": [1, 2, 3], "B": [1, 2, 3]})
+    check_func(impl, (df, ["A"]))
+
+
+# TODO: Add memory_leak_check after memory leak is solved.
 @pytest.mark.slow
 def test_reversed():
     """
