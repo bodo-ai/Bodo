@@ -853,6 +853,21 @@ def unbox_list_literal(typ, obj, c):
     return NativeValue(c.context.get_dummy_value())
 
 
+@lower_cast(ListLiteral, types.List)
+def list_literal_to_list(context, builder, fromty, toty, val):
+    """cast literal list to regular list to support operations like iter()"""
+    # lower a const tuple and convert to list inside the function to avoid Numba errors
+    list_vals = tuple(fromty.literal_value)
+    # remove 'reflected' from list type to avoid errors
+    res_type = types.List(toty.dtype)
+    return context.compile_internal(
+        builder,
+        lambda: list(list_vals),
+        res_type(),
+        [],
+    )  # pragma: no cover
+
+
 # TODO(ehsan): allow modifying the value similar to initial value containers?
 class DictLiteral(types.Literal):
     """class for literal dictionaries, only used when Bodo forces an argument to be a
