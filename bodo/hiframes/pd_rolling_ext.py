@@ -46,16 +46,25 @@ from bodo.utils.typing import (
 class RollingType(types.Type):
     """Rolling objects from df.rolling() or Series.rolling() calls"""
 
-    def __init__(self, obj_type, window_type, on, selection, explicit_select=False):
+    def __init__(
+        self,
+        obj_type,
+        window_type,
+        on,
+        selection,
+        explicit_select=False,
+        series_select=False,
+    ):
         # obj_type can be either Series or DataFrame
         self.obj_type = obj_type
         self.window_type = window_type
         self.on = on
         self.selection = selection
         self.explicit_select = explicit_select
+        self.series_select = series_select
 
         super(RollingType, self).__init__(
-            name=f"RollingType({obj_type}, {window_type}, {on}, {selection}, {explicit_select})"
+            name=f"RollingType({obj_type}, {window_type}, {on}, {selection}, {explicit_select}, {series_select})"
         )
 
     def copy(self):
@@ -65,6 +74,7 @@ class RollingType(types.Type):
             self.on,
             self.selection,
             self.explicit_select,
+            self.series_select,
         )
 
 
@@ -241,7 +251,7 @@ def _gen_df_rolling_out_data(rolling):
         c_ind = rolling.obj_type.columns.index(c)
         if c == rolling.on:
             # avoid adding 'on' column if output will be Series (just ignored in Pandas)
-            if len(rolling.selection) == 2 and rolling.explicit_select:
+            if len(rolling.selection) == 2 and rolling.series_select:
                 continue
             out = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_ind})"
             out_cols.append(c)
@@ -359,7 +369,7 @@ def _gen_rolling_impl(rolling, fname, other=None):
     # column with explicit column selection
     is_out_series = is_series or (
         len(rolling.selection) == (1 if rolling.on is None else 2)
-        and rolling.explicit_select
+        and rolling.series_select
     )
 
     header = f"def impl(rolling, {_get_rolling_func_args(fname)}):\n"
@@ -502,6 +512,7 @@ class GetItemDataFrameRolling2(AbstractTemplate):
                 if isinstance(rolling.obj_type, DataFrameGroupByType)
                 else rolling.obj_type.columns
             )
+            series_select = False
             if isinstance(idx, (tuple, list)):
                 if len(set(idx).difference(set(columns))) > 0:  # pragma: no cover
                     raise_const_error(
@@ -516,6 +527,7 @@ class GetItemDataFrameRolling2(AbstractTemplate):
                         "rolling: selected column {} not found in dataframe".format(idx)
                     )
                 selection = [idx]
+                series_select = True
             if rolling.on is not None:
                 selection.append(rolling.on)
             ret_rolling = RollingType(
@@ -524,6 +536,7 @@ class GetItemDataFrameRolling2(AbstractTemplate):
                 rolling.on,
                 tuple(selection),
                 True,
+                series_select,
             )
             return signature(ret_rolling, *args)
 
@@ -551,6 +564,7 @@ class RollingAttribute(AttributeTemplate):
                 rolling.on,
                 # 'on' column is always kept in selected columns
                 (attr,) if rolling.on is None else (attr, rolling.on),
+                True,
                 True,
             )
 
