@@ -644,7 +644,7 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, context):
             raise BodoError(f"unsupported aggregate function {f_name}")
         # run typer on a groupby with just column col
         ret_grp = DataFrameGroupByType(
-            grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True
+            grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True, True
         )
         out_tp = get_agg_typ(ret_grp, (), f_name, context)[0].return_type
     else:
@@ -659,7 +659,7 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, context):
         f_name = code.co_name
         # run typer on a groupby with just column col
         ret_grp = DataFrameGroupByType(
-            grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True
+            grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True, True
         )
         # out_tp is series because we are passing only one input column
         out_tp = get_agg_typ(ret_grp, (), "agg", context, f)[0].return_type
