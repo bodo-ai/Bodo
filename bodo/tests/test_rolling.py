@@ -82,6 +82,10 @@ def test_column_select(memory_leak_check):
     def impl6(df):
         return df.rolling("2s", on="C").B.mean()
 
+    # select a single column but using a list
+    def impl7(df):
+        return df.rolling("2s", on="C")[["B"]].mean()
+
     df = pd.DataFrame(
         {
             "A": [5, 12, 21, np.nan, 3],
@@ -101,6 +105,7 @@ def test_column_select(memory_leak_check):
     check_func(impl4, (df,))
     check_func(impl5, (df,))
     check_func(impl6, (df,))
+    check_func(impl7, (df,))
 
 
 @pytest.mark.slow
