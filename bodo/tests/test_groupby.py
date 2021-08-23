@@ -233,6 +233,26 @@ def test_return_type_nullable_cumsum_cumprod(df_null, memory_leak_check):
     check_func(impl2, (df_null,), sort_output=True, check_dtype=False)
 
 
+def test_groupby_df_numpy_bool(memory_leak_check):
+    """
+    Test calling groupby using a scalar column bool,
+    which generates a numpy boolean array.
+    This tests that our typing determines array type
+    by actual array and not looking at elem dtype.
+    """
+
+    def impl():
+        df = pd.DataFrame(
+            {
+                "s_suppkey": np.arange(1000) % 10,
+                "$f1": True,
+            }
+        )
+        return df.groupby(["s_suppkey"], as_index=False, dropna=False).min()
+
+    check_func(impl, (), sort_output=True, reset_index=True)
+
+
 def test_all_null_keys(memory_leak_check):
     """
     Test Groupby when all rows have null keys (returns empty dataframe)
