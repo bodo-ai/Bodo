@@ -226,7 +226,34 @@ public:
         swap(tempHLL);
     }
 
-protected:
+    /**
+     * Return the data/registers
+     */
+    const std::vector<uint8_t>& data() const { return M_; }
+
+    /**
+     * Overwrite the current registers with the new ones.
+     *
+     * The `new_registers` argument is taken by value so that calling code can
+     * `std::move()` the data in so that an allocation and copy can be elided.
+     * This is a common pattern for constructors in C++, and since this function
+     * is taking ownership of the data the pattern applies here too.
+     *
+     * @param[new_registers] The new registers overwriting the current ones
+     *
+     * @exception std::invalid_argument number of registers doesn't match.
+     */
+    void overwrite_registers(std::vector<uint8_t> new_registers) {
+        if (m_ != new_registers.size()) {
+            std::stringstream ss;
+            ss << "number of registers doesn't match: " << m_
+               << " != " << new_registers.size();
+            throw std::invalid_argument(ss.str().c_str());
+        }
+        M_ = std::move(new_registers);
+    }
+
+   protected:
     uint8_t b_; ///< register bit width
     uint32_t m_; ///< register size
     double alphaMM_; ///< alpha * m^2
