@@ -262,7 +262,7 @@ def static_getitem_df_groupby(context, builder, sig, args):
 
 def get_groupby_output_dtype(arr_type, func_name, index_type=None):
     """
-    Return output dtype for groupby aggregation function based on the
+    Return output array dtype for groupby aggregation function based on the
     function and the input array type and dtype.
     If the operation is not feasible (e.g. summing dates) then an error message
     is passed upward to be decided according to the context.
@@ -294,7 +294,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
     if (func_name in {"median", "mean", "var", "std"}) and isinstance(
         in_dtype, (Decimal128Type, types.Integer, types.Float)
     ):
-        return types.float64, "ok"
+        return dtype_to_array_type(types.float64), "ok"
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         if is_list_string or in_dtype == types.unicode_type:
             if func_name not in {
@@ -342,15 +342,12 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             f"groupby built-in functions {func_name} does not support boolean column",
         )
     if func_name in {"idxmin", "idxmax"}:
-        return get_index_data_arr_types(index_type)[0].dtype, "ok"
+        return dtype_to_array_type(get_index_data_arr_types(index_type)[0].dtype), "ok"
     if func_name in {"count", "nunique"}:
-        return types.int64, "ok"
+        return dtype_to_array_type(types.int64), "ok"
     else:
-        if isinstance(arr_type, IntegerArrayType):
-            return IntDtype(in_dtype), "ok"
-        elif is_list_string:
-            return arr_type, "ok"
-        return in_dtype, "ok"  # default: return same dtype as input
+        # default: return same dtype as input
+        return arr_type, "ok"
 
 
 def get_pivot_output_dtype(arr_type, func_name, index_type=None):
@@ -475,6 +472,10 @@ def get_agg_typ(grp, args, func_name, context, func=None, kws=None):
                     out_dtype = get_const_func_output_type(
                         func, (in_series_typ,), {}, context
                     )
+                    # Is this check still necessary or should we always wrap
+                    # the result in an array because its a UDF?
+                    if out_dtype != ArrayItemArrayType(string_array_type):
+                        out_dtype = dtype_to_array_type(out_dtype)
                     err_msg = "ok"
                 except:
                     raise_bodo_error(
@@ -561,10 +562,7 @@ def get_agg_typ(grp, args, func_name, context, func=None, kws=None):
                 )
 
             if err_msg == "ok":
-                if out_dtype != ArrayItemArrayType(string_array_type):
-                    out_arr = dtype_to_array_type(out_dtype)
-                else:
-                    out_arr = out_dtype
+                out_arr = out_dtype
                 out_data.append(out_arr)
                 out_columns.append(c)
                 if func_name == "agg":
@@ -911,10 +909,7 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
             )
 
             if err_msg == "ok":
-                if out_dtype != ArrayItemArrayType(string_array_type):
-                    data = dtype_to_array_type(out_dtype)
-                else:
-                    data = out_dtype
+                data = out_dtype
             else:
                 raise BodoError(
                     f"column type of {data.dtype} is not supported by {args[0]} yet.\n"

@@ -1221,6 +1221,8 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
 
 
 def _get_np_dtype(t):
+    if t == types.bool_:
+        return "np.bool_"
     if t == types.NPDatetime("ns"):
         return "dt64_dtype"
     if t == types.NPTimedelta("ns"):
