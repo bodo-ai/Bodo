@@ -17,6 +17,7 @@ from bodo.ir.csv_ext import _get_dtype_str
 from bodo.libs.distributed_api import bcast, bcast_scalar
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
+from bodo.utils.typing import BodoError
 from bodo.utils.utils import sanitize_varname
 
 MPI_ROOT = 0
@@ -257,10 +258,12 @@ def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, db_type, paral
                 func_text += "    start_num = offset + 1\n"
                 func_text += "    end_num = offset + limit + 1\n"
                 func_text += f"    sql_cons = 'select {', '.join(col_names)} from (select row_number() over (order by 1) as row_num, * from (' + sql_request + ')) where row_num >=' + str(start_num) + ' and row_num <' + str(end_num)\n"
+                str_cols = [f"'{c}'" for c in col_names]
+                func_text += f"    col_names = ({','.join(str_cols)}{',' if len(str_cols) > 0 else ''})\n"
+                func_text += "    df_ret = read_snowflake(sql_cons, conn, col_names)\n"
             else:
                 func_text += f"    sql_cons = 'select {', '.join(col_names)} from (' + sql_request + ') x LIMIT ' + str(limit) + ' OFFSET ' + str(offset)\n"
-
-            func_text += "    df_ret = pd.read_sql(sql_cons, conn)\n"
+                func_text += "    df_ret = pd.read_sql(sql_cons, conn)\n"
         else:
             func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
             func_text += "    df_ret = pd.read_sql(sql_request, conn)\n"
@@ -280,3 +283,52 @@ def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, db_type, paral
     jit_func = numba.njit(sql_reader_py)
     compiled_funcs.append(jit_func)
     return jit_func
+
+
+def read_snowflake(sql_cons, conn, expected_colnames):
+    """read query from Snowflake using its connector"""
+    try:
+        import snowflake.connector
+        import sqlalchemy
+    except ImportError:
+        raise BodoError(
+            "pd.read_sql(): reading from Snowflake requires snowflake connector. Install using 'conda install snowflake-sqlalchemy snowflake-connector-python -c bodo.ai -c conda-forge'"
+        )
+
+    # get connection parameters from connection string
+    # some paramters could be part of address or extra paramters
+    # "snowflake://user:pw@account/db/schema?warehouse=XL_WH"
+    # "snowflake://account/?user=user&password=pw&database=db&schema=schema&warehouse=XL_WH"
+    conn_url = sqlalchemy.engine.url._parse_rfc1738_args(conn)
+    params = {}
+    if conn_url.username:
+        params["user"] = conn_url.username
+    if conn_url.password:
+        params["password"] = conn_url.password
+    if conn_url.host:
+        params["account"] = conn_url.host
+    if conn_url.database:
+        # sqlalchemy reads "db/schema" as just database name so need to split schema
+        db = conn_url.database.split("/")[0]
+        params["database"] = db
+        if "/" in conn_url.database:
+            params["schema"] = conn_url.database.split("/")[1]
+    if conn_url.port:
+        params["port"]: conn_url.port
+    params.update(conn_url.query)
+
+    ctx = snowflake.connector.connect(**params)
+    cur = ctx.cursor()
+    cur.execute(sql_cons)
+    df = cur.fetch_pandas_all()
+    # sqlalchemy uses lowercase for case insensitive cases but Snowflake uses upper case
+    # case sensitive cases use quotes
+    # see https://github.com/snowflakedb/snowflake-sqlalchemy
+    #
+    # To handle this, we check if the column names are uppercase and the expected datatype
+    # is lowercase. If so we convert the columns. TODO: Make sure this is fully robust/we
+    # don't handle case sensitivity in the Snowflake connector properly.
+    df.columns = [
+        expected_colnames[i] if s.isupper() else s for i, s in enumerate(df.columns)
+    ]
+    return df
