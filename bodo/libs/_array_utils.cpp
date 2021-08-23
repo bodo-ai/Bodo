@@ -1,6 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_array_utils.h"
 
+#include <mpi.h>
 #include <iostream>
 #include <string>
 
@@ -1724,3 +1725,87 @@ void DEBUG_PrintColumn(std::ostream& os, multiple_array_info* arr) {
     for (auto& earr : arr->vect_access) total_arr.push_back(earr);
     DEBUG_PrintVectorArrayInfo(os, total_arr);
 }
+
+/**
+ * Used for a custom reduction to merge all the HyperLogLog registers across all
+ * ranks.
+ *
+ * The body of this function is what is done in the `HyperLogLog.merge()`
+ * function with some decoration to deal with MPI.
+ */
+void MPI_hyper_log_log_merge(void* in, void* inout, int* len,
+                             MPI_Datatype* dptr) {
+    uint8_t* M_in = reinterpret_cast<uint8_t*>(in);
+    uint8_t* M_inout = reinterpret_cast<uint8_t*>(inout);
+    // The loop below comes from libs/hyperloglog.hpp:merge() (currently like
+    // 161)
+    for (int r = 0; r < *len; ++r) {
+        if (M_inout[r] < M_in[r]) {
+            M_inout[r] |= M_in[r];
+        }
+    }
+}
+
+template <bool UseParallelEstimate>
+size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len) {
+    tracing::Event ev("get_nunique_hashes");
+    ev.add_attribute("parallel estimate", UseParallelEstimate);
+    // Passing bit width = 20 to HyperLogLog (impacts accuracy and execution
+    // time). 30 is extremely slow. 20 seems to be about as fast as 10 and
+    // more accurate. With 20 it is pretty fast, faster than calculating
+    // the hashes with our MurmurHash3_x64_32
+    hll::HyperLogLog hll(20);
+    for (size_t i = 0; i < len; i++) {
+        hll.add(hashes[i]);
+    }
+
+    if constexpr (UseParallelEstimate) {
+        ev.add_attribute("local estimate", hll.estimate());
+        // To get a global estimate of the cardinality we first do a custom
+        // reduction of the "registers" in the HyperLogLog. Once the registers
+        // have been reduced to rank 0, we overwrite the local register in the
+        // hll object, and then compute the estimate.
+        //
+        // Note: the merge for HLL-HIP is much more complicated and so isn't a
+        // trivial replacement. It certainly could be tested, but would require
+        // writing more code.
+        int my_rank = std::numeric_limits<int>::max();
+        MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+        std::vector<uint8_t> hll_registers(hll.data().size(), 0);
+        {
+            MPI_Op mpi_hll_op;
+            MPI_Op_create(&MPI_hyper_log_log_merge, true, &mpi_hll_op);
+            MPI_Reduce(hll.data().data(), hll_registers.data(),
+                       hll.data().size(), MPI_UNSIGNED_CHAR, mpi_hll_op, 0,
+                       MPI_COMM_WORLD);
+            MPI_Op_free(&mpi_hll_op);
+        }
+
+        // Cast to known MPI-compatible type since size_t is implementation
+        // defined.
+        unsigned long local_len = static_cast<unsigned long>(len);
+        unsigned long global_len = 0;
+        MPI_Allreduce(&local_len, &global_len, 1, MPI_UNSIGNED_LONG, MPI_SUM,
+                      MPI_COMM_WORLD);
+
+        unsigned long est;
+        if (my_rank == 0) {
+            hll.overwrite_registers(std::move(hll_registers));
+            using std::min;
+            est = min(global_len, static_cast<unsigned long>(hll.estimate()));
+        }
+        MPI_Bcast(&est, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+        // cast to `size_t` to avoid compilation error on Windows
+        ev.add_attribute("estimate", static_cast<size_t>(est));
+        return est;
+    } else {
+        const size_t est = std::min(static_cast<size_t>(hll.estimate()), len);
+        ev.add_attribute("estimate", est);
+        return est;
+    }
+}
+
+template size_t get_nunique_hashes<true>(uint32_t const* const hashes,
+                                         const size_t len);
+template size_t get_nunique_hashes<false>(uint32_t const* const hashes,
+                                          const size_t len);
