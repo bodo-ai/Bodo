@@ -3591,6 +3591,26 @@ def test_select_col_attr(memory_leak_check):
     check_func(impl, (df,), sort_output=True)
 
 
+def test_select_col_single_list(memory_leak_check):
+    """
+    Test Groupby with single column selected but using a list (should return a DataFrame
+    not Series)
+    """
+
+    def impl(df):
+        A = df.groupby("A")[["B"]].sum()
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        }
+    )
+    check_func(impl, (df,), sort_output=True)
+
+
 @pytest.mark.slow
 def test_groupby_as_index_sum(memory_leak_check):
     """
