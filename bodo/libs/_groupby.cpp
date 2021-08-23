@@ -1218,7 +1218,7 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
         table->columns.begin(), table->columns.begin() + table->num_keys);
     if (hashes == nullptr) {
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE);
-        nunique_hashes = get_nunique_hashes(hashes, table->nrows());
+        nunique_hashes = get_nunique_hashes<false>(hashes, table->nrows());
     }
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
     grp_infos.emplace_back();
@@ -1401,7 +1401,8 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
     std::vector<array_info*> key_cols = table->columns;
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
     uint32_t* hashes = hash_keys(key_cols, seed);
-    size_t nunique_hashes = get_nunique_hashes(hashes, table->nrows());
+
+    size_t nunique_hashes = get_nunique_hashes<false>(hashes, table->nrows());
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
     const int64_t n_keys = table->num_keys;
 
@@ -1520,7 +1521,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
     // it would mean calculating all hashes in advance
     if (hashes == nullptr) {
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE);
-        nunique_hashes = get_nunique_hashes(hashes, table->nrows());
+        nunique_hashes = get_nunique_hashes<false>(hashes, table->nrows());
     }
     grp_infos.emplace_back();
     grouping_info& grp_info = grp_infos.back();
@@ -5426,7 +5427,8 @@ class GroupbyPipeline {
 
             int num_ranks;
             MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-            nunique_hashes = get_nunique_hashes(hashes, in_table->nrows());
+            nunique_hashes =
+                get_nunique_hashes<false>(hashes, in_table->nrows());
             int shuffle_before_update_count_s = 0;
             int shuffle_before_update_count;
             double groups_in_nrows_ratio = double(nunique_hashes) / in_table->nrows();
@@ -5444,7 +5446,8 @@ class GroupbyPipeline {
             ev.add_attribute("groups_in_nrows_ratio", groups_in_nrows_ratio);
             ev.add_attribute("shuffle_before_update_count_s", shuffle_before_update_count_s);
         } else if (!is_parallel) {
-            nunique_hashes = get_nunique_hashes(hashes, in_table->nrows());
+            nunique_hashes =
+                get_nunique_hashes<false>(hashes, in_table->nrows());
         }
 
         if (nunique_op) {
