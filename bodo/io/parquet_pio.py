@@ -1,6 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import os
-import pickle
 from collections import defaultdict
 
 import llvmlite.binding as ll
@@ -958,11 +957,6 @@ def get_parquet_dataset(
                 metadata_nthreads=nthreads,
             )
             dataset_schema = bodo.io.pa_parquet.get_dataset_schema(dataset)
-            # pyarrow bug workaround: the dataset after pickling and unpickling
-            # in some cases doesn't match the original. In this situation we use
-            # the string representation for comparison
-            if pickle.loads(pickle.dumps(dataset_schema)) != dataset_schema:
-                dataset_schema = dataset_schema.to_string()
             # We don't want to send the filesystem because of the issues
             # mentioned above, so we set it to None. Note that this doesn't
             # seem to be enough to prevent sending it
@@ -992,7 +986,6 @@ def get_parquet_dataset(
         piece_nrows_chunk = []
         valid = True  # True if schema of all parquet files match
         dataset._metadata.fs = getfs()
-        convert_file_schema_to_str = isinstance(dataset_schema, str)
         for p in dataset.pieces[start:end]:
             file_metadata = p.get_metadata()
             if get_row_counts:
@@ -1000,8 +993,6 @@ def get_parquet_dataset(
                 total_rows_chunk += file_metadata.num_rows
             if validate_schema:
                 file_schema = file_metadata.schema.to_arrow_schema()
-                if convert_file_schema_to_str:
-                    file_schema = file_schema.to_string()
                 if dataset_schema != file_schema:  # pragma: no cover
                     # this is the same error message that pyarrow shows
                     print(
@@ -1686,7 +1677,7 @@ def pq_read_arrow_array_lower(context, builder, sig, args):
     arr_type = sig.return_type
 
     def get_num_arrays(arr_typ):
-        """ get total number of arrays in nested array """
+        """get total number of arrays in nested array"""
         if isinstance(arr_typ, ArrayItemArrayType):
             return 1 + get_num_arrays(arr_typ.dtype)
         elif isinstance(arr_typ, StructArrayType):
