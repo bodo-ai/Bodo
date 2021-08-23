@@ -91,7 +91,14 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
     """
 
     def __init__(
-        self, df_type, keys, selection, as_index, dropna=True, explicit_select=False
+        self,
+        df_type,
+        keys,
+        selection,
+        as_index,
+        dropna=True,
+        explicit_select=False,
+        series_select=False,
     ):
 
         self.df_type = df_type
@@ -100,11 +107,10 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
         self.as_index = as_index
         self.dropna = dropna
         self.explicit_select = explicit_select
+        self.series_select = series_select
 
         super(DataFrameGroupByType, self).__init__(
-            name="DataFrameGroupBy({}, {}, {}, {}, {}, {})".format(
-                df_type, keys, selection, as_index, dropna, explicit_select
-            )
+            name=f"DataFrameGroupBy({df_type}, {keys}, {selection}, {as_index}, {dropna}, {explicit_select}, {series_select})"
         )
 
     def copy(self):
@@ -116,6 +122,7 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
             self.as_index,
             self.dropna,
             self.explicit_select,
+            self.series_select,
         )
 
 
@@ -201,6 +208,7 @@ class StaticGetItemDataFrameGroupBy(AbstractTemplate):
         grpby, idx = args
         # df.groupby('A')['B', 'C']
         if isinstance(grpby, DataFrameGroupByType):
+            series_select = False
             if isinstance(idx, (tuple, list)):
                 if len(set(idx).difference(set(grpby.df_type.columns))) > 0:
                     raise_const_error(
@@ -215,8 +223,15 @@ class StaticGetItemDataFrameGroupBy(AbstractTemplate):
                         "groupby: selected column {} not found in dataframe".format(idx)
                     )
                 selection = (idx,)
+                series_select = True
             ret_grp = DataFrameGroupByType(
-                grpby.df_type, grpby.keys, selection, grpby.as_index, grpby.dropna, True
+                grpby.df_type,
+                grpby.keys,
+                selection,
+                grpby.as_index,
+                grpby.dropna,
+                True,
+                series_select,
             )
             return signature(ret_grp, *args)
 
@@ -599,7 +614,7 @@ def get_agg_typ(grp, args, func_name, context, func=None, kws=None):
 
     out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
     # XXX output becomes series if single output and explicitly selected
-    if (len(grp.selection) == 1 and grp.explicit_select and grp.as_index) or (
+    if (len(grp.selection) == 1 and grp.series_select and grp.as_index) or (
         func_name == "size" and grp.as_index
     ):
         if isinstance(out_data[0], IntegerArrayType):
@@ -629,7 +644,7 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, context):
             raise BodoError(f"unsupported aggregate function {f_name}")
         # run typer on a groupby with just column col
         ret_grp = DataFrameGroupByType(
-            grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True
+            grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True, True
         )
         out_tp = get_agg_typ(ret_grp, (), f_name, context)[0].return_type
     else:
@@ -644,7 +659,7 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, context):
         f_name = code.co_name
         # run typer on a groupby with just column col
         ret_grp = DataFrameGroupByType(
-            grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True
+            grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True, True
         )
         # out_tp is series because we are passing only one input column
         out_tp = get_agg_typ(ret_grp, (), "agg", context, f)[0].return_type
@@ -909,7 +924,7 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         raise BodoError("No columns in output.")
     out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
     # XXX output becomes series if single output and explicitly selected
-    if len(grp.selection) == 1 and grp.explicit_select and grp.as_index:
+    if len(grp.selection) == 1 and grp.series_select and grp.as_index:
         out_res = SeriesType(
             out_data[0].dtype,
             data=out_data[0],
@@ -1150,12 +1165,10 @@ class DataframeGroupByAttribute(AttributeTemplate):
             return
         if attr not in grpby.df_type.columns:
             raise_const_error(
-                "groupby: invalid attribute {} (column not found in dataframe or unsupported function)".format(
-                    attr
-                )
+                f"groupby: invalid attribute {attr} (column not found in dataframe or unsupported function)"
             )
         return DataFrameGroupByType(
-            grpby.df_type, grpby.keys, (attr,), grpby.as_index, grpby.dropna, True
+            grpby.df_type, grpby.keys, (attr,), grpby.as_index, grpby.dropna, True, True
         )
 
 
