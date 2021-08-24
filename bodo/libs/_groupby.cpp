@@ -2139,14 +2139,15 @@ namespace {
  * Don't use std::function to reduce call overhead.
  */
 struct HashNuniqueComputationNumpyOrNullableIntBool {
-    size_t operator()(const int64_t i) const {
+    uint32_t operator()(const int64_t i) const {
         char* ptr = arr->data1 + i * siztype;
-        size_t retval = 0;
-        memcpy(&retval, ptr, std::min(siztype, sizeof(size_t)));
+        uint32_t retval = 0;
+        hash_string_32(ptr, siztype, seed, &retval);
         return retval;
     }
     array_info* arr;
     size_t siztype;
+    uint32_t seed;
 };
 
 /**
@@ -2310,8 +2311,10 @@ nunique_computation(array_info* arr, array_info* out_arr,
             return false;
         };
         const size_t siztype = numpy_item_size[arr->dtype];
+        const uint32_t seed = SEED_HASH_CONTAINER;
 
-        HashNuniqueComputationNumpyOrNullableIntBool hash_fct{arr, siztype};
+        HashNuniqueComputationNumpyOrNullableIntBool hash_fct{arr, siztype,
+                                                              seed};
         KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{arr,
                                                                    siztype};
         UNORD_SET_CONTAINER<int64_t,
