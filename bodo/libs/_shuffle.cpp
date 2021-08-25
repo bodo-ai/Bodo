@@ -941,6 +941,12 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
  */
 table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                                  mpi_comm_info const& comm_info) {
+    tracing::Event ev("shuffle_table_kernel");
+    ev.add_attribute("table_nrows_before", size_t(in_table->nrows()));
+    if (ev.is_tracing()) {
+        size_t global_table_nbytes = table_global_memory_size(in_table);
+        ev.add_attribute("g_table_nbytes", global_table_nbytes);
+    }
     int n_pes = comm_info.n_pes;
     int64_t total_recv = std::accumulate(
         comm_info.recv_count.begin(), comm_info.recv_count.end(), int64_t(0));
@@ -1010,6 +1016,7 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
         out_arrs.push_back(out_arr);
     }
 
+    ev.add_attribute("table_nrows_after", size_t(out_arrs[0]->length));
     return new table_info(out_arrs);
 }
 
@@ -1383,6 +1390,7 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
 // Note: Steals a reference from the input table.
 table_info* shuffle_table(table_info* in_table, int64_t n_keys,
                           int32_t keep_comm_info) {
+    tracing::Event ev("shuffle_table");
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
@@ -1717,6 +1725,7 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
 */
 table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                             size_t n_cols) {
+    tracing::Event ev("broadcast_table");
 #ifdef DEBUG_BROADCAST
     std::cout << "INPUT of broadcast_table. ref_table=\n";
     DEBUG_PrintRefct(std::cout, ref_table->columns);
@@ -2146,6 +2155,7 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
 
 table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                          bool all_gather) {
+    tracing::Event ev("gather_table");
 #ifdef DEBUG_GATHER
     std::cout << "INPUT of gather_table. in_table=\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
@@ -2593,6 +2603,7 @@ table_info* shuffle_renormalization_group_py_entrypt(
  */
 table_info* shuffle_renormalization(table_info* in_table, int random,
                                     int64_t random_seed, bool parallel) {
+    tracing::Event ev("shuffle_renormalization", parallel);
     return shuffle_renormalization_group(in_table, random, random_seed,
                                          parallel, 0, nullptr);
 }

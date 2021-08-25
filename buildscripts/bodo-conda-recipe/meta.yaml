@@ -32,6 +32,7 @@ requirements:
     - h5py
     - mpich =3.3.2=h* # [not win]
     - msmpi # [win]
+    - mpi4py
     - vc # [win]
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]

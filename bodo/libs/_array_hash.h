@@ -42,6 +42,7 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
  */
 inline uint32_t* hash_keys_table(table_info* in_table, size_t num_keys,
                                  uint32_t seed) {
+    tracing::Event ev("hash_keys_table");
     std::vector<array_info*> key_arrs(in_table->columns.begin(),
                                       in_table->columns.begin() + num_keys);
     return hash_keys(key_arrs, seed);

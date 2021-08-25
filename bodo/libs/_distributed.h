@@ -790,6 +790,7 @@ static void bodo_alltoallv(const void* sendbuf,
                            const std::vector<int64_t>& recv_counts,
                            const std::vector<int64_t>& recv_disp,
                            MPI_Datatype recvtype, MPI_Comm comm) {
+    tracing::Event ev("bodo_alltoallv");
     const int A2AV_LARGE_DTYPE_SIZE = 1024;
     int send_typ_size;
     int recv_typ_size;
@@ -824,6 +825,7 @@ static void bodo_alltoallv(const void* sendbuf,
         throw std::runtime_error("Data is too big to shuffle");
 
     if (big_shuffle == 0) {
+        ev.add_attribute("g_big_shuffle", 0);
         std::vector<int> send_counts_int(send_counts.begin(),
                                          send_counts.end());
         std::vector<int> recv_counts_int(recv_counts.begin(),
@@ -834,6 +836,7 @@ static void bodo_alltoallv(const void* sendbuf,
                       sendtype, recvbuf, recv_counts_int.data(),
                       recv_disp_int.data(), recvtype, comm);
     } else {
+        ev.add_attribute("g_big_shuffle", 1);
         const int TAG = 11;  // arbitrary
         int rank;
         MPI_Comm_rank(comm, &rank);

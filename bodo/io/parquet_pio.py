@@ -29,6 +29,7 @@ from pyarrow import null
 
 import bodo
 import bodo.ir.parquet_ext
+import bodo.utils.tracing as tracing
 from bodo.hiframes.datetime_date_ext import (
     datetime_date_array_type,
     datetime_date_type,
@@ -471,6 +472,8 @@ def _gen_pq_reader_py(
     comma = "," if extra_args else ""
     func_text = f"def pq_reader_py(fname,{extra_args}):\n"
     # if it's an s3 url, get the region and pass it into the c++ code
+    func_text += f"  ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
+    func_text += "  ev.add_attribute('fname', fname)\n"
     func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={is_parallel})\n"
     func_text += (
         f'  filters = get_filters_pyobject("{filter_str}", ({extra_args}{comma}))\n'
@@ -540,6 +543,7 @@ def _gen_pq_reader_py(
         local_types[cat_dtype_name] = cat_dtype
 
     func_text += "  del_dataset_reader(ds_reader)\n"
+    func_text += f"  ev.finalize()\n"
     func_text += "  return (total_rows, {},)\n".format(
         ", ".join(f"{sanitize_varname(c)}" for c in col_names)
     )
@@ -869,7 +873,21 @@ def get_parquet_dataset(
     'filters' are used for predicate pushdown which prunes the unnecessary pieces.
     'read_categories': read categories of DictionaryArray and store in returned dataset
     object, used during typing.
+    'get_row_counts': This is only true at runtime, and indicates that we need
+    to get the number of rows of each piece in the parquet dataset.
     """
+
+    # NOTE: This function obtains the metadata for a parquet dataset and works
+    # in the same way regardless of whether the read is going to be parallel or
+    # replicated. In all cases rank 0 will get the ParquetDataset from pyarrow,
+    # broadcast it to all ranks, and they will divide the work of getting the
+    # number of rows in each file of the dataset
+
+    # get_parquet_dataset can be called both at both compile and run time. We
+    # only want to trace it at run time, so take advantage of get_row_counts flag
+    # to know if this is runtime
+    if get_row_counts:
+        ev = tracing.Event("get_parquet_dataset")
 
     import pyarrow.parquet as pq
     from mpi4py import MPI
@@ -948,6 +966,8 @@ def get_parquet_dataset(
         if cpu_count is not None and cpu_count > 1:
             nthreads = cpu_count // 2
         try:
+            if get_row_counts:
+                ev_pq_ds = tracing.Event("pq.ParquetDataset", is_parallel=False)
             dataset = pq.ParquetDataset(
                 fpath,
                 filesystem=getfs(),
@@ -956,6 +976,8 @@ def get_parquet_dataset(
                 validate_schema=False,  # we do validation below if needed
                 metadata_nthreads=nthreads,
             )
+            if get_row_counts:
+                ev_pq_ds.finalize()
             dataset_schema = bodo.io.pa_parquet.get_dataset_schema(dataset)
             # We don't want to send the filesystem because of the issues
             # mentioned above, so we set it to None. Note that this doesn't
@@ -965,20 +987,30 @@ def get_parquet_dataset(
             comm.bcast(e)
             raise e
 
+        if get_row_counts:
+            ev_bcast = tracing.Event("bcast dataset")
         comm.bcast(dataset)
         comm.bcast(dataset_schema)
+        if get_row_counts and tracing.is_tracing():
+            ev.add_attribute("schema", str(dataset_schema))
     else:
+        if get_row_counts:
+            ev_bcast = tracing.Event("bcast dataset")
         dataset = comm.bcast(None)
         if isinstance(dataset, Exception):  # pragma: no cover
             error = dataset
             raise error
         dataset_schema = comm.bcast(None)
+    if get_row_counts:
+        ev_bcast.finalize()
 
     dataset._bodo_total_rows = 0
     if get_row_counts or validate_schema:
         # getting row counts and validating schema requires reading
         # the file metadata from the parquet files and is very expensive
         # for datasets consisting of many files, so we do this in parallel
+        if get_row_counts:
+            ev_row_counts = tracing.Event("get_row_counts")
         num_pieces = len(dataset.pieces)
         start = get_start(num_pieces, bodo.get_size(), bodo.get_rank())
         end = get_end(num_pieces, bodo.get_size(), bodo.get_rank())
@@ -1015,6 +1047,8 @@ def get_parquet_dataset(
                 [n for sublist in rows_by_ranks for n in sublist]
             ):
                 dataset.pieces[i]._bodo_num_rows = num_rows
+            ev_row_counts.add_attribute("num_pieces", end - start)
+            ev_row_counts.finalize()
 
     # When we pass in a path instead of a filename or list of files to
     # pq.ParquetDataset, the path of the pieces of the resulting dataset
@@ -1047,6 +1081,8 @@ def get_parquet_dataset(
     if read_categories:
         _add_categories_to_pq_dataset(dataset)
 
+    if get_row_counts:
+        ev.finalize()
     return dataset
 
 

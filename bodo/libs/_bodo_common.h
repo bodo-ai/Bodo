@@ -12,6 +12,7 @@
 #include <arrow/api.h>
 #include <vector>
 #include "_meminfo.h"
+#include "tracing.h"
 
 #define ALIGNMENT 64  // preferred alignment for AVX512
 

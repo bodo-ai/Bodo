@@ -1332,15 +1332,19 @@ def lower_crosstab_dummy(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
 
 
-def get_group_indices(keys, dropna):  # pragma: no cover
+# _is_parallel: Bodo flag for tracing
+def get_group_indices(keys, dropna, _is_parallel):  # pragma: no cover
     return np.arange(len(keys))
 
 
 @overload(get_group_indices)
-def get_group_indices_overload(keys, dropna):
+def get_group_indices_overload(keys, dropna, _is_parallel):
     """get group indices (labels) for a tuple of key arrays."""
-    func_text = "def impl(keys, dropna):\n"
+    func_text = "def impl(keys, dropna, _is_parallel):\n"
     # convert arrays to table
+    func_text += (
+        "    ev = bodo.utils.tracing.Event('get_group_indices', _is_parallel)\n"
+    )
     func_text += "    info_list = [{}]\n".format(
         ", ".join(f"array_to_info(keys[{i}])" for i in range(len(keys.types))),
     )
@@ -1349,6 +1353,7 @@ def get_group_indices_overload(keys, dropna):
     func_text += "    sort_idx = np.empty(len(keys[0]), np.int64)\n"
     func_text += "    ngroups = get_groupby_labels(table, group_labels.ctypes, sort_idx.ctypes, dropna)\n"
     func_text += "    delete_table_decref_arrays(table)\n"
+    func_text += "    ev.finalize()\n"
     func_text += "    return sort_idx, group_labels, ngroups\n"
     loc_vars = {}
     exec(

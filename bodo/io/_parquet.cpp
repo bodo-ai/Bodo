@@ -23,8 +23,6 @@
 #include <arrow/io/api.h>
 #include "parquet/arrow/writer.h"
 
-#undef DEBUG_NESTED_PARQUET
-
 /**
  * This holds the arrow parquet readers and other information that this process needs
  * to read its chunk of a Parquet dataset.
@@ -209,9 +207,7 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
                                   char *bucket_region, PyObject* filters,
                                   PyObject* storage_options, int64_t tot_rows_to_read) {
     try {
-#ifdef DEBUG_NESTED_PARQUET
-    std::cout << "GET_DATASET_READER, beginning\n";
-#endif
+    tracing::Event ev("get_dataset_reader", parallel);
     auto gilstate = PyGILState_Ensure();
 
     DatasetReader *ds_reader = new DatasetReader();
@@ -231,8 +227,6 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
     } else {
         throw std::runtime_error("parquet.cpp::get_dataset_reader: storage_options is not a python dictionary.");
     }
-    
-    
 
     // import bodo.io.parquet_pio
     PyObject *pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
@@ -260,6 +254,8 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
 
     // all_pieces = ds.pieces
     PyObject *all_pieces = PyObject_GetAttrString(ds, "pieces");
+    size_t num_pieces = PyObject_Length(all_pieces);
+    ev.add_attribute("g_num_pieces", num_pieces);
     Py_DECREF(ds);
 
     // iterate through pieces next
@@ -404,12 +400,16 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
     Py_DECREF(pq_mod);
     Py_DECREF(num_files_py);
     Py_DECREF(ret);
+    tracing::Event ev_fopen("open_files", parallel);
     // open and store file readers for my pieces
     for (auto& fpath : file_paths) {
         std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
         pq_init_reader(fpath.c_str(), &arrow_reader, bucket_region, ds_reader->s3fs_anon);
         ds_reader->readers.push_back(arrow_reader);
     }
+    ev_fopen.finalize();
+    ev.add_attribute("num_rows", size_t(ds_reader->count));
+    ev.add_attribute("num_files", ds_reader->readers.size());
 
     if (PyErr_Occurred()) return NULL;
     PyGILState_Release(gilstate);
@@ -434,6 +434,7 @@ int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,
                 int64_t column_idx, uint8_t *out_data, int out_dtype,
                 uint8_t *out_nulls, int is_categorical) {
     try {
+        tracing::Event ev("pq_read");
         if (ds_reader->count == 0) return 0;
 
         int64_t start = ds_reader->start_row_first_file;
@@ -462,6 +463,7 @@ int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,
 int pq_read_string(DatasetReader *ds_reader, int64_t real_column_idx,
                    int64_t column_idx, NRT_MemInfo **out_meminfo) {
     try {
+        tracing::Event ev("pq_read_string");
         if (ds_reader->count == 0) {
             // This is to avoid segfaults in case of empty arrays on
             // some ranks
@@ -529,6 +531,7 @@ int pq_read_string(DatasetReader *ds_reader, int64_t real_column_idx,
 int pq_read_list_string(DatasetReader *ds_reader, int64_t real_column_idx,
                         int64_t column_idx, NRT_MemInfo **array_item_meminfo) {
     try {
+        tracing::Event ev("pq_read_list_string");
         if (ds_reader->count == 0) return 0;
 
         int64_t start = ds_reader->start_row_first_file;
@@ -606,6 +609,7 @@ int pq_read_arrow_array(DatasetReader *ds_reader, int64_t real_column_idx,
                         int64_t column_idx, int64_t column_siz,
                         int64_t *lengths, array_info **out_infos) {
     try {
+        tracing::Event ev("pq_read_arrow_array");
         if (ds_reader->count == 0) return 0;
 
         int64_t start = ds_reader->start_row_first_file;
@@ -648,6 +652,7 @@ int pq_read_array_item(DatasetReader *ds_reader, int64_t real_column_idx,
                        array_info **out_offsets, array_info **out_data,
                        array_info **out_nulls) {
     try {
+        tracing::Event ev("pq_read_array_item");
         if (ds_reader->count == 0) return 0;
 
         int64_t start = ds_reader->start_row_first_file;

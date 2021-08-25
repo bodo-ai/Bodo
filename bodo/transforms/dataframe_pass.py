@@ -1776,16 +1776,20 @@ class DataFramePass:
         """
 
         func_text = f"def _bodo_groupby_apply_impl(keys, in_df, {extra_arg_names}_is_parallel=False):\n"
+        func_text += "  ev_apply = bodo.utils.tracing.Event('gb.apply', False)\n"
         func_text += f"  if _is_parallel:\n"
         func_text += f"    in_df, keys, shuffle_info = shuffle_dataframe(in_df, keys)\n"
 
         # get groupby info
-        func_text += f"  sort_idx, group_indices, ngroups = get_group_indices(keys, {grp_typ.dropna})\n"
+        func_text += "  ev_gp_indices_data = bodo.utils.tracing.Event('group_indices_data_key', _is_parallel)\n"
+        func_text += f"  sort_idx, group_indices, ngroups = get_group_indices(keys, {grp_typ.dropna}, _is_parallel)\n"
         # TODO This can be done in C++ as well.
         # This will avoid returning group_indices back.
         func_text += (
             "  starts, ends = generate_slices(group_indices[sort_idx], ngroups)\n"
         )
+        func_text += "  ev_gp_indices_data.add_attribute('g_ngroups', ngroups)\n"
+        func_text += f"  ev_gp_indices_data.add_attribute('n_keys', {n_keys})\n"
         # sort keys and data
         for i in range(n_keys):
             func_text += f"  s_key{i} = keys[{i}][sort_idx]\n"
@@ -1793,6 +1797,8 @@ class DataFramePass:
         func_text += "  in_data = in_df.iloc[sort_idx{}]\n".format(
             ",0" if is_series_in else ""
         )
+        func_text += f"  ev_gp_indices_data.add_attribute('in_data', len(in_data))\n"
+        func_text += "  ev_gp_indices_data.finalize()\n"
 
         # whether UDF returns a single row (as Series) or scalar
         if (
@@ -1819,6 +1825,7 @@ class DataFramePass:
         sum_no = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
         func_text = ""
+        func_text += "  ev = bodo.utils.tracing.Event('_gen_groupby_apply_row_loop', _is_parallel)\n"
 
         # output always has input keys (either Index or regular columns)
         for i in range(n_keys):
@@ -1878,6 +1885,8 @@ class DataFramePass:
         # parallel shuffle clean up
         func_text += f"  if _is_parallel:\n"
         func_text += f"    delete_shuffle_info(shuffle_info)\n"
+        func_text += "  ev.finalize()\n"
+        func_text += "  ev_apply.finalize()\n"
 
         if isinstance(out_typ, DataFrameType):
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
@@ -1895,6 +1904,7 @@ class DataFramePass:
         sum_no = bodo.libs.distributed_api.Reduce_Type.Sum.value
 
         func_text = ""
+        func_text += "  ev = bodo.utils.tracing.Event('_gen_groupby_apply_acc_loop', _is_parallel)\n"
 
         # gather output array, index and keys in lists to concatenate for output
         for i in range(n_out_cols):
@@ -1998,8 +2008,12 @@ class DataFramePass:
             # some ranks may have empty data after shuffle (ngroups == 0), so call the
             # UDF with empty data to get the name of the output Series
             func_text += f"  out_name = out_df.name if ngroups else map_func(in_data[0:0], {udf_arg_names}).name\n"
+            func_text += "  ev.finalize()\n"
+            func_text += "  ev_apply.finalize()\n"
             func_text += f"  return bodo.hiframes.pd_series_ext.init_series(out_arr0, out_index, out_name)\n"
         else:
+            func_text += "  ev.finalize()\n"
+            func_text += "  ev_apply.finalize()\n"
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
 
         return func_text
