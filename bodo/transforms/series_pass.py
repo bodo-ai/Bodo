@@ -2829,6 +2829,10 @@ class SeriesPass:
                     [series_var],
                     pysig=numba.core.utils.pysignature(impl),
                     kws=dict(),
+                    # Some Series functions may require methods or
+                    # attributes that need to be inlined by the full
+                    # pipeline.
+                    run_full_pipeline=True,
                 )
             else:
                 return self._handle_ufuncs(func_name, (series_var,))

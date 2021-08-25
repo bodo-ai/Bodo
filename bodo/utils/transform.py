@@ -1381,10 +1381,16 @@ def find_udf_str_name(obj_dtype, func_name, typing_context, caller_name):
     return result
 
 
-def get_udf_str_return_type(obj_dtype, func_name, typing_context, caller_name):
+def get_udf_str_return_type(
+    obj_dtype, func_name, typing_context, caller_name, axis=None
+):
     """
     Given an obj_dtype, func_name, and a typing_context, this function returns
     the return type for the implementation used inside apply.
+
+    These functions do not normally take arguments except arguments from apply may be forwarded.
+    Currently we only support axis, which if supply we attempt to pass to any Pandas methods.
+    If it fails we try again without axis.
 
     This function uses find_udf_str_name to find the correct overload and simply calls
     the function with the given types.
@@ -1392,17 +1398,28 @@ def get_udf_str_return_type(obj_dtype, func_name, typing_context, caller_name):
     result = find_udf_str_name(obj_dtype, func_name, typing_context, caller_name)
     if isinstance(result, types.BoundFunction):
         # Methods are Bound Functions
-        sig = result.get_call_type(typing_context, (), dict())
+        if axis is not None:
+            # If axis is provided we may need to pass it to DataFrame methods.
+            # Pandas is inconsistent about supporting the axis variable, but
+            # recent changes suggest they will only allow it where it is supported.
+            sig = result.get_call_type(typing_context, (), {"axis": axis})
+        else:
+            sig = result.get_call_type(typing_context, (), dict())
     else:
         # Functions require passing obj_dtype as an argument
         sig = result.get_call_type(typing_context, (obj_dtype,), dict())
     return sig.return_type
 
 
-def get_pandas_method_str_impl(obj_dtype, func_name, typing_context, caller_name):
+def get_pandas_method_str_impl(
+    obj_dtype, func_name, typing_context, caller_name, axis=None
+):
     """
     Given an obj_dtype, func_name, and a typing_context, this function returns
     the function used that implements the provided Pandas method.
+
+    These functions do not normally take arguments except arguments from apply may be forwarded.
+    Currently we only support axis.
 
     This function uses find_udf_str_name to find the correct
     function and uses its internal information to find the implementation.
@@ -1413,5 +1430,8 @@ def get_pandas_method_str_impl(obj_dtype, func_name, typing_context, caller_name
         # Methods are Bound Functions
         template = result.template
         # TODO: Handle situations where we don't have an overload?
-        return template._overload_func(obj_dtype)
+        if axis is not None:
+            return template._overload_func(obj_dtype, axis=axis)
+        else:
+            return template._overload_func(obj_dtype)
     return None

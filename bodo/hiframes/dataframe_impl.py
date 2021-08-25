@@ -869,7 +869,7 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
 
 @overload_method(DataFrameType, "nunique", inline="always", no_unliteral=True)
 def overload_dataframe_nunique(df, axis=0, dropna=True):
-    unsupported_args = dict(axis=0)
+    unsupported_args = dict(axis=axis)
     arg_defaults = dict(axis=0)
     if not is_overload_bool(dropna):
         raise BodoError("DataFrame.nunique: dropna must be a boolean value")
