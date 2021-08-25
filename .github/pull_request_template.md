@@ -18,6 +18,9 @@
 
     - [ ] Marked tests slow (after confirming sufficient coverage).
 
+  - Tracing:
+    - [ ] Newly added code has tracing events where appropiate (in Python and C++)
+
   - Formatting:
     - [ ] Ran pre-commit hooks.
     - [ ] Ran clang-format for C++ code.
