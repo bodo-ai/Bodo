@@ -6,6 +6,17 @@
 #ifndef _MURMURHASH3_H_
 #define _MURMURHASH3_H_
 
+#define USE_MURMUR_32 0  // MurmurHash3_x86_32
+#define USE_MURMUR_128 \
+    0                   // MurmurHash3_x64_128 getting 32 least significant bits
+#define USE_XXH3_LOW 1  // 64-bit hash with xxHash3 and get 32 lsb
+
+#if USE_XXH3_LOW
+// xxHash code from https://github.com/Cyan4973/xxHash
+// and corresponds to commit https://github.com/Cyan4973/xxHash/commit/4a20afceb625f62278e11f630156475aee40b055
+#include "xxh3.h"
+#endif
+
 //-----------------------------------------------------------------------------
 // Platform-specific functions and macros
 
@@ -35,12 +46,23 @@ inline void hash_string_32(const char* str, const int len, const uint32_t seed,
     if (len == 0)
         *out_hash = 0;
     else
+#if USE_MURMUR_32 || USE_MURMUR_128
         MurmurHash3_x64_32(str, len, seed, (void*)out_hash);
+#endif
+#if USE_XXH3_LOW
+        *out_hash = static_cast<uint32_t>(XXH3_64bits_withSeed(str, (size_t)len, seed));
+#endif
 }
 
 template <class T>
 inline void hash_inner_32(T* data, const uint32_t seed, uint32_t* out_hash) {
+#if USE_MURMUR_32 || USE_MURMUR_128
     MurmurHash3_x64_32((const void*)data, sizeof(T), seed, (void*)out_hash);
+#endif
+#if USE_XXH3_LOW
+    *out_hash =
+        static_cast<uint32_t>(XXH3_64bits_withSeed((const void*)data, sizeof(T), seed));
+#endif
 }
 
 //-----------------------------------------------------------------------------

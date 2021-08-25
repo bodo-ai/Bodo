@@ -79,6 +79,9 @@ FORCE_INLINE uint64_t fmix64(uint64_t k) {
 
 void MurmurHash3_x64_32(const void* key, const int len, const uint32_t seed,
                         void* out) {
+#if USE_MURMUR_128
+    // This is MurmurHash3_x64_128 from here (modified to truncate to 32 lsb):
+    // https://github.com/aappleby/smhasher/blob/61a0530f28277f2e850bfc39600ce61d02b518de/src/MurmurHash3.cpp#L255
     const uint8_t* data = (const uint8_t*)key;
     const int nblocks = len / 16;
 
@@ -183,4 +186,67 @@ void MurmurHash3_x64_32(const void* key, const int len, const uint32_t seed,
 
     // TODO: take out masking, unnecesary
     *(uint32_t*)out = h1 & 0xFFFFFFFF;  // 32 least significant bits
+#endif
+#if USE_MURMUR_32
+    // This is MurmurHash3_x86_32 function here:
+    // https://github.com/aappleby/smhasher/blob/61a0530f28277f2e850bfc39600ce61d02b518de/src/MurmurHash3.cpp#L94
+    // It's faster than the above code for 128-bit hashes and seems to be
+    // similar or a bit better in terms of quality (when obtaining 32-bit
+    // hashes)
+
+    const uint8_t* data = (const uint8_t*)key;
+    const int nblocks = len / 4;
+
+    uint32_t h1 = seed;
+
+    const uint32_t c1 = 0xcc9e2d51;
+    const uint32_t c2 = 0x1b873593;
+
+    //----------
+    // body
+
+    const uint32_t* blocks = (const uint32_t*)(data + nblocks * 4);
+
+    for (int i = -nblocks; i; i++) {
+        uint32_t k1 = getblock32(blocks, i);
+
+        k1 *= c1;
+        k1 = ROTL32(k1, 15);
+        k1 *= c2;
+
+        h1 ^= k1;
+        h1 = ROTL32(h1, 13);
+        h1 = h1 * 5 + 0xe6546b64;
+    }
+
+    //----------
+    // tail
+
+    const uint8_t* tail = (const uint8_t*)(data + nblocks * 4);
+
+    uint32_t k1 = 0;
+
+    switch (len & 3) {
+        case 3:
+            k1 ^= tail[2] << 16;
+        case 2:
+            k1 ^= tail[1] << 8;
+        case 1:
+            k1 ^= tail[0];
+            k1 *= c1;
+            k1 = ROTL32(k1, 15);
+            k1 *= c2;
+            h1 ^= k1;
+    };
+
+    //----------
+    // finalization
+
+    h1 ^= len;
+
+    h1 = fmix32(h1);
+
+    *(uint32_t*)out = h1;
+
+#endif
 }
