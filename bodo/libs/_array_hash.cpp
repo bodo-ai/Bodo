@@ -193,6 +193,7 @@ static void hash_na_string(const uint32_t seed, uint32_t* hash_value) {
 static void hash_array_string(uint32_t* out_hashes, char* data,
                               offset_t* offsets, uint8_t* null_bitmask,
                               size_t n_rows, const uint32_t seed) {
+    tracing::Event ev("hash_array_string");
     offset_t start_offset = 0;
     uint32_t na_hash;
     hash_na_string(seed, &na_hash);
@@ -1000,6 +1001,7 @@ uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
 
 uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
                     const uint32_t seed) {
+    tracing::Event ev("hash_keys");
 #ifdef DEBUG_HASH
     std::cout << "INPUT hash_keys. key_arrs=\n";
     DEBUG_PrintRefct(std::cout, key_arrs);

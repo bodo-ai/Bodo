@@ -595,6 +595,7 @@ inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
  * @param len: number of hashes
  */
 inline size_t get_nunique_hashes(uint32_t* hashes, size_t len) {
+    tracing::Event ev("get_nunique_hashes");
     // Passing bit width = 20 to HyperLogLog (impacts accuracy and execution
     // time). 30 is extremely slow. 20 seems to be about as fast as 10 and
     // more accurate. With 20 it is pretty fast, faster than calculating
@@ -603,6 +604,7 @@ inline size_t get_nunique_hashes(uint32_t* hashes, size_t len) {
     for (size_t i=0; i < len; i++)
         hll.add(hashes[i]);
     size_t est = std::min(size_t(hll.estimate()), len);
+    ev.add_attribute("estimate", est);
     return est;
 }
 

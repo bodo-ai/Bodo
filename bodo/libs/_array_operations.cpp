@@ -157,6 +157,7 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
 
 table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
                                     int64_t* vect_ascending, bool na_position) {
+    tracing::Event ev("sort_values_table_local");
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_key = size_t(n_key_t);
 #ifdef DEBUG_SORT_LOCAL_SYMBOL
@@ -231,11 +232,13 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, bool na_position,
                               bool parallel) {
     try {
+        tracing::Event ev("sort_values_table");
         int64_t n_local = in_table->nrows();
         table_info* local_sort = sort_values_table_local(
             in_table, n_key_t, vect_ascending, na_position);
         if (!parallel) return local_sort;
         // preliminary definitions.
+        tracing::Event ev_sample("sort sampling");
         int n_pes, myrank;
         int mpi_root = 0;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -305,6 +308,10 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             }
             pre_bounds = RetrieveTable(all_samples_sort, ListIdxBounds, -1);
             delete_table(all_samples_sort);
+        } else {
+            // all ranks need to trace the event
+            // TODO the right way would be to call sort_values_table_local with an empty table
+            tracing::Event ev_dummy("sort_values_table_local");
         }
         delete_table(all_samples);
 
@@ -314,6 +321,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         table_info* bounds = broadcast_table(local_sort, pre_bounds, n_key_t);
         if (myrank == mpi_root) delete_table(pre_bounds);
         // Now computing to which process it all goes.
+        tracing::Event ev_hashes("compute_destinations");
         std::vector<uint32_t> hashes_v(n_local);
         uint32_t node_id = 0;
         for (int64_t i = 0; i < n_local; i++) {
@@ -334,6 +342,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         // Now shuffle all the data
         mpi_comm_info comm_info(local_sort->columns);
         comm_info.set_counts(hashes_v.data());
+        ev_hashes.finalize();
+        ev_sample.finalize();
         table_info* collected_table =
             shuffle_table_kernel(local_sort, hashes_v.data(), comm_info);
         // NOTE: shuffle_table_kernel decrefs input arrays
@@ -446,6 +456,12 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
  */
 table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
                                         int64_t keep, int step, bool dropna) {
+    tracing::Event ev("drop_duplicates_table_inner");
+    ev.add_attribute("table_nrows_before", size_t(in_table->nrows()));
+    if (ev.is_tracing()) {
+        size_t global_table_nbytes = table_global_memory_size(in_table);
+        ev.add_attribute("g_table_nbytes", global_table_nbytes);
+    }
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<array_info*> key_arrs(num_keys);
     for (size_t iKey = 0; iKey < size_t(num_keys); iKey++)
@@ -566,6 +582,7 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
     table_info* ret_table = RetrieveTable(in_table, ListIdx, -1);
     //
     delete[] hashes;
+    ev.add_attribute("table_nrows_after", size_t(ret_table->nrows()));
 #ifdef DEBUG_DD
     std::cout << "drop_duplicates_table_inner : OUTPUT:\n";
     DEBUG_PrintRefct(std::cout, ret_table->columns);

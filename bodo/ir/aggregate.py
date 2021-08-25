@@ -1954,6 +1954,9 @@ def gen_top_level_agg_func(
             agg_node.dropna,
         )
 
+    func_text += (
+        f"    ev_info = bodo.utils.tracing.Event('info_to_array', {parallel})\n"
+    )
     idx = 0
     if agg_node.return_key:
         for i, key_name in enumerate(key_arg_names):
@@ -1977,9 +1980,14 @@ def gen_top_level_agg_func(
         )
         idx += 1
     # clean up
+    func_text += f"    ev_info.finalize()\n"
+    func_text += (
+        f"    ev_clean = bodo.utils.tracing.Event('tables_clean_up', {parallel})\n"
+    )
     func_text += "    delete_table_decref_arrays(table)\n"
     func_text += "    delete_table_decref_arrays(udf_table_dummy)\n"
     func_text += "    delete_table(out_table)\n"
+    func_text += f"    ev_clean.finalize()\n"
 
     ret_names = tuple(out_names.values())
     if agg_node.return_key:

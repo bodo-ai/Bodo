@@ -65,10 +65,17 @@ lid = [PREFIX_DIR + "/lib"]
 # ela = ["-std=c++17", "-fsanitize=address"]
 if is_win:
     eca = ["/std:c++17", "/O2"]
+    eca_c = ["/O2"]
     ela = ["/std:c++17"]
 else:
     eca = ["-std=c++17", "-g0", "-O3"]
+    eca_c = ["-g0", "-O3"]
     ela = ["-std=c++17"]
+
+BODO_TRACING_SUPPORT = False
+if development_mode:
+    BODO_TRACING_SUPPORT = True  # compile tracing code in tracing.pyx
+    eca += ["-DBODO_ENABLE_TRACING"]  # enable tracing support in bodo/libs/tracing.h
 
 MPI_LIBS = ["mpi"]
 if "setup_centos7" in os.environ:
@@ -403,6 +410,9 @@ ext_parquet = Extension(
     library_dirs=np_compile_args["library_dirs"] + lid,
 )
 
+# Cython files that are part of the code base that aren't just renamed .py
+# files during build
+pyx_builtins = []
 
 ext_pyfs = Extension(
     name="bodo.io.pyfs",
@@ -415,6 +425,23 @@ ext_pyfs = Extension(
     extra_link_args=ela,
     library_dirs=lid,
 )
+# the bodo/io/pyfs.pyx file is always part of Bodo (not generated during build)
+pyx_builtins += [os.path.join("bodo", "io", "pyfs.pyx")]
+
+
+ext_tracing = Extension(
+    name="bodo.utils.tracing",
+    sources=[
+        "bodo/utils/tracing.pyx",
+    ],
+    libraries=MPI_LIBS,
+    define_macros=[],
+    extra_compile_args=eca_c,
+    extra_link_args=ela,
+    library_dirs=lid,
+)
+pyx_builtins += [os.path.join("bodo", "utils", "tracing.pyx")]
+
 
 _ext_mods = [
     ext_hdist,
@@ -430,18 +457,16 @@ _ext_mods = [
 ]
 
 
-# the bodo/io/pyfs.pyx file is always part of Bodo (not generated during build)
-pyfs_pyx_fpath = os.path.join("bodo", "io", "pyfs.pyx")
 if clean_mode:
     assert not development_mode
     _cython_ext_mods = [
-        f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f != pyfs_pyx_fpath
+        f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f not in pyx_builtins
     ]
 elif development_mode:
     _cython_ext_mods = []
     # make sure there are no .pyx files in development mode
     pyxs = [
-        f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f != pyfs_pyx_fpath
+        f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f not in pyx_builtins
     ]
     assert len(pyxs) == 0
 else:
@@ -450,7 +475,7 @@ else:
     # rename select files to .pyx for cythonizing
     subprocess.run([sys.executable, "rename_to_pyx.py"])
     _cython_ext_mods = [
-        f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f != pyfs_pyx_fpath
+        f for f in glob.glob("bodo/**/*.pyx", recursive=True) if f not in pyx_builtins
     ]
 
 
@@ -494,6 +519,8 @@ setup(
     cmdclass=versioneer.get_cmdclass(),
     ext_modules=_ext_mods
     + cythonize(
-        _cython_ext_mods + [ext_pyfs], compiler_directives={"language_level": "3"}
+        _cython_ext_mods + [ext_pyfs, ext_tracing],
+        compiler_directives={"language_level": "3"},
+        compile_time_env=dict(BODO_TRACING_SUPPORT=BODO_TRACING_SUPPORT),
     ),
 )

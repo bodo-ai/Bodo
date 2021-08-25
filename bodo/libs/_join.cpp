@@ -27,6 +27,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                             bool is_right, bool is_join, bool optional_col,
                             bool indicator, bool is_na_equal) {
     try {
+        tracing::Event ev("hash_join_table");
         // Reading the MPI settings
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -49,7 +50,18 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 "Error in join.cpp::hash_join_table: if optional_col=true then "
                 "we must have n_key_t=1.");
         }
-        //
+
+        if (ev.is_tracing()) {
+            ev.add_attribute("g_left_parallel", left_parallel);
+            ev.add_attribute("g_right_parallel", right_parallel);
+            ev.add_attribute("g_n_key", n_key_t);
+            ev.add_attribute("g_n_data_cols_left", n_data_left_t);
+            ev.add_attribute("g_n_data_cols_right", n_data_right_t);
+            ev.add_attribute("g_is_left", is_left);
+            ev.add_attribute("g_is_right", is_right);
+            ev.add_attribute("g_optional_col", optional_col);
+        }
+
         // Now deciding how we handle the parallelization of the tables
         // and doing the allgather/shuffle exchanges as needed.
         // There are two possible algorithms:
@@ -125,6 +137,9 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             work_left_table = left_table;
             work_right_table = right_table;
         }
+        ev.add_attribute("g_left_replicated", left_replicated);
+        ev.add_attribute("g_right_replicated", right_replicated);
+
         // At this point we always refer to the work tables, which abstracts
         // away the original left and right tables. We cannot garbage
         // collect either table because they may be reused in the Python code,
@@ -213,6 +228,9 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 ChoiceOpt = 1;
             }
         }
+        ev.add_attribute("MethodChoice", MethodChoice);
+        ev.add_attribute("ChoiceOpt", ChoiceOpt);
+
         // Select the "short" and "long" table based upon the choice opt
         // that we just set. For the short table we construct a hash map, for
         // the long table, we simply iterate over the rows and see if the keys
@@ -258,6 +276,15 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             short_table_outer && short_replicated && !long_replicated;
         bool long_miss_needs_reduction =
             long_table_outer && long_replicated && !short_replicated;
+
+        tracing::Event ev_tuples("compute_tuples");
+        if (ev_tuples.is_tracing()) {
+            ev_tuples.add_attribute("short_table_rows", short_table_rows);
+            ev_tuples.add_attribute("long_table_rows", long_table_rows);
+            ev_tuples.add_attribute("short_table_outer", short_table_outer);
+            ev_tuples.add_attribute("long_table_outer", long_table_outer);
+        }
+
         /* This is a function for comparing the rows.
          * This is the first lambda used as argument for the unordered map
          * container.
@@ -325,6 +352,8 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                                       is_na_equal);
             return test;
         };
+
+        tracing::Event ev_alloc_map("alloc_hashmap");
         // The entList contains the identical keys with the corresponding rows.
         // We address the entry by the row index. We store all the rows which
         // are identical in a "group". The hashmap stores the group number
@@ -359,6 +388,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> ListPairWrite;
         // [BE-1078]: how much should we reserve?
         ListPairWrite.reserve(long_table_rows);
+        ev_alloc_map.finalize();
 
         // If we will need to perform a reduction on long table matches,
         // specify an allocation size for the vector.
@@ -378,6 +408,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             // even if they are identical in value.
             // The first entry is going to be the index for the boolean array.
             // This code path will be selected whenever we have an OUTER merge.
+            tracing::Event ev_groups("calc_groups");
             size_t pos_idx = 0;
             for (size_t i_short = 0; i_short < short_table_rows; i_short++) {
                 // Check if the group already exists, if it doesn't this will
@@ -400,6 +431,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 }
                 groups[group_id - 1].emplace_back(i_short);
             }
+            ev_groups.finalize();
             //
             // Now iterating and determining how many entries we have to do.
             //
@@ -464,6 +496,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             // No need to keep track of the usage of the short table.
             // This code path is selected whenever the short table is an inner
             // join.
+            tracing::Event ev_groups("calc_groups");
             for (size_t i_short = 0; i_short < short_table_rows; i_short++) {
                 // Check if the group already exists, if it doesn't this will
                 // insert a value.
@@ -477,6 +510,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 }
                 groups[group_id - 1].emplace_back(i_short);
             }
+            ev_groups.finalize();
             //
             // Now iterating and determining how many entries we have to do.
             //
@@ -505,6 +539,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 }
             }
         }
+        tracing::Event ev_clear_map("dealloc_hashmap");
         // Data structures used during computation of the tuples can become
         // quite large and their deallocation can take a non-negligible amount
         // of time. We dealloc them here to free memory for the next stage and
@@ -513,6 +548,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             groups);  // force groups vector dealloc
         entList.clear();
         entList.reserve(0);  // try to force dealloc of hashmap
+        ev_clear_map.finalize();
         // In replicated case, we put the long rows in distributed output
         if (long_table_outer && long_miss_needs_reduction) {
             MPI_Allreduce_bool_or(V_long_map);
@@ -528,6 +564,8 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 }
             }
         }
+        ev_tuples.add_attribute("output_nrows", ListPairWrite.size());
+        ev_tuples.finalize();
         // TODO if we are tight on memory for the next phase and ListPairWrite
         // capacity is much greater than its size, we could do a realloc+resize
         // here
@@ -595,6 +633,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         // Inserting the optional column in the case of merging on column and
         // index.
         if (optional_col) {
+            tracing::Event ev_fill_optional("fill_optional");
             size_t i = 0;
             bool map_integer_type = false;
             array_info* left_arr = work_left_table->columns[i];
@@ -616,6 +655,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         }
 
         // Inserting the Left side of the table
+        tracing::Event ev_fill_left("fill_left");
         int idx = 0;
         for (size_t i = 0; i < n_tot_left; i++) {
             if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
@@ -663,6 +703,8 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             }
             idx++;
         }
+        ev_fill_left.finalize();
+        tracing::Event ev_fill_right("fill_right");
         // Inserting the right side of the table.
         for (size_t i = 0; i < n_tot_right; i++) {
             // There are two cases where we put the column in output:
@@ -690,7 +732,9 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
                 }
             }
         }
+        ev_fill_right.finalize();
         // Create indicator column if indicator=True
+        tracing::Event ev_indicator("create_indicator");
         size_t num_rows = ListPairWrite.size();
         if (indicator) {
             array_info* indicator_col =
@@ -715,7 +759,12 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             }
             out_arrs.emplace_back(indicator_col);
         }
+        ev_indicator.finalize();
 
+        // TODO if we see significant tracing gap at the end of hash_join_table
+        // or right after it, we need to trace the "freeing" portion of this
+        // function, and manually deallocate ListPairWrite, V_long_map, etc.
+        // to make sure deallocations are captured by the trace event
         if (free_work_left) {
             delete_table(work_left_table);
         }

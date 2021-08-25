@@ -1091,7 +1091,7 @@ struct aggfunc<
 #define ROBIN_MAP_MAX_LOAD_FACTOR 0.5
 #define HOPSCOTCH_MAP_MAX_LOAD_FACTOR 0.9
 
-bool calc_use_robin_map(size_t nunique_hashes) {
+bool calc_use_robin_map(size_t nunique_hashes, tracing::Event* ev=nullptr) {
     // If the number of groups is very large, we should avoid very small load
     // factors because the map will use too much memory, and also allocation
     // and deallocation will become very expensive
@@ -1127,6 +1127,10 @@ bool calc_use_robin_map(size_t nunique_hashes) {
             // policy by default (for faster hash to bucket calculation)
             bucket_size = bucket_size << 1;
         }
+        if (ev) {
+            ev->add_attribute("robin_map_load_factor", robin_map_load_factor);
+            ev->add_attribute("hopscotch_map_load_factor", hopscotch_map_load_factor);
+        }
     }
     return use_robin_map;
 }
@@ -1150,6 +1154,7 @@ static void get_group_info_loop(T& key_to_group,
                                 grouping_info& grp_info,
                                 const bool key_drop_nulls,
                                 const int64_t nrows) {
+    tracing::Event ev("get_group_info_loop");
     // Start at 1 because I'm going to use 0 to mean nothing was inserted yet
     // in the map (but note that the group values recorded in grp_info go from
     // 0 to num_groups - 1)
@@ -1203,16 +1208,19 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
                     size_t nunique_hashes,
                     std::vector<grouping_info>& grp_infos,
                     bool check_for_null_keys, bool key_dropna) {
+    tracing::Event ev("get_group_info");
     if (tables.size() == 0) {
         throw std::runtime_error("get_group_info: tables is empty");
     }
     table_info* table = tables[0];
+    ev.add_attribute("input_table_nrows", table->nrows());
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table->columns.begin(), table->columns.begin() + table->num_keys);
     if (hashes == nullptr) {
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE);
         nunique_hashes = get_nunique_hashes(hashes, table->nrows());
     }
+    ev.add_attribute("nunique_hashes_est", nunique_hashes);
     grp_infos.emplace_back();
     grouping_info& grp_info = grp_infos.back();
     const int64_t n_keys = table->num_keys;
@@ -1249,15 +1257,21 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
                            true>  // StoreHash
         rob_t;
 
-    bool use_robin_map = calc_use_robin_map(nunique_hashes);
+    bool use_robin_map = calc_use_robin_map(nunique_hashes, &ev);
+    ev.add_attribute("use_robin_map", int(use_robin_map));
     rob_t key_to_group_rob({}, hash_fct, equal_fct);
     hs_t key_to_group_hs({}, hash_fct, equal_fct);
+    tracing::Event ev_alloc("get_group_info_alloc");
     if (use_robin_map) {
         key_to_group_rob.max_load_factor(ROBIN_MAP_MAX_LOAD_FACTOR);
         key_to_group_rob.reserve(nunique_hashes);
+        ev_alloc.add_attribute("map bucket_count", key_to_group_rob.bucket_count());
+        ev_alloc.add_attribute("map max_load_factor", key_to_group_rob.max_load_factor());
     } else {
         key_to_group_hs.max_load_factor(HOPSCOTCH_MAP_MAX_LOAD_FACTOR);
         key_to_group_hs.reserve(nunique_hashes);
+        ev_alloc.add_attribute("map bucket_count", key_to_group_hs.bucket_count());
+        ev_alloc.add_attribute("map max_load_factor", key_to_group_hs.max_load_factor());
     }
     // XXX Don't want to initialize data (just reserve and set size) but
     // std::vector doesn't support this. Since we know the size of the vector,
@@ -1265,12 +1279,16 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
     // get_group_info_loop, which are slower than [] operator
     grp_info.row_to_group.resize(table->nrows());
     grp_info.group_to_first_row.reserve(nunique_hashes * 1.1);
+    ev_alloc.finalize();
 
     bool key_is_nullable = false;
     if (check_for_null_keys) {
         key_is_nullable = does_keys_have_nulls(key_cols);
     }
     bool key_drop_nulls = key_is_nullable && key_dropna;
+    ev.add_attribute("g_key_is_nullable", key_is_nullable);
+    ev.add_attribute("g_key_dropna", key_dropna);
+    ev.add_attribute("g_key_drop_nulls", key_drop_nulls);
 
     if (use_robin_map)
         get_group_info_loop<rob_t>(key_to_group_rob, key_cols, grp_info,
@@ -1279,16 +1297,31 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
         get_group_info_loop<hs_t>(key_to_group_hs, key_cols, grp_info,
                                   key_drop_nulls, table->nrows());
     grp_info.num_groups = grp_info.group_to_first_row.size();
+    ev.add_attribute("num_groups", size_t(grp_info.num_groups));
 
+    tracing::Event ev_dealloc("get_group_info_dealloc");
     delete[] hashes;
     hashes = nullptr;  // updates hashes ptr at caller
     if (use_robin_map) {
+        if (ev_dealloc.is_tracing()) {
+            ev_dealloc.add_attribute("map size", key_to_group_rob.size());
+            ev_dealloc.add_attribute("map bucket_count", key_to_group_rob.bucket_count());
+            ev_dealloc.add_attribute("map load_factor", key_to_group_rob.load_factor());
+            ev_dealloc.add_attribute("map max_load_factor", key_to_group_rob.max_load_factor());
+        }
         key_to_group_rob.clear();
         key_to_group_rob.reserve(0);  // try to force dealloc of hash map
     } else {
+        if (ev_dealloc.is_tracing()) {
+            ev_dealloc.add_attribute("map size", key_to_group_hs.size());
+            ev_dealloc.add_attribute("map bucket_count", key_to_group_hs.bucket_count());
+            ev_dealloc.add_attribute("map load_factor", key_to_group_hs.load_factor());
+            ev_dealloc.add_attribute("map max_load_factor", key_to_group_hs.max_load_factor());
+        }
         key_to_group_hs.clear();
         key_to_group_hs.reserve(0);  // try to force dealloc of hash map
     }
+    ev_dealloc.finalize();
 
     if (tables.size() > 1) {
         // This case is not currently used
@@ -1304,6 +1337,7 @@ static int64_t get_groupby_labels_loop(T& key_to_group,
                                        int64_t* sort_idx,
                                        const bool key_drop_nulls,
                                        const int64_t nrows) {
+    tracing::Event ev("get_groupby_labels_loop");
     // Start at 1 because I'm going to use 0 to mean nothing was inserted yet
     // in the map (but note that the group values recorded in grp_info go from
     // 0 to num_groups - 1)
@@ -1358,6 +1392,8 @@ static int64_t get_groupby_labels_loop(T& key_to_group,
  */
 int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
                            int64_t* sort_idx, bool key_dropna) {
+    tracing::Event ev("get_groupby_labels");
+    ev.add_attribute("input_table_nrows", table->nrows());
     // TODO(ehsan): refactor to avoid code duplication with get_group_info
     // This function is similar to get_group_info. See that function for
     // more comments
@@ -1366,6 +1402,7 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
     uint32_t* hashes = hash_keys(key_cols, seed);
     size_t nunique_hashes = get_nunique_hashes(hashes, table->nrows());
+    ev.add_attribute("nunique_hashes_est", nunique_hashes);
     const int64_t n_keys = table->num_keys;
 
     std::function<uint32_t(int64_t)> hash_fct = [&](int64_t iRow) -> uint32_t {
@@ -1391,18 +1428,28 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
                            true>  // StoreHash
         rob_t;
 
-    bool use_robin_map = calc_use_robin_map(nunique_hashes);
+    bool use_robin_map = calc_use_robin_map(nunique_hashes, &ev);
+    ev.add_attribute("use_robin_map", int(use_robin_map));
     rob_t key_to_group_rob({}, hash_fct, equal_fct);
     hs_t key_to_group_hs({}, hash_fct, equal_fct);
+    tracing::Event ev_alloc("get_groupby_labels_alloc");
     if (use_robin_map) {
         key_to_group_rob.max_load_factor(ROBIN_MAP_MAX_LOAD_FACTOR);
         key_to_group_rob.reserve(nunique_hashes);
+        ev_alloc.add_attribute("map bucket_count", key_to_group_rob.bucket_count());
+        ev_alloc.add_attribute("map max_load_factor", key_to_group_rob.max_load_factor());
     } else {
         key_to_group_hs.max_load_factor(HOPSCOTCH_MAP_MAX_LOAD_FACTOR);
         key_to_group_hs.reserve(nunique_hashes);
+        ev_alloc.add_attribute("map bucket_count", key_to_group_hs.bucket_count());
+        ev_alloc.add_attribute("map max_load_factor", key_to_group_hs.max_load_factor());
     }
+    ev_alloc.finalize();
     bool key_is_nullable = does_keys_have_nulls(key_cols);
     bool key_drop_nulls = key_is_nullable && key_dropna;
+    ev.add_attribute("g_key_is_nullable", key_is_nullable);
+    ev.add_attribute("g_key_dropna", key_dropna);
+    ev.add_attribute("g_key_drop_nulls", key_drop_nulls);
 
     int64_t num_groups;
     if (use_robin_map)
@@ -1413,15 +1460,30 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
         num_groups =
             get_groupby_labels_loop<hs_t>(key_to_group_hs, key_cols, out_labels,
                                           sort_idx, key_drop_nulls, table->nrows());
+    ev.add_attribute("num_groups", num_groups);
 
+    tracing::Event ev_dealloc("get_groupby_labels_dealloc");
     delete[] hashes;
     if (use_robin_map) {
+        if (ev_dealloc.is_tracing()) {
+            ev_dealloc.add_attribute("map size", key_to_group_rob.size());
+            ev_dealloc.add_attribute("map bucket_count", key_to_group_rob.bucket_count());
+            ev_dealloc.add_attribute("map load_factor", key_to_group_rob.load_factor());
+            ev_dealloc.add_attribute("map max_load_factor", key_to_group_rob.max_load_factor());
+        }
         key_to_group_rob.clear();
         key_to_group_rob.reserve(0);  // try to force dealloc of hash map
     } else {
+        if (ev_dealloc.is_tracing()) {
+            ev_dealloc.add_attribute("map size", key_to_group_hs.size());
+            ev_dealloc.add_attribute("map bucket_count", key_to_group_hs.bucket_count());
+            ev_dealloc.add_attribute("map load_factor", key_to_group_hs.load_factor());
+            ev_dealloc.add_attribute("map max_load_factor", key_to_group_hs.max_load_factor());
+        }
         key_to_group_hs.clear();
         key_to_group_hs.reserve(0);  // try to force dealloc of hash map
     }
+    ev_dealloc.finalize();
 
     return num_groups;
 }
@@ -1446,6 +1508,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
                             size_t nunique_hashes,
                             std::vector<grouping_info>& grp_infos,
                             const bool consider_missing, bool key_dropna) {
+    tracing::Event ev("get_group_info_iterate");
     if (tables.size() == 0) {
         throw std::runtime_error("get_group_info: tables is empty");
     }
@@ -1567,6 +1630,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
         grp_info.group_to_first_row.resize(num_groups, -1);
         grp_info.num_groups = num_groups;
     }
+    ev.add_attribute("num_groups", size_t(num_groups));
 }
 
 /**
@@ -2072,6 +2136,7 @@ template <typename ARRAY>
 typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
 nunique_computation(array_info* arr, array_info* out_arr,
                     grouping_info const& grp_info, bool const& dropna) {
+    tracing::Event ev("nunique_computation");
     size_t num_group = grp_info.group_to_first_row.size();
     if (num_group == 0) return;
     if (arr->arr_type == bodo_array_type::NUMPY) {
@@ -5293,6 +5358,7 @@ class GroupbyPipeline {
           key_dropna(_key_dropna),
           udf_table(_udf_table),
           udf_n_redvars(_udf_nredvars) {
+        tracing::Event ev("GroupbyPipeline()", _is_parallel);
         if (dispatch_table == nullptr)
             n_pivot = 1;
         else
@@ -5375,6 +5441,8 @@ class GroupbyPipeline {
                 shuffle_before_update = true;
                 nunique_grp_shuffle_before = true;
             }
+            ev.add_attribute("groups_in_nrows_ratio", groups_in_nrows_ratio);
+            ev.add_attribute("shuffle_before_update_count_s", shuffle_before_update_count_s);
         } else if (!is_parallel) {
             nunique_hashes = get_nunique_hashes(hashes, in_table->nrows());
         }
@@ -5532,6 +5600,7 @@ class GroupbyPipeline {
                                 col_sets.back()));
                     }
                 }
+                ev.add_attribute("g_column_ftype_"+std::to_string(j), size_t(ftypes[j]));
             }
         }
         // This is needed if aggregation was just size operation, it will skip
@@ -5544,6 +5613,8 @@ class GroupbyPipeline {
         }
 
         in_table->id = 0;
+        ev.add_attribute("g_shuffle_before_update", size_t(shuffle_before_update));
+        ev.add_attribute("g_do_combine", size_t(do_combine));
     }
 
     ~GroupbyPipeline() {
@@ -5576,6 +5647,7 @@ class GroupbyPipeline {
      * More specifically, it will invoke the update method of each column set.
      */
     void update() {
+        tracing::Event ev("update", is_parallel);
         in_table->num_keys = num_keys;
         std::vector<table_info*> tables;
         // Add in_table if operation doesn't include nunique or has nunique
@@ -5639,6 +5711,7 @@ class GroupbyPipeline {
      * shuffled table.
      */
     void shuffle() {
+        tracing::Event ev("shuffle", is_parallel);
         table_info* shuf_table = shuffle_table(update_table, num_keys);
 #ifdef DEBUG_GROUPBY
         std::cout << "After shuffle_table_kernel. shuf_table=\n";
@@ -5662,6 +5735,7 @@ class GroupbyPipeline {
      * the combine method of each column set.
      */
     void combine() {
+        tracing::Event ev("combine", is_parallel);
         update_table->num_keys = num_keys;
         grp_infos.clear();
         std::vector<table_info*> tables = {update_table};
@@ -5697,6 +5771,7 @@ class GroupbyPipeline {
      * set. It call the eval method of each column set.
      */
     void eval() {
+        tracing::Event ev("eval", is_parallel);
         for (auto col_set : col_sets) col_set->eval(grp_infos[0]);
         // only regular UDFs need eval step
         if (n_udf - gen_udf_col_sets.size() > 0) udf_info.eval(cur_table);
@@ -5706,6 +5781,7 @@ class GroupbyPipeline {
      * Returns the final output table which is the result of the groupby.
      */
     table_info* getOutputTable() {
+        tracing::Event ev("getOutputTable", is_parallel);
         table_info* out_table = new table_info();
         if (return_key)
             out_table->columns.assign(cur_table->columns.begin(),
@@ -6290,6 +6366,7 @@ table_info* mpi_exscan_computation(array_info* cat_column, table_info* in_table,
                                    int* func_offsets, bool is_parallel,
                                    bool skipdropna, bool return_key,
                                    bool return_index) {
+    tracing::Event ev("mpi_exscan_computation", is_parallel);
     const Bodo_CTypes::CTypeEnum dtype = cat_column->dtype;
     if (dtype == Bodo_CTypes::INT8)
         return mpi_exscan_computation_Tkey<int8_t>(
@@ -6339,6 +6416,7 @@ table_info* mpi_exscan_computation(array_info* cat_column, table_info* in_table,
 array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
                                       bool is_parallel,
                                       bool key_dropna = true) {
+    tracing::Event ev("compute_categorical_index", is_parallel);
 #ifdef DEBUG_GROUPBY
     std::cout << "compute_categorical_index num_keys=" << num_keys
               << " is_parallel=" << is_parallel << "\n";
@@ -6539,9 +6617,11 @@ table_info* groupby_and_aggregate(
     bool key_dropna, void* update_cb, void* combine_cb, void* eval_cb,
     void* general_udfs_cb, table_info* udf_dummy_table) {
     try {
+        tracing::Event ev("groupby_and_aggregate", is_parallel);
         int strategy =
             determine_groupby_strategy(in_table, num_keys, ftypes, func_offsets,
                                        is_parallel, input_has_index);
+        ev.add_attribute("g_strategy", size_t(strategy));
 
         auto implement_strategy0 = [&]() -> table_info* {
             table_info* dispatch_info = nullptr;

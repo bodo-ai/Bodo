@@ -54,3 +54,4 @@ algebra.log
 *.log
 bodo/io/pyfs.h
 bodo/io/pyfs.cpp
+bodo/utils/tracing.c
