@@ -270,6 +270,7 @@ ext_arr = Extension(
         "bodo/libs/_murmurhash3.cpp",
     ],
     depends=[
+        "bodo/libs/_array_utils.h",
         "bodo/libs/_decimal_ext.h",
         "bodo/libs/_decimal_ext.cpp",
         "bodo/libs/_bodo_common.h",
