@@ -57,6 +57,7 @@ from bodo.utils.typing import (
     get_overload_const_tuple,
     is_literal_type,
     is_overload_constant_list,
+    is_overload_constant_str,
     is_overload_constant_tuple,
     is_overload_none,
     list_cumulative,
@@ -486,7 +487,44 @@ class DataFramePass:
         # get apply function
         kws = dict(rhs.kws)
         func_var = get_call_expr_arg("apply", rhs.args, kws, 0, "func")
-        func = get_overload_const_func(self.typemap[func_var.name], self.func_ir)
+        func_type = self.typemap[func_var.name]
+        axis_var = get_call_expr_arg(
+            "apply", rhs.args, kws, 1, "axis", default=types.literal(0)
+        )
+        # Handle builtin functions passed by strings.
+        if is_overload_constant_str(func_type):
+            func_name = get_overload_const_str(func_type)
+            var_kws = dict()
+            try:
+                axis_var = get_call_expr_arg("apply", rhs.args, kws, 1, "axis")
+                axis_type = self.typemap[axis_var.name]
+                var_kws["axis"] = axis_var
+            except BodoError:
+                # If we have an exception we don't pass an axis value
+                axis_type = None
+            # Manually inline the implementation for efficiency
+            impl = bodo.utils.transform.get_pandas_method_str_impl(
+                df_typ,
+                func_name,
+                self.typingctx,
+                "DataFrame.apply",
+                axis_type,
+            )
+            if impl is not None:
+                return replace_func(
+                    self,
+                    impl,
+                    [df_var],
+                    pysig=numba.core.utils.pysignature(impl),
+                    kws=var_kws,
+                    # Some DataFrame functions may require methods or
+                    # attributes that need to be inlined by the full
+                    # pipeline.
+                    run_full_pipeline=True,
+                )
+            # TODO: Support Numpy funcs (requires overload/typing)
+
+        func = get_overload_const_func(func_type, self.func_ir)
         out_typ = self.typemap[lhs.name]
         is_df_output = isinstance(out_typ, DataFrameType)
         out_arr_types = out_typ.data

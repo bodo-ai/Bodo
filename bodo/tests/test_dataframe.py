@@ -4035,7 +4035,10 @@ def test_df_setitem_multi(memory_leak_check):
     )
     check_func(impl1, (df,), copy_input=True)
     check_func(impl2, (df,), copy_input=True)
-    with pytest.raises(BodoError, match=r"only Dataframe.apply\(\) with axis"):
+    with pytest.raises(
+        BodoError,
+        match=r"Dataframe.apply\(\): only axis=1 supported for user-defined functions",
+    ):
         bodo.jit(impl3)()
 
 

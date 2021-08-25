@@ -286,13 +286,30 @@ class DataFrameAttribute(AttributeTemplate):
         result_type = args[3] if len(args) > 3 else kws.pop("result_type", types.none)
         f_args = args[4] if len(args) > 4 else kws.pop("args", types.Tuple([]))
 
-        # check axis
-        if not (is_overload_constant_int(axis) and get_overload_const_int(axis) == 1):
-            raise BodoError("only Dataframe.apply() with axis=1 supported")
-
         unsupported_args = dict(raw=raw, result_type=result_type)
         merge_defaults = dict(raw=False, result_type=None)
         check_unsupported_args("Dataframe.apply", unsupported_args, merge_defaults)
+
+        # Is the function a UDF or a builtin
+        is_udf = True
+        if types.unliteral(func) == types.unicode_type:
+            if not is_overload_constant_str(func):
+                raise BodoError(
+                    f"DataFrame.apply(): string argument (for builtins) must be a compile time constant"
+                )
+            is_udf = False
+
+        if not (is_overload_constant_int(axis)):
+            raise BodoError(
+                "Dataframe.apply(): axis argument must be a compile time constant."
+            )
+        axis_number = get_overload_const_int(axis)
+        if is_udf and axis_number != 1:
+            raise BodoError(
+                "Dataframe.apply(): only axis=1 supported for user-defined functions"
+            )
+        elif axis_number not in (0, 1):
+            raise BodoError("Dataframe.apply(): axis must be either 0 or 1")
 
         # the data elements come from getitem of Series to perform conversion
         # e.g. dt64 to timestamp in TestDate.test_ts_map_date2
@@ -331,37 +348,60 @@ class DataFrameAttribute(AttributeTemplate):
         arg_typs = (row_typ,)
         if f_args is not None:
             arg_typs += tuple(f_args.types)
+
         try:
-            f_return_type = get_const_func_output_type(
-                func, arg_typs, kws, self.context
-            )
+            if not is_udf:
+                f_return_type = bodo.utils.transform.get_udf_str_return_type(
+                    df,
+                    get_overload_const_str(func),
+                    self.context,
+                    "DataFrame.apply",
+                    # Only pass axis if axis=1
+                    axis if axis_number == 1 else None,
+                )
+
+            else:
+                f_return_type = get_const_func_output_type(
+                    func, arg_typs, kws, self.context
+                )
         except Exception as e:
             raise_bodo_error(get_udf_error_msg("DataFrame.apply()", e))
+        if is_udf:
+            # check axis. We only accept axis=0 on builtins.
+            if not (
+                is_overload_constant_int(axis) and get_overload_const_int(axis) == 1
+            ):
+                raise BodoError(
+                    "Dataframe.apply(): only user-defined functions with axis=1 supported"
+                )
+            if (
+                isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
+                and f_return_type.const_info is None
+            ):
+                raise BodoError(
+                    "Invalid Series output in UDF (Series with constant length and constant Index value expected)"
+                )
 
-        if (
-            isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType))
-            and f_return_type.const_info is None
-        ):
-            raise BodoError(
-                "Invalid Series output in UDF (Series with constant length and constant Index value expected)"
-            )
-
-        # output is dataframe if UDF returns a Series
-        if isinstance(f_return_type, HeterogeneousSeriesType):
-            # NOTE: get_const_func_output_type() adds const_info attribute for Series
-            # output
-            _, index_vals = f_return_type.const_info
-            arrs = tuple(dtype_to_array_type(t) for t in f_return_type.data.types)
-            ret_type = DataFrameType(arrs, df.index, index_vals)
-        elif isinstance(f_return_type, SeriesType):
-            n_cols, index_vals = f_return_type.const_info
-            arrs = tuple(
-                dtype_to_array_type(f_return_type.dtype) for _ in range(n_cols)
-            )
-            ret_type = DataFrameType(arrs, df.index, index_vals)
+            # output is dataframe if UDF returns a Series
+            if isinstance(f_return_type, HeterogeneousSeriesType):
+                # NOTE: get_const_func_output_type() adds const_info attribute for Series
+                # output
+                _, index_vals = f_return_type.const_info
+                arrs = tuple(dtype_to_array_type(t) for t in f_return_type.data.types)
+                ret_type = DataFrameType(arrs, df.index, index_vals)
+            elif isinstance(f_return_type, SeriesType):
+                n_cols, index_vals = f_return_type.const_info
+                arrs = tuple(
+                    dtype_to_array_type(f_return_type.dtype) for _ in range(n_cols)
+                )
+                ret_type = DataFrameType(arrs, df.index, index_vals)
+            else:
+                data_arr = get_udf_out_arr_type(f_return_type)
+                ret_type = SeriesType(data_arr.dtype, data_arr, df.index, None)
         else:
-            data_arr = get_udf_out_arr_type(f_return_type)
-            ret_type = SeriesType(data_arr.dtype, data_arr, df.index, None)
+            # If apply just calls a builtin function we just return the type of that
+            # function.
+            ret_type = f_return_type
 
         # add dummy default value for UDF kws to avoid errors
         kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())
