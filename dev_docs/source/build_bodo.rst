@@ -43,6 +43,8 @@ such as Numba on Ubuntu Linux::
     # conda install -c conda-forge matplotlib
     # for PySpark testing:
     # conda install -c conda-forge pyspark openjdk
+    # Required for ML tests
+    # conda install -c conda-forge scikit-learn
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo
