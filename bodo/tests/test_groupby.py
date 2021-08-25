@@ -5091,7 +5091,7 @@ def test_groupby_apply_na_key():
         # int
         pd.DataFrame(
             {
-                "A": [np.nan, 1, 2, 1, 2, np.nan, np.nan],
+                "A": [np.nan, 1, 11, 1, 11, np.nan, np.nan],
                 "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5],
             }
         ),
@@ -5106,7 +5106,7 @@ def test_groupby_apply_na_key():
         pd.DataFrame(
             {
                 "A": pd.Series(
-                    [np.nan, 1, 2, 1, 2, np.nan, np.nan, 3, 3], dtype="Int64"
+                    [np.nan, 1, 11, 1, 11, np.nan, np.nan, 3, 3], dtype="Int64"
                 ),
                 "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
             }
@@ -5130,7 +5130,7 @@ def test_groupby_apply_na_key():
         pd.DataFrame(
             {
                 "A": pd.Series(
-                    pd.date_range(start="2/1/2015", end="2/24/2021", periods=6)
+                    pd.date_range(start="2/1/2015", end="2/24/2016", periods=6)
                 ).append(pd.Series(data=[None])),
                 "B": [2.2, 5.5, 5.5, 11.1, 12.2, 5.5, 2.2],
             }
