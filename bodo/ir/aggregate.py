@@ -274,7 +274,6 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
           that for each input column, a single function or list of
           functions can be applied.
     """
-
     if func_name == "no_op":
         raise BodoError("Unknown aggregation function used in groupby.")
 
@@ -366,6 +365,9 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                 f_name = agg_func_typ
             elif is_overload_constant_str(agg_func_typ):
                 f_name = get_overload_const_str(agg_func_typ)
+            elif bodo.utils.typing.is_builtin_function(agg_func_typ):
+                # Builtin function case (e.g. df.groupby("B").transform(sum))
+                f_name = bodo.utils.typing.get_builtin_function_name(agg_func_typ)
             if f_name not in bodo.ir.aggregate.supported_transform_funcs[::]:
                 raise BodoError(f"unsupported transform function {f_name}")
             # TODO: It could be user-defined
@@ -438,6 +440,16 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         # input column)
         return [funcs]
 
+    # Single String use case
+    if is_overload_constant_str(agg_func_typ):
+        func_name = get_overload_const_str(agg_func_typ)
+        return get_agg_func(func_ir, func_name, rhs, series_type, typemap)
+
+    # Builtin function case (e.g. df.groupby("B").agg(sum))
+    if bodo.utils.typing.is_builtin_function(agg_func_typ):
+        func_name = bodo.utils.typing.get_builtin_function_name(agg_func_typ)
+        return get_agg_func(func_ir, func_name, rhs, series_type, typemap)
+
     # typemap should be available for UDF case
     assert typemap is not None, "typemap is required for agg UDF handling"
     func = _get_const_agg_func(typemap[rhs.args[0].name], func_ir)
@@ -450,6 +462,10 @@ def get_agg_func_udf(func_ir, f_val, rhs, series_type, typemap):
     """get udf value for agg call"""
     if isinstance(f_val, str):
         return get_agg_func(func_ir, f_val, rhs, series_type, typemap)
+    if bodo.utils.typing.is_builtin_function(f_val):
+        # Builtin function case (e.g. df.groupby("B").agg(sum))
+        func_name = bodo.utils.typing.get_builtin_function_name(f_val)
+        return get_agg_func(func_ir, func_name, rhs, series_type, typemap)
     if isinstance(f_val, (tuple, list)):
         lambda_count = 0
         out = []

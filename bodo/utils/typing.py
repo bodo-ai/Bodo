@@ -1515,3 +1515,25 @@ def create_unsupported_overload(fname):
         raise BodoError("{} not supported yet".format(fname))
 
     return overload_f
+
+
+def is_builtin_function(func):
+    """
+    Determine if func is a builtin function typed by numba
+    https://docs.python.org/3/library/builtins.html
+    """
+    # A function is builtin if its a types.Function
+    # and the typing key is a python builtin.
+    return isinstance(func, types.Function) and isinstance(
+        func.typing_key, pytypes.BuiltinFunctionType
+    )
+
+
+def get_builtin_function_name(func):
+    """
+    Given a builtin function, which is a types.Function,
+    returns the name of the function
+    """
+    # If func is a builtin, its name is
+    # found with func.typing_key.__name__
+    return func.typing_key.__name__
