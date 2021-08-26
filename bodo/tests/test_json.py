@@ -353,6 +353,14 @@ def test_json_write_orient(test_df, orient, memory_leak_check):
         df.to_json(fname, orient=orient)
 
     def read_impl(fname):
-        return pd.read_json(fname, orient=orient)
+        # Supply D has a boolean dtype because there are null values.
+        # Pandas by default will convert boolean with null values to float.
+        # This is true for all orients except table.
+        if orient != "table":
+            dtype = {"D": "boolean"}
+        else:
+            dtype = None
+
+        return pd.read_json(fname, orient=orient, dtype=dtype)
 
     json_write_test(test_impl, read_impl, test_df, "C")
