@@ -2271,7 +2271,9 @@ def _get_json_df_type_from_file(
 
     # raise error on all processors if found (not just rank 0 which would cause hangs)
     if isinstance(df_type_or_e, Exception):
-        raise df_type_or_e
+        raise BodoError(
+            f"error from: {type(df_type_or_e).__name__}: {str(df_type_or_e)}\n"
+        )
 
     return df_type_or_e
 
@@ -2412,7 +2414,9 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
 
     # raise error on all processors if found (not just rank 0 which would cause hangs)
     if isinstance(df_type_or_e, Exception):
-        raise df_type_or_e
+        raise BodoError(
+            f"error from: {type(df_type_or_e).__name__}: {str(df_type_or_e)}\n"
+        )
 
     return df_type_or_e
 

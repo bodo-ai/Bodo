@@ -12,6 +12,7 @@ import pytest
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.testing import ensure_clean, ensure_clean_dir
+from bodo.utils.typing import BodoError
 
 
 def compress_file(fname):
@@ -190,7 +191,7 @@ def test_json_invalid_path_const(memory_leak_check):
     def test_impl():
         return pd.read_json("in_data_invalid.json")
 
-    with pytest.raises(FileNotFoundError, match="No such file or directory"):
+    with pytest.raises(BodoError, match="No such file or directory"):
         bodo.jit(test_impl)()
 
 
