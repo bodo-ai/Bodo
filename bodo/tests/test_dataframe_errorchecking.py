@@ -611,7 +611,10 @@ def test_df_apply_all_args(memory_leak_check):
 
     df = pd.DataFrame({"A": [1, 2, -1, -3, -4, 0]})
 
-    with pytest.raises(BodoError, match="with axis=1 supported"):
+    with pytest.raises(
+        BodoError,
+        match=r"Dataframe.apply\(\): only axis=1 supported for user-defined functions",
+    ):
         bodo.jit(test_axis)(df)
 
     with pytest.raises(BodoError, match="parameter only supports default"):
