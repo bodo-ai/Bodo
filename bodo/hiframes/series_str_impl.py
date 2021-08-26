@@ -26,6 +26,7 @@ from bodo.hiframes.split_impl import (
     get_split_view_index,
     string_array_split_view_type,
 )
+from bodo.libs.array import get_search_regex
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.str_arr_ext import (
     get_utf8_size,
@@ -411,6 +412,25 @@ def series_contains_regex(S, pat, case, flags, na, regex):  # pragma: no cover
     return out_arr
 
 
+def is_regex_unsupported(pat):
+    """Check if it's constant and any of the below patterns are in the regex-pattern."""
+    # Based on https://docs.python.org/3/library/re.html,
+    # all patterns are supported by boost::xpressive except use of flags
+    # as part of the pattern (i.e (?aiLmsux)).
+    # See test_re_syntax for examples
+    # To keep code simple, this treats escaped \(? as unsupported case as well.
+    # These are flags that are used as part of the regular expression
+    # and not supported in C++ directly.
+    # TODO: [BE-1204] match flags in Python with boost::xpressive::regex_constants
+    unsupported_regex = ["(?a", "(?i", "(?L", "(?m", "(?s", "(?u", "(?x", "(?#"]
+    if is_overload_constant_str(pat):
+        if isinstance(pat, types.StringLiteral):
+            pat = pat.literal_value
+        return any([x in pat for x in unsupported_regex])
+    else:
+        return True
+
+
 @overload_method(SeriesStrMethodType, "contains", no_unliteral=True)
 def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, regex=True):
     not_supported_arg_check("contains", "na", na, np.nan)
@@ -446,7 +466,12 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
     func_text += "  out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
 
     if is_overload_true(regex):
-        func_text += "  out_arr = bodo.hiframes.series_str_impl.series_contains_regex(S, pat, case, flags, na, regex)\n"
+        # It not known at compile-time or the pattern isn't supported,
+        # use Python's re.search in objmode
+        if is_regex_unsupported(pat) or flags:
+            func_text += "  out_arr = bodo.hiframes.series_str_impl.series_contains_regex(S, pat, case, flags, na, regex)\n"
+        else:
+            func_text += "  get_search_regex(arr, case, bodo.libs.str_ext.unicode_to_utf8(pat), out_arr)\n"
 
     else:
         func_text += "  numba.parfors.parfor.init_prange()\n"
@@ -475,6 +500,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
             "numba": numba,
             "np": np,
             "re_ignorecase_value": re_ignorecase_value,
+            "get_search_regex": get_search_regex,
         },
         loc_vars,
     )

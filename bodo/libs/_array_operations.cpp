@@ -1,4 +1,5 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
+#include <boost/xpressive/xpressive.hpp>
 #include <functional>
 #include <random>
 #include <set>
@@ -309,7 +310,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             delete_table(all_samples_sort);
         } else {
             // all ranks need to trace the event
-            // TODO the right way would be to call sort_values_table_local with an empty table
+            // TODO the right way would be to call sort_values_table_local with
+            // an empty table
             tracing::Event ev_dummy("sort_values_table_local");
         }
         delete_table(all_samples);
@@ -907,4 +909,59 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
     }
+}
+/**
+ * Search for pattern in each input element using
+ * boost::xpressive::regex_search(in, pattern)
+ * @param[in] in_arr input array of string  elements
+ * @param[in] case_sensitive bool whether pattern is case sensitive or not
+ * @param[in] regex regular expression pattern
+ * @param[out] out_arr output array of bools specifying whether the pattern
+ *                      matched for corresponding in_arr element
+ */
+void get_search_regex(array_info* in_arr, const bool case_sensitive,
+                      char const* const pat, array_info* out_arr) {
+    tracing::Event ev("get_search_regex");
+    // See:
+    // https://www.boost.org/doc/libs/1_76_0/boost/xpressive/regex_constants.hpp
+    boost::xpressive::regex_constants::syntax_option_type flag =
+        boost::xpressive::regex_constants::ECMAScript;  // default value
+    if (!case_sensitive) {
+        flag = boost::xpressive::icase;
+    }
+    const boost::xpressive::cregex pattern =
+        boost::xpressive::cregex::compile(pat, flag);
+    const int64_t nRow = in_arr->length;
+    ev.add_attribute("local_nRows", nRow);
+    int64_t num_match = 0;
+    if (in_arr->arr_type == bodo_array_type::STRING) {
+        offset_t const* const data2 =
+            reinterpret_cast<offset_t*>(in_arr->data2);
+        char const* const data1 = in_arr->data1;
+        for (size_t iRow = 0; iRow < nRow; iRow++) {
+            bool bit = in_arr->get_null_bit(iRow);
+            if (bit) {
+                const offset_t start_pos = data2[iRow];
+                const offset_t end_pos = data2[iRow + 1];
+                const offset_t len = end_pos - start_pos;
+                const std::string outstr(&data1[start_pos], len);
+                if (boost::xpressive::regex_search(data1 + start_pos,
+                                                   data1 + end_pos, pattern)) {
+                    out_arr->at<bool>(iRow) = true;
+                    num_match++;
+                } else {
+                    out_arr->at<bool>(iRow) = false;
+                }
+            }
+            out_arr->set_null_bit(iRow, bit);
+        }
+        ev.add_attribute("local_num_match", num_match);
+
+    } else {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "array in_arr type should be string");
+    }
+    // decref in_arr/out_arr generated in get_search_regex
+    decref_array(out_arr);
+    decref_array(in_arr);
 }
