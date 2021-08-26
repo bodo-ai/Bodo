@@ -637,6 +637,11 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, context):
     elif is_overload_constant_str(f_val):
         is_udf = False
         f_name = get_overload_const_str(f_val)
+    elif bodo.utils.typing.is_builtin_function(f_val):
+        # Builtin functions like
+        is_udf = False
+        f_name = bodo.utils.typing.get_builtin_function_name(f_val)
+
     if not is_udf:
         if f_name not in bodo.ir.aggregate.supported_agg_funcs[:-1]:
             raise BodoError(f"unsupported aggregate function {f_name}")
@@ -824,6 +829,24 @@ def resolve_agg(grp, args, kws, context):
             index = out_tp.index
         out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
         return signature(out_res, *args), gb_info
+
+    f_name = ""
+
+    # String case
+    if types.unliteral(func) == types.unicode_type:
+        # If we have a single string function, we apply the function to the
+        # whole dataframe
+        f_name = get_overload_const_str(func)
+
+    # Builtin function case, for example df.groupby("B").agg(sum)
+    if bodo.utils.typing.is_builtin_function(func):
+        f_name = bodo.utils.typing.get_builtin_function_name(func)
+
+    if f_name:
+        # Remove func from args.
+        args = args[1:]
+        kws.pop("func", None)
+        return get_agg_typ(grp, args, f_name, context, kws)
 
     validate_udf("agg", func)
     return get_agg_typ(grp, args, "agg", context, func)
