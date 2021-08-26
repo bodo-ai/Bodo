@@ -5,6 +5,100 @@
 #include "_distributed.h"
 #include "_shuffle.h"
 
+namespace {
+/**
+ * Compute hash for `hash_join_table`
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct HashHashJoinTable {
+    /**
+     * This is a function for comparing the rows.
+     * This is the first lambda used as argument for the unordered map
+     * container.
+     *
+     * A row can refer to either the short or the long table.
+     * If iRow < short_table_rows then it is in the short table
+     *    at index iRow.
+     * If iRow >= short_table_rows then it is in the long table
+     *    at index (iRow - short_table_rows).
+     *
+     * @param iRow is the first row index for the comparison
+     * @return true/false depending on the case.
+     */
+    uint32_t operator()(const size_t iRow) const {
+        if (iRow < short_table_rows) {
+            return short_table_hashes[iRow];
+        } else {
+            return long_table_hashes[iRow - short_table_rows];
+        }
+    }
+    size_t short_table_rows;
+    uint32_t* short_table_hashes;
+    uint32_t* long_table_hashes;
+};
+
+/**
+ * Key comparison for `hash_join_table`
+ *
+ * Don't use std::function to reduce call overhead.
+ */
+struct KeyEqualHashJoinTable {
+    /* This is a function for testing equality of rows.
+     * This is used as second argument for the unordered map container.
+     *
+     * A row can refer to either the short or the long table.
+     * If iRow < short_table_rows then it is in the short table
+     *    at index iRow.
+     * If iRow >= short_table_rows then it is in the long table
+     *    at index (iRow - short_table_rows).
+     *
+     * NOTE: Trying to minimize the overhead of this function does not
+     * show significant speedup in TPC-H. For example, if there is a single
+     * key column and the key array dtype is int64, doing this:
+     * `return colA->at<int64_t>(iRowA) == colB->at<int64_t>(iRowB);`
+     * only shows about 5% speedup in the portion of join that populates
+     * ListPairWrite, and it looks like trying to have multiple versions
+     * of equal_fct in a performance-correct way would significantly
+     * complicate the code. The most expensive part of the code in the
+     * computation of matching pairs is the loop over the long table,
+     * but it looks like the bottleneck right now is not the key equals
+     * function (equal_fct).
+     *
+     * @param iRowA is the first row index for the comparison
+     * @param iRowB is the second row index for the comparison
+     * @return true/false depending on equality or not.
+     */
+    bool operator()(const size_t iRowA, const size_t iRowB) const {
+        size_t jRowA, jRowB;
+        table_info *table_A, *table_B;
+        if (iRowA < short_table_rows) {
+            table_A = short_table;
+            jRowA = iRowA;
+        } else {
+            table_A = long_table;
+            jRowA = iRowA - short_table_rows;
+        }
+        if (iRowB < short_table_rows) {
+            table_B = short_table;
+            jRowB = iRowB;
+        } else {
+            table_B = long_table;
+            jRowB = iRowB - short_table_rows;
+        }
+        bool test =
+            TestEqualJoin(table_A, table_B, jRowA, jRowB, n_key, is_na_equal);
+        return test;
+    }
+
+    size_t short_table_rows;
+    size_t n_key;
+    table_info* short_table;
+    table_info* long_table;
+    bool is_na_equal;
+};
+}  // namespace
+
 // An overview of the join design can be found on Confluence:
 // https://bodo.atlassian.net/wiki/spaces/B/pages/821624833/Join+Code+Design
 
@@ -285,75 +379,12 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             ev_tuples.add_attribute("long_table_outer", long_table_outer);
         }
 
-        /* This is a function for comparing the rows.
-         * This is the first lambda used as argument for the unordered map
-         * container.
-         *
-         * A row can refer to either the short or the long table.
-         * If iRow < short_table_rows then it is in the short table
-         *    at index iRow.
-         * If iRow >= short_table_rows then it is in the long table
-         *    at index (iRow - short_table_rows).
-         *
-         * @param iRow is the first row index for the comparison
-         * @return true/false depending on the case.
-         */
-        std::function<uint32_t(size_t)> hash_fct =
-            [&](size_t iRow) -> uint32_t {
-            if (iRow < short_table_rows)
-                return short_table_hashes[iRow];
-            else
-                return long_table_hashes[iRow - short_table_rows];
-        };
-        /* This is a function for testing equality of rows.
-         * This is used as second argument for the unordered map container.
-         *
-         * A row can refer to either the short or the long table.
-         * If iRow < short_table_rows then it is in the short table
-         *    at index iRow.
-         * If iRow >= short_table_rows then it is in the long table
-         *    at index (iRow - short_table_rows).
-         *
-         * NOTE: Trying to minimize the overhead of this function does not
-         * show significant speedup in TPC-H. For example, if there is a single
-         * key column and the key array dtype is int64, doing this:
-         * `return colA->at<int64_t>(iRowA) == colB->at<int64_t>(iRowB);`
-         * only shows about 5% speedup in the portion of join that populates
-         * ListPairWrite, and it looks like trying to have multiple versions
-         * of equal_fct in a performance-correct way would significantly
-         * complicate the code. The most expensive part of the code in the
-         * computation of matching pairs is the loop over the long table,
-         * but it looks like the bottleneck right now is not the key equals
-         * function (equal_fct).
-         *
-         * @param iRowA is the first row index for the comparison
-         * @param iRowB is the second row index for the comparison
-         * @return true/false depending on equality or not.
-         */
-        std::function<bool(size_t, size_t)> equal_fct =
-            [&](size_t iRowA, size_t iRowB) -> bool {
-            size_t jRowA, jRowB;
-            table_info *table_A, *table_B;
-            if (iRowA < short_table_rows) {
-                table_A = short_table;
-                jRowA = iRowA;
-            } else {
-                table_A = long_table;
-                jRowA = iRowA - short_table_rows;
-            }
-            if (iRowB < short_table_rows) {
-                table_B = short_table;
-                jRowB = iRowB;
-            } else {
-                table_B = long_table;
-                jRowB = iRowB - short_table_rows;
-            }
-            bool test = TestEqualJoin(table_A, table_B, jRowA, jRowB, n_key,
-                                      is_na_equal);
-            return test;
-        };
-
+        HashHashJoinTable hash_fct{short_table_rows, short_table_hashes,
+                                   long_table_hashes};
+        KeyEqualHashJoinTable equal_fct{short_table_rows, n_key, short_table,
+                                        long_table, is_na_equal};
         tracing::Event ev_alloc_map("alloc_hashmap");
+
         // The entList contains the identical keys with the corresponding rows.
         // We address the entry by the row index. We store all the rows which
         // are identical in a "group". The hashmap stores the group number
@@ -371,8 +402,8 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         // StoreHash=true speeds up join code overall in TPC-H.
         // If we also need to do short_table_outer then we store an index in the
         // first position of the std::vector
-        UNORD_MAP_CONTAINER<size_t, size_t, std::function<uint32_t(size_t)>,
-                            std::function<bool(size_t, size_t)>,
+        UNORD_MAP_CONTAINER<size_t, size_t, HashHashJoinTable,
+                            KeyEqualHashJoinTable,
                             std::allocator<std::pair<size_t, size_t>>,
                             true>  // StoreHash
             entList({}, hash_fct, equal_fct);
