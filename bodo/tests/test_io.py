@@ -2506,7 +2506,7 @@ def test_csv_invalid_path_const(memory_leak_check):
     def test_impl():
         return pd.read_csv("in_csv.csv")
 
-    with pytest.raises(FileNotFoundError, match="No such file or directory"):
+    with pytest.raises(BodoError, match="No such file or directory"):
         bodo.jit(test_impl)()
 
 
@@ -2602,8 +2602,104 @@ def test_read_parquet_invalid_path(memory_leak_check):
         df = pd.read_parquet("I_dont_exist.pq")
         return df
 
-    with pytest.raises(OSError, match="Passed non-file path"):
+    with pytest.raises(BodoError, match="Passed non-file path"):
         bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
+
+
+def test_read_csv_incorrect_s3_credentials(memory_leak_check):
+    """test error raise when AWS credentials are incorrect for csv
+    file path passed by another bodo.jit function"""
+
+    filename = "s3://test-pq-2/item.pq"
+    # Save default developer mode value
+    default_mode = numba.core.config.DEVELOPER_MODE
+    # Test as a user
+    numba.core.config.DEVELOPER_MODE = 0
+
+    @bodo.jit
+    def read(filename):
+        df = pd.read_csv(filename)
+        return df
+
+    # Test with passing filename from bodo to bodo call error and S3
+    def test_impl_csv(filename):
+        return read(filename)
+
+    with pytest.raises(BodoError, match="No response body"):
+        bodo.jit(test_impl_csv)(filename)
+
+    # Reset developer mode
+    numba.core.config.DEVELOPER_MODE = default_mode
+
+
+def test_io_error_nested_calls(memory_leak_check):
+    """Test with passing incorrect filename from bodo to bodo call
+    with local file"""
+    # Save default developer mode value
+    default_mode = numba.core.config.DEVELOPER_MODE
+    # Test as a user
+    numba.core.config.DEVELOPER_MODE = 0
+
+    @bodo.jit
+    def test_csv(filename):
+        df = pd.read_csv(filename)
+        return df
+
+    def test_impl_csv(filename):
+        return test_csv(filename)
+
+    filename = "I_dont_exist.csv"
+    with pytest.raises(BodoError, match="No such file or directory"):
+        bodo.jit(test_impl_csv)(filename)
+
+    @bodo.jit
+    def test_pq(filename):
+        df = pd.read_parquet(filename)
+        return df
+
+    def test_impl_pq(filename):
+        return test_pq(filename)
+
+    filename = "I_dont_exist.pq"
+    with pytest.raises(BodoError, match="Passed non-file path"):
+        bodo.jit(test_impl_pq)(filename)
+
+    # Reset developer mode
+    numba.core.config.DEVELOPER_MODE = default_mode
+
+
+def test_read_parquet_incorrect_s3_credentials(memory_leak_check):
+    """test error raise when AWS credentials are incorrect for parquet
+    file path passed by another bodo.jit function"""
+
+    filename = "s3://test-pq-2/item.pq"
+    # Save default developer mode value
+    default_mode = numba.core.config.DEVELOPER_MODE
+    # Test as a user
+    numba.core.config.DEVELOPER_MODE = 0
+
+    @bodo.jit
+    def read(filename):
+        df = pd.read_parquet(filename)
+        return df
+
+    # Test CallConstraint error
+    def test_impl(filename):
+        return read(filename)
+
+    with pytest.raises(BodoError, match="No response body"):
+        bodo.jit(test_impl)(filename)
+
+    # Test ForceLiteralArg error
+    def test_impl2(filename):
+        df = pd.read_parquet(filename)
+        return df
+
+    with pytest.raises(BodoError, match="No response body"):
+        bodo.jit(test_impl2)(filename)
+
+    # Reset developer mode
+    numba.core.config.DEVELOPER_MODE = default_mode
 
 
 def test_read_parquet_invalid_path_const(memory_leak_check):
@@ -2612,7 +2708,7 @@ def test_read_parquet_invalid_path_const(memory_leak_check):
     def test_impl():
         return pd.read_parquet("I_dont_exist.pq")
 
-    with pytest.raises(OSError, match="Passed non-file path"):
+    with pytest.raises(BodoError, match="Passed non-file path"):
         bodo.jit(test_impl)()
 
 
@@ -2671,7 +2767,7 @@ def test_csv_dtype_unicode(memory_leak_check):
 
 
 def _check_filenotfound(fname, func):
-    with pytest.raises(FileNotFoundError) as excinfo:
+    with pytest.raises(BodoError) as excinfo:
         bodo.jit(func)(fname)
     err_track = excinfo.getrepr(style="native")
     assert "Pseudo-exception" not in str(err_track)

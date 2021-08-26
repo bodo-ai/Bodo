@@ -1176,6 +1176,9 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
         # OSError: When AWS credentials are not provided/incorrect
         except (OSError, FileNotFoundError) as ferr:
             error = FileNotFoundError(str(ferr) + "\n" + e.loc.strformat() + "\n")
+        # This is done to suppress stack when error comes as BodoError called by FilenameType.
+        except bodo.utils.typing.BodoError as e:
+            error = bodo.utils.typing.BodoError(str(e))
         # Re-enter compilation with the Literal-ized arguments
         # only if there's no problem with FilenameType
         if error is None:

@@ -985,7 +985,12 @@ def get_parquet_dataset(
             dataset._metadata.fs = None
         except Exception as e:
             comm.bcast(e)
-            raise e
+            # See note in s3_list_dir_fnames
+            # In some cases, OSError/FileNotFoundError can propagate back to numba and comes back as InternalError.
+            # where numba errors are hidden from the user.
+            # See [BE-1188] for an example
+            # Raising a BodoError lets message comes back and seen by the user.
+            raise BodoError(f"error from pyarrow: {type(e).__name__}: {str(e)}\n")
 
         if get_row_counts:
             ev_bcast = tracing.Event("bcast dataset")

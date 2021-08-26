@@ -228,8 +228,6 @@ def s3_list_dir_fnames(fs, path):
                 # get actual names of objects inside the dir
                 file_stats = file_stats[1:]
             file_names = [file_stat.base_name for file_stat in file_stats]
-    except (FileNotFoundError, OSError) as e:
-        raise FileNotFoundError(str(e) + "\n" + bodo_error_msg)
     except BodoError:  # pragma: no cover
         raise
     except Exception as e:  # pragma: no cover
