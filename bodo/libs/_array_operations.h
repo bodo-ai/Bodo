@@ -87,4 +87,6 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
 table_info* sample_table(table_info* in_table, int64_t n, double frac,
                          bool replace, bool parallel);
 
+void get_search_regex(array_info* in_arr, const bool case_sensitive,
+                      char const* const pat, array_info* out_arr);
 #endif  // _ARRAY_OPERATIONS_H_INCLUDED

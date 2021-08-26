@@ -448,6 +448,171 @@ def test_contains_regex(test_unicode, case, memory_leak_check):
     check_func(test_impl3, (test_unicode,))
 
 
+@pytest.mark.slow
+@pytest.mark.parametrize("case", [True, False])
+def test_re_syntax(case, memory_leak_check):
+
+    # Test special characters and quantifiers
+    def test_impl(S):
+        return S.str.contains(r"[a-z]+", regex=True, case=case)
+
+    # Test special characters and quantifiers
+    def test_impl2(S):
+        return S.str.contains(r"^a...s$", regex=True, case=case)
+
+    # Test groups
+    def test_impl3(S):
+        return S.str.contains(r"(a|b|c)xz", regex=True, case=case)
+
+    # Test (?P<name>...)
+    def test_impl4(S):
+        return S.str.contains(r"(?P<w1>\w+),(?P<w2>\w+)", regex=True, case=case)
+
+    # ()\number
+    def test_impl5(S):
+        return S.str.contains(r"(\w+),\1", regex=True, case=case)
+
+    # (?=...): a positive lookahead assertion.
+    def test_impl6(S):
+        return S.str.contains(r"AB(?=[a-z])", regex=True, case=case)
+
+    # (?!...):  a negative lookahead assertion.
+    def test_impl7(S):
+        return S.str.contains(r"xz(?![a-z])", regex=True, case=case)
+
+    # (?<=...):  a positive lookbehind assertion.
+    def test_impl8(S):
+        return S.str.contains(r"(?<=ax)z", regex=True, case=case)
+
+    # (?<!...) a negative lookbehind assertion.
+    def test_impl9(S):
+        return S.str.contains(r"(?<!foo)bar", regex=True, case=case)
+
+    # Special sequences
+    # \A
+    def test_impl10(S):
+        return S.str.contains(r"\Afoo", regex=True, case=case)
+
+    # {m,n} repititions
+    def test_impl11(S):
+        return S.str.contains(r"a{3,5}?", regex=True, case=case)
+
+    # (?:<regex>): non-capturing group
+    def test_impl12(S):
+        return S.str.contains(r"(\w+),(?:\w+),(\w+)", regex=True, case=case)
+
+    # (?P=name) Matches the contents of a previously captured named group
+    def test_impl13(S):
+        return S.str.contains(r"(?P<word>\w+),(?P=word)", regex=True, case=case)
+
+    # ---------Following tests falls back to Python objmode------------
+
+    # Test unsupported patterns (?aiLmux)
+    # ?a = ASCII-only matching
+    def test_impl_a(S):
+        return S.str.contains(r"(?a)^foo", regex=True, case=case)
+
+    # ?i = ignore case
+    def test_impl_i(S):
+        return S.str.contains(r"(?i)^bar", regex=True, case=case)
+
+    # ?m = multi-line
+    def test_impl_m(S):
+        return S.str.contains(r"(?m)^bar", regex=True, case=case)
+
+    # ?s = dot matches all (including newline)
+    def test_impl_s(S):
+        return S.str.contains(r"(?s)foo.bar", regex=True, case=case)
+
+    # ?u = dot matches all (including newline)
+    # This exists for backward compatibility but is redundant
+    # See https://docs.python.org/3/library/re.html#re.ASCII
+    def test_impl_u(S):
+        return S.str.contains(r"(?u:\w+)", regex=True, case=case)
+
+    # ?x = verbose. Whitespace within the pattern is ignored
+    def test_impl_x(S):
+        return S.str.contains(
+            r"""(?x)\d  +  
+                                .""",
+            regex=True,
+            case=case,
+        )
+
+    def test_impl_comment(S):
+        return S.str.contains(r"bar(?#This is a comment).*", regex=True, case=case)
+
+    # Test escape with unsupported patterns
+    def test_impl14(S):
+        return S.str.contains(r"\(?i", regex=True, case=case)
+
+    # Test flags
+    import re
+
+    flag = re.M.value
+
+    def test_impl15(S):
+        return S.str.contains(r"foo*", regex=True, case=case, flags=flag)
+
+    # ---------End of tests for Python objmode--------------------------
+
+    # Test C++ pattern regex pattern as literal by Python
+    def test_impl16(S):
+        return S.str.contains(r"[:alnum:]", regex=True, case=case, flags=flag)
+
+    def test_impl17(S):
+        return S.str.contains(r"[[:digit:]]", regex=True, case=case, flags=flag)
+
+    S = pd.Series(
+        [
+            "ABCDD,OSAJD",
+            "a1b2d314f,sdf234",
+            "22!@#,$@#$",
+            np.nan,
+            "A,C,V,B,B",
+            "ABcd",
+            "",
+            "axz1s",
+            "foo,foo",
+            "foo\nbar",
+            "foobar",
+            "[:alnum:]",
+            "[[:digit:]]",
+            "(?i",
+            "aaa111",
+            "BAR@#4",
+            "١٢٣",
+        ]
+        * 2,
+    )
+    check_func(test_impl, (S,))
+    check_func(test_impl2, (S,))
+    check_func(test_impl3, (S,))
+    check_func(test_impl4, (S,))
+    check_func(test_impl5, (S,))
+    check_func(test_impl6, (S,))
+    check_func(test_impl7, (S,))
+    check_func(test_impl8, (S,))
+    check_func(test_impl9, (S,))
+    check_func(test_impl10, (S,))
+    check_func(test_impl11, (S,))
+    check_func(test_impl12, (S,))
+    check_func(test_impl13, (S,))
+
+    check_func(test_impl_a, (S,))
+    check_func(test_impl_i, (S,))
+    check_func(test_impl_m, (S,))
+    check_func(test_impl_u, (S,))
+    check_func(test_impl_x, (S,))
+    check_func(test_impl_s, (S,))
+    check_func(test_impl_comment, (S,))
+
+    check_func(test_impl14, (S,))
+    check_func(test_impl15, (S,))
+    check_func(test_impl16, (S,))
+    check_func(test_impl17, (S,))
+
+
 @pytest.mark.parametrize("case", [True, False])
 def test_contains_noregex(test_unicode, case, memory_leak_check):
     def test_impl(S):

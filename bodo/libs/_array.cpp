@@ -277,11 +277,10 @@ array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
                                  NRT_MemInfo* meminfo, int is_bytes) {
     // TODO: better memory management of struct, meminfo refcount?
     auto dtype = Bodo_CTypes::STRING;
-    if (is_bytes)
-        dtype = Bodo_CTypes::BINARY;
-    return new array_info(bodo_array_type::STRING, dtype, n_items,
-                          n_chars, -1, data, offsets, NULL, null_bitmap, NULL,
-                          meminfo, NULL);
+    if (is_bytes) dtype = Bodo_CTypes::BINARY;
+    return new array_info(bodo_array_type::STRING, dtype, n_items, n_chars, -1,
+                          data, offsets, NULL, null_bitmap, NULL, meminfo,
+                          NULL);
 }
 
 array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -320,7 +319,8 @@ array_info* nullable_array_to_info(uint64_t n_items, char* data, int typ_enum,
 }
 
 array_info* interval_array_to_info(uint64_t n_items, char* left_data,
-                                   char* right_data, int typ_enum, NRT_MemInfo* left_meminfo,
+                                   char* right_data, int typ_enum,
+                                   NRT_MemInfo* left_meminfo,
                                    NRT_MemInfo* right_meminfo) {
     return new array_info(bodo_array_type::INTERVAL,
                           (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
@@ -425,7 +425,6 @@ void info_to_interval_array(array_info* info, uint64_t* n_items,
     *right_meminfo = info->meminfo_bitmask;
 }
 
-
 table_info* arr_info_list_to_table(array_info** arrs, int64_t n_arrs) {
     std::vector<array_info*> columns(arrs, arrs + n_arrs);
     return new table_info(columns);
@@ -505,8 +504,7 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
                 size = PyBytes_GET_SIZE(s);
                 // get buffer pointer
                 tmp_store[i] = PyBytes_AS_STRING(s);
-            }
-            else {
+            } else {
                 // check string
                 CHECK(PyUnicode_Check(s), "expecting a string");
                 // convert to UTF-8 and get size
@@ -1364,6 +1362,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&get_groupby_labels)));
     PyObject_SetAttrString(m, "array_isin",
                            PyLong_FromVoidPtr((void*)(&array_isin)));
+    PyObject_SetAttrString(m, "get_search_regex",
+                           PyLong_FromVoidPtr((void*)(&get_search_regex)));
     PyObject_SetAttrString(
         m, "compute_node_partition_by_hash",
         PyLong_FromVoidPtr((void*)(&compute_node_partition_by_hash)));
