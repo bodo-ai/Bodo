@@ -931,6 +931,8 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
     }
     const boost::xpressive::cregex pattern =
         boost::xpressive::cregex::compile(pat, flag);
+    // Use of cmatch is needed to achieve better performance.
+    boost::xpressive::cmatch m;
     const int64_t nRow = in_arr->length;
     ev.add_attribute("local_nRows", nRow);
     int64_t num_match = 0;
@@ -943,10 +945,8 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
             if (bit) {
                 const offset_t start_pos = data2[iRow];
                 const offset_t end_pos = data2[iRow + 1];
-                const offset_t len = end_pos - start_pos;
-                const std::string outstr(&data1[start_pos], len);
-                if (boost::xpressive::regex_search(data1 + start_pos,
-                                                   data1 + end_pos, pattern)) {
+                if (boost::xpressive::regex_search(
+                        data1 + start_pos, data1 + end_pos, m, pattern)) {
                     out_arr->at<bool>(iRow) = true;
                     num_match++;
                 } else {
