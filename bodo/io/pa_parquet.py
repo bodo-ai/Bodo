@@ -254,3 +254,10 @@ def pieces(self):
 
 
 pq.ParquetDataset.pieces = property(pieces)
+
+# monkey patch to remove ParquetDataset.partitions deprecation warning of Arrow 5
+def partitions(self):
+    return self._partitions
+
+
+pq.ParquetDataset.partitions = property(partitions)
