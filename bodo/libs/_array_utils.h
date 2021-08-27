@@ -14,9 +14,11 @@
 
 // Choose default implementation for unordered map and set
 #undef USE_STD
-#define USE_TSL_ROBIN
+#undef USE_TSL_ROBIN
 #undef USE_TSL_SPARSE
 #undef USE_TSL_HOPSCOTCH
+#define USE_ROBIN_HOOD_FLAT
+#undef USE_ROBIN_HOOD_NODE
 
 #ifdef USE_STD
 #include <unordered_map>
@@ -26,12 +28,22 @@
 #endif
 
 #ifdef USE_TSL_ROBIN
+// The robin_map can store hashes internally, which helps improve performance.
+// To enable this, search for UNORD_MAP_CONTAINER and add a `true` template
+// parameter and allocation. E.g.
+//
+// UNORD_MAP_CONTAINER<size_t, size_t, HashHashJoinTable,
+//                     KeyEqualHashJoinTable,
+//                     std::allocator<std::pair<size_t, size_t>>,
+//                     true>  // StoreHash
+#define UNORDERED_MAP_MAX_LOAD_FACTOR 0.5
 #include <include/tsl/robin_set.h>
 #define UNORD_MAP_CONTAINER tsl::robin_map
 #define UNORD_SET_CONTAINER tsl::robin_set
 #endif
 
 #ifdef USE_TSL_SPARSE
+#define UNORDERED_MAP_MAX_LOAD_FACTOR 0.9
 #include <include/tsl/sparse_map.h>
 #include <include/tsl/sparse_set.h>
 #define UNORD_MAP_CONTAINER tsl::sparse_map
@@ -42,6 +54,20 @@
 #include <include/tsl/hopscotch_set.h>
 #define UNORD_MAP_CONTAINER tsl::hopscotch_map
 #define UNORD_SET_CONTAINER tsl::hopscotch_set
+#endif
+
+#ifdef USE_ROBIN_HOOD_FLAT
+#define UNORDERED_MAP_MAX_LOAD_FACTOR 0.8
+#include "robin_hood.h"
+#define UNORD_MAP_CONTAINER robin_hood::unordered_flat_map
+#define UNORD_SET_CONTAINER robin_hood::unordered_flat_set
+#endif
+
+#ifdef USE_ROBIN_HOOD_NODE
+#define UNORDERED_MAP_MAX_LOAD_FACTOR 0.8
+#include "robin_hood.h"
+#define UNORD_MAP_CONTAINER robin_hood::unordered_node_map
+#define UNORD_SET_CONTAINER robin_hood::unordered_node_set
 #endif
 // ------------------------------------------------
 
