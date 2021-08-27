@@ -889,6 +889,7 @@ def get_parquet_dataset(
     if get_row_counts:
         ev = tracing.Event("get_parquet_dataset")
 
+    import pyarrow as pa
     import pyarrow.parquet as pq
     from mpi4py import MPI
 
@@ -968,6 +969,8 @@ def get_parquet_dataset(
         try:
             if get_row_counts:
                 ev_pq_ds = tracing.Event("pq.ParquetDataset", is_parallel=False)
+            pa_default_io_thread_count = pa.io_thread_count()
+            pa.set_io_thread_count(nthreads)
             dataset = pq.ParquetDataset(
                 fpath,
                 filesystem=getfs(),
@@ -976,6 +979,8 @@ def get_parquet_dataset(
                 validate_schema=False,  # we do validation below if needed
                 metadata_nthreads=nthreads,
             )
+            # restore pyarrow default IO thread count
+            pa.set_io_thread_count(pa_default_io_thread_count)
             if get_row_counts:
                 ev_pq_ds.finalize()
             dataset_schema = bodo.io.pa_parquet.get_dataset_schema(dataset)
