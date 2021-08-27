@@ -3650,3 +3650,41 @@ numba.np.ufunc.dufunc.npydecl.Numpy_rules_ufunc._handle_inputs = (
 )
 
 #################   End Bytes Changes   ##################
+
+
+########   Start Jupyter Notebook Caching Changes ########
+
+# Bodo change, add `ipykernel_` as a possible start to the
+# Ipython path for Jupyter
+@classmethod
+def _IPythonCacheLocator_from_function(cls, py_func, py_file):
+    if not (
+        py_file.startswith("<ipython-")
+        # Bodo change: Check for ipykernel_, needed for ipykernel v6
+        or os.path.basename(os.path.dirname(py_file)).startswith("ipykernel_")
+    ):
+        return
+    self = cls(py_func, py_file)
+    try:
+        self.ensure_cache_path()
+    except OSError:
+        # Cannot ensure the cache directory exists
+        return
+    return self
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.caching._IPythonCacheLocator.from_function)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "d1bcb594c7da469542b6c5c78730d30a8df03f69f92fb965a84382b4d58c32dc"
+    ):  # pragma: no cover
+        print(hashlib.sha256(lines.encode()).hexdigest())
+        warnings.warn("_IPythonCacheLocator from_function has changed")
+
+numba.core.caching._IPythonCacheLocator.from_function = (
+    _IPythonCacheLocator_from_function
+)
+
+
+#########   End Jupyter Notebook Caching Changes #########
