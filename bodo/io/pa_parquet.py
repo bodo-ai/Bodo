@@ -248,3 +248,9 @@ ParquetManifest._parse_partition = pq.ParquetManifest._parse_partition
 ParquetManifest._push_pieces = pq.ParquetManifest._push_pieces
 # Replace pyarrow.parquet.ParquetManifest with ours
 pq.ParquetManifest = ParquetManifest
+# monkey patch to remove ParquetDataset.pieces deprecation warning of Arrow 5
+def pieces(self):
+    return self._pieces
+
+
+pq.ParquetDataset.pieces = property(pieces)
