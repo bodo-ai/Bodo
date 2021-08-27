@@ -23,6 +23,10 @@ Methods:
   * :any:`sklearn.linear_model.LogisticRegression.predict`
   * :any:`sklearn.linear_model.LogisticRegression.score`
 
+Attributes:
+
+* :attr:`sklearn.linear_model.LogisticRegression.coef_`
+
 :class:`sklearn.linear_model.SGDClassifier`
 
   This class provides linear classification models with SGD optimization which allows distributed large-scale learning.
@@ -50,6 +54,10 @@ Methods:
   * :any:`sklearn.svm.LinearSVC.predict`
   * :any:`sklearn.svm.LinearSVC.score`
 
+Attributes:
+
+* :attr:`sklearn.linear_model.SGDClassifier.coef_`
+
 Linear Regressors 
 *****************
 
@@ -64,6 +72,10 @@ Methods:
   * :any:`sklearn.linear_model.LinearRegression.predict`
   * :any:`sklearn.linear_model.LinearRegression.score`
 
+Attributes:
+
+* :attr:`sklearn.linear_model.LinearRegression.coef_`
+
 :class:`sklearn.linear_model.Ridge` :sup:`*`
 
   This class provides ridge regression support.
@@ -73,6 +85,10 @@ Methods:
   * :any:`sklearn.linear_model.Ridge.fit`
   * :any:`sklearn.linear_model.Ridge.predict`
   * :any:`sklearn.linear_model.Ridge.score`
+
+Attributes:
+
+* :attr:`sklearn.linear_model.Ridge.coef_`
 
 :class:`sklearn.linear_model.SGDRegressor`
 
