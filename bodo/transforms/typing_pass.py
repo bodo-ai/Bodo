@@ -53,6 +53,7 @@ from bodo.utils.typing import (
     is_literal_type,
     is_overload_constant_bool,
     is_overload_constant_int,
+    is_overload_none,
 )
 from bodo.utils.utils import (
     find_build_tuple,
@@ -1497,14 +1498,26 @@ class TypingTransforms:
         if sql_context_type is None:
             return [assign]
 
+        # TODO: Add argument error handling (should reuse signature error checking
+        # that will be created in df.head PR).
+
         kws = dict(rhs.kws)
         sql_var = get_call_expr_arg(
             f"BodoSQLContextType.{func_name}", rhs.args, kws, 0, "sql"
+        )
+        params_var = get_call_expr_arg(
+            f"BodoSQLContextType.{func_name}",
+            rhs.args,
+            kws,
+            1,
+            "param_dict",
+            default=types.none,
         )
 
         # get constant value for variable if possible.
         # Otherwise, just skip, assuming that the issue may be fixed later or
         # overload will raise an error if necessary.
+        needs_transform = False
         try:
             sql_str = get_const_value_inner(
                 self.func_ir,
@@ -1516,17 +1529,45 @@ class TypingTransforms:
         except GuardException:
             # save for potential loop unrolling
             self._require_const[sql_var] = label
+            needs_transform = True
+
+        # TODO: Handle the none case
+        if is_overload_none(params_var):
+            keys, values = [], []
+        else:
+            try:
+                keys, values = bodo.utils.transform.dict_to_const_keys_var_values_lists(
+                    params_var,
+                    self.func_ir,
+                    self.arg_types,
+                    self.typemap,
+                    self._updated_containers,
+                    self._require_const,
+                    label,
+                )
+            except GuardException:
+                needs_transform = True
+
+        # If any variable needs to be a constant, try and
+        # transform the code
+        if needs_transform:
+            self.needs_transform = True
             return [assign]
 
+        keys = tuple(keys)
+        value_typs = tuple([self.typemap[value.name] for value in values])
+
         if func_name == "sql":
-            impl = bodosql.context_ext._gen_pd_func_for_query(sql_context_type, sql_str)
+            impl = bodosql.context_ext._gen_pd_func_for_query(
+                sql_context_type, sql_str, keys, value_typs
+            )
         elif func_name == "_test_sql_unoptimized":
             impl = bodosql.context_ext._gen_pd_func_for_unoptimized_query(
-                sql_context_type, sql_str
+                sql_context_type, sql_str, keys, value_typs
             )
         elif func_name == "convert_to_pandas":
             impl = bodosql.context_ext._gen_pd_func_str_for_query(
-                sql_context_type, sql_str
+                sql_context_type, sql_str, keys, value_typs
             )
 
         self.changed = True
@@ -1535,7 +1576,7 @@ class TypingTransforms:
         self.needs_transform = True
         return compile_func_single_block(
             impl,
-            [sql_context_var],
+            [sql_context_var] + values,
             assign.target,
             self,
             infer_types=False,

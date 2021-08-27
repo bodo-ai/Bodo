@@ -1435,3 +1435,51 @@ def get_pandas_method_str_impl(
         else:
             return template._overload_func(obj_dtype)
     return None
+
+
+def dict_to_const_keys_var_values_lists(
+    dict_var, func_ir, arg_types, typemap, updated_containers, require_const_map, label
+):
+    """
+    Takes a dictionary variable, which should be created
+    with build_map and returns a list of keys and a list of values.
+
+    This is used for the case where a dictionary is required to have
+    literal keys but may not be required to have literal values.
+
+    It returns 2 values:
+        - keys: Python list of literal values
+        - values: Python list of values variables
+
+    For each key that cannot be made a constant, it updates the require_const_map
+    with the provided label. If there is any key that cnanot be a constant a
+    GuardException is raised.
+    """
+    # Influenced by numba.core.ir_utils.find_build_sequence
+    require(isinstance(dict_var, ir.Var))
+    dict_def = get_definition(func_ir, dict_var)
+    require(isinstance(dict_def, ir.Expr))
+    require(dict_def.op == "build_map")
+    dict_items = dict_def.items
+    keys = []
+    values = []
+    needs_transform = False
+    for i in range(dict_def.size):
+        key, value = dict_items[i]
+        try:
+            key_const = get_const_value_inner(
+                func_ir,
+                key,
+                arg_types,
+                typemap,
+                updated_containers,
+            )
+            keys.append(key_const)
+            values.append(value)
+        except GuardException:
+            # save for potential loop unrolling
+            require_const_map[key] = label
+            needs_transform = True
+    if needs_transform:
+        raise GuardException
+    return keys, values
