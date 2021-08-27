@@ -5077,7 +5077,7 @@ def test_groupby_apply_na_key():
 
     df = pd.DataFrame(
         {
-            "A": pd.Series([np.nan, 1, 2, 1, 2, np.nan, np.nan, 3, 3], dtype="Int64"),
+            "A": pd.Series([np.nan, 1, 11, 1, 11, np.nan, np.nan, 3, 3], dtype="Int64"),
             "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
         }
     )
