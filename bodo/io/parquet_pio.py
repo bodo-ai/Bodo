@@ -1009,7 +1009,9 @@ def get_parquet_dataset(
         dataset = comm.bcast(None)
         if isinstance(dataset, Exception):  # pragma: no cover
             error = dataset
-            raise error
+            raise BodoError(
+                f"error from pyarrow: {type(error).__name__}: {str(error)}\n"
+            )
         dataset_schema = comm.bcast(None)
     if get_row_counts:
         ev_bcast.finalize()
