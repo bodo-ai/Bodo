@@ -403,9 +403,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         // If we also need to do short_table_outer then we store an index in the
         // first position of the std::vector
         UNORD_MAP_CONTAINER<size_t, size_t, HashHashJoinTable,
-                            KeyEqualHashJoinTable,
-                            std::allocator<std::pair<size_t, size_t>>,
-                            true>  // StoreHash
+                            KeyEqualHashJoinTable>
             entList({}, hash_fct, equal_fct);
         // reserving space is very important to avoid expensive reallocations
         // (at the cost of using more memory)

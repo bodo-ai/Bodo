@@ -1213,6 +1213,66 @@ struct KeyEqualLookupIn32bitTable {
     int64_t n_keys;
     table_info* table;
 };
+
+// both get_group_info and get_groupby_labes use the dealloc measurement, so
+// share that code.
+template <bool CalledFromGroupInfo, typename Map>
+void do_map_dealloc(uint32_t*& hashes, Map& key_to_group) {
+    tracing::Event ev_dealloc(CalledFromGroupInfo
+                                  ? "get_group_info_dealloc"
+                                  : "get_groupby_labels_dealloc");
+    delete[] hashes;
+    hashes = nullptr;  // updates hashes ptr at caller
+
+    if (ev_dealloc.is_tracing()) {
+        ev_dealloc.add_attribute("map size", key_to_group.size());
+        ev_dealloc.add_attribute("map bucket_count",
+                                 key_to_group.bucket_count());
+        ev_dealloc.add_attribute("map load_factor", key_to_group.load_factor());
+        ev_dealloc.add_attribute("map max_load_factor",
+                                 key_to_group.max_load_factor());
+    }
+    key_to_group.clear();
+    key_to_group.reserve(0);  // try to force dealloc of hash map
+    ev_dealloc.finalize();
+}
+
+template <typename Map>
+void get_group_info_impl(Map& key_to_group, tracing::Event& ev,
+                         grouping_info& grp_info, table_info* const table,
+                         std::vector<array_info*>& key_cols, uint32_t*& hashes,
+                         const size_t nunique_hashes,
+                         const bool check_for_null_keys, const bool key_dropna,
+                         const double load_factor) {
+    tracing::Event ev_alloc("get_group_info_alloc");
+    key_to_group.max_load_factor(load_factor);
+    key_to_group.reserve(nunique_hashes);
+    ev_alloc.add_attribute("map bucket_count", key_to_group.bucket_count());
+    ev_alloc.add_attribute("map max_load_factor",
+                           key_to_group.max_load_factor());
+
+    // XXX Don't want to initialize data (just reserve and set size) but
+    // std::vector doesn't support this. Since we know the size of the
+    // vector, doing this is better than reserving and then doing
+    // emplace_backs in get_group_info_loop, which are slower than []
+    // operator
+    grp_info.row_to_group.resize(table->nrows());
+    grp_info.group_to_first_row.reserve(nunique_hashes * 1.1);
+    ev_alloc.finalize();
+
+    const bool key_is_nullable =
+        check_for_null_keys ? does_keys_have_nulls(key_cols) : false;
+    const bool key_drop_nulls = key_is_nullable && key_dropna;
+    ev.add_attribute("g_key_is_nullable", key_is_nullable);
+    ev.add_attribute("g_key_dropna", key_dropna);
+    ev.add_attribute("g_key_drop_nulls", key_drop_nulls);
+
+    get_group_info_loop<Map>(key_to_group, key_cols, grp_info, key_drop_nulls,
+                             table->nrows());
+    grp_info.num_groups = grp_info.group_to_first_row.size();
+    ev.add_attribute("num_groups", size_t(grp_info.num_groups));
+    do_map_dealloc<true>(hashes, key_to_group);
+}
 }  // namespace
 
 /**
@@ -1255,92 +1315,13 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
     HashLookupIn32bitTable hash_fct{hashes};
     KeyEqualLookupIn32bitTable equal_fct{n_keys, table};
 
-    // TODO I saw cases where hopscotch ended up growing the map much more
-    // than necessary (which is bad for performance). The only explanation
-    // seems to be because of rehashing. This is linked to NeighborhoodSize=30
-    // instead of 62, but NeighborhoodSize=30 should be fine with a good hash
-    // function, so maybe it was an issue with using bad seeds for hash function
-    // (maybe I used same seed for shuffling and groupby).
-    // We need to look at this again
-    typedef tsl::hopscotch_map<int64_t, int64_t, HashLookupIn32bitTable,
-                               KeyEqualLookupIn32bitTable,
-                               std::allocator<std::pair<int64_t, int64_t>>,
-                               30,  // NeighborhoodSize (NeighborhoodSize <= 30
-                                    // with StoreHash=true)
-                               true>  // StoreHash
-        hs_t;
-
-    typedef tsl::robin_map<int64_t, int64_t, HashLookupIn32bitTable,
-                           KeyEqualLookupIn32bitTable,
-                           std::allocator<std::pair<int64_t, int64_t>>,
-                           true>  // StoreHash
-        rob_t;
-
-    bool use_robin_map = calc_use_robin_map(nunique_hashes, &ev);
-    ev.add_attribute("use_robin_map", int(use_robin_map));
-    rob_t key_to_group_rob({}, hash_fct, equal_fct);
-    hs_t key_to_group_hs({}, hash_fct, equal_fct);
-    tracing::Event ev_alloc("get_group_info_alloc");
-    if (use_robin_map) {
-        key_to_group_rob.max_load_factor(ROBIN_MAP_MAX_LOAD_FACTOR);
-        key_to_group_rob.reserve(nunique_hashes);
-        ev_alloc.add_attribute("map bucket_count", key_to_group_rob.bucket_count());
-        ev_alloc.add_attribute("map max_load_factor", key_to_group_rob.max_load_factor());
-    } else {
-        key_to_group_hs.max_load_factor(HOPSCOTCH_MAP_MAX_LOAD_FACTOR);
-        key_to_group_hs.reserve(nunique_hashes);
-        ev_alloc.add_attribute("map bucket_count", key_to_group_hs.bucket_count());
-        ev_alloc.add_attribute("map max_load_factor", key_to_group_hs.max_load_factor());
-    }
-    // XXX Don't want to initialize data (just reserve and set size) but
-    // std::vector doesn't support this. Since we know the size of the vector,
-    // doing this is better than reserving and then doing emplace_backs in
-    // get_group_info_loop, which are slower than [] operator
-    grp_info.row_to_group.resize(table->nrows());
-    grp_info.group_to_first_row.reserve(nunique_hashes * 1.1);
-    ev_alloc.finalize();
-
-    bool key_is_nullable = false;
-    if (check_for_null_keys) {
-        key_is_nullable = does_keys_have_nulls(key_cols);
-    }
-    bool key_drop_nulls = key_is_nullable && key_dropna;
-    ev.add_attribute("g_key_is_nullable", key_is_nullable);
-    ev.add_attribute("g_key_dropna", key_dropna);
-    ev.add_attribute("g_key_drop_nulls", key_drop_nulls);
-
-    if (use_robin_map)
-        get_group_info_loop<rob_t>(key_to_group_rob, key_cols, grp_info,
-                                   key_drop_nulls, table->nrows());
-    else
-        get_group_info_loop<hs_t>(key_to_group_hs, key_cols, grp_info,
-                                  key_drop_nulls, table->nrows());
-    grp_info.num_groups = grp_info.group_to_first_row.size();
-    ev.add_attribute("num_groups", size_t(grp_info.num_groups));
-
-    tracing::Event ev_dealloc("get_group_info_dealloc");
-    delete[] hashes;
-    hashes = nullptr;  // updates hashes ptr at caller
-    if (use_robin_map) {
-        if (ev_dealloc.is_tracing()) {
-            ev_dealloc.add_attribute("map size", key_to_group_rob.size());
-            ev_dealloc.add_attribute("map bucket_count", key_to_group_rob.bucket_count());
-            ev_dealloc.add_attribute("map load_factor", key_to_group_rob.load_factor());
-            ev_dealloc.add_attribute("map max_load_factor", key_to_group_rob.max_load_factor());
-        }
-        key_to_group_rob.clear();
-        key_to_group_rob.reserve(0);  // try to force dealloc of hash map
-    } else {
-        if (ev_dealloc.is_tracing()) {
-            ev_dealloc.add_attribute("map size", key_to_group_hs.size());
-            ev_dealloc.add_attribute("map bucket_count", key_to_group_hs.bucket_count());
-            ev_dealloc.add_attribute("map load_factor", key_to_group_hs.load_factor());
-            ev_dealloc.add_attribute("map max_load_factor", key_to_group_hs.max_load_factor());
-        }
-        key_to_group_hs.clear();
-        key_to_group_hs.reserve(0);  // try to force dealloc of hash map
-    }
-    ev_dealloc.finalize();
+    using rh_flat_t =
+        robin_hood::unordered_flat_map<int64_t, int64_t, HashLookupIn32bitTable,
+                                       KeyEqualLookupIn32bitTable>;
+    rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);
+    get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table, key_cols,
+                        hashes, nunique_hashes, check_for_null_keys, key_dropna,
+                        UNORDERED_MAP_MAX_LOAD_FACTOR);
 
     if (tables.size() > 1) {
         // This case is not currently used
@@ -1400,6 +1381,40 @@ static int64_t get_groupby_labels_loop(T& key_to_group,
     return next_group - 1;
 }
 
+namespace {
+template <typename Map>
+int64_t get_groupby_labels_impl(Map& key_to_group, tracing::Event& ev,
+                                int64_t* out_labels, int64_t* sort_idx,
+                                table_info* const table,
+                                std::vector<array_info*>& key_cols,
+                                uint32_t*& hashes, const size_t nunique_hashes,
+                                const bool check_for_null_keys,
+                                const bool key_dropna,
+                                const double load_factor) {
+    tracing::Event ev_alloc("get_groupby_labels_alloc");
+    key_to_group.max_load_factor(load_factor);
+    key_to_group.reserve(nunique_hashes);
+    ev_alloc.add_attribute("map bucket_count", key_to_group.bucket_count());
+    ev_alloc.add_attribute("map max_load_factor",
+                           key_to_group.max_load_factor());
+    ev_alloc.finalize();
+
+    const bool key_is_nullable =
+        check_for_null_keys ? does_keys_have_nulls(key_cols) : false;
+    const bool key_drop_nulls = key_is_nullable && key_dropna;
+    ev.add_attribute("g_key_is_nullable", key_is_nullable);
+    ev.add_attribute("g_key_dropna", key_dropna);
+    ev.add_attribute("g_key_drop_nulls", key_drop_nulls);
+
+    const int64_t num_groups =
+        get_groupby_labels_loop<Map>(key_to_group, key_cols, out_labels,
+                                     sort_idx, key_drop_nulls, table->nrows());
+    ev.add_attribute("num_groups", num_groups);
+    do_map_dealloc<false>(hashes, key_to_group);
+    return num_groups;
+}
+}  // namespace
+
 /**
  * @brief Get groupby labels for input key arrays
  *
@@ -1428,77 +1443,15 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
     HashLookupIn32bitTable hash_fct{hashes};
     KeyEqualLookupIn32bitTable equal_fct{n_keys, table};
 
-    typedef tsl::hopscotch_map<
-        int64_t, int64_t, HashLookupIn32bitTable, KeyEqualLookupIn32bitTable,
-        std::allocator<std::pair<int64_t, int64_t>>,
-        30,    // NeighborhoodSize (NeighborhoodSize <= 30 with StoreHash=true)
-        true>  // StoreHash
-        hs_t;
-
-    typedef tsl::robin_map<int64_t, int64_t, HashLookupIn32bitTable,
-                           KeyEqualLookupIn32bitTable,
-                           std::allocator<std::pair<int64_t, int64_t>>,
-                           true>  // StoreHash
-        rob_t;
-
-    bool use_robin_map = calc_use_robin_map(nunique_hashes, &ev);
-    ev.add_attribute("use_robin_map", int(use_robin_map));
-    rob_t key_to_group_rob({}, hash_fct, equal_fct);
-    hs_t key_to_group_hs({}, hash_fct, equal_fct);
-    tracing::Event ev_alloc("get_groupby_labels_alloc");
-    if (use_robin_map) {
-        key_to_group_rob.max_load_factor(ROBIN_MAP_MAX_LOAD_FACTOR);
-        key_to_group_rob.reserve(nunique_hashes);
-        ev_alloc.add_attribute("map bucket_count", key_to_group_rob.bucket_count());
-        ev_alloc.add_attribute("map max_load_factor", key_to_group_rob.max_load_factor());
-    } else {
-        key_to_group_hs.max_load_factor(HOPSCOTCH_MAP_MAX_LOAD_FACTOR);
-        key_to_group_hs.reserve(nunique_hashes);
-        ev_alloc.add_attribute("map bucket_count", key_to_group_hs.bucket_count());
-        ev_alloc.add_attribute("map max_load_factor", key_to_group_hs.max_load_factor());
-    }
-    ev_alloc.finalize();
-    bool key_is_nullable = does_keys_have_nulls(key_cols);
-    bool key_drop_nulls = key_is_nullable && key_dropna;
-    ev.add_attribute("g_key_is_nullable", key_is_nullable);
-    ev.add_attribute("g_key_dropna", key_dropna);
-    ev.add_attribute("g_key_drop_nulls", key_drop_nulls);
-
-    int64_t num_groups;
-    if (use_robin_map)
-        num_groups = get_groupby_labels_loop<rob_t>(key_to_group_rob, key_cols,
-                                                    out_labels, sort_idx, key_drop_nulls,
-                                                    table->nrows());
-    else
-        num_groups =
-            get_groupby_labels_loop<hs_t>(key_to_group_hs, key_cols, out_labels,
-                                          sort_idx, key_drop_nulls, table->nrows());
-    ev.add_attribute("num_groups", num_groups);
-
-    tracing::Event ev_dealloc("get_groupby_labels_dealloc");
-    delete[] hashes;
-    if (use_robin_map) {
-        if (ev_dealloc.is_tracing()) {
-            ev_dealloc.add_attribute("map size", key_to_group_rob.size());
-            ev_dealloc.add_attribute("map bucket_count", key_to_group_rob.bucket_count());
-            ev_dealloc.add_attribute("map load_factor", key_to_group_rob.load_factor());
-            ev_dealloc.add_attribute("map max_load_factor", key_to_group_rob.max_load_factor());
-        }
-        key_to_group_rob.clear();
-        key_to_group_rob.reserve(0);  // try to force dealloc of hash map
-    } else {
-        if (ev_dealloc.is_tracing()) {
-            ev_dealloc.add_attribute("map size", key_to_group_hs.size());
-            ev_dealloc.add_attribute("map bucket_count", key_to_group_hs.bucket_count());
-            ev_dealloc.add_attribute("map load_factor", key_to_group_hs.load_factor());
-            ev_dealloc.add_attribute("map max_load_factor", key_to_group_hs.max_load_factor());
-        }
-        key_to_group_hs.clear();
-        key_to_group_hs.reserve(0);  // try to force dealloc of hash map
-    }
-    ev_dealloc.finalize();
-
-    return num_groups;
+    const bool check_for_null_keys = true;
+    using rh_flat_t =
+        robin_hood::unordered_flat_map<int64_t, int64_t, HashLookupIn32bitTable,
+                                       KeyEqualLookupIn32bitTable>;
+    rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);
+    return get_groupby_labels_impl(key_to_group_rh_flat, ev, out_labels,
+                                   sort_idx, table, key_cols, hashes,
+                                   nunique_hashes, check_for_null_keys,
+                                   key_dropna, UNORDERED_MAP_MAX_LOAD_FACTOR);
 }
 
 /**
@@ -2323,7 +2276,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
                             KeyEqualNuniqueComputationNumpyOrNullableIntBool>
             eset({}, hash_fct, equal_fct);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
-        eset.max_load_factor(0.4);
+        eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             int64_t i = grp_info.group_to_first_row[igrp];
@@ -2362,7 +2315,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
                             KeyEqualNuniqueComputationListString>
             eset({}, hash_fct, equal_fct);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
-        eset.max_load_factor(0.4);
+        eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             int64_t i = grp_info.group_to_first_row[igrp];
@@ -2396,7 +2349,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
                             KeyEqualNuniqueComputationString>
             eset({}, hash_fct, equal_fct);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
-        eset.max_load_factor(0.4);
+        eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             int64_t i = grp_info.group_to_first_row[igrp];
@@ -2430,7 +2383,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
                             KeyEqualNuniqueComputationNumpyOrNullableIntBool>
             eset({}, hash_fct, equal_fct);
         eset.reserve(double(arr->length) / num_group);  // NOTE: num_group > 0
-        eset.max_load_factor(0.4);
+        eset.max_load_factor(UNORDERED_MAP_MAX_LOAD_FACTOR);
 
         for (size_t igrp = 0; igrp < num_group; igrp++) {
             int64_t i = grp_info.group_to_first_row[igrp];
