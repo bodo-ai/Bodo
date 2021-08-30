@@ -359,6 +359,10 @@ The `fill_value` optional argument for binary functions below is supported.
 Function application, GroupBy & Window:
 
 * :meth:`pandas.Series.apply` (`convert_dtype` not supported yet)
+
+  - `func` argument can be a function (e.g. lambda), a jit function, or a constant string.
+    Constant strings must refer to a supported Series method or Numpy ufunc.
+
 * :meth:`pandas.Series.map` (only the `arg` argument, which should be a function or dictionary)
 * :meth:`pandas.Series.groupby` (pass array to `by` argument, or level=0 with regular Index,
   `sort=False` and `observed=True` are set by default)
@@ -586,9 +590,17 @@ Indexing, iteration:
 Function application, GroupBy & Window:
 
 * :meth:`pandas.DataFrame.apply`
-  Supports extra `_bodo_inline` boolean argument to manually control bodo's inlining behavior.
-  Inlining user-defined functions (UDFs) can potentially improve performance at the expense of
-  extra compilation time. Bodo uses heuristics to make a decision automatically if `_bodo_inline` is not provided.
+
+  - `func` argument can be a function (e.g. lambda), a jit function, or a constant string.
+    Constant strings must refer to a supported DataFrame method. If axis is
+    provided with a constant string the method must also take `axis` as an
+    argument. The `axis` argument must be 1 if a function or jit function
+    is provided.
+
+  - Supports extra `_bodo_inline` boolean argument to manually control bodo's inlining behavior.
+    Inlining user-defined functions (UDFs) can potentially improve performance at the expense of
+    extra compilation time. Bodo uses heuristics to make a decision automatically if `_bodo_inline` is not provided.
+
 * :meth:`pandas.DataFrame.groupby` `by` should be a constant column label
   or column labels.
   `sort=False` and `observed=True` are set by default. `as_index`  and `dropna` arguments are supported.
@@ -956,6 +968,10 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.size`
 * :meth:`pandas.core.groupby.SeriesGroupBy.value_counts`
 * :meth:`pandas.core.groupby.DataFrameGroupBy.transform` (only `'count'`, `'min'`, `'max'`, `'mean'`, `'std'`, and `'sum'` operations are supported)
+
+  - `func` must be either a constant string or a Python function from the builtins
+    module that matches a supported operation (i.e. sum, max, min). Numpy functions
+    cannot be provided.
 
 
 Offsets

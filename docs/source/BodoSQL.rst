@@ -106,7 +106,9 @@ and ``HAVING`` in the same query, but you cannot do so with ``WHERE``.
 Supported Operations
 --------------------
 We currently support the following SQL query statements and clauses with Bodo SQL, and are continuously adding support towards completeness. Note that
-Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``select a from table1`` is treated the same as ``SELECT A FROM TABLE1``.
+Bodo SQL ignores casing of keywords, and column and table names, except for the final output column name.
+Therefore, ``select a from table1`` is treated the same as ``SELECT A FROM Table1``, except for the names of
+the final output columns (``a`` vs ``A``).
 
 * `SELECT`
 
@@ -116,7 +118,7 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     For Example::
 
-        SELECT A FROM TABLE1
+        SELECT A FROM table1
 
     The ``SELECT DISTINCT`` statement is used to return only distinct (different) values::
 
@@ -124,9 +126,9 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     ``DISTINCT`` can be used in a SELECT statement or inside an aggregate function. For example::
 
-        SELECT DISTINCT A FROM TABLE1
+        SELECT DISTINCT A FROM table1
 
-        SELECT COUNT DISTINCT A FROM TABLE1
+        SELECT COUNT DISTINCT A FROM table1
 
 
 * `WHERE`
@@ -137,7 +139,7 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     For Example::
 
-        SELECT A FROM TABLE1 WHERE B > 4
+        SELECT A FROM table1 WHERE B > 4
 
 
 * `ORDER BY`
@@ -151,24 +153,49 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     For Example::
 
-        SELECT A, B FROM TABLE1 ORDER BY B, A DESC
+        SELECT A, B FROM table1 ORDER BY B, A DESC
 
 
 * `LIMIT`
 
-    Bodo SQL supports the ``LIMIT`` keyword to select a limited number of rows::
+    Bodo SQL supports the ``LIMIT`` keyword to select a limited number of rows.
+    This keyword can optionally include an offset::
 
         SELECT <COLUMN_NAMES>
         FROM <TABLE_NAME>
         WHERE <CONDITION>
-        LIMIT <NUMBER>
+        LIMIT <LIMIT_NUMBER> OFFSET <OFFSET_NUMBER>
 
     For Example::
 
-        SELECT A FROM TABLE1 LIMIT 5
+        SELECT A FROM table1 LIMIT 5
+
+        SELECT B FROM table2 LIMIT 8 OFFSET 3
+
+    Specifying a limit and offset can be also be written as::
+
+        LIMIT <OFFSET_NUMBER>, <LIMIT_NUMBER>
+
+    For Example::
+
+        SELECT B FROM table2 LIMIT 3, 8
 
 
-* `BETWEEN`
+* [NOT] `IN`
+
+    The ``IN`` determines if a value can be chosen a list of options.
+    Currently we support lists of literals or columns with matching types.
+
+        SELECT <COLUMN_NAMES>
+        FROM <TABLE_NAME>
+        WHERE <COLUMN_NAME> IN (<val1>, <val2>, ... <valN>)
+
+    For example::
+
+        SELECT A FROM table1 WHERE A IN (5, 10, 15, 20, 25)
+
+
+* [NOT] `BETWEEN`
 
     The ``BETWEEN`` operator selects values within a given range. The values can be numbers, text, or datetimes.
     The ``BETWEEN`` operator is inclusive: begin and end values are included::
@@ -179,7 +206,68 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     For example::
 
-        Select A from Table1 where A between 10 and 100
+        SELECT A FROM table1 WHERE A BETWEEN 10 AND 100
+
+
+* `CAST`
+
+    THE ``CAST`` operator converts an input from one type to another. In many cases
+    casts are created implicitly, but this operator can be used to force a type
+    conversion.
+
+    The following casts are currently supported. Please refer to :ref:`supported_dataframe_data_types`
+    for the Python types for each type keyword:
+
+        - VARCHAR → VARCHAR
+
+        - VARCHAR → TINYINT/SMALLINT/INTERGER/BIGINT
+
+        - VARCHAR → FLOAT/DOUBLE
+
+        - VARCHAR → DECIMAL
+
+            - Equivalent to DOUBLE. This may change in the future
+
+        - VARCHAR → TIMESTAMP
+
+        - VARCHAR → DATE
+
+            - Truncates to date but is still Timestamp type. This may change in the future.
+
+        - TINYINT/SMALLINT/INTERGER/BIGINT → VARCHAR
+
+        - TINYINT/SMALLINT/INTERGER/BIGINT → TINYINT/SMALLINT/INTERGER/BIGINT
+
+        - TINYINT/SMALLINT/INTERGER/BIGINT → FLOAT/DOUBLE
+
+        - TINYINT/SMALLINT/INTERGER/BIGINT → DECIMAL
+
+            - Equivalent to DOUBLE. This may change in the future
+
+        - TINYINT/SMALLINT/INTERGER/BIGINT → TIMESTAMP
+
+        - FLOAT/DOUBLE → VARCHAR
+
+        - FLOAT/DOUBLE → TINYINT/SMALLINT/INTERGER/BIGINT
+
+        - FLOAT/DOUBLE → FLOAT/DOUBLE
+
+        - FLOAT/DOUBLE → DECIMAL
+
+            - Equivalent to DOUBLE. This may change in the future
+
+        - TIMESTAMP → VARCHAR
+
+        - TIMESTAMP → TINYINT/SMALLINT/INTERGER/BIGINT
+
+        - TIMESTAMP → TIMESTAMP
+
+        - TIMESTAMP → DATE
+
+            - Truncates to date but is still Timestamp type. This may change in the future.
+
+    *Note*: CAST correctness can often not be determined at compile time. Users are responsible
+        for ensuring that conversion is possible (e.g. ``CAST(str_col as INTEGER)``).
 
 
 * `JOIN`
@@ -194,7 +282,7 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     For example::
 
-        Select table1.A, table1.B from table1 join table2 on table1.A = table2.C
+        SELECT table1.A, table1.B FROM table1 JOIN table2 on table1.A = table2.C
 
     Here are the different types of the joins in SQL:
 
@@ -203,7 +291,7 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
     - ``RIGHT (OUTER) JOIN``: returns all records from the right table, and the matched records from the left table
     - ``FULL (OUTER) JOIN``: returns all records when there is a match in either left or right table
 
-    Bodo SQL currently support inner join on all conditions, but all outer joins are only support on an
+    Bodo SQL currently supports inner join on all conditions, but all outer joins are only supported on an
     equality between columns.
 
 * `UNION`
@@ -212,16 +300,16 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
         SELECT <COLUMN_NAMES> FROM <TABLE1>
         UNION
-        SELECT <COLUMN_NAMES> FROM <TABLE2>;
+        SELECT <COLUMN_NAMES> FROM <TABLE2>
 
     Each SELECT statement within the UNION caluse must have the same number of columns. The columns must also have similar
-    data types. The output of the UNION is the set of rows which are present in either of the input select statements.
+    data types. The output of the UNION is the set of rows which are present in either of the input SELECT statements.
 
     The UNION operator selects only the distinct values from the inputs by default. To allow duplicate values, use UNION ALL::
 
         SELECT <COLUMN_NAMES> FROM <TABLE1>
         UNION ALL
-        SELECT <COLUMN_NAMES> FROM <TABLE2>;
+        SELECT <COLUMN_NAMES> FROM <TABLE2>
 
 
 * `INTERSECT`
@@ -230,11 +318,11 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
         SELECT <COLUMN_NAMES> FROM <TABLE1>
         INTERSECT
-        SELECT <COLUMN_NAMES> FROM <TABLE2>;
+        SELECT <COLUMN_NAMES> FROM <TABLE2>
 
     Each SELECT statement within the INTERSECT clause must have the same number of columns.
     The columns must also have similar data types. The output of the INTERSECT is the set of rows which are present in
-    both of the input select statements. The INTERSECT operator selects only the distinct values from the inputs.
+    both of the input SELECT statements. The INTERSECT operator selects only the distinct values from the inputs.
 
 
 * `GROUP BY`
@@ -249,12 +337,12 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     For example::
 
-        Select MAX(A) from table1 Group By B
+        SELECT MAX(A) FROM table1 GROUP BY B
 
     ``GROUP BY`` statements also referring to columns by alias or column number::
 
-        Select MAX(A), B - 1 as val from table1 Group By val
-        Select MAX(A), B from table1 Group By 2
+        SELECT MAX(A), B - 1 as val FROM table1 GROUP BY val
+        SELECT MAX(A), B FROM table1 GROUP BY 2
 
 
 * `HAVING`
@@ -271,11 +359,11 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     For example::
 
-        Select MAX(A) from table1 Group By B HAVING C < 0
+        SELECT MAX(A) FROM table1 GROUP BY B HAVING C < 0
 
     ``HAVING`` statements also referring to columns by aliases used in the ``GROUP BY``::
 
-        Select MAX(A), B - 1 as val from table1 Group By val having val > 5
+        SELECT MAX(A), B - 1 as val FROM table1 GROUP BY val HAVING val > 5
 
 * `CASE`
 
@@ -285,39 +373,50 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     For example::
 
-        Select (CASE WHEN A > 1 THEN A ELSE B END) as mycol from table1
+        SELECT (CASE WHEN A > 1 THEN A ELSE B END) as mycol FROM table1
 
     If the types of the possible return values are different, BodoSQL will attempt to cast them all to a common type,
     which is currently undefined behavior. The last else clause can optionally be excluded, in which case, the
     CASE statement will return null if none of the conditions are met. For example::
 
-        Select (CASE WHEN A < 0 THEN 0 END) as mycol from table1
+        SELECT (CASE WHEN A < 0 THEN 0 END) as mycol FROM table1
 
     is equivalent to::
 
-        Select (CASE WHEN A < 0 THEN 0 ELSE NULL END) as mycol from table1
+        SELECT (CASE WHEN A < 0 THEN 0 ELSE NULL END) as mycol FROM table1
 
 
 * `LIKE`
 
-    The ``LIKE`` clause is used to select the strings in a column that matches a pattern::
+    The ``LIKE`` clause is used to filter the strings in a column to those that match a pattern::
 
         SELECT column_name(s) FROM table_name WHERE column LIKE pattern
 
     In the pattern we support the wildcards ``%`` and ``_``. For example::
 
-        Select A from table1 where B like '%py'
+        SELECT A FROM table1 WHERE B LIKE '%py'
 
 
 * `GREATEST`
 
-    The ``GREATEST`` clause is used to return the greatest value from a list of columns::
+    The ``GREATEST`` clause is used to return the largest value from a list of columns::
 
-        SELECT GREATEST(col1, col2, ..., colN) from table_name
+        SELECT GREATEST(col1, col2, ..., colN) FROM table_name
 
     For example::
 
-        SELECT GREATEST(A, B, C) from table1
+        SELECT GREATEST(A, B, C) FROM table1
+
+
+* `LEAST`
+
+    The ``LEAST`` clause is used to return the smallest value from a list of columns::
+
+        SELECT LEAST(col1, col2, ..., colN) FROM table_name
+
+    For example::
+
+        SELECT LEAST(A, B, C) FROM table1
 
 * `With`
 
@@ -328,8 +427,8 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     For example::
 
-        WITH subtable as (Select Max(A) as max_al FROM table1 group by B)
-        Select Max(max_val) from subtable
+        WITH subtable as (SELECT MAX(A) as max_al FROM table1 GROUP BY B)
+        SELECT MAX(max_val) FROM subtable
 
 
 * Aliasing
@@ -341,7 +440,10 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
     For example::
 
-        Select SUM(A) as total from table1
+        Select SUM(A) as total FROM table1
+
+    We strongly recommend using aliases for the final outputs of any queries to ensure
+    all column names are predictable.
 
 
 * Operators
@@ -352,16 +454,18 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
         - ``-`` (subtraction)
         - ``*`` (multiplication)
         - ``/`` (true division)
+        - ``%`` (modulo)
 
     - Bodo SQL currently supports the following comparision operators:
 
         - ``=``	(equal to)
         - ``>``	(greater than)
         - ``<``	(less than)
-        - ``>=`` (greater than or equal t)o
+        - ``>=`` (greater than or equal to)
         - ``<=`` (less than or equal to)
         - ``<>`` (not equal to)
         - ``!=`` (not equal to)
+        - ``<=>`` (equal to or both inputs are null)
 
     - Bodo SQL currently supports the following logical operators:
 
@@ -562,9 +666,9 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
     These functions can be used either in a groupby clause, where they will be computed
     for each group, or by itself on an entire column expression. For example::
 
-        Select AVG(A) from table1 Group By B
+        SELECT AVG(A) FROM table1 GROUP BY B
 
-        Select Count(Distinct A) from table1
+        SELECT COUNT(Distinct A) FROM table1
 
 
 * Timestamp Functions
@@ -647,7 +751,7 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
             Equivalent to CURDATE
 
-        - Extract(TimeUnit from timestamp_val)
+        - EXTRACT(TimeUnit from timestamp_val)
 
             Extracts the specified TimeUnit from the supplied date.
 
@@ -734,6 +838,39 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
             Returns a Timestamp value that is n seconds after the unix epoch
 
+        - ADDDATE(timestamp_val, interval)
+
+            Same as DATE_ADD
+
+        - SUBDATE(timestamp_val, interval)
+
+            Same as DATE_SUB
+
+        - TIMESTAMPDIFF(unit, timestamp_val1, timestamp_val2)
+
+            Returns timestamp_val1 - timestamp_val2 rounded down
+            to the provided unit.
+
+        - WEEKDAY(timestamp_val)
+
+            Returns the weekday number for timestamp_val.
+            Note: Monday = 0, Sunday=6
+
+
+        - YEARWEEK(timestamp_val)
+
+            Returns the year and week number for the provided timestamp_val
+            concatenated as a single number. For example::
+
+                YEARWEEK(TIMESTAMP '2021-08-30::00:00:00')
+                202135
+
+        - LAST_DAY(timestamp_val)
+
+            Given a timestamp value, returns a timestamp value that is the
+            last day in the same month as timestamp_val.
+
+
 
 * String Functions
 
@@ -819,7 +956,7 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
             Returns the integer value of the unicode representation of the first charecter of the input string.
             returns 0 when passed the empty string
 
-        - CHR(int)
+        - CHAR(int)
 
             Returns the charecter of the corresponding unicode value.
             Currently only supported for ASCII charecters (0 to 127, inclusive)
@@ -872,8 +1009,8 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
 
             For example::
 
-                LPAD('hello', 10, 'abc') ==> 'helloabcab'
-                LPAD('hello', 1, 'abc') ==> 'h'
+                RPAD('hello', 10, 'abc') ==> 'helloabcab'
+                RPAD('hello', 1, 'abc') ==> 'h'
 
         - REPLACE(base_string, substring_to_remove, string_to_substitute)
 
@@ -882,6 +1019,10 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
             For example::
 
                 REPLACE('hello world', 'hello' 'hi') ==> 'hi world'
+
+        - LENGTH(string)
+
+            Returns the number of characters in the given string.
 
 
 * Control flow Functions
@@ -912,8 +1053,10 @@ Bodo SQL ignores casing of keywords, and column and table names. Therefore, ``se
         common datatype, which is currently undefined behavior.
 
 
-Supported Data Types
---------------------
+.. _supported_dataframe_data_types:
+
+Supported DataFrame Data Types
+------------------------------
 BodoSQL uses Pandas DataFrames to represent SQL tables in memory and converts SQL types
 to corresponding Python types which are used by Bodo. Below is a table
 mapping SQL types used in BodoSQL to their respective Python types
@@ -1034,6 +1177,10 @@ and interval type is one of::
     MINUTE[S] |
     SECOND[S]
 
+In addition we also have limited suport for YEAR[S] and MONTH[S].
+These literals cannot be stored in columns and currently are only
+supported for operations involving add and sub.
+
 .. _string_literal:
 
 String Literal
@@ -1058,3 +1205,47 @@ there a couple notable places where Bodo SQL may not match other SQL systems:
     - Bodo SQL treats `NaN` the same as NULL
     - Is (NOT) False and Is (NOT) True return NULL when used on a null expression
     - AND will return NULL if any of the inputs is NULL
+
+
+BodoSQL Caching & Parameterized Queries
+---------------------------------------
+
+BodoSQL can reuse Bodo caching to avoid recompilation when used inside a JIT function.
+BodoSQL caching works the same as Bodo, so for example::
+
+    @bodo.jit(cache=True)
+    def f(filename):
+        df1 = pd.read_parquet(filename)
+        bc = bodosql.BodoSQLContext({"table1": df1})
+        df2 = bc.sql("SELECT A FROM table1 WHERE B > 4")
+        print(df2.A.sum())
+
+This will avoid recompilation so long as the DataFrame scheme stored in ``filename``
+has the same schema and the code does not change.
+
+To enable caching for queries with scalar parameters that you may want to adjust
+between runs, we introduce a feature called parameterized queries. In a parameterized
+query, the SQL query replaces a constant/scalar value with a variable,
+which we call a named parameter. In addition, the query is passed a dictionary
+of parameters which maps each name to a corresponding Python variable.
+
+For example, if in the above SQL query we wanted to replace 4 with other integers,
+we could rewrite our query as::
+
+    bc.sql("SELECT A FROM table1 WHERE B > @var", {"var": python_var})
+
+Now anywhere that ``@var`` is used, the value of python_var at runtime will be used
+instead. This can be used in caching, because python_var can be provided as an argument
+to the JIT function itself, thus enabling changing the filter without recompiling. The
+full example looks like this::
+
+    @bodo.jit(cache=True)
+    def f(filename, python_var):
+        df1 = pd.read_parquet(filename)
+        bc = bodosql.BodoSQLContext({"table1": df1})
+        df2 = bc.sql("SELECT A FROM table1 WHERE B > @var", {"var": python_var})
+        print(df2.A.sum())
+
+
+Named parameters cannot be used in places that require a constant value to generate
+the correct implementation (e.g. TimeUnit in EXTRACT).
