@@ -256,9 +256,15 @@ supported_transform_funcs = [
     "no_op",
     "sum",
     "count",
+    "nunique",
+    "median",
+    "mean",
     "min",
     "max",
-    "mean",
+    "prod",
+    "first",
+    "last",
+    "var",
     "std",
 ]
 

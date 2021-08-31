@@ -4983,39 +4983,31 @@ def test_agg_supported_types(df, memory_leak_check):
         ),
     ],
 )
-def test_groupby_transform(df, memory_leak_check):
+@pytest.mark.parametrize(
+    "func",
+    [
+        "sum",
+        "min",
+        "max",
+        "count",
+        "mean",
+        "std",
+        "first",
+        "last",
+        "prod",
+        "var",
+        "nunique",
+        "median",
+    ],
+)
+def test_groupby_transform(df, func, memory_leak_check):
     """ Test groupby.transform """
 
-    def impl_sum(df):
-        A = df.groupby("A").transform("sum")
+    def impl(df):
+        A = df.groupby("A").transform(func)
         return A
 
-    def impl_min(df):
-        A = df.groupby("A").transform("min")
-        return A
-
-    def impl_max(df):
-        A = df.groupby("A").transform("max")
-        return A
-
-    def impl_count(df):
-        A = df.groupby("A").transform("count")
-        return A
-
-    def impl_mean(df):
-        A = df.groupby("A").transform("mean")
-        return A
-
-    def impl_std(df):
-        A = df.groupby("A").transform("std")
-        return A
-
-    check_func(impl_sum, (df,))
-    check_func(impl_min, (df,))
-    check_func(impl_max, (df,))
-    check_func(impl_count, (df,))
-    check_func(impl_mean, (df,))
-    check_func(impl_std, (df,))
+    check_func(impl, (df,))
 
 
 @pytest.mark.slow

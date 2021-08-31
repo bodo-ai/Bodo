@@ -967,7 +967,11 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.shift`
 * :meth:`pandas.core.groupby.GroupBy.size`
 * :meth:`pandas.core.groupby.SeriesGroupBy.value_counts`
-* :meth:`pandas.core.groupby.DataFrameGroupBy.transform` (only `'count'`, `'min'`, `'max'`, `'mean'`, `'std'`, and `'sum'` operations are supported)
+* :meth:`pandas.core.groupby.DataFrameGroupBy.transform` 
+
+  - These are the currently supported operations: `'count'`, `'first'`, `'last'`, 
+    `'min'`, `'max'`, `'mean'`, `'median'`, `'nunique'`, `'prod'`, `'std'`, `'sum'`, 
+    and `'var'`
 
   - `func` must be either a constant string or a Python function from the builtins
     module that matches a supported operation (i.e. sum, max, min). Numpy functions
