@@ -1357,6 +1357,8 @@ static int64_t get_groupby_labels_loop(T& key_to_group,
     group_rows[group - 1].push_back(i); \
     row_to_group[i] = group - 1
 
+    //keep track of how many NA values in the column
+    int64_t na_pos = 0;
     if (!key_drop_nulls) {
         for (int64_t i = 0; i < nrows; i++) {
             MAIN_LOOP_BODY;
@@ -1365,12 +1367,16 @@ static int64_t get_groupby_labels_loop(T& key_to_group,
         for (int64_t i = 0; i < nrows; i++) {
             if (does_row_has_nulls(key_cols, i)) {
                 row_to_group[i] = -1;
+                //We need to keep position of all values in the sort_idx regardless of being dropped or not
+                //Indexes of all NA values are first in sort_idx since their group number is -1
+                sort_idx[na_pos] = i;
+                na_pos++;
                 continue;
             }
             MAIN_LOOP_BODY;
         }
     }
-    int64_t pos = 0;
+    int64_t pos = 0 + na_pos;
     for (size_t i = 0; i < group_rows.size(); i++) {
         memcpy(sort_idx + pos, group_rows[i].data(),
                group_rows[i].size() * sizeof(int64_t));
