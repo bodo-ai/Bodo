@@ -1886,13 +1886,13 @@ def test_agg_unsupported_types(test_cumulatives_df, memory_leak_check):
 
 
 # ------------------------------ df.groupby().transform()------------------------------ #
-# TODO: @pytest.mark.slow
+@pytest.mark.slow
 def test_transform_args(memory_leak_check):
     """ Test Groupby.transform with unsupported arguments """
 
     # unsupported function
     def impl_func(df):
-        A = df.groupby("A").transform("var")
+        A = df.groupby("A").transform("idxmin")
         return A
 
     # keyword engine
