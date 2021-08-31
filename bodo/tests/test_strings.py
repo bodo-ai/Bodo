@@ -1074,7 +1074,7 @@ class TestString(unittest.TestCase):
             return bodo.libs.str_arr_ext.get_utf8_size(A[0])
 
         # a string array with a 2-byte kind Unicode
-        A = np.array(["Õ"], dtype=np.object)
+        A = np.array(["Õ"], dtype=object)
         # length of element after encoding back to UTF8 should be 2
         assert bodo.jit(test_impl)(A) == 2
 

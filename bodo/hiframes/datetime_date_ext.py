@@ -666,7 +666,7 @@ def int_to_datetime_date_python(ia):
 
 def int_array_to_datetime_date(ia):
     # setting 'otypes' is necessary since input can be empty
-    return np.vectorize(int_to_datetime_date_python, otypes=[np.object])(ia)
+    return np.vectorize(int_to_datetime_date_python, otypes=[object])(ia)
 
 
 @box(DatetimeDateArrayType)

@@ -2199,7 +2199,7 @@ def test_csv_date_col_name(datapath, memory_leak_check):
         return pd.read_csv(
             fname,
             names=["A", "B", "C", "D"],
-            dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+            dtype={"A": int, "B": float, "C": str, "D": int},
             parse_dates=["C"],
         )
 
@@ -2430,8 +2430,8 @@ def test_excel1(datapath, memory_leak_check):
 
     def test_impl2(fname):
         dtype = {
-            "A": np.int,
-            "B": np.float,
+            "A": int,
+            "B": float,
             "C": np.dtype("datetime64[ns]"),
             "D": str,
             "E": np.bool_,
@@ -2452,8 +2452,8 @@ def test_excel1(datapath, memory_leak_check):
 
     def test_impl5(fname):
         dtype = {
-            "A": np.int,
-            "B": np.float,
+            "A": int,
+            "B": float,
             "C": np.dtype("datetime64[ns]"),
             "D": str,
             "E": np.bool_,
@@ -2995,7 +2995,7 @@ class TestIO(unittest.TestCase):
             return pd.read_csv(
                 fname,
                 names=["A", "B", "C", "D"],
-                dtype={"A": np.int, "B": np.float, "C": np.float, "D": np.int},
+                dtype={"A": int, "B": float, "C": float, "D": int},
             )
 
         check_func(test_impl, (), only_seq=True)
@@ -3004,7 +3004,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
 
         def test_impl():
-            dtype = {"A": np.int, "B": np.float, "C": np.float, "D": np.int}
+            dtype = {"A": int, "B": float, "C": float, "D": int}
             return pd.read_csv(fname, names=list(dtype.keys()), dtype=dtype)
 
         check_func(test_impl, (), only_seq=True)
@@ -3052,7 +3052,7 @@ class TestIO(unittest.TestCase):
             return pd.read_csv(
                 fname,
                 names=["A", "B", "C", "D"],
-                dtype={"A": np.int, "B": np.float, "C": np.float, "D": np.int},
+                dtype={"A": int, "B": float, "C": float, "D": int},
                 skiprows=2,
             )
 
@@ -3083,7 +3083,7 @@ class TestIO(unittest.TestCase):
             df = pd.read_csv(
                 fname,
                 names=["A", "B", "C", "D"],
-                dtype={"A": np.int, "B": np.float, "C": np.float, "D": np.int},
+                dtype={"A": int, "B": float, "C": float, "D": int},
             )
             return df.B.values
 
@@ -3096,7 +3096,7 @@ class TestIO(unittest.TestCase):
             return pd.read_csv(
                 fname,
                 names=["A", "B", "C", "D"],
-                dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+                dtype={"A": int, "B": float, "C": str, "D": int},
                 parse_dates=[2],
             )
 
@@ -3109,7 +3109,7 @@ class TestIO(unittest.TestCase):
             return pd.read_csv(
                 fname,
                 names=["A", "B", "C", "D"],
-                dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+                dtype={"A": int, "B": float, "C": str, "D": int},
             )
 
         check_func(test_impl, (), only_seq=True, check_dtype=False)
@@ -3121,7 +3121,7 @@ class TestIO(unittest.TestCase):
             return pd.read_csv(
                 fname,
                 names=["A", "B", "C", "D"],
-                dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+                dtype={"A": int, "B": float, "C": str, "D": int},
                 index_col="A",
             )
 
@@ -3134,7 +3134,7 @@ class TestIO(unittest.TestCase):
             return pd.read_csv(
                 fname,
                 names=["A", "B", "C", "D"],
-                dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+                dtype={"A": int, "B": float, "C": str, "D": int},
                 index_col=0,
             )
 
@@ -3147,7 +3147,7 @@ class TestIO(unittest.TestCase):
             return pd.read_csv(
                 fname,
                 names=["A", "B", "C", "D"],
-                dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+                dtype={"A": int, "B": float, "C": str, "D": int},
                 index_col=1,
             )
 
@@ -3160,7 +3160,7 @@ class TestIO(unittest.TestCase):
             df = pd.read_csv(
                 fname,
                 names=["A", "B", "C", "D"],
-                dtype={"A": np.int, "B": np.float, "C": np.float, "D": np.int},
+                dtype={"A": int, "B": float, "C": float, "D": int},
             )
             return (df.A.sum(), df.B.sum(), df.C.sum(), df.D.sum())
 
@@ -3174,7 +3174,7 @@ class TestIO(unittest.TestCase):
             df = pd.read_csv(
                 fname,
                 names=["A", "B", "C", "D"],
-                dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+                dtype={"A": int, "B": float, "C": str, "D": int},
             )
             return (df.A.sum(), df.B.sum(), (df.C == "1966-11-13").sum(), df.D.sum())
 
@@ -3185,7 +3185,7 @@ class TestIO(unittest.TestCase):
         fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
 
         def test_impl():
-            return pd.read_csv(fname, names=["C"], dtype={"C": np.float}, usecols=[2])
+            return pd.read_csv(fname, names=["C"], dtype={"C": float}, usecols=[2])
 
         check_func(test_impl, (), only_seq=True)
 
@@ -3213,7 +3213,7 @@ class TestIO(unittest.TestCase):
             df = pd.read_csv(
                 fname,
                 names=["C1", "C2", "C3"],
-                dtype={"C1": np.int, "C2": ct_dtype, "C3": str},
+                dtype={"C1": int, "C2": ct_dtype, "C3": str},
             )
             return df
 

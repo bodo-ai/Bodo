@@ -229,7 +229,7 @@ def test_array_remove(dataframe_val, memory_leak_check):
     elif isinstance(df.A[0][0], np.int64):
         arr = np.array([3])
     elif isinstance(df.A[0][0], str):
-        arr = np.array(["hi"], dtype=np.object)
+        arr = np.array(["hi"], dtype=object)
     elif isinstance(df.A[0][0], (bool, np.bool_)):
         arr = pd.array([True])
 

@@ -554,11 +554,9 @@ def test_merge_inner(memory_leak_check):
         return df3
 
     df1 = pd.DataFrame(
-        {"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], np.float)}
+        {"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], float)}
     )
-    df2 = pd.DataFrame(
-        {"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)}
-    )
+    df2 = pd.DataFrame({"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], float)})
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
@@ -572,11 +570,9 @@ def test_merge_left1(memory_leak_check):
         return df3
 
     df1 = pd.DataFrame(
-        {"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], np.float)}
+        {"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], float)}
     )
-    df2 = pd.DataFrame(
-        {"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)}
-    )
+    df2 = pd.DataFrame({"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], float)})
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
@@ -592,11 +588,9 @@ def test_merge_left2(memory_leak_check):
         return df3
 
     df1 = pd.DataFrame(
-        {"key": [2, 3, 5, 3, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], np.float)}
+        {"key": [2, 3, 5, 3, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], float)}
     )
-    df2 = pd.DataFrame(
-        {"key": [1, 2, 9, 3, 10], "B": np.array([1, 7, 2, 6, 5], np.float)}
-    )
+    df2 = pd.DataFrame({"key": [1, 2, 9, 3, 10], "B": np.array([1, 7, 2, 6, 5], float)})
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
@@ -610,11 +604,9 @@ def test_merge_right(memory_leak_check):
         return df3
 
     df1 = pd.DataFrame(
-        {"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], np.float)}
+        {"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], float)}
     )
-    df2 = pd.DataFrame(
-        {"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)}
-    )
+    df2 = pd.DataFrame({"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], float)})
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
@@ -628,11 +620,9 @@ def test_merge_outer(memory_leak_check):
         return df3
 
     df1 = pd.DataFrame(
-        {"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], np.float)}
+        {"key": [2, 3, 5, 1, 2, 8], "A": np.array([4, 6, 3, 9, 9, -1], float)}
     )
-    df2 = pd.DataFrame(
-        {"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], np.float)}
-    )
+    df2 = pd.DataFrame({"key": [1, 2, 9, 3, 2], "B": np.array([1, 7, 2, 6, 5], float)})
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
@@ -1429,7 +1419,7 @@ def test_merge_cat_identical(memory_leak_check):
 
     fname = os.path.join("bodo", "tests", "data", "csv_data_cat1.csv")
     ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
-    dtypes = {"C1": np.int, "C2": ct_dtype}
+    dtypes = {"C1": int, "C2": ct_dtype}
     df1 = pd.read_csv(fname, names=["C1", "C2"], dtype=dtypes, usecols=[0, 1])
     check_func(test_impl, (df1,), sort_output=True, reset_index=True)
 
@@ -1472,7 +1462,7 @@ def test_merge_cat1_inner(memory_leak_check):
 
     def test_impl():
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
-        dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
+        dtypes = {"C1": int, "C2": ct_dtype, "C3": str}
         df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
         df1["C1"] = df1.C1 * 7 + 1
         n = len(df1) * 100
@@ -1493,7 +1483,7 @@ def test_merge_cat1_right_2cols1(memory_leak_check):
 
     def test_impl():
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
-        dtypes = {"C1": np.int, "C2": ct_dtype}
+        dtypes = {"C1": int, "C2": ct_dtype}
         df1 = pd.read_csv(fname, names=["C1", "C2"], dtype=dtypes)
         n = len(df1)
         df2 = pd.DataFrame({"C1": 2 * np.arange(n) + 1, "AAA": n + np.arange(n) + 1.0})
@@ -1513,7 +1503,7 @@ def test_merge_cat1_right_2cols2(memory_leak_check):
     fname = os.path.join("bodo", "tests", "data", "csv_data_cat4.csv")
 
     def test_impl():
-        dtypes = {"C1": np.int, "C2": str}
+        dtypes = {"C1": int, "C2": str}
         df1 = pd.read_csv(fname, names=["C1", "C2"], dtype=dtypes)
         df1["C1"] = df1.C1 * 7 + 1
         n = len(df1) * 100
@@ -1533,7 +1523,7 @@ def test_merge_cat1_right(memory_leak_check):
 
     def test_impl():
         ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
-        dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
+        dtypes = {"C1": int, "C2": ct_dtype, "C3": str}
         df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
         df1["C1"] = df1.C1 * 7 + 1
         n = len(df1) * 100
@@ -2346,7 +2336,7 @@ class TestJoin(unittest.TestCase):
 
         def test_impl():
             ct_dtype = pd.CategoricalDtype(["A", "B", "C"])
-            dtypes = {"C1": np.int, "C2": ct_dtype, "C3": str}
+            dtypes = {"C1": int, "C2": ct_dtype, "C3": str}
             df1 = pd.read_csv(fname, names=["C1", "C2", "C3"], dtype=dtypes)
             n = len(df1)
             df2 = pd.DataFrame(

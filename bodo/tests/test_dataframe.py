@@ -306,7 +306,7 @@ def test_df_select_dtypes_type_include(select_dtypes_df):
     df = select_dtypes_df
 
     def test_impl1(df):
-        return df.select_dtypes(np.bool)
+        return df.select_dtypes(bool)
 
     def test_impl2(df):
         return df.select_dtypes(np.float64)
@@ -319,7 +319,7 @@ def test_df_select_dtypes_type_exclude(select_dtypes_df):
     df = select_dtypes_df
 
     def test_impl1(df):
-        return df.select_dtypes(exclude=np.bool)
+        return df.select_dtypes(exclude=bool)
 
     def test_impl2(df):
         return df.select_dtypes(exclude=np.float64)
