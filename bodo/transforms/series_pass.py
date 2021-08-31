@@ -2812,6 +2812,9 @@ class SeriesPass:
                 pre_nodes=nodes,
             )
 
+        # Generate a numpy ufunc
+        run_ufunc = False
+
         # Handle builtin functions passed by strings.
         if is_overload_constant_str(func_type):
             func_name = get_overload_const_str(func_type)
@@ -2835,7 +2838,16 @@ class SeriesPass:
                     run_full_pipeline=True,
                 )
             else:
-                return self._handle_ufuncs(func_name, (series_var,))
+                run_ufunc = True
+
+        if bodo.utils.typing.is_numpy_ufunc(func_type):
+            run_ufunc = True
+            # Ufunc name can be found in the __name__ of
+            # the typing key.
+            func_name = func_type.typing_key.__name__
+
+        if run_ufunc:
+            return self._handle_ufuncs(func_name, (series_var,))
 
         func = get_overload_const_func(func_type, self.func_ir)
 

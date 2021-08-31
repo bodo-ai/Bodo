@@ -659,7 +659,14 @@ class SeriesAttribute(AttributeTemplate):
                         "Series.apply",
                     )
                     is_udf = False
-
+                elif bodo.utils.typing.is_numpy_ufunc(func):
+                    f_return_type = func.get_call_type(
+                        self.context,
+                        # We don't support only args/kws other than the Series yet
+                        (ary,),
+                        {},
+                    ).return_type
+                    is_udf = False
                 else:
                     f_return_type = get_const_func_output_type(
                         func, in_types, kws, self.context

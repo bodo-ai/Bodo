@@ -1404,11 +1404,16 @@ def get_udf_str_return_type(
             # recent changes suggest they will only allow it where it is supported.
             sig = result.get_call_type(typing_context, (), {"axis": axis})
         else:
-            sig = result.get_call_type(typing_context, (), dict())
+            sig = result.get_call_type(typing_context, (), {})
+        return sig.return_type
     else:
-        # Functions require passing obj_dtype as an argument
-        sig = result.get_call_type(typing_context, (obj_dtype,), dict())
-    return sig.return_type
+        if bodo.utils.typing.is_numpy_ufunc(result):
+            # Functions require passing obj_dtype as an argument
+            sig = result.get_call_type(typing_context, (obj_dtype,), {})
+            return sig.return_type
+        raise BodoError(
+            f"{caller_name}(): Only Pandas methods and np.ufunc are supported as string literals. '{func_name}' not supported."
+        )
 
 
 def get_pandas_method_str_impl(
