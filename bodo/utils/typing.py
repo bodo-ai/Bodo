@@ -1517,6 +1517,15 @@ def create_unsupported_overload(fname):
     return overload_f
 
 
+def is_numpy_ufunc(func):
+    """
+    Determine if 'func' is a numpy ufunc. This is code written like np.abs.
+    """
+    # If a func is types.Function and its typing_key is a np.ufunc,
+    # then we are working with a ufunc
+    return isinstance(func, types.Function) and isinstance(func.typing_key, np.ufunc)
+
+
 def is_builtin_function(func):
     """
     Determine if func is a builtin function typed by numba

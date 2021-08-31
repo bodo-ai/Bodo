@@ -208,8 +208,6 @@ def test_series_apply_numpy_str(memory_leak_check):
         return S.apply("log")
 
     S = pd.Series(list(np.arange(100) + list(np.arange(100))))
-    # Used for abs test
-    S[0] = -150
 
     check_func(impl1, (S,))
     check_func(impl2, (S,))
@@ -295,5 +293,88 @@ def test_series_apply_numpy_unsupported_type(memory_leak_check):
         return S.apply("radians")
 
     S = pd.Series(["abc", "342", "41"] * 100)
+    with pytest.raises(BodoError, match="user-defined function not supported"):
+        bodo.jit(impl1)(S)
+
+
+def test_series_ufunc(memory_leak_check):
+    """
+    Test running series.apply with a numpy ufunc.
+    """
+
+    def test_impl1(S):
+        return S.apply(np.radians)
+
+    def test_impl2(S):
+        return S.apply(np.abs)
+
+    S = pd.Series(list(np.arange(100) + list(np.arange(100))))
+    # Used for abs test
+    S[0] = -150
+
+    check_func(test_impl1, (S,))
+    check_func(test_impl2, (S,))
+
+
+@pytest.mark.slow
+def test_series_apply_numpy_unsupported_ufunc_function(memory_leak_check):
+    """
+    Test running series.apply with a np.ufunc that
+    matches an unsupported ufunc raises an appropriate
+    exception.
+    """
+
+    def impl1(S):
+        return S.apply(np.cbrt)
+
+    S = pd.Series(list(np.arange(100) + list(np.arange(100))))
+    with pytest.raises(BodoError, match="user-defined function not supported"):
+        bodo.jit(impl1)(S)
+
+
+@pytest.mark.slow
+def test_series_apply_numpy_ufunc_unsupported_type(memory_leak_check):
+    """
+    Test running series.apply with a np.ufunc that
+    has an unsupported type raises an appropriate
+    exception.
+    """
+
+    def impl1(S):
+        # radians is unsupported for string types
+        return S.apply(np.radians)
+
+    S = pd.Series(["abc", "342", "41"] * 100)
+    with pytest.raises(BodoError, match="user-defined function not supported"):
+        bodo.jit(impl1)(S)
+
+
+@pytest.mark.slow
+def test_series_apply_numpy_literal_non_ufunc(memory_leak_check):
+    """
+    Test running series.apply with a string literal that
+    matches a Numpy function but not a ufunc raises an
+    appropriate exception.
+    """
+
+    def impl1(S):
+        return S.apply("nansum")
+
+    S = pd.Series(list(np.arange(100) + list(np.arange(100))))
+    with pytest.raises(BodoError, match="user-defined function not supported"):
+        bodo.jit(impl1)(S)
+
+
+@pytest.mark.slow
+def test_series_apply_numpy_func_non_ufunc(memory_leak_check):
+    """
+    Test running series.apply with a numpy function
+    but not a ufunc raises an appropriate exception.
+    """
+
+    def impl1(S):
+        return S.apply(np.nansum)
+
+    S = pd.Series(list(np.arange(100) + list(np.arange(100))))
     with pytest.raises(BodoError, match="user-defined function not supported"):
         bodo.jit(impl1)(S)
