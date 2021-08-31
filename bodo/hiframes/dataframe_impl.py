@@ -249,7 +249,7 @@ def _get_dtype_str(dtype):
             return "float"
         elif dtype.key[0] == int:
             return "int"
-        elif dtype.key[0] == np.bool:
+        elif dtype.key[0] == bool:
             return "bool"
         else:
             raise BodoError(f"invalid dtype: {dtype}")
@@ -535,7 +535,7 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         include_types = get_nullable_and_non_nullable_types(include_types)
         # Filter columns to those with a matching datatype
         # TODO(Nick): Add more general support for type rules:
-        # ex. np.number for all numeric types, np.object for all obj types,
+        # ex. np.number for all numeric types, object for all obj types,
         # "string" for all string types
         chosen_columns = tuple(
             c for i, c in enumerate(df.columns) if df.data[i] in include_types
@@ -557,7 +557,7 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         exclude_types = get_nullable_and_non_nullable_types(exclude_types)
         # Filter columns to those without a matching datatype
         # TODO(Nick): Add more general support for type rules:
-        # ex. np.number for all numeric types, np.object for all obj types,
+        # ex. np.number for all numeric types, object for all obj types,
         # "string" for all string types
         chosen_columns = tuple(
             c

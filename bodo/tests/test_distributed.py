@@ -1346,9 +1346,9 @@ def test_empty_object_array_warning(memory_leak_check):
         return A
 
     with pytest.warns(BodoWarning, match="Empty object array passed to Bodo"):
-        bodo.jit(impl)(np.array([], dtype=np.object))
+        bodo.jit(impl)(np.array([], dtype=object))
     with pytest.warns(BodoWarning, match="Empty object array passed to Bodo"):
-        bodo.jit(impl)(pd.Series(np.array([], dtype=np.object)))
+        bodo.jit(impl)(pd.Series(np.array([], dtype=object)))
     with pytest.warns(BodoWarning, match="Field value in struct array is NA"):
         bodo.jit(impl)(
             pd.Series(np.array([{"A": None, "B": 2.2}, {"A": "CC", "B": 1.2}]))

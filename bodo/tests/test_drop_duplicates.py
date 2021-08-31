@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import bodo
 from bodo.tests.utils import check_func, gen_random_list_string_array
 
 
@@ -335,9 +334,7 @@ def test_drop_duplicates_2col_int_np_float(memory_leak_check):
         df2 = df1.drop_duplicates()
         return df2
 
-    df1 = pd.DataFrame(
-        {"A": [3, 3, 3, 3, 4], "B": np.array([1, 2, 1, 2, 17], np.float)}
-    )
+    df1 = pd.DataFrame({"A": [3, 3, 3, 3, 4], "B": np.array([1, 2, 1, 2, 17], float)})
     check_func(test_impl, (df1,), sort_output=True)
 
 
@@ -351,7 +348,7 @@ def test_drop_duplicates_2col_int_np_int(memory_leak_check):
         df2 = df1.drop_duplicates()
         return df2
 
-    df1 = pd.DataFrame({"A": [3, 3, 3, 3, 4], "B": np.array([1, 2, 1, 2, 17], np.int)})
+    df1 = pd.DataFrame({"A": [3, 3, 3, 3, 4], "B": np.array([1, 2, 1, 2, 17], int)})
     check_func(test_impl, (df1,), sort_output=True)
 
 
@@ -366,7 +363,7 @@ def test_drop_duplicates_2col_int_np_int_index(memory_leak_check):
         return df2
 
     df1 = pd.DataFrame(
-        {"A": [3, 3, 3, 3, 4], "B": np.array([1, 2, 1, 2, 17], np.int)},
+        {"A": [3, 3, 3, 3, 4], "B": np.array([1, 2, 1, 2, 17], int)},
         index=[0, 1, 2, 3, 4],
     )
     check_func(test_impl, (df1,), sort_output=True)

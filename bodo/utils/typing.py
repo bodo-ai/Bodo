@@ -665,7 +665,7 @@ def parse_dtype(dtype):
             dtype = types.StringLiteral("float")
         elif dtype.key[0] == int:
             dtype = types.StringLiteral("int")
-        elif dtype.key[0] == np.bool:
+        elif dtype.key[0] == bool:
             dtype = types.StringLiteral("bool")
         elif dtype.key[0] == str:
             dtype = bodo.string_type

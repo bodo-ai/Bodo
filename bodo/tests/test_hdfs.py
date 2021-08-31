@@ -84,14 +84,14 @@ def test_csv_data1(datapath, hdfs_datapath):
         return pd.read_csv(
             hdfs_fname,
             names=["A", "B", "C", "D"],
-            dtype={"A": np.int, "B": np.float, "C": np.float, "D": np.int},
+            dtype={"A": int, "B": float, "C": float, "D": int},
         )
 
     fname = datapath("csv_data1.csv")
     py_output = pd.read_csv(
         fname,
         names=["A", "B", "C", "D"],
-        dtype={"A": np.int, "B": np.float, "C": np.float, "D": np.int},
+        dtype={"A": int, "B": float, "C": float, "D": int},
     )
 
     check_func(test_impl, (hdfs_fname,), py_output=py_output)
@@ -108,7 +108,7 @@ def test_csv_data_date1(datapath, hdfs_datapath):
         return pd.read_csv(
             hdfs_fname,
             names=["A", "B", "C", "D"],
-            dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+            dtype={"A": int, "B": float, "C": str, "D": int},
             parse_dates=[2],
         )
 
@@ -116,7 +116,7 @@ def test_csv_data_date1(datapath, hdfs_datapath):
     py_output = pd.read_csv(
         fname,
         names=["A", "B", "C", "D"],
-        dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+        dtype={"A": int, "B": float, "C": str, "D": int},
         parse_dates=[2],
     )
 
@@ -394,7 +394,7 @@ def test_hdfs_csv_read_seq(hdfs_datapath, test_df):
         return pd.read_csv(
             hdfs_fname,
             names=["A", "B", "C"],
-            dtype={"A": np.float, "B": "bool", "C": np.int},
+            dtype={"A": float, "B": "bool", "C": int},
         )
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
@@ -412,7 +412,7 @@ def test_hdfs_csv_read_1D(hdfs_datapath, test_df):
         return pd.read_csv(
             hdfs_fname,
             names=["A", "B", "C"],
-            dtype={"A": np.float, "B": "bool", "C": np.int},
+            dtype={"A": float, "B": "bool", "C": int},
         )
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
@@ -430,7 +430,7 @@ def test_hdfs_csv_read_1D_var(hdfs_datapath, test_df):
         return pd.read_csv(
             hdfs_fname,
             names=["A", "B", "C"],
-            dtype={"A": np.float, "B": "bool", "C": np.int},
+            dtype={"A": float, "B": "bool", "C": int},
         )
 
     check_func(test_read, (hdfs_fname,), py_output=test_df)
@@ -629,7 +629,7 @@ def test_hdfs_json_read_records_lines_seq(hdfs_datapath, test_df):
             hdfs_fname,
             orient="records",
             lines=True,
-            dtype={"A": np.float, "B": "bool", "C": np.int},
+            dtype={"A": float, "B": "bool", "C": int},
         )
 
     hdfs_fname = hdfs_datapath("df_records_lines_seq.json")
@@ -655,7 +655,7 @@ def test_hdfs_json_read_records_lines_1D(hdfs_datapath, test_df):
             hdfs_fname,
             orient="records",
             lines=True,
-            dtype={"A": np.float, "B": "bool", "C": np.int},
+            dtype={"A": float, "B": "bool", "C": int},
         )
 
     hdfs_fname = hdfs_datapath("df_records_lines_1D.json")
@@ -681,7 +681,7 @@ def test_hdfs_json_read_records_lines_1D_var(hdfs_datapath, test_df):
             hdfs_fname,
             orient="records",
             lines=True,
-            dtype={"A": np.float, "B": "bool", "C": np.int},
+            dtype={"A": float, "B": "bool", "C": int},
         )
 
     hdfs_fname = hdfs_datapath("df_records_lines_1D_var.json")

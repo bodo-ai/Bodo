@@ -18,7 +18,7 @@ Parquet
 ~~~~~~~
 
 For Parquet, the syntax is the same as Pandas:
-``pd.read_parquet(path)``, where path can be a parquet file or a directory with multiple parquet files 
+``pd.read_parquet(path)``, where path can be a parquet file or a directory with multiple parquet files
 (all are part of the same dataframe)::
 
     @bodo.jit
@@ -32,7 +32,7 @@ For Parquet, the syntax is the same as Pandas:
 
 ``to_parquet(name)`` with distributed data writes to a folder called ``name``.
 Each process writes one file into the folder, but if the data is not distributed,
-``to_parquet(name)`` writes to a single file called ``name``:: 
+``to_parquet(name)`` writes to a single file called ``name``::
 
     df = pd.DataFrame({'A': np.arange(n)})
 
@@ -100,14 +100,14 @@ Unlike ``read_csv`` in regular Pandas, Bodo can read a directory that contains m
 
 .. note::
 
-   
+
    Bodo uses nullable integer types of Pandas to ensure type stability (see :ref:`Integer NA issue in Pandas <integer-na-issue-pandas>` for more details).
    Therefore, data types must be specified explicitly for accurate performance comparisons of Bodo and Pandas for ``read_csv``.
 
 
 ``to_csv(name)`` has different behaviors for different file systems:
 
-    1. POSIX file systems: always writes to a single file, 
+    1. POSIX file systems: always writes to a single file,
     regardless of the number of processes and whether the data is distributed, but writing is still done in parallel when more than 1 processor is used::
 
             df = pd.DataFrame({'A': np.arange(n)})
@@ -136,7 +136,7 @@ Unlike ``read_csv`` in regular Pandas, Bodo can read a directory that contains m
 
     2. `S3`_ and `HDFS`_: distributed data is written to a folder called ``name``.
     Each process writes one file into the folder, but if the data is not distributed,
-    ``to_csv(name)`` writes to a single file called ``name``:: 
+    ``to_csv(name)`` writes to a single file called ``name``::
 
             df = pd.DataFrame({'A': np.arange(n)})
 
@@ -189,15 +189,15 @@ For JSON, the syntax is also the same as Pandas::
         # dtype argument required when reading a regular multi-line JSON file
         # cannot read a directory containing multiple multi-line JSON files
         df = pd.read_json('example_file.json', orient = 'records', lines = False,
-            dtype={"A": np.float, "B": "bool", "C": np.int})
+            dtype={"A": float, "B": "bool", "C": int})
 
 
 ``to_json(name)`` has different behaviors for different file systems:
 
     1. POSIX file systems: ``to_json(name)`` behavior depends on ``orient`` and ``lines`` arguments.
-        (1) ``DataFrame.to_json(name, orient='records', lines=True)`` 
-        (i.e. writing `JSON Lines text file format <http://jsonlines.org/>`_) always writes to a single file, 
-        regardless of the number of processes and whether the data is distributed, 
+        (1) ``DataFrame.to_json(name, orient='records', lines=True)``
+        (i.e. writing `JSON Lines text file format <http://jsonlines.org/>`_) always writes to a single file,
+        regardless of the number of processes and whether the data is distributed,
         but writing is still done in parallel when more than 1 processor is used::
 
                 df = pd.DataFrame({'A': np.arange(n)})
@@ -228,7 +228,7 @@ For JSON, the syntax is also the same as Pandas::
 
     2. `S3`_ and `HDFS`_: distributed data is written to a folder called ``name``.
     Each process writes one file into the folder, but if the data is not distributed,
-    ``to_json(name)`` writes to a file called ``name``:: 
+    ``to_json(name)`` writes to a file called ``name``::
 
             df = pd.DataFrame({'A': np.arange(n)})
 
@@ -305,7 +305,7 @@ Example code for reading::
 
 .. note::
 
-   
+
    Writing is currently not supported.
 
 .. _numpy-binary-section:
@@ -321,8 +321,8 @@ Numpy's ``fromfile`` and ``tofile`` are supported as below::
         ...
         A.tofile("newfile.dat")
 
-Bodo has the same behavior as Numpy for ``numpy.ndarray.tofile()``, where we always write to a single file. 
-However, writing distributed data to POSIX is done in parallel, 
+Bodo has the same behavior as Numpy for ``numpy.ndarray.tofile()``, where we always write to a single file.
+However, writing distributed data to POSIX is done in parallel,
 but writing to S3 & HDFS is done sequentially (due to file system limitations).
 
 HDF5
@@ -384,7 +384,7 @@ File Systems
 Amazon S3
 ~~~~~~~~~
 
-Reading and writing :ref:`CSV <csv-section>`, :ref:`Parquet <parquet-section>`, :ref:`JSON <json-section>`, and :ref:`Numpy binary <numpy-binary-section>` files from and to Amazon S3 is supported. 
+Reading and writing :ref:`CSV <csv-section>`, :ref:`Parquet <parquet-section>`, :ref:`JSON <json-section>`, and :ref:`Numpy binary <numpy-binary-section>` files from and to Amazon S3 is supported.
 
 The ``fsspec`` package must be available, and the file path should start with :code:`s3://`::
 

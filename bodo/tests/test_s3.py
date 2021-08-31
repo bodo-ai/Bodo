@@ -50,14 +50,14 @@ def test_s3_csv_data1(minio_server, bucket_fixture, datapath, bucket_name, reque
         return pd.read_csv(
             fpath,
             names=["A", "B", "C", "D"],
-            dtype={"A": np.int, "B": np.float, "C": np.float, "D": np.int},
+            dtype={"A": int, "B": float, "C": float, "D": int},
         )
 
     fname = datapath("csv_data1.csv")
     py_output = pd.read_csv(
         fname,
         names=["A", "B", "C", "D"],
-        dtype={"A": np.int, "B": np.float, "C": np.float, "D": np.int},
+        dtype={"A": int, "B": float, "C": float, "D": int},
     )
 
     check_func(test_impl, (f"s3://{bucket_name}/csv_data1.csv",), py_output=py_output)
@@ -132,7 +132,7 @@ def test_s3_csv_data_date1(minio_server, s3_bucket, datapath):
         return pd.read_csv(
             "s3://bodo-test/csv_data_date1.csv",
             names=["A", "B", "C", "D"],
-            dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+            dtype={"A": int, "B": float, "C": str, "D": int},
             parse_dates=[2],
         )
 
@@ -140,7 +140,7 @@ def test_s3_csv_data_date1(minio_server, s3_bucket, datapath):
     py_output = pd.read_csv(
         fname,
         names=["A", "B", "C", "D"],
-        dtype={"A": np.int, "B": np.float, "C": str, "D": np.int},
+        dtype={"A": int, "B": float, "C": str, "D": int},
         parse_dates=[2],
     )
     check_func(test_impl, (), py_output=py_output)
@@ -501,7 +501,7 @@ def test_s3_csv_read_seq(minio_server, s3_bucket, test_df):
         return pd.read_csv(
             "s3://bodo-test/test_df_bodo_seq.csv",
             names=["A", "B", "C"],
-            dtype={"A": np.float, "B": "bool", "C": np.int},
+            dtype={"A": float, "B": "bool", "C": int},
         )
 
     check_func(test_read, (), py_output=test_df)
@@ -517,7 +517,7 @@ def test_s3_csv_read_1D(minio_server, s3_bucket, test_df):
         return pd.read_csv(
             "s3://bodo-test/test_df_bodo_1D.csv",
             names=["A", "B", "C"],
-            dtype={"A": np.float, "B": "bool", "C": np.int},
+            dtype={"A": float, "B": "bool", "C": int},
         )
 
     check_func(test_read, (), py_output=test_df)
@@ -533,7 +533,7 @@ def test_s3_csv_read_1D_var(minio_server, s3_bucket, test_df):
         return pd.read_csv(
             "s3://bodo-test/test_df_bodo_1D_var.csv",
             names=["A", "B", "C"],
-            dtype={"A": np.float, "B": "bool", "C": np.int},
+            dtype={"A": float, "B": "bool", "C": int},
         )
 
     check_func(test_read, (), py_output=test_df)
@@ -735,7 +735,7 @@ def test_s3_json_read_records_lines_seq(minio_server, s3_bucket, test_df):
             "s3://bodo-test/df_records_lines_seq.json",
             orient="records",
             lines=True,
-            dtype={"A": np.float, "B": "bool", "C": np.int},
+            dtype={"A": float, "B": "bool", "C": int},
         )
 
     check_func(test_read, (), py_output=test_df)
@@ -784,7 +784,7 @@ def test_s3_json_read_recoreds_lines_1D_var(minio_server, s3_bucket, test_df):
             "s3://bodo-test/df_records_lines_1D_var.json",
             orient="records",
             lines=True,
-            dtype={"A": np.float, "B": "bool", "C": np.int},
+            dtype={"A": float, "B": "bool", "C": int},
         )
 
     check_func(test_read, (), py_output=test_df)
