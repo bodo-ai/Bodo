@@ -5058,11 +5058,12 @@ def test_groupby_transform_nullable(memory_leak_check):
 
 # TODO: [BE-974] Fix memory_leak_check issue
 @pytest.mark.slow
-def test_groupby_apply_na_key():
+@pytest.mark.parametrize("dropna", [True, False])
+def test_groupby_apply_na_key(dropna):
     """Test groupby.apply with NA keys"""
 
     def impl_apply(df):
-        A = df.groupby("A", dropna=False).apply(
+        A = df.groupby("A", dropna=dropna).apply(
             lambda x: 3.3,
         )
         return A

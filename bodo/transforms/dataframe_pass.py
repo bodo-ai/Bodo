@@ -1812,6 +1812,9 @@ class DataFramePass:
         """generate groupby apply function that groups input rows, calls the UDF, and
         constructs the output.
         """
+        # TODO: [BE-1266] A suggested refactor code
+        # remove NA groups from both out_labels and sort_idx when (dropna=True)
+        # when dropna=True, we don't need to keep track of groupby labels and sort_idx for NA values
 
         func_text = f"def _bodo_groupby_apply_impl(keys, in_df, {extra_arg_names}_is_parallel=False):\n"
         func_text += "  ev_apply = bodo.utils.tracing.Event('gb.apply', False)\n"
