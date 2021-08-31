@@ -1091,7 +1091,7 @@ struct aggfunc<
 #define ROBIN_MAP_MAX_LOAD_FACTOR 0.5
 #define HOPSCOTCH_MAP_MAX_LOAD_FACTOR 0.9
 
-bool calc_use_robin_map(size_t nunique_hashes, tracing::Event* ev=nullptr) {
+bool calc_use_robin_map(size_t nunique_hashes, tracing::Event* ev = nullptr) {
     // If the number of groups is very large, we should avoid very small load
     // factors because the map will use too much memory, and also allocation
     // and deallocation will become very expensive
@@ -1195,10 +1195,8 @@ namespace {
  * Don't use std::function to reduce call overhead.
  */
 struct HashLookupIn32bitTable {
-  uint32_t operator()(const int64_t iRow) const {
-    return hashes[iRow];
-  }
-  uint32_t* hashes;
+    uint32_t operator()(const int64_t iRow) const { return hashes[iRow]; }
+    uint32_t* hashes;
 };
 
 /**
@@ -5355,6 +5353,7 @@ BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
             return new BasicColSet<ARRAY>(in_col, ftype, do_combine);
     }
 }
+
 template <typename ARRAY>
 class GroupbyPipeline {
    public:
@@ -5537,61 +5536,112 @@ class GroupbyPipeline {
                      // update.
                 // Create a table for each nunique col and send for
                 // drop_duplicates.
-                for (int i = 0, c = num_keys;
+                static constexpr float threshold_of_fraction_of_unique_hash =
+                    0.5;
+                ev.add_attribute("g_threshold_of_fraction_of_unique_hash",
+                                 threshold_of_fraction_of_unique_hash);
+                for (int i = 0, column_index = num_keys;
                      i < func_offsets[in_table->ncols() - num_keys - index_i];
-                     i++, c++) {
+                     i++, column_index++) {
                     if (ftypes[i] == Bodo_FTypes::nunique) {
                         table_info* tmp = new table_info();
                         tmp->columns.assign(
                             in_table->columns.begin(),
                             in_table->columns.begin() + num_keys);
                         tmp->num_keys = num_keys;
-                        push_back_arrays(tmp->columns, in_table->columns[c]);
+                        push_back_arrays(tmp->columns,
+                                         in_table->columns[column_index]);
 
                         // If we know that the |set(values)|/len(values)
-                        // is low on this (or all ranks?) then it should be
-                        // beneficial to drop local duplicates before the
-                        // shuffle. NOTE: lines below always drop local
-                        // duplicates, but there are some cases where this might
-                        // worsen performance. I observed this in one case, and
-                        // other cases where I think this might be worse in
-                        // general is when the amount of duplicates is very low,
-                        // shuffle cost is low, cluster of one or few nodes, but
-                        // I haven't had time to evaluate. Estimating amount of
-                        // duplicates on each process to decide whether to drop
-                        // or not based on some threshold doesn't seem to be
-                        // effective in making the best decision.
+                        // is low on all ranks then it should be beneficial to
+                        // drop local duplicates before the shuffle.
 
-                        // drop_duplicates_table_inner steals the reference but
-                        // we still need it for the code after C++ groupby
+                        const size_t n_rows =
+                            static_cast<size_t>(in_table->nrows());
+                        // get hashes of keys+value
+                        uint32_t* key_value_hashes = new uint32_t[n_rows];
+                        memcpy(key_value_hashes, hashes,
+                               sizeof(uint32_t) * n_rows);
+                        // TODO: do a combine which writes to an empty hash
+                        // array to avoid memcpy?
+                        hash_array_combine(key_value_hashes,
+                                           tmp->columns[num_keys], n_rows,
+                                           SEED_HASH_PARTITION);
+
+                        // Compute the local fraction of unique hashes
+                        size_t nunique_keyval_hashes =
+                            get_nunique_hashes<false>(key_value_hashes, n_rows);
+                        float local_fraction_unique_hashes =
+                            static_cast<float>(nunique_keyval_hashes) /
+                            static_cast<float>(n_rows);
+                        float global_fraction_unique_hashes;
+                        if (ev.is_tracing())
+                            ev.add_attribute(
+                                "nunique_" + std::to_string(i) +
+                                    "_local_fraction_unique_hashes",
+                                local_fraction_unique_hashes);
+                        MPI_Allreduce(&local_fraction_unique_hashes,
+                                      &global_fraction_unique_hashes, 1,
+                                      MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+                        int num_ranks = 0;
+                        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+                        global_fraction_unique_hashes /=
+                            static_cast<float>(num_ranks);
+                        ev.add_attribute("g_nunique_" + std::to_string(i) +
+                                             "_global_fraction_unique_hashes",
+                                         global_fraction_unique_hashes);
+
+                        table_info* tmp2 = nullptr;
+
+                        // Regardless of which path is taken, the reference
+                        // to the original input arrays is going to be
+                        // decremented (by either drop_duplicates_table_inner or
+                        // shuffle_table), but we still need it for the code
+                        // after C++ groupby
                         for (auto a : tmp->columns) incref_array(a);
-                        // Set dropna to false because skipna is handled at a
-                        // later step. Setting dropna=True here removes NA from
-                        // the keys, which we do not want
-                        table_info* tmp2 = drop_duplicates_table_inner(
-                            tmp, tmp->ncols(), 0, 1, false);
+                        // NOTE: to improve scaling the shuffle spreads based on
+                        // the keys *and* also the values. If we only spread
+                        // based on keys, scaling will be limited by the number
+                        // of groups, which is sometimes very small compared to
+                        // the number of cores
+                        if (global_fraction_unique_hashes <
+                            threshold_of_fraction_of_unique_hash) {
+                            ev.add_attribute("g_nunique_" + std::to_string(i) +
+                                                 "_drop_duplicates",
+                                             true);
+                            // Set dropna to false because skipna is handled at
+                            // a later step. Setting dropna=True here removes NA
+                            // from the keys, which we do not want
+                            tmp2 = drop_duplicates_table_inner(
+                                tmp, tmp->ncols(), 0, 1, false,
+                                key_value_hashes);
+                            delete tmp;
+                            tmp = tmp2;
+                            // Note that tmp here no longer contains the
+                            // original input arrays
+                            tmp2 = shuffle_table(tmp, tmp->ncols());
+                        } else {
+                            ev.add_attribute("g_nunique_" + std::to_string(i) +
+                                                 "_drop_duplicates",
+                                             false);
+                            // Since the arrays are unmodified we can reuse the
+                            // hashes. shuffle_table will take ownership and
+                            // delete them when done
+                            tmp2 = shuffle_table(tmp, tmp->ncols(), false,
+                                                 key_value_hashes);
+                        }
                         delete tmp;
-                        tmp = tmp2;
-                        // NOTE: to improve scaling this spreads based on the
-                        // keys *and* also the values. If we only spread based
-                        // on keys, scaling will be limited by the number of
-                        // groups, which is sometimes very small compared to the
-                        // number of cores
-                        tmp2 = shuffle_table(tmp, tmp->ncols());
-                        delete tmp;
-
                         tmp2->num_keys = num_keys;
                         tmp2->id = table_id_counter++;
-                        nunique_tables[c] = tmp2;
-
-                        if (nunique_only) {
-                            // in the case of nunique_only the hashes that we
-                            // calculated above are not valid, since we have
-                            // shuffled all of the input columns
-                            delete[] hashes;
-                            hashes = nullptr;
-                        }
+                        nunique_tables[column_index] = tmp2;
                     }
+                }
+                if (nunique_only) {
+                    // in the case of nunique_only the hashes that we
+                    // calculated above are not valid, since we have
+                    // shuffled all of the input columns
+                    delete[] hashes;
+                    hashes = nullptr;
                 }
                 break;
         }
