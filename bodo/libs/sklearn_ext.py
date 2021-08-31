@@ -25,6 +25,7 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
+    register_jitable,
     register_model,
     typeof_impl,
     unbox,
@@ -54,6 +55,7 @@ from bodo.libs.distributed_api import (
 )
 from bodo.utils.typing import (
     BodoError,
+    BodoWarning,
     check_unsupported_args,
     get_overload_const_int,
     get_overload_const_str,
@@ -2464,6 +2466,16 @@ def sklearn_linear_model_logistic_regression_overload(
     return _sklearn_linear_model_logistic_regression_impl
 
 
+@register_jitable
+def _raise_SGD_warning(sgd_name):
+    """raise a BodoWarning for distributed training with SGD instead of user algorithm."""
+    with numba.objmode:
+        warnings.warn(
+            f"Data is distributed so Bodo will fit model with SGD solver optimization ({sgd_name})",
+            BodoWarning,
+        )
+
+
 @overload_method(BodoLogisticRegressionType, "fit", no_unliteral=True)
 def overload_logistic_regression_fit(
     m,
@@ -2490,9 +2502,7 @@ def overload_logistic_regression_fit(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
-                print(
-                    "WARNING: Data is distributed so Bodo will fit model with SGD solver optimization (SGDClassifier)"
-                )
+                _raise_SGD_warning("SGDClassifier")
             with numba.objmode(clf="sgd_classifier_type"):
                 # SGDClassifier doesn't allow l1_ratio to be None. default=0.15
                 if m.l1_ratio is None:
@@ -2642,9 +2652,7 @@ def overload_linear_regression_fit(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
-                print(
-                    "WARNING: Data is distributed so Bodo will fit model with SGD solver optimization (SGDRegressor)"
-                )
+                _raise_SGD_warning("SGDRegressor")
             with numba.objmode(clf="sgd_regressor_type"):
                 clf = sklearn.linear_model.SGDRegressor(
                     loss="squared_loss",
@@ -2800,9 +2808,7 @@ def overload_lasso_fit(
             m, X, y, sample_weight=None, check_input=True, _is_data_distributed=False
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
-                print(
-                    "WARNING: Data is distributed so Bodo will fit model with SGD solver optimization (SGDRegressor)"
-                )
+                _raise_SGD_warning("SGDRegressor")
             with numba.objmode(clf="sgd_regressor_type"):
                 clf = sklearn.linear_model.SGDRegressor(
                     loss="squared_loss",
@@ -2942,9 +2948,7 @@ def overload_ridge_fit(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
-                print(
-                    "WARNING: Data is distributed so Bodo will fit model with SGD solver optimization (SGDRegressor)"
-                )
+                _raise_SGD_warning("SGDRegressor")
             with numba.objmode(clf="sgd_regressor_type"):
                 if m.max_iter is None:
                     max_iter = 1000
@@ -3112,9 +3116,7 @@ def overload_linear_svc_fit(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
             if bodo.get_rank() == 0:
-                print(
-                    "WARNING: Data is distributed so Bodo will fit model with SGD solver optimization (SGDClassifier)"
-                )
+                _raise_SGD_warning("SGDClassifier")
             with numba.objmode(clf="sgd_classifier_type"):
                 clf = sklearn.linear_model.SGDClassifier(
                     loss="hinge",
