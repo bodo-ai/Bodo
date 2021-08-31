@@ -8,6 +8,7 @@
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_shuffle.h"
+#include "_array_operations.h"
 #include "gfx/timsort.hpp"
 
 #undef DEBUG_DD_SYMBOL
@@ -384,7 +385,7 @@ struct HashDropDuplicates {
     size_t operator()(size_t const iRow) const {
         return static_cast<size_t>(hashes[iRow]);
     }
-    uint32_t* hashes;
+    const uint32_t* hashes;
 };
 
 /**
@@ -489,31 +490,32 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
  *        keep = 2 corresponds to the case of keep=False : remove all duplicates
  * @param step: integer specifying the work done
  *              2 corresponds to the first step of the operation where we
+ * @param hashes: the precomputed hashes to use for the hash table. If set to
+ *                `nullptr` then the hashes are computed inside this function
+ *                and deleted at the end. If passed they are not deleted.
+ *
  * collate the rows on the computational node 1 corresponds to the second step
  * of the operation after the rows have been merged on the computation
  * @return the table to be used.
  */
-table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
-                                        int64_t keep, int step, bool dropna) {
+table_info* drop_duplicates_table_inner(
+    table_info* in_table, int64_t num_keys, int64_t keep, int step, bool dropna,
+    uint32_t* hashes) {
     tracing::Event ev("drop_duplicates_table_inner");
     ev.add_attribute("table_nrows_before", size_t(in_table->nrows()));
     if (ev.is_tracing()) {
         size_t global_table_nbytes = table_global_memory_size(in_table);
         ev.add_attribute("g_table_nbytes", global_table_nbytes);
     }
+    const bool delete_hashes = hashes == nullptr;
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<array_info*> key_arrs(num_keys);
     for (size_t iKey = 0; iKey < size_t(num_keys); iKey++)
         key_arrs[iKey] = in_table->columns[iKey];
-#ifdef DEBUG_DD
-    std::cout << "drop_duplicates_table_inner num_keys=" << num_keys
-              << " keep=" << keep << " step=" << step << " : INPUT:\n";
-    DEBUG_PrintRefct(std::cout, in_table->columns);
-    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-#endif
 
     uint32_t seed = SEED_HASH_CONTAINER;
-    uint32_t* hashes = hash_keys(key_arrs, seed);
+    if (hashes == nullptr)
+        hashes = hash_keys(key_arrs, seed);
     HashDropDuplicates hash_fct{hashes};
     KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
     UNORD_MAP_CONTAINER<size_t, size_t, HashDropDuplicates,
@@ -592,13 +594,10 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
     // Now building the out_arrs array.
     table_info* ret_table = RetrieveTable(in_table, ListIdx, -1);
     //
-    delete[] hashes;
+    if (delete_hashes) {
+        delete[] hashes;
+    }
     ev.add_attribute("table_nrows_after", size_t(ret_table->nrows()));
-#ifdef DEBUG_DD
-    std::cout << "drop_duplicates_table_inner : OUTPUT:\n";
-    DEBUG_PrintRefct(std::cout, ret_table->columns);
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
-#endif
     return ret_table;
 }
 

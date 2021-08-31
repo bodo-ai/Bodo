@@ -13,6 +13,9 @@
 #define SEED_HASH_PIVOT_SHUFFLE 0xb0d01285
 #define SEED_HASH_CONTAINER 0xb0d01284
 
+void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
+                        const uint32_t seed);
+
 /**
  * Function for the computation of hashes for keys
  *

@@ -59,7 +59,8 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
                                   int64_t total_cols = -1, bool dropna = false);
 
 table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
-                                        int64_t keep, int step, bool dropna);
+                                        int64_t keep, int step, bool dropna,
+                                        uint32_t* hashes = nullptr);
 
 /** This function is the function for the dropping of duplicated keys:
  * ---only the keys are returned

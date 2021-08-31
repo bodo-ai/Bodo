@@ -541,8 +541,8 @@ static void hash_array_combine_string(uint32_t* out_hashes, char* data,
     }
 }
 
-static void hash_array_combine(uint32_t* out_hashes, array_info* array,
-                               size_t n_rows, const uint32_t seed) {
+void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
+                        const uint32_t seed) {
     // dispatch to proper function
     // TODO: general dispatcher
     if (array->arr_type == bodo_array_type::ARROW) {
