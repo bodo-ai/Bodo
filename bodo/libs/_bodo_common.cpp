@@ -82,8 +82,7 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
             return Bodo_CTypes::DECIMAL;
         // TODO Date, Datetime, Timedelta, String, Bool
         default: {
-            std::string err_msg = "arrow_to_bodo_type : Unsupported type";
-            Bodo_PyErr_SetString(PyExc_RuntimeError, err_msg.c_str());
+            throw std::runtime_error("arrow_to_bodo_type : Unsupported type");
         }
     }
 }
@@ -147,17 +146,18 @@ array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
                           data, NULL, NULL, NULL, NULL, meminfo, NULL);
 }
 
-
-array_info* alloc_interval_array(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
+array_info* alloc_interval_array(int64_t length,
+                                 Bodo_CTypes::CTypeEnum typ_enum) {
     int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* left_meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
-    NRT_MemInfo* right_meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
+    NRT_MemInfo* right_meminfo =
+        NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* left_data = (char*)left_meminfo->data;
     char* right_data = (char*)right_meminfo->data;
     return new array_info(bodo_array_type::INTERVAL, typ_enum, length, -1, -1,
-                          left_data, right_data, NULL, NULL, NULL, left_meminfo, right_meminfo);
+                          left_data, right_data, NULL, NULL, NULL, left_meminfo,
+                          right_meminfo);
 }
-
 
 array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
                               int64_t num_categories) {
@@ -250,8 +250,7 @@ array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
     array_item_arr_payload* payload =
         (array_item_arr_payload*)(meminfo_array_item->data);
     payload->n_arrays = n_lists;
-    payload->offsets =
-        allocate_numpy_payload(n_lists + 1, Bodo_CType_offset);
+    payload->offsets = allocate_numpy_payload(n_lists + 1, Bodo_CType_offset);
     int64_t n_bytes = (int64_t)((n_lists + 7) / 8) + extra_null_bytes;
     payload->null_bitmap =
         allocate_numpy_payload(n_bytes, Bodo_CTypes::CTypeEnum::UINT8);
@@ -283,8 +282,8 @@ numpy_arr_payload allocate_numpy_payload(int64_t length,
     int64_t size = length * itemsize;
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);
     char* data = (char*)meminfo->data;
-    return numpy_arr_payload(meminfo, NULL, length, itemsize, data, length,
-                             itemsize);
+    return make_numpy_array_payload(meminfo, NULL, length, itemsize, data,
+                                    length, itemsize);
 }
 
 /**
@@ -357,8 +356,7 @@ array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
     // TODO: support non-numpy data
     payload->data = allocate_numpy_payload(n_total_items, dtype);
     // TODO: support 64-bit offsets case
-    payload->offsets =
-        allocate_numpy_payload(n_arrays + 1, Bodo_CType_offset);
+    payload->offsets = allocate_numpy_payload(n_arrays + 1, Bodo_CType_offset);
     int64_t n_bytes = (int64_t)((n_arrays + 7) / 8) + extra_null_bytes;
     payload->null_bitmap =
         allocate_numpy_payload(n_bytes, Bodo_CTypes::CTypeEnum::UINT8);
@@ -676,9 +674,10 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
                                         bodo_array_type::arr_type_enum::NUMPY,
                                         Bodo_CTypes::UINT8, 0, 0);
 
-        // NOTE: this should just do a memcpy if the bidwidths of input and output match
-        std::copy_n((int64_t*)(list_array->value_offsets()->data()), list_array->length() + 1,
-                    (offset_t*)offsets->data1);
+        // NOTE: this should just do a memcpy if the bidwidths of input and
+        // output match
+        std::copy_n((int64_t*)(list_array->value_offsets()->data()),
+                    list_array->length() + 1, (offset_t*)offsets->data1);
         memset(nulls->data1, 0, n_null_bytes);
         for (int64_t i = 0; i < list_array->length(); i++) {
             if (!list_array->IsNull(i))
@@ -703,8 +702,8 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
                                         bodo_array_type::arr_type_enum::NUMPY,
                                         Bodo_CTypes::UINT8, 0, 0);
 
-        std::copy_n((int32_t*)(list_array->value_offsets()->data()), list_array->length() + 1,
-                    (offset_t*)offsets->data1);
+        std::copy_n((int32_t*)(list_array->value_offsets()->data()),
+                    list_array->length() + 1, (offset_t*)offsets->data1);
         memset(nulls->data1, 0, n_null_bytes);
         for (int64_t i = 0; i < list_array->length(); i++) {
             if (!list_array->IsNull(i))
@@ -741,7 +740,8 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         }
     } else if (array->type_id() == arrow::Type::LARGE_STRING) {
         // TODO should print error or warning if OFFSET_BITWIDTH==32
-        auto str_array = std::dynamic_pointer_cast<arrow::LargeStringArray>(array);
+        auto str_array =
+            std::dynamic_pointer_cast<arrow::LargeStringArray>(array);
         lengths[lengths_pos++] = str_array->length();
         int64_t n_strings = str_array->length();
         int64_t n_chars =
@@ -749,9 +749,10 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         array_info* str_arr_info = alloc_string_array(n_strings, n_chars, 0);
         memcpy(str_arr_info->data1, str_array->value_data()->data(),
                sizeof(char) * n_chars);  // data
-        // NOTE: this should just do a memcpy if the bidwidths of input and output match
-        std::copy_n((int64_t*)(str_array->value_offsets()->data()), n_strings + 1,
-                    (offset_t*)str_arr_info->data2);
+        // NOTE: this should just do a memcpy if the bidwidths of input and
+        // output match
+        std::copy_n((int64_t*)(str_array->value_offsets()->data()),
+                    n_strings + 1, (offset_t*)str_arr_info->data2);
         int64_t n_null_bytes = (n_strings + 7) >> 3;
         memset(str_arr_info->null_bitmask, 0, n_null_bytes);
         for (int64_t i = 0; i < n_strings; i++) {
@@ -768,8 +769,8 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         array_info* str_arr_info = alloc_string_array(n_strings, n_chars, 0);
         memcpy(str_arr_info->data1, str_array->value_data()->data(),
                sizeof(char) * n_chars);  // data
-        std::copy_n((int32_t*)(str_array->value_offsets()->data()), n_strings + 1,
-                    (offset_t*)str_arr_info->data2);
+        std::copy_n((int32_t*)(str_array->value_offsets()->data()),
+                    n_strings + 1, (offset_t*)str_arr_info->data2);
         int64_t n_null_bytes = (n_strings + 7) >> 3;
         memset(str_arr_info->null_bitmask, 0, n_null_bytes);
         for (int64_t i = 0; i < n_strings; i++) {
