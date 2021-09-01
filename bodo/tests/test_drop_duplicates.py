@@ -152,6 +152,44 @@ def nested_arrays_value(request):
             {"A": [1, 3, 1, 2, 3], "B": [1.2, 3.1, 1.2, 2.5, 3.3]},
             index=[3, 1, 2, 4, 6],
         ),
+        # nullable binary values
+        pd.DataFrame(
+            {
+                "A": [
+                    bytes(5),
+                    b"hello",
+                    b"hello",
+                    b"qwerty",
+                    b"HELLO",
+                    b"h",
+                    b"hbjkl",
+                    b"asdgaasdg",
+                    b"asdjgalsd",
+                ],
+                "B": [
+                    b"a",
+                    b"c",
+                    b"a",
+                    b"ab",
+                    b"abcd",
+                    b"abc",
+                    None,
+                    b"masdg",
+                    b"asdjgalsd",
+                ],
+                "C": [
+                    b"a",
+                    None,
+                    b"hi",
+                    None,
+                    b"abc",
+                    b"d",
+                    b"asdeefeky",
+                    b"mlrgh",
+                    b"adafslg",
+                ],
+            },
+        ),
     ],
 )
 def test_df_drop_duplicates(test_df, memory_leak_check):
