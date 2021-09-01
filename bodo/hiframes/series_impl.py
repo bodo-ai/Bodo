@@ -1429,30 +1429,49 @@ def get_bin_inds(bins, arr):  # pragma: no cover
 
 
 @overload(get_bin_inds, inline="always", no_unliteral=True)
-def overload_get_bin_inds(bins, arr):
+def overload_get_bin_inds(bins, arr, is_nullable=True, include_lowest=True):
     """get bin indices for values in array. equivalent to Pandas code here:
     https://github.com/pandas-dev/pandas/blob/ee18cb5b19357776deffa434a3b9a552fe50af32/pandas/core/reshape/tile.py#L421-L426
+
+    is_nullable=True generates nullable integer output (used for Series.value_counts)
+    is_nullable=False generates numpy integer output with -1 as null for categorical
+    data (used for pd.cut)
     """
+    assert is_overload_constant_bool(is_nullable)
+    gen_nullable = is_overload_true(is_nullable)
 
-    def impl(bins, arr):  # pragma: no cover
-        numba.parfors.parfor.init_prange()
-        n = len(arr)
-        out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
-        for i in numba.parfors.parfor.internal_prange(n):
-            if bodo.libs.array_kernels.isna(arr, i):
-                bodo.libs.array_kernels.setna(out_arr, i)
-                continue
-            val = arr[i]
-            if val == bins[0]:
-                ind = 1
-            else:
-                ind = np.searchsorted(bins, val)
-            if ind == 0 or ind == len(bins):
-                bodo.libs.array_kernels.setna(out_arr, i)
-            else:
-                out_arr[i] = ind - 1
-        return out_arr
+    func_text = "def impl(bins, arr, is_nullable=True, include_lowest=True):\n"
+    func_text += "  numba.parfors.parfor.init_prange()\n"
+    func_text += "  n = len(arr)\n"
+    if gen_nullable:
+        func_text += "  out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)\n"
+    else:
+        func_text += "  out_arr = np.empty(n, np.int64)\n"
+    func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+    func_text += "    if bodo.libs.array_kernels.isna(arr, i):\n"
+    if gen_nullable:
+        func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
+    else:
+        func_text += "      out_arr[i] = -1\n"
+    func_text += "      continue\n"
+    func_text += "    val = arr[i]\n"
+    func_text += "    if include_lowest and val == bins[0]:\n"
+    func_text += "      ind = 1\n"
+    func_text += "    else:\n"
+    func_text += "      ind = np.searchsorted(bins, val)\n"
+    # searchsorted() returns 0 or len(bins) if val is not in any bins
+    func_text += "    if ind == 0 or ind == len(bins):\n"
+    if gen_nullable:
+        func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
+    else:
+        func_text += "      out_arr[i] = -1\n"
+    func_text += "    else:\n"
+    func_text += "      out_arr[i] = ind - 1\n"
+    func_text += "  return out_arr\n"
 
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "np": np, "numba": numba}, loc_vars)
+    impl = loc_vars["impl"]
     return impl
 
 
@@ -1496,7 +1515,7 @@ def get_bin_labels(bins):  # pragma: no cover
 
 
 @overload(get_bin_labels, no_unliteral=True)
-def overload_get_bin_labels(bins):
+def overload_get_bin_labels(bins, right=True, include_lowest=True):
     """
     Get labels from bins. Equivalent to Pandas code here:
     https://github.com/pandas-dev/pandas/blob/ee18cb5b19357776deffa434a3b9a552fe50af32/pandas/core/reshape/tile.py#L552
@@ -1508,10 +1527,11 @@ def overload_get_bin_labels(bins):
     if dtype == bodo.datetime64ns:
         td64_1 = bodo.timedelta64ns(1)  # pandas subtracts 1ns in case of datetime64
 
-        def impl_dt64(bins):  # pragma: no cover
+        def impl_dt64(bins, right=True, include_lowest=True):  # pragma: no cover
             breaks = bins.copy()
-            # adjust first interval by precision to account for being right closed
-            breaks[0] = breaks[0] - td64_1
+            if right and include_lowest:
+                # adjust first interval by precision to account for being right closed
+                breaks[0] = breaks[0] - td64_1
             interval_arr = bodo.libs.interval_arr_ext.init_interval_array(
                 breaks[:-1], breaks[1:]
             )
@@ -1519,12 +1539,13 @@ def overload_get_bin_labels(bins):
 
         return impl_dt64
 
-    def impl(bins):  # pragma: no cover
+    def impl(bins, right=True, include_lowest=True):  # pragma: no cover
         base_precision = 3  # default precision of pd.cut() used in value_counts()
         precision = _infer_precision(base_precision, bins)
         breaks = np.array([_round_frac(b, precision) for b in bins], dtype=dtype)
-        # adjust lhs of first interval by precision to account for being right closed
-        breaks[0] = breaks[0] - 10.0 ** (-precision)
+        if right and include_lowest:
+            # adjust lhs of first interval by precision to account for being right closed
+            breaks[0] = breaks[0] - 10.0 ** (-precision)
         interval_arr = bodo.libs.interval_arr_ext.init_interval_array(
             breaks[:-1], breaks[1:]
         )
@@ -1563,12 +1584,12 @@ def compute_bins(nbins, min_val, max_val):
 
 
 @overload(compute_bins, no_unliteral=True)
-def overload_compute_bins(nbins, min_val, max_val):
+def overload_compute_bins(nbins, min_val, max_val, right=True):
     """compute bin boundaries from number of bins and min/max of dataset values. See:
     https://github.com/pandas-dev/pandas/blob/ee18cb5b19357776deffa434a3b9a552fe50af32/pandas/core/reshape/tile.py#L239
     """
 
-    def impl(nbins, min_val, max_val):  # pragma: no cover
+    def impl(nbins, min_val, max_val, right=True):  # pragma: no cover
         if nbins < 1:
             raise ValueError("`bins` should be a positive integer.")
         min_val = min_val + 0.0
@@ -1584,7 +1605,10 @@ def overload_compute_bins(nbins, min_val, max_val):
         else:  # adjust end points after binning
             bins = np.linspace(min_val, max_val, nbins + 1, endpoint=True)
             adj = (max_val - min_val) * 0.001  # 0.1% of the range
-            bins[0] -= adj
+            if right:
+                bins[0] -= adj
+            else:
+                bins[-1] += adj
 
         return bins
 
@@ -1624,20 +1648,9 @@ def overload_series_value_counts(
     func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
 
     if is_bins:
-        if isinstance(bins, types.Integer):
-            # TODO(ehsan): use array kernels to avoid compilation overhead
-            func_text += "    min_val = S.min()\n"
-            func_text += "    max_val = S.max()\n"
-            if S.dtype == bodo.datetime64ns:
-                # Timestamp to int
-                func_text += "    min_val = min_val.value\n"
-                func_text += "    max_val = max_val.value\n"
-            func_text += "    bins = compute_bins(bins, min_val, max_val)\n"
-            if S.dtype == bodo.datetime64ns:
-                # compute_bins() returns float values, should be converted to datetime64
-                func_text += "    bins = bins.astype(np.int64).view(np.dtype('datetime64[ns]'))\n"
-        else:
-            func_text += "    bins = bodo.utils.conversion.coerce_to_ndarray(bins)\n"
+        # 'right' is used inside code generated by _gen_bins_handling()
+        func_text += "    right = True\n"
+        func_text += _gen_bins_handling(bins, S.dtype)
         func_text += "    arr = get_bin_inds(bins, arr)\n"
 
     # create a dummy dataframe to use groupby/count and sort_values
@@ -1672,6 +1685,116 @@ def overload_series_value_counts(
         size_str = "len(S)" if is_bins else "count_arr.sum()"
         func_text += f"    res = res / float({size_str})\n"
     func_text += "    return res\n"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "pd": pd,
+            "np": np,
+            "get_bin_inds": get_bin_inds,
+            "get_bin_labels": get_bin_labels,
+            "get_output_bin_counts": get_output_bin_counts,
+            "compute_bins": compute_bins,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
+def _gen_bins_handling(bins, dtype):
+    """generate code for handling the 'bins' parameter of Series.value_counts() and
+    pd.cut(). Creates a bin array of 'bins' is a scalar.
+    NOTE: doesn't generate a full function (called from other codegen functions)
+    """
+    func_text = ""
+    # create bins if only number of bins is provided
+    if isinstance(bins, types.Integer):
+        func_text += "    min_val = bodo.libs.array_ops.array_op_min(arr)\n"
+        func_text += "    max_val = bodo.libs.array_ops.array_op_max(arr)\n"
+        if dtype == bodo.datetime64ns:
+            # Timestamp to int
+            func_text += "    min_val = min_val.value\n"
+            func_text += "    max_val = max_val.value\n"
+        func_text += "    bins = compute_bins(bins, min_val, max_val, right)\n"
+        if dtype == bodo.datetime64ns:
+            # compute_bins() returns float values, should be converted to datetime64
+            func_text += (
+                "    bins = bins.astype(np.int64).view(np.dtype('datetime64[ns]'))\n"
+            )
+    else:
+        func_text += "    bins = bodo.utils.conversion.coerce_to_ndarray(bins)\n"
+    return func_text
+
+
+@overload(pd.cut, inline="always", no_unliteral=True)
+def overload_cut(
+    x,
+    bins,
+    right=True,
+    labels=None,
+    retbins=False,
+    precision=3,
+    include_lowest=False,
+    duplicates="raise",
+    ordered=True,
+):
+    unsupported_args = dict(
+        right=right,
+        labels=labels,
+        retbins=retbins,
+        precision=precision,
+        duplicates=duplicates,
+        ordered=ordered,
+    )
+    arg_defaults = dict(
+        right=True,
+        labels=None,
+        retbins=False,
+        precision=3,
+        duplicates="raise",
+        ordered=True,
+    )
+    check_unsupported_args("pd.cut", unsupported_args, arg_defaults)
+
+    # TODO(ehsan): some helper functions support 'right' but more work is needed
+    func_text = "def impl(\n"
+    func_text += "    x,\n"
+    func_text += "    bins,\n"
+    func_text += "    right=True,\n"
+    func_text += "    labels=None,\n"
+    func_text += "    retbins=False,\n"
+    func_text += "    precision=3,\n"
+    func_text += "    include_lowest=False,\n"
+    func_text += "    duplicates='raise',\n"
+    func_text += "    ordered=True\n"
+    func_text += "):\n"
+
+    # Series case requires wrapping output into Series with same Index and name
+    if isinstance(x, SeriesType):
+        func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(x)\n"
+        func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(x)\n"
+        func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(x)\n"
+    else:
+        func_text += "    arr = bodo.utils.conversion.coerce_to_array(x)\n"
+
+    func_text += _gen_bins_handling(bins, x.dtype)
+    func_text += "    arr = get_bin_inds(bins, arr, False, include_lowest)\n"
+
+    func_text += "    label_index = get_bin_labels(bins, right, include_lowest)\n"
+    func_text += "    cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(label_index, ordered, None)\n"
+    func_text += "    out_arr = bodo.hiframes.pd_categorical_ext.init_categorical_array(arr, cat_dtype)\n"
+
+    # Series case requires wrapping output into Series with same Index and name
+    if isinstance(x, SeriesType):
+        func_text += (
+            "    res = bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+        )
+        func_text += "    return res\n"
+    else:
+        func_text += "    return out_arr\n"
 
     loc_vars = {}
     exec(

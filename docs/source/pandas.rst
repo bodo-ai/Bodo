@@ -221,6 +221,8 @@ Data manipulations:
     For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares
     the output table `pt` will have columns called `small` and `large`.
 
+* :func:`pandas.cut` ('include_lowest' optional argument is supported)
+
 * :func:`pandas.merge`
 
   * Arguments ``left``, ``right`` should be dataframes.

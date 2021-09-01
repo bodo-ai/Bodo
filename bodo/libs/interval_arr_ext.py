@@ -26,6 +26,16 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 
 
+# TODO(ehsan): support Interval values [BE-1243]
+class IntervalType(types.Type):
+    """
+    Type class associated with pandas Interval dtypes (e.g. pd.Interval(1, 3)
+    """
+
+    def __init__(self):
+        super(IntervalType, self).__init__("IntervalType()")
+
+
 class IntervalArrayType(types.ArrayCompatible):
     """data type corresponding to IntervalArray of Pandas"""
 
@@ -34,6 +44,7 @@ class IntervalArrayType(types.ArrayCompatible):
         # see IntervalArray.from_arrays
         # https://github.com/pandas-dev/pandas/blob/c65ed1c40fce55198fcd67c2bef15ab88645c1fa/pandas/core/arrays/interval.py#L277
         self.arr_type = arr_type
+        self.dtype = IntervalType()
         super(IntervalArrayType, self).__init__(name=f"IntervalArrayType({arr_type})")
 
     @property

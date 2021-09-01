@@ -64,7 +64,9 @@ class PDCategoricalDtype(types.Opaque):
 @typeof_impl.register(pd.CategoricalDtype)
 def _typeof_pd_cat_dtype(val, c):
     cats = val.categories.to_list()
-    elem_type = None if len(cats) == 0 else bodo.typeof(cats[0])
+    # Using array.dtype instead of typeof(cats[0]) since Interval values are not
+    # supported yet (see test_cut)
+    elem_type = None if len(cats) == 0 else bodo.typeof(val.categories.values).dtype
     # we set _int_type in gen_column_read() of Parquet read to pass proper type info
     int_type = getattr(val, "_int_type", None)
     return PDCategoricalDtype(

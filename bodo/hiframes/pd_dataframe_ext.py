@@ -2657,7 +2657,6 @@ pd_unsupported = (
     ## Data manipulations
     pd.melt,
     pd.pivot,
-    pd.cut,
     pd.qcut,
     pd.merge_ordered,
     pd.factorize,
