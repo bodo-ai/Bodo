@@ -763,6 +763,11 @@ skips = [
     operator.floordiv,
     operator.pow,
     operator.mod,
+    # operator.or_ and operator.and_ are
+    # handled manually because the null
+    # behavior differs from other kernels
+    operator.or_,
+    operator.and_,
 ]
 
 
@@ -882,3 +887,92 @@ def overload_np_array_setitem_bool_arr(A, idx, val):
             A[idx._data] = val
 
         return impl
+
+
+def create_nullable_logical_op_overload(op):
+    is_or = op == operator.or_
+
+    def bool_array_impl(val1, val2):
+        """
+        Support for operator.or_ and operator.and_
+        for nullable boolean arrays. This overload
+        only supports two arrays and
+        1 array with 1 scalar.
+        """
+        # 1 input must be a nullable boolean array and the other either a nullable boolean
+        # array, a numpy boolean array, or a bool
+        is_valid = (
+            (val1 == bodo.boolean_array or val2 == bodo.boolean_array)
+            and (
+                (
+                    bodo.utils.utils.is_array_typ(val1, False)
+                    and val1.dtype == types.bool_
+                )
+                or val1 == types.bool_
+            )
+            and (
+                (
+                    bodo.utils.utils.is_array_typ(val2, False)
+                    and val2.dtype == types.bool_
+                )
+                or val2 == types.bool_
+            )
+        )
+        if not is_valid:
+            return
+
+        # All implementations are almost identical, differing only
+        # on the logical check and array vs scalar code. To simplfy
+        # the code being generate we allocate these output variables
+        # once at the start based on if the inputs are arrays and
+        # if we are doing AND or OR.
+        is_val1_arr = bodo.utils.utils.is_array_typ(val1, False)
+        is_val2_arr = bodo.utils.utils.is_array_typ(val2, False)
+        truth_prefix = "not " if not is_or else ""
+        len_arr = "val1" if is_val1_arr else "val2"
+        val1_elem = "val1[i]" if is_val1_arr else "val1"
+        val2_elem = "val2[i]" if is_val2_arr else "val2"
+
+        func_text = "def impl(val1, val2):\n"
+        func_text += "  numba.parfors.parfor.init_prange()\n"
+        func_text += f"  n = len({len_arr})\n"
+        func_text += (
+            "  out_arr = bodo.utils.utils.alloc_type(n, bodo.boolean_array, (-1,))\n"
+        )
+        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+        if is_val1_arr and is_val2_arr:
+            func_text += "    if bodo.libs.array_kernels.isna(val1, i) and bodo.libs.array_kernels.isna(val2, i):\n"
+            func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
+            func_text += "      continue\n"
+        if is_val1_arr:
+            func_text += "    if bodo.libs.array_kernels.isna(val1, i):\n"
+            func_text += f"      if {truth_prefix}{val2_elem}:\n"
+            func_text += f"       out_arr[i] = {val2_elem}\n"
+            func_text += "      else:\n"
+            func_text += "        bodo.libs.array_kernels.setna(out_arr, i)\n"
+            func_text += "      continue\n"
+        if is_val2_arr:
+            func_text += "    if bodo.libs.array_kernels.isna(val2, i):\n"
+            func_text += f"      if {truth_prefix}{val1_elem}:\n"
+            func_text += f"       out_arr[i] = {val1_elem}\n"
+            func_text += "      else:\n"
+            func_text += "        bodo.libs.array_kernels.setna(out_arr, i)\n"
+            func_text += "      continue\n"
+        func_text += f"    out_arr[i] = operator.{'or_' if is_or else 'and_'}({val1_elem}, {val2_elem})\n"
+        func_text += "  return out_arr\n"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo, "numba": numba, "operator": operator}, loc_vars)
+        impl = loc_vars["impl"]
+        return impl
+
+    return bool_array_impl
+
+
+def _install_nullable_logical_ops():
+    # install unary operators: &, |
+    for op in (operator.and_, operator.or_):
+        overload_impl = create_nullable_logical_op_overload(op)
+        overload(op)(overload_impl)
+
+
+_install_nullable_logical_ops()

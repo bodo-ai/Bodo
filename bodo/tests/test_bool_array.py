@@ -260,3 +260,96 @@ def test_bool_arr_nbytes(bool_arr_value, memory_leak_check):
     py_out = 5 + bodo.get_size()  # 1 extra byte for null_bit_map per rank
     check_func(impl, (bool_arr_value,), py_output=py_out, only_1D=True)
     check_func(impl, (bool_arr_value,), py_output=6, only_seq=True)
+
+
+def test_or_null(memory_leak_check):
+    """
+    Checks or null behavior inside boolean arrays
+    """
+
+    def test_impl(arr1, arr2):
+        return arr1 | arr2
+
+    arr1 = pd.array([True] * 3 + [False] * 3 + [None] * 3, dtype="boolean")
+    arr2 = pd.array([True, False, None] * 3, dtype="boolean")
+
+    check_func(test_impl, (arr1, arr2))
+
+
+@pytest.mark.slow
+def test_or_null_numpy(memory_leak_check):
+    """
+    Checks or null behavior inside boolean arrays
+    """
+
+    def test_impl(arr1, arr2):
+        return arr1 | arr2
+
+    arr1 = pd.array([True] * 2 + [False] * 2 + [None] * 2, dtype="boolean")
+    arr2 = np.array([True, False] * 3)
+
+    check_func(test_impl, (arr1, arr2))
+    check_func(test_impl, (arr2, arr1))
+
+
+@pytest.mark.slow
+def test_or_null_scalar(memory_leak_check):
+    """
+    Checks or null behavior inside boolean arrays
+    """
+
+    def test_impl(arr1, arr2):
+        return arr1 | arr2
+
+    arr = pd.array([True] * 3 + [False] * 3 + [None] * 3, dtype="boolean")
+
+    check_func(test_impl, (arr, True))
+    check_func(test_impl, (arr, False))
+    check_func(test_impl, (True, arr))
+    check_func(test_impl, (False, arr))
+
+
+def test_and_null(memory_leak_check):
+    """
+    Checks and null behavior inside boolean arrays
+    """
+
+    def test_impl(arr1, arr2):
+        return arr1 & arr2
+
+    arr1 = pd.array([True] * 3 + [False] * 3 + [None] * 3, dtype="boolean")
+    arr2 = pd.array([True, False, None] * 3, dtype="boolean")
+
+    check_func(test_impl, (arr1, arr2))
+
+
+def test_and_null_numpy(memory_leak_check):
+    """
+    Checks and null behavior inside boolean arrays with numpy
+    """
+
+    def test_impl(arr1, arr2):
+        return arr1 & arr2
+
+    arr1 = pd.array([True] * 2 + [False] * 2 + [None] * 2, dtype="boolean")
+    arr2 = np.array([True, False] * 3)
+
+    check_func(test_impl, (arr1, arr2))
+    check_func(test_impl, (arr2, arr1))
+
+
+@pytest.mark.slow
+def test_and_null_scalar(memory_leak_check):
+    """
+    Checks and null behavior inside boolean arrays with scalars
+    """
+
+    def test_impl(arr1, arr2):
+        return arr1 & arr2
+
+    arr = pd.array([True] * 3 + [False] * 3 + [None] * 3, dtype="boolean")
+
+    check_func(test_impl, (arr, True))
+    check_func(test_impl, (arr, False))
+    check_func(test_impl, (True, arr))
+    check_func(test_impl, (False, arr))

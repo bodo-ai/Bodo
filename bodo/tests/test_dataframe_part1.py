@@ -2445,3 +2445,72 @@ def test_scalar_dataframe(memory_leak_check):
 
     check_func(test_impl1, ())
     check_func(test_impl2, ())
+
+
+@pytest.mark.slow
+def test_or_null(memory_leak_check):
+    """
+    Checks or null behavior inside DataFrames
+    """
+
+    def test_impl(df1, df2):
+        return df1 | df2
+
+    df1 = pd.DataFrame(
+        {"A": pd.Series([True] * 3 + [False] * 3 + [None] * 3, dtype="boolean")}
+    )
+    df2 = pd.DataFrame({"A": pd.Series([True, False, None] * 3, dtype="boolean")})
+
+    check_func(test_impl, (df1, df2))
+
+
+@pytest.mark.slow
+def test_or_null_numpy(memory_leak_check):
+    """
+    Checks or null behavior inside DataFrames
+    """
+
+    def test_impl(df1, df2):
+        return df1 | df2
+
+    df1 = pd.DataFrame(
+        {"A": pd.Series([True] * 2 + [False] * 2 + [None] * 2, dtype="boolean")}
+    )
+    df2 = pd.DataFrame({"A": [True, False] * 3})
+
+    check_func(test_impl, (df1, df2))
+
+
+@pytest.mark.slow
+def test_and_null(memory_leak_check):
+    """
+    Checks and null behavior inside DataFrames
+    """
+
+    def test_impl(df1, df2):
+        return df1 & df2
+
+    df1 = pd.DataFrame(
+        {"A": pd.Series([True] * 3 + [False] * 3 + [None] * 3, dtype="boolean")}
+    )
+    df2 = pd.DataFrame({"A": pd.Series([True, False, None] * 3, dtype="boolean")})
+
+    check_func(test_impl, (df1, df2))
+
+
+@pytest.mark.slow
+def test_and_null_numpy(memory_leak_check):
+    """
+    Checks and null behavior inside DataFrames with Nullable
+    and numpy booleans
+    """
+
+    def test_impl(df1, df2):
+        return df1 & df2
+
+    df1 = pd.DataFrame(
+        {"A": pd.Series([True] * 2 + [False] * 2 + [None] * 2, dtype="boolean")}
+    )
+    df2 = pd.DataFrame({"A": [True, False] * 3})
+
+    check_func(test_impl, (df1, df2))

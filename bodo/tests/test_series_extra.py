@@ -145,6 +145,169 @@ def test_scalar_series(val, memory_leak_check):
     check_func(test_impl, (), reset_index=True)
 
 
+def test_or_null(memory_leak_check):
+    """
+    Checks or null behavior inside Series
+    """
+
+    def test_impl(S1, S2):
+        return S1 | S2
+
+    S1 = pd.Series([True] * 3 + [False] * 3 + [None] * 3, dtype="boolean")
+    S2 = pd.Series([True, False, None] * 3, dtype="boolean")
+
+    check_func(test_impl, (S1, S2))
+
+
+@pytest.mark.slow
+def test_or_numpy(memory_leak_check):
+    """
+    Checks or null behavior inside Series with a boolean array
+    """
+
+    def test_impl(val1, val2):
+        return val1 | val2
+
+    S1 = pd.Series([True] * 2 + [False] * 2 + [None] * 2, dtype="boolean")
+    S2 = pd.Series(np.array([True, False] * 3))
+
+    check_func(test_impl, (S1, S2))
+    check_func(test_impl, (S2, S1))
+
+
+@pytest.mark.slow
+def test_or_null_arr(memory_leak_check):
+    """
+    Checks or null behavior inside Series with a boolean array
+    """
+
+    def test_impl(val1, val2):
+        return val1 | val2
+
+    S = pd.Series([True] * 3 + [False] * 3 + [None] * 3, dtype="boolean")
+    arr = pd.array([True, False, None] * 3, dtype="boolean")
+
+    check_func(test_impl, (S, arr))
+    check_func(test_impl, (arr, S))
+
+
+@pytest.mark.slow
+def test_or_numpy_array(memory_leak_check):
+    """
+    Checks or null behavior inside Series with a boolean array
+    """
+
+    def test_impl(val1, val2):
+        return val1 | val2
+
+    S = pd.Series([True] * 2 + [False] * 2 + [None] * 2, dtype="boolean")
+    arr = np.array([True, False] * 3)
+
+    check_func(test_impl, (S, arr))
+    check_func(test_impl, (arr, S))
+
+
+@pytest.mark.slow
+def test_or_scalar(memory_leak_check):
+    """
+    Checks or null behavior inside Series with a boolean array
+    """
+
+    def test_impl(val1, val2):
+        return val1 | val2
+
+    S = pd.Series([True] * 2 + [False] * 2 + [None] * 2, dtype="boolean")
+
+    check_func(test_impl, (S, True))
+    check_func(test_impl, (S, False))
+    check_func(test_impl, (True, S))
+    check_func(test_impl, (False, S))
+
+
+def test_and_null(memory_leak_check):
+    """
+    Checks and null behavior inside two Series with
+    nullable boolean arrays.
+    """
+
+    def test_impl(S1, S2):
+        return S1 & S2
+
+    S1 = pd.Series([True] * 3 + [False] * 3 + [None] * 3, dtype="boolean")
+    S2 = pd.Series([True, False, None] * 3, dtype="boolean")
+
+    check_func(test_impl, (S1, S2))
+
+
+@pytest.mark.slow
+def test_and_numpy(memory_leak_check):
+    """
+    Checks and null behavior inside a Series with a nullable
+    boolean array and a numpy boolean array.
+    """
+
+    def test_impl(val1, val2):
+        return val1 & val2
+
+    S1 = pd.Series([True] * 2 + [False] * 2 + [None] * 2, dtype="boolean")
+    S2 = pd.Series(np.array([True, False] * 3))
+
+    check_func(test_impl, (S1, S2))
+    check_func(test_impl, (S2, S1))
+
+
+@pytest.mark.slow
+def test_and_null_arr(memory_leak_check):
+    """
+    Checks and null behavior inside a Series with a boolean array
+    and a nullable boolean array.
+    """
+
+    def test_impl(val1, val2):
+        return val1 & val2
+
+    S = pd.Series([True] * 3 + [False] * 3 + [None] * 3, dtype="boolean")
+    arr = pd.array([True, False, None] * 3, dtype="boolean")
+
+    check_func(test_impl, (S, arr))
+    check_func(test_impl, (arr, S))
+
+
+@pytest.mark.slow
+def test_and_numpy_array(memory_leak_check):
+    """
+    Checks and null behavior inside Series with a nullable boolean array
+    and a numpy array.
+    """
+
+    def test_impl(val1, val2):
+        return val1 & val2
+
+    S = pd.Series([True] * 2 + [False] * 2 + [None] * 2, dtype="boolean")
+    arr = np.array([True, False] * 3)
+
+    check_func(test_impl, (S, arr))
+    check_func(test_impl, (arr, S))
+
+
+@pytest.mark.slow
+def test_and_scalar(memory_leak_check):
+    """
+    Checks and null behavior inside Series with a
+    nullable boolean array and a scalar
+    """
+
+    def test_impl(val1, val2):
+        return val1 & val2
+
+    S = pd.Series([True] * 2 + [False] * 2 + [None] * 2, dtype="boolean")
+
+    check_func(test_impl, (S, True))
+    check_func(test_impl, (S, False))
+    check_func(test_impl, (True, S))
+    check_func(test_impl, (False, S))
+
+
 def test_timestamp_ge(memory_leak_check):
     """
     Tests for comparing a Timestamp value with a dt64 series.

@@ -80,11 +80,7 @@ from bodo.utils.transform import (
     get_call_expr_arg,
     get_const_value_inner,
 )
-from bodo.utils.typing import (
-    BodoError,
-    is_list_like_index_type,
-    list_cumulative,
-)
+from bodo.utils.typing import BodoError, list_cumulative
 from bodo.utils.utils import (
     debug_prints,
     find_build_tuple,
@@ -2813,23 +2809,23 @@ class DistributedPass:
                 extra_globals={"_is_1D": is_1D},
             )
         # Tracing here disabled for now (https://bodo.atlassian.net/browse/BE-1213)
-#        # generate performance tracing event for distributed array filtering
-#        # e.g. ev = Event("filter ..."); A2 = A1[b]; ev.finalize()
-#        elif is_list_like_index_type(index_typ) and index_typ.dtype == types.bool_:
-#            event_nodes = self._gen_start_event("filter")
-#            ev_var = event_nodes[-1].target
-#            ev_add_attr_nodes = []
-#            ev_add_attr_nodes += self._gen_event_add_attribute(
-#                ev_var, "dtype", f"{self.typemap[lhs.name].dtype}"
-#            )
-#            ev_add_attr_nodes += self._gen_event_add_attribute(
-#                ev_var, "lhs", f"{lhs.name}"
-#            )
-#            ev_add_attr_nodes += self._gen_event_add_attribute(
-#                ev_var, "rhs", f"{node.value.name}[{index_var.name}]"
-#            )
-#            finalize_nodes = self._gen_finalize_event(ev_var)
-#            return event_nodes + ev_add_attr_nodes + out + finalize_nodes
+        #        # generate performance tracing event for distributed array filtering
+        #        # e.g. ev = Event("filter ..."); A2 = A1[b]; ev.finalize()
+        #        elif is_list_like_index_type(index_typ) and index_typ.dtype == types.bool_:
+        #            event_nodes = self._gen_start_event("filter")
+        #            ev_var = event_nodes[-1].target
+        #            ev_add_attr_nodes = []
+        #            ev_add_attr_nodes += self._gen_event_add_attribute(
+        #                ev_var, "dtype", f"{self.typemap[lhs.name].dtype}"
+        #            )
+        #            ev_add_attr_nodes += self._gen_event_add_attribute(
+        #                ev_var, "lhs", f"{lhs.name}"
+        #            )
+        #            ev_add_attr_nodes += self._gen_event_add_attribute(
+        #                ev_var, "rhs", f"{node.value.name}[{index_var.name}]"
+        #            )
+        #            finalize_nodes = self._gen_finalize_event(ev_var)
+        #            return event_nodes + ev_add_attr_nodes + out + finalize_nodes
 
         return out
 
@@ -2944,16 +2940,16 @@ class DistributedPass:
         out += reduce_nodes
 
         # Tracing here disabled for now (https://bodo.atlassian.net/browse/BE-1213)
-#        # generate performance trace event
-#        event_nodes = self._gen_start_event("Parfor")
-#        ev_var = event_nodes[-1].target
-#        ev_add_attr_nodes = []
-#        ev_add_attr_nodes += self._gen_event_add_attribute(
-#            ev_var, "parfor_ID", str(parfor.id)
-#        )
-#        ev_add_attr_nodes += self._gen_event_add_attribute(ev_var, "distribution", "1D")
-#        finalize_nodes = self._gen_finalize_event(ev_var)
-#        return event_nodes + ev_add_attr_nodes + out + finalize_nodes
+        #        # generate performance trace event
+        #        event_nodes = self._gen_start_event("Parfor")
+        #        ev_var = event_nodes[-1].target
+        #        ev_add_attr_nodes = []
+        #        ev_add_attr_nodes += self._gen_event_add_attribute(
+        #            ev_var, "parfor_ID", str(parfor.id)
+        #        )
+        #        ev_add_attr_nodes += self._gen_event_add_attribute(ev_var, "distribution", "1D")
+        #        finalize_nodes = self._gen_finalize_event(ev_var)
+        #        return event_nodes + ev_add_attr_nodes + out + finalize_nodes
 
         return out
 
@@ -3087,18 +3083,18 @@ class DistributedPass:
         out = prepend + [parfor] + reduce_nodes
 
         # Tracing here disabled for now (https://bodo.atlassian.net/browse/BE-1213)
-#        # generate performance trace event
-#        event_nodes = self._gen_start_event("Parfor")
-#        ev_var = event_nodes[-1].target
-#        ev_add_attr_nodes = []
-#        ev_add_attr_nodes += self._gen_event_add_attribute(
-#            ev_var, "parfor_ID", str(parfor.id)
-#        )
-#        ev_add_attr_nodes += self._gen_event_add_attribute(
-#            ev_var, "distribution", "1D_Var"
-#        )
-#        finalize_nodes = self._gen_finalize_event(ev_var)
-#        return event_nodes + ev_add_attr_nodes + out + finalize_nodes
+        #        # generate performance trace event
+        #        event_nodes = self._gen_start_event("Parfor")
+        #        ev_var = event_nodes[-1].target
+        #        ev_add_attr_nodes = []
+        #        ev_add_attr_nodes += self._gen_event_add_attribute(
+        #            ev_var, "parfor_ID", str(parfor.id)
+        #        )
+        #        ev_add_attr_nodes += self._gen_event_add_attribute(
+        #            ev_var, "distribution", "1D_Var"
+        #        )
+        #        finalize_nodes = self._gen_finalize_event(ev_var)
+        #        return event_nodes + ev_add_attr_nodes + out + finalize_nodes
 
         return out
 

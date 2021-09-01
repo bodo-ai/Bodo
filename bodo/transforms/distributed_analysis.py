@@ -3121,6 +3121,11 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
     if accesses is None:
         accesses = set()
 
+    # Accesses consist of 3 values:
+    #  - Name of the array
+    #  - Name of the index
+    #  - bool is_bitwise_operation
+
     for block in blocks.values():
         for inst in block.body:
             if isinstance(inst, ir.SetItem):
