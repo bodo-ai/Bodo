@@ -2330,6 +2330,30 @@ def test_to_numeric(value, downcast, memory_leak_check):
     check_func(test_impl, (value,), check_dtype=False)
 
 
+# TODO: add memory_leak_check when memory leaks are fixed
+def test_cut():
+    """Tests for pd.cut()"""
+
+    def impl(S, bins, include_lowest):
+        return pd.cut(S, bins, include_lowest=include_lowest)
+
+    S = pd.Series(
+        [-2, 1, 3, 4, 5, 11, 15, 20, 22],
+        ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"],
+        name="ABC",
+    )
+    A = pd.date_range("2017-01-03", "2017-02-11")
+    check_func(impl, (S, [1, 5, 20], True), check_dtype=False)
+    # categorical types may be different in interval boundaries (int vs float)
+    check_func(impl, (S, [1, 5, 20], False), check_dtype=False, check_categorical=False)
+    check_func(
+        impl, (S, [-4, 6, 29], False), check_dtype=False, check_categorical=False
+    )
+    check_func(impl, (S, 4, False), check_dtype=False)
+    # TODO(ehsan): enable when DatetimeArray is supported [BE-1242]
+    # check_func(impl, (A, 4, False), check_dtype=False)
+
+
 def test_series_mad(series_stat, memory_leak_check):
     def f(S):
         return S.mad()
