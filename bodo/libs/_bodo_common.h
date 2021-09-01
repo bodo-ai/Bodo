@@ -30,7 +30,6 @@ size_t get_stats_free();
 size_t get_stats_mi_alloc();
 size_t get_stats_mi_free();
 
-
 // NOTE: should match CTypeEnum in utils/utils.py
 struct Bodo_CTypes {
     enum CTypeEnum {
@@ -282,7 +281,8 @@ struct array_info {
             case Bodo_CTypes::INT64:
                 return this->at<int64_t>(idx);
             default:
-                throw std::runtime_error("get_code: codes have unrecognized dtype");
+                throw std::runtime_error(
+                    "get_code: codes have unrecognized dtype");
         }
     }
 
@@ -313,7 +313,8 @@ struct array_info {
                 return std::to_string(this->at<uint16_t>(idx));
             case Bodo_CTypes::STRING: {
                 offset_t* offsets = (offset_t*)data2;
-                return std::string(data1 + offsets[idx], offsets[idx + 1] - offsets[idx]);
+                return std::string(data1 + offsets[idx],
+                                   offsets[idx + 1] - offsets[idx]);
             }
             case Bodo_CTypes::DATE: {
                 int64_t val = this->at<int64_t>(idx);
@@ -334,7 +335,8 @@ struct array_info {
                 return "False";
             default: {
                 std::vector<char> error_msg(100);
-                sprintf(error_msg.data(), "val_to_str not implemented for dtype %d", dtype);
+                sprintf(error_msg.data(),
+                        "val_to_str not implemented for dtype %d", dtype);
                 throw std::runtime_error(error_msg.data());
             }
         }
@@ -599,17 +601,6 @@ struct numpy_arr_payload {
     char* data;
     int64_t shape;
     int64_t strides;
-
-    numpy_arr_payload(NRT_MemInfo* _meminfo, PyObject* _parent, int64_t _nitems,
-                      int64_t _itemsize, char* _data, int64_t _shape,
-                      int64_t _strides)
-        : meminfo(_meminfo),
-          parent(_parent),
-          nitems(_nitems),
-          itemsize(_itemsize),
-          data(_data),
-          shape(_shape),
-          strides(_strides) {}
 };
 
 void decref_numpy_payload(numpy_arr_payload arr);
@@ -667,5 +658,22 @@ inline bool is_na(const uint8_t* null_bitmap, int64_t i) {
     return (null_bitmap[i / 8] & kBitmask[i % 8]) == 0;
 }
 }
+
+#ifdef __cplusplus
+// Define constructor outside of the struct to fix C linkage warning
+inline struct numpy_arr_payload make_numpy_array_payload(
+    NRT_MemInfo* _meminfo, PyObject* _parent, int64_t _nitems,
+    int64_t _itemsize, char* _data, int64_t _shape, int64_t _strides) {
+    struct numpy_arr_payload p;
+    p.meminfo = _meminfo;
+    p.parent = _parent;
+    p.nitems = _nitems;
+    p.itemsize = _itemsize;
+    p.data = _data;
+    p.shape = _shape;
+    p.strides = _strides;
+    return p;
+}
+#endif
 
 #endif /* BODO_COMMON_H_INCLUDED_ */

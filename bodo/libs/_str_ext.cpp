@@ -58,7 +58,7 @@ void* pd_array_from_string_array(int64_t no_strings,
                                  const char* buffer,
                                  const uint8_t* null_bitmap);
 
-void setitem_string_array(offset_t* offsets, char* data, int64_t n_bytes,
+void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
                           int64_t index);
 int64_t get_utf8_size(char* str, int64_t len, int kind);
@@ -69,7 +69,7 @@ void set_string_array_range(offset_t* out_offsets, char* out_data,
                             int64_t num_strs, int64_t num_chars);
 void convert_len_arr_to_offset32(uint32_t* offsets, int64_t num_strs);
 void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets,
-                               int64_t num_strs);
+                               uint64_t num_strs);
 
 int str_arr_to_int64(int64_t* out, offset_t* offsets, char* data,
                      int64_t index);
@@ -305,7 +305,7 @@ int64_t get_str_len(std::string* str) {
     return str->length();
 }
 
-void setitem_string_array(offset_t* offsets, char* data, int64_t n_bytes,
+void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
                           int64_t index) {
 #define CHECK(expr, msg)               \
@@ -316,7 +316,7 @@ void setitem_string_array(offset_t* offsets, char* data, int64_t n_bytes,
     // std::cout << "setitem str: " << *str << " " << index << std::endl;
     if (index == 0) offsets[index] = 0;
     offset_t start = offsets[index];
-    int64_t utf8_len = -1;
+    offset_t utf8_len = 0;
     // std::cout << "start " << start << " len " << len << std::endl;
 
     if (is_ascii == 1) {
@@ -329,7 +329,7 @@ void setitem_string_array(offset_t* offsets, char* data, int64_t n_bytes,
     CHECK(utf8_len < std::numeric_limits<offset_t>::max(),
           "string array too large");
     CHECK(start + utf8_len <= n_bytes, "out of bounds string array setitem");
-    offsets[index + 1] = start + (offset_t)utf8_len;
+    offsets[index + 1] = start + utf8_len;
     return;
 #undef CHECK
 }
@@ -369,9 +369,9 @@ void convert_len_arr_to_offset32(uint32_t* offsets, int64_t num_strs) {
 }
 
 void convert_len_arr_to_offset(uint32_t* lens, uint64_t* offsets,
-                               int64_t num_strs) {
+                               uint64_t num_strs) {
     uint64_t curr_offset = 0;
-    for (int64_t i = 0; i < num_strs; i++) {
+    for (uint64_t i = 0; i < num_strs; i++) {
         uint32_t length = lens[i];
         offsets[i] = curr_offset;
         curr_offset += length;
@@ -806,8 +806,7 @@ int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
                 data++;
             } while (Py_ISSPACE(*data));
             // This break is taken if we end with a space character
-            if (data >= end)
-                break;
+            if (data >= end) break;
         }
         CHECK((end - data) >= 2,
               "bytes.fromhex, must provide two hex values per byte");

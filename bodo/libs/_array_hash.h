@@ -122,7 +122,7 @@ struct multi_col_key {
                     if (memcmp(c1_str, c2_str, c1_str_len) != 0) return false;
                 }
                     continue;
-                case bodo_array_type::LIST_STRING:
+                case bodo_array_type::LIST_STRING: {
                     uint8_t* c1_null_bitmask = (uint8_t*)c1->null_bitmask;
                     uint8_t* c2_null_bitmask = (uint8_t*)c2->null_bitmask;
                     if (GetBit(c1_null_bitmask, row) !=
@@ -169,6 +169,13 @@ struct multi_col_key {
                         c2->data1 +
                         c2_data_offsets[c2_index_offsets[other.row]];
                     if (memcmp(c1_strB, c2_strB, common_len) != 0) return false;
+                    continue;
+                }
+                default: {
+                    throw std::runtime_error(
+                        "multi_col_key_hash : Unsupported type");
+                }
+                    continue;
             }
         }
         return true;

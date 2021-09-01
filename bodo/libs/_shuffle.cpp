@@ -388,6 +388,7 @@ static void fill_send_array(array_info* send_arr, array_info* in_arr,
 
 /* Internal function. Convert counts to displacements
  */
+#if OFFSET_BITWIDTH == 32
 static void convert_len_arr_to_offset32(uint32_t* offsets,
                                         size_t const& num_strs) {
     uint32_t curr_offset = 0;
@@ -398,9 +399,10 @@ static void convert_len_arr_to_offset32(uint32_t* offsets,
     }
     offsets[num_strs] = curr_offset;
 }
+#endif
 
 static void convert_len_arr_to_offset(uint32_t* lens, offset_t* offsets,
-                                      int64_t num_strs) {
+                                      size_t num_strs) {
     offset_t curr_offset = 0;
     for (size_t i = 0; i < num_strs; i++) {
         uint32_t length = lens[i];
@@ -1889,7 +1891,10 @@ std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr,
         rows_count.resize(n_pes);
         rows_disps.resize(n_pes);
     }
-    int n_rows = arr->length();
+    if (arr->length() >= INT_MAX)
+        throw std::runtime_error(
+            "gather_arrow_offset_buffer: exceeded size limit");
+    int n_rows = static_cast<int>(arr->length());
     MPI_Gengather(&n_rows, 1, MPI_INT, rows_count.data(), 1, MPI_INT, mpi_root,
                   MPI_COMM_WORLD, all_gather);
     int64_t n_rows_tot =
@@ -1900,9 +1905,12 @@ std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr,
             rows_disps[i_p] = rows_pos;
             rows_pos += rows_count[i_p];
         }
+        if (rows_pos >= INT_MAX)
+            throw std::runtime_error(
+                "gather_arrow_offset_buffer: exceeded size limit");
     }
     std::vector<offset_t> list_siz_loc(n_rows);
-    for (offset_t i = 0; i < n_rows; i++)
+    for (size_t i = 0; i < size_t(n_rows); i++)
         list_siz_loc[i] = arr->value_offset(i + 1) - arr->value_offset(i);
     MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CType_offset);
     std::vector<offset_t> list_siz_tot(n_rows_tot);
@@ -1914,8 +1922,8 @@ std::shared_ptr<arrow::Buffer> gather_arrow_offset_buffer(T const& arr,
         arrow::Result<std::unique_ptr<arrow::Buffer>> maybe_buffer =
             arrow::AllocateBuffer(siz_out);
         if (!maybe_buffer.ok()) {
-            Bodo_PyErr_SetString(PyExc_RuntimeError, "allocation error");
-            return nullptr;
+            throw std::runtime_error(
+                "gather_arrow_offset_buffer: allocation error");
         }
         std::shared_ptr<arrow::Buffer> buffer = *std::move(maybe_buffer);
         offset_t* data_out_ptr = (offset_t*)buffer->mutable_data();
