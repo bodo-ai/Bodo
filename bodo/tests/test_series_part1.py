@@ -2424,9 +2424,6 @@ def test_series_apply_args(memory_leak_check):
     def test_convert_dtype_true(S):
         return S.apply(lambda a: a, convert_dtype=True)
 
-    def test_np_func(S):
-        return S.apply(np.abs)
-
     def test_wrong_func(S):
         return S.apply("XX")
 
@@ -2440,11 +2437,6 @@ def test_series_apply_args(memory_leak_check):
         bodo.jit(test_convert_dtype_false)(S)
 
     bodo.jit(test_convert_dtype_true)(S)
-
-    with pytest.raises(
-        BodoError, match="Series.apply.* not support built-in functions yet"
-    ):
-        bodo.jit(test_np_func)(S)
 
     with pytest.raises(
         BodoError, match="Series.apply.*: user-defined function not supported"
