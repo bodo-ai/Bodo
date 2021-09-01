@@ -1147,10 +1147,25 @@ class SeriesPass:
             impl = overload_func(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
+        # inline operator.or_ and operator.and_ for boolean arrays
+        if (rhs.fn in [operator.or_, operator.and_]) and any(
+            t == boolean_array for t in (typ1, typ2)
+        ):
+            overload_func = bodo.libs.bool_arr_ext.create_nullable_logical_op_overload(
+                rhs.fn
+            )
+            impl = overload_func(typ1, typ2)
+            # Reuse the type check from bool_array_or_impl to determine inlining
+            if impl is not None:
+                return replace_func(self, impl, [arg1, arg2])
+
         # inline Boolean array ops
         if (
             rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
             and any(t == boolean_array for t in (typ1, typ2))
+            # Don't inline operators between array + Series. These should be handled
+            # by Series
+            and not any(isinstance(t, SeriesType) for t in (typ1, typ2))
         ):
             overload_func = bodo.libs.bool_arr_ext.create_op_overload(rhs.fn, 2)
             impl = overload_func(typ1, typ2)
