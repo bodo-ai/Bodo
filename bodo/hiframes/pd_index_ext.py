@@ -1569,7 +1569,7 @@ def range_index_overload(
             and not isinstance(value, types.IntegerLiteral)
             and not isinstance(value, types.Integer)
         ):
-            raise TypeError(msg.format(value=value, field=field))
+            raise BodoError(msg.format(value=value, field=field))
 
     _ensure_int_or_none(start, "start")
     _ensure_int_or_none(stop, "stop")
@@ -1578,7 +1578,7 @@ def range_index_overload(
     # all none error case
     if is_overload_none(start) and is_overload_none(stop) and is_overload_none(step):
         msg = "RangeIndex(...) must be called with integers"
-        raise TypeError(msg)
+        raise BodoError(msg)
 
     # codegen the init function
     _start = "start"

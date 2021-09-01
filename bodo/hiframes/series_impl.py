@@ -3026,7 +3026,7 @@ def create_explicit_binary_op_overload(op):
             or is_legal_string_type
             or is_legal_timedelta
         ):  # pragma: no cover
-            raise TypeError("Unsupported types for Series.{}".format(op.__name__))
+            raise BodoError(f"Unsupported types for Series.{op.__name__}")
 
         typing_context = numba.core.registry.cpu_target.typing_context
         # scalar case
@@ -3121,7 +3121,7 @@ def create_explicit_binary_reverse_op_overload(op):
 
         # TODO: string array, datetimeindex/timedeltaindex
         if not isinstance(S.dtype, types.Number):
-            raise TypeError("only numeric values supported")
+            raise BodoError("only numeric values supported")
 
         typing_context = numba.core.registry.cpu_target.typing_context
         # scalar case

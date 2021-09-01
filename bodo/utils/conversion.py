@@ -1001,7 +1001,7 @@ def overload_convert_to_dt64ns(data):
             data
         )  # pragma: no cover
 
-    raise TypeError("invalid data type {} for dt64 conversion".format(data))
+    raise BodoError(f"invalid data type {data} for dt64 conversion")
 
 
 # TODO: use generated_jit with IR inlining
@@ -1027,7 +1027,7 @@ def overload_convert_to_td64ns(data):
         # TODO: support
         raise BodoError("conversion to timedelta from string not supported yet")
 
-    raise TypeError("invalid data type {} for dt64 conversion".format(data))
+    raise BodoError(f"invalid data type {data} for dt64 conversion")
 
 
 def convert_to_index(data, name=None):  # pragma: no cover
