@@ -1656,7 +1656,7 @@ def create_binary_op_overload(op):
             # df/df case
             if isinstance(rhs, DataFrameType):
                 if lhs != rhs:
-                    raise TypeError(
+                    raise BodoError(
                         f"Inconsistent dataframe schemas in binary operator {op} ({lhs} and {rhs})"
                     )
 
@@ -1799,7 +1799,7 @@ def create_inplace_binary_op_overload(op):
             op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
             if isinstance(right, DataFrameType):
                 if left != right:
-                    raise TypeError(
+                    raise BodoError(
                         "Inconsistent dataframe schemas in binary operator {} ({} and {})".format(
                             op, left, right
                         )
@@ -2587,7 +2587,7 @@ def overload_dataframe_merge_asof(
     # XXX copied from merge, TODO: refactor
     # make sure left and right are dataframes
     if not isinstance(left, DataFrameType) or not isinstance(right, DataFrameType):
-        raise TypeError("merge_asof() requires dataframe inputs")
+        raise BodoError("merge_asof() requires dataframe inputs")
 
     # NOTE: using sorted to avoid inconsistent ordering across processors
     comm_cols = tuple(
