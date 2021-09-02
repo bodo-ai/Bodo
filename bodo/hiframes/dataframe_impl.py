@@ -1648,6 +1648,32 @@ def _is_numeric_dtype(dtype):
 ############################ binary operators #############################
 
 
+def _get_binop_columns(lhs, rhs, is_inplace=False):
+    """
+    Get output column names and corresponding input column indices for binary operators
+    similar to Pandas.
+    For example, lhs = ('A', 'B') and rhs = ('B', 'A', 'C') will return
+    out_cols = ('A', 'B', 'C'), lcol_inds = [0, 1, -1], rcol_inds = [1, 0, 2]
+    Inplace operators only consider left input's columns.
+    """
+    # find corresponding column indices if schemas don't exactly match
+    if lhs.columns != rhs.columns:
+        # same computation as Pandas here:
+        # https://github.com/pandas-dev/pandas/blob/c979bd8b84e95bab0f69b4be71d2cd340e71912f/pandas/core/ops/__init__.py#L369
+        l_cols = pd.Index(lhs.columns)
+        r_cols = pd.Index(rhs.columns)
+        out_cols, lcol_inds, rcol_inds = l_cols.join(
+            r_cols,
+            how="left" if is_inplace else "outer",
+            level=None,
+            return_indexers=True,
+        )
+        return tuple(out_cols), lcol_inds, rcol_inds
+
+    # schemas match, output is trivial
+    return lhs.columns, range(len(lhs.columns)), range(len(lhs.columns))
+
+
 def create_binary_op_overload(op):
     def overload_dataframe_binary_op(lhs, rhs):
         op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
@@ -1657,21 +1683,30 @@ def create_binary_op_overload(op):
         if isinstance(lhs, DataFrameType):
             # df/df case
             if isinstance(rhs, DataFrameType):
-                if lhs != rhs:
-                    raise BodoError(
-                        f"Inconsistent dataframe schemas in binary operator {op} ({lhs} and {rhs})"
-                    )
+                out_cols, lcol_inds, rcol_inds = _get_binop_columns(lhs, rhs)
 
                 data_args = ", ".join(
                     (
-                        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(lhs, {0}) {1}"
-                        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(rhs, {0})"
-                    ).format(i, op_str)
-                    for i in range(len(lhs.columns))
+                        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(lhs, {l_ind}) {op_str}"
+                        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(rhs, {r_ind})"
+                    )
+                    if l_ind != -1 and r_ind != -1
+                    # Pandas always generates an array of NaNs if an intput is missing a
+                    # column
+                    else f"bodo.libs.array_kernels.gen_na_array(len(lhs), float64_arr_type)"
+                    for l_ind, r_ind in zip(lcol_inds, rcol_inds)
                 )
                 header = "def impl(lhs, rhs):\n"
                 index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(lhs)"
-                return _gen_init_df(header, lhs.columns, data_args, index)
+                return _gen_init_df(
+                    header,
+                    out_cols,
+                    data_args,
+                    index,
+                    extra_globals={
+                        "float64_arr_type": types.Array(types.float64, 1, "C")
+                    },
+                )
 
             # scalar case, TODO: Proper error handling for all operators
             # TODO: Test with ArrayItemArrayType
@@ -1800,26 +1835,26 @@ def create_inplace_binary_op_overload(op):
         if isinstance(left, DataFrameType):
             op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
             if isinstance(right, DataFrameType):
-                if left != right:
-                    raise BodoError(
-                        "Inconsistent dataframe schemas in binary operator {} ({} and {})".format(
-                            op, left, right
-                        )
-                    )
+                out_cols, _, rcol_inds = _get_binop_columns(left, right, True)
 
                 func_text = "def impl(left, right):\n"
-                for i in range(len(left.columns)):
-                    func_text += "  df_arr{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {0})\n".format(
-                        i
-                    )
-                    func_text += "  df_arr{0} {1} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {0})\n".format(
-                        i, op_str
-                    )
-                data_args = ", ".join(
-                    ("df_arr{}").format(i) for i in range(len(left.columns))
-                )
+                for i, r_ind in enumerate(rcol_inds):
+                    if r_ind == -1:
+                        func_text += f"  df_arr{i} = bodo.libs.array_kernels.gen_na_array(len(left), float64_arr_type)\n"
+                        continue
+                    func_text += f"  df_arr{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(left, {i})\n"
+                    func_text += f"  df_arr{i} {op_str} bodo.hiframes.pd_dataframe_ext.get_dataframe_data(right, {r_ind})\n"
+                data_args = ", ".join(f"df_arr{i}" for i in range(len(out_cols)))
                 index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(left)"
-                return _gen_init_df(func_text, left.columns, data_args, index)
+                return _gen_init_df(
+                    func_text,
+                    out_cols,
+                    data_args,
+                    index,
+                    extra_globals={
+                        "float64_arr_type": types.Array(types.float64, 1, "C")
+                    },
+                )
 
             # scalar case
             func_text = "def impl(left, right):\n"

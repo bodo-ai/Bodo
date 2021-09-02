@@ -2328,6 +2328,22 @@ def test_dataframe_str_cmp(memory_leak_check):
     check_func(test_impl, (df, "A"))
 
 
+def test_dataframe_binary_op_inconsistent_schemas(memory_leak_check):
+    """Test dataframe binary operators for inputs with different schemas"""
+
+    def impl1(df1, df2):
+        return df1 - df2
+
+    def impl2(df1, df2):
+        df2 -= df1
+        return df2
+
+    df1 = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+    df2 = pd.DataFrame({"B": [3, 1, 2], "A": [1.2, 2.2, 3.3], "C": [1, 2, 3]})
+    check_func(impl1, (df1, df2))
+    check_func(impl2, (df1, df2), copy_input=True)
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("op", (operator.eq, operator.ne))
 def test_dataframe_binary_comp_op_diff_types(op, memory_leak_check):
