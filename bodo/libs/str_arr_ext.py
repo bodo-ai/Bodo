@@ -33,7 +33,6 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
-    register_jitable,
     register_model,
     type_callable,
     typeof_impl,
@@ -48,7 +47,11 @@ from bodo.libs.array_item_arr_ext import (
     np_offset_type,
     offset_type,
 )
-from bodo.libs.binary_arr_ext import BinaryArrayType, binary_array_type
+from bodo.libs.binary_arr_ext import (
+    BinaryArrayType,
+    binary_array_type,
+    pre_alloc_binary_array,
+)
 from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
 from bodo.utils.typing import (
     BodoError,
@@ -1030,15 +1033,30 @@ _print_str_arr = types.ExternalFunction(
 )
 
 
-@register_jitable
+@numba.generated_jit(nopython=True)
 def str_arr_from_sequence(in_seq):  # pragma: no cover
-    n_strs = len(in_seq)
+    if in_seq.dtype == bodo.bytes_type:
+        alloc_fn = "pre_alloc_binary_array"
+    else:
+        alloc_fn = "pre_alloc_string_array"
 
-    A = pre_alloc_string_array(n_strs, -1)
-    for i in range(n_strs):
-        A[i] = in_seq[i]
-
-    return A
+    func_text = "def f(in_seq):\n"
+    func_text += "    n_strs = len(in_seq)\n"
+    func_text += f"    A = {alloc_fn}(n_strs, -1)\n"
+    func_text += "    for i in range(n_strs):\n"
+    func_text += "        A[i] = in_seq[i]\n"
+    func_text += "    return A\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "pre_alloc_string_array": pre_alloc_string_array,
+            "pre_alloc_binary_array": pre_alloc_binary_array,
+        },
+        loc_vars,
+    )
+    f = loc_vars["f"]
+    return f
 
 
 @intrinsic

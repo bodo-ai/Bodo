@@ -148,6 +148,10 @@ def is_alloc_callname(func_name, mod_name):
             and mod_name == "bodo.libs.str_arr_ext"
         )
         or (
+            func_name == "pre_alloc_binary_array"
+            and mod_name == "bodo.libs.binary_arr_ext"
+        )
+        or (
             func_name == "alloc_random_access_string_array"
             and mod_name == "bodo.libs.str_ext"
         )

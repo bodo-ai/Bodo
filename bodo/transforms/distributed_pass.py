@@ -1071,7 +1071,10 @@ class DistributedPass:
             # value (updated only in parfor like _str_replace_regex_impl)
             # get local number of characters for string allocation if there is a
             # reduction
-            if fdef == ("pre_alloc_string_array", "bodo.libs.str_arr_ext"):
+            if fdef in (
+                ("pre_alloc_string_array", "bodo.libs.str_arr_ext"),
+                ("pre_alloc_binary_array", "bodo.libs.binary_arr_ext"),
+            ):
                 n_char_var = rhs.args[1]
                 if n_char_var.name in self._local_reduce_vars:
                     rhs.args[1] = self._local_reduce_vars[n_char_var.name]
@@ -1088,7 +1091,10 @@ class DistributedPass:
         if self._is_1D_Var_arr(lhs) and is_alloc_callname(func_name, func_mod):
             # get local number of characters for string allocation if there is a
             # reduction
-            if fdef == ("pre_alloc_string_array", "bodo.libs.str_arr_ext"):
+            if fdef in (
+                ("pre_alloc_string_array", "bodo.libs.str_arr_ext"),
+                ("pre_alloc_binary_array", "bodo.libs.binary_arr_ext"),
+            ):
                 n_char_var = rhs.args[1]
                 if n_char_var.name in self._local_reduce_vars:
                     rhs.args[1] = self._local_reduce_vars[n_char_var.name]
