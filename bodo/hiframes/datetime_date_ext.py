@@ -3,6 +3,7 @@
 """
 import datetime
 import operator
+import warnings
 
 import llvmlite.binding as ll
 import numba
@@ -921,6 +922,23 @@ def create_cmp_op_overload(op):
             return impl
 
     return overload_date_cmp
+
+
+def create_datetime_date_cmp_op_overload(op):
+    """create overload function for supported comparison operators
+    between datetime_date_type and datetime_datetime_type."""
+
+    def overload_cmp(lhs, rhs):
+        # equality between datetime and date doesn't look at the values.
+        # We raise a warning because this may be a bug.
+        datetime_warning = f"{lhs} {numba.core.utils.OPERATORS_TO_BUILTINS[op]} {rhs} is always {op == operator.ne} in Python. If this is unexpected there may be a bug in your code."
+        warnings.warn(datetime_warning, bodo.utils.typing.BodoWarning)
+        if op == operator.eq:
+            return lambda lhs, rhs: False  # pragma: no cover
+        elif op == operator.ne:
+            return lambda lhs, rhs: True  # pragma: no cover
+
+    return overload_cmp
 
 
 def create_cmp_op_overload_arr(op):
