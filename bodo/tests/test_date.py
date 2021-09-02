@@ -1497,6 +1497,45 @@ def test_dt_floor_timestamp_others(series_value_no_bad_dates, memory_leak_check)
         check_func(impl, (series_value_no_bad_dates, freq))
 
 
+@pytest.mark.slow
+def test_timestamp_floor_edgecase(memory_leak_check):
+    """Test Timestamp.floor() on a case that causes errors with np.remainder"""
+
+    def impl(ts, freq):
+        return ts.floor(freq)
+
+    ts = pd.Timestamp("2010-01-01 11:24:02")
+    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    for freq in freqs:
+        check_func(impl, (ts, freq))
+
+
+@pytest.mark.slow
+def test_timestamp_ceil_edgecase(memory_leak_check):
+    """Test Timestamp.ceil() on a case that causes errors with np.remainder"""
+
+    def impl(ts, freq):
+        return ts.ceil(freq)
+
+    ts = pd.Timestamp("2010-01-01 11:24:02")
+    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    for freq in freqs:
+        check_func(impl, (ts, freq))
+
+
+@pytest.mark.slow
+def test_timestamp_round_edgecase(memory_leak_check):
+    """Test Timestamp.round() on a case that causes errors with np.remainder"""
+
+    def impl(ts, freq):
+        return ts.round(freq)
+
+    ts = pd.Timestamp("2010-01-01 11:24:02")
+    freqs = ["D", "H", "T", "S", "ms", "L", "U", "us", "N"]
+    for freq in freqs:
+        check_func(impl, (ts, freq))
+
+
 def test_dt_round_timestamp_min(series_value_no_bad_dates, memory_leak_check):
     def impl(S, freq):
         return S.dt.round(freq)
