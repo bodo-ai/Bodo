@@ -255,6 +255,12 @@ def create_overload_cmp_operator(op):
         if lhs == datetime_date_type and rhs == datetime_date_type:
             return bodo.hiframes.datetime_date_ext.create_cmp_op_overload(op)(lhs, rhs)
 
+        # datetime.date and datetime.datetime
+        if can_cmp_date_datetime(lhs, rhs, op):
+            return bodo.hiframes.datetime_date_ext.create_datetime_date_cmp_op_overload(
+                op
+            )(lhs, rhs)
+
         # datetime.date array
         if lhs == datetime_date_array_type or rhs == datetime_date_array_type:
             return bodo.hiframes.datetime_date_ext.create_cmp_op_overload_arr(op)(
@@ -547,6 +553,15 @@ def binary_array_cmp(lhs, rhs):
     """return True if lhs and rhs are both binary array types or one binary array and the other bytes"""
     return (lhs == binary_array_type and rhs in [bytes_type, binary_array_type]) or (
         lhs in [bytes_type, binary_array_type] and rhs == binary_array_type
+    )
+
+
+def can_cmp_date_datetime(lhs, rhs, op):
+    """return True if lhs and rhs are a pair of datetime.date and
+    datetime.datetime and op is supported by Python"""
+    return op in (operator.eq, operator.ne) and (
+        (lhs == datetime_date_type and rhs == datetime_datetime_type)
+        or (lhs == datetime_datetime_type and rhs == datetime_date_type)
     )
 
 

@@ -1874,6 +1874,36 @@ def test_pd_to_timedelta_float_arr(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_datetime_date_datetime_equality(memory_leak_check):
+    """Tests == and != between datetime.date and datetime.datetime.
+    These are never equal, even if they evaluate to the same value.
+    We throw a warning because this is likely a user bug."""
+
+    def impl1(d1, d2):
+        return d1 == d2
+
+    def impl2(d1, d2):
+        return d1 != d2
+
+    date_val1 = datetime.date(2021, 8, 31)
+    date_val2 = datetime.date(2021, 9, 1)
+    datetime_val = datetime.datetime(2021, 8, 31)
+
+    # TODO: Check for the warning. This appears in python/ipython
+    # but isn't showing up with pytest.
+
+    # Test equals
+    check_func(impl1, (date_val1, datetime_val))
+    check_func(impl1, (datetime_val, date_val1))
+    check_func(impl1, (date_val2, datetime_val))
+
+    # Test not equals
+    check_func(impl2, (date_val1, datetime_val))
+    check_func(impl2, (datetime_val, date_val1))
+    check_func(impl2, (date_val2, datetime_val))
+
+
+@pytest.mark.slow
 def test_pd_to_timedelta_int_arr(memory_leak_check):
     """Test pd.to_timedelta()"""
 
