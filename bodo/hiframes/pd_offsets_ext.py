@@ -143,10 +143,10 @@ def calculate_month_begin_date(year, month, day, n):  # pragma: no cover
     day and the number of month begins to move by, n.
     Returns: The new date in year, month, day
     """
-    # If n < 0, we need to increment n when rolling back to the start of
+    # If n <= 0, we need to increment n when rolling back to the start of
     # the month. The exception is if we are already at the start of the
     # month.
-    if n < 0:
+    if n <= 0:
         if day > 1:
             n += 1
     # Alter the number of months by n, then update year. Note this is 1 indexed.
@@ -435,6 +435,87 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
         return impl
     # Raise Bodo error if not supported
     raise BodoError(f"add operator not supported for data types {lhs} and {rhs}.")
+
+
+def overload_mul_date_offset_types(lhs, rhs):
+    """Handles scalar multiplication between date offset types, and integer types"""
+
+    if lhs == month_begin_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return pd.tseries.offsets.MonthBegin(lhs.n * rhs, lhs.normalize)
+
+    if lhs == month_end_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return pd.tseries.offsets.MonthEnd(lhs.n * rhs, lhs.normalize)
+
+    if lhs == week_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return pd.tseries.offsets.Week(lhs.n * rhs, lhs.normalize, lhs.weekday)
+
+    if lhs == date_offset_type:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            n = lhs.n * rhs
+            normalize = lhs.normalize
+            nanoseconds = lhs._nanoseconds
+            nanosecond = lhs._nanosecond
+            # Make sure has_kws behavior doesn't change
+            if lhs._has_kws:
+                years = lhs._years
+                months = lhs._months
+                weeks = lhs._weeks
+                days = lhs._days
+                hours = lhs._hours
+                minutes = lhs._minutes
+                seconds = lhs._seconds
+                microseconds = lhs._microseconds
+                year = lhs._year
+                month = lhs._month
+                day = lhs._day
+                weekday = lhs._weekday
+                hour = lhs._hour
+                minute = lhs._minute
+                second = lhs._second
+                microsecond = lhs._microsecond
+                return pd.tseries.offsets.DateOffset(
+                    n,
+                    normalize,
+                    years,
+                    months,
+                    weeks,
+                    days,
+                    hours,
+                    minutes,
+                    seconds,
+                    microseconds,
+                    nanoseconds,
+                    year,
+                    month,
+                    day,
+                    weekday,
+                    hour,
+                    minute,
+                    second,
+                    microsecond,
+                    nanosecond,
+                )
+            else:
+                return pd.tseries.offsets.DateOffset(
+                    n, normalize, nanoseconds=nanoseconds, nanosecond=nanosecond
+                )
+
+    # rhs is the offset
+    if rhs in [week_type, month_end_type, month_begin_type, date_offset_type]:
+
+        def impl(lhs, rhs):  # pragma: no cover
+            return rhs * lhs
+
+        return impl
+
+    return impl
 
 
 # TODO: Support operators with arrays
