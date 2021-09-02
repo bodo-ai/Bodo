@@ -36,7 +36,7 @@ from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.io import csv_cpp
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.libs.str_ext import string_type, unicode_to_utf8
-from bodo.utils.transform import get_const_func_output_type
+from bodo.utils.transform import get_call_expr_arg, get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -50,6 +50,7 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_constant_tuple,
     is_overload_false,
+    is_overload_int,
     is_overload_none,
 )
 
@@ -609,6 +610,18 @@ def cast_series(context, builder, fromty, toty, val):
 @infer_getattr
 class SeriesAttribute(AttributeTemplate):
     key = SeriesType
+
+    @bound_function("series.head")
+    def resolve_head(self, ary, args, kws):
+        # TODO: Add a generic signature checking function
+        n = get_call_expr_arg(
+            "Series.head", args, dict(kws), 0, "n", default=types.IntegerLiteral(5)
+        )
+        if not is_overload_int(n):
+            raise BodoError("Series.head(): 'n' must be an Integer")
+        # Return type is the same as the series
+        ret = ary
+        return ret(*args)
 
     def _resolve_map_func(self, ary, func, pysig, fname, f_args=None, kws=None):
         """Find type signature of Series.map/apply method.

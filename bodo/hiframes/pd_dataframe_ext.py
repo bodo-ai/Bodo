@@ -58,6 +58,7 @@ from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.conversion import index_to_array
 from bodo.utils.transform import (
     gen_const_tup,
+    get_call_expr_arg,
     get_const_func_output_type,
     get_const_tup_vals,
 )
@@ -82,6 +83,7 @@ from bodo.utils.typing import (
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_false,
+    is_overload_int,
     is_overload_none,
     is_overload_true,
     is_tuple_like_type,
@@ -269,6 +271,18 @@ class DataFrameModel(models.StructModel):
 @infer_getattr
 class DataFrameAttribute(AttributeTemplate):
     key = DataFrameType
+
+    @bound_function("df.head")
+    def resolve_head(self, df, args, kws):
+        # TODO: Add a generic signature checking function
+        n = get_call_expr_arg(
+            "DataFrame.head", args, dict(kws), 0, "n", default=types.IntegerLiteral(5)
+        )
+        if not is_overload_int(n):
+            raise BodoError("Dataframe.head(): 'n' must be an Integer")
+        # Return type is the same as the dataframe
+        ret = df
+        return ret(*args)
 
     @bound_function("df.pipe", no_unliteral=True)
     def resolve_pipe(self, df, args, kws):

@@ -10,6 +10,7 @@ import pandas as pd
 from numba.core import types
 from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import (
+    lower_builtin,
     overload,
     overload_attribute,
     overload_method,
@@ -1137,12 +1138,8 @@ def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=N
     )  # pragma: no cover
 
 
-@overload_method(SeriesType, "head", inline="always", no_unliteral=True)
 def overload_series_head(S, n=5):
-    # n must be an integer for indexing.
-    if not is_overload_int(n):
-        raise BodoError("Series.head(): 'n' must be an Integer")
-
+    # This function is called by the inlining in compiler.py
     def impl(S, n=5):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -1152,6 +1149,13 @@ def overload_series_head(S, n=5):
         return bodo.hiframes.pd_series_ext.init_series(new_data, new_index, name)
 
     return impl
+
+
+# Include lowering for safety.
+@lower_builtin("series.head", SeriesType, types.Integer)
+def series_head_lower(context, builder, sig, args):
+    impl = overload_series_head(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 @numba.extending.register_jitable
