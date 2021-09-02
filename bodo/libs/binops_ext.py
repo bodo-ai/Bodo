@@ -200,6 +200,9 @@ def create_overload_arith_op(op):
             if mul_string_arr_and_int(lhs, rhs):
                 return bodo.libs.str_arr_ext.overload_mul_operator_str_arr(lhs, rhs)
 
+            if mul_date_offset_and_int(lhs, rhs):
+                return bodo.hiframes.pd_offsets_ext.overload_mul_date_offset_types(lhs, rhs)
+
             raise_error_if_not_numba_supported(op, lhs, rhs)
 
         # div operators
@@ -394,6 +397,11 @@ def mul_timedelta_and_int(lhs, rhs):
         lhs, types.Integer
     )
     return lhs_td or rhs_td
+
+def mul_date_offset_and_int(lhs, rhs):
+    lhs_offset = lhs in [week_type, month_end_type, month_begin_type, date_offset_type] and isinstance(rhs, types.Integer)
+    rhs_offset = rhs in [week_type, month_end_type, month_begin_type, date_offset_type] and isinstance(lhs, types.Integer)
+    return lhs_offset or rhs_offset
 
 
 ## Helper functions for the sub operator

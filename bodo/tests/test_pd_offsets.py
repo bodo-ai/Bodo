@@ -11,6 +11,12 @@ import bodo
 from bodo.tests.utils import check_func
 
 
+@pytest.fixture(params=[0, -1, 3, -4])
+def offset_multiplier(request):
+    """returns an integer value, to be used with testing offset multiplication"""
+    return request.param
+
+
 @pytest.fixture(
     params=[
         pd.tseries.offsets.Week(),
@@ -136,6 +142,29 @@ def test_week_neg(week_value, memory_leak_check):
     check_func(test_impl, (week_value,))
 
 
+@pytest.mark.slow
+def test_week_mul_int(memory_leak_check, week_value, offset_multiplier):
+
+    # Objects won't match exactly, so test mul by checking that addition in Python
+    # has the same result
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+
+    def test_mul(a, b):
+        return (a * b) + timestamp_val
+
+    check_func(test_mul, (offset_multiplier, week_value))
+    check_func(test_mul, (week_value, offset_multiplier))
+
+
 @pytest.fixture(
     params=[
         pd.tseries.offsets.MonthBegin(),
@@ -150,6 +179,10 @@ def test_week_neg(week_value, memory_leak_check):
         pytest.param(pd.tseries.offsets.MonthBegin(n=-2), marks=pytest.mark.slow),
         pytest.param(
             pd.tseries.offsets.MonthBegin(n=-1, normalize=True), marks=pytest.mark.slow
+        ),
+        pytest.param(
+            pd.tseries.offsets.MonthBegin(n=0),
+            marks=pytest.mark.slow,
         ),
     ]
 )
@@ -403,6 +436,29 @@ def test_month_begin_neg(month_begin_value, memory_leak_check):
     check_func(test_impl, (month_begin_value,))
 
 
+@pytest.mark.slow
+def test_month_begin_mul_int(month_begin_value, offset_multiplier, memory_leak_check):
+
+    # Objects won't match exactly, so test mul by checking that addition in Python
+    # has the same result
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+
+    def test_mul(a, b):
+        return (a * b) + timestamp_val
+
+    check_func(test_mul, (offset_multiplier, month_begin_value))
+    check_func(test_mul, (month_begin_value, offset_multiplier))
+
+
 @pytest.fixture(
     params=[
         pd.tseries.offsets.MonthEnd(),
@@ -417,6 +473,10 @@ def test_month_begin_neg(month_begin_value, memory_leak_check):
         pytest.param(pd.tseries.offsets.MonthEnd(n=-2), marks=pytest.mark.slow),
         pytest.param(
             pd.tseries.offsets.MonthEnd(n=-1, normalize=True), marks=pytest.mark.slow
+        ),
+        pytest.param(
+            pd.tseries.offsets.MonthEnd(n=0),
+            marks=pytest.mark.slow,
         ),
     ]
 )
@@ -666,6 +726,29 @@ def test_month_end_neg(month_end_value, memory_leak_check):
         return -me
 
     check_func(test_impl, (month_end_value,))
+
+
+@pytest.mark.slow
+def test_month_end_mul_int(month_end_value, offset_multiplier, memory_leak_check):
+
+    # Objects won't match exactly, so test mul by checking that addition in Python
+    # has the same result
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+
+    def test_mul(a, b):
+        return (a * b) + timestamp_val
+
+    check_func(test_mul, (offset_multiplier, month_end_value))
+    check_func(test_mul, (month_end_value, offset_multiplier))
 
 
 @pytest.fixture(
@@ -1090,3 +1173,25 @@ def test_date_offset_neg(date_offset_value, memory_leak_check):
         nanosecond=891,
     )
     assert timestamp_val + py_output == timestamp_val + bodo_output
+
+
+def test_date_offset_mul_int(memory_leak_check, offset_multiplier, date_offset_value):
+
+    # Objects won't match exactly, so test mul by checking that addition in Python
+    # has the same result
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+    )
+
+    def test_mul(a, b):
+        return (a * b) + timestamp_val
+
+    check_func(test_mul, (offset_multiplier, date_offset_value))
+    check_func(test_mul, (date_offset_value, offset_multiplier))
