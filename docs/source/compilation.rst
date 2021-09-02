@@ -31,8 +31,8 @@ First of all, let's understand *Why doesn't the code compile*?
 The most common reason is that the code relies on features that Bodo currently does not support, so it's important to understand the limitations of Bodo.
 There are 4 main limitations:
 
-    1. Not supported Pandas API (:ref:`Supported Pandas Operations <pandas>`)
-    2. Not supported NumPy API (:ref:`Supported NumPy Operations <numpy>`)
+    1. Not supported Pandas API (:ref:`Pandas Operations <pandas>`)
+    2. Not supported NumPy API (:ref:`NumPy Operations <numpy>`)
     3. :ref:`Not supported datatypes <heterogeneousdtype>`
     4. Not supported Python programs due to :ref:`type instability <typestability>`
 
@@ -84,7 +84,7 @@ Troubleshooting Compilation Errors
 
 Now that we understand what causes the error, let's fix it!
 
-For the first three of the limitations (not :ref:`Supported Pandas Operations <pandas>`, not :ref:`Supported NumPy Operations <numpy>`, and not supported datatypes) we discussed in the previous section, :ref:`whycompilationerror`, try the following:
+For the first three of the limitations (not :ref:`Pandas Operations <pandas>`, not :ref:`NumPy Operations <numpy>`, and not supported datatypes) we discussed in the previous section, :ref:`whycompilationerror`, try the following:
     1. Make sure your code works in Python: A lot of the times, a Bodo decorated function doesn't compile, but it does not compile in Python, either.
     2. Rewrite your code with supported operations if possible. One example is what we mentioned earlier: :code:`Dictionary` containing heterogeneous values (e.g. :code:`thisdict = {"A": 1, "B": "a", "C": 0.1}` can be replaced with `namedtuple <https://docs.python.org/3/library/collections.html#collections.namedtuple>`_
     3. Refactor your code and use regular Python, explained in *Integration with non-Bodo APIs* of `Bodo tutorial <https://github.com/Bodo-inc/Bodo-tutorial/blob/master/bodo_tutorial.ipynb>`_

@@ -1,7 +1,7 @@
 .. _pandas:
 
-Supported Pandas Operations
----------------------------
+Pandas Operations
+-----------------
 
 Below is a reference list of the Pandas data types and operations that Bodo supports.
 This list will expand regularly as we add support for more APIs.
