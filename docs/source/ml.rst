@@ -1,10 +1,10 @@
 .. _ml:
 
-Supported Machine Learning 
---------------------------
+Machine Learning
+----------------
 
-Supported Scikit-learn
-~~~~~~~~~~~~~~~~~~~~~~
+Scikit-learn
+~~~~~~~~~~~~
 
 Below is the list of scikit-learn classes and functions that Bodo supports natively inside JIT functions.
 This list will expand regularly as we add support for more APIs.
@@ -263,8 +263,8 @@ Model Selection
 
 
 
-Supported XGBoost
-~~~~~~~~~~~~~~~~~
+XGBoost
+~~~~~~~
 
 Below is the list of XGBoost (using the Scikit-Learn-like API) classes and functions that Bodo supports natively inside JIT functions.
 This list will expand regularly as we add support for more APIs.

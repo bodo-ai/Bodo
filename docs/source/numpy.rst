@@ -1,8 +1,8 @@
 .. _numpy:
 
 
-Supported Numpy Operations
---------------------------
+Numpy Operations
+----------------
 
 Below is the list of the data-parallel Numpy operators that Bodo can optimize
 and parallelize.
