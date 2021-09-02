@@ -1835,9 +1835,7 @@ def overload_freq_methods(method):
                 func_text += "        if mask:\n"
                 func_text += "            quotient = quotient + 1\n"
                 func_text += "        value = quotient * unit_value\n"
-            func_text += (
-                "    return pd.Timestamp(year=1970, month=1, day=1, nanosecond=value)\n"
-            )
+            func_text += "    return pd.Timestamp(value)\n"
         loc_vars = {}
         exec(
             func_text,
