@@ -114,6 +114,47 @@ from bodo.utils.typing import BodoError, BodoWarning
                 ),
             }
         ),
+        # Binary Columns with nan
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [
+                        b"AA",
+                        b"AA",
+                        b"",
+                        b"D",
+                        np.nan,
+                        b"B",
+                        b"ZZ",
+                        np.nan,
+                        b"F123",
+                    ],
+                    "B": [
+                        b"jkasdf",
+                        b"asdfas",
+                        np.nan,
+                        b"D",
+                        np.nan,
+                        b"asdgas",
+                        b"sdga",
+                        b"sdaladnc",
+                        b"sdasdan",
+                    ],
+                    "C": [
+                        b"hjksda",
+                        b"sdvnds",
+                        b"",
+                        b"asdjgka",
+                        b"",
+                        b"Basasd",
+                        b"asldfasdf",
+                        b"asdjflas",
+                        b"sasdal",
+                    ],
+                },
+            ),
+            id="binary_df",
+        )
         # TODO: timedelta
     ]
 )
@@ -352,6 +393,38 @@ def test_sort_values_str(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+def test_sort_values_binary(memory_leak_check):
+    """
+    Test sort_values():
+    dataframe has int column, and binary column with nans
+    sort over int columm
+    """
+
+    def test_impl(df):
+        return df.sort_values(by="A", kind="mergesort")
+
+    def _gen_df_binary(n):
+        bytes_vals = []
+        for _ in range(n):
+            # store NA with 30% chance
+            if np.random.randint(0, 10) < 3:
+                bytes_vals.append(np.nan)
+                continue
+
+            val = bytes(np.random.randint(1, 100))
+            bytes_vals.append(val)
+
+        A = np.random.randint(0, 1000, n)
+        df = pd.DataFrame({"A": A, "B": bytes_vals}).drop_duplicates("A")
+        return df
+
+    np.random.seed(3)
+    # seeds should be the same on different processors for consistent input
+    n = 17
+    df = _gen_df_binary(n)
+    check_func(test_impl, (df,))
+
+
 @pytest.mark.slow
 def test_sort_values_1col_long_int_list(memory_leak_check):
     """
@@ -565,6 +638,34 @@ def test_sort_values_strings(n, len_str, memory_leak_check):
 
     random.seed(5)
     df1 = get_random_strings_array(n, len_str)
+    check_func(test_impl, (df1,))
+
+
+def test_sort_random_values_binary():
+    """
+    Test sort_values(): with 1 column of random binary values with
+    some entries assigned to missing values
+    """
+
+    def test_impl(df1):
+        df2 = df1.sort_values(by="A", kind="mergesort")
+        return df2
+
+    def get_random_bin_df(n):
+        bin_vals = []
+        for _ in range(n):
+            prob = np.random.randint(1, 10)
+            if prob == 1:
+                val = np.nan
+            else:
+                val = bytes(np.random.randint(1, 100))
+
+            bin_vals.append(val)
+        df = pd.DataFrame({"A": bin_vals})
+        return df
+
+    np.random.seed(5)
+    df1 = get_random_bin_df(100)
     check_func(test_impl, (df1,))
 
 
