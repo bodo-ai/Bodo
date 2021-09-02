@@ -589,6 +589,10 @@ def test_series_min(series_val, memory_leak_check):
     if isinstance(series_val.values[0], str):
         return
 
+    # skip binary, TODO: handle binary min BE-1253
+    if isinstance(series_val.values[0], bytes):
+        return
+
     def test_impl(A):
         return A.min()
 
@@ -614,6 +618,10 @@ def test_series_max(series_val, memory_leak_check):
 
     # skip strings, TODO: handle strings
     if isinstance(series_val.values[0], str):
+        return
+
+    # skip binary, TODO: handle binary max BE-1253
+    if isinstance(series_val.values[0], bytes):
         return
 
     def test_impl(A):
@@ -673,6 +681,11 @@ def test_series_min_max_int_output_type(memory_leak_check):
 
 
 def test_series_idxmin(series_val, memory_leak_check):
+
+    # Binary not supported in pandas
+    if isinstance(series_val.values[0], bytes):
+        return
+
     def test_impl(A):
         return A.idxmin()
 
@@ -719,6 +732,11 @@ def test_series_idxmin(series_val, memory_leak_check):
 
 
 def test_series_idxmax(series_val, memory_leak_check):
+
+    # Binary not supported in pandas
+    if isinstance(series_val.values[0], bytes):
+        return
+
     def test_impl(A):
         return A.idxmax()
 
@@ -1074,6 +1092,11 @@ def test_series_argsort_fast(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_argsort(series_val, memory_leak_check):
+
+    # TODO: support argsort for binary type, See BE-1268
+    if isinstance(series_val.values[0], bytes):
+        return
+
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
@@ -1143,6 +1166,10 @@ def test_series_sort_values(series_val):
 def test_series_repeat(series_val):
     """Test Series.repeat() method"""
 
+    # TODO: support for binary type, see BE-1269
+    if isinstance(series_val.values[0], bytes):
+        return
+
     def test_impl(S, n):
         return S.repeat(n)
 
@@ -1162,6 +1189,10 @@ def test_series_append_single(series_val, ignore_index, memory_leak_check):
 
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
+        return
+
+    # TODO: support for binary type, BE-1261
+    if isinstance(series_val.values[0], bytes):
         return
 
     func_text = "def test_impl(A, B):\n"
@@ -1191,6 +1222,10 @@ def test_series_append_multi(series_val, ignore_index, memory_leak_check):
 
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
+        return
+
+    # TODO: support for binary type, BE-1261
+    if isinstance(series_val.values[0], bytes):
         return
 
     func_text = "def test_impl(A, B, C):\n"
@@ -2078,6 +2113,7 @@ def test_series_np_where_num(memory_leak_check):
 def test_series_where_true(series_val, memory_leak_check):
     """Tests that all types can be used in Series.where(cond)
     with all True values."""
+
     cond = np.array([True] * len(series_val))
     val = series_val.iloc[0]
 
@@ -2095,6 +2131,12 @@ def test_series_where_true(series_val, memory_leak_check):
 
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    # TODO: support for binary type, BE-1262
+    if isinstance(series_val.values[0], bytes):
         with pytest.raises(BodoError, match=series_err_msg):
             bodo.jit(test_impl)(series_val, cond, val)
         return
@@ -2224,6 +2266,11 @@ def test_np_where_one_arg(memory_leak_check):
 def test_series_mask_false(series_val, memory_leak_check):
     """Tests that all types can be used in Series.mask(cond)
     with all False values."""
+
+    # TODO: support for binary type, BE-1263
+    if isinstance(series_val.values[0], bytes):
+        return
+
     cond = np.array([False] * len(series_val))
     val = series_val.iloc[0]
 

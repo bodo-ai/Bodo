@@ -1747,9 +1747,10 @@ def test_df_idxmax_all_types_axis0(df_value, memory_leak_check):
         if isinstance(dtype, pd.core.arrays.integer._IntegerDtype):
             gen_output = True
 
-        # not supported for Strings, This isn't supported in Pandas
-        if not isinstance(dtype, pd.CategoricalDtype) and isinstance(
-            df_value[df_value.columns[i]].iat[0], str
+        # not supported for Strings or Bytes, This isn't supported in Pandas
+        if not isinstance(dtype, pd.CategoricalDtype) and (
+            isinstance(df_value[df_value.columns[i]].iat[0], str)
+            or isinstance(df_value[df_value.columns[i]].iat[0], bytes)
         ):
             skip = True
             break
@@ -1835,9 +1836,10 @@ def test_df_idxmin_all_types_axis0(df_value, memory_leak_check):
         if isinstance(dtype, pd.core.arrays.integer._IntegerDtype):
             gen_output = True
 
-        # not supported for Strings, This isn't supported in Pandas
-        if not isinstance(dtype, pd.CategoricalDtype) and isinstance(
-            df_value[df_value.columns[i]].iat[0], str
+        # not supported for Strings or Bytes, This isn't supported in Pandas
+        if not isinstance(dtype, pd.CategoricalDtype) and (
+            isinstance(df_value[df_value.columns[i]].iat[0], str)
+            or isinstance(df_value[df_value.columns[i]].iat[0], bytes)
         ):
             skip = True
             break
@@ -2013,6 +2015,10 @@ def test_df_set_index(df_value, memory_leak_check):
     if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer._IntegerDtype):
         return
 
+    # TODO: [BE-1246] Support binary index type
+    if isinstance(df_value.iloc[0, 0], bytes):
+        return
+
     # # TODO(ehsan): test non-str columns using 'df_value.columns[0]' instead of 'A" when
     # # Numba can convert freevars to literals
 
@@ -2171,7 +2177,25 @@ def test_df_duplicated():
     df = pd.DataFrame({"A": ["A", "B", "A", "B", "C"], "B": ["F", "E", "F", "S", "C"]})
     check_func(impl, (df,), sort_output=True)
     df = pd.DataFrame(
-        {"A": [1, 3, 1, 2, 3], "B": ["F", "E", "F", "S", "C"]}, index=[3, 1, 2, 4, 6]
+        {
+            "A": [1, 3, 1, 2, 3],
+            "B": ["F", "E", "F", "S", "C"],
+        },
+        index=[3, 1, 2, 4, 6],
+    )
+    check_func(impl, (df,), sort_output=True)
+
+
+@pytest.mark.skip("TODO: support df.duplicated for binary data [BE-1277]")
+def test_df_duplicated_binary_values():
+    def impl(df):
+        return df.duplicated()
+
+    df = pd.DataFrame(
+        {
+            "A": [b"asdghas", b"bajskhd", b"", bytes(2), b"vjbh"],
+            "B": [b"F", b"E", b"F", b"S", b"C"],
+        }
     )
     check_func(impl, (df,), sort_output=True)
 
@@ -2222,6 +2246,10 @@ def test_duplicated_all_types(df_value):
     """
     Function that tests that duplicated works on our df types.
     """
+
+    # TODO: [BE-1247] Support binary index type
+    if isinstance(df_value.iloc[0, 0], bytes):
+        return
 
     def test_impl(df):
         return df.duplicated()

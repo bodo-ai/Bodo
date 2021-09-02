@@ -150,6 +150,12 @@ GLOBAL_VAL = 2
             .astype(pd.CategoricalDtype(ordered=True)),
             id="series_val21",
         ),
+        pytest.param(
+            pd.Series(
+                [b"", b"abc", b"c", np.nan, b"ccdefg", b"abcde", b"poiu", bytes(3)] * 2
+            ),
+            id="series_val22",
+        ),
     ]
 )
 def series_val(request):

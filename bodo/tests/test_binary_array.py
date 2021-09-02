@@ -93,7 +93,11 @@ def test_bytes_hash(binary_arr_value, memory_leak_check):
 
     # check_dtype=False because None converts the output to Float in Pandas
     # dist_test = False because the randomness causes different inputs on each core.
-    check_func(test_impl, (binary_arr_value,), check_dtype=False, dist_test=False)
+    check_func(
+        test_impl,
+        (binary_arr_value,),
+        check_dtype=False,
+    )
 
 
 def generate_comparison_ops_func(op, check_na=False):
@@ -227,8 +231,14 @@ def test_binary_series_apply(binary_arr_value, memory_leak_check):
         return S.map(lambda x: None if pd.isna(x) else x)
 
     S = pd.Series(binary_arr_value)
-    check_func(test_impl1, (S,), dist_test=False)
-    check_func(test_impl2, (S,), dist_test=False)
+    check_func(
+        test_impl1,
+        (S,),
+    )
+    check_func(
+        test_impl2,
+        (S,),
+    )
 
 
 def test_binary_dataframe_apply(binary_arr_value, memory_leak_check):
@@ -241,4 +251,7 @@ def test_binary_dataframe_apply(binary_arr_value, memory_leak_check):
             "B": 1,
         }
     )
-    check_func(test_impl, (df,), dist_test=False)
+    check_func(
+        test_impl,
+        (df,),
+    )

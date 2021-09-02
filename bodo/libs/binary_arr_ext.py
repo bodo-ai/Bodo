@@ -79,6 +79,11 @@ def overload_bin_arr_ndim(A):
     return lambda A: 1  # pragma: no cover
 
 
+@overload_attribute(BinaryArrayType, "dtype")
+def overload_bool_arr_dtype(A):
+    return lambda A: np.dtype("O")  # pragma: no cover
+
+
 @numba.njit
 def pre_alloc_binary_array(n_bytestrs, n_chars):  # pragma: no cover
     if n_chars is None:
@@ -357,3 +362,18 @@ def create_binary_cmp_op_overload(op):
         return local_vars["impl"]
 
     return overload_binary_cmp
+
+
+# TODO: array analysis and remove call for other functions
+
+
+def pre_alloc_binary_arr_equiv(self, scope, equiv_set, loc, args, kws):
+    assert len(args) == 2 and not kws
+    return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
+
+
+from numba.parfors.array_analysis import ArrayAnalysis
+
+ArrayAnalysis._analyze_op_call_bodo_libs_binary_arr_ext_pre_alloc_binary_array = (
+    pre_alloc_binary_arr_equiv
+)

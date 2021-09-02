@@ -429,7 +429,10 @@ def overload_coerce_to_array(
         )  # pragma: no cover
 
     # string list
-    if isinstance(data, types.List) and data.dtype == bodo.string_type:
+    if isinstance(data, types.List) and data.dtype in (
+        bodo.string_type,
+        bodo.bytes_type,
+    ):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.str_arr_ext.str_arr_from_sequence(
             data
         )  # pragma: no cover
@@ -1096,6 +1099,8 @@ def overload_index_from_array(data, name=None):
     """
     convert data array to Index object.
     """
+
+    # TODO: Possibly extend init_string_index to support binary data? [BE-1246]
     if data == bodo.string_array_type:
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_string_index(
             data, name

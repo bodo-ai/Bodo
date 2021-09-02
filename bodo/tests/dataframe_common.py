@@ -91,6 +91,28 @@ import pytest
             ),
             marks=pytest.mark.slow,
         ),
+        # Binary column
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [
+                            b"",
+                            b"abc",
+                            b"c",
+                            np.nan,
+                            b"ccdefg",
+                            b"abcde",
+                            b"poiu",
+                            bytes(3),
+                        ]
+                        * 2
+                    )
+                },
+            ),
+            id="binary_df",
+            marks=pytest.mark.slow,
+        ),
         # TODO: timedelta
     ]
 )
