@@ -587,13 +587,8 @@ def overload_dataframe_notna(df):
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "head", inline="always", no_unliteral=True)
 def overload_dataframe_head(df, n=5):
-    # n must be an integer for indexing.
-    if not is_overload_int(n):
-        raise BodoError("Dataframe.head(): 'n' must be an Integer")
-
-    # call head() on column Series
+    # This function is called by the inlining in compiler.py
     data_args = ", ".join(
         f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[:n]"
         for i in range(len(df.columns))
@@ -601,6 +596,13 @@ def overload_dataframe_head(df, n=5):
     header = "def impl(df, n=5):\n"
     index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[:n]"
     return _gen_init_df(header, df.columns, data_args, index)
+
+
+# Include lowering for safety.
+@lower_builtin("df.head", DataFrameType, types.Integer)
+def dataframe_head_lower(context, builder, sig, args):
+    impl = overload_dataframe_head(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 @overload_method(DataFrameType, "tail", inline="always", no_unliteral=True)
