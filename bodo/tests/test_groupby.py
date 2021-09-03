@@ -91,6 +91,36 @@ from bodo.utils.typing import BodoError
             ),
             marks=pytest.mark.skip,
         ),
+        # Binary key and decimal values
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [b"", b"", b"a", b"a", b"a", b"c", b"c", bytes(3)] * 2
+                    ),
+                    "B": pd.Series([0, 2, 3, 1, 13, 6, 2, 4] * 2),
+                    "C": pd.Series([-1.2, 0.2, 3.0, 0.41, 0.13, 60.3, 2.0, 0.4444] * 2),
+                }
+            ),
+            id="binary_key_df",
+            marks=pytest.mark.skip("Needs support for binary indexes, see [BE-1246]"),
+        ),
+        # Binary value and decimal key
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series([0, 0, 1, 1, 1, 2, 2, 4] * 2),
+                    "B": pd.Series([-1.2, 0.2, 3.0, 0.41, 0.13, 60.3, 2.0, 0.4444] * 2),
+                    # Binary column must not be B, as only B is aggregated in the test_agg_single_col tests
+                    # Since the column is droped for several agregations, this can result in an empty return
+                    "C": pd.Series(
+                        [b"", b"", b"a", b"a", b"a", b"c", b"c", bytes(3)] * 2
+                    ),
+                }
+            ),
+            id="binary_value_df",
+            marks=pytest.mark.skip("Needs support for max, min, see [BE-1252]"),
+        ),
     ]
 )
 def test_df(request):
@@ -334,6 +364,31 @@ def test_sum_string(memory_leak_check):
     check_func(impl, (df1,), sort_output=True)
 
 
+@pytest.mark.slow
+def test_sum_binary(memory_leak_check):
+    """Tests sum on dataframes containing binary columns. Currently, since the numeric_only
+    argument should default to true, this should simply result in the column being dropped.
+    In later versions of pandas, this may raise a type error by default."""
+
+    assert re.compile(r"1.3.*").match(
+        pd.__version__
+    ), "Object sum will raise a TypeError in a later Pandas version."
+
+    def impl(df):
+        A = df.groupby("A").sum()
+        return A
+
+    df1 = pd.DataFrame(
+        {
+            "A": [1, 1, 1, 2, 3, 3, 4, 0, 5, 0, 11],
+            "B": [b"a", b"b", b"c", b"d", b"", b"AA", b"ABC", b"AB", b"c", b"F", b"GG"],
+            # Binary cols are dropped for sum, so we need an extra column to avoid empty output in that case
+            "C": [1] * 11,
+        }
+    )
+    check_func(impl, (df1,), sort_output=True)
+
+
 def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
     """We do not have decimal as index. Therefore we have to use as_index=False"""
 
@@ -478,6 +533,57 @@ def test_random_string_sum_min_max_first_last(memory_leak_check):
     check_func(impl5, (df1,), sort_output=True)
 
 
+def test_random_binary_sum_min_max_first_last(memory_leak_check):
+
+    assert re.compile(r"1.3.*").match(
+        pd.__version__
+    ), "Object sum will raise a TypeError in a later Pandas version."
+
+    def impl1(df):
+        A = df.groupby("A").sum()
+        return A
+
+    # Needs support for max and min for binary data. See BE-1252
+
+    # def impl2(df):
+    #     A = df.groupby("A").min()
+    #     return A
+
+    # def impl3(df):
+    #     A = df.groupby("A").max()
+    #     return A
+
+    def impl4(df):
+        A = df.groupby("A").first()
+        return A
+
+    def impl5(df):
+        A = df.groupby("A").last()
+        return A
+
+    def random_dataframe(n):
+        random.seed(5)
+        eList_A = []
+        eList_B = []
+        # String cols are dropped for sum, so we need an extra column to avoid empty output in that case
+        eList_C = []
+        for i in range(n):
+            len_str = random.randint(1, 10)
+            val_A = random.randint(1, 10)
+            val_B = bytes(random.randint(1, 10))
+            eList_A.append(val_A)
+            eList_B.append(val_B)
+            eList_C.append(1)
+        return pd.DataFrame({"A": eList_A, "B": eList_B, "C": eList_C})
+
+    df1 = random_dataframe(100)
+    check_func(impl1, (df1,), sort_output=True)
+    # check_func(impl2, (df1,), sort_output=True)
+    # check_func(impl3, (df1,), sort_output=True)
+    check_func(impl4, (df1,), sort_output=True)
+    check_func(impl5, (df1,), sort_output=True)
+
+
 def test_groupby_missing_entry(is_slow_run, memory_leak_check):
     """The columns which cannot be processed cause special problems as they are
     sometimes dropped instead of failing. This behavior is expected to raise an error
@@ -533,6 +639,25 @@ def test_agg_str_key(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": ["AA", "B", "B", "B", "AA", "AA", "B"],
+            "B": [-8, 2, 3, 1, 5, 6, 7],
+        }
+    )
+    check_func(impl, (df,), sort_output=True)
+
+
+@pytest.mark.skip("Needs support for Binary index type, see [BE-1246]")
+def test_agg_binary_key(memory_leak_check):
+    """
+    Test Groupby.agg() with binary keys
+    """
+
+    def impl(df):
+        A = df.groupby("A").agg(lambda x: x.sum())
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [b"AA", b"B", b"B", b"B", b"AA", b"AA", b"B"],
             "B": [-8, 2, 3, 1, 5, 6, 7],
         }
     )
@@ -1684,6 +1809,7 @@ def test_groupby_nunique(memory_leak_check):
             "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, 7.1],
             "C": [3, 5, 6, 5, 4, 4, 3],
             "E": [3, 3, 3, 4, 5, 6, 2],
+            "F": [b"AA", b"B", b"BB", b"B", b"AA", b"AA", b"B"],
         },
         index=np.arange(10, 17),
     )
@@ -1729,6 +1855,8 @@ def test_groupby_nunique_dropna(memory_leak_check):
             ),
             # Nullable boolean
             "C": pd.Series([True, None, None, None, True, True, True], dtype="boolean"),
+            # Nullable Binary
+            "H": [b"AA", b"B", np.NaN, b"B", np.NaN, b"AA", b"B"],
         },
     )
 
@@ -1846,10 +1974,18 @@ def test_count(memory_leak_check):
     df_dt = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
     )
+    df_bin = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [b"", bytes(13), np.nan, b"asd", b"wesds", b"asdk", np.nan],
+            "C": [b"alkj", b"lkjhg", b"w345", b"aszxd", b"poiu", bytes(5), b"lkjhg"],
+        }
+    )
     check_func(impl1, (df_int,), sort_output=True)
     check_func(impl1, (df_str,), sort_output=True)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
+    check_func(impl1, (df_bin,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
 
@@ -1893,10 +2029,18 @@ def test_count_select_col(memory_leak_check):
     df_dt = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
     )
+    df_bin = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [b"", bytes(13), np.nan, b"asd", b"wesds", b"asdk", np.nan],
+            "C": [b"alkj", b"lkjhg", b"w345", b"aszxd", b"poiu", bytes(5), b"lkjhg"],
+        }
+    )
     check_func(impl1, (df_int,), sort_output=True)
     check_func(impl1, (df_str,), sort_output=True)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
+    check_func(impl1, (df_bin,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
 
@@ -1985,6 +2129,14 @@ def test_median_nullable_int_bool(memory_leak_check):
                 "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
             }
         ),
+        pd.DataFrame(
+            {
+                # TODO: change A to be binary column
+                # Grouping by binary columns unsupported due to lack of binary index, see [BE-1246]
+                "A": [1, 1, 1, 3, 3, 2, 6],
+                "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
+            }
+        ),
     ],
 )
 def test_nunique_select_col(df_uniq, memory_leak_check):
@@ -2030,8 +2182,17 @@ def test_nunique_select_col_missing_keys(memory_leak_check):
             "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
         }
     )
+    df_bin = pd.DataFrame(
+        {
+            # TODO: change A to be binary column
+            # Grouping by binary columns unsupported due to lack of binary index, see [BE-1246]
+            "A": [1, np.nan, 1, 2, 2, np.nan, 1],
+            "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
+        }
+    )
     check_func(impl1, (df_int,), sort_output=True)
     check_func(impl1, (df_str,), sort_output=True)
+    check_func(impl1, (df_bin,), sort_output=True)
 
 
 def test_filtered_count(memory_leak_check):
@@ -2242,6 +2403,7 @@ def test_groupby_apply(is_slow_run):
             "B": ["AB", "DD", "E", "A", "DD", "AB"],
             "C": [1.1, 2.2, 3.3, 4.4, 5.5, -1.1],
             "D": [3, 1, 2, 4, 5, 5],
+            "E": [b"AB", b"DD", bytes(3), b"A", b"DD", b"AB"],
         }
     )
     check_func(impl1, (df,), sort_output=True)
@@ -2353,6 +2515,7 @@ def test_groupby_apply_arg_dist():
         {
             "A": [1, 4, 4, 11, 4, 1],
             "B": ["AB", "DD", "E", "A", "DD", "AB"],
+            "C": [b"AB", b"DD", b"E", b"A", b"DD", b"AB"],
         }
     )
     check_func(impl1, (df, 10), sort_output=True, reset_index=True)
@@ -3039,6 +3202,17 @@ def test_min_max_other_supported_types(memory_leak_check):
     check_func(impl1, (df_td,), sort_output=True)
     check_func(impl2, (df_td,), sort_output=True)
 
+    # TODO: need min max support for binary, see BE-1252
+    # df_bin = pd.DataFrame(
+    #     {
+    #         "A": [2, 1, 1, 2, 3],
+    #         "B": [1.1, 2.2, 3.3, 4.4, 1.1],
+    #         "C": [b"ab", np.nan, b"ef", b"gh", b"ijk"],
+    #     }
+    # )
+    # check_func(impl1, (df_bin,), sort_output=True)
+    # check_func(impl2, (df_bin,), sort_output=True)
+
     # Test different column types in same dataframe
     df_mix = pd.DataFrame(
         {
@@ -3289,17 +3463,26 @@ def test_first_last(test_df, memory_leak_check):
     df_dt = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
     )
+    df_bin = pd.DataFrame(
+        {
+            "A": [1, 1, 3, 3, 2, 1, 2],
+            "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
+            "C": [b"cc", b"aa", b"aa", b"bb", b"vv", b"cc", b"cc"],
+        }
+    )
 
     check_func(impl1, (test_df,), sort_output=True)
     check_func(impl1, (df_str,), sort_output=True, check_typing_issues=False)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
+    check_func(impl1, (df_bin,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
     check_func(impl3, (test_df,), sort_output=True)
     check_func(impl3, (df_str,), sort_output=True, check_typing_issues=False)
     check_func(impl3, (df_bool,), sort_output=True)
     check_func(impl3, (df_dt,), sort_output=True)
+    check_func(impl3, (df_bin,), sort_output=True)
     check_func(impl4, (11,), sort_output=True)
 
 
@@ -3373,6 +3556,16 @@ def test_first_last_supported_types(memory_leak_check):
     check_func(impl1, (df_td,), sort_output=True)
     check_func(impl2, (df_td,), sort_output=True)
 
+    # nullable Binary
+    df_bin = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 2, 3] * 2,
+            "C": [b"ab", b"cd", np.nan, b"gh", b"ijk"] * 2,
+        }
+    )
+    check_func(impl1, (df_bin,), sort_output=True)
+    check_func(impl2, (df_bin,), sort_output=True)
+
     # Test different column types in same dataframe
     def impl_mix(df):
         A = df.groupby("A")["B", "C"].first()
@@ -3429,6 +3622,13 @@ def test_first_last_one_col(test_df, memory_leak_check):
     df_dt = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": pd.date_range("2019-1-3", "2019-1-9")}
     )
+    df_bin = pd.DataFrame(
+        {
+            "A": [1, 1, 3, 3, 2, 1, 2],
+            "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
+            "C": [b"cc", b"aa", b"aa", b"bb", b"vv", b"cc", b"cc"],
+        }
+    )
 
     # seems like Pandas 1.0 has a regression and returns float64 for Int64 in this case
     check_dtype = True
@@ -3439,12 +3639,14 @@ def test_first_last_one_col(test_df, memory_leak_check):
     check_func(impl1, (df_str,), sort_output=True, check_typing_issues=False)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
+    check_func(impl1, (df_bin,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
     check_func(impl3, (test_df,), sort_output=True, check_dtype=check_dtype)
     check_func(impl3, (df_str,), sort_output=True, check_typing_issues=False)
     check_func(impl3, (df_bool,), sort_output=True)
     check_func(impl3, (df_dt,), sort_output=True)
+    check_func(impl3, (df_bin,), sort_output=True)
     check_func(impl4, (11,), sort_output=True)
 
 
@@ -4440,6 +4642,23 @@ def test_groupby_shift_timedelta():
     check_func(impl2, (df,))
 
 
+@pytest.mark.slow
+def test_groupby_shift_binary():
+    """tests groupby shift for dataframes containing binary data"""
+
+    def impl2(df):
+        df2 = df.groupby("A").shift(-2)
+        return df2
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 1, 1, 2, 2] * 2,
+            "B": [b"hkjl", b"jkhb", np.nan, bytes(4), b"mhgt"] * 2,
+        }
+    )
+    check_func(impl2, (df,))
+
+
 def test_groupby_shift_simple():
     def impl(df):
         df2 = df.groupby("A").shift()
@@ -4546,14 +4765,14 @@ def test_size(memory_leak_check):
 
     df2 = pd.DataFrame(
         [
-            ("bird", "Falconiformes", 389.0),
-            ("bird", "nan", 24.0),
-            ("mammal", "Carnivora", 80.2),
-            ("mammal", "Primates", np.nan),
-            ("mammal", "Carnivora", 58),
+            ("bird", "Falconiformes", b"a", 389.0),
+            ("bird", "nan", b"b", 24.0),
+            ("mammal", "Carnivora", b"c", 80.2),
+            ("mammal", "Primates", b"d", np.nan),
+            ("mammal", "Carnivora", b"e", 58),
         ],
         index=["falcon", "parrot", "lion", "monkey", "leopard"],
-        columns=("class", "order", "max_speed"),
+        columns=("class", "order", "bin_id", "max_speed"),
     )
 
     check_func(impl, (df2,), sort_output=True, reset_index=True)
@@ -4771,6 +4990,17 @@ def test_cumulatives_supported_cases(memory_leak_check):
                 {"A": [2, 1, 1, 2, 3], "B": pd.array([True, False, None, True, True])}
             )
         ),
+        # binary
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [16, 1, 1, 1, 16, 16, 1, 40],
+                    "B": [b"ab", b"cd", b"ef", np.nan, b"mm", b"a", b"abc", b"x"],
+                }
+            ),
+            marks=pytest.mark.slow,
+            id="bin_test",
+        ),
         # Empty dataframe
         pytest.param(
             pd.DataFrame({"A": [], "B": []}),
@@ -4836,6 +5066,7 @@ def test_count_supported_cases(memory_leak_check):
             "A": [2, 1, 1, 2, 3],
             "B": [1.1, 2.2, 3.3, 4.4, 1.1],
             "C": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
+            "D": [b"ab", b"cd", b"ef", np.nan, b"mm"],
         }
     )
     check_func(impl1, (df_mix,), sort_output=True, check_dtype=False)
@@ -4863,6 +5094,7 @@ def test_value_counts():
         {
             "X": [1, 1, 1, 3, 2, 3],
             "C": ["ab", "ab", "ab", "cd", "ef", "cd"],
+            "E": [b"ab", b"ab", b"ab", b"cd", b"ef", b"cd"],
             "D": [5, 6, 5, 1, 4, 1],
         }
     )
@@ -5024,6 +5256,7 @@ def test_groupby_transform_count(memory_leak_check):
             "B": pd.Series(pd.timedelta_range(start="1 day", periods=6)),
             "C": [True, False, False, False, True, True],
             "D": ["foo", "foo", "foo", "bar", "foo", "bar"],
+            "H": [b"foo", b"foo", b"foo", b"bar", b"foo", b"bar"],
             "E": [-8.3, np.nan, 3.8, 1.3, 5.4, np.nan],
             "G": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, 20]), dtype="Int8"),
         }
@@ -5134,6 +5367,16 @@ def test_groupby_apply_na_key(dropna):
                 "A": ["CC", "aa", "b", np.nan, "aa", np.nan, "aa", "CC"],
                 "B": [10.2, 11.1, 1.1, 2.2, 2.2, 1.3, 3.4, 4.5],
             },
+        ),
+        # Binary
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [b"CC", b"aa", b"b", np.nan, b"aa", np.nan, b"aa", b"CC"],
+                    "B": [10.2, 11.1, 1.1, 2.2, 2.2, 1.3, 3.4, 4.5],
+                },
+            ),
+            marks=pytest.mark.skip("Needs support for binary indexes, see [BE-1246]"),
         ),
         # Boolean
         pd.DataFrame(

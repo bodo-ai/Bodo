@@ -12,8 +12,9 @@ from bodo.tests.utils import check_func
                 "A": np.arange(100) % 10,
                 "B": np.arange(100) % 7,
                 "C": np.arange(100),
-                # This column should be skipped for numeric only computation
+                # These two columns should be skipped for numeric only computation
                 "D": ["a", "ecw", "e2r", "2314", " 342"] * 20,
+                "E": [b"a", b"ecw", b"e2r", b"2314", b" 342"] * 20,
             }
         )
     ]
