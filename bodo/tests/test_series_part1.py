@@ -2631,9 +2631,6 @@ def test_series_map_args(memory_leak_check):
     def test_na_action_none(S):
         return S.map(lambda a: a, na_action=None)
 
-    def test_np_func(S):
-        return S.map(np.abs)
-
     def test_wrong_func(S):
         return S.map("XX")
 
@@ -2642,11 +2639,6 @@ def test_series_map_args(memory_leak_check):
         bodo.jit(test_na_action_ignore)(S)
 
     bodo.jit(test_na_action_none)(S)
-
-    with pytest.raises(
-        BodoError, match="Series.map.* not support built-in functions yet"
-    ):
-        bodo.jit(test_np_func)(S)
 
     with pytest.raises(
         BodoError, match="Series.map.*: user-defined function not supported"
