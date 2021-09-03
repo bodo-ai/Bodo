@@ -93,10 +93,12 @@ def test_bytes_hash(binary_arr_value, memory_leak_check):
 
     # check_dtype=False because None converts the output to Float in Pandas
     # dist_test = False because the randomness causes different inputs on each core.
+    # only_seq=True because the hash function has randomness between cores
     check_func(
         test_impl,
         (binary_arr_value,),
         check_dtype=False,
+        only_seq=True,
     )
 
 
