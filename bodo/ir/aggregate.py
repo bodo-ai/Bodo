@@ -58,6 +58,7 @@ from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
     pre_alloc_array_item_array,
 )
+from bodo.libs.binary_arr_ext import BinaryArrayType, pre_alloc_binary_array
 from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType, alloc_decimal_array
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
@@ -1072,6 +1073,7 @@ def agg_distributed_run(
         {
             "pd": pd,
             "pre_alloc_string_array": pre_alloc_string_array,
+            "pre_alloc_binary_array": pre_alloc_binary_array,
             "pre_alloc_array_item_array": pre_alloc_array_item_array,
             "string_array_type": string_array_type,
             "alloc_decimal_array": alloc_decimal_array,
@@ -1224,6 +1226,8 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
         return "bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))"
     elif isinstance(t, StringArrayType):
         return "pre_alloc_string_array(1, 1)"
+    elif isinstance(t, BinaryArrayType):
+        return "pre_alloc_binary_array(1, 1)"
     elif t == ArrayItemArrayType(string_array_type):
         return "pre_alloc_array_item_array(1, (1, 1), string_array_type)"
     elif isinstance(t, DecimalArrayType):
@@ -1741,7 +1745,6 @@ def gen_top_level_agg_func(
             func_text += "    {} = {}\n".format(
                 out_name, _gen_dummy_alloc(out_col_typ, i, False)
             )
-
     # do_combine indicates whether GroupbyPipeline in C++ will need to do
     # `void combine()` operation or not
     do_combine = parallel
