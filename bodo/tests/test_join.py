@@ -237,6 +237,30 @@ def _gen_df_str(n):
     return df
 
 
+def _gen_df_binary(n, seed=None):
+    """
+    helper function that generate dataframe with int and binary columns.
+    Takes an optional seed argument for use with np.random.seed.
+    """
+    if seed == None:
+        np.random.seed(14)
+    else:
+        np.random.seed(seed)
+
+    bin_vals = []
+    for _ in range(n):
+        # store NA with 30% chance
+        if np.random.ranf() < 0.3:
+            bin_vals.append(np.nan)
+            continue
+
+        bin_vals.append(bytes(np.random.randint(1, 100)))
+
+    A = np.random.randint(0, 100, n)
+    df = pd.DataFrame({"A": A, "B": bin_vals})
+    return df
+
+
 # ------------------------------ merge() ------------------------------ #
 
 
@@ -940,6 +964,65 @@ def test_merge_str_nan2(memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
+def test_merge_binary_key(memory_leak_check):
+    """
+    Test merge(): sequentially merge on key column of type binary
+    """
+
+    def test_impl(df1, df2):
+        df3 = pd.merge(df1, df2, left_on="key1", right_on="key2")
+        return df3
+
+    df1 = pd.DataFrame({"key1": [b"foo", b"bar", b"baz"] * 3})
+    df2 = pd.DataFrame(
+        {"key2": [b"baz", b"bar", b"baz"] * 3, "B": [b"b", b"zzz", b"ss"] * 3}
+    )
+
+    bodo_func = bodo.jit(test_impl)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
+
+
+def test_merge_binary_nan1(memory_leak_check):
+    """
+    test merging dataframes containing binary columns with nan values
+    """
+
+    def test_impl(df1, df2):
+        return pd.merge(df1, df2, left_on="key1", right_on="key2")
+
+    df1 = pd.DataFrame(
+        {
+            "key1": [b"foo", b"bar", b"baz", b"baz", b"c4", b"c7"],
+            "A": [b"b", b"", b"ss", b"a", b"b2", np.nan],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "key2": [b"baz", b"bar", b"baz", b"foo", b"c4", b"c7"],
+            "B": [b"b", np.nan, b"", b"AA", b"c", b"a1"],
+        }
+    )
+
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
+
+
+@pytest.mark.slow
+def test_merge_binary_nan2(memory_leak_check):
+    """
+    test merging dataframes containing binary columns with nan values
+    on larger dataframes
+    """
+
+    def test_impl(df1, df2):
+        return df1.merge(df2, on="A")
+
+    # seeds should be the same on different processors for consistent input
+    n = 1211
+    df1 = _gen_df_binary(n, 3)
+    df2 = _gen_df_binary(n, 13)
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
+
+
 def test_merge_bool_nan(memory_leak_check):
     """
     test merging dataframes containing boolean columns with nan values
@@ -1019,6 +1102,30 @@ def test_merge_out_str_na(memory_leak_check):
     )
 
     check_func(test_impl, (df1, df2), check_typing_issues=False)
+
+
+def test_merge_out_binary_na(memory_leak_check):
+    """
+    Test merge(): setting NA in output binary data column.
+    Sorting has to be done in the code since option sort_output=True does not
+    work for series.
+    reset_index(drop=True) is needed so as to avoid index collisions.
+    Size of the test has been extended so that empty bins do not occur for test on 2 or 3 processors.
+    """
+
+    def test_impl(df1, df2):
+        df4 = df1.merge(df2, left_on="key1", right_on="key2", how="inner")
+        return df4
+
+    df1 = pd.DataFrame({"key1": [b"foo", b"bar", b"baz", b"fab", b"faz", b"fay"] * 2})
+    df2 = pd.DataFrame(
+        {
+            "key2": [b"baz", b"bar", b"baz", b"faq", b"fau", b"fab"] * 2,
+            "B": ["b", "zzz", "ss", "aaa", "bb", "wuk"] * 2,
+        }
+    )
+
+    check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 def test_merge_datetime(memory_leak_check):
@@ -1888,6 +1995,28 @@ def test_merge_index_column_string_index(memory_leak_check):
     df2 = pd.DataFrame({"A": ["aa", "bb"], "C": ["a", "b"]}, index=["zz", "aa"])
 
     check_func(f1, (df1, df2), sort_output=True, check_typing_issues=False)
+
+
+@pytest.mark.skip("need support for binary index, see BE-1246")
+def test_merge_index_column_binary_index(memory_leak_check):
+    """
+    Test merge(): Same as first but with a binary index
+    """
+
+    def f1(df1, df2):
+        df3 = df1.merge(df2, left_index=True, right_on=["A"])
+        return df3
+
+    df1 = pd.DataFrame(
+        {"A": [b"aa", b"bb", b"cc"] * 3, "C": [b"a", b"b", b"c"] * 3},
+        index=[b"z", b"a", b"c", b"zz", b"aa", b"cc", b"zzz", b"aaa", b"ccc"],
+    )
+    df2 = pd.DataFrame(
+        {"A": [b"aa", b"bb", b"cc"] * 3, "C": [b"a", b"b", b"c"] * 3},
+        index=[b"z", b"a", b"c", b"zz", b"aa", b"cc", b"zzz", b"aaa", b"ccc"],
+    )
+
+    check_func(f1, (df1, df2), sort_output=True)
 
 
 def test_merge_index_column_how(memory_leak_check):
