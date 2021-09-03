@@ -1179,8 +1179,8 @@ def set_string_array_range(
                 lir.IntType(64),
             ],
         )
-        fn_alloc = builder.module.get_or_insert_function(
-            fnty, name="set_string_array_range"
+        fn_alloc = cgutils.get_or_insert_function(
+            builder.module, fnty, name="set_string_array_range"
         )
         builder.call(
             fn_alloc,
@@ -1237,7 +1237,7 @@ def box_str_arr(typ, val, c):
             lir.IntType(32),
         ],
     )
-    fn_get = c.builder.module.get_or_insert_function(fnty, name=box_fname)
+    fn_get = cgutils.get_or_insert_function(c.builder.module, fnty, name=box_fname)
     offsets_ptr = c.context.make_array(offset_arr_type)(
         c.context, c.builder, payload.offsets
     ).data
@@ -1507,8 +1507,8 @@ def setitem_str_arr_ptr(typingctx, str_arr_t, ind_t, ptr_t, len_t=None):
                 lir.IntType(64),
             ],
         )
-        fn_setitem = builder.module.get_or_insert_function(
-            fnty, name="setitem_string_array"
+        fn_setitem = cgutils.get_or_insert_function(
+            builder.module, fnty, name="setitem_string_array"
         )
         # kind doesn't matter since input is ASCII
         kind = context.get_constant(types.int32, -1)
@@ -1536,7 +1536,7 @@ def lower_is_na(context, builder, bull_bitmap, ind):
     fnty = lir.FunctionType(
         lir.IntType(1), [lir.IntType(8).as_pointer(), lir.IntType(64)]
     )
-    fn_getitem = builder.module.get_or_insert_function(fnty, name="is_na")
+    fn_getitem = cgutils.get_or_insert_function(builder.module, fnty, name="is_na")
     return builder.call(fn_getitem, [bull_bitmap, ind])
 
 
@@ -2125,7 +2125,7 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t
         else:
             assert sig.args[3].dtype == types.int64
         # TODO: handle NA for float64 (use np.nan)
-        fn_to_numeric = builder.module.get_or_insert_function(fnty, fname)
+        fn_to_numeric = cgutils.get_or_insert_function(builder.module, fnty, fname)
         return builder.call(fn_to_numeric, [out_ptr, offsets, data, ind])
 
     return types.int32(out_ptr_t, string_array_type, types.int64, out_dtype_t), codegen
@@ -2150,8 +2150,8 @@ def unbox_str_series(typ, val, c):
             lir.IntType(32),
         ],
     )
-    fn = c.builder.module.get_or_insert_function(
-        fnty, name="string_array_from_sequence"
+    fn = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="string_array_from_sequence"
     )
     array_item_meminfo = c.builder.call(
         fn,

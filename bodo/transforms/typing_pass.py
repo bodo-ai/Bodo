@@ -125,6 +125,7 @@ class BodoTypeInference(PartialTypeInference):
             typing_transforms_pass = TypingTransforms(
                 state.func_ir,
                 state.typingctx,
+                state.targetctx,
                 state.typemap,
                 state.calltypes,
                 state.args,
@@ -152,6 +153,7 @@ class BodoTypeInference(PartialTypeInference):
             typing_transforms_pass = TypingTransforms(
                 state.func_ir,
                 state.typingctx,
+                state.targetctx,
                 state.typemap,
                 state.calltypes,
                 state.args,
@@ -167,6 +169,7 @@ class BodoTypeInference(PartialTypeInference):
                 typing_transforms_pass = TypingTransforms(
                     state.func_ir,
                     state.typingctx,
+                    state.targetctx,
                     state.typemap,
                     state.calltypes,
                     state.args,
@@ -252,6 +255,7 @@ class TypingTransforms:
         self,
         func_ir,
         typingctx,
+        targetctx,
         typemap,
         calltypes,
         arg_types,
@@ -262,6 +266,7 @@ class TypingTransforms:
     ):
         self.func_ir = func_ir
         self.typingctx = typingctx
+        self.targetctx = targetctx
         self.typemap = typemap
         # calltypes may be None (example in forecast code, hard to reproduce in test)
         self.calltypes = {} if calltypes is None else calltypes  # pragma: no cover

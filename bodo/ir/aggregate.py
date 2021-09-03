@@ -9,7 +9,7 @@ import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
-from numba.core import compiler, ir, ir_utils, types
+from numba.core import cgutils, compiler, ir, ir_utils, types
 from numba.core.analysis import compute_use_defs
 from numba.core.ir_utils import (
     build_definitions,
@@ -126,7 +126,9 @@ def add_agg_cfunc_sym(typingctx, func, sym):
                     lir.IntType(8).as_pointer(),
                 ],
             )
-            fn_tp = builder.module.get_or_insert_function(fnty, sym._literal_value)
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, sym._literal_value
+            )
             builder.call(
                 fn_tp,
                 [
@@ -143,7 +145,9 @@ def add_agg_cfunc_sym(typingctx, func, sym):
                     lir.IntType(8).as_pointer(),
                 ],
             )
-            fn_tp = builder.module.get_or_insert_function(fnty, sym._literal_value)
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, sym._literal_value
+            )
             builder.call(
                 fn_tp,
                 [
@@ -163,7 +167,9 @@ def add_agg_cfunc_sym(typingctx, func, sym):
                     lir.IntType(64).as_pointer(),
                 ],
             )
-            fn_tp = builder.module.get_or_insert_function(fnty, sym._literal_value)
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, sym._literal_value
+            )
             builder.call(
                 fn_tp,
                 [
@@ -1109,7 +1115,13 @@ def agg_distributed_run(
             glbs.update({"cpp_cb_general": udf_func_struct.general_udf_cfunc})
 
     f_block = compile_to_numba_ir(
-        top_level_func, glbs, typingctx, arg_typs, typemap, calltypes
+        top_level_func,
+        glbs,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=arg_typs,
+        typemap=typemap,
+        calltypes=calltypes,
     ).blocks.popitem()[1]
 
     nodes = []
@@ -2027,7 +2039,7 @@ def gen_top_level_agg_func(
     return agg_top
 
 
-def compile_to_optimized_ir(func, arg_typs, typingctx):
+def compile_to_optimized_ir(func, arg_typs, typingctx, targetctx):
     # TODO: reuse Numba's compiler pipelines
     # XXX are outside function's globals needed?
     code = func.code if hasattr(func, "code") else func.__code__
@@ -2059,14 +2071,14 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     assert f_ir.arg_count == 1, "agg function should have one input"
     # construct default flags similar to numba.core.compiler
     flags = numba.core.compiler.Flags()
-    flags.set("nrt")
+    flags.nrt = True
     untyped_pass = bodo.transforms.untyped_pass.UntypedPass(
         f_ir, typingctx, arg_typs, {}, {}, flags
     )
     untyped_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
     typemap, return_type, calltypes, _ = numba.core.typed_passes.type_inference_stage(
-        typingctx, f_ir, arg_typs, None
+        typingctx, targetctx, f_ir, arg_typs, None
     )
 
     options = numba.core.cpu.ParallelOptions(True)
@@ -2127,7 +2139,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     inline_overload_pass.run_pass(pm)
 
     series_pass = bodo.transforms.series_pass.SeriesPass(
-        f_ir, typingctx, typemap, calltypes, {}, False
+        f_ir, typingctx, targetctx, typemap, calltypes, {}, False
     )
     series_pass.run()
     # change the input type to UDF from Series to Array since Bodo passes Arrays to UDFs
@@ -2161,7 +2173,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
 
     bodo.transforms.untyped_pass.remove_dead_branches(f_ir)
     preparfor_pass = numba.parfors.parfor.PreParforPass(
-        f_ir, typemap, calltypes, typingctx, options
+        f_ir, typemap, calltypes, typingctx, targetctx, options
     )
     preparfor_pass.run()
     f_ir._definitions = build_definitions(f_ir.blocks)
@@ -2174,7 +2186,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx):
     state.return_type = return_type
     numba.core.rewrites.rewrite_registry.apply("after-inference", state)
     parfor_pass = numba.parfors.parfor.ParforPass(
-        f_ir, typemap, calltypes, return_type, typingctx, options, flags, {}
+        f_ir, typemap, calltypes, return_type, typingctx, targetctx, options, flags, {}
     )
     parfor_pass.run()
     # TODO(ehsan): remove when this PR is merged and released in Numba:
@@ -2235,7 +2247,9 @@ class RegularUDFGenerator(object):
     def add_udf(self, in_col_typ, func):
         in_series_typ = SeriesType(in_col_typ.dtype, in_col_typ, None, string_type)
         # compile UDF to IR
-        f_ir, pm = compile_to_optimized_ir(func, (in_series_typ,), self.typingctx)
+        f_ir, pm = compile_to_optimized_ir(
+            func, (in_series_typ,), self.typingctx, self.targetctx
+        )
         f_ir._definitions = build_definitions(f_ir.blocks)
 
         assert len(f_ir.blocks) == 1 and 0 in f_ir.blocks, (
@@ -2567,8 +2581,9 @@ def gen_init_func(init_nodes, reduce_vars, var_types, typingctx, targetctx):
     init_all_func = compiler.compile_ir(
         typingctx, targetctx, f_ir, (), return_typ, compiler.DEFAULT_FLAGS, {}
     )
+    from numba.core.target_extension import cpu_target
 
-    imp_dis = numba.core.registry.dispatcher_registry["cpu"](dummy_f)
+    imp_dis = numba.core.target_extension.dispatcher_registry[cpu_target](dummy_f)
     imp_dis.add_overload(init_all_func)
     return imp_dis
 
@@ -2717,7 +2732,9 @@ def gen_all_combine_func(
         typingctx, targetctx, f_ir, arg_typs, types.none, compiler.DEFAULT_FLAGS, {}
     )
 
-    imp_dis = numba.core.registry.dispatcher_registry["cpu"](combine_all_f)
+    from numba.core.target_extension import cpu_target
+
+    imp_dis = numba.core.target_extension.dispatcher_registry[cpu_target](combine_all_f)
     imp_dis.add_overload(combine_all_func)
     return imp_dis
 
@@ -2801,10 +2818,11 @@ def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targe
         agg_eval,
         # TODO: add outside globals
         {"numba": numba, "bodo": bodo, "np": np, "_zero": zero},
-        typingctx,
-        arg_typs,
-        pm.typemap,
-        pm.calltypes,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=arg_typs,
+        typemap=pm.typemap,
+        calltypes=pm.calltypes,
     )
 
     # TODO: support multi block eval funcs
@@ -2826,7 +2844,9 @@ def gen_eval_func(f_ir, eval_nodes, reduce_vars, var_types, pm, typingctx, targe
         typingctx, targetctx, f_ir, arg_typs, return_typ, compiler.DEFAULT_FLAGS, {}
     )
 
-    imp_dis = numba.core.registry.dispatcher_registry["cpu"](agg_eval)
+    from numba.core.target_extension import cpu_target
+
+    imp_dis = numba.core.target_extension.dispatcher_registry[cpu_target](agg_eval)
     imp_dis.add_overload(eval_func)
     return imp_dis
 
@@ -2917,10 +2937,11 @@ def gen_combine_func(
     f_ir = compile_to_numba_ir(
         agg_combine,
         glbs,  # TODO: add outside globals
-        typingctx,
-        arg_typs,
-        pm.typemap,
-        pm.calltypes,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=arg_typs,
+        typemap=pm.typemap,
+        calltypes=pm.calltypes,
     )
 
     block = list(f_ir.blocks.values())[0]
@@ -2931,7 +2952,9 @@ def gen_combine_func(
         typingctx, targetctx, f_ir, arg_typs, return_typ, compiler.DEFAULT_FLAGS, {}
     )
 
-    imp_dis = numba.core.registry.dispatcher_registry["cpu"](agg_combine)
+    from numba.core.target_extension import cpu_target
+
+    imp_dis = numba.core.target_extension.dispatcher_registry[cpu_target](agg_combine)
     imp_dis.add_overload(combine_func)
     return imp_dis
 
@@ -3038,10 +3061,11 @@ def gen_update_func(
         agg_update,
         # TODO: add outside globals
         {"__update_redvars": __update_redvars},
-        typingctx,
-        arg_typs,
-        pm.typemap,
-        pm.calltypes,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=arg_typs,
+        typemap=pm.typemap,
+        calltypes=pm.calltypes,
     )
 
     f_ir._definitions = build_definitions(f_ir.blocks)
@@ -3104,7 +3128,9 @@ def gen_update_func(
         typingctx, targetctx, f_ir, arg_typs, return_typ, compiler.DEFAULT_FLAGS, {}
     )
 
-    imp_dis = numba.core.registry.dispatcher_registry["cpu"](agg_update)
+    from numba.core.target_extension import cpu_target
+
+    imp_dis = numba.core.target_extension.dispatcher_registry[cpu_target](agg_update)
     imp_dis.add_overload(agg_impl_func)
     return imp_dis
 

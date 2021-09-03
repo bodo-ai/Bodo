@@ -19,15 +19,15 @@ such as Numba on Ubuntu Linux::
     source activate DEV
     # Linux: conda install 'gcc_linux-64>=9' 'gxx_linux-64>=9' -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 -c conda-forge
-    # If you don't want to install Numba from source: conda install numba=0.53.0 -c conda-forge
+    # If you don't want to install Numba from source: conda install numba=0.54.0 -c conda-forge
     # For development/debugging purposes, it's best to install Numba from source instead
     # START OF BUILD NUMBA FROM SOURCE
     conda install llvmlite -c conda-forge
     git clone https://github.com/numba/numba.git
-    # make sure you checkout version 0.53.0. numba's master may not work with Bodo master
+    # make sure you checkout version 0.54.0. numba's master may not work with Bodo master
     # if you need to remove any numba in your miniconda env before rebuilding from source try:
     # conda remove numba=<version>
-    cd numba; git checkout 0.53.0
+    cd numba; git checkout 0.54.0
     python setup.py develop
     cd ..
     # END OF BUILD NUMBA FROM SOURCE
@@ -92,7 +92,7 @@ On Windows
 
     conda create -n DEV python numpy scipy pandas="1.3.*" boost-cpp -c conda-forge
     conda activate DEV
-    conda install numba=0.53.0 -c conda-forge
+    conda install numba=0.54.0 -c conda-forge
     conda install mpi4py msmpi cython -c conda-forge
     conda install -c conda-forge pyarrow=5.0.0
     # Required for IO with S3

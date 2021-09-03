@@ -298,7 +298,9 @@ def define_series_dtor(context, builder, series_type, payload_type):
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
     # TODO(ehsan): do we need to sanitize the name in any case?
-    fn = mod.get_or_insert_function(fnty, name=".dtor.series.{}".format(series_type))
+    fn = cgutils.get_or_insert_function(
+        mod, fnty, name=".dtor.series.{}".format(series_type)
+    )
 
     # End early if the dtor is already defined
     if not fn.is_declaration:
@@ -682,7 +684,11 @@ class SeriesAttribute(AttributeTemplate):
                     is_udf = False
                 else:
                     f_return_type = get_const_func_output_type(
-                        func, in_types, kws, self.context
+                        func,
+                        in_types,
+                        kws,
+                        self.context,
+                        numba.core.registry.cpu_target.target_context,
                     )
             except Exception as e:
                 raise BodoError(get_udf_error_msg(f"Series.{fname}()", e))
@@ -797,7 +803,11 @@ class SeriesAttribute(AttributeTemplate):
             dtype2 = pd_timestamp_type
 
         f_return_type = get_const_func_output_type(
-            func, (dtype1, dtype2), {}, self.context
+            func,
+            (dtype1, dtype2),
+            {},
+            self.context,
+            numba.core.registry.cpu_target.target_context,
         )
 
         # TODO: output name is always None in Pandas?

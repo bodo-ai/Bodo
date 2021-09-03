@@ -134,8 +134,8 @@ def array_to_info(typingctx, arr_type_t=None):
                     lir.IntType(8).as_pointer(),
                 ],
             )
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="list_string_array_to_info"
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="list_string_array_to_info"
             )
             return builder.call(
                 fn_tp,
@@ -380,8 +380,8 @@ def array_to_info(typingctx, arr_type_t=None):
                     ).as_pointer(),  # Maybe it should be lit.IntType(8).as_pointer().as_pointer()
                 ],
             )
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="nested_array_to_info"
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="nested_array_to_info"
             )
             ret = builder.call(
                 fn_tp,
@@ -434,8 +434,8 @@ def array_to_info(typingctx, arr_type_t=None):
                     lir.IntType(32),
                 ],
             )
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="string_array_to_info"
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="string_array_to_info"
             )
             return builder.call(
                 fn_tp,
@@ -494,8 +494,8 @@ def array_to_info(typingctx, arr_type_t=None):
                         lir.IntType(8).as_pointer(),
                     ],
                 )
-                fn_tp = builder.module.get_or_insert_function(
-                    fnty, name="categorical_array_to_info"
+                fn_tp = cgutils.get_or_insert_function(
+                    builder.module, fnty, name="categorical_array_to_info"
                 )
                 return builder.call(
                     fn_tp,
@@ -517,8 +517,8 @@ def array_to_info(typingctx, arr_type_t=None):
                         lir.IntType(8).as_pointer(),
                     ],
                 )
-                fn_tp = builder.module.get_or_insert_function(
-                    fnty, name="numpy_array_to_info"
+                fn_tp = cgutils.get_or_insert_function(
+                    builder.module, fnty, name="numpy_array_to_info"
                 )
                 return builder.call(
                     fn_tp,
@@ -569,8 +569,8 @@ def array_to_info(typingctx, arr_type_t=None):
                         lir.IntType(32),
                     ],
                 )
-                fn_tp = builder.module.get_or_insert_function(
-                    fnty, name="decimal_array_to_info"
+                fn_tp = cgutils.get_or_insert_function(
+                    builder.module, fnty, name="decimal_array_to_info"
                 )
                 return builder.call(
                     fn_tp,
@@ -597,8 +597,8 @@ def array_to_info(typingctx, arr_type_t=None):
                         lir.IntType(8).as_pointer(),
                     ],
                 )
-                fn_tp = builder.module.get_or_insert_function(
-                    fnty, name="nullable_array_to_info"
+                fn_tp = cgutils.get_or_insert_function(
+                    builder.module, fnty, name="nullable_array_to_info"
                 )
                 return builder.call(
                     fn_tp,
@@ -639,8 +639,8 @@ def array_to_info(typingctx, arr_type_t=None):
                     lir.IntType(8).as_pointer(),
                 ],
             )
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="interval_array_to_info"
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="interval_array_to_info"
             )
             return builder.call(
                 fn_tp,
@@ -676,7 +676,9 @@ def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
             lir.IntType(8).as_pointer().as_pointer(),
         ],
     )  # meminfo
-    fn_tp = builder.module.get_or_insert_function(fnty, name="info_to_numpy_array")
+    fn_tp = cgutils.get_or_insert_function(
+        builder.module, fnty, name="info_to_numpy_array"
+    )
     builder.call(fn_tp, [in_info, length_ptr, data_ptr, meminfo_ptr])
     context.compile_internal(
         builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
@@ -715,8 +717,8 @@ def _lower_info_to_array_list_string_array(arr_type, context, builder, in_info):
             lir.IntType(8).as_pointer().as_pointer(),  # meminfo
         ],
     )
-    fn_tp = builder.module.get_or_insert_function(
-        fnty, name="info_to_list_string_array"
+    fn_tp = cgutils.get_or_insert_function(
+        builder.module, fnty, name="info_to_list_string_array"
     )
     builder.call(
         fn_tp,
@@ -887,7 +889,9 @@ def nested_to_array(
                 lir.IntType(8).as_pointer().as_pointer(),  # meminfo
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="info_to_string_array")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="info_to_string_array"
+        )
         builder.call(
             fn_tp,
             [
@@ -1046,8 +1050,8 @@ def info_to_array(typingctx, info_type, array_type):
                     lir.IntType(8).as_pointer().as_pointer(),  # array of array_info*
                 ],
             )
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="info_to_nested_array"
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="info_to_nested_array"
             )
             builder.call(
                 fn_tp,
@@ -1089,8 +1093,8 @@ def info_to_array(typingctx, info_type, array_type):
                     lir.IntType(8).as_pointer().as_pointer(),  # meminfo
                 ],
             )
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="info_to_string_array"
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="info_to_string_array"
             )
             builder.call(
                 fn_tp,
@@ -1161,8 +1165,8 @@ def info_to_array(typingctx, info_type, array_type):
                     lir.IntType(8).as_pointer().as_pointer(),
                 ],
             )  # meminfo_nulls
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="info_to_nullable_array"
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="info_to_nullable_array"
             )
             builder.call(
                 fn_tp,
@@ -1256,8 +1260,8 @@ def info_to_array(typingctx, info_type, array_type):
                     lir.IntType(8).as_pointer().as_pointer(),  # right meminfo
                 ],
             )  # meminfo_nulls
-            fn_tp = builder.module.get_or_insert_function(
-                fnty, name="info_to_interval_array"
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="info_to_interval_array"
             )
             builder.call(
                 fn_tp,
@@ -1339,7 +1343,7 @@ def test_alloc_np(typingctx, len_typ, arr_type):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(), [lir.IntType(64), lir.IntType(32)]  # num_items
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="alloc_numpy")
+        fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="alloc_numpy")
         return builder.call(fn_tp, [length, builder.load(typ_arg)])
 
     return array_info_type(len_typ, arr_type), codegen
@@ -1352,7 +1356,9 @@ def test_alloc_string(typingctx, len_typ, n_chars_typ):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(), [lir.IntType(64), lir.IntType(64)]  # num_items
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="alloc_string_array")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="alloc_string_array"
+        )
         return builder.call(fn_tp, [length, n_chars])
 
     return array_info_type(len_typ, n_chars_typ), codegen
@@ -1371,8 +1377,8 @@ def arr_info_list_to_table(typingctx, list_arr_info_typ=None):
             lir.IntType(8).as_pointer(),
             [lir.IntType(8).as_pointer().as_pointer(), lir.IntType(64)],
         )
-        fn_tp = builder.module.get_or_insert_function(
-            fnty, name="arr_info_list_to_table"
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="arr_info_list_to_table"
         )
         return builder.call(fn_tp, [inst.data, inst.size])
 
@@ -1389,7 +1395,9 @@ def info_from_table(typingctx, table_t, ind_t):
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64)]
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="info_from_table")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="info_from_table"
+        )
         return builder.call(fn_tp, args)
 
     return array_info_type(table_t, ind_t), codegen
@@ -1414,7 +1422,9 @@ def delete_table(typingctx, table_t=None):
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer()])
-        fn_tp = builder.module.get_or_insert_function(fnty, name="delete_table")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="delete_table"
+        )
         builder.call(fn_tp, args)
 
     return types.void(table_t), codegen
@@ -1435,7 +1445,9 @@ def shuffle_table(typingctx, table_t, n_keys_t, keep_comm_info_t):  # pragma: no
             lir.IntType(8).as_pointer(),
             [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(32)],
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="shuffle_table")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="shuffle_table"
+        )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
             builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
@@ -1518,7 +1530,9 @@ def hash_join_table(
                 lir.IntType(1),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="hash_join_table")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="hash_join_table"
+        )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
             builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
@@ -1559,8 +1573,8 @@ def compute_node_partition_by_hash(typingctx, table_t, n_keys_t, n_pes_t):
             lir.IntType(8).as_pointer(),
             [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(64)],
         )
-        fn_tp = builder.module.get_or_insert_function(
-            fnty, name="compute_node_partition_by_hash"
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="compute_node_partition_by_hash"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
@@ -1591,7 +1605,9 @@ def sort_values_table(
                 lir.IntType(1),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="sort_values_table")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="sort_values_table"
+        )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
             builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
@@ -1622,7 +1638,9 @@ def sample_table(typingctx, table_t, n_keys_t, frac_t, replace_t, parallel_t):
                 lir.IntType(1),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="sample_table")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="sample_table"
+        )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
             builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
@@ -1652,8 +1670,8 @@ def shuffle_renormalization(typingctx, table_t, random_t, random_seed_t, is_para
                 lir.IntType(1),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(
-            fnty, name="shuffle_renormalization"
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="shuffle_renormalization"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
@@ -1688,8 +1706,8 @@ def shuffle_renormalization_group(
                 lir.IntType(8).as_pointer(),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(
-            fnty, name="shuffle_renormalization_group"
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="shuffle_renormalization_group"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
@@ -1726,8 +1744,8 @@ def drop_duplicates_table(
                 lir.IntType(1),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(
-            fnty, name="drop_duplicates_table"
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="drop_duplicates_table"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
@@ -1796,8 +1814,8 @@ def pivot_groupby_and_aggregate(
                 lir.IntType(8).as_pointer(),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(
-            fnty, name="pivot_groupby_and_aggregate"
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="pivot_groupby_and_aggregate"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(
@@ -1882,8 +1900,8 @@ def groupby_and_aggregate(
                 lir.IntType(8).as_pointer(),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(
-            fnty, name="groupby_and_aggregate"
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="groupby_and_aggregate"
         )
         ret = builder.call(fn_tp, args)
         context.compile_internal(

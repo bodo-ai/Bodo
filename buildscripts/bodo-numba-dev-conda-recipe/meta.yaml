@@ -19,8 +19,10 @@ requirements:
   host:
     - python
     - setuptools
-    - numba
-    - numpy
+    - numba 0.54.0
+    # Compatable with Numba requirements.
+    # Resolves build issues on nightly
+    - numpy >=1.17
     - cython
     - pandas 1.3.*
     - fsspec

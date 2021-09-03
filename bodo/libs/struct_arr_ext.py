@@ -143,7 +143,8 @@ def define_struct_arr_dtor(context, builder, struct_arr_type, payload_type):
     mod = builder.module
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
-    fn = mod.get_or_insert_function(
+    fn = cgutils.get_or_insert_function(
+        mod,
         fnty,
         name=".dtor.struct_arr.{}.{}.".format(
             struct_arr_type.data, struct_arr_type.names
@@ -335,8 +336,8 @@ def unbox_struct_array(typ, val, c, is_tuple_array=False):
                 lir.IntType(1),  # is_tuple_array
             ],
         )
-        fn = c.builder.module.get_or_insert_function(
-            fnty, name="struct_array_from_sequence"
+        fn = cgutils.get_or_insert_function(
+            c.builder.module, fnty, name="struct_array_from_sequence"
         )
 
         c.builder.call(
@@ -504,8 +505,8 @@ def box_struct_arr(typ, val, c, is_tuple_array=False):
                 lir.IntType(1),  # is_tuple_array
             ],
         )
-        fn_get = c.builder.module.get_or_insert_function(
-            fnty, name="np_array_from_struct_array"
+        fn_get = cgutils.get_or_insert_function(
+            c.builder.module, fnty, name="np_array_from_struct_array"
         )
 
         arr = c.builder.call(
@@ -763,7 +764,8 @@ def define_struct_dtor(context, builder, struct_type, payload_type):
     mod = builder.module
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
-    fn = mod.get_or_insert_function(
+    fn = cgutils.get_or_insert_function(
+        mod,
         fnty,
         name=".dtor.struct.{}.{}.".format(struct_type.data, struct_type.names),
     )

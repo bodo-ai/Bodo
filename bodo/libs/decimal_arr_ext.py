@@ -141,7 +141,7 @@ def decimal_to_str_codegen(context, builder, signature, args, scale):
             lir.IntType(32),
         ],
     )
-    fn = builder.module.get_or_insert_function(fnty, name="decimal_to_str")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="decimal_to_str")
     builder.call(
         fn,
         [
@@ -185,7 +185,7 @@ def str_to_decimal_codegen(context, builder, signature, args):
             lir.IntType(8).as_pointer(),
         ],
     )
-    fn = builder.module.get_or_insert_function(fnty, name="str_to_decimal")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="str_to_decimal")
     decimal_val = builder.call(
         fn,
         [
@@ -253,7 +253,7 @@ def decimal128type_cmp(typingctx, val1, scale1, val2, scale2, func_name):
             lir.IntType(1),
             [lir.IntType(128), lir.IntType(64), lir.IntType(128), lir.IntType(64)],
         )
-        fn = builder.module.get_or_insert_function(fnty, name=_func_name)
+        fn = cgutils.get_or_insert_function(builder.module, fnty, name=_func_name)
         return builder.call(fn, (val1, scale1, val2, scale2))
 
     return types.boolean(val1, scale1, val2, scale2, func_name), codegen
@@ -348,7 +348,7 @@ def unbox_decimal(typ, val, c):
             lir.IntType(128).as_pointer(),
         ],
     )
-    fn = c.builder.module.get_or_insert_function(fnty, name="unbox_decimal")
+    fn = cgutils.get_or_insert_function(c.builder.module, fnty, name="unbox_decimal")
     res = cgutils.alloca_once(c.builder, c.context.get_value_type(int128_type))
     c.builder.call(
         fn,
@@ -548,7 +548,9 @@ def box_decimal_arr(typ, val, c):
             lir.IntType(32),
         ],
     )
-    fn_get = c.builder.module.get_or_insert_function(fnty, name="box_decimal_array")
+    fn_get = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="box_decimal_array"
+    )
     obj_arr = c.builder.call(
         fn_get,
         [
@@ -596,7 +598,9 @@ def unbox_decimal_arr(typ, val, c):
             lir.IntType(8).as_pointer(),
         ],
     )
-    fn = c.builder.module.get_or_insert_function(fnty, name="unbox_decimal_array")
+    fn = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="unbox_decimal_array"
+    )
     c.builder.call(
         fn,
         [

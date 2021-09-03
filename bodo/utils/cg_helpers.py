@@ -66,12 +66,12 @@ def pyarray_getitem(builder, context, arr_obj, ind):
     pyobj = context.get_argument_type(types.pyobject)
     py_ssize_t = context.get_value_type(types.intp)
     arr_get_fnty = lir.FunctionType(lir.IntType(8).as_pointer(), [pyobj, py_ssize_t])
-    arr_get_fn = builder.module.get_or_insert_function(
-        arr_get_fnty, name="array_getptr1"
+    arr_get_fn = cgutils.get_or_insert_function(
+        builder.module, arr_get_fnty, name="array_getptr1"
     )
     arr_getitem_fnty = lir.FunctionType(pyobj, [pyobj, lir.IntType(8).as_pointer()])
-    arr_getitem_fn = builder.module.get_or_insert_function(
-        arr_getitem_fnty, name="array_getitem"
+    arr_getitem_fn = cgutils.get_or_insert_function(
+        builder.module, arr_getitem_fnty, name="array_getitem"
     )
     arr_ptr = builder.call(arr_get_fn, [arr_obj, ind])
     return builder.call(arr_getitem_fn, [arr_obj, arr_ptr])
@@ -82,14 +82,14 @@ def pyarray_setitem(builder, context, arr_obj, ind, val_obj):
     pyobj = context.get_argument_type(types.pyobject)
     py_ssize_t = context.get_value_type(types.intp)
     arr_get_fnty = lir.FunctionType(lir.IntType(8).as_pointer(), [pyobj, py_ssize_t])
-    arr_get_fn = builder.module.get_or_insert_function(
-        arr_get_fnty, name="array_getptr1"
+    arr_get_fn = cgutils.get_or_insert_function(
+        builder.module, arr_get_fnty, name="array_getptr1"
     )
     arr_setitem_fnty = lir.FunctionType(
         lir.VoidType(), [pyobj, lir.IntType(8).as_pointer(), pyobj]
     )
-    arr_setitem_fn = builder.module.get_or_insert_function(
-        arr_setitem_fnty, name="array_setitem"
+    arr_setitem_fn = cgutils.get_or_insert_function(
+        builder.module, arr_setitem_fnty, name="array_setitem"
     )
     arr_ptr = builder.call(arr_get_fn, [arr_obj, ind])
     builder.call(arr_setitem_fn, [arr_obj, arr_ptr, val_obj])
@@ -100,7 +100,9 @@ def seq_getitem(builder, context, obj, ind):
     pyobj = context.get_argument_type(types.pyobject)
     py_ssize_t = context.get_value_type(types.intp)
     getitem_fnty = lir.FunctionType(pyobj, [pyobj, py_ssize_t])
-    getitem_fn = builder.module.get_or_insert_function(getitem_fnty, name="seq_getitem")
+    getitem_fn = cgutils.get_or_insert_function(
+        builder.module, getitem_fnty, name="seq_getitem"
+    )
     return builder.call(getitem_fn, [obj, ind])
 
 
@@ -110,8 +112,8 @@ def is_na_value(builder, context, val, C_NA):
     """
     pyobj = context.get_argument_type(types.pyobject)
     arr_isna_fnty = lir.FunctionType(lir.IntType(32), [pyobj, pyobj])
-    arr_isna_fn = builder.module.get_or_insert_function(
-        arr_isna_fnty, name="is_na_value"
+    arr_isna_fn = cgutils.get_or_insert_function(
+        builder.module, arr_isna_fnty, name="is_na_value"
     )
     return builder.call(arr_isna_fn, [val, C_NA])
 
@@ -121,7 +123,7 @@ def list_check(builder, context, obj):
     pyobj = context.get_argument_type(types.pyobject)
     int32_type = context.get_value_type(types.int32)
     fnty = lir.FunctionType(int32_type, [pyobj])
-    fn = builder.module.get_or_insert_function(fnty, name="list_check")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="list_check")
     return builder.call(fn, [obj])
 
 
@@ -129,7 +131,7 @@ def dict_keys(builder, context, obj):
     """call PyDict_Keys"""
     pyobj = context.get_argument_type(types.pyobject)
     fnty = lir.FunctionType(pyobj, [pyobj])
-    fn = builder.module.get_or_insert_function(fnty, name="dict_keys")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="dict_keys")
     return builder.call(fn, [obj])
 
 
@@ -137,7 +139,7 @@ def dict_values(builder, context, obj):
     """call PyDict_Values"""
     pyobj = context.get_argument_type(types.pyobject)
     fnty = lir.FunctionType(pyobj, [pyobj])
-    fn = builder.module.get_or_insert_function(fnty, name="dict_values")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="dict_values")
     return builder.call(fn, [obj])
 
 
@@ -145,7 +147,9 @@ def dict_merge_from_seq2(builder, context, dict_obj, seq2_obj):
     """call PyDict_MergeFromSeq2()"""
     pyobj = context.get_argument_type(types.pyobject)
     fnty = lir.FunctionType(lir.VoidType(), [pyobj, pyobj])
-    fn = builder.module.get_or_insert_function(fnty, name="dict_merge_from_seq2")
+    fn = cgutils.get_or_insert_function(
+        builder.module, fnty, name="dict_merge_from_seq2"
+    )
     builder.call(fn, [dict_obj, seq2_obj])
 
 

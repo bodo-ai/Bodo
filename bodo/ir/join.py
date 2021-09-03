@@ -670,7 +670,13 @@ def join_distributed_run(
         }
     )
     f_block = compile_to_numba_ir(
-        join_impl, glbs, typingctx, arg_typs, typemap, calltypes
+        join_impl,
+        glbs,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=arg_typs,
+        typemap=typemap,
+        calltypes=calltypes,
     ).blocks.popitem()[1]
     replace_arg_nodes(f_block, arg_vars)
 

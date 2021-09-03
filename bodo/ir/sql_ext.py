@@ -111,10 +111,11 @@ def sql_distributed_run(
     f_block = compile_to_numba_ir(
         sql_impl,
         {"_sql_reader_py": sql_reader_py, "bcast_scalar": bcast_scalar, "bcast": bcast},
-        typingctx,
-        (string_type, string_type),
-        typemap,
-        calltypes,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=(string_type, string_type),
+        typemap=typemap,
+        calltypes=calltypes,
     ).blocks.popitem()[1]
     replace_arg_nodes(
         f_block,

@@ -327,12 +327,14 @@ def sort_distributed_run(
     if not sort_node.inplace:
         new_keys = []
         for v in key_arrs:
-            new_key = _copy_array_nodes(v, nodes, typingctx, typemap, calltypes)
+            new_key = _copy_array_nodes(
+                v, nodes, typingctx, targetctx, typemap, calltypes
+            )
             new_keys.append(new_key)
         key_arrs = new_keys
         new_in_vars = []
         for v in in_vars:
-            v_cp = _copy_array_nodes(v, nodes, typingctx, typemap, calltypes)
+            v_cp = _copy_array_nodes(v, nodes, typingctx, targetctx, typemap, calltypes)
             new_in_vars.append(v_cp)
         in_vars = new_in_vars
 
@@ -373,10 +375,11 @@ def sort_distributed_run(
             "arr_info_list_to_table": arr_info_list_to_table,
             "array_to_info": array_to_info,
         },
-        typingctx,
-        tuple(list(key_typ.types) + list(data_tup_typ.types)),
-        typemap,
-        calltypes,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=tuple(list(key_typ.types) + list(data_tup_typ.types)),
+        typemap=typemap,
+        calltypes=calltypes,
     ).blocks.popitem()[1]
     replace_arg_nodes(f_block, key_arrs + in_vars)
     nodes += f_block.body[:-2]
@@ -401,12 +404,18 @@ def sort_distributed_run(
 distributed_pass.distributed_run_extensions[Sort] = sort_distributed_run
 
 
-def _copy_array_nodes(var, nodes, typingctx, typemap, calltypes):
+def _copy_array_nodes(var, nodes, typingctx, targetctx, typemap, calltypes):
     def _impl(arr):  # pragma: no cover
         return arr.copy()
 
     f_block = compile_to_numba_ir(
-        _impl, {}, typingctx, (typemap[var.name],), typemap, calltypes
+        _impl,
+        {},
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=(typemap[var.name],),
+        typemap=typemap,
+        calltypes=calltypes,
     ).blocks.popitem()[1]
     replace_arg_nodes(f_block, [var])
     nodes += f_block.body[:-2]

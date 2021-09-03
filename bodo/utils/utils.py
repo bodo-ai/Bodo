@@ -583,6 +583,7 @@ def _empty_nd_impl(context, builder, arrtype, shapes):  # pragma: no cover
     type, and a tuple or list of lowered dimension sizes, returns a
     LLVM value pointing at a Numba runtime allocated array.
     """
+
     arycls = make_array(arrtype)
     ary = arycls(context, builder)
 
@@ -628,9 +629,10 @@ def _empty_nd_impl(context, builder, arrtype, shapes):  # pragma: no cover
             ),
         )
 
-    align = context.get_preferred_array_alignment(arrtype.dtype)
+    dtype = arrtype.dtype
+    align_val = context.get_preferred_array_alignment(dtype)
+    align = context.get_constant(types.uint32, align_val)
     meminfo = context.nrt.meminfo_alloc_aligned(builder, size=allocsize, align=align)
-
     data = context.nrt.meminfo_data(builder, meminfo)
 
     intp_t = context.get_value_type(types.intp)
@@ -649,12 +651,13 @@ def _empty_nd_impl(context, builder, arrtype, shapes):  # pragma: no cover
     return ary
 
 
-lines = inspect.getsource(numba.np.arrayobj._empty_nd_impl)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "7735d099b608cdae6d3fcd41aac30078428c75f7714227b1af576ac010d70c1f"
-):  # pragma: no cover
-    warnings.warn("numba.np.arrayobj._empty_nd_impl has changed")
+if bodo.numba_compat._check_numba_change:
+    lines = inspect.getsource(numba.np.arrayobj._empty_nd_impl)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "b6a998927680caa35917a553c79704e9d813d8f1873d83a5f8513837c159fa29"
+    ):  # pragma: no cover
+        warnings.warn("numba.np.arrayobj._empty_nd_impl has changed")
 
 
 def alloc_arr_tup(n, arr_tup, init_vals=()):  # pragma: no cover
@@ -895,7 +898,7 @@ def object_length(c, obj):
     """
     pyobj_lltyp = c.context.get_argument_type(types.pyobject)
     fnty = lir.FunctionType(lir.IntType(64), [pyobj_lltyp])
-    fn = c.builder.module.get_or_insert_function(fnty, name="PyObject_Length")
+    fn = cgutils.get_or_insert_function(c.builder.module, fnty, name="PyObject_Length")
     return c.builder.call(fn, (obj,))
 
 
@@ -905,7 +908,9 @@ def sequence_getitem(c, obj, ind):  # pragma: no cover
     """
     pyobj_lltyp = c.context.get_argument_type(types.pyobject)
     fnty = lir.FunctionType(pyobj_lltyp, [pyobj_lltyp, lir.IntType(64)])
-    fn = c.builder.module.get_or_insert_function(fnty, name="PySequence_GetItem")
+    fn = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="PySequence_GetItem"
+    )
     return c.builder.call(fn, (obj, ind))
 
 

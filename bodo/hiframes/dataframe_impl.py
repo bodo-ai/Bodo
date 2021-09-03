@@ -1917,8 +1917,6 @@ _install_unary_ops()
 
 # inline IR for parallelizable data structures, but don't inline for scalars since we
 # pattern match pd.isna(A[i]) in SeriesPass to handle it properly
-@overload(pd.isna, inline="always", no_unliteral=True)
-@overload(pd.isnull, inline="always", no_unliteral=True)
 def overload_isna(obj):
     # DataFrame, Series, Index
     if isinstance(
@@ -1938,6 +1936,11 @@ def overload_isna(obj):
             return out_arr
 
         return impl
+
+
+# Use function decorator to enable stacked inlining
+overload(pd.isna, inline="always", no_unliteral=True)(overload_isna)
+overload(pd.isnull, inline="always", no_unliteral=True)(overload_isna)
 
 
 @overload(pd.isna, no_unliteral=True)
@@ -2004,8 +2007,6 @@ def overload_setitem_arr_none(A, idx, val):
         )  # pragma: no cover
 
 
-@overload(pd.notna, inline="always", no_unliteral=True)
-@overload(pd.notnull, inline="always", no_unliteral=True)
 def overload_notna(obj):
     # non-scalars
     # TODO: ~pd.isna(obj) implementation fails for some reason in
@@ -2021,6 +2022,11 @@ def overload_notna(obj):
 
     # scalars
     return lambda obj: not pd.isna(obj)  # pragma: no cover
+
+
+# Use function decorator to enable stacked inlining
+overload(pd.notna, inline="always", no_unliteral=True)(overload_notna)
+overload(pd.notnull, inline="always", no_unliteral=True)(overload_notna)
 
 
 def _get_pd_dtype_str(t):

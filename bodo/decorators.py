@@ -2,80 +2,220 @@
 """
 Defines decorators of Bodo. Currently just @jit.
 """
+import hashlib
+import inspect
+import warnings
+
 import numba
+from numba.core import cpu
+from numba.core.options import _mapping
+from numba.core.targetconfig import Option, TargetConfig
 
 import bodo
 from bodo import master_mode
 
 # Add Bodo's options to Numba's allowed options/flags
-numba.core.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_block"] = bool
-numba.core.cpu.CPUTargetOptions.OPTIONS["all_args_distributed_varlength"] = bool
-numba.core.cpu.CPUTargetOptions.OPTIONS["all_returns_distributed"] = bool
-numba.core.cpu.CPUTargetOptions.OPTIONS["returns_maybe_distributed"] = bool
-numba.core.cpu.CPUTargetOptions.OPTIONS["args_maybe_distributed"] = bool
-numba.core.cpu.CPUTargetOptions.OPTIONS["distributed"] = set
-numba.core.cpu.CPUTargetOptions.OPTIONS["distributed_block"] = set
-numba.core.cpu.CPUTargetOptions.OPTIONS["threaded"] = set
-numba.core.cpu.CPUTargetOptions.OPTIONS["pivots"] = dict
-numba.core.cpu.CPUTargetOptions.OPTIONS["h5_types"] = dict
-numba.core.compiler.Flags.OPTIONS["all_args_distributed_block"] = False
-numba.core.compiler.Flags.OPTIONS["all_args_distributed_varlength"] = False
-numba.core.compiler.Flags.OPTIONS["all_returns_distributed"] = False
-numba.core.compiler.Flags.OPTIONS["returns_maybe_distributed"] = True
-numba.core.compiler.Flags.OPTIONS["args_maybe_distributed"] = True
-numba.core.compiler.Flags.OPTIONS["distributed"] = set()
-numba.core.compiler.Flags.OPTIONS["distributed_block"] = set()
-numba.core.compiler.Flags.OPTIONS["threaded"] = set()
-numba.core.compiler.Flags.OPTIONS["pivots"] = dict()
-numba.core.compiler.Flags.OPTIONS["h5_types"] = dict()
-
-
-def bodo_set_flags(self, flags):
-    """Add Bodo's options to 'set_flags' function of numba.core.options.TargetOptions
-    Handles Bodo flags, then calls Numba for handling regular Numba flags
-    """
-    # remove Bodo options from 'values', call 'numba_set_flags', restore Bodo options
-    orig_values = self.values.copy()
-    kws = self.values
-
-    if kws.pop("all_args_distributed_block", False):
-        flags.set("all_args_distributed_block")
-
-    if kws.pop("all_args_distributed_varlength", False):
-        flags.set("all_args_distributed_varlength")
-
-    if kws.pop("all_returns_distributed", False):
-        flags.set("all_returns_distributed")
-
-    if not kws.pop("returns_maybe_distributed", True):
-        flags.unset("returns_maybe_distributed")
-
-    if not kws.pop("args_maybe_distributed", True):
-        flags.unset("args_maybe_distributed")
-
-    if "distributed" in kws:
-        flags.set("distributed", kws.pop("distributed"))
-
-    if "distributed_block" in kws:
-        flags.set("distributed_block", kws.pop("distributed_block"))
-
-    if "threaded" in kws:
-        flags.set("threaded", kws.pop("threaded"))
-
-    if "pivots" in kws:
-        flags.set("pivots", kws.pop("pivots"))
-
-    if "h5_types" in kws:
-        flags.set("h5_types", kws.pop("h5_types"))
-
-    self.numba_set_flags(flags)
-    self.values = orig_values
-
-
-numba.core.options.TargetOptions.numba_set_flags = (
-    numba.core.options.TargetOptions.set_flags
+numba.core.cpu.CPUTargetOptions.all_args_distributed_block = _mapping(
+    "all_args_distributed_block"
 )
-numba.core.options.TargetOptions.set_flags = bodo_set_flags
+numba.core.cpu.CPUTargetOptions.all_args_distributed_varlength = _mapping(
+    "all_args_distributed_varlength"
+)
+numba.core.cpu.CPUTargetOptions.all_returns_distributed = _mapping(
+    "all_returns_distributed"
+)
+numba.core.cpu.CPUTargetOptions.returns_maybe_distributed = _mapping(
+    "returns_maybe_distributed"
+)
+numba.core.cpu.CPUTargetOptions.args_maybe_distributed = _mapping(
+    "args_maybe_distributed"
+)
+numba.core.cpu.CPUTargetOptions.distributed = _mapping("distributed")
+numba.core.cpu.CPUTargetOptions.distributed_block = _mapping("distributed_block")
+numba.core.cpu.CPUTargetOptions.threaded = _mapping("threaded")
+numba.core.cpu.CPUTargetOptions.pivots = _mapping("pivots")
+numba.core.cpu.CPUTargetOptions.h5_types = _mapping("h5_types")
+
+
+class Flags(TargetConfig):
+    enable_looplift = Option(
+        type=bool,
+        default=False,
+        doc="Enable loop-lifting",
+    )
+    enable_pyobject = Option(
+        type=bool,
+        default=False,
+        doc="Enable pyobject mode (in general)",
+    )
+    enable_pyobject_looplift = Option(
+        type=bool,
+        default=False,
+        doc="Enable pyobject mode inside lifted loops",
+    )
+    enable_ssa = Option(
+        type=bool,
+        default=True,
+        doc="Enable SSA",
+    )
+    force_pyobject = Option(
+        type=bool,
+        default=False,
+        doc="Force pyobject mode inside the whole function",
+    )
+    release_gil = Option(
+        type=bool,
+        default=False,
+        doc="Release GIL inside the native function",
+    )
+    no_compile = Option(
+        type=bool,
+        default=False,
+        doc="TODO",
+    )
+    debuginfo = Option(
+        type=bool,
+        default=False,
+        doc="TODO",
+    )
+    boundscheck = Option(
+        type=bool,
+        default=False,
+        doc="TODO",
+    )
+    forceinline = Option(
+        type=bool,
+        default=False,
+        doc="TODO",
+    )
+    no_cpython_wrapper = Option(
+        type=bool,
+        default=False,
+        doc="TODO",
+    )
+    no_cfunc_wrapper = Option(
+        type=bool,
+        default=False,
+        doc="TODO",
+    )
+    auto_parallel = Option(
+        type=cpu.ParallelOptions,
+        default=cpu.ParallelOptions(False),
+        doc="""Enable automatic parallel optimization, can be fine-tuned by
+taking a dictionary of sub-options instead of a boolean, see parfor.py for
+detail""",
+    )
+    nrt = Option(
+        type=bool,
+        default=False,
+        doc="TODO",
+    )
+    no_rewrites = Option(
+        type=bool,
+        default=False,
+        doc="TODO",
+    )
+    error_model = Option(
+        type=str,
+        default="python",
+        doc="TODO",
+    )
+    fastmath = Option(
+        type=cpu.FastMathOptions,
+        default=cpu.FastMathOptions(False),
+        doc="TODO",
+    )
+    noalias = Option(
+        type=bool,
+        default=False,
+        doc="TODO",
+    )
+    inline = Option(
+        type=cpu.InlineOptions,
+        default=cpu.InlineOptions("never"),
+        doc="TODO",
+    )
+    # Defines a new target option for tracking the "target backend".
+    # This will be the XYZ in @jit(_target=XYZ).
+    target_backend = Option(
+        type=str, default="cpu", doc="backend"  # if not set, default to CPU
+    )
+
+    # Bodo change: add Bodo-specific options
+    all_args_distributed_block = Option(
+        type=bool,
+        default=False,
+        doc="All args have 1D distribution",
+    )
+
+    all_args_distributed_varlength = Option(
+        type=bool,
+        default=False,
+        doc="All args have 1D_Var distribution",
+    )
+
+    all_returns_distributed = Option(
+        type=bool,
+        default=False,
+        doc="All returns are distributed",
+    )
+
+    returns_maybe_distributed = Option(
+        type=bool,
+        default=True,
+        doc="Returns may be distributed",
+    )
+    args_maybe_distributed = Option(
+        type=bool,
+        default=True,
+        doc="Arguments may be distributed",
+    )
+
+    distributed = Option(
+        type=set,
+        default=set(),
+        doc="distributed arguments or returns",
+    )
+
+    distributed_block = Option(
+        type=set,
+        default=set(),
+        doc="distributed 1D arguments or returns",
+    )
+
+    threaded = Option(
+        type=set,
+        default=set(),
+        doc="Threaded arguments or returns",
+    )
+
+    pivots = Option(
+        type=dict,
+        default=dict(),
+        doc="pivot values",
+    )
+
+    h5_types = Option(
+        type=dict,
+        default=dict(),
+        doc="HDF5 read data types",
+    )
+
+
+DEFAULT_FLAGS = Flags()
+DEFAULT_FLAGS.nrt = True
+
+# Check if Flags source code has changed
+if bodo.numba_compat._check_numba_change:
+    lines = inspect.getsource(numba.core.compiler.Flags)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "9d5f7a93545fe783c20a9d7579c73e04d91d6b2841fb5972b391a67fff03b9c3"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.compiler.Flags has changed")
+
+numba.core.compiler.Flags = Flags
+numba.core.compiler.DEFAULT_FLAGS = DEFAULT_FLAGS
 
 
 # adapted from parallel_diagnostics()

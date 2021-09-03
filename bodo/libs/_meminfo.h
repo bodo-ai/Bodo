@@ -147,6 +147,7 @@ struct MemInfo {
     void *dtor_info;
     void *data;
     size_t size; /* only used for NRT allocated memory */
+    void *external_allocator;
 };
 
 typedef struct MemInfo NRT_MemInfo;
@@ -216,12 +217,14 @@ inline void *nrt_allocate_meminfo_and_data(size_t size, NRT_MemInfo **mi_out) {
 }
 
 inline void NRT_MemInfo_init(NRT_MemInfo *mi, void *data, size_t size,
-                             NRT_dtor_function dtor, void *dtor_info) {
+                             NRT_dtor_function dtor, void *dtor_info,
+                             void *external_allocator) {
     mi->refct = 1; /* starts with 1 refct */
     mi->dtor = dtor;
     mi->dtor_info = dtor_info;
     mi->data = data;
     mi->size = size;
+    mi->external_allocator = external_allocator;
     /* Update stats */
     TheMSys.atomic_inc(&TheMSys.stats_mi_alloc);
 }
@@ -258,7 +261,7 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_dtor_safe(size_t size,
     std::cerr << "NRT_MemInfo_alloc_dtor_safe " << data << " " << size << "\n";
 #endif
     NRT_MemInfo_init(mi, data, size, nrt_internal_custom_dtor_safe,
-                     (void *)dtor);
+                     (void *)dtor, NULL);
     return mi;
 }
 
@@ -287,7 +290,7 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_aligned(size_t size, unsigned align) {
 #ifdef BODO_DEBUG
     std::cerr << "NRT_MemInfo_alloc_aligned " << data << "\n";
 #endif
-    NRT_MemInfo_init(mi, data, size, NULL, NULL);
+    NRT_MemInfo_init(mi, data, size, NULL, NULL, NULL);
     return mi;
 }
 
@@ -302,7 +305,7 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned(size_t size,
     std::cerr << "NRT_MemInfo_alloc_safe_aligned " << data << " " << size
               << "\n";
 #endif
-    NRT_MemInfo_init(mi, data, size, nrt_internal_dtor_safe, (void *)size);
+    NRT_MemInfo_init(mi, data, size, nrt_internal_dtor_safe, (void *)size, NULL);
     return mi;
 }
 
