@@ -594,8 +594,6 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
         return gatherv_impl
 
     if data == string_array_type:
-        int32_typ_enum = np.int32(numba_to_c_type(types.int32))
-        char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def gatherv_str_arr_impl(
             data, allgather=False, warn_if_rep=True, root=MPI_ROOT
@@ -605,6 +603,17 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             return bodo.libs.str_arr_ext.init_str_arr(all_data)
 
         return gatherv_str_arr_impl
+
+    if data == binary_array_type:
+
+        def gatherv_binary_arr_impl(
+            data, allgather=False, warn_if_rep=True, root=MPI_ROOT
+        ):  # pragma: no cover
+            # call gatherv() on underlying array(item) array
+            all_data = bodo.gatherv(data._data, allgather, warn_if_rep, root)
+            return bodo.libs.binary_arr_ext.init_binary_arr(all_data)
+
+        return gatherv_binary_arr_impl
 
     # Handle datetime error as special because no _data field
     if data == datetime_timedelta_array_type:

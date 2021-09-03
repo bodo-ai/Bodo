@@ -1271,7 +1271,7 @@ def _get_df_args(data, index, columns, dtype, copy):
     if index_is_none:
         # empty df has object Index in Pandas which correponds to our StringIndex
         if is_overload_none(data):
-            index_arg = "bodo.hiframes.pd_index_ext.init_string_index(bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0))"
+            index_arg = "bodo.hiframes.pd_index_ext.init_binary_str_index(bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0))"
         else:
             index_arg = (
                 "bodo.hiframes.pd_index_ext.init_range_index(0, {}, 1, None)".format(

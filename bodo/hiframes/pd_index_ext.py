@@ -34,6 +34,7 @@ import bodo.utils.conversion
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
+from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
@@ -71,6 +72,11 @@ def typeof_pd_index(val, c):
         # skipna=True
         return StringIndexType(get_val_type_maybe_str_literal(val.name))
 
+    if val.inferred_type == "bytes" or pd._libs.lib.infer_dtype(val, True) == "bytes":
+        # Index.inferred_type doesn't skip NAs so we call infer_dtype with
+        # skipna=True
+        return BinaryIndexType(get_val_type_maybe_str_literal(val.name))
+
     # XXX: assume string data type for empty Index with object dtype
     if val.equals(pd.Index([])):
         return StringIndexType(get_val_type_maybe_str_literal(val.name))
@@ -98,7 +104,6 @@ def typeof_pd_index(val, c):
             get_val_type_maybe_str_literal(val.name),
             boolean_array,
         )
-
     # catch-all for non-supported Index types
     # RangeIndex is directly supported (TODO: make sure this is not called)
     raise NotImplementedError(f"unsupported pd.Index type {val}")
@@ -177,14 +182,6 @@ def overload_datetime_index_copy(A):
     return lambda A: bodo.hiframes.pd_index_ext.init_datetime_index(
         A._data.copy(), A._name
     )  # pragma: no cover
-
-
-@overload_attribute(DatetimeIndexType, "name")
-def DatetimeIndex_get_name(di):
-    def impl(di):  # pragma: no cover
-        return di._name
-
-    return impl
 
 
 @box(DatetimeIndexType)
@@ -629,13 +626,13 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
                 data_coerced = bodo.utils.conversion.fix_arr_dtype(data_arr, elem_type)
                 return bodo.hiframes.pd_index_ext.init_numeric_index(data_coerced, name)
 
-        # String index:
-        elif elem_type == types.string:
+        # String/Binary index:
+        elif elem_type in [types.string, bytes_type]:
 
             def impl(
                 data=None, dtype=None, copy=False, name=None, tupleize_cols=True
             ):  # pragma: no cover
-                return bodo.hiframes.pd_index_ext.init_string_index(
+                return bodo.hiframes.pd_index_ext.init_binary_str_index(
                     bodo.utils.conversion.coerce_to_array(data), name
                 )
 
@@ -1277,14 +1274,6 @@ def overload_timedelta_index_max(tdi, axis=None, skipna=True):
     return impl
 
 
-@overload_attribute(TimedeltaIndexType, "name")
-def TimeDeltaIndex_get_name(tdi):
-    def impl(tdi):  # pragma: no cover
-        return tdi._name
-
-    return impl
-
-
 # support TimedeltaIndex time fields such as T.days
 def gen_tdi_field_impl(field):
     # TODO: NaN
@@ -1613,14 +1602,6 @@ def range_index_overload(
     return _pd_range_index_imp
 
 
-@overload_attribute(RangeIndexType, "name")
-def rangeIndex_get_name(ri):
-    def impl(ri):  # pragma: no cover
-        return ri._name
-
-    return impl
-
-
 @overload_attribute(RangeIndexType, "start")
 def rangeIndex_get_start(ri):
     def impl(ri):  # pragma: no cover
@@ -1770,14 +1751,6 @@ def init_period_index(typingctx, data, name, freq):
     ret_typ = PeriodIndexType(freq_val, name)
     sig = signature(ret_typ, data, name, freq)
     return sig, codegen
-
-
-@overload_attribute(PeriodIndexType, "name")
-def PeriodIndex_get_name(pi):
-    def impl(pi):  # pragma: no cover
-        return pi._name
-
-    return impl
 
 
 @box(PeriodIndexType)
@@ -2264,14 +2237,6 @@ def overload_numeric_index_copy(A):
     )  # pragma: no cover
 
 
-@overload_attribute(NumericIndexType, "name")
-def NumericIndex_get_name(ni):
-    def impl(ni):  # pragma: no cover
-        return ni._name
-
-    return impl
-
-
 @box(NumericIndexType)
 def box_numeric_index(typ, val, c):
     """Box NumericIndexType values by calling pd.Index(data).
@@ -2468,23 +2433,119 @@ make_attribute_wrapper(StringIndexType, "name", "_name")
 make_attribute_wrapper(StringIndexType, "dict", "_dict")
 
 
-@overload_method(StringIndexType, "copy", no_unliteral=True)
-def overload_string_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_string_index(
-        A._data.copy(), A._name
-    )  # pragma: no cover
+# ---------------- BinaryIndex -------------------
 
 
+# represents binary index, which doesn't have direct Pandas type
+# pd.Index() infers binary
+# Largely copied from the StringIndexType class
+class BinaryIndexType(types.IterableType, types.ArrayCompatible):
+    """type class for pd.Index() objects with 'binary' as inferred_dtype."""
+
+    def __init__(self, name_typ=None):
+        name_typ = types.none if name_typ is None else name_typ
+        self.name_typ = name_typ
+        # Add a .data field for consistency with other index types
+        self.data = binary_array_type
+        super(BinaryIndexType, self).__init__(
+            name="BinaryIndexType({})".format(name_typ)
+        )
+
+    ndim = 1
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
+
+    def copy(self):
+        return BinaryIndexType(self.name_typ)
+
+    @property
+    def dtype(self):
+        return bytes_type
+
+    @property
+    def pandas_type_name(self):
+        return "bytes"
+
+    @property
+    def numpy_type_name(self):
+        return "object"
+
+    @property
+    def iterator_type(self):
+        # TODO: handle merging string/binary iterator
+        return bodo.libs.binary_arr_ext.BinaryArrayIterator()
+
+
+# even though name attribute is mutable, we don't handle it for now
+# TODO: create refcounted payload to handle mutable name
+@register_model(BinaryIndexType)
+class BinaryIndexModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [
+            ("data", binary_array_type),
+            ("name", fe_type.name_typ),
+            ("dict", types.DictType(bytes_type, types.int64)),
+        ]
+        super(BinaryIndexModel, self).__init__(dmm, fe_type, members)
+
+
+make_attribute_wrapper(BinaryIndexType, "data", "_data")
+make_attribute_wrapper(BinaryIndexType, "name", "_name")
+make_attribute_wrapper(BinaryIndexType, "dict", "_dict")
+
+
+# ---------------- Helper fns common to both String/Binary index types -------------------
+
+
+@unbox(BinaryIndexType)
+@unbox(StringIndexType)
+def unbox_binary_str_index(typ, val, c):
+    """
+    helper function that handles unboxing for both binary and string index types
+    """
+
+    array_type = typ.data
+    scalar_type = typ.data.dtype
+
+    # get data and name attributes
+    # TODO: use to_numpy()
+    values_obj = c.pyapi.object_getattr_string(val, "values")
+    data = c.pyapi.to_native_value(array_type, values_obj).value
+    name_obj = c.pyapi.object_getattr_string(val, "name")
+    name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
+    c.pyapi.decref(values_obj)
+    c.pyapi.decref(name_obj)
+
+    # create index struct
+    index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    index_val.data = data
+    index_val.name = name
+    # create empty dict for get_loc hashmap
+    _is_error, ind_dict = c.pyapi.call_jit_code(
+        lambda: numba.typed.Dict.empty(scalar_type, types.int64),
+        types.DictType(scalar_type, types.int64)(),
+        [],
+    )
+    index_val.dict = ind_dict
+    return NativeValue(index_val._getvalue())
+
+
+@box(BinaryIndexType)
 @box(StringIndexType)
-def box_string_index(typ, val, c):
+def box_binary_str_index(typ, val, c):
+    """
+    helper function that handles boxing for both binary and string index types
+    """
+    array_type = typ.data
     mod_name = c.context.insert_const_string(c.builder.module, "pandas")
     class_obj = c.pyapi.import_module_noblock(mod_name)
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    c.context.nrt.incref(c.builder, string_array_type, index_val.data)
-    data_obj = c.pyapi.from_native_value(
-        string_array_type, index_val.data, c.env_manager
-    )
+    c.context.nrt.incref(c.builder, array_type, index_val.data)
+    data_obj = c.pyapi.from_native_value(array_type, index_val.data, c.env_manager)
     c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
 
@@ -2506,65 +2567,96 @@ def box_string_index(typ, val, c):
 
 
 @intrinsic
-def init_string_index(typingctx, data, name=None):
-    """Create StringIndex object"""
+def init_binary_str_index(typingctx, data, name=None):
+    """Create StringIndex or BinaryIndex object"""
     name = types.none if name is None else name
 
-    def codegen(context, builder, signature, args):
-        assert len(args) == 2
-        index_typ = signature.return_type
-        index_val = cgutils.create_struct_proxy(index_typ)(context, builder)
-        index_val.data = args[0]
-        index_val.name = args[1]
-        # increase refcount of stored values
-        context.nrt.incref(builder, string_array_type, args[0])
-        context.nrt.incref(builder, index_typ.name_typ, args[1])
-        # create empty dict for get_loc hashmap
-        index_val.dict = context.compile_internal(
-            builder,
-            lambda: numba.typed.Dict.empty(string_type, types.int64),
-            types.DictType(string_type, types.int64)(),
-            [],
-        )  # pragma: no cover
-        return index_val._getvalue()
-
-    return StringIndexType(name)(data, name), codegen
+    sig = type(bodo.utils.typing.get_index_type_from_dtype(data.dtype))(name)(
+        data, name
+    )
+    cg = get_binary_str_codegen(is_binary=data.dtype == bytes_type)
+    return sig, cg
 
 
-ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_string_index = (
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_init_binary_str_index = (
     init_index_equiv
 )
 
 
-@unbox(StringIndexType)
-def unbox_string_index(typ, val, c):
-    # get data and name attributes
-    # TODO: use to_numpy()
-    values_obj = c.pyapi.object_getattr_string(val, "values")
-    data = c.pyapi.to_native_value(string_array_type, values_obj).value
-    name_obj = c.pyapi.object_getattr_string(val, "name")
-    name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
-    c.pyapi.decref(values_obj)
-    c.pyapi.decref(name_obj)
+def get_binary_str_codegen(is_binary=False):
+    """
+    helper function that returns the codegen for initializing a binary/string index
+    """
 
-    # create index struct
-    index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-    index_val.data = data
-    index_val.name = name
-    # create empty dict for get_loc hashmap
-    _is_error, ind_dict = c.pyapi.call_jit_code(
-        lambda: numba.typed.Dict.empty(string_type, types.int64),
-        types.DictType(string_type, types.int64)(),
-        [],
+    if is_binary:
+        array_dtype_string = "binary_array_type"
+        scalar_dtype_string = "bytes_type"
+    else:
+        array_dtype_string = "string_array_type"
+        scalar_dtype_string = "string_type"
+
+    func_text = "def impl(context, builder, signature, args):\n"
+    func_text += "    assert len(args) == 2\n"
+    func_text += "    index_typ = signature.return_type\n"
+    func_text += (
+        "    index_val = cgutils.create_struct_proxy(index_typ)(context, builder)\n"
     )
-    index_val.dict = ind_dict
-    return NativeValue(index_val._getvalue())
+    func_text += "    index_val.data = args[0]\n"
+    func_text += "    index_val.name = args[1]\n"
+    func_text += "    # increase refcount of stored values\n"
+    func_text += f"    context.nrt.incref(builder, {array_dtype_string}, args[0])\n"
+    func_text += "    context.nrt.incref(builder, index_typ.name_typ, args[1])\n"
+    func_text += "    # create empty dict for get_loc hashmap\n"
+    func_text += "    index_val.dict = context.compile_internal(\n"
+    func_text += "       builder,\n"
+    func_text += (
+        f"       lambda: numba.typed.Dict.empty({scalar_dtype_string}, types.int64),\n"
+    )
+    func_text += f"        types.DictType({scalar_dtype_string}, types.int64)(), [],)\n"
+    func_text += "    return index_val._getvalue()\n"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "signature": signature,
+            "cgutils": cgutils,
+            "numba": numba,
+            "types": types,
+            "bytes_type": bytes_type,
+            "string_type": string_type,
+            "string_array_type": string_array_type,
+            "binary_array_type": binary_array_type,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
 
 
+@overload_method(BinaryIndexType, "copy", no_unliteral=True)
+@overload_method(StringIndexType, "copy", no_unliteral=True)
+def overload_binary_string_index_copy(A):
+    return lambda A: bodo.hiframes.pd_index_ext.init_binary_str_index(
+        A._data.copy(), A._name
+    )  # pragma: no cover
+
+
+# ---------------- Common Index fns -------------------
+
+
+@overload_attribute(BinaryIndexType, "name")
 @overload_attribute(StringIndexType, "name")
-def stringIndex_get_name(si):
-    def impl(si):  # pragma: no cover
-        return si._name
+@overload_attribute(DatetimeIndexType, "name")
+@overload_attribute(TimedeltaIndexType, "name")
+@overload_attribute(RangeIndexType, "name")
+@overload_attribute(PeriodIndexType, "name")
+@overload_attribute(NumericIndexType, "name")
+@overload_attribute(StringIndexType, "name")
+def Index_get_name(i):
+    def impl(i):  # pragma: no cover
+        return i._name
 
     return impl
 
@@ -2587,7 +2679,7 @@ def overload_index_getitem(I, ind):
         )  # pragma: no cover
 
     if isinstance(I, StringIndexType):
-        return lambda I, ind: bodo.hiframes.pd_index_ext.init_string_index(
+        return lambda I, ind: bodo.hiframes.pd_index_ext.init_binary_str_index(
             bodo.hiframes.pd_index_ext.get_index_data(I)[ind],
             bodo.hiframes.pd_index_ext.get_index_name(I),
         )  # pragma: no cover
@@ -2598,6 +2690,8 @@ def array_type_to_index(arr_typ, name_typ=None):
     """convert array type to a corresponding Index type"""
     if arr_typ == bodo.string_array_type:
         return StringIndexType(name_typ)
+    if arr_typ == bodo.binary_array_type:
+        return BinaryIndexType(name_typ)
 
     assert isinstance(
         arr_typ, (types.Array, IntegerArrayType, bodo.CategoricalArrayType)
@@ -2637,6 +2731,7 @@ def is_pd_index_type(t):
             CategoricalIndexType,
             PeriodIndexType,
             StringIndexType,
+            BinaryIndexType,
             RangeIndexType,
             HeterogeneousIndexType,
         ),
@@ -2647,6 +2742,7 @@ def is_pd_index_type(t):
 @overload_method(RangeIndexType, "take", no_unliteral=True)
 @overload_method(NumericIndexType, "take", no_unliteral=True)
 @overload_method(StringIndexType, "take", no_unliteral=True)
+@overload_method(BinaryIndexType, "take", no_unliteral=True)
 @overload_method(CategoricalIndexType, "take", no_unliteral=True)
 @overload_method(PeriodIndexType, "take", no_unliteral=True)
 @overload_method(DatetimeIndexType, "take", no_unliteral=True)
@@ -2703,6 +2799,7 @@ def range_contains(start, stop, step, val):  # pragma: no cover
 @overload_method(RangeIndexType, "get_loc", no_unliteral=True)
 @overload_method(NumericIndexType, "get_loc", no_unliteral=True)
 @overload_method(StringIndexType, "get_loc", no_unliteral=True)
+@overload_method(BinaryIndexType, "get_loc", no_unliteral=True)
 @overload_method(PeriodIndexType, "get_loc", no_unliteral=True)
 @overload_method(DatetimeIndexType, "get_loc", no_unliteral=True)
 @overload_method(TimedeltaIndexType, "get_loc", no_unliteral=True)
@@ -2753,6 +2850,7 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
 @overload_method(RangeIndexType, "isna", no_unliteral=True)
 @overload_method(NumericIndexType, "isna", no_unliteral=True)
 @overload_method(StringIndexType, "isna", no_unliteral=True)
+@overload_method(BinaryIndexType, "isna", no_unliteral=True)
 @overload_method(CategoricalIndexType, "isna", no_unliteral=True)
 @overload_method(PeriodIndexType, "isna", no_unliteral=True)
 @overload_method(DatetimeIndexType, "isna", no_unliteral=True)
@@ -2760,6 +2858,7 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
 @overload_method(RangeIndexType, "isnull", no_unliteral=True)
 @overload_method(NumericIndexType, "isnull", no_unliteral=True)
 @overload_method(StringIndexType, "isnull", no_unliteral=True)
+@overload_method(BinaryIndexType, "isnull", no_unliteral=True)
 @overload_method(CategoricalIndexType, "isnull", no_unliteral=True)
 @overload_method(PeriodIndexType, "isnull", no_unliteral=True)
 @overload_method(DatetimeIndexType, "isnull", no_unliteral=True)
@@ -2793,6 +2892,7 @@ def overload_index_isna(I):
 @overload_attribute(RangeIndexType, "values")
 @overload_attribute(NumericIndexType, "values")
 @overload_attribute(StringIndexType, "values")
+@overload_attribute(BinaryIndexType, "values")
 @overload_attribute(CategoricalIndexType, "values")
 @overload_attribute(PeriodIndexType, "values")
 @overload_attribute(DatetimeIndexType, "values")
@@ -2808,6 +2908,7 @@ def overload_index_len(I):
         (
             NumericIndexType,
             StringIndexType,
+            BinaryIndexType,
             PeriodIndexType,
             IntervalIndexType,
             CategoricalIndexType,
@@ -2824,6 +2925,7 @@ def overload_index_len(I):
 @overload_attribute(DatetimeIndexType, "shape")
 @overload_attribute(NumericIndexType, "shape")
 @overload_attribute(StringIndexType, "shape")
+@overload_attribute(BinaryIndexType, "shape")
 @overload_attribute(PeriodIndexType, "shape")
 @overload_attribute(TimedeltaIndexType, "shape")
 @overload_attribute(IntervalIndexType, "shape")
@@ -2867,7 +2969,7 @@ numba.core.ir_utils.alias_func_extensions[
     ("init_numeric_index", "bodo.hiframes.pd_index_ext")
 ] = alias_ext_dummy_func
 numba.core.ir_utils.alias_func_extensions[
-    ("init_string_index", "bodo.hiframes.pd_index_ext")
+    ("init_binary_str_index", "bodo.hiframes.pd_index_ext")
 ] = alias_ext_dummy_func
 numba.core.ir_utils.alias_func_extensions[
     ("init_categorical_index", "bodo.hiframes.pd_index_ext")
@@ -2891,6 +2993,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_get_index_data = (
 @overload_method(RangeIndexType, "map", inline="always", no_unliteral=True)
 @overload_method(NumericIndexType, "map", inline="always", no_unliteral=True)
 @overload_method(StringIndexType, "map", inline="always", no_unliteral=True)
+@overload_method(BinaryIndexType, "map", inline="always", no_unliteral=True)
 @overload_method(CategoricalIndexType, "map", inline="always", no_unliteral=True)
 @overload_method(PeriodIndexType, "map", inline="always", no_unliteral=True)
 @overload_method(DatetimeIndexType, "map", inline="always", no_unliteral=True)
@@ -2957,6 +3060,7 @@ def overload_index_map(I, mapper, na_action=None):
 
 @lower_builtin(operator.is_, NumericIndexType, NumericIndexType)
 @lower_builtin(operator.is_, StringIndexType, StringIndexType)
+@lower_builtin(operator.is_, BinaryIndexType, BinaryIndexType)
 @lower_builtin(operator.is_, PeriodIndexType, PeriodIndexType)
 @lower_builtin(operator.is_, DatetimeIndexType, DatetimeIndexType)
 @lower_builtin(operator.is_, TimedeltaIndexType, TimedeltaIndexType)
@@ -3121,6 +3225,7 @@ def is_index_type(t):
             RangeIndexType,
             NumericIndexType,
             StringIndexType,
+            BinaryIndexType,
             PeriodIndexType,
             DatetimeIndexType,
             TimedeltaIndexType,
@@ -3235,9 +3340,9 @@ def init_heter_index(typingctx, data, name=None):
 
 
 @overload_attribute(HeterogeneousIndexType, "name")
-def heter_index_get_name(si):
-    def impl(si):  # pragma: no cover
-        return si._name
+def heter_index_get_name(i):
+    def impl(i):  # pragma: no cover
+        return i._name
 
     return impl
 
@@ -3247,6 +3352,7 @@ def heter_index_get_name(si):
 @overload_attribute(TimedeltaIndexType, "nbytes")
 @overload_attribute(RangeIndexType, "nbytes")
 @overload_attribute(StringIndexType, "nbytes")
+@overload_attribute(BinaryIndexType, "nbytes")
 @overload_attribute(CategoricalIndexType, "nbytes")
 @overload_attribute(PeriodIndexType, "nbytes")
 def overload_nbytes(I):
@@ -3367,9 +3473,13 @@ def lower_constant_numeric_index(context, builder, ty, pyval):
 
 
 @lower_constant(StringIndexType)
-def lower_constant_string_index(context, builder, ty, pyval):
-    """ Constant lowering for StringIndexType. """
-    data = context.get_constant_generic(builder, string_array_type, pyval.values)
+@lower_constant(BinaryIndexType)
+def lower_constant_binary_string_index(context, builder, ty, pyval):
+    """Helper functon that handles constant lowering for Binary/String IndexType."""
+    array_type = ty.data
+    scalar_type = ty.data.dtype
+
+    data = context.get_constant_generic(builder, array_type, pyval.values)
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
     index_val = cgutils.create_struct_proxy(ty)(context, builder)
@@ -3378,8 +3488,8 @@ def lower_constant_string_index(context, builder, ty, pyval):
     # create empty dict for get_loc hashmap
     index_val.dict = context.compile_internal(
         builder,
-        lambda: numba.typed.Dict.empty(string_type, types.int64),
-        types.DictType(string_type, types.int64)(),
+        lambda: numba.typed.Dict.empty(scalar_type, types.int64),
+        types.DictType(scalar_type, types.int64)(),
         [],
     )  # pragma: no cover
 
@@ -3451,6 +3561,7 @@ def _install_index_getiter():
     index_types = [
         NumericIndexType,
         StringIndexType,
+        BinaryIndexType,
         CategoricalIndexType,
         TimedeltaIndexType,
         DatetimeIndexType,
@@ -3549,6 +3660,7 @@ def _install_index_unsupported():
     index_types = [
         ("NumericIndexType.", NumericIndexType),
         ("StringIndexType.", StringIndexType),
+        ("BinaryIndexType.", BinaryIndexType),
         ("TimedeltaIndexType.", TimedeltaIndexType),
         ("IntervalIndexType.", IntervalIndexType),
         ("CategoricalIndexType.", CategoricalIndexType),

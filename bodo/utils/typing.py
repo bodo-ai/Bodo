@@ -754,6 +754,7 @@ def get_index_names(t, func_name, default_name):
 def get_index_data_arr_types(t):
     """get array type corresponding to Index type 't'"""
     from bodo.hiframes.pd_index_ext import (
+        BinaryIndexType,
         CategoricalIndexType,
         DatetimeIndexType,
         NumericIndexType,
@@ -775,6 +776,7 @@ def get_index_data_arr_types(t):
         (
             NumericIndexType,
             StringIndexType,
+            BinaryIndexType,
             DatetimeIndexType,
             TimedeltaIndexType,
             CategoricalIndexType,
@@ -788,6 +790,7 @@ def get_index_data_arr_types(t):
 def get_index_type_from_dtype(t):
     """get Index type that can hold dtype 't' values."""
     from bodo.hiframes.pd_index_ext import (
+        BinaryIndexType,
         CategoricalIndexType,
         DatetimeIndexType,
         NumericIndexType,
@@ -806,6 +809,9 @@ def get_index_type_from_dtype(t):
 
     if t == bodo.string_type:
         return StringIndexType(types.none)
+
+    if t == bodo.bytes_type:
+        return BinaryIndexType(types.none)
 
     if isinstance(t, (types.Integer, types.Float, types.Boolean)):
         return NumericIndexType(t, types.none)

@@ -98,6 +98,7 @@ from bodo.hiframes.pd_index_ext import (
     CategoricalIndexType,
     RangeIndexType,
     StringIndexType,
+    BinaryIndexType,
     TimedeltaIndexType,
 )
 from bodo.hiframes.pd_offsets_ext import (

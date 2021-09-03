@@ -42,6 +42,7 @@ from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 from bodo.hiframes.pd_index_ext import (
+    BinaryIndexType,
     CategoricalIndexType,
     DatetimeIndexType,
     HeterogeneousIndexType,
@@ -741,6 +742,7 @@ class SeriesPass:
                 (
                     NumericIndexType,
                     StringIndexType,
+                    BinaryIndexType,
                     PeriodIndexType,
                     CategoricalIndexType,
                     DatetimeIndexType,
@@ -1953,7 +1955,7 @@ class SeriesPass:
             if call_def in (
                 ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
                 ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
-                ("init_string_index", "bodo.hiframes.pd_index_ext"),
+                ("init_binary_str_index", "bodo.hiframes.pd_index_ext"),
                 ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
                 ("init_categorical_index", "bodo.hiframes.pd_index_ext"),
                 ("init_heter_index", "bodo.hiframes.pd_index_ext"),
@@ -1969,7 +1971,7 @@ class SeriesPass:
                 in (
                     ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
                     ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
-                    ("init_string_index", "bodo.hiframes.pd_index_ext"),
+                    ("init_binary_str_index", "bodo.hiframes.pd_index_ext"),
                     ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
                     ("init_categorical_index", "bodo.hiframes.pd_index_ext"),
                     ("init_heter_index", "bodo.hiframes.pd_index_ext"),
@@ -3312,7 +3314,7 @@ class SeriesPass:
         if call_def in (
             ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
             ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
-            ("init_string_index", "bodo.hiframes.pd_index_ext"),
+            ("init_binary_str_index", "bodo.hiframes.pd_index_ext"),
             ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
             ("init_categorical_index", "bodo.hiframes.pd_index_ext"),
             ("init_heter_index", "bodo.hiframes.pd_index_ext"),
