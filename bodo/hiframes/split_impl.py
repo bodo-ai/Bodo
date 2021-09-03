@@ -128,8 +128,8 @@ def construct_str_arr_split_view(context, builder):
     llvoidptr = context.get_value_type(types.voidptr)
     llsize = context.get_value_type(types.uintp)
     dtor_ftype = lir.FunctionType(lir.VoidType(), [llvoidptr, llsize, llvoidptr])
-    dtor_fn = builder.module.get_or_insert_function(
-        dtor_ftype, name="dtor_str_arr_split_view"
+    dtor_fn = cgutils.get_or_insert_function(
+        builder.module, dtor_ftype, name="dtor_str_arr_split_view"
     )
 
     meminfo = context.nrt.meminfo_alloc_dtor(
@@ -167,8 +167,8 @@ def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
                 lir.IntType(8),
             ],
         )
-        fn_impl = builder.module.get_or_insert_function(
-            fnty, name="str_arr_split_view_impl"
+        fn_impl = cgutils.get_or_insert_function(
+            builder.module, fnty, name="str_arr_split_view_impl"
         )
 
         offsets = context.make_helper(
@@ -333,8 +333,8 @@ def pre_alloc_str_arr_view(typingctx, num_items_t, num_offsets_t, data_t=None):
             lir.VoidType(), [meminfo_data_ptr.type, lir.IntType(64), lir.IntType(64)]
         )
 
-        fn_impl = builder.module.get_or_insert_function(
-            fnty, name="str_arr_split_view_alloc"
+        fn_impl = cgutils.get_or_insert_function(
+            builder.module, fnty, name="str_arr_split_view_alloc"
         )
 
         builder.call(fn_impl, [meminfo_data_ptr, num_items, num_offsets])

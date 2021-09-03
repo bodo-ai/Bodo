@@ -120,8 +120,8 @@ def unicode_to_utf8_and_len(typingctx, str_typ=None):
                         lir.IntType(32),
                     ],
                 )
-                fn_encode = builder.module.get_or_insert_function(
-                    fnty, name="unicode_to_utf8"
+                fn_encode = cgutils.get_or_insert_function(
+                    builder.module, fnty, name="unicode_to_utf8"
                 )
                 null_ptr = context.get_constant_null(types.voidptr)
                 utf8_len = builder.call(
@@ -196,7 +196,9 @@ def memcmp(typingctx, dest_t, src_t, count_t=None):
                 lir.IntType(64),
             ],
         )
-        memcmp_func = builder.module.get_or_insert_function(fnty, name="memcmp")
+        memcmp_func = cgutils.get_or_insert_function(
+            builder.module, fnty, name="memcmp"
+        )
         return builder.call(
             memcmp_func,
             args,
@@ -335,7 +337,7 @@ def gen_unicode_to_std_str(context, builder, unicode_val):
     fnty = lir.FunctionType(
         lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64)]
     )
-    fn = builder.module.get_or_insert_function(fnty, name="init_string_const")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="init_string_const")
     return builder.call(fn, [uni_str.data, uni_str.length])
 
 
@@ -568,14 +570,14 @@ def overload_format(value, format_spec=""):
 @lower_cast(StdStringType, types.float64)
 def cast_str_to_float64(context, builder, fromty, toty, val):
     fnty = lir.FunctionType(lir.DoubleType(), [lir.IntType(8).as_pointer()])
-    fn = builder.module.get_or_insert_function(fnty, name="str_to_float64")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="str_to_float64")
     return builder.call(fn, (val,))
 
 
 @lower_cast(StdStringType, types.float32)
 def cast_str_to_float32(context, builder, fromty, toty, val):
     fnty = lir.FunctionType(lir.FloatType(), [lir.IntType(8).as_pointer()])
-    fn = builder.module.get_or_insert_function(fnty, name="str_to_float32")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="str_to_float32")
     return builder.call(fn, (val,))
 
 
@@ -603,7 +605,7 @@ def cast_unicode_str_to_int64(context, builder, fromty, toty, val):
     fnty = lir.FunctionType(
         lir.IntType(toty.bitwidth), [lir.IntType(8).as_pointer(), lir.IntType(64)]
     )
-    fn = builder.module.get_or_insert_function(fnty, name="str_to_int64")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="str_to_int64")
     return builder.call(fn, (uni_str.data, uni_str.length))
 
 
@@ -617,7 +619,7 @@ def cast_unicode_str_to_uint64(context, builder, fromty, toty, val):
     fnty = lir.FunctionType(
         lir.IntType(toty.bitwidth), [lir.IntType(8).as_pointer(), lir.IntType(64)]
     )
-    fn = builder.module.get_or_insert_function(fnty, name="str_to_uint64")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="str_to_uint64")
     return builder.call(fn, (uni_str.data, uni_str.length))
 
 
@@ -786,7 +788,9 @@ def int_to_hex(typingctx, output, out_len, header_len, int_val):
                 lir.IntType(64),
             ],
         )
-        hex_func = builder.module.get_or_insert_function(fnty, name="int_to_hex")
+        hex_func = cgutils.get_or_insert_function(
+            builder.module, fnty, name="int_to_hex"
+        )
         # increment the arr ptr by the length of the header
         data_arr = builder.inttoptr(
             builder.add(

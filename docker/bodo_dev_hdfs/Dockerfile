@@ -20,7 +20,7 @@ ENV PATH /root/miniconda3/bin/:${PATH}
 #
 
 RUN conda create -n BODODEV numpy scipy pandas='1.3.*' boost-cpp=1.74.0 cmake h5py mpich='3.3.2=h*' mpi 'gcc_linux-64>=9' 'gxx_linux-64>=9' -c conda-forge
-RUN conda install -n BODODEV python numba=0.53.0 -c conda-forge
+RUN conda install -n BODODEV python numba=0.54.0 -c conda-forge
 RUN conda install -n BODODEV hdf5=*=*mpich* -c conda-forge
 RUN conda install -n BODODEV python pyarrow=5.0.0 fsspec -c conda-forge
 RUN conda install -n BODODEV pytest ipython

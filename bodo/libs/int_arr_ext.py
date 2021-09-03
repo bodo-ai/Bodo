@@ -197,7 +197,7 @@ def unbox_int_array(typ, obj, c):
     )
 
     fnty = lir.FunctionType(lir.IntType(32), [lir.IntType(8).as_pointer()])
-    fn = c.builder.module.get_or_insert_function(fnty, name="is_pd_int_array")
+    fn = cgutils.get_or_insert_function(c.builder.module, fnty, name="is_pd_int_array")
 
     is_pd_int = c.builder.call(fn, [obj])
     cond_pd = c.builder.icmp_unsigned("!=", is_pd_int, is_pd_int.type(0))
@@ -227,8 +227,8 @@ def unbox_int_array(typ, obj, c):
                     lir.IntType(64),
                 ],
             )
-            fn = c.builder.module.get_or_insert_function(
-                fnty, name="mask_arr_to_bitmap"
+            fn = cgutils.get_or_insert_function(
+                c.builder.module, fnty, name="mask_arr_to_bitmap"
             )
             c.builder.call(fn, [bitmap_arr_struct.data, mask_arr_struct.data, n])
 
@@ -247,8 +247,8 @@ def unbox_int_array(typ, obj, c):
                     lir.IntType(8).as_pointer(),
                 ],
             )
-            unbox_fn = c.builder.module.get_or_insert_function(
-                fnty, name="int_array_from_sequence"
+            unbox_fn = cgutils.get_or_insert_function(
+                c.builder.module, fnty, name="int_array_from_sequence"
             )
             c.builder.call(
                 unbox_fn,

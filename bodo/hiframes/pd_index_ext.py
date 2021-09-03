@@ -765,6 +765,16 @@ def _dummy_convert_none_to_int(val):
             return 0
 
         return impl
+    # Handle optional types
+    if isinstance(val, types.Optional):
+
+        def impl(val):  # pragma: no cover
+            if val is None:
+                return 0
+            return bodo.utils.indexing.unoptional(val)
+
+        return impl
+
     return lambda val: val  # pragma: no cover
 
 
@@ -841,7 +851,7 @@ def pd_date_range_overload(
         if freq is not None:
             # pandas/core/arrays/_ranges/generate_regular_range
             # TODO: handle overflows
-            stride = freq
+            stride = _dummy_convert_none_to_int(freq)
             if periods is None:
                 b = start_t.value
                 e = b + (end_t.value - b) // stride * stride + stride // 2 + 1
@@ -946,7 +956,7 @@ def pd_timedelta_range_overload(
 
         if freq is not None:
             # pandas/core/arrays/_ranges/generate_regular_range
-            stride = freq
+            stride = _dummy_convert_none_to_int(freq)
             if periods is None:
                 b = start_t.value
                 e = b + (end_t.value - b) // stride * stride + stride // 2 + 1
@@ -2900,8 +2910,11 @@ def overload_index_map(I, mapper, na_action=None):
 
     # get output element type
     typing_context = numba.core.registry.cpu_target.typing_context
+    target_context = numba.core.registry.cpu_target.target_context
     try:
-        f_return_type = get_const_func_output_type(mapper, (dtype,), {}, typing_context)
+        f_return_type = get_const_func_output_type(
+            mapper, (dtype,), {}, typing_context, target_context
+        )
     except Exception as e:
         raise_bodo_error(get_udf_error_msg("Index.map()", e))
 

@@ -306,10 +306,11 @@ def compile_func_single_block(
         f_ir = compile_to_numba_ir(
             func,
             glbls,
-            typing_info.typingctx,
-            tuple(typing_info.typemap[arg.name] for arg in args),
-            typing_info.typemap,
-            typing_info.calltypes,
+            typingctx=typing_info.typingctx,
+            targetctx=typing_info.targetctx,
+            arg_typs=tuple(typing_info.typemap[arg.name] for arg in args),
+            typemap=typing_info.typemap,
+            calltypes=typing_info.calltypes,
         )
     else:
         f_ir = compile_to_numba_ir(func, glbls)
@@ -815,7 +816,9 @@ def fold_argument_types(pysig, args, kws):
     return args
 
 
-def get_const_func_output_type(func, arg_types, kw_types, typing_context, is_udf=True):
+def get_const_func_output_type(
+    func, arg_types, kw_types, typing_context, target_context, is_udf=True
+):
     """Get output type of constant function 'func' when compiled with 'arg_types' as
     argument types.
     'func' can be a MakeFunctionLiteral (inline lambda) or FunctionLiteral (function)
@@ -842,7 +845,7 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context, is_udf
             calltypes,
             _,
         ) = numba.core.typed_passes.type_inference_stage(
-            typing_context, f_ir, arg_types, None
+            typing_context, target_context, f_ir, arg_types, None
         )
     elif isinstance(func, bodo.utils.typing.FunctionLiteral):
         py_func = func.literal_value
@@ -879,9 +882,11 @@ def get_const_func_output_type(func, arg_types, kw_types, typing_context, is_udf
     if is_udf and isinstance(f_return_type, (SeriesType, HeterogeneousSeriesType)):
         # run SeriesPass to simplify Series calls (e.g. pd.Series)
         typingctx = numba.core.registry.cpu_target.typing_context
+        targetctx = numba.core.registry.cpu_target.target_context
         series_pass = bodo.transforms.series_pass.SeriesPass(
             f_ir,
             typingctx,
+            targetctx,
             typemap,
             calltypes,
             {},

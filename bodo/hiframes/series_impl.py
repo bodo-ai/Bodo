@@ -2791,8 +2791,6 @@ def argmin_overload(a, axis=None, out=None):
         return impl
 
 
-@overload(np.dot, inline="always", no_unliteral=True)
-@overload(operator.matmul, inline="always", no_unliteral=True)
 def overload_series_np_dot(a, b, out=None):
 
     if (
@@ -2816,6 +2814,11 @@ def overload_series_np_dot(a, b, out=None):
             return np.dot(a, arr)
 
         return impl
+
+
+# Use function decorator to enable stacked inlining
+overload(np.dot, inline="always", no_unliteral=True)(overload_series_np_dot)
+overload(operator.matmul, inline="always", no_unliteral=True)(overload_series_np_dot)
 
 
 @overload_method(SeriesType, "dropna", inline="always", no_unliteral=True)
@@ -3792,8 +3795,6 @@ def overload_where_unsupported_one_arg(condition):
         return lambda condition: np.where(condition)
 
 
-@overload(where_impl_one_arg, inline="always", no_unliteral=True)
-@overload(np.where, inline="always", no_unliteral=True)
 def overload_np_where_one_arg(condition):
     if isinstance(condition, SeriesType):
 
@@ -3808,6 +3809,13 @@ def overload_np_where_one_arg(condition):
             return bodo.libs.array_kernels.nonzero(condition)
 
         return impl
+
+
+# Use function decorator to enable stacked inlining
+overload(np.where, inline="always", no_unliteral=True)(overload_np_where_one_arg)
+overload(where_impl_one_arg, inline="always", no_unliteral=True)(
+    overload_np_where_one_arg
+)
 
 
 def where_impl(c, x, y):

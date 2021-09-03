@@ -410,7 +410,9 @@ def get_keys_not_as_index(
         out_column_type.append(ColumnType.KeyColumn.value)
 
 
-def get_agg_typ(grp, args, func_name, context, func=None, kws=None):
+def get_agg_typ(
+    grp, args, func_name, typing_context, target_context, func=None, kws=None
+):
     """Get output signature for a groupby function"""
     # grp: DataFrameGroupByType instance
     # args: arguments to xxx in df.groupby().xxx()
@@ -470,7 +472,7 @@ def get_agg_typ(grp, args, func_name, context, func=None, kws=None):
                     # input to UDFs is a Series
                     in_series_typ = SeriesType(data.dtype, data, None, string_type)
                     out_dtype = get_const_func_output_type(
-                        func, (in_series_typ,), {}, context
+                        func, (in_series_typ,), {}, typing_context, target_context
                     )
                     # Is this check still necessary or should we always wrap
                     # the result in an array because its a UDF?
@@ -626,7 +628,7 @@ def get_agg_typ(grp, args, func_name, context, func=None, kws=None):
     return signature(out_res, *args), gb_info
 
 
-def get_agg_funcname_and_outtyp(grp, col, f_val, context):
+def get_agg_funcname_and_outtyp(grp, col, f_val, typing_context, target_context):
     """Get function name and output type for a function used in
     groupby.agg(), given by f_val (can be a string constant or
     user-defined function) applied to column col"""
@@ -649,7 +651,9 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, context):
         ret_grp = DataFrameGroupByType(
             grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True, True
         )
-        out_tp = get_agg_typ(ret_grp, (), f_name, context)[0].return_type
+        out_tp = get_agg_typ(ret_grp, (), f_name, typing_context, target_context)[
+            0
+        ].return_type
     else:
         # assume udf
         if is_expr(f_val, "make_function"):
@@ -665,11 +669,13 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, context):
             grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True, True
         )
         # out_tp is series because we are passing only one input column
-        out_tp = get_agg_typ(ret_grp, (), "agg", context, f)[0].return_type
+        out_tp = get_agg_typ(ret_grp, (), "agg", typing_context, target_context, f)[
+            0
+        ].return_type
     return f_name, out_tp
 
 
-def resolve_agg(grp, args, kws, context):
+def resolve_agg(grp, args, kws, typing_context, target_context):
     """infer groupby output type for agg/aggregate"""
     # NamedAgg case has func=None
     # e.g. df.groupby("A").agg(C=pd.NamedAgg(column="B", aggfunc="sum"))
@@ -749,7 +755,7 @@ def resolve_agg(grp, args, kws, context):
                 lambda_count = 0
                 for f in f_val:
                     f_name, out_tp = get_agg_funcname_and_outtyp(
-                        grp, col_name, f, context
+                        grp, col_name, f, typing_context, target_context
                     )
                     has_cumulative_ops = f_name in list_cumulative
                     if f_name == "<lambda>" and len(f_val) > 1:
@@ -763,7 +769,7 @@ def resolve_agg(grp, args, kws, context):
                     _append_out_type(grp, out_data, out_tp)
             else:
                 f_name, out_tp = get_agg_funcname_and_outtyp(
-                    grp, col_name, f_val, context
+                    grp, col_name, f_val, typing_context, target_context
                 )
                 has_cumulative_ops = f_name in list_cumulative
                 if multi_level_names:
@@ -811,7 +817,7 @@ def resolve_agg(grp, args, kws, context):
         in_col_name = grp.selection[0]
         for f_val in func.types:
             f_name, out_tp = get_agg_funcname_and_outtyp(
-                grp, in_col_name, f_val, context
+                grp, in_col_name, f_val, typing_context, target_context
             )
             has_cumulative_ops = f_name in list_cumulative
             # if tuple has lambdas they will be named <lambda_0>,
@@ -846,10 +852,10 @@ def resolve_agg(grp, args, kws, context):
         # Remove func from args.
         args = args[1:]
         kws.pop("func", None)
-        return get_agg_typ(grp, args, f_name, context, kws)
+        return get_agg_typ(grp, args, f_name, typing_context, kws)
 
     validate_udf("agg", func)
-    return get_agg_typ(grp, args, "agg", context, func)
+    return get_agg_typ(grp, args, "agg", typing_context, target_context, func)
 
 
 def resolve_transformative(grp, args, kws, msg, name_operation):
@@ -952,15 +958,17 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
     return signature(out_res, *args), gb_info
 
 
-def resolve_gb(grp, args, kws, func_name, context, err_msg=""):
+def resolve_gb(grp, args, kws, func_name, typing_context, target_context, err_msg=""):
     """Given a groupby function returns 2-tuple with output signature
     and dict with mapping of (in_col, func_name) -> out_col"""
     if func_name in set(list_cumulative) | {"shift", "transform"}:
         return resolve_transformative(grp, args, kws, err_msg, func_name)
     elif func_name in {"agg", "aggregate"}:
-        return resolve_agg(grp, args, kws, context)
+        return resolve_agg(grp, args, kws, typing_context, target_context)
     else:
-        return get_agg_typ(grp, args, func_name, context, kws=kws)
+        return get_agg_typ(
+            grp, args, func_name, typing_context, target_context, kws=kws
+        )
 
 
 @infer_getattr
@@ -972,96 +980,255 @@ class DataframeGroupByAttribute(AttributeTemplate):
 
     @bound_function("groupby.agg", no_unliteral=True)
     def resolve_agg(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "agg", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "agg",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.aggregate", no_unliteral=True)
     def resolve_aggregate(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "agg", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "agg",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.sum", no_unliteral=True)
     def resolve_sum(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "sum", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "sum",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.count", no_unliteral=True)
     def resolve_count(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "count", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "count",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.nunique", no_unliteral=True)
     def resolve_nunique(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "nunique", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "nunique",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.median", no_unliteral=True)
     def resolve_median(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "median", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "median",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.mean", no_unliteral=True)
     def resolve_mean(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "mean", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "mean",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.min", no_unliteral=True)
     def resolve_min(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "min", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "min",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.max", no_unliteral=True)
     def resolve_max(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "max", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "max",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.prod", no_unliteral=True)
     def resolve_prod(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "prod", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "prod",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.var", no_unliteral=True)
     def resolve_var(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "var", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "var",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.std", no_unliteral=True)
     def resolve_std(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "std", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "std",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.first", no_unliteral=True)
     def resolve_first(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "first", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "first",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.last", no_unliteral=True)
     def resolve_last(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "last", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "last",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.idxmin", no_unliteral=True)
     def resolve_idxmin(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "idxmin", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "idxmin",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.idxmax", no_unliteral=True)
     def resolve_idxmax(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "idxmax", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "idxmax",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.size", no_unliteral=True)
     def resolve_size(self, grp, args, kws):
-        return resolve_gb(grp, args, kws, "size", self.context)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "size",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+        )[0]
 
     @bound_function("groupby.cumsum", no_unliteral=True)
     def resolve_cumsum(self, grp, args, kws):
         msg = "Groupby.cumsum() only supports columns of types integer, float, string or liststring"
-        return resolve_gb(grp, args, kws, "cumsum", self.context, err_msg=msg)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "cumsum",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+            err_msg=msg,
+        )[0]
 
     @bound_function("groupby.cumprod", no_unliteral=True)
     def resolve_cumprod(self, grp, args, kws):
         msg = "Groupby.cumprod() only supports columns of types integer and float"
-        return resolve_gb(grp, args, kws, "cumprod", self.context, err_msg=msg)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "cumprod",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+            err_msg=msg,
+        )[0]
 
     @bound_function("groupby.cummin", no_unliteral=True)
     def resolve_cummin(self, grp, args, kws):
         msg = "Groupby.cummin() only supports columns of types integer, float, string, liststring, date, datetime or timedelta"
-        return resolve_gb(grp, args, kws, "cummin", self.context, err_msg=msg)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "cummin",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+            err_msg=msg,
+        )[0]
 
     @bound_function("groupby.cummax", no_unliteral=True)
     def resolve_cummax(self, grp, args, kws):
         msg = "Groupby.cummax() only supports columns of types integer, float, string, liststring, date, datetime or timedelta"
-        return resolve_gb(grp, args, kws, "cummax", self.context, err_msg=msg)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "cummax",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+            err_msg=msg,
+        )[0]
 
     @bound_function("groupby.shift", no_unliteral=True)
     def resolve_shift(self, grp, args, kws):
         msg = "Column type of list/tuple is not supported in groupby built-in function shift"
-        return resolve_gb(grp, args, kws, "shift", self.context, err_msg=msg)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "shift",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+            err_msg=msg,
+        )[0]
 
     @bound_function("groupby.pipe", no_unliteral=True)
     def resolve_pipe(self, grp, args, kws):
@@ -1070,7 +1237,15 @@ class DataframeGroupByAttribute(AttributeTemplate):
     @bound_function("groupby.transform", no_unliteral=True)
     def resolve_transform(self, grp, args, kws):
         msg = "Groupby.transform() only supports sum, count, min, max, mean, and std operations"
-        return resolve_gb(grp, args, kws, "transform", self.context, err_msg=msg)[0]
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "transform",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+            err_msg=msg,
+        )[0]
 
     @bound_function("groupby.apply", no_unliteral=True)
     def resolve_apply(self, grp, args, kws):
@@ -1080,7 +1255,12 @@ class DataframeGroupByAttribute(AttributeTemplate):
         f_args = tuple(args[1:]) if len(args) > 0 else ()
 
         f_return_type = _get_groupby_apply_udf_out_type(
-            func, grp, f_args, kws, self.context
+            func,
+            grp,
+            f_args,
+            kws,
+            self.context,
+            numba.core.registry.cpu_target.target_context,
         )
 
         # TODO: check output data type to array-compatible scalar, Series or DataFrame
@@ -1190,7 +1370,9 @@ class DataframeGroupByAttribute(AttributeTemplate):
         )
 
 
-def _get_groupby_apply_udf_out_type(func, grp, f_args, kws, context):
+def _get_groupby_apply_udf_out_type(
+    func, grp, f_args, kws, typing_context, target_context
+):
     """get output type for UDF used in groupby apply()"""
 
     # NOTE: without explicit column selection, Pandas passes key columns also for
@@ -1217,7 +1399,9 @@ def _get_groupby_apply_udf_out_type(func, grp, f_args, kws, context):
     arg_typs = (in_data_type,)
     arg_typs += tuple(f_args)
     try:
-        f_return_type = get_const_func_output_type(func, arg_typs, kws, context)
+        f_return_type = get_const_func_output_type(
+            func, arg_typs, kws, typing_context, target_context
+        )
     except Exception as e:
         raise_bodo_error(
             get_udf_error_msg("GroupBy.apply()", e), getattr(e, "loc", None)
@@ -1237,7 +1421,12 @@ def resolve_obj_pipe(self, grp, args, kws, obj_name):
     arg_typs = (grp,) + f_args
     try:
         f_return_type = get_const_func_output_type(
-            func, arg_typs, kws, self.context, False
+            func,
+            arg_typs,
+            kws,
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+            False,
         )
     except Exception as e:
         raise_bodo_error(

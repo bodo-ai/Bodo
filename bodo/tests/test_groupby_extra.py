@@ -42,7 +42,15 @@ def test_agg_single_str(test_groupby_agg_df):
 
     check_func(test_impl1, (test_groupby_agg_df,), sort_output=True, reset_index=True)
     check_func(test_impl2, (test_groupby_agg_df,), sort_output=True, reset_index=True)
-    check_func(test_impl3, (test_groupby_agg_df,), sort_output=True, reset_index=True)
+    # Pandas seems to detect that every value can be represented as an integer and returns
+    # int instead of float for the dtype of column C.
+    check_func(
+        test_impl3,
+        (test_groupby_agg_df,),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+    )
 
 
 def test_agg_single_builtin(test_groupby_agg_df, memory_leak_check):

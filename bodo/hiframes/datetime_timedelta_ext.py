@@ -1205,8 +1205,8 @@ def unbox_datetime_timedelta_array(typ, val, c):
             lir.IntType(8).as_pointer(),
         ],
     )
-    fn = c.builder.module.get_or_insert_function(
-        fnty, name="unbox_datetime_timedelta_array"
+    fn = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="unbox_datetime_timedelta_array"
     )
     c.builder.call(
         fn,
@@ -1258,8 +1258,8 @@ def box_datetime_timedelta_array(typ, val, c):
             lir.IntType(8).as_pointer(),
         ],
     )
-    fn_get = c.builder.module.get_or_insert_function(
-        fnty, name="box_datetime_timedelta_array"
+    fn_get = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="box_datetime_timedelta_array"
     )
     obj_arr = c.builder.call(
         fn_get,

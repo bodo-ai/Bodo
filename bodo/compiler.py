@@ -377,11 +377,13 @@ _dataframe_no_inline_methods = {
     "rolling",
 }
 
-TypingInfo = namedtuple("TypingInfo", ["typingctx", "typemap", "calltypes", "curr_loc"])
+TypingInfo = namedtuple(
+    "TypingInfo", ["typingctx", "targetctx", "typemap", "calltypes", "curr_loc"]
+)
 
 
 def _inline_bodo_getattr(
-    stmt, rhs, rhs_type, new_body, func_ir, typingctx, typemap, calltypes
+    stmt, rhs, rhs_type, new_body, func_ir, typingctx, targetctx, typemap, calltypes
 ):
     """Inline getattr nodes for Bodo types like Series"""
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
@@ -399,7 +401,7 @@ def _inline_bodo_getattr(
 
     func_ir._definitions[stmt.target.name].remove(rhs)
     impl = overload_func(rhs_type)
-    typing_info = TypingInfo(typingctx, typemap, calltypes, stmt.loc)
+    typing_info = TypingInfo(typingctx, targetctx, typemap, calltypes, stmt.loc)
     nodes = compile_func_single_block(
         impl,
         (rhs.value,),
@@ -421,6 +423,7 @@ def _inline_bodo_call(
     new_body,
     block,
     typingctx,
+    targetctx,
     calltypes,
     work_list,
 ):
@@ -484,11 +487,12 @@ def _inline_bodo_call(
         block,
         len(new_body),
         rp_func.func,
-        typingctx,
-        rp_func.arg_types,
-        typemap,
-        calltypes,
-        work_list,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=rp_func.arg_types,
+        typemap=typemap,
+        calltypes=calltypes,
+        work_list=work_list,
     )
     # update Loc objects
     for c_block in callee_blocks.values():
@@ -498,7 +502,7 @@ def _inline_bodo_call(
     return True
 
 
-def bodo_overload_inline_pass(func_ir, typingctx, typemap, calltypes):
+def bodo_overload_inline_pass(func_ir, typingctx, targetctx, typemap, calltypes):
     """inline Bodo overloads to make compilation time faster than with Numba's inliner.
     Single block functions for example can be inlined faster here.
 
@@ -528,6 +532,7 @@ def bodo_overload_inline_pass(func_ir, typingctx, typemap, calltypes):
                     new_body,
                     func_ir,
                     typingctx,
+                    targetctx,
                     typemap,
                     calltypes,
                 ):
@@ -549,6 +554,7 @@ def bodo_overload_inline_pass(func_ir, typingctx, typemap, calltypes):
                     new_body,
                     block,
                     typingctx,
+                    targetctx,
                     calltypes,
                     work_list,
                 ):
@@ -629,6 +635,7 @@ class BodoSeriesPass(FunctionPass):
         series_pass = SeriesPass(
             state.func_ir,
             state.typingctx,
+            state.targetctx,
             state.type_annotation.typemap,
             state.type_annotation.calltypes,
             state.locals,
@@ -751,7 +758,13 @@ class LowerBodoIRExtSeq(FunctionPass):
 
 
 def inline_calls(
-    func_ir, _locals, work_list=None, typingctx=None, typemap=None, calltypes=None
+    func_ir,
+    _locals,
+    work_list=None,
+    typingctx=None,
+    targetctx=None,
+    typemap=None,
+    calltypes=None,
 ):
     """Inlines all bodo.jit decorated functions in worklist.
     Returns the set of block labels that were processed.
@@ -791,10 +804,11 @@ def inline_calls(
                             block,
                             i,
                             py_func,
-                            typingctx,
-                            arg_types,
-                            typemap,
-                            calltypes,
+                            typingctx=typingctx,
+                            targetctx=targetctx,
+                            arg_typs=arg_types,
+                            typemap=typemap,
+                            calltypes=calltypes,
                             work_list=work_list,
                         )
 

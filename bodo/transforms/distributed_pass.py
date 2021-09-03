@@ -3,6 +3,8 @@
 Parallelizes the IR for distributed execution and inserts MPI calls.
 """
 import copy
+import hashlib
+import inspect
 import operator
 import sys
 import types as pytypes  # avoid confusion with numba.core.types
@@ -1609,10 +1611,11 @@ class DistributedPass:
                         ")"
                     ),
                     {"bodo": bodo, "numba": numba},
-                    self.typingctx,
-                    (),
-                    self.typemap,
-                    self.calltypes,
+                    typingctx=self.typingctx,
+                    targetctx=self.targetctx,
+                    arg_typs=(),
+                    typemap=self.typemap,
+                    calltypes=self.calltypes,
                 ).blocks.popitem()[1]
                 out = f_block.body[:-2]
                 out[-1].target = assign.target
@@ -1628,10 +1631,11 @@ class DistributedPass:
                         ")"
                     ),
                     {"bodo": bodo, "numba": numba},
-                    self.typingctx,
-                    (),
-                    self.typemap,
-                    self.calltypes,
+                    typingctx=self.typingctx,
+                    targetctx=self.targetctx,
+                    arg_typs=(),
+                    typemap=self.typemap,
+                    calltypes=self.calltypes,
                 ).blocks.popitem()[1]
                 out = f_block.body[:-2]
                 out[-1].target = assign.target
@@ -2095,10 +2099,11 @@ class DistributedPass:
                 "bodo": bodo,
                 "_csv_output_is_dir": _csv_output_is_dir,
             },
-            self.typingctx,
-            (self.typemap[cond_var.name], self.typemap[fname_var.name]),
-            self.typemap,
-            self.calltypes,
+            typingctx=self.typingctx,
+            targetctx=self.targetctx,
+            arg_typs=(self.typemap[cond_var.name], self.typemap[fname_var.name]),
+            typemap=self.typemap,
+            calltypes=self.calltypes,
         ).blocks.popitem()[1]
         replace_arg_nodes(f_block, [cond_var, fname_var])
         nodes = f_block.body[:-2]
@@ -2119,10 +2124,11 @@ class DistributedPass:
         f_block = compile_to_numba_ir(
             loc_vars["f"],
             {"bodo": bodo},
-            self.typingctx,
-            (self.typemap[lhs.name], types.intp),
-            self.typemap,
-            self.calltypes,
+            typingctx=self.typingctx,
+            targetctx=self.targetctx,
+            arg_typs=(self.typemap[lhs.name], types.intp),
+            typemap=self.typemap,
+            calltypes=self.calltypes,
         ).blocks.popitem()[1]
         replace_arg_nodes(f_block, [lhs, n])
         f_block.body = [assign] + f_block.body
@@ -2210,6 +2216,7 @@ class DistributedPass:
         count_var = self._get_1D_count(shape_vars[0], nodes)
         dtype = self.typemap[in_arr.name].dtype
         nodes += mk_alloc(
+            self.typingctx,
             self.typemap,
             self.calltypes,
             lhs,
@@ -2607,10 +2614,11 @@ class DistributedPass:
         f_ir = compile_to_numba_ir(
             loc_vars["f"],
             {"np": np},
-            self.typingctx,
-            (self.typemap[arr.name], types.intp),
-            self.typemap,
-            self.calltypes,
+            typingctx=self.typingctx,
+            targetctx=self.targetctx,
+            arg_typs=(self.typemap[arr.name], types.intp),
+            typemap=self.typemap,
+            calltypes=self.calltypes,
         )
         f_block = f_ir.blocks.popitem()[1]
         replace_arg_nodes(f_block, [arr, dim1_size])
@@ -3067,10 +3075,11 @@ class DistributedPass:
             f_block = compile_to_numba_ir(
                 loc_vars["_fix_ind_bounds"],
                 {"bodo": bodo, "_op": np.int32(Reduce_Type.Sum.value)},
-                self.typingctx,
-                (types.intp, types.intp),
-                self.typemap,
-                self.calltypes,
+                typingctx=self.typingctx,
+                targetctx=self.targetctx,
+                arg_typs=(types.intp, types.intp),
+                typemap=self.typemap,
+                calltypes=self.calltypes,
             ).blocks.popitem()[1]
             replace_arg_nodes(f_block, [l_nest.start, l_nest.stop])
             nodes = f_block.body[:-2]
@@ -3278,10 +3287,11 @@ class DistributedPass:
             f_block = compile_to_numba_ir(
                 eval("lambda A: len(A)"),
                 {},
-                self.typingctx,
-                (self.typemap[arr.name],),
-                self.typemap,
-                self.calltypes,
+                typingctx=self.typingctx,
+                targetctx=self.targetctx,
+                arg_typs=(self.typemap[arr.name],),
+                typemap=self.typemap,
+                calltypes=self.calltypes,
             ).blocks.popitem()[1]
             replace_arg_nodes(f_block, [arr])
             nodes = f_block.body[:-3]  # remove none return
@@ -3335,10 +3345,11 @@ class DistributedPass:
         f_block = compile_to_numba_ir(
             loc_vars["f"],
             {"bodo": bodo},
-            self.typingctx,
-            (self.typemap[var.name], types.int64, types.int32),
-            self.typemap,
-            self.calltypes,
+            typingctx=self.typingctx,
+            targetctx=self.targetctx,
+            arg_typs=(self.typemap[var.name], types.int64, types.int32),
+            typemap=self.typemap,
+            calltypes=self.calltypes,
         ).blocks.popitem()[1]
         replace_arg_nodes(
             f_block,
@@ -3413,10 +3424,11 @@ class DistributedPass:
         f_block = compile_to_numba_ir(
             loc_vars["f"],
             {"bodo": bodo},
-            self.typingctx,
-            (self.typemap[arr.name], types.int32),
-            self.typemap,
-            self.calltypes,
+            typingctx=self.typingctx,
+            targetctx=self.targetctx,
+            arg_typs=(self.typemap[arr.name], types.int32),
+            typemap=self.typemap,
+            calltypes=self.calltypes,
         ).blocks.popitem()[1]
         replace_arg_nodes(f_block, [arr, ir.Const(Reduce_Type.Sum.value, arr.loc)])
         nodes = f_block.body[:-3]  # remove none return
@@ -3491,10 +3503,11 @@ class DistributedPass:
         f_ir = compile_to_numba_ir(
             eval("lambda ind, start: ind - start"),
             {},
-            self.typingctx,
-            (types.intp, types.intp),
-            self.typemap,
-            self.calltypes,
+            typingctx=self.typingctx,
+            targetctx=self.targetctx,
+            arg_typs=(types.intp, types.intp),
+            typemap=self.typemap,
+            calltypes=self.calltypes,
         )
         block = f_ir.blocks.popitem()[1]
         replace_arg_nodes(block, [ind_var, start_var])
@@ -3528,7 +3541,13 @@ class DistributedPass:
             arg_typs = (slice_type, types.intp)
         _globals = self.func_ir.func_id.func.__globals__
         f_ir = compile_to_numba_ir(
-            f, _globals, self.typingctx, arg_typs, self.typemap, self.calltypes
+            f,
+            _globals,
+            typingctx=self.typingctx,
+            targetctx=self.targetctx,
+            arg_typs=arg_typs,
+            typemap=self.typemap,
+            calltypes=self.calltypes,
         )
         _, block = f_ir.blocks.popitem()
         replace_arg_nodes(block, args)
@@ -3808,10 +3827,11 @@ class DistributedPass:
         f_block = compile_to_numba_ir(
             f,
             {},
-            self.typingctx,
-            (self.typemap[tup_var.name],),
-            self.typemap,
-            self.calltypes,
+            typingctx=self.typingctx,
+            targetctx=self.targetctx,
+            arg_typs=(self.typemap[tup_var.name],),
+            typemap=self.typemap,
+            calltypes=self.calltypes,
         ).blocks.popitem()[1]
         replace_arg_nodes(f_block, [tup_var])
         nodes = f_block.body[:-3]
@@ -4051,14 +4071,19 @@ def find_available_vars(blocks, cfg, init_avail=None):
 # copied from Numba and modified to avoid ir.Del generation, which is invalid in 0.49
 # https://github.com/numba/numba/blob/1ea770564cb3c0c6cb9d8ab92e7faf23cd4c4c19/numba/parfors/parfor.py#L3050
 def lower_parfor_sequential(typingctx, func_ir, typemap, calltypes, metadata):
-    ir_utils._max_label = max(
-        ir_utils._max_label, ir_utils.find_max_label(func_ir.blocks)
-    )
+    ir_utils._the_max_label.update(ir_utils.find_max_label(func_ir.blocks))
     parfor_found = False
     new_blocks = {}
+    scope = next(iter(func_ir.blocks.values())).scope
     for (block_label, block) in func_ir.blocks.items():
         block_label, parfor_found = _lower_parfor_sequential_block(
-            block_label, block, new_blocks, typemap, calltypes, parfor_found
+            block_label,
+            block,
+            new_blocks,
+            typemap,
+            calltypes,
+            parfor_found,
+            scope=scope,
         )
         # old block stays either way
         new_blocks[block_label] = block
@@ -4073,3 +4098,12 @@ def lower_parfor_sequential(typingctx, func_ir, typemap, calltypes, metadata):
     # # add dels since simplify removes dels
     # post_proc = postproc.PostProcessor(func_ir)
     # post_proc.run(True)
+
+
+if bodo.numba_compat._check_numba_change:
+    lines = inspect.getsource(numba.parfors.parfor.lower_parfor_sequential)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "c548919f8821df2f137b18cb16791ab5761c1f6ff678864893bb758abd7dc2b1"
+    ):  # pragma: no cover
+        warnings.warn("numba.parfors.parfor.lower_parfor_sequential has changed")

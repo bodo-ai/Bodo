@@ -387,10 +387,11 @@ def pq_distributed_run(
     f_block = compile_to_numba_ir(
         pq_impl,
         {"_pq_reader_py": pq_reader_py},
-        typingctx,
-        arg_types,
-        typemap,
-        calltypes,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=arg_types,
+        typemap=typemap,
+        calltypes=calltypes,
     ).blocks.popitem()[1]
     replace_arg_nodes(f_block, [pq_node.file_name] + filter_vars)
     nodes = f_block.body[:-3]
@@ -1428,7 +1429,7 @@ def pq_read_lower(context, builder, sig, args):
     out_array = make_array(sig.args[3])(context, builder, args[3])
     zero_ptr = context.get_constant_null(types.voidptr)
 
-    fn = builder.module.get_or_insert_function(fnty, name="pq_read")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="pq_read")
     ret = builder.call(
         fn,
         [
@@ -1509,7 +1510,7 @@ def pq_read_int_arr_lower(context, builder, sig, args):
     null_arr_typ = types.Array(types.uint8, 1, "C")
     bitmap = make_array(null_arr_typ)(context, builder, int_arr.null_bitmap)
 
-    fn = builder.module.get_or_insert_function(fnty, name="pq_read")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="pq_read")
     ret = builder.call(
         fn,
         [
@@ -1553,7 +1554,7 @@ def pq_read_string_lower(context, builder, sig, args):
         ],
     )
 
-    fn = builder.module.get_or_insert_function(fnty, name="pq_read_string")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="pq_read_string")
     builder.call(
         fn,
         [
@@ -1596,7 +1597,9 @@ def pq_read_list_string_lower(context, builder, sig, args):
         ],
     )
 
-    fn = builder.module.get_or_insert_function(fnty, name="pq_read_list_string")
+    fn = cgutils.get_or_insert_function(
+        builder.module, fnty, name="pq_read_list_string"
+    )
     _res = builder.call(
         fn,
         [
@@ -1667,7 +1670,7 @@ def pq_read_array_item_lower(context, builder, sig, args):
         ],
     )
 
-    fn = builder.module.get_or_insert_function(fnty, name="pq_read_array_item")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="pq_read_array_item")
     builder.call(
         fn,
         [
@@ -1782,7 +1785,9 @@ def pq_read_arrow_array_lower(context, builder, sig, args):
             lir.IntType(8).as_pointer().as_pointer(),  # array of array_info*
         ],
     )
-    fn_tp = builder.module.get_or_insert_function(fnty, name="pq_read_arrow_array")
+    fn_tp = cgutils.get_or_insert_function(
+        builder.module, fnty, name="pq_read_arrow_array"
+    )
     builder.call(
         fn_tp,
         [
@@ -1849,7 +1854,7 @@ def parquet_write_table_cpp(
                 lir.IntType(8).as_pointer(),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="pq_write")
+        fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="pq_write")
         builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 
@@ -1908,7 +1913,9 @@ def parquet_write_table_partitioned_cpp(
                 lir.IntType(8).as_pointer(),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="pq_write_partitioned")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="pq_write_partitioned"
+        )
         builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
 

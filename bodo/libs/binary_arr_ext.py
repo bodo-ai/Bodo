@@ -235,7 +235,9 @@ def bytes_to_hex(typingctx, output, arr):
                 lir.IntType(64),
             ],
         )
-        hex_func = builder.module.get_or_insert_function(fnty, name="bytes_to_hex")
+        hex_func = cgutils.get_or_insert_function(
+            builder.module, fnty, name="bytes_to_hex"
+        )
         builder.call(hex_func, (output_arr.data, bytes_arr.data, bytes_arr.nitems))
 
     return types.void(output, arr), codegen

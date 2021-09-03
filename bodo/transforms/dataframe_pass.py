@@ -80,9 +80,10 @@ class DataFramePass:
     IR nodes for complex operations like Join.
     """
 
-    def __init__(self, func_ir, typingctx, typemap, calltypes):
+    def __init__(self, func_ir, typingctx, targetctx, typemap, calltypes):
         self.func_ir = func_ir
         self.typingctx = typingctx
+        self.targetctx = targetctx
         self.typemap = typemap
         self.calltypes = calltypes
         # Loc object of current location being translated
@@ -1455,7 +1456,12 @@ class DataFramePass:
         kws = {k: self.typemap[v.name] for k, v in rhs.kws}
         # gb_info maps (in_col, func_name) -> out_col
         _, gb_info = bodo.hiframes.pd_groupby_ext.resolve_gb(
-            grp_typ, args, kws, func_name, numba.core.registry.cpu_target.typing_context
+            grp_typ,
+            args,
+            kws,
+            func_name,
+            numba.core.registry.cpu_target.typing_context,
+            numba.core.registry.cpu_target.target_context,
         )
 
         # Populate gb_info_in and gb_info_out (to store in Aggregate node)
@@ -1707,6 +1713,7 @@ class DataFramePass:
             udf_arg_types,
             udf_kw_types,
             self.typingctx,
+            self.targetctx,
         )
 
         extra_args += list(kws.values())

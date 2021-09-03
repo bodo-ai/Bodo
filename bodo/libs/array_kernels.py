@@ -2,9 +2,12 @@
 """
 Implements array kernels such as median and quantile.
 """
+import hashlib
+import inspect
 import math
 import operator
 import re
+import warnings
 from math import sqrt
 
 import llvmlite.binding as ll
@@ -467,7 +470,9 @@ def lower_dist_quantile_seq(context, builder, sig, args):
         lir.IntType(32),
     ]
     fnty = lir.FunctionType(lir.DoubleType(), arg_typs)
-    fn = builder.module.get_or_insert_function(fnty, name="quantile_sequential")
+    fn = cgutils.get_or_insert_function(
+        builder.module, fnty, name="quantile_sequential"
+    )
     ret = builder.call(fn, call_args)
     bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
     return ret
@@ -518,7 +523,7 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
         lir.IntType(32),
     ]
     fnty = lir.FunctionType(lir.DoubleType(), arg_typs)
-    fn = builder.module.get_or_insert_function(fnty, name="quantile_parallel")
+    fn = cgutils.get_or_insert_function(builder.module, fnty, name="quantile_parallel")
     ret = builder.call(fn, call_args)
     bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
     return ret
@@ -587,6 +592,10 @@ def nlargest(A, index_arr, k, is_largest, cmp_f):  # pragma: no cover
     # than the minimum (root) in heap, replace the minimum and rebuild the heap
     m = len(A)
 
+    # return empty arrays for k=0 corner case (min_heap_vals[0] below would be invalid)
+    if k == 0:
+        return A[:0], index_arr[:0]
+
     # if all of A, just sort and reverse
     if k >= m:
         B = np.sort(A)
@@ -620,6 +629,7 @@ def nlargest(A, index_arr, k, is_largest, cmp_f):  # pragma: no cover
     if is_largest:
         min_heap_vals = min_heap_vals[::-1]
         min_heap_inds = min_heap_inds[::-1]
+
     return (np.ascontiguousarray(min_heap_vals), np.ascontiguousarray(min_heap_inds))
 
 
@@ -1697,7 +1707,15 @@ def arange_parallel_impl(return_type, *args):
         raise BodoError("parallel arange with types {}".format(args))
 
 
-numba.parfors.parfor.replace_functions_map[("arange", "numpy")] = arange_parallel_impl
+# Check if numba.parfors.parfor.arange_parallel_impl source code has changed
+if bodo.numba_compat._check_numba_change:
+    lines = inspect.getsource(numba.parfors.parfor.arange_parallel_impl)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "c72b0390b4f3e52dcc5426bd42c6b55ff96bae5a425381900985d36e7527a4bd"
+    ):  # pragma: no cover
+        warnings.warn("numba.parfors.parfor.arange_parallel_impl has changed")
+numba.parfors.parfor.swap_functions_map[("arange", "numpy")] = arange_parallel_impl
 
 
 def sort(arr, ascending, inplace):  # pragma: no cover
@@ -1730,8 +1748,6 @@ def overload_sort(arr, ascending, inplace):
 ###### Overloads of np array operations on our array types. ######
 
 
-@overload(np.max, inline="always", no_unliteral=True)
-@overload(max, inline="always", no_unliteral=True)
 def overload_array_max(A):
     if isinstance(A, IntegerArrayType) or A == boolean_array:
 
@@ -1741,8 +1757,11 @@ def overload_array_max(A):
         return impl
 
 
-@overload(np.min, inline="always", no_unliteral=True)
-@overload(min, inline="always", no_unliteral=True)
+# Use function decorator to enable stacked inlining
+overload(np.max, inline="always", no_unliteral=True)(overload_array_max)
+overload(max, inline="always", no_unliteral=True)(overload_array_max)
+
+
 def overload_array_min(A):
     if isinstance(A, IntegerArrayType) or A == boolean_array:
 
@@ -1752,8 +1771,11 @@ def overload_array_min(A):
         return impl
 
 
-@overload(np.sum, inline="always", no_unliteral=True)
-@overload(sum, inline="always", no_unliteral=True)
+# Use function decorator to enable stacked inlining
+overload(np.min, inline="always", no_unliteral=True)(overload_array_min)
+overload(min, inline="always", no_unliteral=True)(overload_array_min)
+
+
 def overload_array_sum(A):
     if isinstance(A, IntegerArrayType) or A == boolean_array:
 
@@ -1761,6 +1783,11 @@ def overload_array_sum(A):
             return pd.Series(A).sum()
 
     return impl
+
+
+# Use function decorator to enable stacked inlining
+overload(np.sum, inline="always", no_unliteral=True)(overload_array_sum)
+overload(sum, inline="always", no_unliteral=True)(overload_array_sum)
 
 
 @overload(np.prod, inline="always", no_unliteral=True)
@@ -2373,7 +2400,10 @@ def _nan_argmin(arr):  # pragma: no cover
     return
 
 
-@overload(_nan_argmin, inline="always", no_unliteral=True)
+# inlining in series pass to avoid non-unique variable name issue in Numba 0.54 for
+# bodo/tests/test_dataframe.py::test_df_idxmin_all_types_axis0"[df_value2]"
+# see https://github.com/numba/numba/issues/7225
+@overload(_nan_argmin, no_unliteral=True)
 def _overload_nan_argmin(arr):
     """
     Argmin function used on Bodo Array types for idxmin
@@ -2428,8 +2458,10 @@ def _nan_argmax(arr):  # pragma: no cover
     return
 
 
-# TODO: Figure out how if this should be inlined.
-@overload(_nan_argmax, no_unliteral=True, inline="always")
+# inlining in series pass to avoid non-unique variable name issue in Numba 0.54 for
+# bodo/tests/test_dataframe.py::test_df_idxmax_all_types_axis0"[df_value2]"
+# see https://github.com/numba/numba/issues/7225
+@overload(_nan_argmax, no_unliteral=True)
 def _overload_nan_argmax(arr):
     """
     Argmax function used on Bodo Array types for idxmax

@@ -177,10 +177,14 @@ def unbox_bool_array(typ, obj, c):
     c.pyapi.decref(n_obj)
 
     fnty = lir.FunctionType(lir.IntType(32), [lir.IntType(8).as_pointer()])
-    fn_bool = c.builder.module.get_or_insert_function(fnty, name="is_bool_array")
+    fn_bool = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="is_bool_array"
+    )
 
     fnty = lir.FunctionType(lir.IntType(32), [lir.IntType(8).as_pointer()])
-    fn = c.builder.module.get_or_insert_function(fnty, name="is_pd_boolean_array")
+    fn = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="is_pd_boolean_array"
+    )
 
     bool_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
 
@@ -216,8 +220,8 @@ def unbox_bool_array(typ, obj, c):
                     lir.IntType(64),
                 ],
             )
-            fn = c.builder.module.get_or_insert_function(
-                fnty, name="mask_arr_to_bitmap"
+            fn = cgutils.get_or_insert_function(
+                c.builder.module, fnty, name="mask_arr_to_bitmap"
             )
             c.builder.call(fn, [bitmap_arr_struct.data, mask_arr_struct.data, n])
             bool_arr.null_bitmap = bitmap_arr_struct._getvalue()
@@ -271,8 +275,8 @@ def unbox_bool_array(typ, obj, c):
                             lir.IntType(64),
                         ],
                     )
-                    fn = c.builder.module.get_or_insert_function(
-                        fnty, name="unbox_bool_array_obj"
+                    fn = cgutils.get_or_insert_function(
+                        c.builder.module, fnty, name="unbox_bool_array_obj"
                     )
                     c.builder.call(fn, [obj, data_ptr, bitmap_ptr, n])
 

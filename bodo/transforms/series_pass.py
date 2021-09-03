@@ -181,15 +181,25 @@ class SeriesPass:
     """
 
     def __init__(
-        self, func_ir, typingctx, typemap, calltypes, _locals, optimize_inplace_ops=True
+        self,
+        func_ir,
+        typingctx,
+        targetctx,
+        typemap,
+        calltypes,
+        _locals,
+        optimize_inplace_ops=True,
     ):
         self.func_ir = func_ir
         self.typingctx = typingctx
+        self.targetctx = targetctx
         self.typemap = typemap
         self.calltypes = calltypes
         self.locals = _locals
         # dataframe transformation module to try on each statement
-        self.dataframe_pass = DataFramePass(func_ir, typingctx, typemap, calltypes)
+        self.dataframe_pass = DataFramePass(
+            func_ir, typingctx, targetctx, typemap, calltypes
+        )
         # flag to enable inplace array op optimization: A[i] == v -> inplace_eq(A, i, v)
         self.optimize_inplace_ops = optimize_inplace_ops
         # Loc object of current location being translated
@@ -291,12 +301,13 @@ class SeriesPass:
                         block,
                         len(new_body),
                         rp_func.func,
-                        self.typingctx,
-                        rp_func.arg_types,
-                        self.typemap,
-                        self.calltypes,
-                        work_list,
-                        callee_validator,
+                        typingctx=self.typingctx,
+                        targetctx=self.targetctx,
+                        arg_typs=rp_func.arg_types,
+                        typemap=self.typemap,
+                        calltypes=self.calltypes,
+                        work_list=work_list,
+                        callee_validator=callee_validator,
                     )
                     # recursively inline Bodo functions if necessary (UDF case)
                     if rp_func.inline_bodo_calls:
@@ -310,6 +321,7 @@ class SeriesPass:
                             self.locals,
                             inline_worklist,
                             self.typingctx,
+                            self.targetctx,
                             self.typemap,
                             self.calltypes,
                         )
@@ -2219,6 +2231,46 @@ class SeriesPass:
                 self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
+        # inline np.where() for 3 arg case with 1D input
+        if (
+            fdef == ("where", "numpy")
+            or fdef == ("where_impl", "bodo.hiframes.series_impl")
+        ) and (len(rhs.args) == 3 and self.typemap[rhs.args[0].name].ndim == 1):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            impl = bodo.hiframes.series_impl.overload_np_where(*arg_typs, **kw_typs)
+            return replace_func(
+                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            )
+
+        # Manually inline np.where() for 1 arg case with 1D input
+        # This is done because Numba doesn't seem to different inline
+        # options across overloads
+        if (
+            fdef == ("where", "numpy")
+            or fdef == ("where_impl_one_arg", "bodo.hiframes.series_impl")
+            and (
+                (len(rhs.args) == 1 and len(dict(rhs.kws)) == 0)
+                and (
+                    isinstance(self.typemap[rhs.args[0].name], SeriesType)
+                    or (
+                        bodo.utils.utils.is_array_typ(
+                            self.typemap[rhs.args[0].name], False
+                        )
+                        and self.typemap[rhs.args[0].name].ndim == 1
+                    )
+                )
+            )
+        ):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            impl = bodo.hiframes.series_impl.overload_np_where_one_arg(
+                *arg_typs, **kw_typs
+            )
+            return replace_func(
+                self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
+            )
+
         # dummy count loop to support len of group in agg UDFs
         if fdef == ("dummy_agg_count", "bodo.ir.aggregate"):
 
@@ -2248,6 +2300,20 @@ class SeriesPass:
             return replace_func(
                 self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
+
+        # inlining here to avoid errors with Numba 0.54, see comment in the overload
+        if fdef == ("_nan_argmax", "bodo.libs.array_kernels"):
+            impl = bodo.libs.array_kernels._overload_nan_argmax(
+                self.typemap[rhs.args[0].name]
+            )
+            return replace_func(self, impl, rhs.args)
+
+        # inlining here to avoid errors with Numba 0.54, see comment in the overload
+        if fdef == ("_nan_argmin", "bodo.libs.array_kernels"):
+            impl = bodo.libs.array_kernels._overload_nan_argmin(
+                self.typemap[rhs.args[0].name]
+            )
+            return replace_func(self, impl, rhs.args)
 
         # convert Series to Array for unhandled calls
         # TODO check all the functions that get here and handle if necessary
@@ -3139,10 +3205,11 @@ class SeriesPass:
         f_block = compile_to_numba_ir(
             loc_vars["f"],
             {"np": np},
-            self.typingctx,
-            (if_series_to_array_type(self.typemap[in_arr.name]),),
-            self.typemap,
-            self.calltypes,
+            typingctx=self.typingctx,
+            targetctx=self.targetctx,
+            arg_typs=(if_series_to_array_type(self.typemap[in_arr.name]),),
+            typemap=self.typemap,
+            calltypes=self.calltypes,
         ).blocks.popitem()[1]
         replace_arg_nodes(f_block, [in_arr])
         nodes = f_block.body[:-3]  # remove none return

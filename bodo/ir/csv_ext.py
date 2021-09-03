@@ -145,10 +145,11 @@ def csv_distributed_run(
     f_block = compile_to_numba_ir(
         csv_impl,
         {"_csv_reader_py": csv_reader_py},
-        typingctx,
-        (string_type,),
-        typemap,
-        calltypes,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=(string_type,),
+        typemap=typemap,
+        calltypes=calltypes,
     ).blocks.popitem()[1]
     replace_arg_nodes(f_block, [csv_node.file_name])
     nodes = f_block.body[:-3]

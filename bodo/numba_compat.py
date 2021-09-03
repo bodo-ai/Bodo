@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from contextlib import ExitStack
 
 import numba
+import numba.core.inline_closurecall
 import numba.np.linalg
 from numba.core import analysis, cgutils, errors, ir, ir_utils, types
 from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
@@ -31,6 +32,7 @@ from numba.core.ir_utils import (
     find_callname,
     guard,
     has_no_side_effect,
+    mk_unique_var,
     remove_dead_extensions,
     replace_vars_inner,
     require,
@@ -50,7 +52,6 @@ from numba.core.typing.templates import (
     _EmptyImplementationEntry,
     _inline_info,
     _OverloadAttributeTemplate,
-    _OverloadMethodTemplate,
     infer_global,
     signature,
 )
@@ -91,6 +92,8 @@ def run_frontend(func, inline_closures=False, emit_dels=False):
     bc = numba.core.bytecode.ByteCode(func_id=func_id)
     func_ir = interp.interpret(bc)
     if inline_closures:
+        from numba.core.inline_closurecall import InlineClosureCallPass
+
         # code added to original 'run_frontend' to add rewrite passes
         # we need to run the before inference rewrite pass to normalize the IR
         # XXX: check rewrite pass flag?
@@ -109,7 +112,7 @@ def run_frontend(func, inline_closures=False, emit_dels=False):
         numba.core.rewrites.rewrite_registry.apply(
             "before-inference", DummyPipeline(func_ir).state
         )
-        inline_pass = numba.core.inline_closurecall.InlineClosureCallPass(
+        inline_pass = InlineClosureCallPass(
             func_ir, numba.core.cpu.ParallelOptions(False), {}, False
         )
         inline_pass.run()
@@ -123,7 +126,7 @@ if _check_numba_change:
     lines = inspect.getsource(numba.core.compiler.run_frontend)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "53e6495bcf751f5fdd91ce6f9319cd7e06df8c3e2919fdf3f9fda976ff4c83ea"
+        != "8c2477a793b2c08d56430997880974ac12c5570e69c9e54d37d694b322ea18b6"
     ):  # pragma: no cover
         warnings.warn("numba.core.compiler.run_frontend has changed")
 
@@ -212,7 +215,7 @@ def InlineOverloads_run_pass(self, state):
     import bodo
 
     bodo.compiler.bodo_overload_inline_pass(
-        state.func_ir, state.typingctx, state.typemap, state.calltypes
+        state.func_ir, state.typingctx, state.targetctx, state.typemap, state.calltypes
     )
     return old_run_pass(self, state)
 
@@ -453,108 +456,17 @@ numba.core.typed_passes.dead_code_elimination = mini_dce
 numba.core.inline_closurecall.dead_code_elimination = mini_dce
 
 
-# replace Numba's overload/overload_method handling functions to support a new option
+# replace Numba's make_overload_template to support a new option
 # called 'no_unliteral', which avoids a second run of overload with literal types
 # converted to non-literal versions. This solves hiding errors such as #889
 # TODO: remove after Numba's #5411 is resolved
-_overload_default_jit_options = {"no_cpython_wrapper": True}
-
-
-# change: added no_unliteral argument
-def overload(
-    func,
-    jit_options={},
-    strict=True,
-    inline="never",
-    prefer_literal=False,
-    no_unliteral=False,
-):
-    from numba.core.typing.templates import (
-        infer,
-        infer_global,
-        make_overload_template,
-    )
-
-    # set default options
-    opts = _overload_default_jit_options.copy()
-    opts.update(jit_options)  # let user options override
-
-    def decorate(overload_func):
-        # change: added no_unliteral argument
-        template = make_overload_template(
-            func, overload_func, opts, strict, inline, prefer_literal, no_unliteral
-        )
-        infer(template)
-        if callable(func):
-            infer_global(func, types.Function(template))
-        return overload_func
-
-    return decorate
-
-
-if _check_numba_change:
-    # make sure overload hasn't changed before replacing it
-    lines = inspect.getsource(numba.core.extending.overload)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "9a2e592c984bd1d2df462bc3f2724a155962f85a30dc468d67acbd78cb023cc5"
-    ):  # pragma: no cover
-        warnings.warn("numba.core.extending.overload has changed")
-
-
-numba.core.extending.overload = overload
-numba.extending.overload = overload
-
-
-def overload_method(typ, attr, **kwargs):
-    from numba.core.typing.templates import (
-        infer_getattr,
-        make_overload_method_template,
-    )
-
-    def decorate(overload_func):
-        template = make_overload_method_template(
-            typ,
-            attr,
-            overload_func,
-            inline=kwargs.get("inline", "never"),
-            prefer_literal=kwargs.get("prefer_literal", False),
-            # change: added no_unliteral argument
-            no_unliteral=kwargs.get("no_unliteral", False),
-        )
-        infer_getattr(template)
-        overload(overload_func, **kwargs)(overload_func)
-        return overload_func
-
-    return decorate
-
-
-if _check_numba_change:
-    # make sure overload_method hasn't changed before replacing it
-    lines = inspect.getsource(numba.core.extending.overload_method)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "0d2663f1499836c32413f6a4dd8e4c1a407453320034b81b343e38fc34cf0658"
-    ):  # pragma: no cover
-        warnings.warn("numba.core.extending.overload_method has changed")
-
-
-numba.core.extending.overload_method = overload_method
-numba.extending.overload_method = overload_method
-
 
 from numba.core.cpu_options import InlineOptions
 
 
 # change: added no_unliteral argument
 def make_overload_template(
-    func,
-    overload_func,
-    jit_options,
-    strict,
-    inline,
-    prefer_literal=False,
-    no_unliteral=False,
+    func, overload_func, jit_options, strict, inline, prefer_literal=False, **kwargs
 ):
     """
     Make a template class for function *func* overloaded by *overload_func*.
@@ -562,6 +474,8 @@ def make_overload_template(
     """
     func_name = getattr(func, "__name__", str(func))
     name = "OverloadTemplate_%s" % (func_name,)
+    # Bodo change: added no_unliteral argument
+    no_unliteral = kwargs.pop("no_unliteral", False)
     base = numba.core.typing.templates._OverloadFunctionTemplate
     dct = dict(
         key=func,
@@ -575,6 +489,7 @@ def make_overload_template(
         prefer_literal=prefer_literal,
         # Bodo change: added no_unliteral argument
         _no_unliteral=no_unliteral,
+        metadata=kwargs,
     )
     return type(base)(name, (base,), dct)
 
@@ -584,7 +499,7 @@ if _check_numba_change:
     lines = inspect.getsource(numba.core.typing.templates.make_overload_template)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "1d304a414a1bfb2d7185ddddabcf637790ef2357b4c7d90035970b4f60e2d058"
+        != "7f6974584cb10e49995b652827540cc6732e497c0b9f8231b44fd83fcc1c0a83"
     ):  # pragma: no cover
         warnings.warn("numba.core.typing.templates.make_overload_template has changed")
 
@@ -596,7 +511,10 @@ def _resolve(self, typ, attr):
     if self._attr != attr:
         return None
 
-    assert isinstance(typ, self.key)
+    if isinstance(typ, types.TypeRef):
+        assert typ == self.key
+    else:
+        assert isinstance(typ, self.key)
 
     class MethodTemplate(AbstractTemplate):
         key = (self.key, attr)
@@ -627,7 +545,7 @@ if _check_numba_change:
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "ccfe9f8dec20f58cf61f95420e25abe5419faf2cfffde78f39118fe6f91949e3"
+        != "ce8e0935dc939d0867ef969e1ed2975adb3533a58a4133fcc90ae13c4418e4d6"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.typing.templates._OverloadMethodTemplate._resolve has changed"
@@ -644,8 +562,8 @@ def make_overload_attribute_template(
     overload_func,
     inline,
     prefer_literal=False,
-    no_unliteral=False,
     base=_OverloadAttributeTemplate,
+    **kwargs,
 ):
     """
     Make a template class for attribute *attr* of *typ* overloaded by
@@ -653,6 +571,8 @@ def make_overload_attribute_template(
     """
     assert isinstance(typ, types.Type) or issubclass(typ, types.Type)
     name = "OverloadAttributeTemplate_%s_%s" % (typ, attr)
+    # Bodo change: added _no_unliteral attribute
+    no_unliteral = kwargs.pop("no_unliteral", False)
     # Note the implementation cache is subclass-specific
     dct = dict(
         key=typ,
@@ -664,6 +584,7 @@ def make_overload_attribute_template(
         _no_unliteral=no_unliteral,
         _overload_func=staticmethod(overload_func),
         prefer_literal=prefer_literal,
+        metadata=kwargs,
     )
     obj = type(base)(name, (base,), dct)
     return obj
@@ -676,7 +597,7 @@ if _check_numba_change:
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "fced9b9ca8b1f94d3f6b5fd2377acc544df3be01dfd4adf7044d6e27473a357a"
+        != "f066c38c482d6cf8bf5735a529c3264118ba9b52264b24e58aad12a6b1960f5d"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.typing.templates.make_overload_attribute_template has changed"
@@ -685,43 +606,6 @@ if _check_numba_change:
 
 numba.core.typing.templates.make_overload_attribute_template = (
     make_overload_attribute_template
-)
-
-
-# change: added no_unliteral argument
-def make_overload_method_template(
-    typ, attr, overload_func, inline, prefer_literal=False, no_unliteral=False
-):
-    """
-    Make a template class for method *attr* of *typ* overloaded by
-    *overload_func*.
-    """
-    return make_overload_attribute_template(
-        # Bodo change: added no_unliteral argument
-        typ,
-        attr,
-        overload_func,
-        inline=inline,
-        no_unliteral=no_unliteral,
-        base=_OverloadMethodTemplate,
-        prefer_literal=prefer_literal,
-    )
-
-
-if _check_numba_change:
-    # make sure make_overload_method_template hasn't changed before replacing it
-    lines = inspect.getsource(numba.core.typing.templates.make_overload_method_template)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "09157f571dec522776accc54e9ec9261300100cac107c0cc94b7d17fb51238a1"
-    ):  # pragma: no cover
-        warnings.warn(
-            "numba.core.typing.templates.make_overload_method_template has changed"
-        )
-
-
-numba.core.typing.templates.make_overload_method_template = (
-    make_overload_method_template
 )
 
 
@@ -797,7 +681,7 @@ def generic(self, args, kws):
         )
 
         (typemap, return_type, calltypes, _) = typed_passes.type_inference_stage(
-            self.context, ir, folded_args, None
+            self.context, tgctx, ir, folded_args, None
         )
         ir = PreLowerStripPhis()._strip_phi_nodes(ir)
         ir._definitions = numba.core.ir_utils.build_definitions(ir.blocks)
@@ -827,19 +711,24 @@ def generic(self, args, kws):
         self._inline_overloads[sig.args] = {"folded_args": folded_args, "iinfo": iinfo}
     else:
         sig = disp_type.get_call_type(self.context, new_args, kws)
+        if sig is None:  # can't resolve for this target
+            return None
         self._compiled_overloads[sig.args] = disp_type.get_overload(sig)
     return sig
 
 
-# make sure generic() hasn't changed before replacing it
-lines = inspect.getsource(numba.core.typing.templates._OverloadFunctionTemplate.generic)
-if (
-    hashlib.sha256(lines.encode()).hexdigest()
-    != "1205804c405eecc4e15e0c9e3695f6d4ce0957a3c60907cdcb629c694cd094ce"
-):  # pragma: no cover
-    warnings.warn(
-        "numba.core.typing.templates._OverloadFunctionTemplate.generic has changed"
+if _check_numba_change:
+    # make sure generic() hasn't changed before replacing it
+    lines = inspect.getsource(
+        numba.core.typing.templates._OverloadFunctionTemplate.generic
     )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "5d453a6d0215ebf0bab1279ff59eb0040b34938623be99142ce20acc09cdeb64"
+    ):  # pragma: no cover
+        warnings.warn(
+            "numba.core.typing.templates._OverloadFunctionTemplate.generic has changed"
+        )
 
 
 numba.core.typing.templates._OverloadFunctionTemplate.generic = generic
@@ -898,11 +787,43 @@ numba.core.typing.templates.bound_function = bound_function
 
 
 def get_call_type(self, context, args, kws):
+    from numba.core.target_extension import get_local_target, target_registry
+
     prefer_lit = [True, False]  # old behavior preferring literal
     prefer_not = [False, True]  # new behavior preferring non-literal
     failures = _ResolutionFailures(context, self, args, kws, depth=self._depth)
+
+    # BODO TODO: does target handling increase compilation time?
+    # get the current target target
+    target_hw = get_local_target(context)
+
+    # fish out templates that are specific to the target if a target is
+    # specified
+    DEFAULT_TARGET = "generic"
+    usable = []
+    for ix, temp_cls in enumerate(self.templates):
+        # ? Need to do something about this next line
+        hw = temp_cls.metadata.get("target", DEFAULT_TARGET)
+        if hw is not None:
+            hw_clazz = target_registry[hw]
+            if target_hw.inherits_from(hw_clazz):
+                usable.append((temp_cls, hw_clazz, ix))
+
+    # sort templates based on target specificity
+    def key(x):
+        return target_hw.__mro__.index(x[1])
+
+    order = [x[0] for x in sorted(usable, key=key)]
+
+    if not order:
+        msg = (
+            f"Function resolution cannot find any matches for function"
+            f" '{self.key[0]}' for the current target: '{target_hw}'."
+        )
+        raise errors.UnsupportedError(msg)
+
     self._depth += 1
-    for temp_cls in self.templates:
+    for temp_cls in order:
         temp = temp_cls(context)
         # The template can override the default and prefer literal args
         choice = prefer_lit if temp.prefer_literal else prefer_not
@@ -935,12 +856,6 @@ def get_call_type(self, context, args, kws):
                         msg = "No match."
                     failures.add_error(temp, True, msg, uselit)
 
-    if len(failures) == 0:
-        raise AssertionError(
-            "Internal Error. "
-            "Function resolution ended with no failures "
-            "or successful signature"
-        )
     failures.raise_error()
 
 
@@ -949,7 +864,7 @@ if _check_numba_change:
     lines = inspect.getsource(numba.core.types.functions.BaseFunction.get_call_type)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "eea3bba0b35522f006f451309e9155f1fbfd94448060e2c9763df8a37d105880"
+        != "bec97de8c8b943243f111ca58d0afd705bbb30b0807b055b5da36bede5159abb"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.types.functions.BaseFunction.get_call_type has changed"
@@ -1207,13 +1122,14 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
             else:
                 if tp is None:
                     failed_args.append(
-                        (i, "cannot determine Numba type of value %r" % (val,))
+                        (i, f"cannot determine Numba type of value {val}")
                     )
         if failed_args:
             # Patch error message to ease debugging
-            msg = str(e).rstrip() + (
-                "\n\nThis error may have been caused by the following argument(s):\n%s\n"
-                % "\n".join("- argument %d: %s" % (i, err) for i, err in failed_args)
+            args_str = "\n".join(f"- argument {i}: {err}" for i, err in failed_args)
+            msg = (
+                f"{str(e).rstrip()} \n\nThis error may have been caused "
+                f"by the following argument(s):\n{args_str}\n"
             )
             e.patch_message(msg)
 
@@ -1288,7 +1204,7 @@ if _check_numba_change:
     lines = inspect.getsource(numba.core.dispatcher._DispatcherBase._compile_for_args)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "79466480839c6e16cf437dc054937deb639c85664df1fef673e8f34dfe9d41b6"
+        != "5cdfbf0b13a528abf9f0408e70f67207a03e81d610c26b1acab5b2dc1f79bf06"
     ):  # pragma: no cover
         warnings.warn(
             "numba.core.dispatcher._DispatcherBase._compile_for_args has changed"
@@ -1323,6 +1239,10 @@ def compile(self, sig):
     import numba.core.event as ev
     from numba.core import sigutils
     from numba.core.compiler_lock import global_compiler_lock
+
+    disp = self._get_dispatcher_for_current_target()
+    if disp is not self:
+        return disp.compile(sig)
 
     with ExitStack() as scope:
         cres = None
@@ -1385,7 +1305,7 @@ if _check_numba_change:
     lines = inspect.getsource(numba.core.dispatcher.Dispatcher.compile)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "bab1d95438fe39d3e26e0ac0989ae3a3b54439ee0eda8507a693ea6ca4a4917b"
+        != "934ec993577ea3b1c7dd2181ac02728abf8559fd42c17062cc821541b092ff8f"
     ):  # pragma: no cover
         warnings.warn("numba.core.dispatcher.Dispatcher.compile has changed")
 
@@ -1442,16 +1362,16 @@ def _get_module_for_linking(self):
 
 
 if _check_numba_change:
-    lines = inspect.getsource(numba.core.codegen.CodeLibrary._get_module_for_linking)
+    lines = inspect.getsource(numba.core.codegen.CPUCodeLibrary._get_module_for_linking)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
         != "56dde0e0555b5ec85b93b97c81821bce60784515a1fbf99e4542e92d02ff0a73"
     ):  # pragma: no cover
         warnings.warn(
-            "numba.core.codegen.CodeLibrary._get_module_for_linking has changed"
+            "numba.core.codegen.CPUCodeLibrary._get_module_for_linking has changed"
         )
 
-numba.core.codegen.CodeLibrary._get_module_for_linking = _get_module_for_linking
+numba.core.codegen.CPUCodeLibrary._get_module_for_linking = _get_module_for_linking
 
 
 def propagate(self, typeinfer):
@@ -1707,56 +1627,6 @@ types.Set.__init__ = Set__init__
 def eq_str(context, builder, sig, args):
     func = numba.cpython.unicode.unicode_eq(*sig.args)
     return context.compile_internal(builder, func, sig, args)
-
-
-# fix Numba's max label global bug
-def ParforPassStates__init__(
-    self,
-    func_ir,
-    typemap,
-    calltypes,
-    return_type,
-    typingctx,
-    options,
-    flags,
-    metadata,
-    diagnostics=numba.parfors.parfor.ParforDiagnostics(),
-):
-    self.func_ir = func_ir
-    self.typemap = typemap
-    self.calltypes = calltypes
-    self.typingctx = typingctx
-    self.return_type = return_type
-    self.options = options
-    self.diagnostics = diagnostics
-    self.swapped_fns = diagnostics.replaced_fns
-    self.fusion_info = diagnostics.fusion_info
-    self.nested_fusion_info = diagnostics.nested_fusion_info
-
-    self.array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
-        self.typingctx,
-        self.func_ir,
-        self.typemap,
-        self.calltypes,
-    )
-
-    # bodo change: make sure _max_label is always maximum
-    ir_utils._max_label = max(ir_utils._max_label, max(func_ir.blocks.keys()))
-    self.flags = flags
-    self.metadata = metadata
-    if "parfors" not in metadata:
-        metadata["parfors"] = {}
-
-
-if _check_numba_change:
-    lines = inspect.getsource(numba.parfors.parfor.ParforPassStates.__init__)
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "86614f7cf5b0ce442ac51d1ade9bc42fd5c238cae723c3b0ed3d8e4d9a33d7fb"
-    ):  # pragma: no cover
-        warnings.warn("numba.parfors.parfor.ParforPassStates.__init__ has changed")
-
-numba.parfors.parfor.ParforPassStates.__init__ = ParforPassStates__init__
 
 
 # disable push_call_vars() since it is only useful for threading not used in Bodo and
@@ -2631,8 +2501,10 @@ def jitclass(cls_or_spec=None, spec=None, **options):
         if numba.core.config.DISABLE_JIT:
             return cls
         else:
+            from numba.experimental.jitclass.base import ClassBuilder
+
             return register_class_type(
-                cls, spec, types.ClassType, jitclass_base.ClassBuilder, **options
+                cls, spec, types.ClassType, ClassBuilder, **options
             )
 
     if cls_or_spec is None:
@@ -2645,7 +2517,7 @@ if _check_numba_change:
     lines = inspect.getsource(jitclass_decorators.jitclass)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "f6ad843b4d553d18f6f0028fa231e38b7861f23533d7f3a8274a18fc17423d9e"
+        != "265f1953ee5881d1a5d90238d3c932cd300732e41495657e65bf51e59f7f4af5"
     ):  # pragma: no cover
         warnings.warn("jitclass_decorators.jitclass has changed")
 
@@ -2670,6 +2542,9 @@ def CallConstraint_resolve(self, typeinfer, typevars, fnty):
             return
 
     # Resolve call type
+    if isinstance(fnty, types.TypeRef):
+        # Unwrap TypeRef
+        fnty = fnty.instance_type
     try:
         sig = typeinfer.resolve_call(fnty, pos_args, kw_args)
     except ForceLiteralArg as e:
@@ -2751,7 +2626,7 @@ if _check_numba_change:
     lines = inspect.getsource(numba.core.typeinfer.CallConstraint.resolve)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "bef85735a781f8ce98211f23227052e3abb12cb9b8120dc2a59840421af8595b"
+        != "c78cd8ffc64b836a6a2ddf0362d481b52b9d380c5249920a87ff4da052ce081f"
     ):  # pragma: no cover
         warnings.warn("numba.core.typeinfer.CallConstraint.resolve has changed")
 
@@ -3173,6 +3048,9 @@ def unbox_dicttype(typ, val, c):
     return NativeValue(dctobj_res, is_error=is_error_res)
 
 
+# Import numba.core.types.typeddict to DictType unboxing
+import numba.typed.typeddict  # noqa
+
 if _check_numba_change:
     lines = inspect.getsource(
         numba.core.pythonapi._unboxers.functions[numba.core.types.DictType]
@@ -3182,7 +3060,6 @@ if _check_numba_change:
         != "5f6f183b94dc57838538c668a54c2476576c85d8553843f3219f5162c61e7816"
     ):  # pragma: no cover
         warnings.warn("unbox_dicttype has changed")
-
 numba.core.pythonapi._unboxers.functions[types.DictType] = unbox_dicttype
 
 
@@ -3192,13 +3069,13 @@ numba.core.pythonapi._unboxers.functions[types.DictType] = unbox_dicttype
 # https://github.com/numba/numba/pull/7082
 
 
-def mk_alloc(typemap, calltypes, lhs, size_var, dtype, scope, loc, lhs_typ):
+def mk_alloc(typingctx, typemap, calltypes, lhs, size_var, dtype, scope, loc, lhs_typ):
     """generate an array allocation with np.empty() and return list of nodes.
     size_var can be an int variable or tuple of int variables.
+    lhs_typ is the type of the array being allocated.
     """
     # Imports to match Numba
     import numpy
-    from numba.core import typing
     from numba.core.ir_utils import (
         convert_size_to_var,
         get_np_ufunc_typ,
@@ -3260,12 +3137,16 @@ def mk_alloc(typemap, calltypes, lhs, size_var, dtype, scope, loc, lhs_typ):
         typ_var_assign = ir.Assign(np_typ_getattr, typ_var, loc)
     alloc_call = ir.Expr.call(attr_var, [size_var, typ_var], (), loc)
     if calltypes:
-        calltypes[alloc_call] = typemap[attr_var.name].get_call_type(
-            typing.Context(), [size_typ, types.functions.NumberClass(dtype)], {}
+        cac = typemap[attr_var.name].get_call_type(
+            typingctx, [size_typ, types.functions.NumberClass(dtype)], {}
         )
-    # signature(
-    #    types.npytypes.Array(dtype, ndims, 'C'), size_typ,
-    #    types.functions.NumberClass(dtype))
+        # By default, all calls to "empty" are typed as returning a standard
+        # NumPy ndarray.  If we are allocating a ndarray subclass here then
+        # just change the return type to be that of the subclass.
+        cac._return_type = (
+            lhs_typ.copy(layout="C") if lhs_typ.layout == "F" else lhs_typ
+        )
+        calltypes[alloc_call] = cac
 
     if lhs_typ.layout == "F":
         empty_c_typ = lhs_typ.copy(layout="C")
@@ -3284,7 +3165,7 @@ def mk_alloc(typemap, calltypes, lhs, size_var, dtype, scope, loc, lhs_typ):
         asfortranarray_call = ir.Expr.call(afa_attr_var, [empty_c_var], (), loc)
         if calltypes:
             calltypes[asfortranarray_call] = typemap[afa_attr_var.name].get_call_type(
-                typing.Context(), [empty_c_typ], {}
+                typingctx, [empty_c_typ], {}
             )
 
         asfortranarray_assign = ir.Assign(asfortranarray_call, lhs, loc)
@@ -3310,14 +3191,157 @@ if _check_numba_change:
     lines = inspect.getsource(numba.core.ir_utils.mk_alloc)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "c7d3fcf16b7f268082614da52b3a9ba8cb3a9e41b63595f915aa6e7ed13cbe63"
+        != "ee194e9b4637c385a32a8eadd998a665d29a1f787e0e1f46b160ea2dcabd3b26"
     ):  # pragma: no cover
-        print(hashlib.sha256(lines.encode()).hexdigest())
         warnings.warn("mk_alloc has changed")
 
 numba.core.ir_utils.mk_alloc = mk_alloc
 # This function is imported in additional places
 numba.parfors.parfor.mk_alloc = mk_alloc
+
+
+# BODO change: add mk_unique_var (see https://github.com/numba/numba/issues/7365)
+def inline_ir(self, caller_ir, block, i, callee_ir, callee_freevars, arg_typs=None):
+    """Inlines the callee_ir in the caller_ir at statement index i of block
+    `block`, callee_freevars are the free variables for the callee_ir. If
+    the callee_ir is derived from a function `func` then this is
+    `func.__code__.co_freevars`. If `arg_typs` is given and the InlineWorker
+    instance was initialized with a typemap and calltypes then they will be
+    appropriately updated based on the arg_typs.
+    """
+    from numba.core.inline_closurecall import (
+        _add_definitions,
+        _debug_dump,
+        _get_all_scopes,
+        _get_callee_args,
+        _replace_args_with,
+        _replace_returns,
+        add_offset_to_labels,
+        find_topo_order,
+        next_label,
+        replace_vars,
+        simplify_CFG,
+    )
+
+    # Always copy the callee IR, it gets mutated
+    def copy_ir(the_ir):
+        kernel_copy = the_ir.copy()
+        kernel_copy.blocks = {}
+        for block_label, block in the_ir.blocks.items():
+            new_block = copy.deepcopy(the_ir.blocks[block_label])
+            new_block.body = []
+            for stmt in the_ir.blocks[block_label].body:
+                scopy = copy.deepcopy(stmt)
+                new_block.body.append(scopy)
+            kernel_copy.blocks[block_label] = new_block
+        return kernel_copy
+
+    callee_ir = copy_ir(callee_ir)
+
+    # check that the contents of the callee IR is something that can be
+    # inlined if a validator is present
+    if self.validator is not None:
+        self.validator(callee_ir)
+
+    # save an unmutated copy of the callee_ir to return
+    callee_ir_original = callee_ir.copy()
+    scope = block.scope
+    instr = block.body[i]
+    call_expr = instr.value
+    callee_blocks = callee_ir.blocks
+
+    # 1. relabel callee_ir by adding an offset
+    max_label = max(ir_utils._the_max_label.next(), max(caller_ir.blocks.keys()))
+    callee_blocks = add_offset_to_labels(callee_blocks, max_label + 1)
+    callee_blocks = simplify_CFG(callee_blocks)
+    callee_ir.blocks = callee_blocks
+    min_label = min(callee_blocks.keys())
+    max_label = max(callee_blocks.keys())
+    #    reset globals in ir_utils before we use it
+    ir_utils._the_max_label.update(max_label)
+    self.debug_print("After relabel")
+    _debug_dump(callee_ir)
+
+    # 2. rename all local variables in callee_ir with new locals created in
+    # caller_ir
+    callee_scopes = _get_all_scopes(callee_blocks)
+    self.debug_print("callee_scopes = ", callee_scopes)
+    #    one function should only have one local scope
+    assert len(callee_scopes) == 1
+    callee_scope = callee_scopes[0]
+    var_dict = {}
+    for var in callee_scope.localvars._con.values():
+        if not (var.name in callee_freevars):
+            # BODO change: add mk_unique_var (see https://github.com/numba/numba/issues/7365)
+            new_var = scope.redefine(mk_unique_var(var.name), loc=var.loc)
+            var_dict[var.name] = new_var
+    self.debug_print("var_dict = ", var_dict)
+    replace_vars(callee_blocks, var_dict)
+    self.debug_print("After local var rename")
+    _debug_dump(callee_ir)
+
+    # 3. replace formal parameters with actual arguments
+    callee_func = callee_ir.func_id.func
+    args = _get_callee_args(call_expr, callee_func, block.body[i].loc, caller_ir)
+
+    # 4. Update typemap
+    if self._permit_update_type_and_call_maps:
+        if arg_typs is None:
+            raise TypeError("arg_typs should have a value not None")
+        self.update_type_and_call_maps(callee_ir, arg_typs)
+        # update_type_and_call_maps replaces blocks
+        callee_blocks = callee_ir.blocks
+
+    self.debug_print("After arguments rename: ")
+    _debug_dump(callee_ir)
+
+    _replace_args_with(callee_blocks, args)
+    # 5. split caller blocks into two
+    new_blocks = []
+    new_block = ir.Block(scope, block.loc)
+    new_block.body = block.body[i + 1 :]
+    new_label = next_label()
+    caller_ir.blocks[new_label] = new_block
+    new_blocks.append((new_label, new_block))
+    block.body = block.body[:i]
+    block.body.append(ir.Jump(min_label, instr.loc))
+
+    # 6. replace Return with assignment to LHS
+    topo_order = find_topo_order(callee_blocks)
+    _replace_returns(callee_blocks, instr.target, new_label)
+
+    # remove the old definition of instr.target too
+    if (
+        instr.target.name in caller_ir._definitions
+        and call_expr in caller_ir._definitions[instr.target.name]
+    ):
+        # NOTE: target can have multiple definitions due to control flow
+        caller_ir._definitions[instr.target.name].remove(call_expr)
+
+    # 7. insert all new blocks, and add back definitions
+    for label in topo_order:
+        # block scope must point to parent's
+        block = callee_blocks[label]
+        block.scope = scope
+        _add_definitions(caller_ir, block)
+        caller_ir.blocks[label] = block
+        new_blocks.append((label, block))
+    self.debug_print("After merge in")
+    _debug_dump(caller_ir)
+
+    return callee_ir_original, callee_blocks, var_dict, new_blocks
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.inline_closurecall.InlineWorker.inline_ir)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "9a06c2daf1ac4db26d0d6c02a85c3e661909d8190b9ae354283e1631c9693d20"
+    ):  # pragma: no cover
+        warnings.warn("inline_ir has changed")
+
+
+numba.core.inline_closurecall.InlineWorker.inline_ir = inline_ir
 
 
 def ufunc_find_matching_loop(ufunc, arg_types):
@@ -3517,7 +3541,6 @@ if _check_numba_change:
         hashlib.sha256(lines.encode()).hexdigest()
         != "31d1c4f9c2fb0dd0642bc3717e64f79a846e0dc5fdeecd36392cf546e4d7d85b"
     ):  # pragma: no cover
-        print(hashlib.sha256(lines.encode()).hexdigest())
         warnings.warn("ufunc_find_matching_loop has changed")
 
 numba.np.numpy_support.ufunc_find_matching_loop = ufunc_find_matching_loop
@@ -3530,6 +3553,221 @@ numba.np.npyimpl.ufunc_find_matching_loop = ufunc_find_matching_loop
 
 #################   End Timedelta Arithmetic Changes   ###################
 
+
+#################   Start Typer Changes   #################
+# Numba 0.54 introduced more strict type checking for numpy type constructors.
+# Since these are done outside of regular overloads, it is not possible to
+# provide an additional overload that handles more general cases (since the
+# type constructor cannot be extended). To get around this, we replace the typers
+# in the functions that need additional constructors.
+
+# TODO: Include directly in Numba
+
+# Bodo Change, add support for calling a number constructor on strings, datetime, timedelta
+def resolve_number___call__(self, classty):
+    """
+    Resolve a number class's constructor (e.g. calling int(...))
+    """
+    import numpy as np
+    from numba.core.typing.templates import make_callable_template
+
+    ty = classty.instance_type
+
+    def typer(val):
+        if isinstance(val, (types.BaseTuple, types.Sequence)):
+            # Array constructor, e.g. np.int32([1, 2])
+            fnty = self.context.resolve_value_type(np.array)
+            sig = fnty.get_call_type(self.context, (val, types.DType(ty)), {})
+            return sig.return_type
+        elif isinstance(val, (types.Number, types.Boolean)):
+            # Scalar constructor, e.g. np.int32(42)
+            return ty
+        # Bodo Change: Support for unicode
+        elif val == types.unicode_type:
+            return ty
+        # Bodo Change: Support for dt64/td64
+        elif val in [types.NPDatetime("ns"), types.NPTimedelta("ns")]:
+            return ty
+        else:
+            if isinstance(val, types.Array) and val.ndim == 0 and val.dtype == ty:
+                # This is 0d array -> scalar degrading
+                return ty
+            else:
+                # unsupported
+                msg = f"Casting {val} to {ty} directly is unsupported."
+                if isinstance(val, types.Array):
+                    # array casts are supported a different way.
+                    msg += f" Try doing '<array>.astype(np.{ty})' instead"
+                raise errors.TypingError(msg)
+
+    return types.Function(make_callable_template(key=ty, typer=typer))
+
+
+if _check_numba_change:
+    lines = inspect.getsource(
+        numba.core.typing.builtins.NumberClassAttribute.resolve___call__
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "6708eb64f6df62710ebaaed6232f324a8ffb0e176e14a9ffa65d7f0e12380c2d"
+    ):  # pragma: no cover
+        warnings.warn("Number Class resolve___call__ has changed")
+
+numba.core.typing.builtins.NumberClassAttribute.resolve___call__ = (
+    resolve_number___call__
+)
+
+
+#################   End Typer Changes   #################
+
+
+def on_assign(self, states, assign):
+
+    if assign.target.name == states["varname"]:
+        scope = states["scope"]
+        defmap = states["defmap"]
+        # Allow first assignment to retain the name
+        if len(defmap) == 0:
+            newtarget = assign.target
+            numba.core.ssa._logger.debug("first assign: %s", newtarget)
+            if newtarget.name not in scope.localvars:
+                # Bodo Change: Define the variable if its not already in the scope.
+                # and comment out warning so users don't see it.
+
+                # wmsg = f"variable {newtarget.name!r} is not in scope."
+                # warnings.warn(errors.NumbaIRAssumptionWarning(wmsg, loc=assign.loc))
+                newtarget = scope.define(assign.target.name, loc=assign.loc)
+        else:
+            newtarget = scope.redefine(assign.target.name, loc=assign.loc)
+        assign = ir.Assign(target=newtarget, value=assign.value, loc=assign.loc)
+        defmap[states["label"]].append(assign)
+    return assign
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.ssa._FreshVarHandler.on_assign)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "922c4f9807455f81600b794bbab36f9c6edfecfa83fda877bf85f465db7865e8"
+    ):  # pragma: no cover
+        warnings.warn("_FreshVarHandler on_assign has changed")
+
+numba.core.ssa._FreshVarHandler.on_assign = on_assign
+
+
+#################   Start Array Math Changes   #################
+
+# Bodo change: Enable multiple overloads in canonicalize_array_math
+def get_np_ufunc_typ_lst(func):
+    """get type of the incoming function from builtin registry.
+    Return all registered implementations"""
+    from numba.core import typing
+
+    impls = []
+    for (k, v) in typing.npydecl.registry.globals:
+        if k == func:
+            impls.append(v)
+    for (k, v) in typing.templates.builtin_registry.globals:
+        if k == func:
+            impls.append(v)
+    if len(impls) == 0:
+        raise RuntimeError("type for func ", func, " not found")
+    return impls
+
+
+def canonicalize_array_math(func_ir, typemap, calltypes, typingctx):
+    import numpy
+    from numba.core.ir_utils import arr_math, find_topo_order, mk_unique_var
+
+    # save array arg to call
+    # call_varname -> array
+    blocks = func_ir.blocks
+    saved_arr_arg = {}
+    topo_order = find_topo_order(blocks)
+    # Bodo Change: Store the implementations outside the typemap
+    impl_map = {}
+    for label in topo_order:
+        block = blocks[label]
+        new_body = []
+        for stmt in block.body:
+            if isinstance(stmt, ir.Assign) and isinstance(stmt.value, ir.Expr):
+                lhs = stmt.target.name
+                rhs = stmt.value
+                # replace A.func with np.func, and save A in saved_arr_arg
+                if (
+                    rhs.op == "getattr"
+                    and rhs.attr in arr_math
+                    and isinstance(typemap[rhs.value.name], types.npytypes.Array)
+                ):
+                    rhs = stmt.value
+                    arr = rhs.value
+                    saved_arr_arg[lhs] = arr
+                    scope = arr.scope
+                    loc = arr.loc
+                    # g_np_var = Global(numpy)
+                    g_np_var = ir.Var(scope, mk_unique_var("$np_g_var"), loc)
+                    typemap[g_np_var.name] = types.misc.Module(numpy)
+                    g_np = ir.Global("np", numpy, loc)
+                    g_np_assign = ir.Assign(g_np, g_np_var, loc)
+                    rhs.value = g_np_var
+                    new_body.append(g_np_assign)
+                    func_ir._definitions[g_np_var.name] = [g_np]
+                    # update func var type
+                    func = getattr(numpy, rhs.attr)
+                    # Bodo Change, don't store in typemap and select
+                    # all possible implementations
+                    func_typ_list = get_np_ufunc_typ_lst(func)
+                    impl_map[lhs] = func_typ_list
+                if rhs.op == "call" and rhs.func.name in saved_arr_arg:
+                    # add array as first arg
+                    arr = saved_arr_arg[rhs.func.name]
+                    # update call type signature to include array arg
+                    old_sig = calltypes.pop(rhs)
+                    # argsort requires kws for typing so sig.args can't be used
+                    # reusing sig.args since some types become Const in sig
+                    argtyps = old_sig.args[: len(rhs.args)]
+                    kwtyps = {name: typemap[v.name] for name, v in rhs.kws}
+                    # Bodo Change: Try all possible implementations and then update
+                    # the typemap
+                    func_typs = impl_map[rhs.func.name]
+                    call_type = None
+                    for func_typ in func_typs:
+                        try:
+                            call_type = func_typ.get_call_type(
+                                typingctx, [typemap[arr.name]] + list(argtyps), kwtyps
+                            )
+                            # Update typemap and calltypes
+                            typemap.pop(rhs.func.name)
+                            typemap[rhs.func.name] = func_typ
+                            calltypes[rhs] = call_type
+                            break
+                        except Exception:
+                            # If an implementation doesn't match, continue
+                            pass
+                    if call_type is None:
+                        raise TypeError(f"No valid template found for {rhs.func.name}")
+                    rhs.args = [arr] + rhs.args
+
+            new_body.append(stmt)
+        block.body = new_body
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.ir_utils.canonicalize_array_math)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "b2200e9100613631cc554f4b640bc1181ba7cea0ece83630122d15b86941be2e"
+    ):  # pragma: no cover
+        warnings.warn("canonicalize_array_math has changed")
+
+numba.core.ir_utils.canonicalize_array_math = canonicalize_array_math
+# Clobber import in parfor
+numba.parfors.parfor.canonicalize_array_math = canonicalize_array_math
+# Clobber import in inline_closurecall
+numba.core.inline_closurecall.canonicalize_array_math = canonicalize_array_math
+
+
+#################   End Array Math Changes   #################
 
 #################   Start Bytes Changes   ##################
 
@@ -3634,13 +3872,14 @@ def _Numpy_Rules_ufunc_handle_inputs(cls, ufunc, args, kws):
 
 
 if _check_numba_change:
-    lines = inspect.getsource(numba.np.numpy_support.ufunc_find_matching_loop)
+    lines = inspect.getsource(
+        numba.core.typing.npydecl.Numpy_rules_ufunc._handle_inputs
+    )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
         != "4b97c64ad9c3d50e082538795054f35cf6d2fe962c3ca40e8377a4601b344d5c"
     ):  # pragma: no cover
-        print(hashlib.sha256(lines.encode()).hexdigest())
-        warnings.warn("ufunc_find_matching_loop has changed")
+        warnings.warn("Numpy_rules_ufunc._handle_inputs has changed")
 
 numba.core.typing.npydecl.Numpy_rules_ufunc._handle_inputs = (
     _Numpy_Rules_ufunc_handle_inputs
@@ -3679,7 +3918,6 @@ if _check_numba_change:
         hashlib.sha256(lines.encode()).hexdigest()
         != "d1bcb594c7da469542b6c5c78730d30a8df03f69f92fb965a84382b4d58c32dc"
     ):  # pragma: no cover
-        print(hashlib.sha256(lines.encode()).hexdigest())
         warnings.warn("_IPythonCacheLocator from_function has changed")
 
 numba.core.caching._IPythonCacheLocator.from_function = (

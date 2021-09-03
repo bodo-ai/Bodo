@@ -373,10 +373,13 @@ class DataFrameAttribute(AttributeTemplate):
                     # Only pass axis if axis=1
                     axis if axis_number == 1 else None,
                 )
-
             else:
                 f_return_type = get_const_func_output_type(
-                    func, arg_typs, kws, self.context
+                    func,
+                    arg_typs,
+                    kws,
+                    self.context,
+                    numba.core.registry.cpu_target.target_context,
                 )
         except Exception as e:
             raise_bodo_error(get_udf_error_msg("DataFrame.apply()", e))
@@ -503,7 +506,7 @@ def define_df_dtor(context, builder, df_type, payload_type):
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
     # TODO(ehsan): do we need to sanitize the name in any case?
-    fn = mod.get_or_insert_function(fnty, name=".dtor.df.{}".format(df_type))
+    fn = cgutils.get_or_insert_function(mod, fnty, name=".dtor.df.{}".format(df_type))
 
     # End early if the dtor is already defined
     if not fn.is_declaration:

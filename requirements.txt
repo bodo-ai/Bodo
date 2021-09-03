@@ -2,4 +2,4 @@ python
 mpich
 scipy
 pandas>=1.3.0
-numba=0.53.0
+numba=0.54.0

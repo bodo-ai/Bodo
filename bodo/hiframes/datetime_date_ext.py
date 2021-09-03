@@ -366,7 +366,9 @@ def get_isocalendar(typingctx, dt_year, dt_month, dt_day):
                 lir.IntType(64).as_pointer(),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="get_isocalendar")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="get_isocalendar"
+        )
         builder.call(fn_tp, [args[0], args[1], args[2], year, week, dow])
         return cgutils.pack_array(
             builder, [builder.load(year), builder.load(week), builder.load(dow)]
@@ -650,7 +652,9 @@ def unbox_datetime_date_array(typ, val, c):
             lir.IntType(8).as_pointer(),
         ],
     )
-    fn = c.builder.module.get_or_insert_function(fnty, name="unbox_datetime_date_array")
+    fn = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="unbox_datetime_date_array"
+    )
     c.builder.call(fn, [val, n, data_arr.data, bitmap_arr.data])
 
     out_dt_date_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
@@ -687,8 +691,8 @@ def box_datetime_date_array(typ, val, c):
         c.pyapi.pyobj,
         [lir.IntType(64), lir.IntType(64).as_pointer(), lir.IntType(8).as_pointer()],
     )
-    fn_get = c.builder.module.get_or_insert_function(
-        fnty, name="box_datetime_date_array"
+    fn_get = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="box_datetime_date_array"
     )
     obj_arr = c.builder.call(fn_get, [n, data_arr.data, bitmap_arr_data])
 

@@ -628,7 +628,9 @@ def box_date_offset(typ, val, c):
             lir.IntType(1),
         ],
     )
-    fn_get = c.builder.module.get_or_insert_function(fnty, name="box_date_offset")
+    fn_get = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="box_date_offset"
+    )
     date_offset_obj = c.builder.call(
         fn_get,
         [
@@ -664,7 +666,9 @@ def unbox_date_offset(typ, val, c):
             lir.IntType(64).as_pointer(),
         ],
     )
-    fn = c.builder.module.get_or_insert_function(fnty, name="unbox_date_offset")
+    fn = cgutils.get_or_insert_function(
+        c.builder.module, fnty, name="unbox_date_offset"
+    )
     has_kws = c.builder.call(
         fn,
         [

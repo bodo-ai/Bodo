@@ -8,6 +8,7 @@ import types as pytypes
 from inspect import getfullargspec
 
 import numba
+import numba.cpython.unicode
 import numpy as np
 import pandas as pd
 from numba.core import ir, ir_utils, types

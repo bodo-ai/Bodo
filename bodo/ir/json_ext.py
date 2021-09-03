@@ -129,10 +129,11 @@ def json_distributed_run(
     f_block = compile_to_numba_ir(
         json_impl,
         {"_json_reader_py": json_reader_py},
-        typingctx,
-        (string_type,),
-        typemap,
-        calltypes,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=(string_type,),
+        typemap=typemap,
+        calltypes=calltypes,
     ).blocks.popitem()[1]
     replace_arg_nodes(f_block, [json_node.file_name])
     nodes = f_block.body[:-3]

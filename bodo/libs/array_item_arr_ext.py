@@ -120,8 +120,8 @@ def define_array_item_dtor(context, builder, array_item_type, payload_type):
     mod = builder.module
     # Declare dtor
     fnty = lir.FunctionType(lir.VoidType(), [cgutils.voidptr_t])
-    fn = mod.get_or_insert_function(
-        fnty, name=".dtor.array_item.{}".format(array_item_type.dtype)
+    fn = cgutils.get_or_insert_function(
+        mod, fnty, name=".dtor.array_item.{}".format(array_item_type.dtype)
     )
 
     # End early if the dtor is already defined
@@ -340,8 +340,8 @@ def unbox_array_item_array(typ, val, c):
             lir.IntType(64),
             [lir.IntType(8).as_pointer()],
         )
-        fn_tp = c.builder.module.get_or_insert_function(
-            fnty, name="count_total_elems_list_array"
+        fn_tp = cgutils.get_or_insert_function(
+            c.builder.module, fnty, name="count_total_elems_list_array"
         )
         n_elems = cgutils.pack_array(c.builder, [c.builder.call(fn_tp, [val])])
     else:
@@ -354,7 +354,6 @@ def unbox_array_item_array(typ, val, c):
                 for i in range(1, n_elems_all.type.count)
             ],
         )
-
     meminfo, data_arr, offsets_ptr, null_bitmap_ptr = construct_array_item_array(
         c.context, c.builder, typ, n_arrays, n_elems, c
     )
@@ -375,8 +374,8 @@ def unbox_array_item_array(typ, val, c):
                 lir.IntType(32),  # ctype
             ],
         )
-        fn = c.builder.module.get_or_insert_function(
-            fnty, name="array_item_array_from_sequence"
+        fn = cgutils.get_or_insert_function(
+            c.builder.module, fnty, name="array_item_array_from_sequence"
         )
         c.builder.call(
             fn,
@@ -532,8 +531,8 @@ def box_array_item_arr(typ, val, c):
                 lir.IntType(32),  # ctype
             ],
         )
-        fn_get = c.builder.module.get_or_insert_function(
-            fnty, name="np_array_from_array_item_array"
+        fn_get = cgutils.get_or_insert_function(
+            c.builder.module, fnty, name="np_array_from_array_item_array"
         )
 
         arr = c.builder.call(

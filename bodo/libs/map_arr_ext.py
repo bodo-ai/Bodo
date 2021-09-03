@@ -122,8 +122,8 @@ def unbox_map_array(typ, val, c):
 
     if handle_in_c:
         fnty = lir.FunctionType(lir.IntType(64), [lir.IntType(8).as_pointer()])
-        fn_tp = c.builder.module.get_or_insert_function(
-            fnty, name="count_total_elems_list_array"
+        fn_tp = cgutils.get_or_insert_function(
+            c.builder.module, fnty, name="count_total_elems_list_array"
         )
         n_elems_all = cgutils.pack_array(
             c.builder, [n_maps, c.builder.call(fn_tp, [val])]
@@ -180,8 +180,8 @@ def unbox_map_array(typ, val, c):
                 lir.IntType(32),  # value ctype
             ],
         )
-        fn = c.builder.module.get_or_insert_function(
-            fnty, name="map_array_from_sequence"
+        fn = cgutils.get_or_insert_function(
+            c.builder.module, fnty, name="map_array_from_sequence"
         )
 
         key_ctype = bodo.utils.utils.numba_to_c_type(typ.key_arr_type.dtype)
@@ -351,8 +351,8 @@ def box_map_arr(typ, val, c):
                 lir.IntType(32),  # value ctype
             ],
         )
-        fn_get = c.builder.module.get_or_insert_function(
-            fnty, name="np_array_from_map_array"
+        fn_get = cgutils.get_or_insert_function(
+            c.builder.module, fnty, name="np_array_from_map_array"
         )
 
         key_ctype = bodo.utils.utils.numba_to_c_type(typ.key_arr_type.dtype)

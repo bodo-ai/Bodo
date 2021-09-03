@@ -912,7 +912,9 @@ def extract_year_days(typingctx, dt64_t=None):
                 lir.IntType(64).as_pointer(),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="extract_year_days")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="extract_year_days"
+        )
         builder.call(fn_tp, [dt, year, days])
         return cgutils.pack_array(
             builder, [builder.load(dt), builder.load(year), builder.load(days)]
@@ -939,7 +941,9 @@ def get_month_day(typingctx, year_t, days_t=None):
                 lir.IntType(64).as_pointer(),
             ],
         )
-        fn_tp = builder.module.get_or_insert_function(fnty, name="get_month_day")
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="get_month_day"
+        )
         builder.call(fn_tp, [args[0], args[1], month, day])
         return cgutils.pack_array(builder, [builder.load(month), builder.load(day)])
 
