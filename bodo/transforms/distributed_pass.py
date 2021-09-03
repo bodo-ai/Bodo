@@ -54,6 +54,7 @@ import bodo
 import bodo.utils.utils
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import (
+    BinaryIndexType,
     CategoricalIndexType,
     DatetimeIndexType,
     NumericIndexType,
@@ -379,6 +380,7 @@ class DistributedPass:
                     (
                         NumericIndexType,
                         StringIndexType,
+                        BinaryIndexType,
                         CategoricalIndexType,
                         DatetimeIndexType,
                         TimedeltaIndexType,

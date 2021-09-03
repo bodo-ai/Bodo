@@ -87,6 +87,11 @@ def test_distributed_range_index(memory_leak_check):
         pd.date_range(
             start="2018-04-10", end="2018-04-27", periods=3
         ).to_series(),  # deltatime series
+        pd.Series(["hello world", "lsskasbdf", ""] * 3),
+        pytest.param(
+            pd.Series([b"sdalf", b"asd", b"mnbghu"] * 3),
+            id="binary_case",
+        ),
     ],
 )
 def test_generic_index_constructor(data):
@@ -99,6 +104,24 @@ def test_generic_index_constructor(data):
 
     # parallel with no dtype
     check_func(impl, (data,))
+
+
+@pytest.mark.slow
+def test_binary_infer(memory_leak_check):
+    """tests that we can infer the type of a binary index"""
+
+    def impl(idx):
+        return idx
+
+    check_func(
+        impl,
+        (
+            pd.Index(
+                pd.array([b"ajkshdg", b"jhasdgf", b"asdfajd", np.NaN] * 3),
+                name="my_index",
+            ),
+        ),
+    )
 
 
 @pytest.mark.slow
@@ -128,6 +151,10 @@ def test_generic_index_constructor_with_dtype(data, dtype):
     [
         [1, 3, 4],
         ["A", "B", "C"],
+        pytest.param(
+            [bytes(5), b"abc", b"vhkj"],
+            id="binary_case",
+        ),
     ],
 )
 def test_generic_index_constructor_sequential(data):
@@ -212,6 +239,7 @@ def test_init_numeric_index_array_analysis(memory_leak_check):
         pd.Float64Index([10.1, 12.1]),
         pd.UInt64Index([10, 12]),
         pd.Index(["A", "B"]),
+        pytest.param(pd.Index([b"hkjl", bytes(2), b""]), id="binary_case"),
     ],
 )
 def test_array_index_box(index, memory_leak_check):
@@ -236,6 +264,7 @@ def test_array_index_box(index, memory_leak_check):
         pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
         # TODO: PeriodIndex.values returns object array of Period objects
         # pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+        pytest.param(pd.Index([b"hkjl", bytes(2), b""] * 3), id="binary_case"),
     ],
 )
 def test_index_values(index, memory_leak_check):
@@ -251,12 +280,19 @@ def test_index_values(index, memory_leak_check):
     [
         pd.Int64Index([10, 12, 11, 1, 3, 4], name="A"),
         pd.Index(["A", "B", "C", "D", "FF"], name="B"),
+        pytest.param(
+            pd.Index([b"A", bytes(1), b"C", b"", b"ghbjhk"], name="cur_idx"),
+            id="binary_case",
+        ),
         pd.RangeIndex(10, name="BB"),
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=6, name="A"),
     ],
 )
 def test_index_slice_name(index, memory_leak_check):
     """make sure Index name is preserved properly in slicing"""
+
+    if isinstance(index[0], bytes):
+        pytest.skip("requires support for binary getitem, BE-1248")
 
     def impl(I):
         return I[:3]
@@ -271,6 +307,11 @@ def test_index_slice_name(index, memory_leak_check):
         (pd.RangeIndex(3, 22, 3), 9),
         (pd.Int64Index([10, 12, 15, 18]), 15),
         (pd.Index(["A", "B", "C", "AA", "DD"]), "A"),
+        pytest.param(
+            pd.Index([b"asdhgk", b"", bytes(7), b"AA", b"DD"]),
+            b"asdhgk",
+            id="binary_case",
+        ),
         (
             pd.date_range(start="2018-04-24", end="2018-04-27", periods=6),
             pd.Timestamp("2018-04-27"),
@@ -296,6 +337,8 @@ def test_index_get_loc_error_checking():
     def impl(A, key):
         return A.get_loc(key)
 
+    # String idx
+
     # repeated value raises an error
     index = pd.Index(["A", "B", "C", "AA", "DD", "C"])
     key = "C"
@@ -308,6 +351,22 @@ def test_index_get_loc_error_checking():
     key = "E"
     with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
         bodo.jit(impl)(index, key)
+
+    # binary idx
+
+    # repeated value raises an error
+    index = pd.Index([b"A", b"B", b"C", b"AA", b"DD", b"C"])
+    key = b"C"
+    with pytest.raises(
+        ValueError, match=r"Index.get_loc\(\): non-unique Index not supported yet"
+    ):
+        bodo.jit(impl)(index, key)
+    # key not in Index
+    index = pd.Index([b"A", b"B", b"C", b"AA", b"DD"])
+    key = b"E"
+    with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
+        bodo.jit(impl)(index, key)
+
     # key not in RangeIndex
     with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
         bodo.jit(impl)(pd.RangeIndex(1, 4, 2), 2)
@@ -327,6 +386,10 @@ def test_index_get_loc_error_checking():
         pd.Float64Index([10.1, 12.1, 1.2, 3.1, -1.2, -3.1, 0.0]),
         pd.UInt64Index([10, 12, 0, 1, 11, 12, 5, 3]),
         pd.Index(["A", "B", "AB", "", "CDEF", "CC", "l"]),
+        pytest.param(
+            pd.Index([b"asdga", b"asdga", b"", b"oihjb", bytes(2), b"CC", b"asdfl"]),
+            id="binary_case",
+        ),
         pd.RangeIndex(11),
         # pd.RangeIndex(3, 10, 2), # TODO: support
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
@@ -447,6 +510,16 @@ def test_datetimeindex_constant_lowering():
 
 def test_string_index_constant_lowering():
     si = pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"])
+
+    def impl():
+        return si
+
+    bodo_func = bodo.jit(impl)
+    pd.testing.assert_index_equal(bodo_func(), impl())
+
+
+def test_binary_index_constant_lowering():
+    si = pd.Index([b"asfd", b"bjkhj", bytes(12), b"", b"KG", b"khs", b"asdfkh"])
 
     def impl():
         return si
@@ -796,11 +869,11 @@ def test_multi_index_unbox(m_ind, memory_leak_check):
 
 
 def test_init_string_index_array_analysis(memory_leak_check):
-    """make sure shape equivalence for init_string_index() is applied correctly"""
+    """make sure shape equivalence for init_binary_str_index() is applied correctly for string indexes"""
     import numba.tests.test_array_analysis
 
     def impl(d):
-        I = bodo.hiframes.pd_index_ext.init_string_index(d, "AA")
+        I = bodo.hiframes.pd_index_ext.init_binary_str_index(d, "AA")
         return I
 
     test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
@@ -810,6 +883,37 @@ def test_init_string_index_array_analysis(memory_leak_check):
     ]
     eq_set = array_analysis.equiv_sets[0]
     assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
+
+
+def test_init_binary_index_array_analysis(memory_leak_check):
+    """make sure shape equivalence for init_binary_str_index() is applied for binary indexes"""
+    import numba.tests.test_array_analysis
+
+    def impl(d):
+        I = bodo.hiframes.pd_index_ext.init_binary_str_index(d, "AA")
+        return I
+
+    test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
+    # this is needed, else we get issues due to numpys handling of this array
+    test_func(np.array([b"AA", b"asdgas", b"sdfkah"], dtype=object))
+
+    array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
+        "preserved_array_analysis"
+    ]
+    eq_set = array_analysis.equiv_sets[0]
+    assert eq_set._get_ind("I#0") == eq_set._get_ind("d#0")
+
+
+@pytest.mark.skip("Need support for charSeq [BE-1281]")
+def test_init_binary_array_bad_numpy_arr(memory_leak_check):
+    a = np.array([b"AA", b"asdgas", b"sdfkah"])
+
+    @bodo.jit
+    def impl(d):
+        I = pd.Index(d)
+        return I
+
+    check_func(impl, (a,))
 
 
 @pytest.mark.parametrize(
@@ -913,6 +1017,10 @@ def test_map(index, memory_leak_check):
             start="2018-04-24", end="2018-04-27", periods=3
         ),  # datetime range
         pd.timedelta_range(start="1D", end="3D"),  # deltatime range
+        pytest.param(
+            np.array([b"adksg", b"abdsgas", b"asdga", b"lkjhi"]),
+            id="binary_case",
+        ),
     ],
 )
 def test_index_unsupported(data):
@@ -1434,6 +1542,10 @@ def test_index_cmp_ops(op, memory_leak_check):
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
         pd.timedelta_range(start="1D", end="3D", name="A"),
         pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"]),
+        pytest.param(
+            pd.Index([b"sdhfa", b"asdf", bytes(5), b"", b"A", b"abjfdsb", b"ABCDF"]),
+            id="binary_case",
+        ),
         pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
         pd.RangeIndex(10),
     ],
@@ -1448,8 +1560,9 @@ def test_index_nbytes(index, memory_leak_check):
     if isinstance(index, pd.RangeIndex):
         py_out = 24
         check_func(impl, (index,), py_output=py_out)
-    # StringIndex has three 3 underlying arrays (data, offsets, nulll_bit_map)
-    # In this example: 15 characters,
+    # String/BinaryIndex has three 3 underlying arrays (data, offsets, nulll_bit_map)
+
+    # In the String example: 15 characters,
     # data=15 characters * 1 byte +
     # offset=(7 elements + 1 extra) * 8 bytes +
     # null_bit_map= 1 byte
@@ -1458,6 +1571,16 @@ def test_index_nbytes(index, memory_leak_check):
     # and 1 byte for null_bit_map)
     elif isinstance(index[0], str):
         py_out = 80 + (bodo.get_size() - 1) * 9
+        check_func(impl, (index,), py_output=py_out, only_1D=True)
+
+    # In the Binary example:
+    # data = 27 bytes
+    # offset=(7 elements + 1 extra) * 8 bytes +
+    # null_bit_map= 1 byte
+    # Total = 92 bytes for sequential case
+    # + 9 (For each rank we get an extra 8 bytes for offset
+    elif isinstance(index[0], bytes):
+        py_out = 92 + (bodo.get_size() - 1) * 9
         check_func(impl, (index,), py_output=py_out, only_1D=True)
     else:
         check_func(impl, (index,))

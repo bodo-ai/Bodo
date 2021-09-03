@@ -410,7 +410,11 @@ def overload_coerce_to_array(
     use_nullable_array=True returns nullable boolean/int arrays instead of Numpy arrays.
     """
     # TODO: support other arrays like list(str), datetime.date ...
-    from bodo.hiframes.pd_index_ext import CategoricalIndexType, StringIndexType
+    from bodo.hiframes.pd_index_ext import (
+        BinaryIndexType,
+        CategoricalIndexType,
+        StringIndexType,
+    )
     from bodo.hiframes.pd_series_ext import SeriesType
 
     # unliteral e.g. Tuple(Literal[int](3), Literal[int](1)) to UniTuple(int64 x 2)
@@ -422,13 +426,13 @@ def overload_coerce_to_array(
             data
         )  # pragma: no cover
 
-    # string/categorical Index
-    if isinstance(data, (StringIndexType, CategoricalIndexType)):
+    # string/binary/categorical Index
+    if isinstance(data, (StringIndexType, BinaryIndexType, CategoricalIndexType)):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.hiframes.pd_index_ext.get_index_data(
             data
         )  # pragma: no cover
 
-    # string list
+    # string/binary list
     if isinstance(data, types.List) and data.dtype in (
         bodo.string_type,
         bodo.bytes_type,
@@ -1043,6 +1047,7 @@ def overload_convert_to_index(data, name=None):
     convert data to Index object if necessary.
     """
     from bodo.hiframes.pd_index_ext import (
+        BinaryIndexType,
         CategoricalIndexType,
         DatetimeIndexType,
         NumericIndexType,
@@ -1060,6 +1065,7 @@ def overload_convert_to_index(data, name=None):
             DatetimeIndexType,
             TimedeltaIndexType,
             StringIndexType,
+            BinaryIndexType,
             CategoricalIndexType,
             types.NoneType,
         ),
@@ -1099,13 +1105,10 @@ def overload_index_from_array(data, name=None):
     """
     convert data array to Index object.
     """
-
-    # TODO: Possibly extend init_string_index to support binary data? [BE-1246]
-    if data == bodo.string_array_type:
-        return lambda data, name=None: bodo.hiframes.pd_index_ext.init_string_index(
+    if data in [bodo.string_array_type, bodo.binary_array_type]:
+        return lambda data, name=None: bodo.hiframes.pd_index_ext.init_binary_str_index(
             data, name
         )  # pragma: no cover
-
     if (
         data == bodo.hiframes.datetime_date_ext.datetime_date_array_type
         or data.dtype == types.NPDatetime("ns")

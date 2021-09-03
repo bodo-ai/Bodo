@@ -122,6 +122,9 @@ The following table can be used to select the necessary Bodo Type based upon the
   * - ``bodo.StringIndexType(name_type)``
     - | Index of strings with a given name type.
       | e.g. ``bodo.StringIndexType(bodo.string_type)``
+  * - ``bodo.BinaryIndexType(name_type)``
+    - | Index of binary values with a given name type.
+      | e.g. ``bodo.BinaryIndexType(bodo.string_type)``
   * - ``bodo.TimedeltaIndexType(name_type)``
     - | Index of timedelta64 values with a given name type.
       | e.g. ``bodo.TimedeltaIndexType(bodo.string_type)``
@@ -844,6 +847,13 @@ PeriodIndex
 boxed/unboxed and set as index to dataframes and series.
 Operations on them will be supported in upcoming releases.
 
+BinaryIndex
+***********
+
+``BinaryIndex`` objects can be
+boxed/unboxed and set as index to dataframes and series.
+Operations on them will be supported in upcoming releases.
+
 
 MultiIndex
 **********
@@ -969,10 +979,10 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.shift`
 * :meth:`pandas.core.groupby.GroupBy.size`
 * :meth:`pandas.core.groupby.SeriesGroupBy.value_counts`
-* :meth:`pandas.core.groupby.DataFrameGroupBy.transform` 
+* :meth:`pandas.core.groupby.DataFrameGroupBy.transform`
 
-  - These are the currently supported operations: `'count'`, `'first'`, `'last'`, 
-    `'min'`, `'max'`, `'mean'`, `'median'`, `'nunique'`, `'prod'`, `'std'`, `'sum'`, 
+  - These are the currently supported operations: `'count'`, `'first'`, `'last'`,
+    `'min'`, `'max'`, `'mean'`, `'median'`, `'nunique'`, `'prod'`, `'std'`, `'sum'`,
     and `'var'`
 
   - `func` must be either a constant string or a Python function from the builtins
