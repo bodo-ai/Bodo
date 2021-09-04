@@ -373,7 +373,7 @@ def none_optional_setitem_overload(A, idx, val):
                         else:
                             out_arr[i] = A[i]  # TODO(ehsan): copy inplace
 
-                    bodo.libs.str_arr_ext.move_str_arr_payload(A, out_arr)
+                    bodo.libs.str_arr_ext.move_str_binary_arr_payload(A, out_arr)
 
                 return string_arr_impl
 

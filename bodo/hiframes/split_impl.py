@@ -23,7 +23,7 @@ import bodo
 from bodo.libs import hstr_ext
 from bodo.libs.array_item_arr_ext import offset_type
 from bodo.libs.str_arr_ext import (
-    _get_string_arr_payload,
+    _get_str_binary_arr_payload,
     _memcpy,
     char_arr_type,
     get_data_ptr,
@@ -152,7 +152,9 @@ def compute_split_view(typingctx, str_arr_typ, sep_typ=None):
         str_arr, _ = args
         meminfo, meminfo_data_ptr = construct_str_arr_split_view(context, builder)
 
-        in_str_arr_payload = _get_string_arr_payload(context, builder, str_arr)
+        in_str_arr_payload = _get_str_binary_arr_payload(
+            context, builder, str_arr, string_array_type
+        )
 
         # (str_arr_split_view_payload* out_view, int64_t n_strs,
         #  offset_t* offsets, char* data, char sep)

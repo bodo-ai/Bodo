@@ -1205,11 +1205,6 @@ def test_df_dropna_df_value(df_value):
 
 @pytest.mark.slow
 def test_df_fillna_df_value(df_value):
-
-    # TODO: support fillna on binary types 1259
-    if isinstance(df_value.iat[0, 0], bytes):
-        return
-
     def impl(df, value):
         return df.fillna(value)
 
@@ -1237,10 +1232,6 @@ def test_df_replace_df_value(df_value):
     df = df[[df.columns[0]]]
     to_replace = df.iat[0, 0]
     value = df.iat[1, 0]
-
-    # TODO: support df replace for binary data, see [BE-1255]
-    if any(isinstance(x, bytes) for x in [to_replace, value]):
-        return
 
     if any(isinstance(x, pd.Timestamp) for x in [to_replace, value]):
         message = "Not supported for types PandasTimestampType"
@@ -2112,6 +2103,22 @@ def test_df_fillna_str_inplace(memory_leak_check):
 
     df_str = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["ab", "b", np.nan, "c", "bdd", "c", "a"]}
+    )
+    check_func(test_impl, (df_str,), copy_input=True)
+
+
+def test_df_fillna_binary_inplace(memory_leak_check):
+    """Make sure inplace fillna for string columns is reflected in output"""
+
+    def test_impl(df):
+        df.B.fillna(b"kjlkas", inplace=True)
+        return df
+
+    df_str = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": [b"ab", b"", np.nan, b"hkjl", b"bddsad", b"asdfc", b"sdfa"],
+        }
     )
     check_func(test_impl, (df_str,), copy_input=True)
 

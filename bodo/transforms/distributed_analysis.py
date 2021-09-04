@@ -1351,7 +1351,7 @@ class DistributedAnalysis:
         if fdef == ("get_str_arr_item_length", "bodo.libs.str_arr_ext"):
             return
 
-        if fdef == ("move_str_arr_payload", "bodo.libs.str_arr_ext"):
+        if fdef == ("move_str_binary_arr_payload", "bodo.libs.str_arr_ext"):
             self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             return
 
@@ -1593,6 +1593,9 @@ class DistributedAnalysis:
             return
 
         if fdef == ("str_arr_set_not_na", "bodo.libs.str_arr_ext"):
+            return
+
+        if fdef == ("set_null_bits_to_value", "bodo.libs.str_arr_ext"):
             return
 
         if fdef == (

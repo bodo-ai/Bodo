@@ -52,6 +52,7 @@ from bodo.utils.typing import (
     dtype_to_array_type,
     element_type,
     get_literal_value,
+    get_overload_const_bytes,
     get_overload_const_int,
     get_overload_const_str,
     is_common_scalar_dtype,
@@ -59,6 +60,7 @@ from bodo.utils.typing import (
     is_literal_type,
     is_overload_bool,
     is_overload_constant_bool,
+    is_overload_constant_bytes,
     is_overload_constant_int,
     is_overload_constant_nan,
     is_overload_constant_str,
@@ -2156,54 +2158,98 @@ def overload_series_memory_usage(S, index=True, deep=False):
         return impl
 
 
-def str_fillna_inplace_series_impl(
-    S,
-    value=None,
-    method=None,
-    axis=None,
-    inplace=False,
-    limit=None,
-    downcast=None,
-):  # pragma: no cover
-    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)
-    n = len(in_arr)
-    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
-    for j in numba.parfors.parfor.internal_prange(n):
-        s = in_arr[j]
-        if bodo.libs.array_kernels.isna(in_arr, j) and not bodo.libs.array_kernels.isna(
-            fill_arr, j
-        ):
-            s = fill_arr[j]
-        out_arr[j] = s
-    bodo.libs.str_arr_ext.move_str_arr_payload(in_arr, out_arr)
-    return
-
-
-# Since string arrays can't be changed, we have to create a new
+# Since string/binary arrays can't be changed, we have to create a new
 # array and update the same Series variable
 # TODO: handle string array reflection
 # TODO: handle init_series() optimization guard for mutability
-def str_fillna_inplace_impl(
-    S,
-    value=None,
-    method=None,
-    axis=None,
-    inplace=False,
-    limit=None,
-    downcast=None,
-):  # pragma: no cover
-    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-    val_len = bodo.libs.str_arr_ext.get_utf8_size(value)
-    n = len(in_arr)
-    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
-    for j in numba.parfors.parfor.internal_prange(n):
-        s = in_arr[j]
-        if bodo.libs.array_kernels.isna(in_arr, j):
-            s = value
-        out_arr[j] = s
-    bodo.libs.str_arr_ext.move_str_arr_payload(in_arr, out_arr)
-    return
+def binary_str_fillna_inplace_series_impl(is_binary=False):
+
+    if is_binary:
+        alloc_fn = "bodo.libs.binary_arr_ext.pre_alloc_binary_array"
+    else:
+        alloc_fn = "bodo.libs.str_arr_ext.pre_alloc_string_array"
+
+    func_text = "def impl(\n"
+    func_text += "    S,\n"
+    func_text += "    value=None,\n"
+    func_text += "    method=None,\n"
+    func_text += "    axis=None,\n"
+    func_text += "    inplace=False,\n"
+    func_text += "    limit=None,\n"
+    func_text += "    downcast=None,\n"
+    func_text += "):  # pragma: no cover\n"
+    func_text += "    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)\n"
+    func_text += "    n = len(in_arr)\n"
+    func_text += f"    out_arr = {alloc_fn}(n, -1)\n"
+    func_text += "    for j in numba.parfors.parfor.internal_prange(n):\n"
+    func_text += "        s = in_arr[j]\n"
+    func_text += "        if bodo.libs.array_kernels.isna(in_arr, j) and not bodo.libs.array_kernels.isna(\n"
+    func_text += "            fill_arr, j\n"
+    func_text += "        ):\n"
+    func_text += "            s = fill_arr[j]\n"
+    func_text += "        out_arr[j] = s\n"
+    func_text += (
+        "    bodo.libs.str_arr_ext.move_str_binary_arr_payload(in_arr, out_arr)\n"
+    )
+
+    locs = dict()
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "numba": numba,
+        },
+        locs,
+    )
+    f = locs["impl"]
+
+    return f
+
+
+# Since string/binary arrays can't be changed, we have to create a new
+# array and update the same Series variable
+# TODO: handle string array reflection
+# TODO: handle init_series() optimization guard for mutability
+def binary_str_fillna_inplace_impl(is_binary=False):
+
+    if is_binary:
+        alloc_fn = "bodo.libs.binary_arr_ext.pre_alloc_binary_array"
+    else:
+        alloc_fn = "bodo.libs.str_arr_ext.pre_alloc_string_array"
+
+    func_text = "def impl(S,\n"
+    func_text += "     value=None,\n"
+    func_text += "    method=None,\n"
+    func_text += "    axis=None,\n"
+    func_text += "    inplace=False,\n"
+    func_text += "    limit=None,\n"
+    func_text += "   downcast=None,\n"
+    func_text += "):\n"
+    func_text += "    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "    n = len(in_arr)\n"
+    func_text += f"    out_arr = {alloc_fn}(n, -1)\n"
+    func_text += "    for j in numba.parfors.parfor.internal_prange(n):\n"
+    func_text += "        s = in_arr[j]\n"
+    func_text += "        if bodo.libs.array_kernels.isna(in_arr, j):\n"
+    func_text += "            s = value\n"
+    func_text += "        out_arr[j] = s\n"
+    func_text += (
+        "    bodo.libs.str_arr_ext.move_str_binary_arr_payload(in_arr, out_arr)\n"
+    )
+
+    locs = dict()
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "numba": numba,
+        },
+        locs,
+    )
+    f = locs["impl"]
+
+    return f
 
 
 def fillna_inplace_series_impl(
@@ -2336,9 +2382,25 @@ def overload_series_fillna(
 
             # value is a Series
             if isinstance(value, SeriesType):
-                return str_fillna_inplace_series_impl
+                return binary_str_fillna_inplace_series_impl(is_binary=False)
 
-            return str_fillna_inplace_impl
+            return binary_str_fillna_inplace_impl(is_binary=False)
+        if S.dtype == bodo.bytes_type:
+            # optimization: just set null bit if fill is empty
+            if (
+                is_overload_constant_bytes(value)
+                and get_overload_const_bytes(value) == b""
+            ):
+
+                return lambda S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None: bodo.libs.str_arr_ext.set_null_bits_to_value(
+                    bodo.hiframes.pd_series_ext.get_series_data(S), -1
+                )
+
+            # value is a Series
+            if isinstance(value, SeriesType):
+                return binary_str_fillna_inplace_series_impl(is_binary=True)
+
+            return binary_str_fillna_inplace_impl(is_binary=True)
         else:
             # value is a Series
             if isinstance(value, SeriesType):
@@ -2582,11 +2644,12 @@ def _build_replace_dict(to_replace, value, key_dtype_conv):
     # TODO: replace with something that captures all scalars
     is_scalar_replace = isinstance(
         to_replace, (types.Number, Decimal128Type)
-    ) or to_replace in [bodo.string_type, types.boolean]
+    ) or to_replace in [bodo.string_type, types.boolean, bodo.bytes_type]
     is_iterable_replace = is_iterable_type(to_replace)
 
     is_scalar_value = isinstance(value, (types.Number, Decimal128Type)) or value in [
         bodo.string_type,
+        bodo.bytes_type,
         types.boolean,
     ]
     is_iterable_value = is_iterable_type(value)

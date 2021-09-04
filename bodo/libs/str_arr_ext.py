@@ -397,12 +397,13 @@ def iternext_str_array(context, builder, sig, args, result):
         builder.store(nindex, iterobj.index)
 
 
-def _get_string_arr_payload(context, builder, str_arr_value):
-    """get payload struct proxy for a string array's underlying array(item) array"""
-    string_array = context.make_helper(builder, string_array_type, str_arr_value)
+def _get_str_binary_arr_payload(context, builder, arr_value, arr_typ):
+    """get payload struct proxy for a string/binary array's underlying array(item) array"""
+    assert arr_typ == string_array_type or arr_typ == binary_array_type
+    cur_array = context.make_helper(builder, arr_typ, arr_value)
     array_item_data_type = ArrayItemArrayType(char_arr_type)
     payload = _get_array_item_arr_payload(
-        context, builder, array_item_data_type, string_array.data
+        context, builder, array_item_data_type, cur_array.data
     )
     return payload
 
@@ -414,7 +415,9 @@ def num_strings(typingctx, str_arr_typ=None):
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
         return payload.n_arrays
 
     return types.int64(string_array_type), codegen
@@ -437,7 +440,9 @@ def num_total_chars(typingctx, str_arr_typ=None):
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
         offsets_ptr = context.make_helper(
             builder, offset_arr_type, payload.offsets
         ).data
@@ -452,7 +457,9 @@ def get_offset_ptr(typingctx, str_arr_typ=None):
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
         offsets_arr = context.make_helper(builder, offset_arr_type, payload.offsets)
         # # Create new ArrayCType structure
         ctinfo = context.make_helper(builder, offset_ctypes_type)
@@ -472,7 +479,9 @@ def get_data_ptr(typingctx, str_arr_typ=None):
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
         data_arr = context.make_helper(builder, char_arr_type, payload.data)
 
         # Create new ArrayCType structure
@@ -491,7 +500,9 @@ def get_data_ptr_ind(typingctx, str_arr_typ, int_t=None):
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
         data_arr = context.make_helper(builder, char_arr_type, payload.data)
 
         # Create new ArrayCType structure
@@ -530,7 +541,9 @@ def get_null_bitmap_ptr(typingctx, str_arr_typ=None):
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
         null_bitmap_arr = context.make_helper(
             builder, null_bitmap_arr_type, payload.null_bitmap
         )
@@ -545,9 +558,13 @@ def get_null_bitmap_ptr(typingctx, str_arr_typ=None):
 
 @intrinsic
 def getitem_str_offset(typingctx, str_arr_typ, ind_t=None):
+    assert str_arr_typ == string_array_type
+
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
         offsets_ptr = context.make_helper(
             builder, offset_arr_type, payload.offsets
         ).data
@@ -559,9 +576,13 @@ def getitem_str_offset(typingctx, str_arr_typ, ind_t=None):
 # TODO: fix this for join
 @intrinsic
 def setitem_str_offset(typingctx, str_arr_typ, ind_t, val_t=None):
+    assert str_arr_typ == string_array_type
+
     def codegen(context, builder, sig, args):
         in_str_arr, ind, val = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
         offsets = context.make_helper(builder, offset_arr_type, payload.offsets).data
 
         builder.store(val, builder.gep(offsets, [ind]))
@@ -601,12 +622,17 @@ def copy_str_arr_slice(typingctx, out_str_arr_typ, in_str_arr_typ, ind_t=None):
     Copy a slice of input array (from the beginning) to output array.
     Precondition: output is allocated with enough room for data.
     """
+    assert out_str_arr_typ == string_array_type and in_str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
         out_str_arr, in_str_arr, ind = args
 
-        in_payload = _get_string_arr_payload(context, builder, in_str_arr)
-        out_payload = _get_string_arr_payload(context, builder, out_str_arr)
+        in_payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
+        out_payload = _get_str_binary_arr_payload(
+            context, builder, out_str_arr, string_array_type
+        )
 
         in_offsets = context.make_helper(
             builder, offset_arr_type, in_payload.offsets
@@ -646,11 +672,17 @@ def copy_str_arr_slice(typingctx, out_str_arr_typ, in_str_arr_typ, ind_t=None):
 @intrinsic
 def copy_data(typingctx, str_arr_typ, out_str_arr_typ=None):
     # precondition: output is allocated with data the same size as input's data
+    assert str_arr_typ == string_array_type and out_str_arr_typ == string_array_type
+
     def codegen(context, builder, sig, args):
         out_str_arr, in_str_arr = args
 
-        in_payload = _get_string_arr_payload(context, builder, in_str_arr)
-        out_payload = _get_string_arr_payload(context, builder, out_str_arr)
+        in_payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
+        out_payload = _get_str_binary_arr_payload(
+            context, builder, out_str_arr, string_array_type
+        )
         in_offsets = context.make_helper(
             builder, offset_arr_type, in_payload.offsets
         ).data
@@ -672,11 +704,17 @@ def copy_data(typingctx, str_arr_typ, out_str_arr_typ=None):
 @intrinsic
 def copy_non_null_offsets(typingctx, str_arr_typ, out_str_arr_typ=None):
     # precondition: output is allocated with offset the size non-nulls in input
+    assert str_arr_typ == string_array_type and out_str_arr_typ == string_array_type
+
     def codegen(context, builder, sig, args):
         out_str_arr, in_str_arr = args
 
-        in_payload = _get_string_arr_payload(context, builder, in_str_arr)
-        out_payload = _get_string_arr_payload(context, builder, out_str_arr)
+        in_payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
+        out_payload = _get_str_binary_arr_payload(
+            context, builder, out_str_arr, string_array_type
+        )
 
         in_offsets = context.make_helper(
             builder, offset_arr_type, in_payload.offsets
@@ -1060,16 +1098,16 @@ def str_arr_from_sequence(in_seq):  # pragma: no cover
 
 
 @intrinsic
-def set_all_offsets_to_0(typingctx, str_arr_typ=None):
+def set_all_offsets_to_0(typingctx, arr_typ=None):
     """
-    Set all the offsets of a string array to 0. Useful for
+    Set all the offsets of a string/bniary array to 0. Useful for
     all null columns.
     """
-    assert str_arr_typ in [string_array_type, binary_array_type]
+    assert arr_typ in [string_array_type, binary_array_type]
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, sig.args[0])
         n_arrays_plus_1 = builder.add(
             payload.n_arrays, lir.Constant(lir.IntType(64), 1)
         )
@@ -1089,7 +1127,7 @@ def set_all_offsets_to_0(typingctx, str_arr_typ=None):
         cgutils.memset(builder, null_offsets_ptr, n_bytes, 0)
         return context.get_dummy_value()
 
-    return types.none(str_arr_typ), codegen
+    return types.none(arr_typ), codegen
 
 
 @numba.njit
@@ -1151,8 +1189,12 @@ def set_string_array_range(
         out_arr, in_arr, curr_str_ind, curr_chars_ind = args
 
         # get input/output struct
-        in_payload = _get_string_arr_payload(context, builder, in_arr)
-        out_payload = _get_string_arr_payload(context, builder, out_arr)
+        in_payload = _get_str_binary_arr_payload(
+            context, builder, in_arr, string_array_type
+        )
+        out_payload = _get_str_binary_arr_payload(
+            context, builder, out_arr, string_array_type
+        )
 
         in_offsets = context.make_helper(
             builder, offset_arr_type, in_payload.offsets
@@ -1269,7 +1311,9 @@ def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
         null_bitmap_ptr = context.make_array(null_bitmap_arr_type)(
             context, builder, payload.null_bitmap
         ).data
@@ -1301,7 +1345,9 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
 
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1356,7 +1402,9 @@ def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
 
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1397,7 +1445,9 @@ def set_null_bits_to_value(typingctx, str_arr_typ, value_typ=None):
             in_str_arr,
             value,
         ) = args
-        payload = _get_string_arr_payload(context, builder, in_str_arr)
+        payload = _get_str_binary_arr_payload(
+            context, builder, in_str_arr, string_array_type
+        )
 
         # n_bytes = (num_strings + 7) // 8;
         n_bytes = builder.udiv(
@@ -1413,7 +1463,7 @@ def set_null_bits_to_value(typingctx, str_arr_typ, value_typ=None):
     return types.none(string_array_type, types.int8), codegen
 
 
-def _get_str_arr_data_payload_ptr(context, builder, str_arr):
+def _get_str_binary_arr_data_payload_ptr(context, builder, str_arr):
     """get pointer to meminfo of string array's underlying data array"""
     string_array = context.make_helper(builder, string_array_type, str_arr)
     array_item_data_type = ArrayItemArrayType(char_arr_type)
@@ -1429,22 +1479,26 @@ def _get_str_arr_data_payload_ptr(context, builder, str_arr):
 
 
 @intrinsic
-def move_str_arr_payload(typingctx, to_str_arr_typ, from_str_arr_typ=None):
-    """Move string array payload from one array to another."""
-    assert to_str_arr_typ == string_array_type and from_str_arr_typ == string_array_type
+def move_str_binary_arr_payload(typingctx, to_arr_typ, from_arr_typ=None):
+    """Move string/binary array payload from one array to another."""
+    assert (to_arr_typ == string_array_type and from_arr_typ == string_array_type) or (
+        to_arr_typ == binary_array_type and from_arr_typ == binary_array_type
+    )
 
     def codegen(context, builder, sig, args):
-        (to_str_arr, from_str_arr) = args
+        (to_arr, from_arr) = args
 
         # get payload pointers
-        from_meminfo_data_ptr = _get_str_arr_data_payload_ptr(
-            context, builder, from_str_arr
+        from_meminfo_data_ptr = _get_str_binary_arr_data_payload_ptr(
+            context, builder, from_arr
         )
-        to_meminfo_data_ptr = _get_str_arr_data_payload_ptr(
-            context, builder, to_str_arr
+        to_meminfo_data_ptr = _get_str_binary_arr_data_payload_ptr(
+            context, builder, to_arr
         )
-        from_payload = _get_string_arr_payload(context, builder, from_str_arr)
-        to_payload = _get_string_arr_payload(context, builder, to_str_arr)
+        from_payload = _get_str_binary_arr_payload(
+            context, builder, from_arr, sig.args[1]
+        )
+        to_payload = _get_str_binary_arr_payload(context, builder, to_arr, sig.args[0])
 
         # incref data of from_str_arr (not the meminfo, which is not copied)
         context.nrt.incref(builder, char_arr_type, from_payload.data)
@@ -1461,7 +1515,7 @@ def move_str_arr_payload(typingctx, to_str_arr_typ, from_str_arr_typ=None):
 
         return context.get_dummy_value()
 
-    return types.none(string_array_type, string_array_type), codegen
+    return types.none(to_arr_typ, from_arr_typ), codegen
 
 
 dummy_use = numba.njit(lambda a: None)
@@ -1491,7 +1545,7 @@ def get_utf8_size(s):
 def setitem_str_arr_ptr(typingctx, str_arr_t, ind_t, ptr_t, len_t=None):
     def codegen(context, builder, sig, args):
         arr, ind, ptr, length = args
-        payload = _get_string_arr_payload(context, builder, arr)
+        payload = _get_str_binary_arr_payload(context, builder, arr, sig.args[0])
         offsets = context.make_helper(builder, offset_arr_type, payload.offsets).data
         data = context.make_helper(builder, char_arr_type, payload.data).data
         fnty = lir.FunctionType(
@@ -1912,7 +1966,7 @@ def str_arr_setitem(A, idx, val):
                         else:
                             out_arr[i] = A[i]  # TODO(ehsan): copy inplace
 
-                move_str_arr_payload(A, out_arr)
+                move_str_binary_arr_payload(A, out_arr)
 
             return impl_bool_scalar
 
@@ -1944,7 +1998,7 @@ def str_arr_setitem(A, idx, val):
                         else:
                             out_arr[i] = A[i]  # TODO(ehsan): copy inplace
 
-                move_str_arr_payload(A, out_arr)
+                move_str_binary_arr_payload(A, out_arr)
 
             return impl_bool_arr
 
@@ -2106,7 +2160,7 @@ def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t
     def codegen(context, builder, sig, args):
         # TODO: return tuple with value and error and avoid array arg?
         out_ptr, arr, ind, _dtype = args
-        payload = _get_string_arr_payload(context, builder, arr)
+        payload = _get_str_binary_arr_payload(context, builder, arr, string_array_type)
         offsets = context.make_helper(builder, offset_arr_type, payload.offsets).data
         data = context.make_helper(builder, char_arr_type, payload.data).data
 

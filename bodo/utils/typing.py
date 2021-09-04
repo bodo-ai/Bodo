@@ -229,6 +229,16 @@ def is_overload_constant_str(val):
     )
 
 
+def is_overload_constant_bytes(val):
+    """Checks if the specified value is a binary constant"""
+    return (
+        isinstance(val, bytes)
+        # Numba doesn't have a coresponding literal type for byte literals
+        # or (isinstance(val, types.BinaryLiteral) and isinstance(val.literal_value, bytes))
+        or ((isinstance(val, types.Omitted) and isinstance(val.value, bytes)))
+    )
+
+
 def is_overload_constant_list(val):
     """return True if 'val' is a constant list in overload. Currently considers tuples
     as well since tuples and lists are interchangable in most Pandas APIs
@@ -414,6 +424,9 @@ def element_type(val):
     if isinstance(val, (types.List, types.ArrayCompatible)):
         if isinstance(val.dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
             return val.dtype.elem_type
+        # Bytes type is array compatible, but should be treated as scalar
+        if val == bodo.bytes_type:
+            return bodo.bytes_type
         return val.dtype
     return types.unliteral(val)
 
@@ -576,6 +589,19 @@ def get_overload_const_str(val):
         assert isinstance(val.literal_value, str)
         return val.literal_value
     raise BodoError("{} not constant string".format(val))
+
+
+def get_overload_const_bytes(val):
+    """Gets the bytes value from the possibly wraped value.
+    Val must actually be a constant byte type, or this fn will throw an error
+    """
+    if isinstance(val, bytes):
+        return val
+    if isinstance(val, types.Omitted):
+        assert isinstance(val.value, bytes)
+        return val.value
+    # Numba has no eqivalent literal type for bytes
+    raise BodoError("{} not constant binary".format(val))
 
 
 def get_overload_const_int(val):
