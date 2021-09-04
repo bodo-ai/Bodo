@@ -257,7 +257,7 @@ def remove_hiframes(rhs, lives, call_list):
         return True
 
     if (
-        call_list == ["move_str_arr_payload", "str_arr_ext", "libs", bodo]
+        call_list == ["move_str_binary_arr_payload", "str_arr_ext", "libs", bodo]
         and rhs.args[0].name not in lives
     ):
         return True

@@ -321,7 +321,7 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
             # recv the number of string characters and resize buffer to proper size
             n_chars = recv(np.int64, pe, tag - 1)
             new_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(size, n_chars)
-            bodo.libs.str_arr_ext.move_str_arr_payload(arr, new_arr)
+            bodo.libs.str_arr_ext.move_str_binary_arr_payload(arr, new_arr)
 
             n_bytes = (size + 7) >> 3
             _recv(

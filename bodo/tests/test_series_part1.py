@@ -165,11 +165,6 @@ def test_series_cov_ddof(memory_leak_check):
 
 
 def test_series_fillna_series_val(series_val):
-
-    # TODO: Support fillna with binary data, see [BE-1259]
-    if isinstance(series_val.iat[0], bytes):
-        return
-
     def impl(S):
         val = S.iat[0]
         return S.fillna(val)
@@ -184,6 +179,68 @@ def test_series_fillna_series_val(series_val):
         check_func(impl, (series_val,), dist_test=False, check_dtype=False)
 
 
+def test_string_series_fillna_inplace():
+    """tests fillna on string series with inplace = True"""
+
+    A = pd.Series(["sakdhjlf", "abc", "a", None, "sadljgksd", "", "asdjg", None] * 2)
+    A2 = pd.Series(["hsldf", "avsjbdhjof", "bjknjoiuh", "abnsdgd", "", "sadf"] * 2)
+
+    def impl0(S):
+        return S.fillna("", inplace=True)
+
+    def impl1(S):
+        return S.fillna("hello", inplace=True)
+
+    def impl2(S):
+        val = S.iat[0]
+        return S.fillna(val, inplace=True)
+
+    def impl3(S1, S2):
+        return S1.fillna(S2, inplace=True)
+
+    check_func(impl0, (A,), check_dtype=False)
+    check_func(impl0, (A2,), dist_test=False, check_dtype=False)
+    check_func(impl1, (A,), check_dtype=False)
+    check_func(impl1, (A2,), check_dtype=False)
+    check_func(impl2, (A,), check_dtype=False)
+    check_func(impl2, (A2,), check_dtype=False)
+    # with dist=True and n = 3, these cause a segfault, which is strange, since their
+    # binary counterparts do not. See BE-1297
+    check_func(impl3, (A, A2), dist_test=False, check_dtype=False)
+    check_func(impl3, (A2, A), dist_test=False, check_dtype=False)
+
+
+def test_binary_series_fillna_inplace():
+    """tests fillna on binary series with inplace = True"""
+
+    A = pd.Series(
+        [b"sakdhjlf", b"abc", b"a", np.nan, b"sadljgksd", b"", b"asdjg", bytes(1)] * 2
+    )
+    A2 = pd.Series([bytes(1), b"avsjbdhjof", b"bjknjoiuh", b"abnsdgd", b""] * 2)
+
+    def impl0(S):
+        return S.fillna(b"", inplace=True)
+
+    def impl1(S):
+        return S.fillna(b"hello", inplace=True)
+
+    def impl2(S):
+        val = S.iat[0]
+        return S.fillna(val, inplace=True)
+
+    def impl3(S1, S2):
+        return S1.fillna(S2, inplace=True)
+
+    check_func(impl0, (A,), check_dtype=False)
+    check_func(impl0, (A2,), check_dtype=False)
+    check_func(impl1, (A,), check_dtype=False)
+    check_func(impl1, (A2,), check_dtype=False)
+    check_func(impl2, (A,), check_dtype=False)
+    check_func(impl2, (A2,), check_dtype=False)
+    check_func(impl3, (A, A2), check_dtype=False)
+    check_func(impl3, (A2, A), check_dtype=False)
+
+
 def series_replace_impl(series, to_replace, value):
     return series.replace(to_replace, value)
 
@@ -196,9 +253,6 @@ def test_replace_series_val(series_val):
     to_replace = series.iat[0]
     value = series.iat[1]
 
-    # TODO: support binary replace BE-1255
-    if any(isinstance(x, bytes) for x in [to_replace, value]):
-        return
     message = ""
     if any(
         isinstance(x, (datetime.date, pd.Timedelta, pd.Timestamp))
@@ -241,7 +295,7 @@ def test_series_float_literal(memory_leak_check):
     check_func(impl, (S,))
 
 
-def test_series_str_literal(memory_leak_check):
+def test_series_replace_str_literal(memory_leak_check):
     """Checks that series.replace works with str literals"""
 
     def impl(S):

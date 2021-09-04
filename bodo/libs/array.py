@@ -26,7 +26,7 @@ from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.str_arr_ext import (
-    _get_string_arr_payload,
+    _get_str_binary_arr_payload,
     char_arr_type,
     null_bitmap_arr_type,
     offset_arr_type,
@@ -295,7 +295,9 @@ def array_to_info(typingctx, arr_type_t=None):
                     )
                     buffers = cgutils.pack_array(builder, [null_bitmap_ptr, data_ptr])
                 elif arr_typ in (string_array_type, binary_array_type):
-                    payload = _get_string_arr_payload(context, builder, arr)
+                    payload = _get_str_binary_arr_payload(
+                        context, builder, arr, arr_typ
+                    )
                     offsets = context.make_helper(
                         builder, offset_arr_type, payload.offsets
                     ).data
@@ -407,7 +409,7 @@ def array_to_info(typingctx, arr_type_t=None):
             array_item_array = context.make_helper(
                 builder, array_item_data_type, string_array.data
             )
-            payload = _get_string_arr_payload(context, builder, in_arr)
+            payload = _get_str_binary_arr_payload(context, builder, in_arr, arr_type)
             offsets = context.make_helper(
                 builder, offset_arr_type, payload.offsets
             ).data
