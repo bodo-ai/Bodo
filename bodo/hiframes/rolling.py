@@ -1362,7 +1362,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
 
         # update start of output array (from left recv buff) early for string arrays
         # since they are immutable and should be written in order
-        if send_right and is_str_array(in_arr):
+        if send_right and is_str_binary_array(in_arr):
             is_parallel_str = True
             shift_left_recv(
                 r_send_req,
@@ -1379,7 +1379,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
 
     if parallel:
         if send_right:
-            if not is_str_array(in_arr):
+            if not is_str_binary_array(in_arr):
                 shift_left_recv(
                     r_send_req,
                     l_send_req,
@@ -1455,14 +1455,14 @@ def shift_left_recv(
             output[i] = l_recv_buff[i]
 
 
-def is_str_array(arr):  # pragma: no cover
+def is_str_binary_array(arr):  # pragma: no cover
     return False
 
 
-@overload(is_str_array)
-def overload_is_str_array(arr):
-    """return True if 'arr' is a string array"""
-    if arr == bodo.string_array_type:
+@overload(is_str_binary_array)
+def overload_is_str_binary_array(arr):
+    """return True if 'arr' is a string or binary array"""
+    if arr in [bodo.string_array_type, bodo.binary_array_type]:
         return lambda arr: True  # pragma: no cover
 
     return lambda arr: False  # pragma: no cover
@@ -1480,7 +1480,12 @@ def is_supported_shift_array_type(arr_type):
         )
         or isinstance(arr_type, (bodo.IntegerArrayType, bodo.DecimalArrayType))
         or arr_type
-        in (bodo.boolean_array, bodo.datetime_date_array_type, bodo.string_array_type)
+        in (
+            bodo.boolean_array,
+            bodo.datetime_date_array_type,
+            bodo.string_array_type,
+            bodo.binary_array_type,
+        )
     )
 
 
@@ -1821,14 +1826,14 @@ def _handle_small_data_apply(
     return all_out[start:end]
 
 
-def bcast_n_chars_if_str_arr(arr):
+def bcast_n_chars_if_str_binary_arr(arr):
     pass
 
 
-@overload(bcast_n_chars_if_str_arr)
-def overload_bcast_n_chars_if_str_arr(arr):
-    """broadcast number of characters if 'arr' is a string array"""
-    if arr == bodo.string_array_type:
+@overload(bcast_n_chars_if_str_binary_arr)
+def overload_bcast_n_chars_if_str_binary_arr(arr):
+    """broadcast number of characters if 'arr' is a string or binary array"""
+    if arr in [bodo.binary_array_type, bodo.string_array_type]:
 
         def impl(arr):  # pragma: no cover
             return bodo.libs.distributed_api.bcast_scalar(
@@ -1855,9 +1860,9 @@ def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
     if rank == 0:
         all_out = alloc_shift(len(all_in_arr), all_in_arr, (-1,))
         shift_seq(all_in_arr, shift, all_out)
-        n_chars = bcast_n_chars_if_str_arr(all_out)
+        n_chars = bcast_n_chars_if_str_binary_arr(all_out)
     else:
-        n_chars = bcast_n_chars_if_str_arr(in_arr)
+        n_chars = bcast_n_chars_if_str_binary_arr(in_arr)
         all_out = alloc_shift(all_N, in_arr, (n_chars,))
 
     bodo.libs.distributed_api.bcast(all_out)

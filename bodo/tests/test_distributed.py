@@ -20,7 +20,7 @@ from bodo.tests.utils import (
     count_array_REPs,
     count_parfor_REPs,
     dist_IR_contains,
-    gen_random_string_array,
+    gen_random_string_binary_array,
     get_start_end,
     reduce_sum,
 )
@@ -1730,8 +1730,11 @@ def get_random_int64index(n):
             np.arange(n * n_col).reshape(n, n_col), marks=pytest.mark.slow
         ),  # 2D np array
         pytest.param(
-            gen_random_string_array(n), marks=pytest.mark.slow
+            gen_random_string_binary_array(n), marks=pytest.mark.slow
         ),  # string array
+        pytest.param(
+            gen_random_string_binary_array(n, is_binary=True), marks=pytest.mark.slow
+        ),  # binary array
         pytest.param(get_random_integerarray(n), marks=pytest.mark.slow),
         pytest.param(get_random_booleanarray(n), marks=pytest.mark.slow),
         pytest.param(get_random_decimalarray(n), marks=pytest.mark.slow),
@@ -1746,7 +1749,8 @@ def get_random_int64index(n):
         ),  # RangeIndex with name
         pytest.param(get_random_int64index(n), marks=pytest.mark.slow),
         pytest.param(
-            pd.Index(gen_random_string_array(n), name="A"), marks=pytest.mark.slow
+            pd.Index(gen_random_string_binary_array(n), name="A"),
+            marks=pytest.mark.slow,
         ),  # String Index
         pytest.param(
             pd.DatetimeIndex(pd.date_range("1983-10-15", periods=n)),
@@ -1758,7 +1762,7 @@ def get_random_int64index(n):
         pytest.param(
             pd.MultiIndex.from_arrays(
                 [
-                    gen_random_string_array(n),
+                    gen_random_string_binary_array(n),
                     np.arange(n),
                     pd.date_range("2001-10-15", periods=n),
                 ],
@@ -1766,10 +1770,10 @@ def get_random_int64index(n):
             ),
             marks=pytest.mark.slow,
         ),
-        pd.Series(gen_random_string_array(n), np.arange(n) + 1, name="A"),
+        pd.Series(gen_random_string_binary_array(n), np.arange(n) + 1, name="A"),
         pd.DataFrame(
             {
-                "A": gen_random_string_array(n),
+                "A": gen_random_string_binary_array(n),
                 "AB": np.arange(n),
                 "CCC": pd.date_range("2001-10-15", periods=n),
             },
@@ -1781,7 +1785,7 @@ def get_random_int64index(n):
         ),
         # list(str) array
         # unboxing crashes for case below (issue #812)
-        # pd.Series(gen_random_string_array(n)).map(lambda a: None if pd.isna(a) else [a, "A"]).values
+        # pd.Series(gen_random_string_binary_array(n)).map(lambda a: None if pd.isna(a) else [a, "A"]).values
         pytest.param(
             pd.Series(["A"] * n).map(lambda a: None if pd.isna(a) else [a, "A"]).values,
             marks=pytest.mark.slow,

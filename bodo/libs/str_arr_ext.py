@@ -434,32 +434,28 @@ def _get_num_total_chars(builder, offsets, num_strings):
 
 
 @intrinsic
-def num_total_chars(typingctx, str_arr_typ=None):
+def num_total_chars(typingctx, in_arr_typ=None):
     # None default to make IntelliSense happy
-    assert str_arr_typ == string_array_type
+    assert in_arr_typ in [binary_array_type, string_array_type]
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
-        payload = _get_str_binary_arr_payload(
-            context, builder, in_str_arr, string_array_type
-        )
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, sig.args[0])
         offsets_ptr = context.make_helper(
             builder, offset_arr_type, payload.offsets
         ).data
         return _get_num_total_chars(builder, offsets_ptr, payload.n_arrays)
 
-    return types.uint64(string_array_type), codegen
+    return types.uint64(in_arr_typ), codegen
 
 
 @intrinsic
-def get_offset_ptr(typingctx, str_arr_typ=None):
-    assert str_arr_typ == string_array_type
+def get_offset_ptr(typingctx, in_arr_typ=None):
+    assert in_arr_typ in [binary_array_type, string_array_type]
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
-        payload = _get_str_binary_arr_payload(
-            context, builder, in_str_arr, string_array_type
-        )
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, sig.args[0])
         offsets_arr = context.make_helper(builder, offset_arr_type, payload.offsets)
         # # Create new ArrayCType structure
         ctinfo = context.make_helper(builder, offset_ctypes_type)
@@ -470,18 +466,16 @@ def get_offset_ptr(typingctx, str_arr_typ=None):
         res = ctinfo._getvalue()
         return impl_ret_borrowed(context, builder, offset_ctypes_type, res)
 
-    return offset_ctypes_type(string_array_type), codegen
+    return offset_ctypes_type(in_arr_typ), codegen
 
 
 @intrinsic
-def get_data_ptr(typingctx, str_arr_typ=None):
-    assert str_arr_typ == string_array_type
+def get_data_ptr(typingctx, in_arr_typ=None):
+    assert in_arr_typ in [binary_array_type, string_array_type]
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
-        payload = _get_str_binary_arr_payload(
-            context, builder, in_str_arr, string_array_type
-        )
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, sig.args[0])
         data_arr = context.make_helper(builder, char_arr_type, payload.data)
 
         # Create new ArrayCType structure
@@ -491,7 +485,7 @@ def get_data_ptr(typingctx, str_arr_typ=None):
         res = ctinfo._getvalue()
         return impl_ret_borrowed(context, builder, data_ctypes_type, res)
 
-    return data_ctypes_type(string_array_type), codegen
+    return data_ctypes_type(in_arr_typ), codegen
 
 
 @intrinsic
@@ -536,14 +530,12 @@ def copy_single_char(typingctx, dst_ptr_t, dst_ind_t, src_ptr_t, src_ind_t=None)
 
 
 @intrinsic
-def get_null_bitmap_ptr(typingctx, str_arr_typ=None):
-    assert str_arr_typ == string_array_type
+def get_null_bitmap_ptr(typingctx, in_arr_typ=None):
+    assert in_arr_typ in [binary_array_type, string_array_type]
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
-        payload = _get_str_binary_arr_payload(
-            context, builder, in_str_arr, string_array_type
-        )
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, sig.args[0])
         null_bitmap_arr = context.make_helper(
             builder, null_bitmap_arr_type, payload.null_bitmap
         )
@@ -553,24 +545,22 @@ def get_null_bitmap_ptr(typingctx, str_arr_typ=None):
         res = ctinfo._getvalue()
         return impl_ret_borrowed(context, builder, data_ctypes_type, res)
 
-    return data_ctypes_type(string_array_type), codegen
+    return data_ctypes_type(in_arr_typ), codegen
 
 
 @intrinsic
-def getitem_str_offset(typingctx, str_arr_typ, ind_t=None):
-    assert str_arr_typ == string_array_type
+def getitem_str_offset(typingctx, in_arr_typ, ind_t=None):
+    assert in_arr_typ in [binary_array_type, string_array_type]
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_str_binary_arr_payload(
-            context, builder, in_str_arr, string_array_type
-        )
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, sig.args[0])
         offsets_ptr = context.make_helper(
             builder, offset_arr_type, payload.offsets
         ).data
         return builder.load(builder.gep(offsets_ptr, [ind]))
 
-    return offset_type(string_array_type, ind_t), codegen
+    return offset_type(in_arr_typ, ind_t), codegen
 
 
 # TODO: fix this for join
@@ -1258,10 +1248,11 @@ def set_string_array_range(
 @box(StringArrayType)
 def box_str_arr(typ, val, c):
     """box string array into numpy object array with string values"""
-    string_array = c.context.make_helper(c.builder, string_array_type, val)
+    assert typ in [binary_array_type, string_array_type]
+    array_struct = c.context.make_helper(c.builder, typ, val)
     array_item_data_type = ArrayItemArrayType(char_arr_type)
     payload = _get_array_item_arr_payload(
-        c.context, c.builder, array_item_data_type, string_array.data
+        c.context, c.builder, array_item_data_type, array_struct.data
     )
     is_bytes = c.context.get_constant(types.int32, int(typ == binary_array_type))
 
