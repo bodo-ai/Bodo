@@ -1415,7 +1415,7 @@ def gen_random_decimal_array(option, n):
     return pd.Series(e_list)
 
 
-def gen_random_string_array(n, max_str_len=10):
+def gen_random_string_binary_array(n, max_str_len=10, is_binary=False):
     """
     helper function that generates a random string array
     """
@@ -1429,10 +1429,12 @@ def gen_random_string_array(n, max_str_len=10):
 
         k = random.randint(1, max_str_len)
         val = "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
+        if is_binary:
+            val = val.encode("utf-8")
         str_vals.append(val)
 
     # use consistent string array type with Bodo to avoid output comparison errors
-    if bodo.libs.str_arr_ext.use_pd_string_array:
+    if not is_binary and bodo.libs.str_arr_ext.use_pd_string_array:
         return pd.array(str_vals, "string")
     return np.array(str_vals, dtype="object")  # avoid unichr dtype (TODO: support?)
 

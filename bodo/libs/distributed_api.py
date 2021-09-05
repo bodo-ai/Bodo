@@ -228,7 +228,7 @@ def isend(arr, size, pe, tag, cond=True):
         return impl_nullable
 
     # string arrays
-    if arr == string_array_type:
+    if arr in [binary_array_type, string_array_type]:
         offset_typ_enum = np.int32(numba_to_c_type(offset_type))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
@@ -311,39 +311,55 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
         return impl_nullable
 
     # string arrays
-    if arr == string_array_type:
+    if arr in [binary_array_type, string_array_type]:
         offset_typ_enum = np.int32(numba_to_c_type(offset_type))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         # using blocking communication for string arrays instead since the array
         # slice passed in shift() may not stay alive (not a view of the original array)
-        def impl_str_arr(arr, size, pe, tag, cond=True):  # pragma: no cover
+        if arr == binary_array_type:
+            alloc_fn = "bodo.libs.binary_arr_ext.pre_alloc_binary_array"
+        else:
+            alloc_fn = "bodo.libs.str_arr_ext.pre_alloc_string_array"
+        func_text = f"""def impl(arr, size, pe, tag, cond=True):
             # recv the number of string characters and resize buffer to proper size
-            n_chars = recv(np.int64, pe, tag - 1)
-            new_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(size, n_chars)
+            n_chars = bodo.libs.distributed_api.recv(np.int64, pe, tag - 1)
+            new_arr = {alloc_fn}(size, n_chars)
             bodo.libs.str_arr_ext.move_str_binary_arr_payload(arr, new_arr)
 
             n_bytes = (size + 7) >> 3
-            _recv(
+            bodo.libs.distributed_api._recv(
                 bodo.libs.str_arr_ext.get_offset_ptr(arr),
                 size + 1,
                 offset_typ_enum,
                 pe,
                 tag,
             )
-            _recv(
+            bodo.libs.distributed_api._recv(
                 bodo.libs.str_arr_ext.get_data_ptr(arr), n_chars, char_typ_enum, pe, tag
             )
-            _recv(
+            bodo.libs.distributed_api._recv(
                 bodo.libs.str_arr_ext.get_null_bitmap_ptr(arr),
                 n_bytes,
                 char_typ_enum,
                 pe,
                 tag,
             )
-            return None
+            return None"""
 
-        return impl_str_arr
+        loc_vars = dict()
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                "np": np,
+                "offset_typ_enum": offset_typ_enum,
+                "char_typ_enum": char_typ_enum,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
 
     raise BodoError(f"irecv(): array type {arr} not supported yet")
 
@@ -1439,6 +1455,9 @@ def get_value_for_type(dtype):  # pragma: no cover
     if dtype == string_array_type:
         return pd.array(["A"], "string")
 
+    if dtype == binary_array_type:
+        return np.array([b"A"], dtype=object)
+
     # Int array
     if isinstance(dtype, IntegerArrayType):
         pd_dtype = "{}Int{}".format(
@@ -1543,16 +1562,21 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
             data, send_counts
         )  # pragma: no cover
 
-    if data == string_array_type:
+    if data in [binary_array_type, string_array_type]:
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
-        def scatterv_str_arr_impl(
+        if data == binary_array_type:
+            alloc_fn = "bodo.libs.binary_arr_ext.pre_alloc_binary_array"
+        else:
+            alloc_fn = "bodo.libs.str_arr_ext.pre_alloc_string_array"
+
+        func_text = f"""def impl(
             data, send_counts=None, warn_if_dist=True
         ):  # pragma: no cover
             rank = bodo.libs.distributed_api.get_rank()
             n_pes = bodo.libs.distributed_api.get_size()
-            n_all = bcast_scalar(len(data))
+            n_all = bodo.libs.distributed_api.bcast_scalar(len(data))
 
             # convert offsets to lengths of strings
             send_arr_lens = np.empty(
@@ -1565,7 +1589,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
 
             # ------- calculate buffer counts -------
 
-            send_counts = _get_scatterv_send_counts(send_counts, n_pes, n_all)
+            send_counts = bodo.libs.distributed_api._get_scatterv_send_counts(send_counts, n_pes, n_all)
 
             # displacements
             displs = bodo.ir.join.calc_disp(send_counts)
@@ -1581,7 +1605,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
                         curr_str += 1
                     send_counts_char[i] = c
 
-            bcast(send_counts_char)
+            bodo.libs.distributed_api.bcast(send_counts_char)
 
             # displacements for characters
             displs_char = bodo.ir.join.calc_disp(send_counts_char)
@@ -1597,12 +1621,12 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
             # alloc output array
             n_loc = send_counts[rank]  # total number of elements on this PE
             n_loc_char = send_counts_char[rank]
-            recv_arr = pre_alloc_string_array(n_loc, n_loc_char)
+            recv_arr = {alloc_fn}(n_loc, n_loc_char)
 
             # ----- string lengths -----------
 
             recv_lens = np.empty(n_loc, np.uint32)
-            c_scatterv(
+            bodo.libs.distributed_api.c_scatterv(
                 send_arr_lens.ctypes,
                 send_counts.ctypes,
                 displs.ctypes,
@@ -1613,15 +1637,15 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
 
             # TODO: don't hardcode offset type. Also, if offset is 32 bit we can
             # use the same buffer
-            convert_len_arr_to_offset(recv_lens.ctypes, get_offset_ptr(recv_arr), n_loc)
+            bodo.libs.str_arr_ext.convert_len_arr_to_offset(recv_lens.ctypes, bodo.libs.str_arr_ext.get_offset_ptr(recv_arr), n_loc)
 
             # ----- string characters -----------
 
-            c_scatterv(
-                get_data_ptr(data),
+            bodo.libs.distributed_api.c_scatterv(
+                bodo.libs.str_arr_ext.get_data_ptr(data),
                 send_counts_char.ctypes,
                 displs_char.ctypes,
-                get_data_ptr(recv_arr),
+                bodo.libs.str_arr_ext.get_data_ptr(recv_arr),
                 np.int32(n_loc_char),
                 char_typ_enum,
             )
@@ -1630,22 +1654,34 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
 
             n_recv_bytes = (n_loc + 7) >> 3
 
-            send_null_bitmap = get_scatter_null_bytes_buff(
-                get_null_bitmap_ptr(data), send_counts, send_counts_nulls
+            send_null_bitmap = bodo.libs.distributed_api.get_scatter_null_bytes_buff(
+                bodo.libs.str_arr_ext.get_null_bitmap_ptr(data), send_counts, send_counts_nulls
             )
 
-            c_scatterv(
+            bodo.libs.distributed_api.c_scatterv(
                 send_null_bitmap.ctypes,
                 send_counts_nulls.ctypes,
                 displs_nulls.ctypes,
-                get_null_bitmap_ptr(recv_arr),
+                bodo.libs.str_arr_ext.get_null_bitmap_ptr(recv_arr),
                 np.int32(n_recv_bytes),
                 char_typ_enum,
             )
 
-            return recv_arr
+            return recv_arr"""
 
-        return scatterv_str_arr_impl
+        loc_vars = dict()
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                "np": np,
+                "int32_typ_enum": int32_typ_enum,
+                "char_typ_enum": char_typ_enum,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
 
     if isinstance(data, ArrayItemArrayType):
         # Code adapted from the string code. Both the string and array(item) codes should be
@@ -2011,7 +2047,7 @@ def bcast_overload(data):
         return bcast_impl_int_arr
 
     # string arrays
-    if data == string_array_type:
+    if data in [binary_array_type, string_array_type]:
         offset_typ_enum = np.int32(numba_to_c_type(offset_type))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 

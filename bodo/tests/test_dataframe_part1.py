@@ -638,6 +638,9 @@ def test_df_multi_get_level(memory_leak_check):
         np.arange(10),
         pd.Series(np.arange(10)),
         pd.array([1, 4, 1, 5, 11, 1, 3, 1, -1, 6]),
+        np.array(
+            [b"32234", b"342432", b"g43b2", b"4t242t", b" weew"] * 2, dtype=object
+        ),
     ],
 )
 def test_rebalance_simple(data, memory_leak_check):
@@ -1966,6 +1969,7 @@ def test_df_shift_unsupported(df_value, memory_leak_check):
             or is_bool_object_series(series_val)
             or isinstance(series_val.values[0], datetime.date)
             or isinstance(series_val.values[0], str)
+            or isinstance(series_val.values[0], bytes)
         ) or isinstance(series_val.dtype, pd.CategoricalDtype):
             is_unsupported = True
 
