@@ -1755,17 +1755,10 @@ def test_series_shift_type_check(series_val, memory_leak_check):
     def test_impl3(A):
         return A.shift(3)
 
-    # Series.shift supports ints, floats, dt64, nullable nullable int/bool/decimal/date
+    # Series.shift supports ints, floats, dt64, nullable int/bool/decimal/date
     # and strings
-    if (
-        pd.api.types.is_numeric_dtype(series_val)
-        or series_val.dtype == np.dtype("datetime64[ns]")
-        or isinstance(series_val.values[0], Decimal)
-        or series_val.dtype == np.bool_
-        or is_bool_object_series(series_val)
-        or isinstance(series_val.values[0], datetime.date)
-        or isinstance(series_val.values[0], str)
-    ) and not isinstance(series_val.dtype, pd.CategoricalDtype):
+    bodo_type = bodo.typeof(series_val)
+    if bodo.hiframes.rolling.is_supported_shift_array_type(bodo_type.data):
         check_func(test_impl, (series_val,))
         check_func(test_impl2, (series_val,))
         check_func(test_impl3, (series_val,))
