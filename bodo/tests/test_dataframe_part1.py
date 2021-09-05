@@ -6,7 +6,6 @@ import datetime
 import operator
 import random
 import sys
-from decimal import Decimal
 
 import numba
 import numpy as np
@@ -1956,21 +1955,12 @@ def test_df_shift_unsupported(df_value, memory_leak_check):
     """
     Test for the Dataframe.shift inputs that are expected to be unsupported.
     """
-    # Dataframe.shift supports supports ints, floats, dt64, nullable nullable
+    # Dataframe.shift supports ints, floats, dt64, nullable
     # int/bool/decimal/date and strings
     is_unsupported = False
-    for i in range(len(df_value.columns)):
-        series_val = df_value.iloc[:, i]
-        if not (
-            pd.api.types.is_numeric_dtype(series_val)
-            or series_val.dtype == np.dtype("datetime64[ns]")
-            or isinstance(series_val.values[0], Decimal)
-            or series_val.dtype == np.bool_
-            or is_bool_object_series(series_val)
-            or isinstance(series_val.values[0], datetime.date)
-            or isinstance(series_val.values[0], str)
-            or isinstance(series_val.values[0], bytes)
-        ) or isinstance(series_val.dtype, pd.CategoricalDtype):
+    bodo_type = bodo.typeof(df_value)
+    for column_type in bodo_type.data:
+        if not bodo.hiframes.rolling.is_supported_shift_array_type(column_type):
             is_unsupported = True
 
     def impl(df):
