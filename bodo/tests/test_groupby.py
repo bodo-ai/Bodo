@@ -3300,6 +3300,63 @@ def test_min_datetime(memory_leak_check):
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
+# TODO: Add a memory leak check.
+def test_optional_heterogenous_series_apply():
+    """
+    Test groupby.apply works when heterogenous series requires an optional type
+    """
+
+    def impl(df):
+        df1 = pd.DataFrame(
+            {"B": df["B"], "A": df["A"], "C": df["C"], "$f3": (df["A"] == np.int32(1))}
+        )
+
+        def __bodo_dummy___sql_groupby_apply_fn_1(df):
+            S0 = df["A"][df["$f3"]]
+            S1 = df["C"][df["$f3"]]
+            var0 = S0.mean() if len(S0) > 0 else None
+            var1 = S0.sum() if len(S1) > 0 else None
+            return pd.Series(
+                (var0, var1), index=pd.Index(("single_avg_a", "single_sum_c"))
+            )
+
+        df2 = df1.groupby(["B"], as_index=False, dropna=False).apply(
+            __bodo_dummy___sql_groupby_apply_fn_1
+        )
+        return df2
+
+    df = pd.DataFrame(
+        {"A": [1, 2, 3] * 4, "B": [4, 5, 6, 7] * 3, "C": [7, 8, 9, 10, 11, 12] * 2}
+    )
+    # Pandas returns float64 instead of Nullable int.
+    check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
+
+
+# TODO: Add a memory leak check.
+def test_optional_homogenous_series_apply():
+    """
+    Test groupby.apply works when a homogenous series requires an optional type
+    """
+
+    def impl(df):
+        df1 = pd.DataFrame(
+            {"B": df["B"], "A": df["A"], "$f3": (df["A"] == np.int32(1))}
+        )
+
+        def __bodo_dummy___sql_groupby_apply_fn_1(df):
+            S0 = df["A"][df["$f3"]]
+            var0 = S0.sum() if len(S0) > 0 else None
+            return pd.Series((var0,), index=pd.Index(("single_sum_a",)))
+
+        df2 = df1.groupby(["B"], as_index=False, dropna=False).apply(
+            __bodo_dummy___sql_groupby_apply_fn_1
+        )
+        return df2
+
+    df = pd.DataFrame({"A": [1, 2, 3] * 4, "B": [4, 5, 6, 7] * 3})
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+
+
 def test_prod(test_df, memory_leak_check):
     """
     Test Groupby.prod()

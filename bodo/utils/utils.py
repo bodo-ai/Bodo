@@ -892,6 +892,27 @@ def is_null_pointer(typingctx, ptr_typ=None):
     return types.bool_(ptr_typ), codegen
 
 
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def tuple_list_to_array(A, data, elem_type):
+    """
+    Function used to keep list -> array transformation
+    replicated.
+    """
+    elem_type = (
+        elem_type.instance_type if isinstance(elem_type, types.TypeRef) else elem_type
+    )
+    func_text = "def impl(A, data, elem_type):\n"
+    func_text += "  for i, d in enumerate(data):\n"
+    if elem_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
+        func_text += "    A[i] = bodo.utils.conversion.unbox_if_timestamp(d)\n"
+    else:
+        func_text += "    A[i] = d\n"
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
 def object_length(c, obj):
     """
     len(obj)

@@ -192,3 +192,23 @@ def test_dataframe_apply_numpy_unsupported_type(memory_leak_check):
     )
     with pytest.raises(BodoError, match="user-defined function not supported"):
         bodo.jit(impl1)(df)
+
+
+def test_dataframe_optional_scalar(memory_leak_check):
+    """
+    Test calling pd.DataFrame with a scalar that is an optional type.
+    """
+
+    def impl(table1):
+        df1 = pd.DataFrame({"A": table1["A"], "$f3": table1["A"] == np.int32(1)})
+        S0 = df1["A"][df1["$f3"]]
+        df2 = pd.DataFrame(
+            {"col1_sum_a": S0.sum() if len(S0) > 0 else None},
+            index=pd.RangeIndex(0, 1, 1),
+        )
+        return df2
+
+    df = pd.DataFrame({"A": [1, 2, 3] * 4})
+
+    # Pandas can avoid nullable so the types don't match
+    check_func(impl, (df,), check_dtype=False)
