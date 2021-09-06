@@ -1091,6 +1091,14 @@ def dtype_to_array_type(dtype):
     if isinstance(dtype, types.List):
         dtype = dtype_to_array_type(dtype.dtype)
 
+    convert_nullable = False
+
+    # UDFs may use Optional types for setting array values.
+    # These should use the nullable type of the non-null case
+    if isinstance(dtype, types.Optional):
+        dtype = dtype.type
+        convert_nullable = True
+
     # string array
     if dtype == bodo.string_type:
         return bodo.string_array_type
@@ -1153,7 +1161,12 @@ def dtype_to_array_type(dtype):
     if isinstance(
         dtype, (types.Number, types.Boolean, types.NPDatetime, types.NPTimedelta)
     ):
-        return types.Array(dtype, 1, "C")
+        arr = types.Array(dtype, 1, "C")
+        # If this comes from an optional type try converting to
+        # nullable.
+        if convert_nullable:
+            return to_nullable_type(arr)
+        return arr
 
     raise BodoError(f"dtype {dtype} cannot be stored in arrays")  # pragma: no cover
 

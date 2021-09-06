@@ -940,6 +940,14 @@ def _get_const_series_info(block, f_ir, typemap):
     data_var = ret_def.args[0]
     data_def = get_definition(f_ir, data_var)
 
+    if is_call(data_def) and bodo.utils.utils.is_alloc_callname(
+        *find_callname(f_ir, data_def)
+    ):
+        # If we have an allocation, we want to find the source of n if possible.
+        alloc_len = data_def.args[0]
+        total_len = get_const_value_inner(f_ir, alloc_len, typemap=typemap)
+        return total_len, index_vals
+
     if is_call(data_def) and find_callname(f_ir, data_def) in [
         ("asarray", "numpy"),
         ("str_arr_from_sequence", "bodo.libs.str_arr_ext"),
