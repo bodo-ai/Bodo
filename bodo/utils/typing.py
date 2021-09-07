@@ -1312,6 +1312,7 @@ def is_scalar_type(t):
         bodo.datetime64ns,
         bodo.timedelta64ns,
         bodo.string_type,
+        bodo.bytes_type,
         bodo.datetime_date_type,
         bodo.datetime_datetime_type,
         bodo.datetime_timedelta_type,

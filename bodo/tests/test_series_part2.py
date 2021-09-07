@@ -2085,6 +2085,31 @@ def test_series_np_where_str(memory_leak_check):
     check_func(test_impl2, (S, "ddd"))
 
 
+@pytest.mark.slow
+def test_series_np_where_binary(memory_leak_check):
+    """Tests np.where() called on Series with binary input (#223)."""
+
+    def test_impl1(S, true_val, false_val):
+        # wrapping array in Series to enable output comparison for NA
+        return pd.Series(np.where(S == b"aa", true_val, false_val))
+
+    def test_impl2(S):
+        # wrapping array in Series to enable output comparison for NA
+        return np.where(S == b"aa")
+
+    S1 = pd.Series(
+        [b"aa", b"asdfa", b"aa", np.NaN, b"s", b"aa", b"asdgs"] * 2,
+    )
+    S2 = pd.Series(
+        [np.NaN, b"asdga", b"alsdnf", np.NaN, b"aa", b"aa", b"mnbhju"] * 2,
+    )
+
+    check_func(test_impl1, (S1, S2, b"nabjhij"))
+    check_func(test_impl1, (S1, b"nabjhij", S2))
+    check_func(test_impl1, (S1, S1, S2))
+    check_func(test_impl2, (S1,))
+
+
 def test_series_np_where_num(memory_leak_check):
     """Tests np.where() called on Series with numeric input."""
 
@@ -2124,12 +2149,6 @@ def test_series_where_true(series_val, memory_leak_check):
 
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
-        with pytest.raises(BodoError, match=series_err_msg):
-            bodo.jit(test_impl)(series_val, cond, val)
-        return
-
-    # TODO: support for binary type, BE-1262
-    if isinstance(series_val.values[0], bytes):
         with pytest.raises(BodoError, match=series_err_msg):
             bodo.jit(test_impl)(series_val, cond, val)
         return
@@ -2234,13 +2253,41 @@ def test_series_where_arr(memory_leak_check):
 def test_series_where_str(memory_leak_check):
     """Tests Series.where() with string input"""
 
-    def impl(S):
-        return S.where(S == "aa", "d")
+    def impl(S, v):
+        return S.where(S == "aa", v)
 
     S = pd.Series(
-        ["aa", "b", "aa", "cc", np.nan, "aa", "DD"], [5, 1, 2, 0, 3, 4, 9], name="AA"
+        ["aa", "b", "aa", None, "s", "aa", "DD"] * 3,
     )
-    check_func(impl, (S,))
+    S2 = pd.Series(
+        ["asgdk", "bsadf", "sdaaa", "", "s", None, "DD"] * 3,
+    )
+    A = np.array(["adsgk", "", "ags", "", "askjdga", None, "asdf"] * 3, dtype=object)
+
+    check_func(impl, (S, "bksd"))
+    check_func(impl, (S, S2))
+    check_func(impl, (S, A))
+
+
+def test_series_where_binary(memory_leak_check):
+    """Tests Series.where() with binary input"""
+
+    def impl(S, v):
+        return S.where(S == b"hello", v)
+
+    S = pd.Series(
+        [b"hello", b"b", b"hello world", b"csjk", np.nan, b"aa", b"hello"] * 3,
+    )
+    S2 = pd.Series(
+        [b"hello", b"b", b"hello world", b"csjk", np.nan, b"aa", b"hello"] * 3,
+    )
+    A = np.array(
+        [b"adsgk", b"", b"ags", b"", b"askjdga", None, b"asdf"] * 3, dtype=object
+    )
+
+    check_func(impl, (S, b"hlhsha"))
+    check_func(impl, (S, S2))
+    check_func(impl, (S, A))
 
 
 def test_np_where_one_arg(memory_leak_check):
@@ -2259,10 +2306,6 @@ def test_np_where_one_arg(memory_leak_check):
 def test_series_mask_false(series_val, memory_leak_check):
     """Tests that all types can be used in Series.mask(cond)
     with all False values."""
-
-    # TODO: support for binary type, BE-1263
-    if isinstance(series_val.values[0], bytes):
-        return
 
     cond = np.array([False] * len(series_val))
     val = series_val.iloc[0]
@@ -2336,6 +2379,41 @@ def test_series_mask_arr(memory_leak_check):
     cond = np.random.ranf(len(S)) < 0.5
     check_func(test_impl, (S, cond, other_series))
     check_func(test_impl, (S, cond, other_arr))
+
+
+def test_series_mask_binary(memory_leak_check):
+    """Test for Series.where(cond, arr) where arr is either
+    a string series or array"""
+
+    def test_impl(S, val):
+        return S.mask(S != b"hsjldf", val)
+
+    S = pd.Series(
+        np.array([np.NaN, bytes(2), b"hsjldf", b"asdgfa", b"nsldgjh"], dtype=object)
+    )
+    other_series = pd.Series([b"sadkjf", b"asdf", b"nkjhg", np.nan, b"sdlfj"])
+    other_arr = np.array([b"sadkjf", b"asdf", b"nkjhg", np.NaN, b"sdlfj"], dtype=object)
+    np.random.seed(0)
+
+    check_func(test_impl, (S, b"sasadgk"))
+    check_func(test_impl, (S, other_series))
+    check_func(test_impl, (S, other_arr))
+
+
+def test_series_mask_str(memory_leak_check):
+    """Test for Series.where(cond, arr) where arr is either
+    a binary series or array"""
+
+    def test_impl(S, val):
+        return S.mask(S != "", val)
+
+    S = pd.Series(np.array([None, "", "hello", "hello", "hello world"], dtype=object))
+    other_series = pd.Series(["sadkjf", "asdf", "nkjhg", None, "sdlfj"])
+    other_arr = np.array(["sadkjf", "asdf", "nkjhg", None, "sdlfj"], dtype=object)
+    np.random.seed(0)
+    check_func(test_impl, (S, "sasadgk"))
+    check_func(test_impl, (S, other_series))
+    check_func(test_impl, (S, other_arr))
 
 
 def test_series_mask_cat_literal(memory_leak_check):
