@@ -39,10 +39,15 @@ from bodo.hiframes.pd_timestamp_ext import (
 )
 from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.binary_arr_ext import (
+    BinaryArrayType,
+    binary_array_type,
+    bytes_type,
+)
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_arr_ext import StringArrayType, string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.utils.transform import gen_const_tup, is_var_size_item_array_type
 from bodo.utils.typing import (
@@ -3140,13 +3145,14 @@ def _validate_arguments_mask_where(
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError(f"{func_name}(): axis argument not supported")
 
-    # Bodo Limitation. Where/Mask is only supported for string arrays, categorical + scalar, and numpy arrays
+    # Bodo Limitation. Where/Mask is only supported for string/binary arrays, categorical + scalar, and numpy arrays
     if not (
         isinstance(S.data, types.Array)
         or isinstance(S.data, BooleanArrayType)
         or isinstance(S.data, IntegerArrayType)
         or (
-            bodo.utils.utils.is_array_typ(S.data, False) and S.dtype == bodo.string_type
+            bodo.utils.utils.is_array_typ(S.data, False)
+            and (S.dtype in [bodo.string_type, bodo.bytes_type])
         )
         # TODO: Support categorical of Timestamp/Timedelta
         or (
@@ -3181,7 +3187,7 @@ def _validate_arguments_mask_where(
     # - a scalar of the "same" type as S (or np.nan)
     # - a Series or 1-dim Numpy array with the "same" type as S
 
-    # Bodo Limitation. Where is only supported for string arrays and numpy arrays
+    # Bodo Limitation. Where is only supported for binary/string arrays and numpy arrays
     # Nullable int/bool arrays can be used, but they may have the wrong type or
     # drop NaN values.
     val_is_nan = is_overload_constant_nan(other)
@@ -3192,11 +3198,19 @@ def _validate_arguments_mask_where(
         or (isinstance(other, types.Array) and other.ndim == 1)
         or (
             isinstance(other, SeriesType)
-            and (isinstance(S.data, types.Array) or S.dtype == bodo.string_type)
+            and (
+                isinstance(S.data, types.Array)
+                or (S.dtype in [bodo.string_type, bodo.bytes_type])
+            )
         )
+        or (isinstance(other, StringArrayType) and S.dtype == bodo.string_type)
+        or (isinstance(other, BinaryArrayType) and S.dtype == bodo.bytes_type)
         or (
             (
-                (
+                # need this check here, in the case that someone passes in series.mask(_, bad_str/bin_arr_val),
+                # as str/bin_arr.data.dtype gives a pretty unintelligble error from the user perspective
+                not isinstance(other, (StringArrayType, BinaryArrayType))
+                and (
                     isinstance(S.data.dtype, types.Integer)
                     and isinstance(other.data.dtype, types.Integer)
                 )
@@ -3957,7 +3971,6 @@ def overload_np_where(condition, x, y):
         or condition.ndim != 1
     ):
         return
-
     assert condition.dtype == types.bool_, "invalid condition dtype"
 
     is_x_arr = bodo.utils.utils.is_array_typ(x, True)
@@ -4000,6 +4013,13 @@ def overload_np_where(condition, x, y):
     # output is string if any input is string
     elif x_dtype == string_type or y_dtype == string_type:
         out_dtype = bodo.string_array_type
+    # For binary, we support y/x being bytes type, or array/series of bytes
+    elif (
+        x_data == bytes_type
+        or (is_x_arr and x_dtype == bytes_type)
+        and (y_data == bytes_type or (is_y_arr and y_dtype == bytes_type))
+    ):
+        out_dtype = binary_array_type
     # TODO: Support 2 categorical arrays
     # If the dtype is categorical, we need to use an actual
     # dtype from runtime.
