@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from numba import generated_jit
 from numba.core import ir, ir_utils, typeinfer, types
+from numba.core.extending import intrinsic
 from numba.core.ir_utils import (
     compile_to_numba_ir,
     replace_arg_nodes,
@@ -91,6 +92,7 @@ class Join(ir.Stmt):
         right_index,
         indicator,
         is_na_equal,
+        gen_cond_expr,
     ):
         self.df_out = df_out
         self.left_df = left_df
@@ -111,6 +113,14 @@ class Join(ir.Stmt):
         self.right_index = right_index
         self.indicator = indicator
         self.is_na_equal = is_na_equal
+        self.gen_cond_expr = gen_cond_expr
+        # find columns used in general join condition to avoid removing them in rm dead
+        self.left_cond_cols = set(
+            c for c in left_vars.keys() if f"(left.{c})" in gen_cond_expr
+        )
+        self.right_cond_cols = set(
+            c for c in right_vars.keys() if f"(right.{c})" in gen_cond_expr
+        )
         # keep the origin of output columns to enable proper dead code elimination
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_keys) & set(right_keys)
@@ -265,7 +275,7 @@ def join_typeinfer(join_node, typeinferer):
     add_suffix = comm_data - comm_keys
     for out_col_name, out_col_var in join_node.out_data_vars.items():
         # left suffix
-        if self.indicator and out_col_name == "_merge":
+        if join_node.indicator and out_col_name == "_merge":
             continue
         if not out_col_name in join_node.column_origins:
             raise BodoError(
@@ -337,10 +347,18 @@ def remove_dead_join(
             join_node.indicator = False
             continue
         orig, orig_name = join_node.column_origins[col_name]
-        if orig == "left" and orig_name not in join_node.left_keys:
+        if (
+            orig == "left"
+            and orig_name not in join_node.left_keys
+            and orig_name not in join_node.left_cond_cols
+        ):
             join_node.left_vars.pop(orig_name)
             dead_cols.append(col_name)
-        if orig == "right" and orig_name not in join_node.right_keys:
+        if (
+            orig == "right"
+            and orig_name not in join_node.right_keys
+            and orig_name not in join_node.right_cond_cols
+        ):
             join_node.right_vars.pop(orig_name)
             dead_cols.append(col_name)
 
@@ -585,6 +603,12 @@ def join_distributed_run(
         merge_out += (_get_out_col_var("_merge", False),)
     out_names = ["t3_c" + str(i) for i in range(len(merge_out))]
 
+    # Generate a general join condition function if it exists
+    # and determine the data columns it needs.
+    cfunc_cond_address, left_col_nums, right_col_nums = _gen_general_cond_cfunc(
+        join_node, typemap
+    )
+
     if join_node.how == "asof":
         if left_parallel or right_parallel:
             assert left_parallel and right_parallel
@@ -616,6 +640,8 @@ def join_distributed_run(
             join_node.loc,
             join_node.indicator,
             join_node.is_na_equal,
+            left_col_nums,
+            right_col_nums,
         )
     if join_node.how == "asof":
         for i in range(len(left_other_names)):
@@ -667,6 +693,7 @@ def join_distributed_run(
             "info_to_array": info_to_array,
             "delete_table": delete_table,
             "delete_table_decref_arrays": delete_table_decref_arrays,
+            "cfunc_cond": cfunc_cond_address,
         }
     )
     f_block = compile_to_numba_ir(
@@ -687,6 +714,140 @@ def join_distributed_run(
 
 
 distributed_pass.distributed_run_extensions[Join] = join_distributed_run
+
+
+def _gen_general_cond_cfunc(join_node, typemap):
+    """Generate cfunc for general join condition and return its address.
+    Return 0 (NULL) if there is no general join condition to evaluate.
+    The cfunc takes data pointers of table columns and row indices to access as input
+    and returns True or False.
+    E.g. left_table=[A_data_ptr, B_data_ptr], right_table=[A_data_ptr, C_data_ptr],
+    left_ind=3, right_ind=7
+    """
+    expr = join_node.gen_cond_expr
+    if not expr:
+        return 0, [], []
+
+    # get column name to table column index
+    left_col_to_ind = _get_col_to_ind(join_node.left_keys, join_node.left_vars)
+    right_col_to_ind = _get_col_to_ind(join_node.right_keys, join_node.right_vars)
+
+    table_getitem_funcs = {}
+    func_text = "def f(left_table, right_table, left_ind, right_ind):\n"
+    expr, func_text, left_col_nums = _replace_column_accesses(
+        expr,
+        left_col_to_ind,
+        typemap,
+        join_node.left_vars,
+        table_getitem_funcs,
+        func_text,
+        "left",
+        len(join_node.left_keys),
+    )
+    expr, func_text, right_col_nums = _replace_column_accesses(
+        expr,
+        right_col_to_ind,
+        typemap,
+        join_node.right_vars,
+        table_getitem_funcs,
+        func_text,
+        "right",
+        len(join_node.right_keys),
+    )
+    func_text += f"  return {expr}"
+
+    loc_vars = {}
+    exec(func_text, table_getitem_funcs, loc_vars)
+    cond_func = loc_vars["f"]
+
+    c_sig = types.bool_(types.voidptr, types.voidptr, types.int64, types.int64)
+    cfunc_cond = numba.cfunc(c_sig, nopython=True)(cond_func)
+    return cfunc_cond.address, left_col_nums, right_col_nums
+
+
+def _replace_column_accesses(
+    expr,
+    col_to_ind,
+    typemap,
+    col_vars,
+    table_getitem_funcs,
+    func_text,
+    table_name,
+    n_keys,
+):
+    """replace column accesses in join condition expression with an intrinsic that loads
+    values from table data pointers.
+    For example, left.B is replaced with data_ptrs[1][row_ind]
+
+    This function returns the modified expression, the func_text defining the column
+    accesses, and the list of column numbers that are used by the table.
+    """
+    col_nums = []
+    for c, c_ind in col_to_ind.items():
+        cname = f"({table_name}.{c})"
+        if cname not in expr:
+            continue
+        getitem_fname = f"getitem_{table_name}_val_{c_ind}"
+        val_varname = f"_bodo_{table_name}_val_{c_ind}"
+        func_text += (
+            f"  {val_varname} = {getitem_fname}({table_name}_table, {table_name}_ind)\n"
+        )
+        col_dtype = typemap[col_vars[c].name].dtype
+        table_getitem_funcs[getitem_fname] = _gen_row_access_intrinsic(col_dtype, c_ind)
+        expr = expr.replace(cname, val_varname)
+        # only append the column if it is not a key
+        if c_ind >= n_keys:
+            col_nums.append(c_ind)
+    return expr, func_text, col_nums
+
+
+def _get_col_to_ind(key_names, col_vars):
+    """create a mapping from input dataframe column names to column indices in the C++
+    left/right table structure (keys are first, then data columns).
+    """
+    n_keys = len(key_names)
+    col_to_ind = {c: i for (i, c) in enumerate(key_names)}
+    i = n_keys
+    for c in sorted(col_vars, key=lambda a: str(a)):
+        if c in key_names:
+            continue
+        col_to_ind[c] = i
+        i += 1
+    return col_to_ind
+
+
+def _gen_row_access_intrinsic(col_dtype, c_ind):
+    """Generate an intrinsic for loading a value from a table column with 'col_dtype'
+    data type. 'c_ind' is the index of the column within the table.
+    The intrinsic's input is an array of data pointers for the table's data, and a row
+    index.
+
+    For example, col_dtype=int64, c_ind=1, table=[A_data_ptr, B_data_ptr, C_data_ptr],
+    row_ind=2 will return 6 for the table below.
+    A  B  C
+    1  4  7
+    2  5  8
+    3  6  9
+    """
+    from llvmlite import ir as lir
+
+    @intrinsic
+    def getitem_func(typingctx, table_t, ind_t):
+        def codegen(context, builder, signature, args):
+            table, row_ind = args
+            # cast void* to void**
+            table = builder.bitcast(table, lir.IntType(8).as_pointer().as_pointer())
+            # get data pointer for input column and cast to proper data type
+            col_ind = lir.Constant(lir.IntType(64), c_ind)
+            col_ptr = builder.load(builder.gep(table, [col_ind]))
+            col_ptr = builder.bitcast(
+                col_ptr, context.get_data_type(col_dtype).as_pointer()
+            )
+            return builder.load(builder.gep(col_ptr, [row_ind]))
+
+        return col_dtype(types.voidptr, types.int64), codegen
+
+    return getitem_func
 
 
 def _match_join_key_types(t1, t2, loc):
@@ -756,6 +917,8 @@ def _gen_local_hash_join(
     loc,
     indicator,
     is_na_equal,
+    left_col_nums,
+    right_col_nums,
 ):
     # In some case the column in output has a type different from the one in input.
     # TODO: Unify those type changes between all cases.
@@ -852,7 +1015,9 @@ def _gen_local_hash_join(
     func_text += "    vect_need_typechange = np.array([{}])\n".format(
         ",".join("1" if x else "0" for x in vect_need_typechange)
     )
-    func_text += "    out_table = hash_join_table(table_left, table_right, {}, {}, {}, {}, {}, vect_same_key.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {}, {}, {})\n".format(
+    func_text += f"    left_table_cond_columns = np.array({left_col_nums if len(left_col_nums) > 0 else [-1]}, dtype=np.int64)\n"
+    func_text += f"    right_table_cond_columns = np.array({right_col_nums if len(right_col_nums) > 0 else [-1]}, dtype=np.int64)\n"
+    func_text += "    out_table = hash_join_table(table_left, table_right, {}, {}, {}, {}, {}, vect_same_key.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {}, {}, {}, cfunc_cond, left_table_cond_columns.ctypes, {}, right_table_cond_columns.ctypes, {})\n".format(
         left_parallel,
         right_parallel,
         n_keys,
@@ -864,6 +1029,8 @@ def _gen_local_hash_join(
         optional_column,
         indicator,
         is_na_equal,
+        len(left_col_nums),
+        len(right_col_nums),
     )
     func_text += "    delete_table(table_left)\n"
     func_text += "    delete_table(table_right)\n"

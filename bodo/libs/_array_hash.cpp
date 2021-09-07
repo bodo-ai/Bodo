@@ -5,8 +5,6 @@
 #include "_bodo_common.h"
 #include "_murmurhash3.h"
 
-#undef DEBUG_HASH
-
 /**
  * Computation of the NA value hash
  * @param seed: the seed of the computation.
@@ -1002,11 +1000,6 @@ uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
 uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
                     const uint32_t seed) {
     tracing::Event ev("hash_keys");
-#ifdef DEBUG_HASH
-    std::cout << "INPUT hash_keys. key_arrs=\n";
-    DEBUG_PrintRefct(std::cout, key_arrs);
-    DEBUG_PrintSetOfColumn(std::cout, key_arrs);
-#endif
     size_t n_rows = (size_t)key_arrs[0]->length;
     uint32_t* hashes = new uint32_t[n_rows];
     // hash first array
@@ -1015,11 +1008,5 @@ uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
     for (size_t i = 1; i < key_arrs.size(); i++) {
         hash_array_combine(hashes, key_arrs[i], n_rows, seed);
     }
-#ifdef DEBUG_HASH
-    for (size_t i_row = 0; i_row < n_rows; i_row++)
-        std::cout << "hash_keys : i_row=" << i_row << " hash=" << hashes[i_row]
-                  << "\n";
-    std::cout << "Ending of hash_keys\n";
-#endif
     return hashes;
 }
