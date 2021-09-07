@@ -2394,6 +2394,23 @@ def test_cut():
     # check_func(impl, (A, 4, False), check_dtype=False)
 
 
+def test_qcut(memory_leak_check):
+    """Tests for pd.qcut()"""
+
+    def impl(S, q):
+        return pd.qcut(S, q)
+
+    S = pd.Series(
+        [-2, 1, 3, 4, 5, 11, 15, 20, 22],
+        ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"],
+        name="ABC",
+    )
+    check_func(impl, (S, 3), check_dtype=False, check_categorical=False)
+    check_func(impl, (S, [0.1, 0.4, 0.9]), check_dtype=False, check_categorical=False)
+    with pytest.raises(BodoError, match="should be an integer or a list"):
+        bodo.jit(impl)(S, "ABC")
+
+
 def test_series_mad(series_stat, memory_leak_check):
     def f(S):
         return S.mad()
