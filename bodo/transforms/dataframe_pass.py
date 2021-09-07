@@ -892,9 +892,7 @@ class DataFramePass:
             raise BodoError("query(): multiline expressions not supported yet")
 
         # parse expression
-        parsed_expr, parsed_expr_str, used_cols = self._parse_query_expr(
-            expr, df_typ.columns
-        )
+        parsed_expr, parsed_expr_str, used_cols = self._parse_query_expr(expr, df_typ)
 
         # check no columns nor index in selcted in expr
         if len(used_cols) == 0 and "index" not in expr:
@@ -939,247 +937,23 @@ class DataFramePass:
             self, _query_impl, args, pre_nodes=nodes, run_full_pipeline=True
         )
 
-    def _parse_query_expr(self, expr, columns):
+    def _parse_query_expr(self, expr, df_typ):
         """Parses query expression using Pandas parser but avoids issues such as
         early evaluation of string expressions by Pandas.
         """
         clean_name = pd.core.computation.parsing.clean_column_name
-        cleaned_columns = [clean_name(c) for c in columns]
+        cleaned_columns = [clean_name(c) for c in df_typ.columns]
         resolver = {c: 0 for c in cleaned_columns}
         resolver["index"] = 0
-        used_cols = {}
         # create fake environment for Expr that just includes the symbol names to
         # enable parsing
         glbs = self.func_ir.func_id.func.__globals__
         lcls = {a: 0 for a in self.func_ir.func_id.code.co_varnames}
         env = pd.core.computation.scope.ensure_scope(2, glbs, lcls, (resolver,))
-
-        # avoid rewrite of operations in Pandas such as early evaluation of string exprs
-        def _rewrite_membership_op(self, node, left, right):
-            op_instance = node.op
-            op = self.visit(op_instance)
-            return op, op_instance, left, right
-
-        def _maybe_evaluate_binop(
-            self,
-            op,
-            op_class,
-            lhs,
-            rhs,
-            eval_in_python=("in", "not in"),
-            maybe_eval_in_python=("==", "!=", "<", ">", "<=", ">="),
-        ):
-            # currently, & and | are not supported in expr
-            res = op(lhs, rhs)
-            return res
-
-        # avoid early evaluation of getattr such as C.str.contains().
-        # functions like C.str.contains are saved and handled similar to
-        # intrinsic functions like sqrt instead of evaluation.
-        new_funcs = []
-
-        class NewFuncNode(pd.core.computation.ops.FuncNode):
-            def __init__(self, name):
-
-                if name not in pd.core.computation.ops.MATHOPS or (
-                    pd.core.computation.check._NUMEXPR_INSTALLED
-                    and pd.core.computation.check_NUMEXPR_VERSION
-                    < pd.core.computation.ops.LooseVersion("2.6.9")
-                    and name in ("floor", "ceil")
-                ):
-                    if name not in new_funcs:
-                        raise BodoError(
-                            '"{0}" is not a supported function'.format(name)
-                        )
-
-                self.name = name
-                if name in new_funcs:
-                    self.func = name
-                else:
-                    self.func = getattr(np, name)
-
-            def __call__(self, *args):
-                return pd.core.computation.ops.MathCall(self, args)
-
-            # __repr__ is needed if this attr node is not called, e.g. A.dt.year
-            def __repr__(self):
-                return pd.io.formats.printing.pprint_thing(self.name)
-
-        def visit_Attribute(self, node, **kwargs):
-            """handles value.attr cases such as C.str.contains()
-            functions are turned into NewFuncNode. Intermediate values like C.str
-            are added to local scope as local variable to avoid evaluation.
-            """
-            attr = node.attr
-            value = node.value
-            sentinel = pd.core.computation.ops.LOCAL_TAG
-
-            if attr in ("str", "dt"):
-                # check the case where df.column.str where column is not in df
-                try:
-                    value_str = str(self.visit(value))
-                except pd.core.computation.ops.UndefinedVariableError as e:
-                    col_name = e.args[0].split("'")[1]
-                    raise BodoError(
-                        "df.query(): column {} is not found in dataframe columns {}".format(
-                            col_name, columns
-                        )
-                    )
-            else:
-                value_str = str(self.visit(value))
-            name = value_str + "." + attr
-            if name.startswith(sentinel):
-                name = name[len(sentinel) :]
-
-            # make local variable in case of C.str
-            if attr in ("str", "dt"):
-                orig_col_name = columns[cleaned_columns.index(value_str)]
-                used_cols[orig_col_name] = value_str
-                self.env.scope[name] = 0
-                return self.term_type(sentinel + name, self.env)
-
-            # make function node
-            new_funcs.append(name)
-            return NewFuncNode(name)
-
-        # make sure string literals are printed correctly in expression
-        def __str__(self):
-            if isinstance(self.value, list):
-                return "{}".format(self.value)
-            if isinstance(self.value, str):
-                return "'{}'".format(self.value)
-            return pd.io.formats.printing.pprint_thing(self.name)
-
-        # handle math calls
-        def math__str__(self):
-            """makes math calls compilable by adding "np." and Series functions"""
-            # avoid change if it is a dummy attribute call
-            if self.op in new_funcs:
-                return pd.io.formats.printing.pprint_thing(
-                    "{0}({1})".format(self.op, ",".join(map(str, self.operands)))
-                )
-
-            operands = map(
-                lambda a: "bodo.hiframes.pd_series_ext.get_series_data({})".format(
-                    str(a)
-                ),
-                self.operands,
-            )
-            op = "np.{}".format(self.op)
-            ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
-                str(self.operands[0])
-            )
-            return pd.io.formats.printing.pprint_thing(
-                "bodo.hiframes.pd_series_ext.init_series({0}({1}), {2})".format(
-                    op, ",".join(operands), ind
-                )
-            )
-
-        # replace 'in' operator with dummy function to convert to prange later
-        def op__str__(self):
-            parened = (
-                "({0})".format(pd.io.formats.printing.pprint_thing(opr))
-                for opr in self.operands
-            )
-            if self.op == "in":
-                return pd.io.formats.printing.pprint_thing(
-                    "bodo.hiframes.pd_dataframe_ext.val_isin_dummy({})".format(
-                        ", ".join(parened)
-                    )
-                )
-            if self.op == "not in":
-                return pd.io.formats.printing.pprint_thing(
-                    "bodo.hiframes.pd_dataframe_ext.val_notin_dummy({})".format(
-                        ", ".join(parened)
-                    )
-                )
-            return pd.io.formats.printing.pprint_thing(
-                " {0} ".format(self.op).join(parened)
-            )
-
-        saved_rewrite_membership_op = (
-            pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op
+        index_name = df_typ.index.name_typ
+        return bodo.hiframes.dataframe_impl._parse_query_expr(
+            expr, env, df_typ.columns, cleaned_columns, index_name
         )
-        saved_maybe_evaluate_binop = (
-            pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop
-        )
-        saved_visit_Attribute = pd.core.computation.expr.BaseExprVisitor.visit_Attribute
-        saved__maybe_downcast_constants = (
-            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants
-        )
-        saved__str__ = pd.core.computation.ops.Term.__str__
-        saved_math__str__ = pd.core.computation.ops.MathCall.__str__
-        saved_op__str__ = pd.core.computation.ops.Op.__str__
-        saved__disallow_scalar_only_bool_ops = (
-            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
-        )
-        try:
-            pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
-                _rewrite_membership_op
-            )
-            pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = (
-                _maybe_evaluate_binop
-            )
-            pd.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
-            # _maybe_downcast_constants accesses actual value which is not possible
-            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (
-                lambda self, left, right: (
-                    left,
-                    right,
-                )
-            )
-            pd.core.computation.ops.Term.__str__ = __str__
-            pd.core.computation.ops.MathCall.__str__ = math__str__
-            pd.core.computation.ops.Op.__str__ = op__str__
-            # _disallow_scalar_only_bool_ops accesses actual value which is not possible
-            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
-                lambda self: None
-            )
-            parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
-            parsed_expr_str = str(parsed_expr)
-        except pd.core.computation.ops.UndefinedVariableError as e:
-            # catch undefined variable error
-            index_name = self.typemap["arg.df"].index.name_typ
-            if (
-                not is_overload_none(index_name)
-                and get_overload_const_str(index_name) == e.args[0].split("'")[1]
-            ):
-                # currently do not support named index appears in expr
-                raise BodoError(
-                    "df.query(): Refering to named"
-                    " index ('{}') by name is not supported".format(
-                        get_overload_const_str(index_name)
-                    )
-                )
-            else:
-                # throw other errors
-                # this includes: columns does not exist in dataframe,
-                #                undefined local variable using @
-                raise BodoError("df.query(): undefined variable, {}".format(e))
-        finally:
-            pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
-                saved_rewrite_membership_op
-            )
-            pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = (
-                saved_maybe_evaluate_binop
-            )
-            pd.core.computation.expr.BaseExprVisitor.visit_Attribute = (
-                saved_visit_Attribute
-            )
-            pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (
-                saved__maybe_downcast_constants
-            )
-            pd.core.computation.ops.Term.__str__ = saved__str__
-            pd.core.computation.ops.MathCall.__str__ = saved_math__str__
-            pd.core.computation.ops.Op.__str__ = saved_op__str__
-            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
-                saved__disallow_scalar_only_bool_ops
-            )
-
-        used_cols.update(
-            {c: clean_name(c) for c in columns if clean_name(c) in parsed_expr.names}
-        )
-        return parsed_expr, parsed_expr_str, used_cols
 
     def _run_call_set_df_column(self, assign, lhs, rhs):
         """transform set_df_column() to handle reflection/inplace cases properly if
@@ -1323,6 +1097,7 @@ class DataFramePass:
         return replace_func(self, loc_vars["f"], [arr], pre_nodes=nodes)
 
     def _run_call_join(self, assign, lhs, rhs):
+        """Transform join_dummy() generated from calls like df.merge() into ir.Join node"""
         (
             left_df,
             right_df,
@@ -1334,6 +1109,7 @@ class DataFramePass:
             is_join_var,
             is_indicator_var,
             _bodo_na_equal_var,
+            gen_cond_var,
         ) = rhs.args
 
         left_keys = self._get_const_or_list(left_on_var)
@@ -1344,6 +1120,7 @@ class DataFramePass:
         is_join = guard(find_const, self.func_ir, is_join_var)
         is_indicator = guard(find_const, self.func_ir, is_indicator_var)
         is_na_equal = guard(find_const, self.func_ir, _bodo_na_equal_var)
+        gen_cond_expr = guard(find_const, self.func_ir, gen_cond_var)
         out_typ = self.typemap[lhs.name]
         # convert right join to left join
         is_left = how in {"left", "outer"}
@@ -1372,7 +1149,6 @@ class DataFramePass:
         # ---the index of df1 is used for the merging. and the index of df2 or some other column.
         # ---The index of the joined table is assigned from the non-joined column.
 
-        in_index_var = None
         out_index_var = None
         in_df_index_name = None
         right_index = "$_bodo_index_" in right_keys
@@ -1420,6 +1196,7 @@ class DataFramePass:
                 right_index,
                 is_indicator,
                 is_na_equal,
+                gen_cond_expr,
             )
         )
 

@@ -1,103 +1,11 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
+#include "_join.h"
 #include "_array_hash.h"
 #include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_distributed.h"
+#include "_join_hashing.h"
 #include "_shuffle.h"
-
-namespace {
-/**
- * Compute hash for `hash_join_table`
- *
- * Don't use std::function to reduce call overhead.
- */
-struct HashHashJoinTable {
-    /**
-     * This is a function for comparing the rows.
-     * This is the first lambda used as argument for the unordered map
-     * container.
-     *
-     * A row can refer to either the short or the long table.
-     * If iRow < short_table_rows then it is in the short table
-     *    at index iRow.
-     * If iRow >= short_table_rows then it is in the long table
-     *    at index (iRow - short_table_rows).
-     *
-     * @param iRow is the first row index for the comparison
-     * @return true/false depending on the case.
-     */
-    uint32_t operator()(const size_t iRow) const {
-        if (iRow < short_table_rows) {
-            return short_table_hashes[iRow];
-        } else {
-            return long_table_hashes[iRow - short_table_rows];
-        }
-    }
-    size_t short_table_rows;
-    uint32_t* short_table_hashes;
-    uint32_t* long_table_hashes;
-};
-
-/**
- * Key comparison for `hash_join_table`
- *
- * Don't use std::function to reduce call overhead.
- */
-struct KeyEqualHashJoinTable {
-    /* This is a function for testing equality of rows.
-     * This is used as second argument for the unordered map container.
-     *
-     * A row can refer to either the short or the long table.
-     * If iRow < short_table_rows then it is in the short table
-     *    at index iRow.
-     * If iRow >= short_table_rows then it is in the long table
-     *    at index (iRow - short_table_rows).
-     *
-     * NOTE: Trying to minimize the overhead of this function does not
-     * show significant speedup in TPC-H. For example, if there is a single
-     * key column and the key array dtype is int64, doing this:
-     * `return colA->at<int64_t>(iRowA) == colB->at<int64_t>(iRowB);`
-     * only shows about 5% speedup in the portion of join that populates
-     * ListPairWrite, and it looks like trying to have multiple versions
-     * of equal_fct in a performance-correct way would significantly
-     * complicate the code. The most expensive part of the code in the
-     * computation of matching pairs is the loop over the long table,
-     * but it looks like the bottleneck right now is not the key equals
-     * function (equal_fct).
-     *
-     * @param iRowA is the first row index for the comparison
-     * @param iRowB is the second row index for the comparison
-     * @return true/false depending on equality or not.
-     */
-    bool operator()(const size_t iRowA, const size_t iRowB) const {
-        size_t jRowA, jRowB;
-        table_info *table_A, *table_B;
-        if (iRowA < short_table_rows) {
-            table_A = short_table;
-            jRowA = iRowA;
-        } else {
-            table_A = long_table;
-            jRowA = iRowA - short_table_rows;
-        }
-        if (iRowB < short_table_rows) {
-            table_B = short_table;
-            jRowB = iRowB;
-        } else {
-            table_B = long_table;
-            jRowB = iRowB - short_table_rows;
-        }
-        bool test =
-            TestEqualJoin(table_A, table_B, jRowA, jRowB, n_key, is_na_equal);
-        return test;
-    }
-
-    size_t short_table_rows;
-    size_t n_key;
-    table_info* short_table;
-    table_info* long_table;
-    bool is_na_equal;
-};
-}  // namespace
 
 // An overview of the join design can be found on Confluence:
 // https://bodo.atlassian.net/wiki/spaces/B/pages/821624833/Join+Code+Design
@@ -113,13 +21,17 @@ struct KeyEqualHashJoinTable {
 //    Thus the size of the table is just one parameter in the choice. We put a
 //    factor of 6.0 in this choice. Variable is CritQuotientNrows.
 
-table_info* hash_join_table(table_info* left_table, table_info* right_table,
-                            bool left_parallel, bool right_parallel,
-                            int64_t n_key_t, int64_t n_data_left_t,
-                            int64_t n_data_right_t, int64_t* vect_same_key,
-                            int64_t* vect_need_typechange, bool is_left,
-                            bool is_right, bool is_join, bool optional_col,
-                            bool indicator, bool is_na_equal) {
+table_info* hash_join_table(
+    table_info* left_table, table_info* right_table, bool left_parallel,
+    bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
+    int64_t n_data_right_t, int64_t* vect_same_key,
+    int64_t* vect_need_typechange, bool is_left, bool is_right, bool is_join,
+    bool optional_col, bool indicator, bool is_na_equal,
+    cond_expr_fn_t cond_func, int64_t* cond_func_left_columns,
+    int64_t cond_func_left_column_len, int64_t* cond_func_right_columns,
+    int64_t cond_func_right_column_len) {
+    // Does this join need an additional cond_func
+    const bool uses_cond_func = cond_func != nullptr;
     try {
         tracing::Event ev("hash_join_table");
         // Reading the MPI settings
@@ -242,6 +154,22 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
 
         size_t n_rows_left = work_left_table->nrows();
         size_t n_rows_right = work_right_table->nrows();
+
+        // Create a data structure containing the columns to match the format
+        // expected by cond_func, as a vector of arrays/pointers.
+        // These include both keys and data columns as either can
+        // be used in the cond_func.
+        std::vector<void*> col_ptrs_left(n_tot_left);
+        std::vector<void*> col_ptrs_right(n_tot_right);
+        for (size_t i = 0; i < n_tot_left; i++) {
+            col_ptrs_left[i] =
+                static_cast<void*>(work_left_table->columns[i]->data1);
+        }
+        for (size_t i = 0; i < n_tot_right; i++) {
+            col_ptrs_right[i] =
+                static_cast<void*>(work_right_table->columns[i]->data1);
+        }
+
         //
         // Now computing the hashes that will be used in the hash map
         // or compared to the hash map.
@@ -336,8 +264,12 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         bool short_table_outer, long_table_outer;
         table_info *short_table, *long_table;
         bool short_replicated, long_replicated;
+        // Flag set to true if left table is assigned as short table,
+        // used in equal_fct below
+        bool short_is_left;
         if (ChoiceOpt == 0) {
             // short = left and long = right
+            short_is_left = true;
             short_table_outer = is_left;
             long_table_outer = is_right;
             short_table = work_left_table;
@@ -350,6 +282,7 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             long_replicated = right_replicated;
         } else {
             // short = right and long = left
+            short_is_left = false;
             short_table_outer = is_right;
             long_table_outer = is_left;
             short_table = work_right_table;
@@ -379,10 +312,10 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             ev_tuples.add_attribute("long_table_outer", long_table_outer);
         }
 
-        HashHashJoinTable hash_fct{short_table_rows, short_table_hashes,
-                                   long_table_hashes};
-        KeyEqualHashJoinTable equal_fct{short_table_rows, n_key, short_table,
-                                        long_table, is_na_equal};
+        joinHashFcts::HashHashJoinTable hash_fct{
+            short_table_rows, short_table_hashes, long_table_hashes};
+        joinHashFcts::KeyEqualHashJoinTable equal_fct{
+            short_table_rows, n_key, short_table, long_table, is_na_equal};
         tracing::Event ev_alloc_map("alloc_hashmap");
 
         // The entList contains the identical keys with the corresponding rows.
@@ -402,15 +335,51 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         // StoreHash=true speeds up join code overall in TPC-H.
         // If we also need to do short_table_outer then we store an index in the
         // first position of the std::vector
-        UNORD_MAP_CONTAINER<size_t, size_t, HashHashJoinTable,
-                            KeyEqualHashJoinTable>
+        UNORD_MAP_CONTAINER<size_t, size_t, joinHashFcts::HashHashJoinTable,
+                            joinHashFcts::KeyEqualHashJoinTable>
             entList({}, hash_fct, equal_fct);
         // reserving space is very important to avoid expensive reallocations
         // (at the cost of using more memory)
-        // [BE-1078]: Should this use statistics to influence how much we reserve?
+        // [BE-1078]: Should this use statistics to influence how much we
+        // reserve?
         entList.reserve(short_table_rows);
         std::vector<std::vector<size_t>> groups;
         groups.reserve(short_table_rows);
+
+        // Define additional information needed for non-equality conditions,
+        // determined by 'uses_cond_func'. We need a vector of hash maps for the
+        // short table groups. In addition, we also need hashes for the short
+        // table on all columns that are not since they will insert into the
+        // hash map.
+        uint32_t* short_nonequal_key_hashes = nullptr;
+        std::vector<UNORD_MAP_CONTAINER<
+            size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
+            joinHashFcts::SecondLevelKeyEqualHashJoinTable>>
+            second_level_hash_maps;
+        // Keep track of which table to use to populate the second level hash
+        // table if 'uses_cond_func'
+        int64_t* short_data_key_cols = nullptr;
+        int64_t short_data_key_n_cols = 0;
+
+        if (uses_cond_func) {
+            if (short_is_left) {
+                short_data_key_cols = cond_func_left_columns;
+                short_data_key_n_cols = cond_func_left_column_len;
+            } else {
+                short_data_key_cols = cond_func_right_columns;
+                short_data_key_n_cols = cond_func_right_column_len;
+            }
+            short_nonequal_key_hashes =
+                hash_data_cols_table(short_table->columns, short_data_key_cols,
+                                     short_data_key_n_cols, SEED_HASH_JOIN);
+            // [BE-1078]: Should this use statistics to influence how much we
+            // reserve?
+            second_level_hash_maps.reserve(short_table_rows);
+        }
+        joinHashFcts::SecondLevelHashHashJoinTable second_level_hash_fct{
+            short_nonequal_key_hashes};
+        joinHashFcts::SecondLevelKeyEqualHashJoinTable second_level_equal_fct{
+            short_table, short_data_key_cols, short_data_key_n_cols};
 
         // ListPairWrite is the table used for the output
         // It precises the index used for the writing of the output table.
@@ -437,72 +406,177 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             // even if they are identical in value.
             // The first entry is going to be the index for the boolean array.
             // This code path will be selected whenever we have an OUTER merge.
+
             tracing::Event ev_groups("calc_groups");
-            size_t pos_idx = 0;
-            for (size_t i_short = 0; i_short < short_table_rows; i_short++) {
-                // Check if the group already exists, if it doesn't this will
-                // insert a value.
-                size_t& group_id = entList[i_short];
-                // group_id==0 means key doesn't exist in map
-                if (group_id == 0) {
-                    // Update the value of group_id stored in the hash map
-                    // as well since its pass by reference.
-                    group_id = groups.size() + 1;
-                    groups.emplace_back();
-                    // The first entry is going to be the index for the boolean
-                    // array, that tracks if the group matches any rows in the
-                    // long table. We add that initial value to the group here.
-                    groups.back().emplace_back(pos_idx);
-                    // pos_idx is used to track how many groups
-                    // require allocations in the short table vector that
-                    // track matches.
-                    pos_idx++;
+            // TODO: Refactor code paths into helper functions.
+            if (uses_cond_func) {
+                // If 'uses_cond_func' we have a separate insertion process. We
+                // place the condition before the loop to avoid overhead.
+                for (size_t i_short = 0; i_short < short_table_rows;
+                     i_short++) {
+                    // Check if the group already exists, if it doesn't this
+                    // will insert a value.
+                    size_t& first_level_group_id = entList[i_short];
+                    // first_level_group_id==0 means the equality condition
+                    // doesn't have a match
+                    if (first_level_group_id == 0) {
+                        // Update the value of first_level_group_id stored in
+                        // the hash map as well since its pass by reference.
+                        first_level_group_id =
+                            second_level_hash_maps.size() + 1;
+                        UNORD_MAP_CONTAINER<
+                            size_t, size_t,
+                            joinHashFcts::SecondLevelHashHashJoinTable,
+                            joinHashFcts::SecondLevelKeyEqualHashJoinTable>
+                            group_map({}, second_level_hash_fct,
+                                      second_level_equal_fct);
+                        second_level_hash_maps.emplace_back(group_map);
+                    }
+                    auto& group_map =
+                        second_level_hash_maps[first_level_group_id - 1];
+                    // Check if the group already exists, if it doesn't this
+                    // will insert a value.
+                    size_t& second_level_group_id = group_map[i_short];
+                    if (second_level_group_id == 0) {
+                        // Update the value of group_id stored in the hash map
+                        // as well since its pass by reference.
+                        second_level_group_id = groups.size() + 1;
+                        groups.emplace_back();
+                    }
+                    groups[second_level_group_id - 1].emplace_back(i_short);
                 }
-                groups[group_id - 1].emplace_back(i_short);
+            } else {
+                for (size_t i_short = 0; i_short < short_table_rows;
+                     i_short++) {
+                    // Check if the group already exists, if it doesn't this
+                    // will insert a value.
+                    size_t& group_id = entList[i_short];
+                    // group_id==0 means key doesn't exist in map
+                    if (group_id == 0) {
+                        // Update the value of group_id stored in the hash map
+                        // as well since its pass by reference.
+                        group_id = groups.size() + 1;
+                        groups.emplace_back();
+                    }
+                    groups[group_id - 1].emplace_back(i_short);
+                }
             }
             ev_groups.finalize();
             //
             // Now iterating and determining how many entries we have to do.
             //
-            size_t n_bytes = (pos_idx + 7) >> 3;
+            size_t n_bytes = (groups.size() + 7) >> 3;
             std::vector<uint8_t> V_short_map(n_bytes, 0);
             // We now iterate over all entries of the long table in order to get
             // the entries in the ListPairWrite.
-            for (size_t i_long = 0; i_long < long_table_rows; i_long++) {
-                size_t i_long_shift = i_long + short_table_rows;
-                auto iter = entList.find(i_long_shift);
-                if (iter == entList.end()) {
-                    if (long_table_outer) {
-                        if (long_miss_needs_reduction) {
-                            SetBitTo(V_long_map.data(), i_long, false);
-                        } else {
-                            ListPairWrite.emplace_back(-1, i_long);
+
+            // TODO: Refactor code paths into helper functions.
+            if (uses_cond_func) {
+                // If 'uses_cond_func' we have a separate check to search
+                // second level hashes. We place the condition before the loop
+                // to avoid overhead.
+                for (size_t i_long = 0; i_long < long_table_rows; i_long++) {
+                    size_t i_long_shift = i_long + short_table_rows;
+                    auto iter = entList.find(i_long_shift);
+                    if (iter == entList.end()) {
+                        if (long_table_outer) {
+                            if (long_miss_needs_reduction) {
+                                SetBitTo(V_long_map.data(), i_long, false);
+                            } else {
+                                ListPairWrite.emplace_back(-1, i_long);
+                            }
+                        }
+                    } else {
+                        // If the first level matches, check each second level
+                        // hash.
+                        UNORD_MAP_CONTAINER<
+                            size_t, size_t,
+                            joinHashFcts::SecondLevelHashHashJoinTable,
+                            joinHashFcts::SecondLevelKeyEqualHashJoinTable>
+                            group_map =
+                                second_level_hash_maps[iter->second - 1];
+
+                        bool has_match = false;
+                        // Iterate over all of the keys and compare each group.
+                        // TODO [BE-1300]: Explore tsl:sparse_map
+                        for (auto& item : group_map) {
+                            size_t pos = item.second - 1;
+                            std::vector<size_t>& group = groups[pos];
+                            // Select a single member
+                            size_t cmp_row = group[0];
+                            size_t left_ind = 0;
+                            size_t right_ind = 0;
+                            if (short_is_left) {
+                                left_ind = cmp_row;
+                                right_ind = i_long;
+                            } else {
+                                left_ind = i_long;
+                                right_ind = cmp_row;
+                            }
+                            bool match = cond_func(col_ptrs_left.data(),
+                                                   col_ptrs_right.data(),
+                                                   left_ind, right_ind);
+                            if (match) {
+                                // If our group matches, add every row and
+                                // update the bitmap
+                                SetBitTo(V_short_map.data(), pos, true);
+                                has_match = true;
+                                for (size_t idx = 0; idx < group.size();
+                                     idx++) {
+                                    size_t j_short = group[idx];
+                                    ListPairWrite.emplace_back(j_short, i_long);
+                                }
+                            }
+                        }
+                        if (!has_match && long_table_outer) {
+                            // If there is no match, update the long table row.
+                            if (long_miss_needs_reduction) {
+                                SetBitTo(V_long_map.data(), i_long, false);
+                            } else {
+                                ListPairWrite.emplace_back(-1, i_long);
+                            }
                         }
                     }
-                } else {
-                    // If the short table entry are present in output as well,
-                    // then we need to keep track whether they are used or not
-                    // by the long table.
-                    std::vector<size_t>& group = groups[iter->second - 1];
-                    size_t pos = group[0];
-                    SetBitTo(V_short_map.data(), pos, true);
-                    for (size_t idx = 1; idx < group.size(); idx++) {
-                        size_t j_short = group[idx];
-                        ListPairWrite.emplace_back(j_short, i_long);
+                }
+            } else {
+                for (size_t i_long = 0; i_long < long_table_rows; i_long++) {
+                    size_t i_long_shift = i_long + short_table_rows;
+                    auto iter = entList.find(i_long_shift);
+                    if (iter == entList.end()) {
+                        if (long_table_outer) {
+                            if (long_miss_needs_reduction) {
+                                SetBitTo(V_long_map.data(), i_long, false);
+                            } else {
+                                ListPairWrite.emplace_back(-1, i_long);
+                            }
+                        }
+                    } else {
+                        // If the short table entry are present in output as
+                        // well, then we need to keep track whether they are
+                        // used or not by the long table.
+                        std::vector<size_t>& group = groups[iter->second - 1];
+                        size_t pos = iter->second - 1;
+                        SetBitTo(V_short_map.data(), pos, true);
+                        for (size_t idx = 0; idx < group.size(); idx++) {
+                            size_t j_short = group[idx];
+                            ListPairWrite.emplace_back(j_short, i_long);
+                        }
                     }
                 }
             }
+
             // Perform the reduction on short table misses if necessary
             if (short_miss_needs_reduction) {
                 MPI_Allreduce_bool_or(V_short_map);
             }
             int pos_short_disp = 0;
-            for (auto& iter : entList) {
-                std::vector<size_t>& group = groups[iter.second - 1];
-                size_t pos = group[0];
+            // Add missing rows for outer joins when there are no matching short
+            // table groups.
+            for (size_t pos = 0; pos < groups.size(); pos++) {
+                std::vector<size_t>& group = groups[pos];
                 bool bit = GetBit(V_short_map.data(), pos);
                 if (!bit) {
-                    for (size_t idx = 1; idx < group.size(); idx++) {
+                    for (size_t idx = 0; idx < group.size(); idx++) {
                         size_t j_short = group[idx];
                         // For short_miss_needs_reduction=True, the output table
                         // is distributed. Since the table in input is
@@ -525,19 +599,62 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
             // No need to keep track of the usage of the short table.
             // This code path is selected whenever the short table is an inner
             // join.
+
             tracing::Event ev_groups("calc_groups");
-            for (size_t i_short = 0; i_short < short_table_rows; i_short++) {
-                // Check if the group already exists, if it doesn't this will
-                // insert a value.
-                size_t& group_id = entList[i_short];
-                // group_id==0 means key doesn't exist in map
-                if (group_id == 0) {
-                    // Update the value of group_id stored in the hash map
-                    // as well since its pass by reference.
-                    group_id = groups.size() + 1;
-                    groups.emplace_back();
+            // TODO: Refactor code paths into helper functions.
+            if (uses_cond_func) {
+                // If 'uses_cond_func' we have a separate check to search
+                // second level hashes. We place the condition before the loop
+                // to avoid overhead..
+                for (size_t i_short = 0; i_short < short_table_rows;
+                     i_short++) {
+                    // Check if the group already exists, if it doesn't this
+                    // will insert a value.
+                    size_t& first_level_group_id = entList[i_short];
+                    // first_level_group_id==0 means the equality condition
+                    // doesn't have a match
+                    if (first_level_group_id == 0) {
+                        // Update the value of first_level_group_id stored in
+                        // the hash map as well since its pass by reference.
+                        first_level_group_id =
+                            second_level_hash_maps.size() + 1;
+                        UNORD_MAP_CONTAINER<
+                            size_t, size_t,
+                            joinHashFcts::SecondLevelHashHashJoinTable,
+                            joinHashFcts::SecondLevelKeyEqualHashJoinTable>
+                            group_map({}, second_level_hash_fct,
+                                      second_level_equal_fct);
+                        second_level_hash_maps.emplace_back(group_map);
+                    }
+                    auto& group_map =
+                        second_level_hash_maps[first_level_group_id - 1];
+                    // Check if the group already exists, if it doesn't this
+                    // will insert a value.
+                    size_t& second_level_group_id = group_map[i_short];
+                    if (second_level_group_id == 0) {
+                        // Update the value of group_id stored in the hash map
+                        // as well since its pass by reference.
+                        second_level_group_id = groups.size() + 1;
+                        groups.emplace_back();
+                    }
+                    groups[second_level_group_id - 1].emplace_back(i_short);
                 }
-                groups[group_id - 1].emplace_back(i_short);
+
+            } else {
+                for (size_t i_short = 0; i_short < short_table_rows;
+                     i_short++) {
+                    // Check if the group already exists, if it doesn't this
+                    // will insert a value.
+                    size_t& group_id = entList[i_short];
+                    // group_id==0 means key doesn't exist in map
+                    if (group_id == 0) {
+                        // Update the value of group_id stored in the hash map
+                        // as well since its pass by reference.
+                        group_id = groups.size() + 1;
+                        groups.emplace_back();
+                    }
+                    groups[group_id - 1].emplace_back(i_short);
+                }
             }
             ev_groups.finalize();
             //
@@ -546,24 +663,94 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
 
             // We now iterate over all entries of the long table in order to get
             // the entries in the ListPairWrite.
-            for (size_t i_long = 0; i_long < long_table_rows; i_long++) {
-                size_t i_long_shift = i_long + short_table_rows;
-                auto iter = entList.find(i_long_shift);
-                if (iter == entList.end()) {
-                    if (long_table_outer) {
-                        if (long_miss_needs_reduction) {
-                            SetBitTo(V_long_map.data(), i_long, false);
-                        } else {
-                            ListPairWrite.emplace_back(-1, i_long);
+
+            // TODO: Refactor code paths into helper functions.
+            if (uses_cond_func) {
+                // If 'uses_cond_func' we have a separate check to search
+                // second level hashes. We place the condition before the loop
+                // to avoid overhead.
+                for (size_t i_long = 0; i_long < long_table_rows; i_long++) {
+                    size_t i_long_shift = i_long + short_table_rows;
+                    auto iter = entList.find(i_long_shift);
+                    if (iter == entList.end()) {
+                        if (long_table_outer) {
+                            if (long_miss_needs_reduction) {
+                                SetBitTo(V_long_map.data(), i_long, false);
+                            } else {
+                                ListPairWrite.emplace_back(-1, i_long);
+                            }
+                        }
+                    } else {
+                        // If the first level matches, check each second level
+                        // hash.
+                        UNORD_MAP_CONTAINER<
+                            size_t, size_t,
+                            joinHashFcts::SecondLevelHashHashJoinTable,
+                            joinHashFcts::SecondLevelKeyEqualHashJoinTable>
+                            group_map =
+                                second_level_hash_maps[iter->second - 1];
+
+                        bool has_match = false;
+                        // Iterate over all of the keys and compare each group.
+                        // TODO [BE-1300]: Explore tsl:sparse_map
+                        for (auto& item : group_map) {
+                            size_t pos = item.second - 1;
+                            std::vector<size_t>& group = groups[pos];
+                            // Select a single s
+                            size_t cmp_row = group[0];
+                            size_t left_ind = 0;
+                            size_t right_ind = 0;
+                            if (short_is_left) {
+                                left_ind = cmp_row;
+                                right_ind = i_long;
+                            } else {
+                                left_ind = i_long;
+                                right_ind = cmp_row;
+                            }
+                            bool match = cond_func(col_ptrs_left.data(),
+                                                   col_ptrs_right.data(),
+                                                   left_ind, right_ind);
+                            if (match) {
+                                // If our group matches, add every row
+                                has_match = true;
+                                for (size_t idx = 0; idx < group.size();
+                                     idx++) {
+                                    size_t j_short = group[idx];
+                                    ListPairWrite.emplace_back(j_short, i_long);
+                                }
+                            }
+                        }
+                        if (!has_match && long_table_outer) {
+                            // If there is no match, update the long table row.
+                            if (long_miss_needs_reduction) {
+                                SetBitTo(V_long_map.data(), i_long, false);
+                            } else {
+                                ListPairWrite.emplace_back(-1, i_long);
+                            }
                         }
                     }
-                } else {
-                    // If the short table entry are present in output as well,
-                    // then we need to keep track whether they are used or not
-                    // by the long table.
-                    std::vector<size_t>& group = groups[iter->second - 1];
-                    for (auto& j_short : group) {
-                        ListPairWrite.emplace_back(j_short, i_long);
+                }
+
+            } else {
+                for (size_t i_long = 0; i_long < long_table_rows; i_long++) {
+                    size_t i_long_shift = i_long + short_table_rows;
+                    auto iter = entList.find(i_long_shift);
+                    if (iter == entList.end()) {
+                        if (long_table_outer) {
+                            if (long_miss_needs_reduction) {
+                                SetBitTo(V_long_map.data(), i_long, false);
+                            } else {
+                                ListPairWrite.emplace_back(-1, i_long);
+                            }
+                        }
+                    } else {
+                        // If the short table entry are present in output as
+                        // well, then we need to keep track whether they are
+                        // used or not by the long table.
+                        std::vector<size_t>& group = groups[iter->second - 1];
+                        for (auto& j_short : group) {
+                            ListPairWrite.emplace_back(j_short, i_long);
+                        }
                     }
                 }
             }
@@ -574,9 +761,22 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         // of time. We dealloc them here to free memory for the next stage and
         // also to trace dealloc time
         std::vector<std::vector<size_t>>().swap(
-            groups);  // force groups vector dealloc
+            groups);  // force groups vector to dealloc
         entList.clear();
         entList.reserve(0);  // try to force dealloc of hashmap
+        // Force second_level_hash_maps vector to dealloc. This should
+        // deallocate the hashmaps as well.
+        std::vector<UNORD_MAP_CONTAINER<
+            size_t, size_t, joinHashFcts::SecondLevelHashHashJoinTable,
+            joinHashFcts::SecondLevelKeyEqualHashJoinTable>>()
+            .swap(second_level_hash_maps);
+
+        // Delete the hashes
+        delete[] hashes_left;
+        delete[] hashes_right;
+        if (short_nonequal_key_hashes != nullptr) {
+            delete[] short_nonequal_key_hashes;
+        }
         ev_clear_map.finalize();
         // In replicated case, we put the long rows in distributed output
         if (long_table_outer && long_miss_needs_reduction) {
@@ -800,8 +1000,6 @@ table_info* hash_join_table(table_info* left_table, table_info* right_table,
         if (free_work_right) {
             delete_table(work_right_table);
         }
-        delete[] hashes_left;
-        delete[] hashes_right;
         return new table_info(out_arrs);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

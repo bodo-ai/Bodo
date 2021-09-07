@@ -2085,6 +2085,78 @@ def overload_dataframe_replace(
     return _gen_init_df(header, df.columns, data_args)
 
 
+def _is_col_access(expr_node):
+    """return True if the expression is a column access"""
+    expr_str = str(expr_node)
+    return expr_str.startswith("left.") or expr_str.startswith("right.")
+
+
+def _extract_equal_conds(expr_node):
+    """extract equality terms of parsed expression node and remove them
+    e.g. "left.A == right.A & left.B < 3" -> ["A"], ["B"], "left.B < 3"
+    """
+    # "left.A == right.A" -> ["A"], ["A"], None (means there is no non-equality condition)
+    if (
+        expr_node.op == "=="
+        and _is_col_access(expr_node.lhs)
+        and _is_col_access(expr_node.rhs)
+    ):
+        l_str = str(expr_node.lhs)
+        r_str = str(expr_node.rhs)
+
+        # if both refer to the same table (strange corner case)
+        if (l_str.startswith("left.") and r_str.startswith("left.")) or (
+            l_str.startswith("right.") and r_str.startswith("right.")
+        ):
+            return [], [], expr_node
+
+        # remove "left." and "right."
+        left_on = [l_str.split(".")[1]]
+        right_on = [r_str.split(".")[1]]
+
+        # reverse order
+        if l_str.startswith("right."):
+            return right_on, left_on, None
+
+        return left_on, right_on, None
+
+    # for '&', extract equality terms from lhs and rhs
+    if expr_node.op == "&":
+        l_left_on, l_right_on, l_expr = _extract_equal_conds(expr_node.lhs)
+        r_left_on, r_right_on, r_expr = _extract_equal_conds(expr_node.rhs)
+        left_on = l_left_on + r_left_on
+        right_on = l_right_on + r_right_on
+
+        # lhs is removed, only rhs remains
+        if l_expr is None:
+            return left_on, right_on, r_expr
+
+        # rhs is removed, only lhs remains
+        if r_expr is None:
+            return left_on, right_on, l_expr
+
+        # update '&' expr with new lhs/rhs
+        expr_node.lhs = l_expr
+        expr_node.rhs = r_expr
+        return left_on, right_on, expr_node
+
+    # no term can be extracted for other nodes like '|' (unless if transformed)
+    # TODO(ehsan): transform the expression into conjunctive normal form (CNF) to
+    # extract more equality conditions
+    return [], [], expr_node
+
+
+def _parse_merge_cond(on_str, left_columns, right_columns):
+    """Parse general merge condition such as "left.A == right.A & left.B < 3" and
+    extract its column equality terms
+    """
+    resolver = {"left": 0, "right": 0}
+    # create fake environment for Expr to enable parsing
+    env = pd.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
+    parsed_expr, _, _ = _parse_query_expr(on_str, env, [], [], None)
+    return _extract_equal_conds(parsed_expr.terms)
+
+
 @overload_method(DataFrameType, "merge", inline="always", no_unliteral=True)
 @overload(pd.merge, inline="always", no_unliteral=True)
 def overload_dataframe_merge(
@@ -2134,8 +2206,22 @@ def overload_dataframe_merge(
         sorted(set(left.columns) & set(right.columns), key=lambda k: str(k))
     )
 
+    gen_cond = ""
     if not is_overload_none(on):
         left_on = right_on = on
+        # check for general condition like "left.A == right.A & left.B < 3"
+        if is_overload_constant_str(on):
+            on_str = get_overload_const_str(on)
+            if on_str not in comm_cols and ("left." in on_str or "right." in on_str):
+                # extract equality portions to reuse existing infrastructure
+                # e.g. "left.A == right.A & left.B < 3" -> ["A"], ["A"], "left.B < 3"
+                left_on, right_on, gen_expr = _parse_merge_cond(
+                    on_str, left.columns, right.columns
+                )
+                if gen_expr is None:
+                    gen_cond = ""
+                else:
+                    gen_cond = str(gen_expr)
 
     if (
         is_overload_none(on)
@@ -2168,12 +2254,8 @@ def overload_dataframe_merge(
         )
     _bodo_na_equal_val = get_overload_const_bool(_bodo_na_equal)
 
-    validate_keys_length(
-        left_on, right_on, left_index, right_index, left_keys, right_keys
-    )
-    validate_keys_dtypes(
-        left, right, left_on, right_on, left_index, right_index, left_keys, right_keys
-    )
+    validate_keys_length(left_index, right_index, left_keys, right_keys)
+    validate_keys_dtypes(left, right, left_index, right_index, left_keys, right_keys)
 
     # The suffixes
     if is_overload_constant_tuple(suffixes):
@@ -2200,7 +2282,7 @@ def overload_dataframe_merge(
     func_text = "def _impl(left, right, how='inner', on=None, left_on=None,\n"
     func_text += "    right_on=None, left_index=False, right_index=False, sort=False,\n"
     func_text += "    suffixes=('_x', '_y'), copy=True, indicator=False, validate=None, _bodo_na_equal=True):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}', '{}', '{}', False, {}, {})\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, '{}', '{}', '{}', False, {}, {}, '{}')\n".format(
         left_keys,
         right_keys,
         how,
@@ -2208,6 +2290,7 @@ def overload_dataframe_merge(
         suffix_y,
         indicator_val,
         _bodo_na_equal_val,
+        gen_cond,
     )
 
     loc_vars = {}
@@ -2247,8 +2330,15 @@ def common_validate_merge_merge_asof_spec(
 
     comm_cols = tuple(set(left.columns) & set(right.columns))
     if not is_overload_none(on):
-        # make sure two dataframes have common columns
-        if len(comm_cols) == 0:
+        # make sure two dataframes have common columns if 'on' columns are specified
+        is_gen_cond = False
+        if is_overload_constant_str(on):
+            on_str = get_overload_const_str(on)
+            is_gen_cond = on_str not in comm_cols and (
+                "left." in on_str or "right." in on_str
+            )
+
+        if len(comm_cols) == 0 and not is_gen_cond:
             raise_bodo_error(
                 name_func + "(): No common columns to perform merge on. "
                 "Merge options: left_on={lon}, right_on={ron}, "
@@ -2266,7 +2356,7 @@ def common_validate_merge_merge_asof_spec(
                 'and "right_on", not a combination of both.'
             )
 
-    # make sure right_on, right_index, left_on, left_index are speciefied properly
+    # make sure right_on, right_index, left_on, left_index are specified properly
     if (
         (is_overload_true(left_index) or not is_overload_none(left_on))
         and is_overload_none(right_on)
@@ -2378,9 +2468,7 @@ def validate_merge_asof_keys_length(
         )
 
 
-def validate_keys_length(
-    left_on, right_on, left_index, right_index, left_keys, right_keys
-):
+def validate_keys_length(left_index, right_index, left_keys, right_keys):
     # make sure right_keys and left_keys have the same size
     if (not is_overload_true(left_index)) and (not is_overload_true(right_index)):
         if len(right_keys) != len(left_keys):
@@ -2399,9 +2487,7 @@ def validate_keys_length(
             )
 
 
-def validate_keys_dtypes(
-    left, right, left_on, right_on, left_index, right_index, left_keys, right_keys
-):
+def validate_keys_dtypes(left, right, left_index, right_index, left_keys, right_keys):
     # make sure left keys and right keys have comparable dtypes
 
     typing_context = numba.core.registry.cpu_target.typing_context
@@ -2508,7 +2594,7 @@ def overload_dataframe_join(
     # generating code since typers can't find constants easily
     func_text = "def _impl(left, other, on=None, how='left',\n"
     func_text += "    lsuffix='', rsuffix='', sort=False):\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', '{}', '{}', True, False, True)\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, other, {}, {}, '{}', '{}', '{}', True, False, True, '')\n".format(
         left_keys, right_keys, how, lsuffix, rsuffix
     )
 
@@ -2666,9 +2752,7 @@ def overload_dataframe_merge_asof(
     validate_merge_asof_keys_length(
         left_on, right_on, left_index, right_index, left_keys, right_keys
     )
-    validate_keys_dtypes(
-        left, right, left_on, right_on, left_index, right_index, left_keys, right_keys
-    )
+    validate_keys_dtypes(left, right, left_index, right_index, left_keys, right_keys)
     left_keys = gen_const_tup(left_keys)
     right_keys = gen_const_tup(right_keys)
     # The suffixes
@@ -2689,7 +2773,7 @@ def overload_dataframe_merge_asof(
     func_text += "    allow_exact_matches=True, direction='backward'):\n"
     func_text += "  suffix_x = suffixes[0]\n"
     func_text += "  suffix_y = suffixes[1]\n"
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof', '{}', '{}', False, False, True)\n".format(
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.join_dummy(left, right, {}, {}, 'asof', '{}', '{}', False, False, True, '')\n".format(
         left_keys, right_keys, suffix_x, suffix_y
     )
 
@@ -3815,6 +3899,233 @@ class SetDfColInfer(AbstractTemplate):
             ret = DataFrameType(new_typs, index, new_cols)
 
         return ret(*args)
+
+
+def _parse_query_expr(expr, env, columns, cleaned_columns, index_name=None):
+    """Parses expression string for DataFrame.query() call handling.
+    Patches Pandas query expr parsing code to avoid evaluating values during parsing.
+    """
+    used_cols = {}
+
+    # NOTE: all comments are Bodo specific
+    # avoid rewrite of operations in Pandas such as early evaluation of string exprs
+    def _rewrite_membership_op(self, node, left, right):
+        op_instance = node.op
+        op = self.visit(op_instance)
+        return op, op_instance, left, right
+
+    def _maybe_evaluate_binop(
+        self,
+        op,
+        op_class,
+        lhs,
+        rhs,
+        eval_in_python=("in", "not in"),
+        maybe_eval_in_python=("==", "!=", "<", ">", "<=", ">="),
+    ):
+        res = op(lhs, rhs)
+        return res
+
+    # avoid early evaluation of getattr such as C.str.contains().
+    # functions like C.str.contains are saved and handled similar to
+    # intrinsic functions like sqrt instead of evaluation.
+    new_funcs = []
+
+    class NewFuncNode(pd.core.computation.ops.FuncNode):
+        def __init__(self, name):
+
+            if name not in pd.core.computation.ops.MATHOPS or (
+                pd.core.computation.check._NUMEXPR_INSTALLED
+                and pd.core.computation.check_NUMEXPR_VERSION
+                < pd.core.computation.ops.LooseVersion("2.6.9")
+                and name in ("floor", "ceil")
+            ):
+                if name not in new_funcs:
+                    raise BodoError('"{0}" is not a supported function'.format(name))
+
+            self.name = name
+            if name in new_funcs:
+                self.func = name
+            else:
+                self.func = getattr(np, name)
+
+        def __call__(self, *args):
+            return pd.core.computation.ops.MathCall(self, args)
+
+        # __repr__ is needed if this attr node is not called, e.g. A.dt.year
+        def __repr__(self):
+            return pd.io.formats.printing.pprint_thing(self.name)
+
+    def visit_Attribute(self, node, **kwargs):
+        """handles value.attr cases such as C.str.contains()
+        functions are turned into NewFuncNode. Intermediate values like C.str
+        are added to local scope as local variable to avoid evaluation.
+        """
+        attr = node.attr
+        value = node.value
+        sentinel = pd.core.computation.ops.LOCAL_TAG
+
+        if attr in ("str", "dt"):
+            # check the case where df.column.str where column is not in df
+            try:
+                value_str = str(self.visit(value))
+            except pd.core.computation.ops.UndefinedVariableError as e:
+                col_name = e.args[0].split("'")[1]
+                raise BodoError(
+                    "df.query(): column {} is not found in dataframe columns {}".format(
+                        col_name, columns
+                    )
+                )
+        else:
+            value_str = str(self.visit(value))
+        name = value_str + "." + attr
+        if name.startswith(sentinel):
+            name = name[len(sentinel) :]
+
+        # make local variable in case of C.str
+        if attr in ("str", "dt"):
+            orig_col_name = columns[cleaned_columns.index(value_str)]
+            used_cols[orig_col_name] = value_str
+            self.env.scope[name] = 0
+            return self.term_type(sentinel + name, self.env)
+
+        # make function node
+        new_funcs.append(name)
+        return NewFuncNode(name)
+
+    # make sure string literals are printed correctly in expression
+    def __str__(self):
+        if isinstance(self.value, list):
+            return "{}".format(self.value)
+        if isinstance(self.value, str):
+            return "'{}'".format(self.value)
+        return pd.io.formats.printing.pprint_thing(self.name)
+
+    # handle math calls
+    def math__str__(self):
+        """makes math calls compilable by adding "np." and Series functions"""
+        # avoid change if it is a dummy attribute call
+        if self.op in new_funcs:
+            return pd.io.formats.printing.pprint_thing(
+                "{0}({1})".format(self.op, ",".join(map(str, self.operands)))
+            )
+
+        operands = map(
+            lambda a: "bodo.hiframes.pd_series_ext.get_series_data({})".format(str(a)),
+            self.operands,
+        )
+        op = "np.{}".format(self.op)
+        ind = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
+            str(self.operands[0])
+        )
+        return pd.io.formats.printing.pprint_thing(
+            "bodo.hiframes.pd_series_ext.init_series({0}({1}), {2})".format(
+                op, ",".join(operands), ind
+            )
+        )
+
+    # replace 'in' operator with dummy function to convert to prange later
+    def op__str__(self):
+        parened = (
+            "({0})".format(pd.io.formats.printing.pprint_thing(opr))
+            for opr in self.operands
+        )
+        if self.op == "in":
+            return pd.io.formats.printing.pprint_thing(
+                "bodo.hiframes.pd_dataframe_ext.val_isin_dummy({})".format(
+                    ", ".join(parened)
+                )
+            )
+        if self.op == "not in":
+            return pd.io.formats.printing.pprint_thing(
+                "bodo.hiframes.pd_dataframe_ext.val_notin_dummy({})".format(
+                    ", ".join(parened)
+                )
+            )
+        return pd.io.formats.printing.pprint_thing(
+            " {0} ".format(self.op).join(parened)
+        )
+
+    saved_rewrite_membership_op = (
+        pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op
+    )
+    saved_maybe_evaluate_binop = (
+        pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop
+    )
+    saved_visit_Attribute = pd.core.computation.expr.BaseExprVisitor.visit_Attribute
+    saved__maybe_downcast_constants = (
+        pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants
+    )
+    saved__str__ = pd.core.computation.ops.Term.__str__
+    saved_math__str__ = pd.core.computation.ops.MathCall.__str__
+    saved_op__str__ = pd.core.computation.ops.Op.__str__
+    saved__disallow_scalar_only_bool_ops = (
+        pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
+    )
+    try:
+        pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
+            _rewrite_membership_op
+        )
+        pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = (
+            _maybe_evaluate_binop
+        )
+        pd.core.computation.expr.BaseExprVisitor.visit_Attribute = visit_Attribute
+        # _maybe_downcast_constants accesses actual value which is not possible
+        pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (
+            lambda self, left, right: (
+                left,
+                right,
+            )
+        )
+        pd.core.computation.ops.Term.__str__ = __str__
+        pd.core.computation.ops.MathCall.__str__ = math__str__
+        pd.core.computation.ops.Op.__str__ = op__str__
+        # _disallow_scalar_only_bool_ops accesses actual value which is not possible
+        pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: None
+        parsed_expr = pd.core.computation.expr.Expr(expr, env=env)
+        parsed_expr_str = str(parsed_expr)
+    except pd.core.computation.ops.UndefinedVariableError as e:
+        # catch undefined variable error
+
+        if (
+            not is_overload_none(index_name)
+            and get_overload_const_str(index_name) == e.args[0].split("'")[1]
+        ):
+            # currently do not support named index appears in expr
+            raise BodoError(
+                "df.query(): Refering to named"
+                " index ('{}') by name is not supported".format(
+                    get_overload_const_str(index_name)
+                )
+            )
+        else:
+            # throw other errors
+            # this includes: columns does not exist in dataframe,
+            #                undefined local variable using @
+            raise BodoError(f"df.query(): undefined variable, {e}")
+    finally:
+        pd.core.computation.expr.BaseExprVisitor._rewrite_membership_op = (
+            saved_rewrite_membership_op
+        )
+        pd.core.computation.expr.BaseExprVisitor._maybe_evaluate_binop = (
+            saved_maybe_evaluate_binop
+        )
+        pd.core.computation.expr.BaseExprVisitor.visit_Attribute = saved_visit_Attribute
+        pd.core.computation.expr.BaseExprVisitor._maybe_downcast_constants = (
+            saved__maybe_downcast_constants
+        )
+        pd.core.computation.ops.Term.__str__ = saved__str__
+        pd.core.computation.ops.MathCall.__str__ = saved_math__str__
+        pd.core.computation.ops.Op.__str__ = saved_op__str__
+        pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
+            saved__disallow_scalar_only_bool_ops
+        )
+
+    clean_name = pd.core.computation.parsing.clean_column_name
+    used_cols.update(
+        {c: clean_name(c) for c in columns if clean_name(c) in parsed_expr.names}
+    )
+    return parsed_expr, parsed_expr_str, used_cols
 
 
 class DataFrameTupleIterator(types.SimpleIteratorType):

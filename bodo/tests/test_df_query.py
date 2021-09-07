@@ -262,8 +262,8 @@ def test_df_query_index_name(memory_leak_check):
     Test df.query(): Refering to named index by name is not supported
     """
 
-    def impl1(df):
-        return df.query("index_name<3")
+    def impl1(df2):
+        return df2.query("index_name<3")
 
     def impl2(df, expr):
         return df.query(expr)

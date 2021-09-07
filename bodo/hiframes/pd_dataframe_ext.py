@@ -1401,6 +1401,7 @@ def join_dummy(
     is_join,
     indicator,
     _bodo_na_equal,
+    gen_cond,
 ):  # pragma: no cover
     return left_df
 
@@ -1423,6 +1424,7 @@ class JoinTyper(AbstractTemplate):
             is_join,
             indicator,
             _bodo_na_equal,
+            _gen_cond,
         ) = args
 
         left_on = get_overload_const_list(left_on)

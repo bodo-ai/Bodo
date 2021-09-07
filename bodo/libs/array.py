@@ -1504,6 +1504,11 @@ def hash_join_table(
     optional_col_t,
     indicator,
     _bodo_na_equal,
+    cond_func,
+    left_col_nums,
+    left_col_nums_len,
+    right_col_nums,
+    right_col_nums_len,
 ):
     """
     Interface to the hash join of two tables.
@@ -1530,6 +1535,11 @@ def hash_join_table(
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -1558,6 +1568,11 @@ def hash_join_table(
             types.boolean,
             types.boolean,
             types.boolean,
+            types.voidptr,
+            types.voidptr,
+            types.int64,
+            types.voidptr,
+            types.int64,
         ),
         codegen,
     )
