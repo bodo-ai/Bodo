@@ -397,8 +397,8 @@ def test_replace_types_supported(series_replace):
         pytest.param(
             SeriesReplace(
                 pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=True)),
-                to_replace=pd.Categorical(5),
-                value=pd.Categorical(15),
+                to_replace=pd.Categorical([5]),
+                value=pd.Categorical([15]),
             ),
         ),
         # pd.Categorical expected fail value
@@ -406,7 +406,7 @@ def test_replace_types_supported(series_replace):
             SeriesReplace(
                 pd.Series(pd.Categorical([1, 2, 5, None, 2], ordered=True)),
                 to_replace=5,
-                value=pd.Categorical(15),
+                value=pd.Categorical([15]),
             ),
         ),
     ],
@@ -1218,7 +1218,8 @@ def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
             bodo.jit(test_impl)(series_val.copy(deep=True), val)
     elif isinstance(series_val.iat[0], bytes):
         with pytest.raises(
-            BodoError, match="setitem for Binary Array only supported with bytes value"
+            BodoError,
+            match=r"setitem for Binary Array only supported with bytes value and integer indexing",
         ):
             bodo.jit(test_impl)(series_val.copy(deep=True), val)
     else:
@@ -1236,7 +1237,8 @@ def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
             bodo.jit(test_impl)(series_val.copy(deep=True), val)
     elif isinstance(series_val.iat[0], bytes):
         with pytest.raises(
-            BodoError, match="setitem for Binary Array only supported with bytes value"
+            BodoError,
+            match=r"setitem for Binary Array only supported with bytes value and integer indexing",
         ):
             bodo.jit(test_impl)(series_val.copy(deep=True), val)
     else:
@@ -1256,7 +1258,7 @@ def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
         with pytest.raises(
             BodoError,
             match=re.escape(
-                "setitem for Binary Array with indexing type array(bool, 1d, C) not supported."
+                r"setitem for Binary Array with indexing type BooleanArrayType() not supported."
             ),
         ):
             bodo.jit(test_impl)(series_val.copy(deep=True), val)
