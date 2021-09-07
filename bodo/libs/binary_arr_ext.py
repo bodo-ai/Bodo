@@ -321,7 +321,9 @@ def binary_arr_setitem(arr, ind, val):
     # # NOTE: This should only be used on initialization, but it is needed
     # # for map/apply
     if val != bytes_type:
-        raise BodoError(f"setitem for Binary Array only supported with bytes value")
+        raise BodoError(
+            f"setitem for Binary Array only supported with bytes value and integer indexing"
+        )
     if isinstance(ind, types.Integer):
 
         def impl(arr, ind, val):  # pragma: no cover
