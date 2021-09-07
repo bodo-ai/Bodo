@@ -1820,6 +1820,59 @@ def overload_cut(
     return impl
 
 
+def _get_q_list(q):  # pragma: no cover
+    return q
+
+
+@overload(_get_q_list, no_unliteral=True)
+def get_q_list_overload(q):
+    """return an array of equally spaced quantiles between 0 and 1 if 'q' is integer"""
+    if is_overload_int(q):
+        return lambda q: np.linspace(0, 1, q + 1)  # pragma: no cover
+
+    return lambda q: q  # pragma: no cover
+
+
+@overload(pd.qcut, inline="always", no_unliteral=True)
+def overload_qcut(
+    x,
+    q,
+    labels=None,
+    retbins=False,
+    precision=3,
+    duplicates="raise",
+):
+    unsupported_args = dict(
+        labels=labels,
+        retbins=retbins,
+        precision=precision,
+        duplicates=duplicates,
+    )
+    arg_defaults = dict(
+        labels=None,
+        retbins=False,
+        precision=3,
+        duplicates="raise",
+    )
+    check_unsupported_args("pd.qcut", unsupported_args, arg_defaults)
+    if not (is_overload_int(q) or is_iterable_type(q)):
+        raise BodoError("pd.qcut(): 'q' should be an integer or a list of quantiles")
+
+    # implementation is the same as pd.cut(), just uses quantiles in bins
+    # https://github.com/pandas-dev/pandas/blob/ac7c043c537990be7b4b049739d544b00138875a/pandas/core/reshape/tile.py#L368
+    def impl(
+        x, q, labels=None, retbins=False, precision=3, duplicates="raise"
+    ):  # pragma: no cover
+        q_list = _get_q_list(q)
+        arr = bodo.utils.conversion.coerce_to_array(x)
+        bins = bodo.libs.array_ops.array_op_quantile(arr, q_list)
+        return pd.cut(
+            x, bins, include_lowest=True
+        )  # TODO: add optional args when supported
+
+    return impl
+
+
 @overload_method(SeriesType, "groupby", inline="always", no_unliteral=True)
 def overload_series_groupby(
     S,

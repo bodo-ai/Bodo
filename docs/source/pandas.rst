@@ -226,6 +226,8 @@ Data manipulations:
 
 * :func:`pandas.cut` ('include_lowest' optional argument is supported)
 
+* :func:`pandas.qcut`
+
 * :func:`pandas.merge`
 
   * Arguments ``left``, ``right`` should be dataframes.
