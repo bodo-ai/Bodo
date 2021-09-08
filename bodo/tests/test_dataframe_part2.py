@@ -1477,10 +1477,6 @@ def test_iloc_getitem_row(memory_leak_check):
 def test_iloc_getitem_row_alltypes(df_value, memory_leak_check):
     """test getitem of a single row with iloc"""
 
-    # TODO: [BE-1248] Fully support getitem with binary types
-    if isinstance(df_value.iloc[0, 0], bytes):
-        return
-
     def test_impl1(df):
         return df.iloc[1]
 
@@ -1525,10 +1521,6 @@ def test_iloc_getitem_row_alltypes(df_value, memory_leak_check):
 def test_iloc_getitem_value_alltypes(df_value, memory_leak_check):
     """test getitem of a single value with iloc. The value will be returned
     as a Series."""
-
-    # TODO: [BE-1248] Fully support getitem with binary types
-    if isinstance(df_value.iloc[0, 0], bytes):
-        return
 
     def test_impl(df):
         return df.iloc[1, 0]
@@ -1599,10 +1591,6 @@ def test_iloc_getitem_rows_list_alltypes(df_value, memory_leak_check):
 @pytest.mark.slow
 def test_iloc_getitem_slice_col_alltypes(df_value, memory_leak_check):
     """test getitem of a list or rows with iloc."""
-
-    # TODO: [BE-1248] Fully support getitem with binary types
-    if isinstance(df_value.iloc[0, 0], bytes):
-        return
 
     def test_impl1(df, rows):
         return df.iloc[rows, 0:2]
@@ -1901,10 +1889,6 @@ def test_loc_setitem_str(memory_leak_check):
 
 def test_iat_getitem(df_value, memory_leak_check):
     """test df.iat[] getitem (single value)"""
-
-    # TODO: [BE-1248] Fully support getitem with binary types
-    if isinstance(df_value.iloc[0, 0], bytes):
-        return
 
     series = df_value[df_value.columns[0]]
     if series.dtype == np.dtype("datetime64[ns]"):

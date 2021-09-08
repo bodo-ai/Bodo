@@ -2661,9 +2661,9 @@ def Index_get_name(i):
 @overload(operator.getitem, no_unliteral=True)
 def overload_index_getitem(I, ind):
     # output of integer indexing is scalar value
-    if isinstance(I, (NumericIndexType, StringIndexType)) and isinstance(
-        ind, types.Integer
-    ):
+    if isinstance(
+        I, (NumericIndexType, StringIndexType, BinaryIndexType)
+    ) and isinstance(ind, types.Integer):
         return lambda I, ind: bodo.hiframes.pd_index_ext.get_index_data(I)[
             ind
         ]  # pragma: no cover
@@ -2675,7 +2675,7 @@ def overload_index_getitem(I, ind):
             bodo.hiframes.pd_index_ext.get_index_name(I),
         )  # pragma: no cover
 
-    if isinstance(I, StringIndexType):
+    if isinstance(I, (StringIndexType, BinaryIndexType)):
         return lambda I, ind: bodo.hiframes.pd_index_ext.init_binary_str_index(
             bodo.hiframes.pd_index_ext.get_index_data(I)[ind],
             bodo.hiframes.pd_index_ext.get_index_name(I),
