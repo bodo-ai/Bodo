@@ -782,11 +782,6 @@ def test_series_astype_numeric(numeric_series_val, memory_leak_check):
 # TODO: add memory_leak_check
 def test_series_astype_str(series_val):
 
-    # TODO: BE-1258 Support binary astype str
-    # (should be a no-op by pandas, currently causes an error)
-    if isinstance(series_val.values[0], bytes):
-        return
-
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return
@@ -817,6 +812,21 @@ def test_series_astype_str(series_val):
 
     def test_impl2(S):
         return S.astype(pd.StringDtype())
+
+    # In pandas, binarySeries.astype(str) will call str on each of the bytes objects,
+    # returning a string array.
+    # For example:
+    # Pandas behavior:
+    #   pd.Series([b"a", b"c"]).astypes(str) == pd.Series(["b'a'", "b'c'"])
+    # Desired Bodo Behavior:
+    #   pd.Series([b"a", b"c"]).astypes(str) == pd.Series(["a", "c"])
+    if isinstance(series_val.values[0], bytes):
+        expected_out = series_val.apply(
+            lambda bin_val: bin_val if pd.isna(bin_val) else bin_val.decode("utf-8")
+        )
+        check_func(test_impl1, (series_val,), py_output=expected_out)
+        check_func(test_impl2, (series_val,), py_output=expected_out)
+        return
 
     check_func(test_impl1, (series_val,))
     # Bodo doesn't unbox string dtypes as pd.StringDtype(), so provide a py_output

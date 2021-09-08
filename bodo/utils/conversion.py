@@ -10,6 +10,7 @@ from numba.core import types
 from numba.extending import overload
 
 import bodo
+from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (
@@ -638,6 +639,32 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
                 return A
 
             return impl_int_str
+
+        if data.dtype == bytes_type:
+            # In pandas, binarySeries.astype(str) will call str on each of the bytes objects,
+            # returning a string array.
+            # For example:
+            # Pandas behavior:
+            #   pd.Series([b"a", b"c"]).astypes(str) == pd.Series(["b'a'", "b'c'"])
+            # Desired Bodo Behavior:
+            #   pd.Series([b"a", b"c"]).astypes(str) == pd.Series(["a", "c"])
+            def impl_binary(
+                data, new_dtype, copy=None, nan_to_str=True
+            ):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(data)
+                A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
+                for j in numba.parfors.parfor.internal_prange(n):
+
+                    if bodo.libs.array_kernels.isna(data, j):
+                        bodo.libs.array_kernels.setna(A, j)
+                    else:
+                        # TODO: replace his with .encode
+                        A[j] = "".join([chr(z) for z in data[j]])
+
+                return A
+
+            return impl_binary
 
         def impl_str(data, new_dtype, copy=None, nan_to_str=True):  # pragma: no cover
             numba.parfors.parfor.init_prange()
