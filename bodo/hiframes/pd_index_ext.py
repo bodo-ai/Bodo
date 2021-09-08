@@ -312,7 +312,6 @@ def gen_dti_field_impl(field):
         func_text += "        S[i] = ts." + field + "\n"
     func_text += "    return bodo.hiframes.pd_index_ext.init_numeric_index(S, name)\n"
     loc_vars = {}
-    # print(func_text)
     exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, loc_vars)
     impl = loc_vars["impl"]
     return impl
@@ -545,7 +544,6 @@ def gen_dti_str_binop_impl(op, is_lhs_dti):
     func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
     func_text += "    S[i] = {}\n".format(comp)
     func_text += "  return S\n"
-    # print(func_text)
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, loc_vars)
     impl = loc_vars["impl"]
@@ -1305,7 +1303,6 @@ def gen_tdi_field_impl(field):
         assert False, "invalid timedelta field"
     func_text += "    return bodo.hiframes.pd_index_ext.init_numeric_index(S, name)\n"
     loc_vars = {}
-    # print(func_text)
     exec(func_text, {"numba": numba, "np": np, "bodo": bodo}, loc_vars)
     impl = loc_vars["impl"]
     return impl

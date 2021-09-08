@@ -1093,10 +1093,6 @@ def test_series_argsort_fast(memory_leak_check):
 @pytest.mark.slow
 def test_series_argsort(series_val, memory_leak_check):
 
-    # TODO: support argsort for binary type, See BE-1268
-    if isinstance(series_val.values[0], bytes):
-        return
-
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
         return

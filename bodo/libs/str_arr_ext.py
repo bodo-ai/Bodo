@@ -793,37 +793,38 @@ def get_str_null_bools(str_arr):  # pragma: no cover
     return null_bools
 
 
-# convert array to list of strings if it is StringArray
+# converts array to list of strings if it is StringArray
+# and converts array to list of bytes if it is a BinaryArray
 # just return it otherwise
-def to_string_list(arr, str_null_bools=None):  # pragma: no cover
+def to_list_if_immutable_arr(arr, str_null_bools=None):  # pragma: no cover
     return arr
 
 
-@overload(to_string_list, no_unliteral=True)
-def to_string_list_overload(data, str_null_bools=None):
+@overload(to_list_if_immutable_arr, no_unliteral=True)
+def to_list_if_immutable_arr_overload(data, str_null_bools=None):
     """if str_null_bools is True and data is tuple, output tuple contains
     an array of bools as null mask for each string array
     """
     # TODO: create a StringRandomWriteArray
-    if data == string_array_type:
+    if data in [string_array_type, binary_array_type]:
 
-        def to_string_impl(data, str_null_bools=None):  # pragma: no cover
+        def to_list_impl(data, str_null_bools=None):  # pragma: no cover
             n = len(data)
-            l_str = []
+            l = []
             for i in range(n):
-                l_str.append(data[i])
-            return l_str
+                l.append(data[i])
+            return l
 
-        return to_string_impl
+        return to_list_impl
 
     if isinstance(data, types.BaseTuple):
         count = data.count
-        out = ["to_string_list(data[{}])".format(i) for i in range(count)]
+        out = ["to_list_if_immutable_arr(data[{}])".format(i) for i in range(count)]
         if is_overload_true(str_null_bools):
             out += [
                 "get_str_null_bools(data[{}])".format(i)
                 for i in range(count)
-                if data.types[i] == string_array_type
+                if data.types[i] in [string_array_type, binary_array_type]
             ]
 
         func_text = "def f(data, str_null_bools=None):\n"
@@ -835,7 +836,7 @@ def to_string_list_overload(data, str_null_bools=None):
         exec(
             func_text,
             {
-                "to_string_list": to_string_list,
+                "to_list_if_immutable_arr": to_list_if_immutable_arr,
                 "get_str_null_bools": get_str_null_bools,
                 "bodo": bodo,
             },
