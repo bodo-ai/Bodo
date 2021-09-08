@@ -1390,7 +1390,6 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
 }
 
 // NOTE: Steals a reference from the input table.
-// Takes ownership of hashes passed
 table_info* shuffle_table(table_info* in_table, int64_t n_keys,
                           int32_t keep_comm_info, uint32_t* hashes) {
     tracing::Event ev("shuffle_table");
@@ -1400,6 +1399,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
         return NULL;
     }
 
+    const bool delete_hashes = (hashes == nullptr);
     mpi_comm_info* comm_info = new mpi_comm_info(in_table->columns);
     // computing the hash data structure
     if (hashes == nullptr)
@@ -1411,7 +1411,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
         table->comm_info = comm_info;
         table->hashes = hashes;
     } else {
-        delete[] hashes;
+        if (delete_hashes) delete[] hashes;
         delete comm_info;
     }
 

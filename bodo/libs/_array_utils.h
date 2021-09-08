@@ -619,10 +619,15 @@ inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
  * Given an array of hashes, returns estimate of number of unique hashes.
  * @param hashes: pointer to array of hashes
  * @param len: number of hashes
- * @tparam UseParallelEstimate: if `true` then do a reduction over all nodes
- *                              to get a global estimate
  */
-template <bool UseParallelEstimate>
 size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len);
+
+/**
+ * Given an array of hashes, returns estimate of number of unique hashes
+ * of the local array, and global estimate doing a reduction over all ranks.
+ * @param hashes: pointer to array of hashes
+ * @param len: number of hashes
+ */
+std::pair<size_t, size_t> get_nunique_hashes_global(uint32_t const* const hashes, const size_t len);
 
 #endif  // _ARRAY_UTILS_H_INCLUDED

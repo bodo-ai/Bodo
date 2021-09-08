@@ -1303,7 +1303,7 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
         table->columns.begin(), table->columns.begin() + table->num_keys);
     if (hashes == nullptr) {
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE);
-        nunique_hashes = get_nunique_hashes<false>(hashes, table->nrows());
+        nunique_hashes = get_nunique_hashes(hashes, table->nrows());
     }
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
     grp_infos.emplace_back();
@@ -1440,7 +1440,7 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
     uint32_t* hashes = hash_keys(key_cols, seed);
 
-    size_t nunique_hashes = get_nunique_hashes<false>(hashes, table->nrows());
+    size_t nunique_hashes = get_nunique_hashes(hashes, table->nrows());
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
     const int64_t n_keys = table->num_keys;
 
@@ -1490,7 +1490,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
     // it would mean calculating all hashes in advance
     if (hashes == nullptr) {
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE);
-        nunique_hashes = get_nunique_hashes<false>(hashes, table->nrows());
+        nunique_hashes = get_nunique_hashes(hashes, table->nrows());
     }
     grp_infos.emplace_back();
     grouping_info& grp_info = grp_infos.back();
@@ -4887,17 +4887,11 @@ class MedianColSet : public BasicColSet<ARRAY> {
 template <typename ARRAY>
 class NUniqueColSet : public BasicColSet<ARRAY> {
    public:
-    NUniqueColSet(array_info* in_col, bool _dropna,
-                  table_info* nunique_table = nullptr,
-                  bool nunique_grp_shuffle_after = false,
-                  bool nunique_only = false)
-        : BasicColSet<ARRAY>(
-              in_col, Bodo_FTypes::nunique,
-              nunique_grp_shuffle_after || nunique_only),  // do_combine
+    NUniqueColSet(array_info* in_col, bool _dropna, table_info* nunique_table,
+                  bool do_combine)
+        : BasicColSet<ARRAY>(in_col, Bodo_FTypes::nunique, do_combine),
           dropna(_dropna),
-          my_nunique_table(nunique_table),
-          nunique_grp_shuffle_after(nunique_grp_shuffle_after),
-          nunique_only(nunique_only) {}
+          my_nunique_table(nunique_table) {}
 
     virtual ~NUniqueColSet() {
         if (my_nunique_table != nullptr)
@@ -4906,7 +4900,7 @@ class NUniqueColSet : public BasicColSet<ARRAY> {
 
     virtual void update(const std::vector<grouping_info>& grp_infos) {
         // TODO: check nunique with pivot_table operation
-        if (nunique_grp_shuffle_after || nunique_only) {  // nunique_mode=0 or 2
+        if (my_nunique_table != nullptr) {
             // use the grouping_info that corresponds to my nunique table
             aggfunc_output_initialize(this->update_cols[0],
                                       Bodo_FTypes::sum);  // zero initialize
@@ -4921,10 +4915,7 @@ class NUniqueColSet : public BasicColSet<ARRAY> {
 
    private:
     bool dropna;
-    bool nunique_grp_shuffle_after;  // shuffling after update
-    bool nunique_only;  // groupby operation is only nunique on 1 or more
-                        // columns
-    table_info* my_nunique_table;
+    table_info* my_nunique_table = nullptr;
 };
 
 template <typename ARRAY>
@@ -5123,12 +5114,14 @@ void copy_values(ARRAY* update_col, ARRAY* tmp_col,
  *        (currently groupby operation that are already supported)
  */
 template <typename ARRAY>
-BasicColSet<ARRAY>* makeColSet(
-    array_info* in_col, array_info* index_col, int ftype, bool do_combine,
-    bool skipna, int64_t periods, int64_t transform_func, int n_udf,
-    int* udf_n_redvars = nullptr, table_info* udf_table = nullptr,
-    int udf_table_idx = 0, table_info* nunique_table = nullptr,
-    bool nunique_shuffle_after_update = false, bool nunique_only = false);
+BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
+                               int ftype, bool do_combine, bool skipna,
+                               int64_t periods, int64_t transform_func,
+                               int n_udf, int* udf_n_redvars = nullptr,
+                               table_info* udf_table = nullptr,
+                               int udf_table_idx = 0,
+                               table_info* nunique_table = nullptr);
+
 template <typename ARRAY>
 class TransformColSet : public BasicColSet<ARRAY> {
    public:
@@ -5320,9 +5313,7 @@ BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
                                int64_t periods, int64_t transform_func,
                                int n_udf, int* udf_n_redvars,
                                table_info* udf_table, int udf_table_idx,
-                               table_info* nunique_table,
-                               bool nunique_shuffle_after_update,
-                               bool nunique_only) {
+                               table_info* nunique_table) {
     switch (ftype) {
         case Bodo_FTypes::udf:
             return new UdfColSet<ARRAY>(in_col, do_combine, udf_table,
@@ -5334,8 +5325,7 @@ BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
             return new MedianColSet<ARRAY>(in_col, skipna);
         case Bodo_FTypes::nunique:
             return new NUniqueColSet<ARRAY>(in_col, skipna, nunique_table,
-                                            nunique_shuffle_after_update,
-                                            nunique_only);
+                                            do_combine);
         case Bodo_FTypes::cumsum:
         case Bodo_FTypes::cummin:
         case Bodo_FTypes::cummax:
@@ -5363,24 +5353,6 @@ BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
 template <typename ARRAY>
 class GroupbyPipeline {
    public:
-    /*
-     nunique operation has 3 different implementation depending on its mode.
-     1- nunique_mode=1: groupby has mix of
-     nunique and operations that require shuffling before doing an update.
-     This is the original approach. In this case, we don't use
-     drop_duplicates_table and follow `shuffle_before_update` path. 3-
-     2- nunique_mode=2: groupby has mix of nunique and operations that do
-     update and then shuffle/combine. In this mode, we create a table per
-     nunique column and does drop_duplciates_table on each of them
-     independently. Then, we update the update_cols with nunique_computation.
-     Lastly, we do shuffle and combine to reduce results (partial sum) 3-
-     nunique_mode=0: groupby has only nunique operation. In this case, we only
-     do 1st part in nunique_mode=2 (drop_duplciates_tables per nunique
-     column). We don't need to shuffle and combine since ranks already have
-     its grouping done in drop_duplicates_table step 4- nunique_mode=-1: means
-     there's no nunique operation in this groupby/agg step, or nunique is
-     serial)
-    */
     GroupbyPipeline(table_info* _in_table, int64_t _num_keys,
                     table_info* _dispatch_table, table_info* _dispatch_info,
                     bool input_has_index, bool _is_parallel, bool _is_crosstab,
@@ -5391,6 +5363,7 @@ class GroupbyPipeline {
                     int64_t periods, int64_t transform_func, bool _return_key,
                     bool _return_index, bool _key_dropna)
         : in_table(_in_table),
+          orig_in_table(_in_table),
           num_keys(_num_keys),
           dispatch_table(_dispatch_table),
           dispatch_info(_dispatch_info),
@@ -5401,35 +5374,34 @@ class GroupbyPipeline {
           key_dropna(_key_dropna),
           udf_table(_udf_table),
           udf_n_redvars(_udf_nredvars) {
-        tracing::Event ev("GroupbyPipeline()", _is_parallel);
+        tracing::Event ev("GroupbyPipeline()", is_parallel);
         if (dispatch_table == nullptr)
             n_pivot = 1;
         else
             n_pivot = dispatch_table->nrows();
         udf_info = {udf_table, update_cb, combine_cb, eval_cb, general_udfs_cb};
         // if true, the last column is the index on input and output.
-        // this is relevant only to cumulative operation like cumsum
+        // this is relevant only to cumulative operations like cumsum
         // and transform.
         int index_i = int(input_has_index);
         // NOTE cumulative operations (cumsum, cumprod, etc.) cannot be mixed
         // with non cumulative ops. This is checked at compile time in
         // aggregate.py
 
-        int table_id_counter;
-        int ftypes_count = 0;  // count if we have groupby operations that
-                               // requires shuffle after update
         bool has_udf = false;
-        for (int i = 0;
-             i < func_offsets[in_table->ncols() - num_keys - index_i]; i++) {
+        bool nunique_op = false;
+        int nunique_count = 0;
+        const int num_funcs =
+            func_offsets[in_table->ncols() - num_keys - index_i];
+        for (int i = 0; i < num_funcs; i++) {
             int ftype = ftypes[i];
             if (ftype == Bodo_FTypes::gen_udf && is_parallel)
                 shuffle_before_update = true;
-            // Don't break out of loop to see if there are other groupby
-            // operations that require shuffling before update
             if (ftype == Bodo_FTypes::udf) has_udf = true;
             if (ftype == Bodo_FTypes::nunique) {
-                if (is_parallel) nunique_op = true;
+                nunique_op = true;
                 req_extended_group_info = true;
+                nunique_count++;
             } else if (ftype == Bodo_FTypes::median ||
                        ftype == Bodo_FTypes::cumsum ||
                        ftype == Bodo_FTypes::cumprod ||
@@ -5440,7 +5412,6 @@ class GroupbyPipeline {
                 // these operations first require shuffling the data to
                 // gather all rows with the same key in the same process
                 if (is_parallel) shuffle_before_update = true;
-                nunique_grp_shuffle_before = true;
                 // these operations require extended group info
                 req_extended_group_info = true;
                 if (ftype == Bodo_FTypes::cumsum ||
@@ -5451,13 +5422,33 @@ class GroupbyPipeline {
                 if (ftype == Bodo_FTypes::shift) shift_op = true;
                 if (ftype == Bodo_FTypes::transform) transform_op = true;
                 break;
-            } else
-                ftypes_count++;
+            }
+        }
+        if (nunique_op) {
+            if (nunique_count == num_funcs) nunique_only = true;
+            ev.add_attribute("nunique_only", nunique_only);
         }
 
+        // get hashes of keys
         hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION);
+        size_t nunique_hashes_global;
+        // get estimate of number of unique hashes to guide optimization.
+        // if shuffle_before_update=true we are going to shuffle everything
+        // first so we don't need statistics of current hashes
+        if (is_parallel && !shuffle_before_update) {
+            if (nunique_op)
+                // nunique_hashes_global is currently only used for gb.nunique
+                // heuristic
+                std::tie(nunique_hashes, nunique_hashes_global) =
+                    get_nunique_hashes_global(hashes, in_table->nrows());
+            else
+                nunique_hashes = get_nunique_hashes(hashes, in_table->nrows());
+        } else if (!is_parallel) {
+            nunique_hashes = get_nunique_hashes(hashes, in_table->nrows());
+        }
 
-        if (is_parallel && (dispatch_table == nullptr) && !has_udf && !shuffle_before_update) {
+        if (is_parallel && (dispatch_table == nullptr) && !has_udf &&
+            !shuffle_before_update) {
             // If the estimated number of groups (given by nunique_hashes)
             // is similar to the number of input rows, then it's better to
             // shuffle first instead of doing a local reduction
@@ -5465,191 +5456,52 @@ class GroupbyPipeline {
             // TODO To do this with UDF functions we need to generate
             // two versions of UDFs at compile time (one for
             // shuffle_before_update=true and one for
-            // shuffle_before_update=false
+            // shuffle_before_update=false)
 
-            int num_ranks;
-            MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-            nunique_hashes =
-                get_nunique_hashes<false>(hashes, in_table->nrows());
-            int shuffle_before_update_count_s = 0;
-            int shuffle_before_update_count;
-            double groups_in_nrows_ratio = double(nunique_hashes) / in_table->nrows();
+            int shuffle_before_update_local = 0;
+            const float groups_in_nrows_ratio =
+                float(nunique_hashes) / in_table->nrows();
             if (groups_in_nrows_ratio >= 0.9)  // XXX what threshold is best?
-                shuffle_before_update_count_s = 1;
-            MPI_Allreduce(&shuffle_before_update_count_s,
+                shuffle_before_update_local = 1;
+            ev.add_attribute("groups_in_nrows_ratio", groups_in_nrows_ratio);
+            ev.add_attribute("shuffle_before_update_local",
+                             shuffle_before_update_local);
+            // global count of ranks that decide to shuffle before update
+            int shuffle_before_update_count;
+            MPI_Allreduce(&shuffle_before_update_local,
                           &shuffle_before_update_count, 1, MPI_INT, MPI_SUM,
                           MPI_COMM_WORLD);
             // TODO Need a better threshold or cost model to decide when
-            // to shuffle
-            if (shuffle_before_update_count >= num_ranks * 0.5) {
+            // to shuffle: https://bodo.atlassian.net/browse/BE-1140
+            int num_ranks;
+            MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+            if (shuffle_before_update_count >= num_ranks * 0.5)
                 shuffle_before_update = true;
-                nunique_grp_shuffle_before = true;
-            }
-            ev.add_attribute("groups_in_nrows_ratio", groups_in_nrows_ratio);
-            ev.add_attribute("shuffle_before_update_count_s", shuffle_before_update_count_s);
-        } else if (!is_parallel) {
-            nunique_hashes =
-                get_nunique_hashes<false>(hashes, in_table->nrows());
         }
 
-        if (nunique_op) {
-            if (nunique_grp_shuffle_before)
-                nunique_mode = 1;
-            else if (ftypes_count == 0) {
-                nunique_only = true;
-                nunique_mode = 0;
+        if (shuffle_before_update) {
+            // Code below is equivalent to:
+            // table_info* in_table = shuffle_table(in_table, num_keys)
+            // We do this more complicated construction because we may
+            // need the hashes and comm_info later.
+            comm_info_ptr = new mpi_comm_info(in_table->columns);
+            comm_info_ptr->set_counts(hashes);
+            // shuffle_table_kernel steals the reference but we still
+            // need it for the code after C++ groupby
+            for (auto a : in_table->columns) incref_array(a);
+            in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr);
+            if (!(cumulative_op || shift_op || transform_op)) {
+                delete[] hashes;
+                delete comm_info_ptr;
             } else {
-                nunique_grp_shuffle_after = true;
-                nunique_mode = 2;
+                // preserve input table hashes for reverse shuffle at the end
+                in_hashes = hashes;
             }
-        }
-        // If it's just nunique we set count to 0 as we won't add in_table to
-        // our list of tables Otherwise, set to 1 as 0 is reserved for in_table
-        if (nunique_only)
-            table_id_counter = 0;
-        else
-            table_id_counter = 1;
-        switch (nunique_mode) {
-            // TODO: Move to a function
-            case -1:  // groupby without nunique or sequential nunique
-            case 1:   // nunique + groupby function that requires shuffle
-                      // before update.
-                if (shuffle_before_update) {
-                    // Code below is equivalent to:
-                    // table_info* in_table = shuffle_table(in_table, num_keys)
-                    // We do this more complicated construction because we may
-                    // need later the hashes and comm_info.
-                    comm_info_ptr = new mpi_comm_info(in_table->columns);
-                    comm_info_ptr->set_counts(hashes);
-                    // shuffle_table_kernel steals the reference but we still
-                    // need it for the code after C++ groupby
-                    for (auto a : in_table->columns) incref_array(a);
-                    in_table =
-                        shuffle_table_kernel(in_table, hashes, *comm_info_ptr);
-                    if (!(cumulative_op || shift_op || transform_op)) {
-                        delete hashes;
-                        delete comm_info_ptr;
-                    } else {
-                        // preserve input table hashes for reverse shuffle at
-                        // the end
-                        in_hashes = hashes;
-                    }
-                    hashes = nullptr;
-                }
-                break;
-            case 0:  // nunique operation only. Drop duplicates
-            case 2:  // nunique + groupby_functions that needs shuffle after
-                     // update.
-                // Create a table for each nunique col and send for
-                // drop_duplicates.
-                static constexpr float threshold_of_fraction_of_unique_hash =
-                    0.5;
-                ev.add_attribute("g_threshold_of_fraction_of_unique_hash",
-                                 threshold_of_fraction_of_unique_hash);
-                for (int i = 0, column_index = num_keys;
-                     i < func_offsets[in_table->ncols() - num_keys - index_i];
-                     i++, column_index++) {
-                    if (ftypes[i] == Bodo_FTypes::nunique) {
-                        table_info* tmp = new table_info();
-                        tmp->columns.assign(
-                            in_table->columns.begin(),
-                            in_table->columns.begin() + num_keys);
-                        tmp->num_keys = num_keys;
-                        push_back_arrays(tmp->columns,
-                                         in_table->columns[column_index]);
-
-                        // If we know that the |set(values)|/len(values)
-                        // is low on all ranks then it should be beneficial to
-                        // drop local duplicates before the shuffle.
-
-                        const size_t n_rows =
-                            static_cast<size_t>(in_table->nrows());
-                        // get hashes of keys+value
-                        uint32_t* key_value_hashes = new uint32_t[n_rows];
-                        memcpy(key_value_hashes, hashes,
-                               sizeof(uint32_t) * n_rows);
-                        // TODO: do a combine which writes to an empty hash
-                        // array to avoid memcpy?
-                        hash_array_combine(key_value_hashes,
-                                           tmp->columns[num_keys], n_rows,
-                                           SEED_HASH_PARTITION);
-
-                        // Compute the local fraction of unique hashes
-                        size_t nunique_keyval_hashes =
-                            get_nunique_hashes<false>(key_value_hashes, n_rows);
-                        float local_fraction_unique_hashes =
-                            static_cast<float>(nunique_keyval_hashes) /
-                            static_cast<float>(n_rows);
-                        float global_fraction_unique_hashes;
-                        if (ev.is_tracing())
-                            ev.add_attribute(
-                                "nunique_" + std::to_string(i) +
-                                    "_local_fraction_unique_hashes",
-                                local_fraction_unique_hashes);
-                        MPI_Allreduce(&local_fraction_unique_hashes,
-                                      &global_fraction_unique_hashes, 1,
-                                      MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-                        int num_ranks = 0;
-                        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-                        global_fraction_unique_hashes /=
-                            static_cast<float>(num_ranks);
-                        ev.add_attribute("g_nunique_" + std::to_string(i) +
-                                             "_global_fraction_unique_hashes",
-                                         global_fraction_unique_hashes);
-
-                        table_info* tmp2 = nullptr;
-
-                        // Regardless of which path is taken, the reference
-                        // to the original input arrays is going to be
-                        // decremented (by either drop_duplicates_table_inner or
-                        // shuffle_table), but we still need it for the code
-                        // after C++ groupby
-                        for (auto a : tmp->columns) incref_array(a);
-                        // NOTE: to improve scaling the shuffle spreads based on
-                        // the keys *and* also the values. If we only spread
-                        // based on keys, scaling will be limited by the number
-                        // of groups, which is sometimes very small compared to
-                        // the number of cores
-                        if (global_fraction_unique_hashes <
-                            threshold_of_fraction_of_unique_hash) {
-                            ev.add_attribute("g_nunique_" + std::to_string(i) +
-                                                 "_drop_duplicates",
-                                             true);
-                            // Set dropna to false because skipna is handled at
-                            // a later step. Setting dropna=True here removes NA
-                            // from the keys, which we do not want
-                            tmp2 = drop_duplicates_table_inner(
-                                tmp, tmp->ncols(), 0, 1, false,
-                                key_value_hashes);
-                            delete tmp;
-                            tmp = tmp2;
-                            // Note that tmp here no longer contains the
-                            // original input arrays
-                            tmp2 = shuffle_table(tmp, tmp->ncols());
-                        } else {
-                            ev.add_attribute("g_nunique_" + std::to_string(i) +
-                                                 "_drop_duplicates",
-                                             false);
-                            // Since the arrays are unmodified we can reuse the
-                            // hashes. shuffle_table will take ownership and
-                            // delete them when done
-                            tmp2 = shuffle_table(tmp, tmp->ncols(), false,
-                                                 key_value_hashes);
-                        }
-                        delete tmp;
-                        tmp2->num_keys = num_keys;
-                        tmp2->id = table_id_counter++;
-                        nunique_tables[column_index] = tmp2;
-                    }
-                }
-                if (nunique_only) {
-                    // in the case of nunique_only the hashes that we
-                    // calculated above are not valid, since we have
-                    // shuffled all of the input columns
-                    delete[] hashes;
-                    hashes = nullptr;
-                }
-                break;
+            hashes = nullptr;
+        } else if (nunique_op && is_parallel) {
+            // **NOTE**: gb_nunique_preprocess can set
+            // shuffle_before_update=true in some cases
+            gb_nunique_preprocess(ftypes, num_funcs, nunique_hashes_global);
         }
 
         // a combine operation is only necessary when data is distributed and
@@ -5660,26 +5512,26 @@ class GroupbyPipeline {
         if (input_has_index)
             index_col = in_table->columns[in_table->columns.size() - 1];
 
-        // construct the column sets, one for each (input_column, func) pair
+        // construct the column sets, one for each (input_column, func) pair.
         // ftypes is an array of function types received from generated code,
         // and has one ftype for each (input_column, func) pair
         int k = 0;
         n_udf = 0;
-        for (int64_t i = num_keys; i < in_table->ncols() - index_i; i++, k++) {
+        for (int64_t i = num_keys; i < in_table->ncols() - index_i;
+             i++, k++) {  // for each data column
             array_info* col = in_table->columns[i];
             int start = func_offsets[k];
             int end = func_offsets[k + 1];
-            for (int j = start; j != end; j++) {
-                // nunique_mode == 0 or 2
+            for (int j = start; j != end;
+                 j++) {  // for each function applied to this column
                 if (ftypes[j] == Bodo_FTypes::nunique &&
-                    (nunique_grp_shuffle_after || nunique_only)) {
+                    (nunique_tables.size() > 0)) {
                     array_info* nunique_col =
                         nunique_tables[i]->columns[num_keys];
                     col_sets.push_back(makeColSet<ARRAY>(
                         nunique_col, index_col, ftypes[j], do_combine, skipna,
                         periods, transform_func, n_udf, udf_n_redvars,
-                        udf_table, udf_table_idx, nunique_tables[i],
-                        nunique_grp_shuffle_after, nunique_only));
+                        udf_table, udf_table_idx, nunique_tables[i]));
                 } else {
                     col_sets.push_back(makeColSet<ARRAY>(
                         col, index_col, ftypes[j], do_combine, skipna, periods,
@@ -5696,7 +5548,8 @@ class GroupbyPipeline {
                                 col_sets.back()));
                     }
                 }
-                ev.add_attribute("g_column_ftype_"+std::to_string(j), size_t(ftypes[j]));
+                ev.add_attribute("g_column_ftype_" + std::to_string(j),
+                                 ftypes[j]);
             }
         }
         // This is needed if aggregation was just size operation, it will skip
@@ -5709,7 +5562,8 @@ class GroupbyPipeline {
         }
 
         in_table->id = 0;
-        ev.add_attribute("g_shuffle_before_update", size_t(shuffle_before_update));
+        ev.add_attribute("g_shuffle_before_update",
+                         size_t(shuffle_before_update));
         ev.add_attribute("g_do_combine", size_t(do_combine));
     }
 
@@ -5724,9 +5578,9 @@ class GroupbyPipeline {
     table_info* run() {
         update();
         if (shuffle_before_update) {
-            // in_table was created in C++ during shuffling and not needed
-            // anymore
-            delete_table_decref_arrays(in_table);
+            if (in_table != orig_in_table)
+                // in_table is temporary table created in C++
+                delete_table_decref_arrays(in_table);
         }
         if (is_parallel && !shuffle_before_update) {
             shuffle();
@@ -5746,15 +5600,16 @@ class GroupbyPipeline {
         tracing::Event ev("update", is_parallel);
         in_table->num_keys = num_keys;
         std::vector<table_info*> tables;
-        // Add in_table if operation doesn't include nunique or has nunique
-        // mixed with other operations This is because in_table has columns with
-        // other operations.
-        if (!nunique_only) tables.push_back(in_table);
+        // If nunique_only and nunique_tables.size() > 0 then all of the input
+        // data is in nunique_tables
+        if (!(nunique_only && nunique_tables.size() > 0))
+            tables.push_back(in_table);
         for (auto it = nunique_tables.begin(); it != nunique_tables.end(); it++)
             tables.push_back(it->second);
 
         if (req_extended_group_info) {
-            bool consider_missing = cumulative_op || shift_op || transform_op;
+            const bool consider_missing =
+                cumulative_op || shift_op || transform_op;
             get_group_info_iterate(tables, hashes, nunique_hashes, grp_infos,
                                    consider_missing, key_dropna);
         } else
@@ -5889,13 +5744,183 @@ class GroupbyPipeline {
         if ((cumulative_op || shift_op || transform_op) && is_parallel) {
             table_info* revshuf_table = reverse_shuffle_table_kernel(
                 out_table, in_hashes, *comm_info_ptr);
-            delete in_hashes;
+            delete[] in_hashes;
             delete comm_info_ptr;
             delete_table(out_table);
             out_table = revshuf_table;
         }
         delete cur_table;
         return out_table;
+    }
+
+    /**
+     * We enter this algorithm at the beginning of the groupby pipeline, if
+     * there are gb.nunique operations and there is no other operation that
+     * requires shuffling before update. This algorithm decides, for each
+     * nunique column, whether all ranks drop duplicates locally for that column
+     * based on average local cardinality estimates across all ranks, and will
+     * also decide how to shuffle all the nunique columns (it will use the same
+     * scheme to shuffle all the nunique columns since the decision is not
+     * based on the characteristics on any particular column). There are two
+     * strategies for shuffling:
+     * a) Shuffle based on groupby keys. Shuffles nunique data to its final
+     *    destination. If there are no other groupby operations other than
+     *    nunique then this equals shuffle_before_update=true and we just
+     *    need an update and eval step (no second shuffle and combine). But
+     *    if there are other operations mixed in, for simplicity we will do
+     *    update, shuffle and combine step for nunique columns even though
+     *    the nunique data is already in the final destination.
+     * b) Shuffle based on keys+value. This is done if the number of *global*
+     *    groups is small compared to the number of ranks, since shuffling
+     *    based on keys in this case can generate significant load imbalance.
+     *    In this case the update step calculates number of unique values
+     *    for (key, value) tuples, the second shuffle (after update) collects
+     *    the nuniques for a given group on the same rank, and the combine sums
+     *    them.
+     * @param ftypes: list of groupby function types passed directly from
+     * GroupbyPipeline constructor.
+     * @param num_funcs: number of functions in ftypes
+     * @param nunique_hashes_global: estimated number of global unique hashes
+     * of groupby keys (gives an estimate of global number of unique groups)
+     */
+    void gb_nunique_preprocess(int* ftypes, int num_funcs,
+                               size_t nunique_hashes_global) {
+        tracing::Event ev("gb_nunique_preprocess");
+        if (!is_parallel)
+            throw std::runtime_error(
+                "gb_nunique_preprocess called for non-distributed data");
+        if (shuffle_before_update)
+            throw std::runtime_error(
+                "gb_nunique_preprocess called with shuffle_before_update=true");
+
+        // If it's just nunique we set table_id_counter to 0 because we won't
+        // add in_table to our list of tables. Otherwise, set to 1 as 0 is
+        // reserved for in_table
+        int table_id_counter;
+        if (nunique_only)
+            table_id_counter = 0;
+        else
+            table_id_counter = 1;
+
+        static constexpr float threshold_of_fraction_of_unique_hash = 0.5;
+        ev.add_attribute("g_threshold_of_fraction_of_unique_hash",
+                         threshold_of_fraction_of_unique_hash);
+
+        // If the number of global groups is small we need to shuffle
+        // based on keys *and* values to maximize data distribution
+        // and improve scaling. If we only spread based on keys, scaling
+        // will be limited by the number of groups.
+        int num_ranks;
+        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+        // When number of groups starts to approximate the number of ranks
+        // there will be a high chance that a single rank ends up with 2-3
+        // times the load (number of groups) than others after shuffling
+        // TODO investigate what is the best threshold:
+        // https://bodo.atlassian.net/browse/BE-1308
+        const bool shuffle_by_keys_and_value =
+            (nunique_hashes_global <= num_ranks * 3);
+        ev.add_attribute("g_nunique_shuffle_by_keys_and_values",
+                         shuffle_by_keys_and_value);
+
+        for (int i = 0, col_idx = num_keys; i < num_funcs; i++, col_idx++) {
+            if (ftypes[i] != Bodo_FTypes::nunique) continue;
+
+            table_info* tmp = new table_info();
+            tmp->columns.assign(in_table->columns.begin(),
+                                in_table->columns.begin() + num_keys);
+            tmp->num_keys = num_keys;
+            push_back_arrays(tmp->columns, in_table->columns[col_idx]);
+
+            // --------- drop local duplicates ---------
+            // If we know that the |set(values)| / len(values)
+            // is low on all ranks then it should be beneficial to
+            // drop local duplicates before the shuffle.
+
+            const size_t n_rows = static_cast<size_t>(in_table->nrows());
+            // get hashes of keys+value
+            uint32_t* key_value_hashes = new uint32_t[n_rows];
+            memcpy(key_value_hashes, hashes, sizeof(uint32_t) * n_rows);
+            // TODO: do a hash combine that writes to an empty hash
+            // array to avoid memcpy?
+            hash_array_combine(key_value_hashes, tmp->columns[num_keys], n_rows,
+                               SEED_HASH_PARTITION);
+
+            // Compute the local fraction of unique hashes
+            size_t nunique_keyval_hashes =
+                get_nunique_hashes(key_value_hashes, n_rows);
+            float local_fraction_unique_hashes =
+                static_cast<float>(nunique_keyval_hashes) /
+                static_cast<float>(n_rows);
+            float global_fraction_unique_hashes;
+            if (ev.is_tracing())
+                ev.add_attribute("nunique_" + std::to_string(i) +
+                                     "_local_fraction_unique_hashes",
+                                 local_fraction_unique_hashes);
+            MPI_Allreduce(&local_fraction_unique_hashes,
+                          &global_fraction_unique_hashes, 1, MPI_FLOAT, MPI_SUM,
+                          MPI_COMM_WORLD);
+            global_fraction_unique_hashes /= static_cast<float>(num_ranks);
+            ev.add_attribute("g_nunique_" + std::to_string(i) +
+                                 "_global_fraction_unique_hashes",
+                             global_fraction_unique_hashes);
+            const bool drop_duplicates = global_fraction_unique_hashes <
+                                         threshold_of_fraction_of_unique_hash;
+            ev.add_attribute(
+                "g_nunique_" + std::to_string(i) + "_drop_duplicates",
+                drop_duplicates);
+
+            // Regardless of whether we drop duplicates or not, the references
+            // to the original input arrays are going to be decremented (by
+            // either drop_duplicates_table_inner or shuffle_table), but we
+            // still need the references for the code after C++ groupby
+            for (auto a : tmp->columns) incref_array(a);
+            table_info* tmp2 = nullptr;
+            if (drop_duplicates) {
+                // Set dropna to false because skipna is handled at
+                // a later step. Setting dropna=True here removes NA
+                // from the keys, which we do not want
+                tmp2 = drop_duplicates_table_inner(tmp, tmp->ncols(), 0, 1,
+                                                   false, key_value_hashes);
+                delete tmp;
+                tmp = tmp2;
+            }
+
+            // --------- shuffle column ---------
+            if (shuffle_by_keys_and_value) {
+                if (drop_duplicates)
+                    // Note that tmp here no longer contains the
+                    // original input arrays
+                    tmp2 = shuffle_table(tmp, tmp->ncols());
+                else
+                    // Since the arrays are unmodified we can reuse the hashes
+                    tmp2 = shuffle_table(tmp, tmp->ncols(), false,
+                                         key_value_hashes);
+            } else {
+                if (drop_duplicates)
+                    tmp2 = shuffle_table(tmp, num_keys);
+                else
+                    tmp2 = shuffle_table(tmp, num_keys, false, hashes);
+            }
+            delete[] key_value_hashes;
+            delete tmp;
+            tmp2->num_keys = num_keys;
+            tmp2->id = table_id_counter++;
+            nunique_tables[col_idx] = tmp2;
+        }
+
+        if (!shuffle_by_keys_and_value && nunique_only)
+            // We have shuffled the data to its final destination so this is
+            // equivalent to shuffle_before_update=true and we don't need to
+            // do a combine step
+            shuffle_before_update = true;
+
+        if (nunique_only) {
+            // in the case of nunique_only the hashes that we calculated in
+            // GroupbyPipeline() are not valid, since we have shuffled all of
+            // the input columns
+            delete[] hashes;
+            hashes = nullptr;
+        }
     }
 
     void find_key_for_group(int64_t group,
@@ -6040,6 +6065,8 @@ class GroupbyPipeline {
         }
     }
 
+    table_info*
+        orig_in_table;  // original input table of groupby received from Python
     table_info* in_table;  // input table of groupby
     int64_t num_keys;
     table_info* dispatch_table;  // input dispatching table of pivot_table
@@ -6068,24 +6095,10 @@ class GroupbyPipeline {
     bool req_extended_group_info = false;
     bool do_combine;
 
-    std::map<int, table_info*>
-        nunique_tables;  // column position in in_table, table that contains key
-                         // columns + one nunique column after
-                         // drop_duplicates_table
-    int nunique_mode =
-        -1;  //-1: no nunique, 0: just nunique, 1: nunique+(groupyby with
-             // shuffle_before_update), 2: (nunique+groupby with do_combine)
-    // These flags are used to determine the nunique mode. They are set during
-    // iteration over type of functions. Then, they are used to set
-    // nunique_mode.
-    bool nunique_op = false;
-    bool nunique_only = false;
-    bool nunique_grp_shuffle_before =
-        false;  // indicates that groupby/agg has nunique and another operation
-                // that requires shuffling before update (e.g. cummin)
-    bool nunique_grp_shuffle_after =
-        false;  // indicates that groupby/agg has nunique and another operation
-                // that requires a shuffle and combine after update (e.g. sum)
+    // column position in in_table -> table that contains key columns + one
+    // nunique column after [dropping local duplicates] + shuffling
+    std::map<int, table_info*> nunique_tables;
+    bool nunique_only = false;  // there are only groupby nunique operations
 
     udfinfo_t udf_info;
 
