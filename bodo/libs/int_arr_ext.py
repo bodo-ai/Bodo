@@ -901,7 +901,6 @@ def concat_bitmap_tup(arrs):
         )
         func_text += "    curr_bit += 1\n"
     func_text += "  return new_mask\n"
-    # print(func_text)
     loc_vars = {}
     exec(func_text, {"np": np, "bodo": bodo}, loc_vars)
     impl = loc_vars["f"]

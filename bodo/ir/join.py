@@ -28,6 +28,7 @@ from bodo.libs.array import (
     info_to_array,
     shuffle_table,
 )
+from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import (
@@ -1219,7 +1220,7 @@ def write_data_buff_overload(meta, node_id, i, key_arrs, data):
     n_keys = len(key_arrs.types)
     for i, typ in enumerate(key_arrs.types + data.types):
         arr = "key_arrs[{}]".format(i) if i < n_keys else "data[{}]".format(i - n_keys)
-        if not typ in (string_type, string_array_type):
+        if not typ in (string_type, string_array_type, binary_array_type, bytes_type):
             func_text += "  meta.send_buff_tup[{}][w_ind] = {}[i]\n".format(i, arr)
         else:
             func_text += "  n_chars_{} = get_str_arr_item_length({}, i)\n".format(

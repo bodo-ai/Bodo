@@ -1715,7 +1715,6 @@ class SeriesPass:
                     ndim
                 )
             func_text += "  return A\n"
-            # print(func_text)
 
             loc_vars = {}
             exec(func_text, {}, loc_vars)

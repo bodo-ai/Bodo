@@ -1371,7 +1371,6 @@ class UntypedPass:
         )
         loc_vars = {}
         exec(func_text, {}, loc_vars)
-        # print(func_text)
         _init_df = loc_vars["_init_df"]
 
         nodes += compile_func_single_block(_init_df, data_arrs, lhs)
@@ -1562,7 +1561,6 @@ class UntypedPass:
         )
         loc_vars = {}
         exec(func_text, {}, loc_vars)
-        # print(func_text)
         _init_df = loc_vars["_init_df"]
 
         nodes += compile_func_single_block(_init_df, data_arrs, lhs)

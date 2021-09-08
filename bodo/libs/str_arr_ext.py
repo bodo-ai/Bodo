@@ -489,14 +489,12 @@ def get_data_ptr(typingctx, in_arr_typ=None):
 
 
 @intrinsic
-def get_data_ptr_ind(typingctx, str_arr_typ, int_t=None):
-    assert str_arr_typ == string_array_type
+def get_data_ptr_ind(typingctx, in_arr_typ, int_t=None):
+    assert in_arr_typ in [binary_array_type, string_array_type]
 
     def codegen(context, builder, sig, args):
-        in_str_arr, ind = args
-        payload = _get_str_binary_arr_payload(
-            context, builder, in_str_arr, string_array_type
-        )
+        in_arr, ind = args
+        payload = _get_str_binary_arr_payload(context, builder, in_arr, sig.args[0])
         data_arr = context.make_helper(builder, char_arr_type, payload.data)
 
         # Create new ArrayCType structure
@@ -506,7 +504,7 @@ def get_data_ptr_ind(typingctx, str_arr_typ, int_t=None):
         res = ctinfo._getvalue()
         return impl_ret_borrowed(context, builder, data_ctypes_type, res)
 
-    return data_ctypes_type(string_array_type, types.intp), codegen
+    return data_ctypes_type(in_arr_typ, types.intp), codegen
 
 
 @intrinsic
