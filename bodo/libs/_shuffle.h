@@ -46,9 +46,8 @@ struct shuffle_info {
  * @param n_keys   : the number of keys for comparison.
  * @param keep_comm_info : specifies if shuffle information should be kept in
  * output table, to be used for reverse shuffle later (e.g. in groupby apply).
- * @param hashes : hashes can be provided by caller and this function won't
- *        calculate them, but this function takes ownership
- * @return the new table after the shuffling-
+ * @param hashes : provide precalculated hashes
+ * @return the new table after shuffling
  */
 table_info* shuffle_table(table_info* in_table, int64_t n_keys,
                           int32_t keep_comm_info = 0, uint32_t* hashes=nullptr);

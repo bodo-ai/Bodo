@@ -116,6 +116,12 @@ public:
         }
     }
 
+    void addAll(uint32_t const* const hashes, const size_t len) {
+        for (size_t i = 0; i < len; i++) {
+            add(hashes[i]);
+        }
+    }
+
     /**
      * Estimates cardinality value.
      *

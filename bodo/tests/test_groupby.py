@@ -1777,7 +1777,40 @@ def test_groupby_agg_func_list(memory_leak_check):
     assert not dist_IR_contains(f_ir, "global(cpp_cb_general:")
 
 
-def test_groupby_nunique(memory_leak_check):
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 1, 2, 2, 1],
+                "D": ["AA", "B", "BB", "B", "AA", "AA", "B"],
+                "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, 7.1],
+                "C": [3, 5, 6, 5, 4, 4, 3],
+                "E": [3, 3, 3, 4, 5, 6, 2],
+                "F": [b"AA", b"B", b"BB", b"B", b"AA", b"AA", b"B"],
+            },
+            index=np.arange(10, 17),
+        ),
+        # There are many different paths that the gb nunique heuristic can
+        # take (see gb_nunique_preprocess in _groupby.cpp). To try to test
+        # most or all of these paths, this dataframe makes it so that for
+        # np3 there are 20 unique groups locally but the ratio of
+        # groups/num_local_rows is small enough so that
+        # shuffle_before_update=false, and column B has enough duplicates
+        # per group locally on each rank so that the nunique algorithm
+        # decides to drop them before shuffling, but not for column D.
+        # And the number of groups is large enough that nunique decides to
+        # shuffle based on keys (instead of keys+values). Shuffling based
+        # on keys+values is the common case in CI and is tested elsewhere.
+        pytest.param(
+            pd.DataFrame(
+                {"A": list(range(20)) * 12, "D": list(range(40)) * 6, "B": [0] * 240}
+            ),
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_groupby_nunique(df, memory_leak_check):
     """
     Test nunique only and with groupy.agg (nunique_mode:0, 1,2)
     """
@@ -1802,17 +1835,6 @@ def test_groupby_nunique(memory_leak_check):
         df2 = df.groupby("A").nunique()
         return df2
 
-    df = pd.DataFrame(
-        {
-            "A": [2, 1, 1, 1, 2, 2, 1],
-            "D": ["AA", "B", "BB", "B", "AA", "AA", "B"],
-            "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, 7.1],
-            "C": [3, 5, 6, 5, 4, 4, 3],
-            "E": [3, 3, 3, 4, 5, 6, 2],
-            "F": [b"AA", b"B", b"BB", b"B", b"AA", b"AA", b"B"],
-        },
-        index=np.arange(10, 17),
-    )
     check_func(impl0, (df,), sort_output=True)
     check_func(impl1, (df,), sort_output=True)
     check_func(impl2, (df,), sort_output=True)
