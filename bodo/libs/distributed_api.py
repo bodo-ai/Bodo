@@ -2584,7 +2584,6 @@ def alltoallv_tup(
 def alltoallv_tup_overload(
     send_data, out_data, send_counts, recv_counts, send_disp, recv_disp
 ):
-
     count = send_data.count
     assert out_data.count == count
 

@@ -1114,7 +1114,6 @@ def create_str2str_methods_overload(func_name):
             "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
         )
         loc_vars = {}
-        # print(func_text)
         exec(
             func_text,
             {
@@ -1151,7 +1150,6 @@ def create_str2bool_methods_overload(func_name):
         func_text += "    return bodo.hiframes.pd_series_ext.init_series(\n"
         func_text += "      out_arr,index, name)\n"
         loc_vars = {}
-        # print(func_text)
         exec(
             func_text,
             {

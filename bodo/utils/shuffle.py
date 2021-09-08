@@ -2,7 +2,6 @@
 """
 helper data structures and functions for shuffle (alltoall).
 """
-
 import os
 from collections import namedtuple
 
@@ -14,6 +13,7 @@ from numba.extending import overload
 
 import bodo
 from bodo.libs.array_item_arr_ext import offset_type
+from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
@@ -25,7 +25,6 @@ from bodo.libs.str_arr_ext import (
     get_offset_ptr,
     get_str_arr_item_length,
     num_total_chars,
-    pre_alloc_string_array,
     print_str_arr,
     set_bit_to,
     string_array_type,
@@ -100,7 +99,7 @@ def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
             if i < n_keys
             else "  arr = data[{}]\n".format(i - n_keys)
         )
-        if typ == string_array_type:
+        if typ in [string_array_type, binary_array_type]:
             func_text += "  send_counts_char_{} = np.zeros(n_pes, np.int32)\n".format(i)
             func_text += "  send_arr_lens_{} = np.empty(0, np.uint32)\n".format(i)
             # needs allocation since written in update before finalize
@@ -112,7 +111,7 @@ def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
             func_text += "  send_counts_char_{} = None\n".format(i)
             func_text += "  send_arr_lens_{} = None\n".format(i)
 
-        # null masks for string array, int array
+        # null masks for string, binary, and int array
         if is_null_masked_type(typ):
             func_text += "  send_arr_nulls_{} = np.empty(0, np.uint8)\n".format(i)
             # allocate null bytes, 2 * n_pes extra space since bits are
@@ -136,7 +135,6 @@ def alloc_pre_shuffle_metadata_overload(key_arrs, data, n_pes, is_contig):
         )
     )
 
-    # print(func_text)
     loc_vars = {}
     exec(func_text, {"np": np, "PreShuffleMeta": PreShuffleMeta}, loc_vars)
     alloc_impl = loc_vars["f"]
@@ -171,7 +169,7 @@ def update_shuffle_meta_overload(
         func_text += "    print('large shuffle error')\n"
     n_keys = len(key_arrs.types)
     for i, typ in enumerate(key_arrs.types + data.types):
-        if typ in (string_type, string_array_type):
+        if typ in (string_type, string_array_type, bytes_type, binary_array_type):
             arr = (
                 "key_arrs[{}]".format(i)
                 if i < n_keys
@@ -204,7 +202,6 @@ def update_shuffle_meta_overload(
                 )
             func_text += "    set_bit_to(out_bitmap, padded_bits + ind, bit_val)\n"
 
-    # print(func_text)
     loc_vars = {}
     exec(
         func_text,
@@ -267,7 +264,12 @@ def finalize_shuffle_meta_overload(
             if i < n_keys
             else "  arr = data[{}]\n".format(i - n_keys)
         )
-        if typ == string_array_type:
+        if typ in [string_array_type, binary_array_type]:
+            if typ == string_array_type:
+                alloc_fn = "bodo.libs.str_arr_ext.pre_alloc_string_array"
+            else:
+                alloc_fn = "bodo.libs.binary_arr_ext.pre_alloc_binary_array"
+
             # send_buff is None for strings
             func_text += "  send_buff_{} = None\n".format(i)
             # send/recv counts
@@ -281,9 +283,7 @@ def finalize_shuffle_meta_overload(
             ).format(i, i)
             # alloc output
             func_text += "  n_all_chars = recv_counts_char_{}.sum()\n".format(i)
-            func_text += (
-                "  out_arr_{} = pre_alloc_string_array(n_out, n_all_chars)\n".format(i)
-            )
+            func_text += "  out_arr_{} = {}(n_out, n_all_chars)\n".format(i, alloc_fn)
             # send/recv disp
             func_text += (
                 "  send_disp_char_{} = bodo.ir.join." "calc_disp(send_counts_char_{})\n"
@@ -406,15 +406,12 @@ def finalize_shuffle_meta_overload(
         all_comma,
     )
 
-    # print(func_text)
-
     loc_vars = {}
     exec(
         func_text,
         {
             "np": np,
             "bodo": bodo,
-            "pre_alloc_string_array": pre_alloc_string_array,
             "num_total_chars": num_total_chars,
             "get_data_ptr": get_data_ptr,
             "ShuffleMeta": ShuffleMeta,
@@ -463,7 +460,7 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
                 "meta.recv_counts, meta.send_disp, meta.recv_disp)\n"
             ).format(i, i)
         else:
-            assert typ == string_array_type
+            assert typ in [string_array_type, binary_array_type]
             func_text += (
                 "  offset_ptr_{} = get_offset_ptr(meta.out_arr_tup[{}])\n".format(i, i)
             )
@@ -520,8 +517,6 @@ def alltoallv_tup_overload(arrs, meta, key_arrs):
         ",".join(["meta.out_arr_tup[{}]".format(i) for i in range(arrs.count)]),
         "," if arrs.count == 1 else "",
     )
-    # print(func_text)
-
     int32_typ_enum = np.int32(numba_to_c_type(types.int32))
     char_typ_enum = np.int32(numba_to_c_type(types.uint8))
     loc_vars = {}
@@ -682,15 +677,21 @@ def val_to_tup_overload(val):
 
 def is_null_masked_type(t):
     return (
-        t in (string_type, string_array_type)
+        t
+        in (
+            string_type,
+            string_array_type,
+            bytes_type,
+            binary_array_type,
+            boolean_array,
+        )
         or isinstance(t, IntegerArrayType)
-        or t == boolean_array
     )
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_mask_bit(arr, i):
-    if arr == string_array_type:
+    if arr in [string_array_type, binary_array_type]:
         return lambda arr, i: get_bit_bitmap(get_null_bitmap_ptr(arr), i)
 
     assert isinstance(arr, IntegerArrayType) or arr == boolean_array
@@ -699,7 +700,7 @@ def get_mask_bit(arr, i):
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def get_arr_null_ptr(arr):
-    if arr == string_array_type:
+    if arr in [string_array_type, binary_array_type]:
         return lambda arr: get_null_bitmap_ptr(arr)
 
     assert isinstance(arr, IntegerArrayType) or arr == boolean_array

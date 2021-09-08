@@ -2241,17 +2241,13 @@ def test_duplicated_all_types(df_value):
     Function that tests that duplicated works on our df types.
     """
 
-    # TODO: [BE-1247] Support binary index type
-    if isinstance(df_value.iloc[0, 0], bytes):
-        return
-
     def test_impl(df):
         return df.duplicated()
 
     # TODO [BE-414]: Properly support NA
 
     # Index and order doesn't match in distributed case.
-    check_func(test_impl, (df_value,), sort_output=True, reset_index=True)
+    check_func(test_impl, (df_value.dropna(),), sort_output=True, reset_index=True)
 
 
 # TODO: [BE-266] Fix memory leak in duplicated

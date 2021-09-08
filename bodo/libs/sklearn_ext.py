@@ -2266,7 +2266,6 @@ def overload_multinomial_nb_model_fit(
             globals(),
             loc_vars,
         )
-        # print(func_text)
         _model_multinomial_nb_fit_impl = loc_vars["_model_multinomial_nb_fit_impl"]
         return _model_multinomial_nb_fit_impl
 
