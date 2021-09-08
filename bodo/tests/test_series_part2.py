@@ -1260,7 +1260,7 @@ def test_series_quantile(numeric_series_val, memory_leak_check):
 
 
 def test_series_quantile_q(memory_leak_check):
-    """ Test passing list, int, and unsupported type to q argument"""
+    """ Tests passing list, int, and unsupported type to q argument"""
 
     # List
     def test_impl(S):

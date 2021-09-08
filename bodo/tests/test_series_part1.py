@@ -1931,7 +1931,7 @@ def test_series_setitem_slice(series_val, memory_leak_check):
     if isinstance(series_val.values[0], list):
         return
 
-    # string/binary setitem not supported yet. Binary JIRA: BE-1248
+    # string/binary setitem not supported yet. Binary JIRA: BE-1256
     if isinstance(series_val.iat[0], (str, bytes)):
         return
 
@@ -1954,7 +1954,7 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_chec
     if isinstance(series_val.values[0], list):
         return
 
-    # string/binary setitem not supported yet. Binary JIRA: BE-1248
+    # string/binary setitem not supported yet. Binary JIRA: BE-1256
     if isinstance(series_val.iat[0], (str, bytes)):
         return
     val = series_val.iloc[0:2].values.copy()  # values to avoid alignment

@@ -291,9 +291,6 @@ def test_index_values(index, memory_leak_check):
 def test_index_slice_name(index, memory_leak_check):
     """make sure Index name is preserved properly in slicing"""
 
-    if isinstance(index[0], bytes):
-        pytest.skip("requires support for binary getitem, BE-1248")
-
     def impl(I):
         return I[:3]
 
