@@ -1170,10 +1170,12 @@ def set_string_array_range(
     typingctx, out_typ, in_typ, curr_str_typ, curr_chars_typ=None
 ):
     """
-    Copy input string array to a range of output string array starting from
+    Copy input string/binary array to a range of output string/binary array starting from
     curr_str_ind string index and curr_chars_ind character index.
     """
-    assert out_typ == string_array_type and in_typ == string_array_type
+    assert (out_typ == string_array_type and in_typ == string_array_type) or (
+        out_typ == binary_array_type and in_typ == binary_array_type
+    )
     assert curr_str_typ == types.intp and curr_chars_typ == types.intp
 
     def codegen(context, builder, sig, args):
@@ -1241,7 +1243,7 @@ def set_string_array_range(
 
         return context.get_dummy_value()
 
-    sig = types.void(string_array_type, string_array_type, types.intp, types.intp)
+    sig = types.void(out_typ, in_typ, types.intp, types.intp)
     return sig, codegen
 
 
@@ -1423,14 +1425,16 @@ def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
 
 
 @intrinsic
-def set_null_bits_to_value(typingctx, str_arr_typ, value_typ=None):
+def set_null_bits_to_value(typingctx, arr_typ, value_typ=None):
     """
-    Sets all the bits in the null bitmap of the string array
+    Sets all the bits in the null bitmap of the string/binary array
     to the specified value.
     Setting them to 0 sets them to null and setting them
     to -1 sets them to not null.
     """
-    assert str_arr_typ == string_array_type and is_overload_constant_int(value_typ)
+    assert (
+        arr_typ == string_array_type or arr_typ == binary_array_type
+    ) and is_overload_constant_int(value_typ)
 
     def codegen(context, builder, sig, args):
         (
@@ -1452,7 +1456,7 @@ def set_null_bits_to_value(typingctx, str_arr_typ, value_typ=None):
         cgutils.memset(builder, null_bitmap_ptr, n_bytes, value)
         return context.get_dummy_value()
 
-    return types.none(string_array_type, types.int8), codegen
+    return types.none(arr_typ, types.int8), codegen
 
 
 def _get_str_binary_arr_data_payload_ptr(context, builder, str_arr):

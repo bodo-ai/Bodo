@@ -1095,34 +1095,51 @@ def concat_overload(arr_list):
 
     # all string input case
     # TODO: handle numerics to string casting case
-    if (
-        isinstance(arr_list, (types.UniTuple, types.List))
-        and arr_list.dtype == string_array_type
+    if isinstance(arr_list, (types.UniTuple, types.List)) and (
+        arr_list.dtype in [string_array_type, bodo.binary_array_type]
     ):
+        if arr_list.dtype == bodo.binary_array_type:
+            alloc_fn = "bodo.libs.str_arr_ext.pre_alloc_binary_array"
+        elif arr_list.dtype == string_array_type:
+            alloc_fn = "bodo.libs.str_arr_ext.pre_alloc_string_array"
 
-        def string_concat_impl(arr_list):  # pragma: no cover
-            # preallocate the output
-            num_strs = 0
-            num_chars = 0
-            for A in arr_list:
-                arr = A
-                num_strs += len(arr)
-                num_chars += bodo.libs.str_arr_ext.num_total_chars(arr)
-            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(num_strs, num_chars)
-            bodo.libs.str_arr_ext.set_null_bits_to_value(out_arr, -1)
-            # copy data to output
-            curr_str_ind = 0
-            curr_chars_ind = 0
-            for A in arr_list:
-                arr = A
-                bodo.libs.str_arr_ext.set_string_array_range(
-                    out_arr, arr, curr_str_ind, curr_chars_ind
-                )
-                curr_str_ind += len(arr)
-                curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(arr)
-            return out_arr
+        func_text = "def impl(arr_list):  # pragma: no cover\n"
+        func_text += "    # preallocate the output\n"
+        func_text += "    num_strs = 0\n"
+        func_text += "    num_chars = 0\n"
+        func_text += "    for A in arr_list:\n"
+        func_text += "        arr = A\n"
+        func_text += "        num_strs += len(arr)\n"
+        func_text += "        # this should work for both binary and string\n"
+        func_text += "        num_chars += bodo.libs.str_arr_ext.num_total_chars(arr)\n"
+        func_text += f"    out_arr = {alloc_fn}(\n"
+        func_text += "        num_strs, num_chars\n"
+        func_text += "    )\n"
+        func_text += "    bodo.libs.str_arr_ext.set_null_bits_to_value(out_arr, -1)\n"
+        func_text += "    # copy data to output\n"
+        func_text += "    curr_str_ind = 0\n"
+        func_text += "    curr_chars_ind = 0\n"
+        func_text += "    for A in arr_list:\n"
+        func_text += "        arr = A\n"
+        func_text += "        # This will probably need to be extended\n"
+        func_text += "        bodo.libs.str_arr_ext.set_string_array_range(\n"
+        func_text += "            out_arr, arr, curr_str_ind, curr_chars_ind\n"
+        func_text += "        )\n"
+        func_text += "        curr_str_ind += len(arr)\n"
+        func_text += "        # this should work for both binary and string\n"
+        func_text += (
+            "        curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(arr)\n"
+        )
+        func_text += "    return out_arr\n"
 
-        return string_concat_impl
+        locs = dict()
+        exec(
+            func_text,
+            {"bodo": bodo},
+            locs,
+        )
+        f = locs["impl"]
+        return f
 
     # Integer array input, or mix of Integer array and Numpy int array
     if (

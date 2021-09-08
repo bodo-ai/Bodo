@@ -1187,10 +1187,6 @@ def test_series_append_single(series_val, ignore_index, memory_leak_check):
     if isinstance(series_val.values[0], Decimal):
         return
 
-    # TODO: support for binary type, BE-1261
-    if isinstance(series_val.values[0], bytes):
-        return
-
     func_text = "def test_impl(A, B):\n"
     func_text += "  return A.append(B, {})\n".format(ignore_index)
     loc_vars = {}
@@ -1218,10 +1214,6 @@ def test_series_append_multi(series_val, ignore_index, memory_leak_check):
 
     # not supported for Decimal yet, TODO: support and test
     if isinstance(series_val.values[0], Decimal):
-        return
-
-    # TODO: support for binary type, BE-1261
-    if isinstance(series_val.values[0], bytes):
         return
 
     func_text = "def test_impl(A, B, C):\n"
