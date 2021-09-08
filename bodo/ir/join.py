@@ -44,7 +44,7 @@ from bodo.libs.str_arr_ext import (
     set_bit_to,
     str_copy_ptr,
     string_array_type,
-    to_string_list,
+    to_list_if_immutable_arr,
 )
 from bodo.libs.str_ext import string_type
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
@@ -682,7 +682,7 @@ def join_distributed_run(
             "bodo": bodo,
             "np": np,
             "pd": pd,
-            "to_string_list": to_string_list,
+            "to_list_if_immutable_arr": to_list_if_immutable_arr,
             "cp_str_list_to_array": cp_str_list_to_array,
             "parallel_asof_comm": parallel_asof_comm,
             "array_to_info": array_to_info,

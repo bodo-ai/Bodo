@@ -24,7 +24,7 @@ from bodo.libs.array import (
     info_to_array,
     sort_values_table,
 )
-from bodo.libs.str_arr_ext import cp_str_list_to_array, to_string_list
+from bodo.libs.str_arr_ext import cp_str_list_to_array, to_list_if_immutable_arr
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import debug_prints, gen_getitem
@@ -365,7 +365,7 @@ def sort_distributed_run(
         {
             "bodo": bodo,
             "np": np,
-            "to_string_list": to_string_list,
+            "to_list_if_immutable_arr": to_list_if_immutable_arr,
             "cp_str_list_to_array": cp_str_list_to_array,
             "delete_table": delete_table,
             "delete_table_decref_arrays": delete_table_decref_arrays,

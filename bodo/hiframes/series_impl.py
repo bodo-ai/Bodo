@@ -3802,9 +3802,9 @@ def argsort(A):  # pragma: no cover
 
 @overload(argsort, no_unliteral=True)
 def overload_argsort(A):
-    def impl(A):
+    def impl(A):  # pragma: no cover
         n = len(A)
-        l_key_arrs = bodo.libs.str_arr_ext.to_string_list((A.copy(),))
+        l_key_arrs = bodo.libs.str_arr_ext.to_list_if_immutable_arr((A.copy(),))
         data = (np.arange(n),)
         bodo.libs.timsort.sort(l_key_arrs, 0, n, data)
         return data[0]

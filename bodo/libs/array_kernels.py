@@ -719,9 +719,9 @@ def duplicated(data, ind_arr, parallel=False):  # pragma: no cover
     if parallel:
         data, (ind_arr,) = bodo.ir.join.parallel_shuffle(data, (ind_arr,))
 
-    # XXX: convert StringArray to list of strings due to strange error with set
+    # XXX: convert StringArray/BinaryArray to list of strings due to strange error with set
     # TODO: debug StringArray issue on test_df_duplicated with multiple pes
-    data = bodo.libs.str_arr_ext.to_string_list(data)
+    data = bodo.libs.str_arr_ext.to_list_if_immutable_arr(data)
 
     n = len(data[0])
     out = np.empty(n, np.bool_)
@@ -1734,8 +1734,8 @@ def overload_sort(arr, ascending, inplace):
         if not inplace:
             key_arrs = (arr.copy(),)
 
-        l_key_arrs = bodo.libs.str_arr_ext.to_string_list(key_arrs)
-        l_data = bodo.libs.str_arr_ext.to_string_list(data, True)
+        l_key_arrs = bodo.libs.str_arr_ext.to_list_if_immutable_arr(key_arrs)
+        l_data = bodo.libs.str_arr_ext.to_list_if_immutable_arr(data, True)
         bodo.libs.timsort.sort(l_key_arrs, 0, n, l_data)
         if not ascending:
             bodo.libs.timsort.reverseRange(l_key_arrs, 0, n, l_data)
