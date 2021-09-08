@@ -1997,6 +1997,11 @@ def test_set_df_column_names(memory_leak_check):
         df2.columns = ["A", "testCol1", "count(B)", "testCol2", "count(C)"]
         return df2
 
+    # test loop unrolling when necessary
+    def impl6(df):
+        df.columns = [x.lower() for x in df.columns]
+        return df
+
     df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1]})
     check_func(impl1, (df,), copy_input=True)
     with pytest.raises(
@@ -2017,6 +2022,7 @@ def test_set_df_column_names(memory_leak_check):
         {"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1], "C": [2, 3, 1, 5]}
     )
     check_func(impl5, (df,), reset_index=True, sort_output=True)
+    check_func(impl6, (df,), copy_input=True)
 
 
 def test_set_df_index(memory_leak_check):

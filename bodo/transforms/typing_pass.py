@@ -450,13 +450,11 @@ class TypingTransforms:
             else:
                 # try to find index values
                 try:
-                    val = get_const_value_inner(
-                        self.func_ir, idx, self.arg_types, self.typemap
-                    )
-                except GuardException:
+                    err_msg = "DataFrame[] requires constant column names"
+                    val = self._get_const_value(idx, label, rhs.loc, err_msg)
+                except (GuardException, BodoConstUpdatedError):
                     # couldn't find values, just return to be handled later
                     # save for potential loop unrolling
-                    self._require_const[idx] = label
                     nodes.append(assign)
                     return nodes
             # replace index variable with a new variable holding constant
@@ -543,10 +541,9 @@ class TypingTransforms:
 
             # try to find index values
             try:
-                val = get_const_value_inner(
-                    self.func_ir, col_ind_var, self.arg_types, self.typemap
-                )
-            except GuardException:
+                err_msg = "DataFrame.loc[] requires constant column names"
+                val = self._get_const_value(col_ind_var, label, rhs.loc, err_msg)
+            except (GuardException, BodoConstUpdatedError):
                 # couldn't find values, just return to be handled later
                 nodes.append(assign)
                 return nodes
@@ -630,7 +627,7 @@ class TypingTransforms:
     def _run_setitem_df_loc(self, inst, target_typ, idx_typ, idx_var, nodes, label):
         """transform df.loc setitem nodes, e.g. df.loc[:, "B"] = 3"""
 
-        col_inds, row_ind = self._get_loc_indices(idx_var)
+        col_inds, row_ind = self._get_loc_indices(idx_var, label, inst.loc)
 
         # couldn't find column name values, just return to be handled later
         if col_inds is None:
@@ -672,7 +669,7 @@ class TypingTransforms:
     def _run_setitem_df_iloc(self, inst, target_typ, idx_typ, idx_var, nodes, label):
         """transform df.iloc setitem nodes, e.g. df.loc[:, 1] = 3"""
 
-        col_inds, row_ind = self._get_loc_indices(idx_var)
+        col_inds, row_ind = self._get_loc_indices(idx_var, label, inst.loc)
 
         # couldn't find column name values, just return to be handled later
         if col_inds is None:
@@ -699,7 +696,7 @@ class TypingTransforms:
             impl, [inst.target, idx_var, inst.value], None, self
         )
 
-    def _get_loc_indices(self, idx_var):
+    def _get_loc_indices(self, idx_var, label, loc):
         """get row/column index values for df.loc/df.iloc if possible"""
         # get column index var
         tup_list = guard(find_build_tuple, self.func_ir, idx_var)
@@ -710,10 +707,9 @@ class TypingTransforms:
 
         # try to find index values
         try:
-            col_inds = get_const_value_inner(
-                self.func_ir, col_ind_var, self.arg_types, self.typemap
-            )
-        except GuardException:
+            err_msg = "df.loc/iloc[] requires constant column names"
+            col_inds = self._get_const_value(col_ind_var, label, loc, err_msg)
+        except (GuardException, BodoConstUpdatedError):
             col_inds = None
 
         # normalize single column name to list
@@ -721,11 +717,16 @@ class TypingTransforms:
             col_inds = [col_inds]
 
         # try to find index values
+        # NOTE: not using _get_const_value() since constant isn't fully necessary
         try:
             row_ind = get_const_value_inner(
-                self.func_ir, row_ind_var, self.arg_types, self.typemap
+                self.func_ir,
+                row_ind_var,
+                self.arg_types,
+                self.typemap,
+                self._updated_containers,
             )
-        except GuardException:
+        except (GuardException, BodoConstUpdatedError):
             row_ind = None
 
         return col_inds, row_ind
@@ -806,11 +807,9 @@ class TypingTransforms:
             if inst.attr == "columns":
                 # try to find new column names
                 try:
-                    columns = get_const_value_inner(
-                        self.func_ir, inst.value, self.arg_types, self.typemap
-                    )
-                except GuardException:
-                    # couldn't find values, just return to be handled later
+                    err_msg = "Setting dataframe columns requires constant names"
+                    columns = self._get_const_value(inst.value, label, err_msg)
+                except (GuardException, BodoConstUpdatedError):
                     return [inst]
 
                 # check number of column names
@@ -1524,16 +1523,9 @@ class TypingTransforms:
         # overload will raise an error if necessary.
         needs_transform = False
         try:
-            sql_str = get_const_value_inner(
-                self.func_ir,
-                sql_var,
-                self.arg_types,
-                self.typemap,
-                self._updated_containers,
-            )
-        except GuardException:
-            # save for potential loop unrolling
-            self._require_const[sql_var] = label
+            err_msg = "BodoSQLContextType.sql() requires a constant sql string"
+            sql_str = self._get_const_value(sql_var, label, err_msg)
+        except (GuardException, BodoConstUpdatedError):
             needs_transform = True
 
         # TODO: Handle the none case
@@ -1835,30 +1827,14 @@ class TypingTransforms:
             # Otherwise, just skip, assuming that the issue may be fixed later or
             # overload will raise an error if necessary.
             try:
-                val = get_const_value_inner(
-                    self.func_ir,
-                    var,
-                    self.arg_types,
-                    self.typemap,
-                    self._updated_containers,
-                    pyobject_to_literal=pyobject_to_literal,
+                err_msg = (
+                    f"{func_name}(): argument '{arg_name}' requires a constant value"
                 )
-            except BodoConstUpdatedError as e:
-                # loop unrolling can potentially make updated lists constants
-                if self.ran_transform:
-                    raise BodoError(
-                        "{}(): argument '{}' requires a constant value but {}\n{}\n".format(
-                            func_name, arg_name, e, rhs.loc.strformat()
-                        )
-                    )
-                else:
-                    # save for potential loop unrolling
-                    self._require_const[var] = label
-                    self.needs_transform = True
-                    continue
-            except GuardException:
+                val = self._get_const_value(
+                    var, label, rhs.loc, err_msg, pyobject_to_literal
+                )
+            except (GuardException, BodoConstUpdatedError):
                 # save for potential loop unrolling
-                self._require_const[var] = label
                 continue
             # set values don't have literal types yet
             # convert to list for agg since it is equivalent, but skip otherwise
@@ -1884,6 +1860,38 @@ class TypingTransforms:
 
         rhs.kws = list(kws.items())
         return nodes
+
+    def _get_const_value(
+        self, var, label, loc, err_msg=None, pyobject_to_literal=False
+    ):
+        """get constant value for variable 'var'. If constant not found, saves info to
+        run transforms like loop unrolling.
+        If err_msg is provided, raise an error if transforms ran but the variable is
+        still an updated container.
+        """
+        try:
+            value = get_const_value_inner(
+                self.func_ir,
+                var,
+                self.arg_types,
+                self.typemap,
+                self._updated_containers,
+                pyobject_to_literal=pyobject_to_literal,
+            )
+        except BodoConstUpdatedError as e:
+            # loop unrolling can potentially make updated lists constants
+            if self.ran_transform and err_msg:
+                raise BodoError(f"{err_msg} but {e}\n{loc.strformat()}\n")
+            else:
+                # save for potential loop unrolling
+                self._require_const[var] = label
+                self.needs_transform = True
+            raise e
+        except GuardException as e2:
+            # save for potential loop unrolling
+            self._require_const[var] = label
+            raise e2
+        return value
 
     def _try_unroll_const_loop(self):
         """Try to unroll a loop with constant iteration range if possible. Otherwise,
@@ -2023,7 +2031,13 @@ class TypingTransforms:
         # TODO(ehsan): support "build_map"
         if container_def.op in ("build_list", "build_set"):
             container_val = [
-                get_const_value_inner(self.func_ir, v, self.arg_types, self.typemap)
+                get_const_value_inner(
+                    self.func_ir,
+                    v,
+                    self.arg_types,
+                    self.typemap,
+                    self._updated_containers,
+                )
                 for v in container_def.items
             ]
             if container_def.op == "build_set":
@@ -2038,7 +2052,9 @@ class TypingTransforms:
 
         # update container value by calling the actual update function
         arg_vals = [
-            get_const_value_inner(self.func_ir, v, self.arg_types, self.typemap)
+            get_const_value_inner(
+                self.func_ir, v, self.arg_types, self.typemap, self._updated_containers
+            )
             for v in stmt.value.args
         ]
         out_val = getattr(container_val, fdef[0])(*arg_vals)
@@ -2199,7 +2215,11 @@ class TypingTransforms:
         getiter_expr = get_definition(self.func_ir, iternext_expr.value)
         require(is_expr(getiter_expr, "getiter"))
         return get_const_value_inner(
-            self.func_ir, getiter_expr.value, self.arg_types, self.typemap
+            self.func_ir,
+            getiter_expr.value,
+            self.arg_types,
+            self.typemap,
+            self._updated_containers,
         )
 
     def _vars_dependant(self, var1, var2):
