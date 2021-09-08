@@ -478,10 +478,6 @@ def test_series_concat(series_val, memory_leak_check):
     We convert to dataframe in order to reset the index.
     """
 
-    # TODO: support series concat for binary, BE-1257
-    if isinstance(series_val.values[0], bytes):
-        return
-
     def f(S1, S2):
         return pd.concat([S1, S2])
 
@@ -557,10 +553,6 @@ def test_dataframe_concat(series_val):
     # Pandas converts Integer arrays to int object arrays when adding an all NaN
     # chunk, which we cannot handle in our parallel testing.
     if isinstance(series_val.dtype, pd.core.arrays.integer._IntegerDtype):
-        return
-
-    # TODO: support dataframe concat for binary BE-1257
-    if isinstance(series_val.values[0], bytes):
         return
 
     def f(df1, df2):
