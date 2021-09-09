@@ -7,24 +7,21 @@ Bodo
 ====
 
 
-Bodo is the first Python Supercomputing Analytics platform that empowers data scientists to run
-Python workloads with the extreme performance and scalability of
-High Performance Computing (HPC) without code rewrites.
-
-Bodo’s technology provides automatic parallelization and acceleration for analytics workloads
-for the first time. This eliminates the need to rewrite Python code in Spark/Scala,
-SQL or MPI/C++,
-allowing data scientists to focus on solving business problems instead
-of scalability and performance of their applications.
+Bodo is a new compute engine that brings supercomputing-like performance
+and scalability to native Python analytics code automatically.
+With Bodo, Python/Pandas code scales to 10,000+ cores and petabytes of
+data without any rewrites and the inefficiencies
+and frequent failures of distributed libraries.
+Bodo does this using a new just-in-time (JIT) inferential compiler technology
+that can automate the optimization process of world-class performance experts.
 
 
-This user manual covers the basics of using Bodo, provides a reference
-of supported Python features/APIs, and explains how Bodo works under the hoods.
-In a nutshell, Bodo provides a just-in-time (JIT) compilation workflow
+This documentation covers the basics of using Bodo and provides a reference
+of supported Python features and APIs.
+In a nutshell, Bodo provides a JIT compilation workflow
 using the `@bodo.jit decorator <user_guide.html#jit-just-in-time-compilation-workflow>`__.
 It replaces the decorated Python functions
-with an optimized and parallelized binary version automatically,
-using advanced compilation methods.
+with an optimized and parallelized binary version automatically.
 For example, the program below can perform data transformation on large datasets::
 
     @bodo.jit
@@ -53,7 +50,7 @@ computation can also be parallelized with some communication across processors.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Get Started
+   :caption: Installation and Setup
 
    source/install
    source/enterprise
