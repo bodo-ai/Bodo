@@ -36,7 +36,7 @@ from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.io import csv_cpp
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.libs.str_ext import string_type, unicode_to_utf8
-from bodo.utils.transform import get_call_expr_arg, get_const_func_output_type
+from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -615,15 +615,27 @@ class SeriesAttribute(AttributeTemplate):
 
     @bound_function("series.head")
     def resolve_head(self, ary, args, kws):
-        # TODO: Add a generic signature checking function
-        n = get_call_expr_arg(
-            "Series.head", args, dict(kws), 0, "n", default=types.IntegerLiteral(5)
+        func_name = "Series.head"
+
+        # Obtain a the pysig and folded args
+        full_args = (ary,) + args
+        arg_names = ("S", "n")
+        arg_defaults = {"n": 5}
+
+        pysig, folded_args = bodo.utils.typing.fold_typing_args(
+            func_name, full_args, kws, arg_names, arg_defaults
         )
-        if not is_overload_int(n):
-            raise BodoError("Series.head(): 'n' must be an Integer")
+
+        # Check typing on arguments
+        n_arg = folded_args[1]
+        if not is_overload_int(n_arg):
+            raise BodoError(f"{func_name}(): 'n' must be an Integer")
+
+        # Determine the return type
         # Return type is the same as the series
         ret = ary
-        return ret(*args)
+        # Return the signature
+        return ret(*folded_args).replace(pysig=pysig)
 
     def _resolve_map_func(self, ary, func, pysig, fname, f_args=None, kws=None):
         """Find type signature of Series.map/apply method.

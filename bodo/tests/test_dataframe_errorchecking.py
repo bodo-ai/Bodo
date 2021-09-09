@@ -452,7 +452,7 @@ def test_df_head_errors(memory_leak_check):
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         return df.head(5.0)
 
-    with pytest.raises(BodoError, match="Dataframe.head.*: 'n' must be an Integer"):
+    with pytest.raises(BodoError, match="DataFrame.head.*: 'n' must be an Integer"):
         bodo.jit(impl)()
 
 
@@ -793,7 +793,7 @@ def test_dataframe_iloc_bad_index(memory_leak_check):
     df = pd.DataFrame(
         {"A": np.random.randn(10)}, index=list(string.ascii_lowercase)[:10]
     )
-    error_msg = "df.iloc\[\] getitem using .* not supported"
+    error_msg = "df.iloc\\[] getitem using .* not supported"
     with pytest.raises(
         BodoError,
         match=error_msg,
@@ -815,3 +815,57 @@ def test_non_numba_err(memory_leak_check):
         match="name 'x' is not defined",
     ):
         bodo.jit(test)()
+
+
+@pytest.mark.slow
+def test_df_head_too_many_args(memory_leak_check):
+    """
+    Test that a function split into typing and lowering still checks
+    the correct number of arguments.
+    """
+
+    def impl(df):
+        return df.head(3, 5)
+
+    df = pd.DataFrame({"A": [1, 23, 4, 1, 1, 7]})
+    with pytest.raises(
+        BodoError,
+        match="Too many arguments specified. Function takes 2 arguments, but 3 were provided.",
+    ):
+        bodo.jit(impl)(df)
+
+
+@pytest.mark.slow
+def test_df_corr_repeat_kws(memory_leak_check):
+    """
+    Test that a function split into typing and lowering still checks
+    that there are no kws that repeat an args.
+    """
+
+    def impl(df):
+        return df.corr("pearson", method="kendall")
+
+    df = pd.DataFrame({"A": [1, 23, 4, 1, 1, 7]})
+    with pytest.raises(
+        BodoError,
+        match="multiple values for argument 'method'",
+    ):
+        bodo.jit(impl)(df)
+
+
+@pytest.mark.slow
+def test_df_corr_unknown_kws(memory_leak_check):
+    """
+    Test that a function split into typing and lowering still checks
+    that there are no kws that are unknown.
+    """
+
+    def impl(df):
+        return df.corr("pearson", unknown_arg=5)
+
+    df = pd.DataFrame({"A": [1, 23, 4, 1, 1, 7]})
+    with pytest.raises(
+        BodoError,
+        match="got an unexpected keyword argument 'unknown_arg'",
+    ):
+        bodo.jit(impl)(df)

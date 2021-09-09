@@ -58,7 +58,6 @@ from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.conversion import index_to_array
 from bodo.utils.transform import (
     gen_const_tup,
-    get_call_expr_arg,
     get_const_func_output_type,
     get_const_tup_vals,
 )
@@ -274,15 +273,65 @@ class DataFrameAttribute(AttributeTemplate):
 
     @bound_function("df.head")
     def resolve_head(self, df, args, kws):
-        # TODO: Add a generic signature checking function
-        n = get_call_expr_arg(
-            "DataFrame.head", args, dict(kws), 0, "n", default=types.IntegerLiteral(5)
+        func_name = "DataFrame.head"
+
+        # Obtain a the pysig and folded args
+        full_args = (df,) + args
+        arg_names = ("df", "n")
+        arg_defaults = {"n": 5}
+
+        pysig, folded_args = bodo.utils.typing.fold_typing_args(
+            func_name, full_args, kws, arg_names, arg_defaults
         )
-        if not is_overload_int(n):
-            raise BodoError("Dataframe.head(): 'n' must be an Integer")
+
+        # Check typing on arguments
+        n_arg = folded_args[1]
+        if not is_overload_int(n_arg):
+            raise BodoError(f"{func_name}(): 'n' must be an Integer")
+
+        # Determine the return type
         # Return type is the same as the dataframe
         ret = df
-        return ret(*args)
+        # Return the signature
+        return ret(*folded_args).replace(pysig=pysig)
+
+    @bound_function("df.corr")
+    def resolve_corr(self, df, args, kws):
+        func_name = "DataFrame.corr"
+
+        # Obtain a the pysig and folded args
+        full_args = (df,) + args
+        arg_names = ("df", "method", "min_periods")
+        arg_defaults = {"method": "pearson", "min_periods": 1}
+        unsupported_arg_names = ("method",)
+
+        pysig, folded_args = bodo.utils.typing.fold_typing_args(
+            func_name, full_args, kws, arg_names, arg_defaults, unsupported_arg_names
+        )
+
+        # Check typing on arguments
+        min_periods_arg = folded_args[2]
+        if not is_overload_int(min_periods_arg):
+            raise BodoError(f"{func_name}(): 'min_periods' must be an Integer")
+
+        # Determine the return type
+        # Return type are float64 operating only on numeric columns
+        numeric_col_names = []
+        numeric_col_data = []
+        for c, d in zip(df.columns, df.data):
+            if bodo.utils.typing._is_pandas_numeric_dtype(d.dtype):
+                numeric_col_names.append(c)
+                # All output columns are always float64. The astype
+                # used np.hstack makes this "A" instead of "C"
+                numeric_col_data.append(types.Array(types.float64, 1, "A"))
+        # TODO: support empty dataframe
+        assert len(numeric_col_names) != 0
+        numeric_col_data = tuple(numeric_col_data)
+        numeric_col_names = tuple(numeric_col_names)
+        index_typ = bodo.utils.typing.type_col_to_index(numeric_col_names)
+        ret = DataFrameType(numeric_col_data, index_typ, numeric_col_names)
+        # Return the signature
+        return ret(*folded_args).replace(pysig=pysig)
 
     @bound_function("df.pipe", no_unliteral=True)
     def resolve_pipe(self, df, args, kws):
