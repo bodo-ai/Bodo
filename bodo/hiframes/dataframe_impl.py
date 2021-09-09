@@ -776,15 +776,12 @@ def overload_dataframe_abs(df):
     return _gen_init_df(header, df.columns, data_args)
 
 
-@overload_method(DataFrameType, "corr", inline="always", no_unliteral=True)
 def overload_dataframe_corr(df, method="pearson", min_periods=1):
-
-    unsupported_args = dict(method=method)
-    arg_defaults = dict(method="pearson")
-    check_unsupported_args("DataFrame.corr", unsupported_args, arg_defaults)
-
+    # This function is called by the inlining in compiler.py
     numeric_cols = [
-        c for c, d in zip(df.columns, df.data) if _is_numeric_dtype(d.dtype)
+        c
+        for c, d in zip(df.columns, df.data)
+        if bodo.utils.typing._is_pandas_numeric_dtype(d.dtype)
     ]
     # TODO: support empty dataframe
     assert len(numeric_cols) != 0
@@ -809,12 +806,18 @@ def overload_dataframe_corr(df, method="pearson", min_periods=1):
     mat = "np.stack(({},), 1){}".format(arr_args, typ_conv)
 
     data_args = ", ".join("res[:,{}]".format(i) for i in range(len(numeric_cols)))
-    index = f"pd.Index({numeric_cols})\n"
+    index = f"{generate_col_to_index_func_text(numeric_cols)}\n"
 
     header = "def impl(df, method='pearson', min_periods=1):\n"
     header += "  mat = {}\n".format(mat)
     header += "  res = bodo.libs.array_kernels.nancorr(mat, 0, min_periods)\n"
     return _gen_init_df(header, numeric_cols, data_args, index)
+
+
+@lower_builtin("df.corr", DataFrameType, types.VarArg(types.Any))
+def dataframe_corr_lower(context, builder, sig, args):
+    impl = overload_dataframe_corr(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
 
 
 @overload_method(DataFrameType, "cov", inline="always", no_unliteral=True)
@@ -828,7 +831,9 @@ def overload_dataframe_cov(df, min_periods=None, ddof=1):
     minpv = "1" if is_overload_none(min_periods) else "min_periods"
 
     numeric_cols = [
-        c for c, d in zip(df.columns, df.data) if _is_numeric_dtype(d.dtype)
+        c
+        for c, d in zip(df.columns, df.data)
+        if bodo.utils.typing._is_pandas_numeric_dtype(d.dtype)
     ]
     # TODO: support empty dataframe
     assert len(numeric_cols) != 0
@@ -1094,7 +1099,9 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
     else:
         # TODO: numeric_only=None tries its best: core/frame.py/DataFrame/_reduce
         numeric_cols = tuple(
-            c for c, d in zip(df.columns, df.data) if _is_numeric_dtype(d.dtype)
+            c
+            for c, d in zip(df.columns, df.data)
+            if bodo.utils.typing._is_pandas_numeric_dtype(d.dtype)
         )
         out_colnames = numeric_cols
 
@@ -1640,11 +1647,6 @@ def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
     exec(func_text, _global, loc_vars)
     impl = loc_vars["impl"]
     return impl
-
-
-def _is_numeric_dtype(dtype):
-    # Pandas considers bool numeric as well: core/internals/blocks
-    return isinstance(dtype, types.Number) or dtype == types.bool_
 
 
 ############################ binary operators #############################

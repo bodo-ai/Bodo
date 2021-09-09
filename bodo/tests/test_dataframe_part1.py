@@ -1261,6 +1261,19 @@ def test_df_corr(df_value, memory_leak_check):
     check_func(impl, (df_value,), is_out_distributed=False)
 
 
+@pytest.mark.slow
+def test_df_corr_float64(memory_leak_check):
+    """
+    Test df.corr with no astype is required.
+    """
+
+    def impl(df):
+        return df.corr()
+
+    df = pd.DataFrame({"A": np.linspace(1, 50, dtype=np.float64)})
+    check_func(impl, (df,), is_out_distributed=False)
+
+
 def test_df_corr_parallel(memory_leak_check):
     def impl(n):
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
