@@ -4,7 +4,13 @@
 Spark Examples
 ================
 
-Bodo offers simplicity and maintainability of Python codes while unlocking orders of magnitude performance improvement. Spark APIs are usually equivalent to simpler Python/Pandas APIs, which are automatically parallelized by Bodo. This section aims to assist spark users with their transition to Bodo. Here, we show the most common data wrangling methods in Pyspark and Pandas through brief code examples. We used the COVID-19 World Vaccination Progress dataset that can be downloaded from `Kaggle <https://www.kaggle.com/gpreda/covid-world-vaccination-progress?select=country_vaccinations.csv>`_. If you want to execute the code as shown below, make sure that you have `Bodo <https://docs.bodo.ai/latest/source/install.html>`_ installed. Here is a list of examples:
+Bodo offers simplicity and maintainability of Python codes while unlocking orders of magnitude
+performance improvement. Spark APIs are usually equivalent to simpler Python/Pandas APIs,
+which are automatically parallelized by Bodo. This section aims to assist spark users with
+their transition to Bodo. Here, we show the most common data wrangling methods in PySpark and
+Pandas through brief code examples. We used the COVID-19 World Vaccination Progress dataset
+that can be downloaded from `Kaggle <https://www.kaggle.com/gpreda/covid-world-vaccination-progress?select=country_vaccinations.csv>`_.
+If you want to execute the code as shown below, make sure that you have `Bodo <https://docs.bodo.ai/latest/source/install.html>`_ installed. Here is a list of examples:
 
 - :ref:`Environment Setup`
 - :ref:`Load Data`

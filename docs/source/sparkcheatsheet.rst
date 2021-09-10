@@ -1,9 +1,9 @@
 .. _pscheatsheet:
 
-Pyspark Bodo Cheatsheet
+PySpark Bodo Cheatsheet
 ========================
 
-References of Pyspark methods and their Python equivalents supported by Bodo.
+References of PySpark methods and their Python equivalents supported by Bodo.
 
 - :ref:`psdataframe`
 - :ref:`psfunctions`
@@ -18,7 +18,7 @@ which are supported by Bodo.
 .. list-table::
   :header-rows: 1
 
-  * - Pyspark Method
+  * - PySpark Method
     - Python Equivalent
   * - :meth:`pyspark.sql.DataFrame.alias`
     - ``alias = df``
@@ -85,7 +85,7 @@ which are supported by Bodo.
 .. list-table::
   :header-rows: 1
 
-  * - Pyspark Function
+  * - PySpark Function
     - Python Equivalent
   * - :func:`pyspark.sql.functions.abs`
     - ``df.col.abs()``

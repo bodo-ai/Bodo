@@ -51,7 +51,7 @@ Benchmarking Spark on EMR
 When benchmarking Spark, we opt to use AWS EMR because it tends to provide the best Spark
 performance. In general, configuring a Spark cluster can prove to be difficult, as there are
 many configuration settings you must manually specify (for example memory allocation). EMR
-seems to avoid many of these issues and allows you to run either Pyspark or Scala code 
+seems to avoid many of these issues and allows you to run either PySpark or Scala code 
 via Jupyter Notebooks.
 
 **Important**: When creating a Spark benchmark save any notebook you create to Github for
@@ -100,7 +100,7 @@ Please also consider the following details:
    - EMR **does not** have an autoshutdown feature. Please remember to delete
      your notebooks and clusters when you are finished using them.
 
-Common Spark/Pyspark Pitfalls
+Common Spark/PySpark Pitfalls
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Spark attempts to do a variety of optimizations under the hood, most notably
 lazy execution, which can make it difficult when attempting to benchmark

@@ -6,14 +6,20 @@
 Bodo
 ====
 
-
-Bodo is a new compute engine that brings supercomputing-like performance
+Bodo is a new just-in-time (JIT) inferential compiler that
+brings supercomputing-style performance
 and scalability to native Python analytics code automatically.
-With Bodo, Python/Pandas code scales to 10,000+ cores and petabytes of
-data without any rewrites and the inefficiencies
-and frequent failures of distributed libraries.
-Bodo does this using a new just-in-time (JIT) inferential compiler technology
-that can automate the optimization process of world-class performance experts.
+Bodo has several advantages over other big data analytics systems
+(which are usually distributed scheduler libraries):
+
+- Simple programming with native Python APIs like Pandas and Numpy (no "Pandas-like" API layers)
+- Extreme performance and scalability using true parallelism and advanced compiler technology
+- Very high reliability due to binary code generation, which avoids distributed library failures
+- Simple deployment using standard Python workflows
+- Flexible integration with other systems such as cloud storage, data warehouses, and visualization tools
+
+
+.. TODO: Conceptual diagram
 
 
 This documentation covers the basics of using Bodo and provides a reference
@@ -38,14 +44,6 @@ To run Bodo programs such as this example, programmers can
 simply use the command line such as `mpiexec -n 1024 python data_transform.py`
 (to run on 1024 cores),
 or use :ref:`Jupyter Notebook <jupyter>`.
-
-Automatic parallelization is performed by taking advantage
-of Python APIs (Pandas, Numpy, ...) that have data-parallel semantics.
-For example, output elements of `df.C.dt.month` operation in the example above can be
-computed independently on different processor nodes and cores.
-More complex operations such as groupby
-computation can also be parallelized with some communication across processors.
-
 
 
 .. toctree::
