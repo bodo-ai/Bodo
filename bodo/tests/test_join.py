@@ -1576,6 +1576,157 @@ def test_merge_general_cond(memory_leak_check):
         )
 
 
+def test_merge_general_cond_strings(memory_leak_check):
+    """
+    test merge(): with general condition expressions like "left.A == right.A"
+    with string columns
+    """
+
+    # single equality term
+    def impl1(df1, df2):
+        return df1.merge(df2, on="left.A == right.A")
+
+    # multiple equality terms
+    def impl2(df1, df2):
+        return df1.merge(df2, on="left.A == right.A & right.C == left.B")
+
+    # single non-equality term
+    def impl3(df1, df2):
+        return df1.merge(df2, on="right.D <= left.B & left.A == right.A")
+
+    # single non-equality term, multiple equal terms
+    def impl4(df1, df2):
+        return df1.merge(
+            df2, on="left.B == right.C & right.D >= left.B & left.A == right.A"
+        )
+
+    # multiple non-equality terms
+    def impl5(df1, df2, how):
+        return df1.merge(
+            df2,
+            on="(right.D < left.B | right.C < left.B) & left.A == right.A",
+            how=how,
+        )
+
+    df1 = pd.DataFrame(
+        {
+            "A": ["a", "bcew", "a", "a", "A", "bcew", "A"],
+            "B": ["a", "bcew", "A", "a", "bcew", "A", "a"],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": ["re2f", "a", "bcew", "A", "bcew", "a", "bcew"],
+            "C": ["A", "bcew", "a", "A", "bcew", "a", "bcew"],
+            "D": ["a", "bcew", "A", "re2f", "", "Z", "Fe"],
+        }
+    )
+    # larger tables to test short/long table control flow in _join.cpp
+    df3 = pd.concat([df1] * 10)
+    df4 = pd.concat([df2] * 10)
+
+    py_out = df1.merge(df2, on="A")
+    check_func(
+        impl1,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+    py_out = df1.merge(df2, left_on=["A", "B"], right_on=["A", "C"])
+    check_func(
+        impl2,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+    py_out = df1.merge(df2, left_on=["A"], right_on=["A"])
+    py_out = py_out.query("D <= B")
+    check_func(
+        impl3,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+    py_out = df3.merge(df2, left_on=["A", "B"], right_on=["A", "C"])
+    py_out = py_out.query("D >= B")
+    check_func(
+        impl4,
+        (df3, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+    py_out = df1.merge(df4, left_on=["A"], right_on=["A"])
+    py_out = py_out.query("D < B | C < B")
+    check_func(
+        impl5,
+        (df1, df4, "inner"),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+    # # hit corner case
+    df11 = pd.DataFrame(
+        {
+            "A": ["a", "a"] * 5,
+            "B": ["a", "A"] * 5,
+        }
+    )
+    df22 = pd.DataFrame(
+        {
+            "A": ["a", "a"] * 5,
+            "C": ["bcew", "a"] * 5,
+            "D": ["bcew", "bcew"] * 5,
+        }
+    )
+    py_out = df11.merge(df22, left_on=["A"], right_on=["A"])
+    py_out = py_out.query("D < B | C < B")
+    check_func(
+        impl5,
+        (df11, df22, "inner"),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+    # # test left/right/outer cases, needs Spark to generate reference output
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+    sdf1 = spark.createDataFrame(df1)
+    sdf2 = spark.createDataFrame(df2)
+    sdf1.createOrReplaceTempView("table1")
+    sdf2.createOrReplaceTempView("table2")
+    for how in ("left", "right", "outer"):
+        # Spark requires "full outer" for some reason
+        spark_how = "full outer" if how == "outer" else how
+        py_out = spark.sql(
+            f"select * from table1 {spark_how} join table2 on (table2.D < table1.B or table2.C < table1.B) and table1.A == table2.A"
+        ).toPandas()
+        # spark duplicates key columns with nulls
+        py_out_A = py_out.A.iloc[:, 0].combine_first(py_out.A.iloc[:, 1])
+        py_out = py_out.drop(columns="A")
+        py_out.insert(0, "A", py_out_A)
+        check_func(
+            impl5,
+            (df1, df2, how),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+            py_output=py_out,
+        )
+
+
 def test_merge_general_cond_all_keys(memory_leak_check):
     """
     test merge(): with general condition expressions where all non-equal

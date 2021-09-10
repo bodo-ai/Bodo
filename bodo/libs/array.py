@@ -7,6 +7,7 @@ from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.extending import intrinsic, models, register_model
 
+import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
@@ -86,6 +87,7 @@ ll.add_symbol("get_search_regex", array_ext.get_search_regex)
 ll.add_symbol(
     "compute_node_partition_by_hash", array_ext.compute_node_partition_by_hash
 )
+ll.add_symbol("array_info_getitem", array_ext.array_info_getitem)
 
 
 class ArrayInfoType(types.Type):
@@ -2002,3 +2004,88 @@ def get_search_regex(in_arr, case, pat, out_arr):  # pragma: no cover
         out_arr_info,
     )
     check_and_propagate_cpp_exception()
+
+
+def _gen_row_access_intrinsic(col_dtype, c_ind):
+    """Generate an intrinsic for loading a value from a table column with 'col_dtype'
+    data type. 'c_ind' is the index of the column within the table.
+    The intrinsic's input is an array of data pointers for the table's data, and a row
+    index.
+
+    For example, col_dtype=int64, c_ind=1, table=[A_data_ptr, B_data_ptr, C_data_ptr],
+    row_ind=2 will return 6 for the table below.
+    A  B  C
+    1  4  7
+    2  5  8
+    3  6  9
+    """
+    from llvmlite import ir as lir
+
+    if isinstance(col_dtype, types.Number) or col_dtype in [
+        bodo.datetime_date_type,
+        bodo.datetime64ns,
+        bodo.timedelta64ns,
+    ]:
+        # This code path just returns the data.
+
+        @intrinsic
+        def getitem_func(typingctx, table_t, ind_t):
+            def codegen(context, builder, signature, args):
+                table, row_ind = args
+                # cast void* to void**
+                table = builder.bitcast(table, lir.IntType(8).as_pointer().as_pointer())
+                # get data pointer for input column and cast to proper data type
+                col_ind = lir.Constant(lir.IntType(64), c_ind)
+                col_ptr = builder.load(builder.gep(table, [col_ind]))
+                col_ptr = builder.bitcast(
+                    col_ptr, context.get_data_type(col_dtype).as_pointer()
+                )
+                return builder.load(builder.gep(col_ptr, [row_ind]))
+
+            return col_dtype(types.voidptr, types.int64), codegen
+
+        return getitem_func
+
+    if col_dtype == types.unicode_type:
+        # If we have a unicode type we want to leave the raw
+        # data pointer as a void* because we don't have a full
+        # string yet.
+
+        # This code path returns the data + length
+
+        @intrinsic
+        def getitem_func(typingctx, table_t, ind_t):
+            def codegen(context, builder, signature, args):
+                table, row_ind = args
+                fnty = lir.FunctionType(
+                    lir.IntType(8).as_pointer(),
+                    [
+                        lir.IntType(8).as_pointer(),
+                        lir.IntType(64),
+                        lir.IntType(64),
+                        lir.IntType(64).as_pointer(),
+                    ],
+                )
+                getitem_fn = cgutils.get_or_insert_function(
+                    builder.module, fnty, name="array_info_getitem"
+                )
+                # get data pointer for input column and cast to proper data type
+                col_ind = lir.Constant(lir.IntType(64), c_ind)
+                # Allocate for the output size
+                size = cgutils.alloca_once(builder, lir.IntType(64))
+                args = (table, col_ind, row_ind, size)
+                data_ptr = builder.call(getitem_fn, args)
+                return context.make_tuple(
+                    builder, signature.return_type, [data_ptr, builder.load(size)]
+                )
+
+            return (
+                types.Tuple([types.voidptr, types.int64])(types.voidptr, types.int64),
+                codegen,
+            )
+
+        return getitem_func
+
+    raise BodoError(
+        f"General Join Conditions with '{col_dtype}' column data type not supported"
+    )

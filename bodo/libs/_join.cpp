@@ -156,9 +156,12 @@ table_info* hash_join_table(
         size_t n_rows_right = work_right_table->nrows();
 
         // Create a data structure containing the columns to match the format
-        // expected by cond_func, as a vector of arrays/pointers.
-        // These include both keys and data columns as either can
-        // be used in the cond_func.
+        // expected by cond_func. We create two pairs of vectors, one with
+        // the array_infos, which handle general types, and one with just data1
+        // as a fast path for accessing numeric data. These include both keys
+        // and data columns as either can be used in the cond_func.
+        std::vector<array_info*> left_table_infos = work_left_table->columns;
+        std::vector<array_info*> right_table_infos = work_right_table->columns;
         std::vector<void*> col_ptrs_left(n_tot_left);
         std::vector<void*> col_ptrs_right(n_tot_right);
         for (size_t i = 0; i < n_tot_left; i++) {
@@ -513,9 +516,10 @@ table_info* hash_join_table(
                                 left_ind = i_long;
                                 right_ind = cmp_row;
                             }
-                            bool match = cond_func(col_ptrs_left.data(),
-                                                   col_ptrs_right.data(),
-                                                   left_ind, right_ind);
+                            bool match =
+                                cond_func(left_table_infos.data(), right_table_infos.data(),
+                                          col_ptrs_left.data(), col_ptrs_right.data(),
+                                          left_ind, right_ind);
                             if (match) {
                                 // If our group matches, add every row and
                                 // update the bitmap
@@ -696,7 +700,7 @@ table_info* hash_join_table(
                         for (auto& item : group_map) {
                             size_t pos = item.second - 1;
                             std::vector<size_t>& group = groups[pos];
-                            // Select a single s
+                            // Select a single member
                             size_t cmp_row = group[0];
                             size_t left_ind = 0;
                             size_t right_ind = 0;
@@ -707,9 +711,10 @@ table_info* hash_join_table(
                                 left_ind = i_long;
                                 right_ind = cmp_row;
                             }
-                            bool match = cond_func(col_ptrs_left.data(),
-                                                   col_ptrs_right.data(),
-                                                   left_ind, right_ind);
+                            bool match =
+                                cond_func(left_table_infos.data(), right_table_infos.data(),
+                                          col_ptrs_left.data(), col_ptrs_right.data(),
+                                          left_ind, right_ind);
                             if (match) {
                                 // If our group matches, add every row
                                 has_match = true;

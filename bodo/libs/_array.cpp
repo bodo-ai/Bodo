@@ -1243,6 +1243,34 @@ void int_array_from_sequence(PyObject* arr_obj, int64_t* data,
 #undef CHECK
 }
 
+/**
+ * Extract the value from a table with the given column and row numbers.
+ * This function does not check for NA values (these are handled elsewhere).
+ * Currently we only include data types supported in general join conds
+ * that require data beyond just data1 (as those are handled by a
+ * different fast path).
+ *
+ * Returns a pointer the the start of the data in the given row and col.
+ * output_size is updated to give the size of the returned data.
+ */
+char* array_info_getitem(array_info** table, int64_t col_num,
+                         int64_t row_num, offset_t* output_size) {
+    array_info* arr = table[col_num];
+    bodo_array_type::arr_type_enum arr_type = arr->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = arr->dtype;
+    if (arr_type == bodo_array_type::STRING) {
+        // In the first case of STRING, we have to check the offsets.
+        offset_t* offsets = (offset_t*)arr->data2;
+        char* in_data1 = arr->data1;
+        offset_t start_offset = offsets[row_num];
+        offset_t end_offset = offsets[row_num + 1];
+        offset_t size = end_offset - start_offset;
+        *output_size = size;
+        return in_data1 + start_offset;
+    }
+    throw std::runtime_error("array_info_getitem : Unsupported type");
+}
+
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;
     static struct PyModuleDef moduledef = {
@@ -1471,5 +1499,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     // handling is not required
     PyObject_SetAttrString(m, "get_stats_mi_free",
                            PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
+
+    PyObject_SetAttrString(m, "array_info_getitem",
+                           PyLong_FromVoidPtr((void*)(&array_info_getitem)));
     return m;
 }
