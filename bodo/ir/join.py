@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 from numba import generated_jit
 from numba.core import ir, ir_utils, typeinfer, types
-from numba.core.extending import intrinsic
 from numba.core.ir_utils import (
     compile_to_numba_ir,
     replace_arg_nodes,
@@ -733,8 +732,8 @@ def _gen_general_cond_cfunc(join_node, typemap):
     left_col_to_ind = _get_col_to_ind(join_node.left_keys, join_node.left_vars)
     right_col_to_ind = _get_col_to_ind(join_node.right_keys, join_node.right_vars)
 
-    table_getitem_funcs = {}
-    func_text = "def f(left_table, right_table, left_ind, right_ind):\n"
+    table_getitem_funcs = {"bodo": bodo, "numba": numba}
+    func_text = "def f(left_table, right_table, left_data1, right_data1, left_ind, right_ind):\n"
     expr, func_text, left_col_nums = _replace_column_accesses(
         expr,
         left_col_to_ind,
@@ -761,7 +760,14 @@ def _gen_general_cond_cfunc(join_node, typemap):
     exec(func_text, table_getitem_funcs, loc_vars)
     cond_func = loc_vars["f"]
 
-    c_sig = types.bool_(types.voidptr, types.voidptr, types.int64, types.int64)
+    c_sig = types.bool_(
+        types.voidptr,
+        types.voidptr,
+        types.voidptr,
+        types.voidptr,
+        types.int64,
+        types.int64,
+    )
     cfunc_cond = numba.cfunc(c_sig, nopython=True)(cond_func)
     return cfunc_cond.address, left_col_nums, right_col_nums
 
@@ -790,11 +796,19 @@ def _replace_column_accesses(
             continue
         getitem_fname = f"getitem_{table_name}_val_{c_ind}"
         val_varname = f"_bodo_{table_name}_val_{c_ind}"
-        func_text += (
-            f"  {val_varname} = {getitem_fname}({table_name}_table, {table_name}_ind)\n"
-        )
         col_dtype = typemap[col_vars[c].name].dtype
-        table_getitem_funcs[getitem_fname] = _gen_row_access_intrinsic(col_dtype, c_ind)
+        if col_dtype == types.unicode_type:
+            # If we have unicode we pass the table variable which is an array info
+            func_text += f"  {val_varname}, {val_varname}_size = {getitem_fname}({table_name}_table, {table_name}_ind)\n"
+            # Create proper Python string.
+            func_text += f"  {val_varname} = bodo.libs.str_arr_ext.decode_utf8({val_varname}, {val_varname}_size)\n"
+        else:
+            # If we have a numeric type we just pass the data pointers
+            func_text += f"  {val_varname} = {getitem_fname}({table_name}_data1, {table_name}_ind)\n"
+
+        table_getitem_funcs[getitem_fname] = bodo.libs.array._gen_row_access_intrinsic(
+            col_dtype, c_ind
+        )
         expr = expr.replace(cname, val_varname)
         # only append the column if it is not a key
         if c_ind >= n_keys:
@@ -815,40 +829,6 @@ def _get_col_to_ind(key_names, col_vars):
         col_to_ind[c] = i
         i += 1
     return col_to_ind
-
-
-def _gen_row_access_intrinsic(col_dtype, c_ind):
-    """Generate an intrinsic for loading a value from a table column with 'col_dtype'
-    data type. 'c_ind' is the index of the column within the table.
-    The intrinsic's input is an array of data pointers for the table's data, and a row
-    index.
-
-    For example, col_dtype=int64, c_ind=1, table=[A_data_ptr, B_data_ptr, C_data_ptr],
-    row_ind=2 will return 6 for the table below.
-    A  B  C
-    1  4  7
-    2  5  8
-    3  6  9
-    """
-    from llvmlite import ir as lir
-
-    @intrinsic
-    def getitem_func(typingctx, table_t, ind_t):
-        def codegen(context, builder, signature, args):
-            table, row_ind = args
-            # cast void* to void**
-            table = builder.bitcast(table, lir.IntType(8).as_pointer().as_pointer())
-            # get data pointer for input column and cast to proper data type
-            col_ind = lir.Constant(lir.IntType(64), c_ind)
-            col_ptr = builder.load(builder.gep(table, [col_ind]))
-            col_ptr = builder.bitcast(
-                col_ptr, context.get_data_type(col_dtype).as_pointer()
-            )
-            return builder.load(builder.gep(col_ptr, [row_ind]))
-
-        return col_dtype(types.voidptr, types.int64), codegen
-
-    return getitem_func
 
 
 def _match_join_key_types(t1, t2, loc):

@@ -8,12 +8,17 @@
  * Python. Takes data pointers for left and right tables and row indices, and
  * evaluates the condition. NOTE: Only works for numerical columns and does not
  * handle NAs yet.
- * @param l_table_ptr array of data pointers for all columns of left table
- * @param r_table_ptr array of data pointers for all columns of right table
+ * @param left_table array of array_info pointers for all columns of left table
+ * @param right_table array of array_info pointers for all columns of right table
+ * @param left_data1 array of data1 pointers for the left table. This is used as
+ *      a fast path for numeric columns.
+ * @param right_data1  array of data1 pointers for the right table. This is used as
+ *      a fast path for numeric columns.
  * @param l_ind index in left table
  * @param r_ind index in right table
  */
-typedef bool (*cond_expr_fn_t)(void** l_table_ptr, void** r_table_ptr,
+typedef bool (*cond_expr_fn_t)(array_info ** left_table, array_info ** right_table,
+                               void **left_data1, void **right_data1,
                                int64_t l_ind, int64_t r_ind);
 
 /** This function does the joining of the table and returns the joined
