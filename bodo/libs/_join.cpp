@@ -33,6 +33,7 @@ table_info* hash_join_table(
     // Does this join need an additional cond_func
     const bool uses_cond_func = cond_func != nullptr;
     try {
+        using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
         tracing::Event ev("hash_join_table");
         // Reading the MPI settings
         int n_pes, myrank;
@@ -58,6 +59,8 @@ table_info* hash_join_table(
         }
 
         if (ev.is_tracing()) {
+            ev.add_attribute("in_left_table_nrows", left_table->nrows());
+            ev.add_attribute("in_right_table_nrows", right_table->nrows());
             ev.add_attribute("g_left_parallel", left_parallel);
             ev.add_attribute("g_right_parallel", right_parallel);
             ev.add_attribute("g_n_key", n_key_t);
@@ -111,16 +114,41 @@ table_info* hash_join_table(
             if (CritMemorySize < 0) {
                 throw std::runtime_error("hash_join: CritMemorySize < 0");
             }
+            if (ev.is_tracing()) {
+                ev.add_attribute("g_left_total_memory", left_total_memory);
+                ev.add_attribute("g_right_total_memory", right_total_memory);
+                ev.add_attribute("g_bloom_filter_supported", bloom_filter_supported());
+                ev.add_attribute("CritMemorySize", CritMemorySize);
+            }
             bool all_gather = true;
-            // We always broadcast the smaller table
+            // Broadcast the smaller table if its replicated size is below a
+            // size limit (CritMemorySize) and not similar or larger than the
+            // size of the local "large" table (the latter is to avoid
+            // detrimental impact on parallelization/scaling, note that bloom
+            // filter approach also reduces cost of shuffle and does not have
+            // sequential bottleneck)
+            // We should tune this doing a more extensive study, see:
+            // https://bodo.atlassian.net/browse/BE-1030
+            float global_short_to_local_long_ratio_limit;
+            if (bloom_filter_supported())
+                global_short_to_local_long_ratio_limit = 0.8;
+            else
+                // Since we can't rely on bloom filters to reduce the shuffle
+                // cost we give some more headroom to use broadcast join
+                global_short_to_local_long_ratio_limit = 2.0;
             if (left_total_memory < right_total_memory &&
-                left_total_memory < CritMemorySize) {
+                left_total_memory < CritMemorySize &&
+                left_total_memory < (right_total_memory / double(n_pes) *
+                                     global_short_to_local_long_ratio_limit)) {
                 work_left_table = gather_table(left_table, -1, all_gather);
                 free_work_left = true;
                 work_right_table = right_table;
                 left_replicated = true;
             } else if (right_total_memory <= left_total_memory &&
-                       right_total_memory < CritMemorySize) {
+                       right_total_memory < CritMemorySize &&
+                       right_total_memory <
+                           (left_total_memory / double(n_pes) *
+                            global_short_to_local_long_ratio_limit)) {
                 work_left_table = left_table;
                 work_right_table = gather_table(right_table, -1, all_gather);
                 free_work_right = true;
@@ -130,12 +158,134 @@ table_info* hash_join_table(
                 // we do a shuffle-join. To shuffle the tables we build
                 // a hash table (ensuring that comparable
                 // types hash to the same values).
-                work_left_table =
-                    coherent_shuffle_table(left_table, right_table, n_key);
-                work_right_table =
-                    coherent_shuffle_table(right_table, left_table, n_key);
+
+                // only do filters for inner join for now
+                BloomFilter* bloom_left = nullptr;
+                BloomFilter* bloom_right = nullptr;
+                uint32_t* hashes_left = nullptr;
+                uint32_t* hashes_right = nullptr;
+                if (bloom_filter_supported() && !is_left && !is_right) {
+                    bool make_bloom_left = true;
+                    bool make_bloom_right = true;
+                    hashes_left = coherent_hash_keys_table(
+                        left_table, right_table, n_key, SEED_HASH_PARTITION);
+                    hashes_right = coherent_hash_keys_table(
+                        right_table, left_table, n_key, SEED_HASH_PARTITION);
+                    const int64_t left_table_nrows = left_table->nrows();
+                    const int64_t right_table_nrows = right_table->nrows();
+                    int64_t left_table_global_nrows;
+                    int64_t right_table_global_nrows;
+                    // TODO do this in a single reduction?
+                    MPI_Allreduce(&left_table_nrows, &left_table_global_nrows,
+                                  1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
+                    MPI_Allreduce(&right_table_nrows, &right_table_global_nrows,
+                                  1, MPI_INT64_T, MPI_SUM, MPI_COMM_WORLD);
+                    // Filter built from table A is used to filter table
+                    // B. If A is much larger than B we don't make a filter
+                    // from A because the cost of making the bloom filter will
+                    // probably be larger than what we save from filtering B
+                    // Also see https://bodo.atlassian.net/browse/BE-1321
+                    // regarding tuning these values
+                    if (left_table_global_nrows >
+                        (right_table_global_nrows * 10))
+                        make_bloom_left = false;
+                    if (right_table_global_nrows >
+                        (left_table_global_nrows * 10))
+                        make_bloom_right = false;
+                    static constexpr size_t MAX_BLOOM_SIZE = 100 * 1024 * 1024;
+                    size_t left_cardinality;
+                    size_t right_cardinality;
+                    // We are going to build global bloom filters, and we need
+                    // to know how many unique elements we are inserting into
+                    // each to set a bloom filter size that has good false
+                    // positive probability. We only get global cardinality
+                    // estimate if there is a reasonable chance that the bloom
+                    // filter will be smaller than MAX_BLOOM_SIZE.
+                    // Also see https://bodo.atlassian.net/browse/BE-1321
+                    // regarding tuning these values
+                    make_bloom_left =
+                        make_bloom_left &&
+                        (bloom_size_bytes(double(left_table_global_nrows) *
+                                          0.3) < MAX_BLOOM_SIZE);
+                    make_bloom_right =
+                        make_bloom_right &&
+                        (bloom_size_bytes(double(right_table_global_nrows) *
+                                          0.3) < MAX_BLOOM_SIZE);
+                    // Additionally we don't make a bloom filter if it is larger
+                    // than MAX_BLOOM_SIZE or much larger than the data that
+                    // it's supposed to filter (see previous reasoning)
+                    // Also see https://bodo.atlassian.net/browse/BE-1321
+                    // regarding tuning these values
+                    if (make_bloom_left) {
+                        left_cardinality =
+                            std::get<1>(get_nunique_hashes_global(
+                                hashes_left, left_table_nrows));
+                        size_t bloom_left_bytes =
+                            bloom_size_bytes(left_cardinality);
+                        if ((bloom_left_bytes > MAX_BLOOM_SIZE) ||
+                            (bloom_left_bytes /
+                                 (right_total_memory / double(n_pes)) >
+                             2.0))
+                            make_bloom_left = false;
+                    }
+                    if (make_bloom_right) {
+                        right_cardinality =
+                            std::get<1>(get_nunique_hashes_global(
+                                hashes_right, right_table_nrows));
+                        size_t bloom_right_bytes =
+                            bloom_size_bytes(right_cardinality);
+                        if ((bloom_right_bytes > MAX_BLOOM_SIZE) ||
+                            (bloom_right_bytes /
+                                 (left_total_memory / double(n_pes)) >
+                             2.0))
+                            make_bloom_right = false;
+                    }
+                    ev.add_attribute("g_make_bloom_left", make_bloom_left);
+                    ev.add_attribute("g_make_bloom_right", make_bloom_right);
+
+                    if (make_bloom_left) {
+                        tracing::Event ev_bloom("make_bloom");
+                        // A bloom filter is a set, and we need to know how
+                        // many unique elements we are inserting so that the
+                        // implementation chooses a buffer size that guarantees
+                        // low false positive probability. We are inserting
+                        // the hashes, and this is going to be a global set
+                        // (based on hashes from all the ranks) so we use the
+                        // estimated global cardinality of the hashes
+                        bloom_left = new BloomFilter(left_cardinality);
+                        bloom_left->AddAll(hashes_left, 0, left_table_nrows);
+                        // Do a union of the filters from all ranks (performs a
+                        // bitwise OR allreduce of the bloom filter's buffer)
+                        bloom_left->union_reduction();
+                        ev_bloom.add_attribute("input_len", left_table_nrows);
+                        ev_bloom.add_attribute("g_size", left_cardinality);
+                        ev_bloom.add_attribute("g_size_bytes",
+                                               bloom_left->SizeInBytes());
+                        ev_bloom.add_attribute("which", "left");
+                    }
+                    if (make_bloom_right) {
+                        tracing::Event ev_bloom("make_bloom");
+                        bloom_right = new BloomFilter(right_cardinality);
+                        bloom_right->AddAll(hashes_right, 0, right_table_nrows);
+                        bloom_right->union_reduction();
+                        ev_bloom.add_attribute("input_len", right_table_nrows);
+                        ev_bloom.add_attribute("g_size", right_cardinality);
+                        ev_bloom.add_attribute("g_size_bytes",
+                                               bloom_right->SizeInBytes());
+                        ev_bloom.add_attribute("which", "right");
+                    }
+                }
+
+                work_left_table = coherent_shuffle_table(
+                    left_table, right_table, n_key, hashes_left, bloom_right);
+                work_right_table = coherent_shuffle_table(
+                    right_table, left_table, n_key, hashes_right, bloom_left);
                 free_work_left = true;
                 free_work_right = true;
+                if (hashes_left != nullptr) delete[] hashes_left;
+                if (hashes_right != nullptr) delete[] hashes_right;
+                if (bloom_left != nullptr) delete bloom_left;
+                if (bloom_right != nullptr) delete bloom_right;
             }
         } else {
             // If either table is already replicated then we
@@ -968,9 +1118,9 @@ table_info* hash_join_table(
         }
         ev_fill_right.finalize();
         // Create indicator column if indicator=True
-        tracing::Event ev_indicator("create_indicator");
         size_t num_rows = ListPairWrite.size();
         if (indicator) {
+            tracing::Event ev_indicator("create_indicator");
             array_info* indicator_col =
                 alloc_array(num_rows, -1, -1, bodo_array_type::CATEGORICAL,
                             Bodo_CTypes::INT8, 0, 3);
@@ -993,7 +1143,6 @@ table_info* hash_join_table(
             }
             out_arrs.emplace_back(indicator_col);
         }
-        ev_indicator.finalize();
 
         // TODO if we see significant tracing gap at the end of hash_join_table
         // or right after it, we need to trace the "freeing" portion of this

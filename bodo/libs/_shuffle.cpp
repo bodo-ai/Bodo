@@ -71,18 +71,37 @@ static void calc_disp(std::vector<T>& disps, std::vector<T> const& counts) {
     for (size_t i = 1; i < n; i++) disps[i] = disps[i - 1] + counts[i - 1];
 }
 
-/*
-  Computation of
-  ---send_count/recv_count arrays
-  ---send_count_sub / recv_count_sub
-  ---send_count_sub_sub / recv_count_sub_sub
-  Those are used for the shuffling of data1/data2/data3 and their sizes.
- */
-void mpi_comm_info::set_counts(uint32_t* hashes) {
+void mpi_comm_info::set_counts(
+    uint32_t const* const hashes,
+    SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter) {
+    tracing::Event ev("set_counts");
+    ev.add_attribute("n_rows", n_rows);
     // get send count
-    for (size_t i = 0; i < n_rows; i++) {
-        size_t node = hash_to_rank(hashes[i], n_pes);
-        send_count[node]++;
+    // -1 indicates that a row is dropped (not sent anywhere)
+    row_dest.resize(n_rows, -1);
+    if (filter == nullptr) {
+        for (size_t i = 0; i < n_rows; i++) {
+            int node = hash_to_rank(hashes[i], n_pes);
+            row_dest[i] = node;
+            send_count[node]++;
+        }
+    } else {
+        for (size_t i = 0; i < n_rows; i++) {
+            const uint32_t& hash = hashes[i];
+            // if the hash is not in the filter we drop this row (row_dest[i]
+            // will stay as default initialized value of -1)
+            if (!filter->Find(static_cast<uint64_t>(hash))) continue;
+            int node = hash_to_rank(hash, n_pes);
+            row_dest[i] = node;
+            send_count[node]++;
+        }
+        filtered = true;
+    }
+    if (ev.is_tracing()) {
+        int64_t n_rows_send =
+            std::accumulate(send_count.begin(), send_count.end(), int64_t(0));
+        ev.add_attribute("nrows_filtered", n_rows - n_rows_send);
+        ev.add_attribute("filtered", filtered);
     }
     // get recv count
     MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
@@ -98,11 +117,11 @@ void mpi_comm_info::set_counts(uint32_t* hashes) {
         if (arr_info->arr_type == bodo_array_type::STRING) {
             // send counts
             std::vector<int64_t>& sub_counts = send_count_sub[i];
-            offset_t* offsets = (offset_t*)arr_info->data2;
+            offset_t const* const offsets = (offset_t*)arr_info->data2;
             for (size_t i = 0; i < n_rows; i++) {
                 offset_t str_len = offsets[i + 1] - offsets[i];
-                size_t node = hash_to_rank(hashes[i], n_pes);
-                sub_counts[node] += str_len;
+                if (row_dest[i] == -1) continue;
+                sub_counts[row_dest[i]] += str_len;
             }
             // get recv count
             MPI_Alltoall(sub_counts.data(), 1, MPI_INT64_T,
@@ -116,10 +135,11 @@ void mpi_comm_info::set_counts(uint32_t* hashes) {
             // send counts
             std::vector<int64_t>& sub_counts = send_count_sub[i];
             std::vector<int64_t>& sub_sub_counts = send_count_sub_sub[i];
-            offset_t* index_offsets = (offset_t*)arr_info->data3;
-            offset_t* data_offsets = (offset_t*)arr_info->data2;
+            offset_t const* const index_offsets = (offset_t*)arr_info->data3;
+            offset_t const* const data_offsets = (offset_t*)arr_info->data2;
             for (size_t i = 0; i < n_rows; i++) {
-                size_t node = hash_to_rank(hashes[i], n_pes);
+                const int node = row_dest[i];
+                if (node == -1) continue;
                 offset_t len_sub = index_offsets[i + 1] - index_offsets[i];
                 offset_t len_sub_sub = data_offsets[index_offsets[i + 1]] -
                                        data_offsets[index_offsets[i]];
@@ -156,30 +176,40 @@ void mpi_comm_info::set_counts(uint32_t* hashes) {
 
 template <class T>
 static void fill_send_array_inner(T* send_buff, const T* data,
-                                  const uint32_t* hashes,
                                   std::vector<int64_t> const& send_disp,
-                                  int n_pes, size_t n_rows) {
+                                  const size_t n_rows,
+                                  const std::vector<int>& row_dest,
+                                  bool filter) {
+    tracing::Event ev("fill_send_array_inner");
     std::vector<int64_t> tmp_offset(send_disp);
-    for (size_t i = 0; i < n_rows; i++) {
-        size_t node = hash_to_rank(hashes[i], n_pes);
-        int64_t ind = tmp_offset[node];
-        send_buff[ind] = data[i];
-        tmp_offset[node]++;
+    if (!filter) {
+        for (size_t i = 0; i < n_rows; i++) {
+            int64_t& ind = tmp_offset[row_dest[i]];
+            send_buff[ind++] = data[i];
+        }
+    } else {
+        for (size_t i = 0; i < n_rows; i++) {
+            const int& dest = row_dest[i];
+            if (dest == -1) continue;
+            int64_t& ind = tmp_offset[dest];
+            send_buff[ind++] = data[i];
+        }
     }
 }
 
 static void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data,
-                                          uint32_t* hashes,
                                           std::vector<int64_t> const& send_disp,
-                                          int n_pes, size_t n_rows) {
+                                          const size_t n_rows,
+                                          const std::vector<int>& row_dest) {
+    tracing::Event ev("fill_send_array_inner_decimal");
     std::vector<int64_t> tmp_offset(send_disp);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = hash_to_rank(hashes[i], n_pes);
-        int64_t ind = tmp_offset[node];
+        if (row_dest[i] == -1) continue;
+        int64_t& ind = tmp_offset[row_dest[i]];
         // send_buff[ind] = data[i];
         memcpy(send_buff + ind * BYTES_PER_DECIMAL,
                data + i * BYTES_PER_DECIMAL, BYTES_PER_DECIMAL);
-        tmp_offset[node]++;
+        ind++;
     }
 }
 
@@ -192,28 +222,28 @@ static void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data,
   @param hashes           : the hashes of the rows
   @param send_disp        : the sending array of displacements
   @param send_disp_sub    : the sending array of sub displacements
-  @param n_pes            : the number of processors
   @param n_rows           : the number of rows.
  */
 static void fill_send_array_string_inner(
     // XXX send_length_buff was allocated as offset_t but treating as uint32
     char* send_data_buff, uint32_t* send_length_buff, char* arr_data,
-    offset_t* arr_offsets, uint32_t* hashes,
-    std::vector<int64_t> const& send_disp,
-    std::vector<int64_t> const& send_disp_sub, int n_pes, size_t n_rows) {
+    offset_t* arr_offsets, std::vector<int64_t> const& send_disp,
+    std::vector<int64_t> const& send_disp_sub, const size_t n_rows,
+    const std::vector<int>& row_dest) {
+    tracing::Event ev("fill_send_array_string_inner");
     std::vector<int64_t> tmp_offset(send_disp);
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = hash_to_rank(hashes[i], n_pes);
         // write length
-        int64_t ind = tmp_offset[node];
-        uint32_t str_len = arr_offsets[i + 1] - arr_offsets[i];
-        send_length_buff[ind] = str_len;
-        tmp_offset[node]++;
+        const int node = row_dest[i];
+        if (node == -1) continue;
+        int64_t& ind = tmp_offset[node];
+        const uint32_t str_len = arr_offsets[i + 1] - arr_offsets[i];
+        send_length_buff[ind++] = str_len;
         // write data
-        int64_t c_ind = tmp_offset_sub[node];
+        int64_t& c_ind = tmp_offset_sub[node];
         memcpy(&send_data_buff[c_ind], &arr_data[arr_offsets[i]], str_len);
-        tmp_offset_sub[node] += str_len;
+        c_ind += str_len;
     }
 }
 
@@ -238,17 +268,18 @@ static void fill_send_array_list_string_inner(
     // XXX send_length_xxx was allocated as offset_t but treating as uint32
     char* send_data_buff, uint32_t* send_length_data,
     uint32_t* send_length_index, char* arr_data, offset_t* arr_data_offsets,
-    offset_t* arr_index_offsets, uint32_t* hashes,
-    std::vector<int64_t> const& send_disp,
+    offset_t* arr_index_offsets, std::vector<int64_t> const& send_disp,
     std::vector<int64_t> const& send_disp_sub,
-    std::vector<int64_t> const& send_disp_sub_sub, int n_pes, size_t n_rows) {
+    std::vector<int64_t> const& send_disp_sub_sub, int n_pes, size_t n_rows,
+    const std::vector<int>& row_dest) {
     std::vector<int64_t> tmp_offset(send_disp);
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
     std::vector<int64_t> tmp_offset_sub_sub(send_disp_sub_sub);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = hash_to_rank(hashes[i], n_pes);
         // Compute the number of strings and the number of characters that will
         // have to be sent.
+        const int node = row_dest[i];
+        if (node == -1) continue;
         int64_t ind = tmp_offset[node];
         uint32_t len_sub = arr_index_offsets[i + 1] - arr_index_offsets[i];
         uint32_t len_sub_sub = arr_data_offsets[arr_index_offsets[i + 1]] -
@@ -277,98 +308,100 @@ static void fill_send_array_list_string_inner(
 }
 
 static void fill_send_array_null_inner(
-    uint8_t* send_null_bitmask, uint8_t* array_null_bitmask, uint32_t* hashes,
-    std::vector<int64_t> const& send_disp_null, int n_pes, size_t n_rows) {
+    uint8_t* send_null_bitmask, uint8_t* array_null_bitmask,
+    std::vector<int64_t> const& send_disp_null, int n_pes, size_t n_rows,
+    const std::vector<int>& row_dest) {
     std::vector<int64_t> tmp_offset(n_pes, 0);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = hash_to_rank(hashes[i], n_pes);
-        int64_t ind = tmp_offset[node];
+        int node = row_dest[i];
+        if (node == -1) continue;
+        int64_t& ind = tmp_offset[node];
         // write null bit
         bool bit = GetBit(array_null_bitmask, i);
         uint8_t* out_bitmap = &send_null_bitmask[send_disp_null[node]];
-        SetBitTo(out_bitmap, ind, bit);
-        tmp_offset[node]++;
+        SetBitTo(out_bitmap, ind++, bit);
     }
     return;
 }
 
 static void fill_send_array(array_info* send_arr, array_info* in_arr,
-                            uint32_t* hashes,
                             std::vector<int64_t> const& send_disp,
                             std::vector<int64_t> const& send_disp_sub,
                             std::vector<int64_t> const& send_disp_sub_sub,
                             std::vector<int64_t> const& send_disp_null,
-                            int n_pes) {
-    size_t n_rows = (size_t)in_arr->length;
+                            int n_pes, const std::vector<int>& row_dest,
+                            bool filter) {
+    tracing::Event ev("fill_send_array");
+    const size_t n_rows = (size_t)in_arr->length;
     // dispatch to proper function
     // TODO: general dispatcher
     if (in_arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL)
         fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask,
-                                   (uint8_t*)in_arr->null_bitmask, hashes,
-                                   send_disp_null, n_pes, n_rows);
+                                   (uint8_t*)in_arr->null_bitmask,
+                                   send_disp_null, n_pes, n_rows, row_dest);
     if (in_arr->dtype == Bodo_CTypes::_BOOL)
         return fill_send_array_inner<bool>((bool*)send_arr->data1,
-                                           (bool*)in_arr->data1, hashes,
-                                           send_disp, n_pes, n_rows);
+                                           (bool*)in_arr->data1, send_disp,
+                                           n_rows, row_dest, filter);
     if (in_arr->dtype == Bodo_CTypes::INT8)
         return fill_send_array_inner<int8_t>((int8_t*)send_arr->data1,
-                                             (int8_t*)in_arr->data1, hashes,
-                                             send_disp, n_pes, n_rows);
+                                             (int8_t*)in_arr->data1, send_disp,
+                                             n_rows, row_dest, filter);
     if (in_arr->dtype == Bodo_CTypes::UINT8)
-        return fill_send_array_inner<uint8_t>((uint8_t*)send_arr->data1,
-                                              (uint8_t*)in_arr->data1, hashes,
-                                              send_disp, n_pes, n_rows);
+        return fill_send_array_inner<uint8_t>(
+            (uint8_t*)send_arr->data1, (uint8_t*)in_arr->data1, send_disp,
+            n_rows, row_dest, filter);
     if (in_arr->dtype == Bodo_CTypes::INT16)
-        return fill_send_array_inner<int16_t>((int16_t*)send_arr->data1,
-                                              (int16_t*)in_arr->data1, hashes,
-                                              send_disp, n_pes, n_rows);
+        return fill_send_array_inner<int16_t>(
+            (int16_t*)send_arr->data1, (int16_t*)in_arr->data1, send_disp,
+            n_rows, row_dest, filter);
     if (in_arr->dtype == Bodo_CTypes::UINT16)
-        return fill_send_array_inner<uint16_t>((uint16_t*)send_arr->data1,
-                                               (uint16_t*)in_arr->data1, hashes,
-                                               send_disp, n_pes, n_rows);
+        return fill_send_array_inner<uint16_t>(
+            (uint16_t*)send_arr->data1, (uint16_t*)in_arr->data1, send_disp,
+            n_rows, row_dest, filter);
     if (in_arr->dtype == Bodo_CTypes::INT32)
-        return fill_send_array_inner<int32_t>((int32_t*)send_arr->data1,
-                                              (int32_t*)in_arr->data1, hashes,
-                                              send_disp, n_pes, n_rows);
+        return fill_send_array_inner<int32_t>(
+            (int32_t*)send_arr->data1, (int32_t*)in_arr->data1, send_disp,
+            n_rows, row_dest, filter);
     if (in_arr->dtype == Bodo_CTypes::UINT32)
-        return fill_send_array_inner<uint32_t>((uint32_t*)send_arr->data1,
-                                               (uint32_t*)in_arr->data1, hashes,
-                                               send_disp, n_pes, n_rows);
+        return fill_send_array_inner<uint32_t>(
+            (uint32_t*)send_arr->data1, (uint32_t*)in_arr->data1, send_disp,
+            n_rows, row_dest, filter);
     if (in_arr->dtype == Bodo_CTypes::INT64)
-        return fill_send_array_inner<int64_t>((int64_t*)send_arr->data1,
-                                              (int64_t*)in_arr->data1, hashes,
-                                              send_disp, n_pes, n_rows);
+        return fill_send_array_inner<int64_t>(
+            (int64_t*)send_arr->data1, (int64_t*)in_arr->data1, send_disp,
+            n_rows, row_dest, filter);
     if (in_arr->dtype == Bodo_CTypes::UINT64)
-        return fill_send_array_inner<uint64_t>((uint64_t*)send_arr->data1,
-                                               (uint64_t*)in_arr->data1, hashes,
-                                               send_disp, n_pes, n_rows);
+        return fill_send_array_inner<uint64_t>(
+            (uint64_t*)send_arr->data1, (uint64_t*)in_arr->data1, send_disp,
+            n_rows, row_dest, filter);
     if (in_arr->dtype == Bodo_CTypes::DATE ||
         in_arr->dtype == Bodo_CTypes::DATETIME ||
         in_arr->dtype == Bodo_CTypes::TIMEDELTA)
-        return fill_send_array_inner<int64_t>((int64_t*)send_arr->data1,
-                                              (int64_t*)in_arr->data1, hashes,
-                                              send_disp, n_pes, n_rows);
+        return fill_send_array_inner<int64_t>(
+            (int64_t*)send_arr->data1, (int64_t*)in_arr->data1, send_disp,
+            n_rows, row_dest, filter);
     if (in_arr->dtype == Bodo_CTypes::FLOAT32)
         return fill_send_array_inner<float>((float*)send_arr->data1,
-                                            (float*)in_arr->data1, hashes,
-                                            send_disp, n_pes, n_rows);
+                                            (float*)in_arr->data1, send_disp,
+                                            n_rows, row_dest, filter);
     if (in_arr->dtype == Bodo_CTypes::FLOAT64)
         return fill_send_array_inner<double>((double*)send_arr->data1,
-                                             (double*)in_arr->data1, hashes,
-                                             send_disp, n_pes, n_rows);
+                                             (double*)in_arr->data1, send_disp,
+                                             n_rows, row_dest, filter);
     if (in_arr->dtype == Bodo_CTypes::DECIMAL)
         return fill_send_array_inner_decimal((uint8_t*)send_arr->data1,
-                                             (uint8_t*)in_arr->data1, hashes,
-                                             send_disp, n_pes, n_rows);
+                                             (uint8_t*)in_arr->data1, send_disp,
+                                             n_rows, row_dest);
     if (in_arr->arr_type == bodo_array_type::STRING) {
         fill_send_array_string_inner(
             /// XXX casting data2 offset_t to uint32
             (char*)send_arr->data1, (uint32_t*)send_arr->data2,
-            (char*)in_arr->data1, (offset_t*)in_arr->data2, hashes, send_disp,
-            send_disp_sub, n_pes, n_rows);
+            (char*)in_arr->data1, (offset_t*)in_arr->data2, send_disp,
+            send_disp_sub, n_rows, row_dest);
         fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask,
-                                   (uint8_t*)in_arr->null_bitmask, hashes,
-                                   send_disp_null, n_pes, n_rows);
+                                   (uint8_t*)in_arr->null_bitmask,
+                                   send_disp_null, n_pes, n_rows, row_dest);
         return;
     }
     if (in_arr->arr_type == bodo_array_type::LIST_STRING) {
@@ -376,11 +409,11 @@ static void fill_send_array(array_info* send_arr, array_info* in_arr,
             /// XXX casting data2 and data3 offset_t to uint32
             (char*)send_arr->data1, (uint32_t*)send_arr->data2,
             (uint32_t*)send_arr->data3, (char*)in_arr->data1,
-            (offset_t*)in_arr->data2, (offset_t*)in_arr->data3, hashes,
-            send_disp, send_disp_sub, send_disp_sub_sub, n_pes, n_rows);
+            (offset_t*)in_arr->data2, (offset_t*)in_arr->data3, send_disp,
+            send_disp_sub, send_disp_sub_sub, n_pes, n_rows, row_dest);
         fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask,
-                                   (uint8_t*)in_arr->null_bitmask, hashes,
-                                   send_disp_null, n_pes, n_rows);
+                                   (uint8_t*)in_arr->null_bitmask,
+                                   send_disp_null, n_pes, n_rows, row_dest);
         return;
     }
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid data type for send fill");
@@ -435,14 +468,15 @@ static void copy_gathered_null_bytes(uint8_t* null_bitmask,
 
 // shuffle_array
 void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
-                                      uint32_t* hashes,
-                                      mpi_comm_info const& comm_info) {
+                                      mpi_comm_info const& comm_info,
+                                      const std::vector<int>& row_dest) {
     int64_t n_rows = in_arr->length;
     int n_pes = comm_info.n_pes;
     std::vector<int64_t> send_count(n_pes), recv_count(n_pes);
     offset_t* index_offset = (offset_t*)in_arr->data3;
     for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t node = hash_to_rank(hashes[i_row], n_pes);
+        int node = row_dest[i_row];
+        if (node == -1) continue;
         offset_t len = index_offset[i_row + 1] - index_offset[i_row];
         send_count[node] += len;
     }
@@ -469,7 +503,8 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
     uint8_t* sub_null_bitmap = (uint8_t*)in_arr->sub_null_bitmask;
     std::vector<int64_t> shift(n_pes, 0);
     for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t node = hash_to_rank(hashes[i_row], n_pes);
+        int node = row_dest[i_row];
+        if (node == -1) continue;
         offset_t len = index_offset[i_row + 1] - index_offset[i_row];
         for (offset_t u = 0; u < len; u++) {
             bool bit = GetBit(sub_null_bitmap, pos_index + u);
@@ -504,6 +539,7 @@ static void shuffle_array(array_info* send_arr, array_info* out_arr,
                           std::vector<int64_t> const& send_disp_null,
                           std::vector<int64_t> const& recv_disp_null,
                           std::vector<uint8_t>& tmp_null_bytes) {
+    tracing::Event ev("shuffle_array");
     if (send_arr->arr_type == bodo_array_type::LIST_STRING) {
         // index_offsets
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
@@ -593,9 +629,10 @@ static void shuffle_array(array_info* send_arr, array_info* out_arr,
 template <typename T>
 std::shared_ptr<arrow::Buffer> shuffle_arrow_bitmap_buffer(
     std::vector<int64_t> const& send_count,
-    std::vector<int64_t> const& recv_count, int const& n_pes, uint32_t* hashes,
-    T const& input_array) {
-    size_t n_rows =
+    std::vector<int64_t> const& recv_count, int const& n_pes,
+    T const& input_array, const std::vector<int>& row_dest) {
+    size_t n_rows_in = static_cast<size_t>(input_array->length());
+    size_t n_rows_send =
         std::accumulate(send_count.begin(), send_count.end(), size_t(0));
     size_t n_rows_out =
         std::accumulate(recv_count.begin(), recv_count.end(), size_t(0));
@@ -613,9 +650,13 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_bitmap_buffer(
     calc_disp(send_disp_null, send_count_null);
     calc_disp(recv_disp_null, recv_count_null);
     MPI_Datatype mpi_typ_null = get_MPI_typ(Bodo_CTypes::UINT8);
-    std::vector<uint8_t> send_null_bitmask((n_rows + 7) >> 3, 0);
-    for (size_t i_row = 0; i_row < n_rows; i_row++)
-        SetBitTo(send_null_bitmask.data(), i_row, !input_array->IsNull(i_row));
+    std::vector<uint8_t> send_null_bitmask((n_rows_send + 7) >> 3, 0);
+    std::vector<int> row_dest_send(n_rows_send);
+    for (size_t i_row = 0, s_row = 0; i_row < n_rows_in; i_row++) {
+        if (row_dest[i_row] == -1) continue;
+        SetBitTo(send_null_bitmask.data(), s_row, !input_array->IsNull(i_row));
+        row_dest_send[s_row++] = row_dest[i_row];
+    }
     int64_t n_row_send_null = std::accumulate(
         send_count_null.begin(), send_count_null.end(), int64_t(0));
     int64_t n_row_recv_null = std::accumulate(
@@ -623,8 +664,8 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_bitmap_buffer(
     std::vector<uint8_t> send_array_null_bitmask(n_row_send_null, 0);
     std::vector<uint8_t> recv_array_null_bitmask(n_row_recv_null, 0);
     fill_send_array_null_inner(send_array_null_bitmask.data(),
-                               send_null_bitmask.data(), hashes, send_disp_null,
-                               n_pes, n_rows);
+                               send_null_bitmask.data(), send_disp_null, n_pes,
+                               n_rows_send, row_dest_send);
     bodo_alltoallv(send_array_null_bitmask.data(), send_count_null,
                    send_disp_null, mpi_typ_null, recv_array_null_bitmask.data(),
                    recv_count_null, recv_disp_null, mpi_typ_null,
@@ -650,20 +691,20 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_bitmap_buffer(
 template <typename T>
 std::shared_ptr<arrow::Buffer> shuffle_arrow_offset_buffer(
     std::vector<int64_t> const& send_count,
-    std::vector<int64_t> const& recv_count, uint32_t* hashes, int const& n_pes,
-    T const& input_array) {
-    size_t n_rows =
-        std::accumulate(send_count.begin(), send_count.end(), size_t(0));
+    std::vector<int64_t> const& recv_count, int const& n_pes,
+    T const& input_array, const std::vector<int>& row_dest) {
+    size_t n_rows = static_cast<size_t>(input_array->length());
     size_t n_rows_out =
         std::accumulate(recv_count.begin(), recv_count.end(), size_t(0));
     std::vector<int64_t> send_disp(n_pes);
     std::vector<int64_t> recv_disp(n_pes);
     calc_disp(send_disp, send_count);
     calc_disp(recv_disp, recv_count);
-    std::vector<int64_t> send_len(n_rows);
+    std::vector<int64_t> send_len(n_rows, 0);
     std::vector<int64_t> list_shift = send_disp;
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t node = hash_to_rank(hashes[i_row], n_pes);
+        int node = row_dest[i_row];
+        if (node == -1) continue;
         int64_t off1 = input_array->value_offset(i_row);
         int64_t off2 = input_array->value_offset(i_row + 1);
         offset_t e_len = off2 - off1;
@@ -695,46 +736,49 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_offset_buffer(
 }
 
 template <typename T>
-std::vector<uint32_t> map_hashes_array(std::vector<int64_t> const& send_count,
-                                       std::vector<int64_t> const& recv_count,
-                                       uint32_t* hashes, int const& n_pes,
-                                       T const& input_array) {
-    size_t n_rows =
-        std::accumulate(send_count.begin(), send_count.end(), size_t(0));
+std::vector<int> map_hashes_array(std::vector<int64_t> const& send_count,
+                                  std::vector<int64_t> const& recv_count,
+                                  const std::vector<int>& row_dest,
+                                  int const& n_pes, T const& input_array) {
+    size_t n_rows = static_cast<size_t>(input_array->length());
     size_t n_ent = input_array->value_offset(n_rows);
-    std::vector<uint32_t> hashes_out(n_ent);
+    std::vector<int> row_dest_out(n_ent, -1);
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        uint32_t e_hash = hashes[i_row];
+        int node = row_dest[i_row];
+        if (node == -1) continue;
         int64_t off1 = input_array->value_offset(i_row);
         int64_t off2 = input_array->value_offset(i_row + 1);
-        for (int64_t idx = off1; idx < off2; idx++) hashes_out[idx] = e_hash;
+        for (int64_t idx = off1; idx < off2; idx++) row_dest_out[idx] = node;
     }
-    return hashes_out;
+    return row_dest_out;
 }
 
 std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
     std::vector<int64_t> const& send_count,
-    std::vector<int64_t> const& recv_count, uint32_t* hashes, int const& n_pes,
-    std::shared_ptr<arrow::PrimitiveArray> const& input_array) {
+    std::vector<int64_t> const& recv_count, int const& n_pes,
+    std::shared_ptr<arrow::PrimitiveArray> const& input_array,
+    const std::vector<int>& row_dest) {
     // Typing stuff
     arrow::Type::type typ = input_array->type()->id();
     Bodo_CTypes::CTypeEnum dtype = arrow_to_bodo_type(typ);
     uint64_t siztype = numpy_item_size[dtype];
     MPI_Datatype mpi_typ = get_MPI_typ(dtype);
     // Setting up the arrays
-    size_t n_rows =
+    size_t n_rows_send =
         std::accumulate(send_count.begin(), send_count.end(), size_t(0));
+    size_t n_rows = static_cast<size_t>(input_array->length());
     size_t n_rows_out =
         std::accumulate(recv_count.begin(), recv_count.end(), size_t(0));
     std::vector<int64_t> send_disp(n_pes);
     std::vector<int64_t> recv_disp(n_pes);
     calc_disp(send_disp, send_count);
     calc_disp(recv_disp, recv_count);
-    std::vector<char> send_arr(n_rows * siztype);
+    std::vector<char> send_arr(n_rows_send * siztype);
     char* values = (char*)input_array->values()->data();
     std::vector<int64_t> tmp_offset(send_disp);
     for (size_t i = 0; i < n_rows; i++) {
-        size_t node = hash_to_rank(hashes[i], n_pes);
+        int node = row_dest[i];
+        if (node == -1) continue;
         int64_t ind = tmp_offset[node];
         memcpy(send_arr.data() + ind * siztype, values + i * siztype, siztype);
         tmp_offset[node]++;
@@ -757,18 +801,19 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
 
 std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     std::vector<int64_t> const& send_count,
-    std::vector<int64_t> const& recv_count, uint32_t* hashes, int const& n_pes,
+    std::vector<int64_t> const& recv_count, const std::vector<int>& row_dest,
+    int const& n_pes,
 #if OFFSET_BITWIDTH == 32
     std::shared_ptr<arrow::StringArray> const& string_array) {
 #else
     std::shared_ptr<arrow::LargeStringArray> const& string_array) {
 #endif
-    size_t n_rows =
-        std::accumulate(send_count.begin(), send_count.end(), size_t(0));
+    size_t n_rows = static_cast<size_t>(string_array->length());
     std::vector<int64_t> send_count_char(n_pes, 0);
     std::vector<int64_t> recv_count_char(n_pes);
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t node = hash_to_rank(hashes[i_row], n_pes);
+        int node = row_dest[i_row];
+        if (node == -1) continue;
         std::string e_str = string_array->GetString(i_row);
         int64_t n_char = e_str.size();
         send_count_char[node] += n_char;
@@ -795,7 +840,8 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     char* recv_char = (char*)buffer->mutable_data();
     std::vector<int64_t> list_shift = send_disp_char;
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t node = hash_to_rank(hashes[i_row], n_pes);
+        int node = row_dest[i_row];
+        if (node == -1) continue;
         std::string e_str = string_array->GetString(i_row);
         int64_t n_char = e_str.size();
         for (int64_t i_char = 0; i_char < n_char; i_char++) {
@@ -819,7 +865,8 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
   The hashes specify how the nodes will be sent.
  */
 std::shared_ptr<arrow::Array> shuffle_arrow_array(
-    std::shared_ptr<arrow::Array> input_array, uint32_t* hashes, int n_pes) {
+    std::shared_ptr<arrow::Array> input_array, int n_pes,
+    const std::vector<int>& row_dest) {
     // Computing total number of rows on output
     // Note that the number of rows, counts and hashes varies according
     // to the array in the recursive structure
@@ -827,7 +874,8 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
     std::vector<int64_t> send_count(n_pes, 0);
     std::vector<int64_t> recv_count(n_pes);
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
-        size_t node = hash_to_rank(hashes[i_row], n_pes);
+        int node = row_dest[i_row];
+        if (node == -1) continue;
         send_count[node]++;
     }
     MPI_Alltoall(send_count.data(), 1, MPI_INT64_T, recv_count.data(), 1,
@@ -847,17 +895,17 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
 #endif
         // Computing the offsets, hashes
         std::shared_ptr<arrow::Buffer> list_offsets =
-            shuffle_arrow_offset_buffer(send_count, recv_count, hashes, n_pes,
-                                        list_array);
-        std::vector<uint32_t> hashes_out =
-            map_hashes_array(send_count, recv_count, hashes, n_pes, list_array);
+            shuffle_arrow_offset_buffer(send_count, recv_count, n_pes,
+                                        list_array, row_dest);
+        std::vector<int> row_dest_out = map_hashes_array(
+            send_count, recv_count, row_dest, n_pes, list_array);
         // Now computing the bitmap
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            shuffle_arrow_bitmap_buffer(send_count, recv_count, n_pes, hashes,
-                                        list_array);
+            shuffle_arrow_bitmap_buffer(send_count, recv_count, n_pes,
+                                        list_array, row_dest);
         // Computing the child_array
         std::shared_ptr<arrow::Array> child_array =
-            shuffle_arrow_array(list_array->values(), hashes_out.data(), n_pes);
+            shuffle_arrow_array(list_array->values(), n_pes, row_dest_out);
         // Now returning the shuffled array
 #if OFFSET_BITWIDTH == 32
         return std::make_shared<arrow::ListArray>(list_array->type(),
@@ -878,11 +926,11 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
         std::vector<std::shared_ptr<arrow::Array>> children;
         for (int64_t i = 0; i < struct_type->num_fields(); i++)
             children.push_back(
-                shuffle_arrow_array(struct_array->field(i), hashes, n_pes));
+                shuffle_arrow_array(struct_array->field(i), n_pes, row_dest));
         // Now computing the bitmap
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            shuffle_arrow_bitmap_buffer(send_count, recv_count, n_pes, hashes,
-                                        struct_array);
+            shuffle_arrow_bitmap_buffer(send_count, recv_count, n_pes,
+                                        struct_array, row_dest);
         // Now returning the arrays
         return std::make_shared<arrow::StructArray>(
             struct_array->type(), n_rows_out, children, null_bitmap_out);
@@ -897,15 +945,15 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
 #endif
         // Now computing the offsets
         std::shared_ptr<arrow::Buffer> list_offsets =
-            shuffle_arrow_offset_buffer(send_count, recv_count, hashes, n_pes,
-                                        string_array);
+            shuffle_arrow_offset_buffer(send_count, recv_count, n_pes,
+                                        string_array, row_dest);
         // Now computing the bitmap
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            shuffle_arrow_bitmap_buffer(send_count, recv_count, n_pes, hashes,
-                                        string_array);
+            shuffle_arrow_bitmap_buffer(send_count, recv_count, n_pes,
+                                        string_array, row_dest);
         // Now computing the characters
         std::shared_ptr<arrow::Buffer> data = shuffle_string_buffer(
-            send_count, recv_count, hashes, n_pes, string_array);
+            send_count, recv_count, row_dest, n_pes, string_array);
         // Now returning the array
 #if OFFSET_BITWIDTH == 32
         return std::make_shared<arrow::StringArray>(n_rows_out, list_offsets,
@@ -920,11 +968,11 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(input_array);
         // Now computing the data
         std::shared_ptr<arrow::Buffer> data = shuffle_arrow_primitive_buffer(
-            send_count, recv_count, hashes, n_pes, primitive_array);
+            send_count, recv_count, n_pes, primitive_array, row_dest);
         // Now computing the bitmap
         std::shared_ptr<arrow::Buffer> null_bitmap_out =
-            shuffle_arrow_bitmap_buffer(send_count, recv_count, n_pes, hashes,
-                                        primitive_array);
+            shuffle_arrow_bitmap_buffer(send_count, recv_count, n_pes,
+                                        primitive_array, row_dest);
         return std::make_shared<arrow::PrimitiveArray>(
             primitive_array->type(), n_rows_out, data, null_bitmap_out);
     }
@@ -944,8 +992,9 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
 table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                                  mpi_comm_info const& comm_info) {
     tracing::Event ev("shuffle_table_kernel");
-    ev.add_attribute("table_nrows_before", size_t(in_table->nrows()));
     if (ev.is_tracing()) {
+        ev.add_attribute("table_nrows_before", size_t(in_table->nrows()));
+        ev.add_attribute("filtered", comm_info.filtered);
         size_t global_table_nbytes = table_global_memory_size(in_table);
         ev.add_attribute("g_table_nbytes", global_table_nbytes);
     }
@@ -967,21 +1016,36 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
     // fill send buffer and send
     std::vector<array_info*> out_arrs;
     std::vector<uint8_t> tmp_null_bytes(comm_info.n_null_bytes);
+    const int64_t n_rows_send = std::accumulate(
+        comm_info.send_count.begin(), comm_info.send_count.end(), int64_t(0));
     for (size_t i = 0; i < n_cols; i++) {
         array_info* in_arr = in_table->columns[i];
         array_info* out_arr;
         if (in_arr->arr_type != bodo_array_type::ARROW) {
-            array_info* send_arr =
-                alloc_array(in_table->nrows(), in_arr->n_sub_elems,
-                            in_arr->n_sub_sub_elems, in_arr->arr_type,
-                            in_arr->dtype, 2 * n_pes, in_arr->num_categories);
+            const std::vector<int64_t>& send_count_sub =
+                comm_info.send_count_sub[i];
+            const std::vector<int64_t>& send_count_sub_sub =
+                comm_info.send_count_sub_sub[i];
+            int64_t n_sub_elems = -1;
+            int64_t n_sub_sub_elems = -1;
+            if (send_count_sub.size() > 0)
+                n_sub_elems = std::accumulate(send_count_sub.begin(),
+                                              send_count_sub.end(), int64_t(0));
+            if (send_count_sub_sub.size() > 0)
+                n_sub_sub_elems =
+                    std::accumulate(send_count_sub_sub.begin(),
+                                    send_count_sub_sub.end(), int64_t(0));
+            array_info* send_arr = alloc_array(
+                n_rows_send, n_sub_elems, n_sub_sub_elems, in_arr->arr_type,
+                in_arr->dtype, 2 * n_pes, in_arr->num_categories);
             out_arr = alloc_array(total_recv, n_sub_recvs[i],
                                   n_sub_sub_recvs[i], in_arr->arr_type,
                                   in_arr->dtype, 0, in_arr->num_categories);
-            fill_send_array(send_arr, in_arr, hashes, comm_info.send_disp,
+            fill_send_array(send_arr, in_arr, comm_info.send_disp,
                             comm_info.send_disp_sub[i],
                             comm_info.send_disp_sub_sub[i],
-                            comm_info.send_disp_null, n_pes);
+                            comm_info.send_disp_null, n_pes, comm_info.row_dest,
+                            comm_info.filtered);
 
             shuffle_array(
                 send_arr, out_arr, comm_info.send_count, comm_info.recv_count,
@@ -994,15 +1058,14 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                 comm_info.recv_count_null, comm_info.send_disp_null,
                 comm_info.recv_disp_null, tmp_null_bytes);
             if (in_arr->arr_type == bodo_array_type::LIST_STRING)
-                shuffle_list_string_null_bitmask(in_arr, out_arr, hashes,
-                                                 comm_info);
+                shuffle_list_string_null_bitmask(in_arr, out_arr, comm_info,
+                                                 comm_info.row_dest);
             delete_info_decref_array(send_arr);
         } else {
             std::shared_ptr<arrow::Array> out_array =
-                shuffle_arrow_array(in_arr->array, hashes, n_pes);
-            uint64_t n_items =
-                out_array
-                    ->length();  // Should get the value from the output array
+                shuffle_arrow_array(in_arr->array, n_pes, comm_info.row_dest);
+            // Should get the value from the output array
+            int64_t n_items = out_array->length();
             NRT_MemInfo* meminfo = NULL;
             out_arr = new array_info(
                 bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/, n_items,
@@ -1028,9 +1091,10 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
 // tranferring the shuffled data back to the original DF. Useful for things like
 // cumulative operations, array_isin, etc.
 
-array_info* reverse_shuffle_numpy_array(array_info* in_arr, uint32_t* hashes,
+array_info* reverse_shuffle_numpy_array(array_info* in_arr,
                                         mpi_comm_info const& comm_info) {
-    uint64_t siztype = numpy_item_size[in_arr->dtype];
+    tracing::Event ev("reverse_shuffle_numpy_array");
+    const uint64_t siztype = numpy_item_size[in_arr->dtype];
     MPI_Datatype mpi_typ = get_MPI_typ(in_arr->dtype);
     size_t n_rows_ret = std::accumulate(comm_info.send_count.begin(),
                                         comm_info.send_count.end(), size_t(0));
@@ -1043,17 +1107,18 @@ array_info* reverse_shuffle_numpy_array(array_info* in_arr, uint32_t* hashes,
                    tmp_recv.data(), comm_info.send_count, comm_info.send_disp,
                    mpi_typ, MPI_COMM_WORLD);
     std::vector<int64_t> tmp_offset(comm_info.send_disp);
+    const std::vector<int>& row_dest = comm_info.row_dest;
     for (size_t i = 0; i < n_rows_ret; i++) {
-        size_t node = hash_to_rank(hashes[i], comm_info.n_pes);
-        int64_t ind = tmp_offset[node];
-        memcpy(data1_o + siztype * i, tmp_recv.data() + siztype * ind, siztype);
-        tmp_offset[node]++;
+        int64_t& ind = tmp_offset[row_dest[i]];
+        memcpy(data1_o + siztype * i, tmp_recv.data() + siztype * ind++,
+               siztype);
     }
     return out_arr;
 }
 
 array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
                                          mpi_comm_info const& comm_info) {
+    tracing::Event ev("reverse_shuffle_string_array");
     // 1: computing the recv_count_sub and related
     offset_t* in_offset = (offset_t*)in_arr->data2;
     int n_pes = comm_info.n_pes;
@@ -1124,6 +1189,7 @@ array_info* reverse_shuffle_string_array(array_info* in_arr, uint32_t* hashes,
 void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
                                        uint32_t* hashes,
                                        mpi_comm_info const& comm_info) {
+    tracing::Event ev("reverse_shuffle_null_bitmap_array");
     int n_pes = comm_info.n_pes;
     std::vector<int64_t> send_count_null(n_pes), recv_count_null(n_pes);
     for (int i = 0; i < n_pes; i++) {
@@ -1166,6 +1232,7 @@ void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
 array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                                               uint32_t* hashes,
                                               mpi_comm_info const& comm_info) {
+    tracing::Event ev("reverse_shuffle_list_string_array");
     // 1: computing the recv_count_sub and related
     int n_pes = comm_info.n_pes;
     offset_t* in_str_offset = (offset_t*)in_arr->data3;
@@ -1339,6 +1406,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
  */
 table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                                          mpi_comm_info const& comm_info) {
+    tracing::Event ev("reverse_shuffle_table_kernel");
 #ifdef DEBUG_REVERSE_SHUFFLE
     std::cout << "Beginning of reverse_shuffle_table_kernel. in_table:\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
@@ -1359,8 +1427,7 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
             if (arr_type == bodo_array_type::NUMPY ||
                 arr_type == bodo_array_type::CATEGORICAL ||
                 arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-                out_arr =
-                    reverse_shuffle_numpy_array(in_arr, hashes, comm_info);
+                out_arr = reverse_shuffle_numpy_array(in_arr, comm_info);
             }
             if (arr_type == bodo_array_type::STRING) {
                 out_arr =
@@ -1464,20 +1531,24 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info) {
     return revshuf_table;
 }
 
-table_info* coherent_shuffle_table(table_info* in_table, table_info* ref_table,
-                                   int64_t n_keys) {
+table_info* coherent_shuffle_table(
+    table_info* in_table, table_info* ref_table, int64_t n_keys,
+    uint32_t* hashes, SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter) {
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
         return NULL;
     }
+    const bool delete_hashes = (hashes == nullptr);
     mpi_comm_info comm_info(in_table->columns);
     // computing the hash data structure
-    uint32_t* hashes = coherent_hash_keys_table(in_table, ref_table, n_keys,
-                                                SEED_HASH_PARTITION);
-    comm_info.set_counts(hashes);  // Prereq to calling shuffle_table_kernel
+    if (hashes == nullptr)
+        hashes = coherent_hash_keys_table(in_table, ref_table, n_keys,
+                                          SEED_HASH_PARTITION);
+    // Prereq to calling shuffle_table_kernel
+    comm_info.set_counts(hashes, filter);
     table_info* table = shuffle_table_kernel(in_table, hashes, comm_info);
-    delete[] hashes;
+    if (delete_hashes) delete[] hashes;
     return table;
 }
 
