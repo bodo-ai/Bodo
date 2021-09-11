@@ -5459,8 +5459,12 @@ class GroupbyPipeline {
             // shuffle_before_update=false)
 
             int shuffle_before_update_local = 0;
-            const float groups_in_nrows_ratio =
-                float(nunique_hashes) / in_table->nrows();
+            float groups_in_nrows_ratio;
+            if (in_table->nrows() == 0)
+                groups_in_nrows_ratio = 1.0;
+            else
+                groups_in_nrows_ratio =
+                    float(nunique_hashes) / in_table->nrows();
             if (groups_in_nrows_ratio >= 0.9)  // XXX what threshold is best?
                 shuffle_before_update_local = 1;
             ev.add_attribute("groups_in_nrows_ratio", groups_in_nrows_ratio);
@@ -5732,7 +5736,6 @@ class GroupbyPipeline {
      * Returns the final output table which is the result of the groupby.
      */
     table_info* getOutputTable() {
-        tracing::Event ev("getOutputTable", is_parallel);
         table_info* out_table = new table_info();
         if (return_key)
             out_table->columns.assign(cur_table->columns.begin(),

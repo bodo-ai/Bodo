@@ -841,6 +841,7 @@ def test_merge_right_key_nullable(memory_leak_check):
         (df1, df2),
         sort_output=True,
         check_dtype=False,
+        reset_index=True,
     )
 
 

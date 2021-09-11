@@ -68,7 +68,9 @@ if is_win:
     eca_c = ["/O2"]
     ela = ["/std:c++17"]
 else:
-    eca = ["-std=c++17", "-g0", "-O3"]
+    # -march=haswell is used to enable AVX2 support (required by SIMD bloom
+    # filter implementation)
+    eca = ["-std=c++17", "-g0", "-O3", "-march=haswell"]
     eca_c = ["-g0", "-O3"]
     ela = ["-std=c++17"]
 
@@ -283,7 +285,9 @@ ext_arr = Extension(
         "bodo/libs/hyperloglog.h",
     ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
-    extra_compile_args=eca,
+    # -fno-strict-aliasing required by bloom filter implementation (see comment
+    # in simd-block-fixed-fpp.h about violating strict aliasing rules)
+    extra_compile_args=eca + ["-fno-strict-aliasing"],
     extra_link_args=ela,
     define_macros=np_compile_args["define_macros"],
     include_dirs=np_compile_args["include_dirs"] + ind + extra_hash_ind,

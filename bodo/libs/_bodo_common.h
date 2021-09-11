@@ -12,6 +12,7 @@
 #include <arrow/api.h>
 #include <vector>
 #include "_meminfo.h"
+#include "simd-block-fixed-fpp.h"
 #include "tracing.h"
 
 #define ALIGNMENT 64  // preferred alignment for AVX512
@@ -523,10 +524,30 @@ struct mpi_comm_info {
     std::vector<int64_t> send_disp_null;
     std::vector<int64_t> recv_disp_null;
     size_t n_null_bytes;
+    // Store input row to destination rank. This way we only need to do
+    // hash_to_rank() once during shuffle. Also stores the result of filtering
+    // rows with bloom filters (removed rows have dest == -1), so that we only
+    // query the filter once.
+    std::vector<int> row_dest;
+    // true if using a bloom filter to discard rows before shuffling
+    bool filtered = false;
 
     explicit mpi_comm_info(std::vector<array_info*>& _arrays);
 
-    void set_counts(uint32_t* hashes);
+    /**
+     * Computation of:
+     * - send_count/recv_count arrays
+     * - send_count_sub / recv_count_sub
+     * - send_count_sub_sub / recv_count_sub_sub
+     * Those are used for the shuffling of data1/data2/data3 and their sizes.
+     * @param hashes : hashes of all the rows
+     * @param filter : Bloom filter. Rows whose hash is not in the filter will
+     * be discarded from shuffling. If no filter is provided no filtering will
+     * happen.
+     */
+    void set_counts(
+        uint32_t const* const hashes,
+        SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr);
 };
 
 struct table_info {

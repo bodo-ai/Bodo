@@ -1,3 +1,6 @@
+#ifndef _TRACING_H_INCLUDED
+#define _TRACING_H_INCLUDED
+
 #include <Python.h>
 
 namespace tracing {
@@ -93,6 +96,13 @@ public:
         finalized = true;
     }
 
+    void add_attribute(const std::string& name, const std::string& value) {
+#ifdef BODO_ENABLE_TRACING
+        if (event_py)
+            PyObject_CallMethod(event_py, "add_attribute", "ss", name.c_str(), value.c_str());
+#endif
+    }
+
 private:
     bool tracing = false;
     PyObject* event_py = nullptr;  // instance of bodo.utils.tracing.Event
@@ -100,3 +110,5 @@ private:
 };
 
 }
+
+#endif // _TRACING_H_INCLUDED
