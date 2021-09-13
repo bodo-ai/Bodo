@@ -260,7 +260,7 @@ table_info* hash_join_table(
                         ev_bloom.add_attribute("input_len", left_table_nrows);
                         ev_bloom.add_attribute("g_size", left_cardinality);
                         ev_bloom.add_attribute("g_size_bytes",
-                                               bloom_left->SizeInBytes());
+                                               static_cast<size_t>(bloom_left->SizeInBytes()));
                         ev_bloom.add_attribute("which", "left");
                     }
                     if (make_bloom_right) {
@@ -271,7 +271,7 @@ table_info* hash_join_table(
                         ev_bloom.add_attribute("input_len", right_table_nrows);
                         ev_bloom.add_attribute("g_size", right_cardinality);
                         ev_bloom.add_attribute("g_size_bytes",
-                                               bloom_right->SizeInBytes());
+                                               static_cast<size_t>(bloom_right->SizeInBytes()));
                         ev_bloom.add_attribute("which", "right");
                     }
                 }
