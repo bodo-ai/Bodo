@@ -76,7 +76,10 @@ from bodo.hiframes.series_str_impl import (
 from bodo.hiframes.split_impl import StringArraySplitViewType
 from bodo.io.h5_api import h5dataset_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import (
+    boolean_array,
+    is_valid_boolean_array_logical_op,
+)
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import StringArrayType, string_array_type
@@ -1165,12 +1168,11 @@ class SeriesPass:
         if (rhs.fn in [operator.or_, operator.and_]) and any(
             t == boolean_array for t in (typ1, typ2)
         ):
-            overload_func = bodo.libs.bool_arr_ext.create_nullable_logical_op_overload(
-                rhs.fn
-            )
-            impl = overload_func(typ1, typ2)
-            # Reuse the type check from bool_array_or_impl to determine inlining
-            if impl is not None:
+            if is_valid_boolean_array_logical_op(typ1, typ2):
+                impl = bodo.libs.bool_arr_ext.create_nullable_logical_op_overload(
+                    rhs.fn
+                )(typ1, typ2)
+                assert impl != None
                 return replace_func(self, impl, [arg1, arg2])
 
         # inline Boolean array ops

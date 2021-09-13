@@ -12,6 +12,7 @@ import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed, lower_constant
+from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import (
     NativeValue,
     box,
@@ -905,24 +906,7 @@ def create_nullable_logical_op_overload(op):
         """
         # 1 input must be a nullable boolean array and the other either a nullable boolean
         # array, a numpy boolean array, or a bool
-        is_valid = (
-            (val1 == bodo.boolean_array or val2 == bodo.boolean_array)
-            and (
-                (
-                    bodo.utils.utils.is_array_typ(val1, False)
-                    and val1.dtype == types.bool_
-                )
-                or val1 == types.bool_
-            )
-            and (
-                (
-                    bodo.utils.utils.is_array_typ(val2, False)
-                    and val2.dtype == types.bool_
-                )
-                or val2 == types.bool_
-            )
-        )
-        if not is_valid:
+        if not is_valid_boolean_array_logical_op(val1, val2):
             return
 
         # All implementations are almost identical, differing only
@@ -972,11 +956,71 @@ def create_nullable_logical_op_overload(op):
     return bool_array_impl
 
 
-def _install_nullable_logical_ops():
+def create_boolean_array_logical_lower_impl(op):
+    """
+    Returns a lowering implementation for the specified operand (Or/And),
+    To be used with lower_builtin
+    """
+
+    def logical_lower_impl(context, builder, sig, args):
+        impl = create_nullable_logical_op_overload(op)(*sig.args)
+        return context.compile_internal(builder, impl, sig, args)
+
+    return logical_lower_impl
+
+
+class BooleanArrayLogicalOperatorTemplate(AbstractTemplate):
+    """
+    Operator template used for doing typing for nullable logical operators (And/Or)
+    between boolean arrays.
+    """
+
+    def generic(self, args, kws):
+        assert len(args) == 2
+        # No kws supported, as builtin operators do not accept them
+        assert not kws
+
+        if not is_valid_boolean_array_logical_op(args[0], args[1]):
+            return
+
+        # Return type is always boolean array
+        ret = boolean_array
+        # Return the signature
+        return ret(*args)
+
+
+def is_valid_boolean_array_logical_op(typ1, typ2):
+    """Helper function that determines if we a valid logical and/or operation
+    on a boolean array type"""
+
+    is_valid = (
+        (typ1 == bodo.boolean_array or typ2 == bodo.boolean_array)
+        and (
+            (bodo.utils.utils.is_array_typ(typ1, False) and typ1.dtype == types.bool_)
+            or typ1 == types.bool_
+        )
+        and (
+            (bodo.utils.utils.is_array_typ(typ2, False) and typ2.dtype == types.bool_)
+            or typ2 == types.bool_
+        )
+    )
+    return is_valid
+
+
+def _install_nullable_logical_lowering():
     # install unary operators: &, |
     for op in (operator.and_, operator.or_):
-        overload_impl = create_nullable_logical_op_overload(op)
-        overload(op)(overload_impl)
+        lower_impl = create_boolean_array_logical_lower_impl(op)
+        infer_global(op)(BooleanArrayLogicalOperatorTemplate)
+        for typ1, typ2 in [
+            (boolean_array, boolean_array),
+            (boolean_array, types.bool_),
+            (boolean_array, types.Array(types.bool_, 1, "C")),
+        ]:
+            lower_builtin(op, typ1, typ2)(lower_impl)
+
+            if typ1 != typ2:
+                lower_builtin(op, typ2, typ1)(lower_impl)
 
 
-_install_nullable_logical_ops()
+_install_nullable_logical_lowering()
