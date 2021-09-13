@@ -132,7 +132,7 @@ DataFrameGetItemTemplate._no_unliteral = True
 
 # lowering is necessary since df filtering is used in the train_test_split()
 # implementation which is not inlined and uses the regular Numba pipeline
-# see bodo/tests/test_sklearn.py::test_train_test_split_df
+# see bodo/tests/test_sklearn_part2.py::test_train_test_split_df
 @lower_builtin(operator.getitem, DataFrameType, types.Any)
 def getitem_df_lower(context, builder, sig, args):
     impl = df_getitem_overload(*sig.args)
