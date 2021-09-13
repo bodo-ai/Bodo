@@ -100,7 +100,7 @@ void mpi_comm_info::set_counts(
     if (ev.is_tracing()) {
         int64_t n_rows_send =
             std::accumulate(send_count.begin(), send_count.end(), int64_t(0));
-        ev.add_attribute("nrows_filtered", n_rows - n_rows_send);
+        ev.add_attribute("nrows_filtered", static_cast<size_t>(n_rows - n_rows_send));
         ev.add_attribute("filtered", filtered);
     }
     // get recv count
