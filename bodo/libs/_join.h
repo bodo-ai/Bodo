@@ -14,11 +14,14 @@
  *      a fast path for numeric columns.
  * @param right_data1  array of data1 pointers for the right table. This is used as
  *      a fast path for numeric columns.
+ * @param left_null_bitmap array of null bitmaps for the left table.
+ * @param right_null_bitmap array of null bitmaps for the right table.
  * @param l_ind index in left table
  * @param r_ind index in right table
  */
 typedef bool (*cond_expr_fn_t)(array_info ** left_table, array_info ** right_table,
                                void **left_data1, void **right_data1,
+                               void **left_null_bitmap, void **right_null_bitmap,
                                int64_t l_ind, int64_t r_ind);
 
 /** This function does the joining of the table and returns the joined

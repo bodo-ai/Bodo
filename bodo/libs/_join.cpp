@@ -314,13 +314,20 @@ table_info* hash_join_table(
         std::vector<array_info*> right_table_infos = work_right_table->columns;
         std::vector<void*> col_ptrs_left(n_tot_left);
         std::vector<void*> col_ptrs_right(n_tot_right);
+        // Vectors for null bitmaps for fast null checking from the cfunc
+        std::vector<void*> null_bitmap_left(n_tot_left);
+        std::vector<void*> null_bitmap_right(n_tot_right);
         for (size_t i = 0; i < n_tot_left; i++) {
             col_ptrs_left[i] =
                 static_cast<void*>(work_left_table->columns[i]->data1);
+            null_bitmap_left[i] =
+                static_cast<void*>(work_left_table->columns[i]->null_bitmask);
         }
         for (size_t i = 0; i < n_tot_right; i++) {
             col_ptrs_right[i] =
                 static_cast<void*>(work_right_table->columns[i]->data1);
+            null_bitmap_right[i] =
+                static_cast<void*>(work_right_table->columns[i]->null_bitmask);
         }
 
         //
@@ -669,6 +676,7 @@ table_info* hash_join_table(
                             bool match =
                                 cond_func(left_table_infos.data(), right_table_infos.data(),
                                           col_ptrs_left.data(), col_ptrs_right.data(),
+                                          null_bitmap_left.data(), null_bitmap_right.data(),
                                           left_ind, right_ind);
                             if (match) {
                                 // If our group matches, add every row and
@@ -864,6 +872,7 @@ table_info* hash_join_table(
                             bool match =
                                 cond_func(left_table_infos.data(), right_table_infos.data(),
                                           col_ptrs_left.data(), col_ptrs_right.data(),
+                                          null_bitmap_left.data(), null_bitmap_right.data(),
                                           left_ind, right_ind);
                             if (match) {
                                 // If our group matches, add every row

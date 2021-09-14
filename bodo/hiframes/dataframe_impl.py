@@ -2095,6 +2095,109 @@ def _is_col_access(expr_node):
     return expr_str.startswith("left.") or expr_str.startswith("right.")
 
 
+def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_data):
+    """
+    Insert NA checks for the general cond used in a join. NA values
+    can be inserted at the start of expressions in which they are used.
+
+    The one exception to this is an OR, which must do separate NA checks in
+    each section of the OR, unless a value appears on both sides.
+
+    This returns the expression with NOT_NA(...) for each table.
+
+    Example:
+    input: left.A > right.B & (left.C > right.D | left.C < right.A)
+    output: NOT_NA(left.A) & NOT_NA(right.B) & NOT_NA(left.C)
+            & left.A > right.B
+            & ((NOT_NA(right.D) & left.C > right.D) | (NOT_NA(right.A) & left.C < right.A)
+
+    Notice how right.D and right.A must be checked inside the OR because each only impacts
+    part of the expression, but left.C is checked once because it impacts both sides.
+
+    NA checks are only inserted if the types is nullable.
+    """
+    # create fake environment for Expr to enable parsing
+    # include NOT_NA for the checks we insert
+    resolver = {"left": 0, "right": 0, "NOT_NA": 0}
+    env = pd.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
+
+    def append_null_checks(expr_node, null_set):
+        """Create a new expr appending by append NOTNA & checks
+        to the front of expr node for each element in null_set."""
+
+        if not null_set:
+            return expr_node
+        null_check_str = " & ".join(list(null_set))
+        null_expr, _, _ = _parse_query_expr(null_check_str, env, [], [], None)
+        # _disallow_scalar_only_bool_ops accesses actual value which is not possible
+        saved__disallow_scalar_only_bool_ops = (
+            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
+        )
+        pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = lambda self: None
+
+        try:
+            binop = pd.core.computation.ops.BinOp("&", null_expr, expr_node)
+        finally:
+            # Restore _disallow_scalar_only_bool_ops
+            pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops = (
+                saved__disallow_scalar_only_bool_ops
+            )
+        return binop
+
+    def _insert_NA_cond_body(expr_node, null_set):
+        """
+        Returns an updated version of the sub expr and a set
+        of all column checks (i.e. right.A) that need a null value
+        inserted.
+        """
+        if isinstance(expr_node, pd.core.computation.ops.BinOp):
+            if expr_node.op == "|":
+                # If we encounter OR we need special handling because
+                # a null value may only impact the lhs or rhs.
+                left_null = set()
+                right_null = set()
+
+                left_body = _insert_NA_cond_body(expr_node.lhs, left_null)
+                right_body = _insert_NA_cond_body(expr_node.rhs, right_null)
+
+                # Elements found in both sets can be bubbled up
+                joint_nulls = left_null.intersection(right_null)
+
+                # Remove any joint nulls from each set
+                left_null.difference_update(joint_nulls)
+                right_null.difference_update(joint_nulls)
+
+                # Update the existing set
+                null_set.update(joint_nulls)
+
+                # Add null checks where needed
+                expr_node.lhs = append_null_checks(left_body, left_null)
+                expr_node.rhs = append_null_checks(right_body, right_null)
+                # Update operands so print works properly
+                expr_node.operands = (expr_node.lhs, expr_node.rhs)
+            else:
+                expr_node.lhs = _insert_NA_cond_body(expr_node.lhs, null_set)
+                expr_node.rhs = _insert_NA_cond_body(expr_node.rhs, null_set)
+        elif _is_col_access(expr_node):
+            # If we have a column add it to the nullset if the type is nullable.
+            full_name = expr_node.name
+            table_name, col_name = full_name.split(".")
+            if table_name == "left":
+                cols = left_columns
+                data = left_data
+            else:
+                cols = right_columns
+                data = right_data
+            arr_type = data[cols.index(col_name)]
+            if bodo.utils.typing.is_nullable(arr_type):
+                null_set.add("NOT_NA." + expr_node.name)
+        return expr_node
+
+    null_set = set()
+    modified_expr_nodes = _insert_NA_cond_body(expr_node, null_set)
+    return append_null_checks(expr_node, null_set)
+
+
 def _extract_equal_conds(expr_node):
     """extract equality terms of parsed expression node and remove them
     e.g. "left.A == right.A & left.B < 3" -> ["A"], ["B"], "left.B < 3"
@@ -2142,6 +2245,8 @@ def _extract_equal_conds(expr_node):
         # update '&' expr with new lhs/rhs
         expr_node.lhs = l_expr
         expr_node.rhs = r_expr
+        # Update operands so print works properly
+        expr_node.operands = (expr_node.lhs, expr_node.rhs)
         return left_on, right_on, expr_node
 
     # no term can be extracted for other nodes like '|' (unless if transformed)
@@ -2150,7 +2255,7 @@ def _extract_equal_conds(expr_node):
     return [], [], expr_node
 
 
-def _parse_merge_cond(on_str, left_columns, right_columns):
+def _parse_merge_cond(on_str, left_columns, left_data, right_columns, right_data):
     """Parse general merge condition such as "left.A == right.A & left.B < 3" and
     extract its column equality terms
     """
@@ -2158,7 +2263,14 @@ def _parse_merge_cond(on_str, left_columns, right_columns):
     # create fake environment for Expr to enable parsing
     env = pd.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
     parsed_expr, _, _ = _parse_query_expr(on_str, env, [], [], None)
-    return _extract_equal_conds(parsed_expr.terms)
+    left_on, right_on, simplified_expr = _extract_equal_conds(parsed_expr.terms)
+    return (
+        left_on,
+        right_on,
+        _insert_NA_cond(
+            simplified_expr, left_columns, left_data, right_columns, right_data
+        ),
+    )
 
 
 @overload_method(DataFrameType, "merge", inline="always", no_unliteral=True)
@@ -2220,7 +2332,7 @@ def overload_dataframe_merge(
                 # extract equality portions to reuse existing infrastructure
                 # e.g. "left.A == right.A & left.B < 3" -> ["A"], ["A"], "left.B < 3"
                 left_on, right_on, gen_expr = _parse_merge_cond(
-                    on_str, left.columns, right.columns
+                    on_str, left.columns, left.data, right.columns, right.data
                 )
                 if gen_expr is None:
                     gen_cond = ""
@@ -2249,6 +2361,14 @@ def overload_dataframe_merge(
             right_keys = get_overload_const_list(right_on)
             # make sure all right_keys is a valid column in right
             validate_keys(right_keys, right.columns)
+
+    if (not left_on or not right_on) and not is_overload_none(on):
+        # If we have no left_on or right_on but we have an on, then
+        # we have a general condition that requires a cross join.
+        raise BodoError(
+            f"DataFrame.merge(): Merge condition '{get_overload_const_str(on)}' requires a cross join to implement, but cross join is not supported."
+        )
+
     if not is_overload_bool(indicator):
         raise_bodo_error("DataFrame.merge(): indicator must be a constant boolean")
     indicator_val = get_overload_const_bool(indicator)

@@ -1577,6 +1577,234 @@ def test_merge_general_cond(memory_leak_check):
         )
 
 
+def test_merge_general_cond_na(memory_leak_check):
+    """
+    test merge(): with general condition expressions that include
+    various NA values
+    """
+
+    # single non-equality term
+    def impl1(df1, df2):
+        return df1.merge(df2, on="right.D <= left.B + 1 & left.A == right.A")
+
+    # single non-equality term, multiple equal terms
+    def impl2(df1, df2):
+        return df1.merge(df2, on="left.A == right.A & right.C+right.D-5 >= left.B")
+
+    # multiple non-equality terms
+    def impl3(df1, df2, how):
+        return df1.merge(
+            df2,
+            on="(right.C > left.B | right.D < left.B + 1) & left.A == right.A",
+            how=how,
+        )
+
+    df1 = pd.DataFrame(
+        {
+            "A": [1, 2, 1, 1, 3, 2, 3],
+            "B": pd.Series([1, None, 3, None, 2, 3, 1], dtype="Int64"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": [4, 1, 2, 3, 2, 1, 4],
+            "C": [3, 2, 1, 3, 2, 1, 2],
+            "D": pd.Series([None, 2, 3, 4, 5, 6, 7], dtype="Int64"),
+        }
+    )
+    # larger tables to test short/long table control flow in _join.cpp
+    df3 = pd.concat([df1] * 10)
+    df4 = pd.concat([df2] * 10)
+
+    py_out = df1.merge(df2, left_on=["A"], right_on=["A"])
+    # Note we can't use df.query in Pandas because it can't
+    # handle NA types
+    filter_cond = py_out["D"] <= (py_out["B"] + 1)
+    py_out = py_out[filter_cond]
+    check_func(
+        impl1,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+    py_out = df3.merge(df2, left_on=["A"], right_on=["A"])
+    filter_cond = (py_out["C"] + py_out["D"] - 5) >= py_out["B"]
+    py_out = py_out[filter_cond]
+    check_func(
+        impl2,
+        (df3, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+    py_out = df1.merge(df4, left_on=["A"], right_on=["A"])
+    filter_cond = (py_out["C"] > py_out["B"]) | (py_out["D"] < (py_out["B"] + 1))
+    py_out = py_out[filter_cond]
+    check_func(
+        impl3,
+        (df1, df4, "inner"),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+
+def test_merge_general_cond_na_float(memory_leak_check):
+    """
+    test merge(): with general condition expressions that include
+    various NA float values
+    """
+
+    # single non-equality term
+    def impl1(df1, df2):
+        return df1.merge(df2, on="right.D <= left.B + 1 & left.A == right.A")
+
+    # single non-equality term, multiple equal terms
+    def impl2(df1, df2):
+        return df1.merge(df2, on="left.A == right.A & right.C+right.D-5 >= left.B")
+
+    # multiple non-equality terms
+    def impl3(df1, df2, how):
+        return df1.merge(
+            df2,
+            on="(right.C > left.B | right.D < left.B + 1) & left.A == right.A",
+            how=how,
+        )
+
+    df1 = pd.DataFrame(
+        {
+            "A": [1, 2, 1, 1, 3, 2, 3],
+            "B": pd.Series([1, None, 3, None, 2, 3, 1], dtype="float64"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": [4, 1, 2, 3, 2, 1, 4],
+            "C": [3, 2, 1, 3, 2, 1, 2],
+            "D": pd.Series([None, 2, 3, 4, 5, 6, 7], dtype="float32"),
+        }
+    )
+    # larger tables to test short/long table control flow in _join.cpp
+    df3 = pd.concat([df1] * 10)
+    df4 = pd.concat([df2] * 10)
+
+    py_out = df1.merge(df2, left_on=["A"], right_on=["A"])
+    # Note we can't use df.query in Pandas because it can't
+    # handle NA types
+    filter_cond = py_out["D"] <= (py_out["B"] + 1)
+    py_out = py_out[filter_cond]
+    check_func(
+        impl1,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+    py_out = df3.merge(df2, left_on=["A"], right_on=["A"])
+    filter_cond = (py_out["C"] + py_out["D"] - 5) >= py_out["B"]
+    py_out = py_out[filter_cond]
+    check_func(
+        impl2,
+        (df3, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+    py_out = df1.merge(df4, left_on=["A"], right_on=["A"])
+    filter_cond = (py_out["C"] > py_out["B"]) | (py_out["D"] < (py_out["B"] + 1))
+    py_out = py_out[filter_cond]
+    check_func(
+        impl3,
+        (df1, df4, "inner"),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+
+def test_merge_general_cond_na_dt64(memory_leak_check):
+    """
+    test merge(): with general condition expressions that include
+    various NA values stored in data1
+    """
+
+    # multiple non-equality terms
+    def impl(df1, df2, how):
+        return df1.merge(
+            df2,
+            on="(right.C > left.B | right.D < left.B) & left.A == right.A",
+            how=how,
+        )
+
+    df1 = pd.DataFrame(
+        {
+            "A": [1, 2, 1, 1, 3, 2, 3],
+            "B": pd.Series(
+                [
+                    pd.Timestamp(2021, 10, 2),
+                    None,
+                    pd.Timestamp(2021, 11, 3),
+                    None,
+                    pd.Timestamp(2021, 11, 2),
+                    3,
+                    pd.Timestamp(2021, 10, 2),
+                ],
+                dtype="datetime64[ns]",
+            ),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": [4, 1, 2, 3, 2, 1, 4],
+            "C": pd.Series(
+                [
+                    pd.Timestamp(2021, 11, 3),
+                    pd.Timestamp(2021, 11, 2),
+                    pd.Timestamp(2021, 10, 2),
+                    3,
+                    pd.Timestamp(2021, 11, 2),
+                    pd.Timestamp(2021, 10, 2),
+                    pd.Timestamp(2021, 11, 2),
+                ],
+                dtype="datetime64[ns]",
+            ),
+            "D": pd.Series(
+                [
+                    None,
+                    pd.Timestamp(2021, 11, 2),
+                    pd.Timestamp(2021, 11, 3),
+                    pd.Timestamp(2021, 11, 4),
+                    pd.Timestamp(2021, 11, 5),
+                    pd.Timestamp(2021, 11, 6),
+                    pd.Timestamp(2021, 11, 7),
+                ],
+                dtype="datetime64[ns]",
+            ),
+        }
+    )
+    # larger tables to test short/long table control flow in _join.cpp
+    df4 = pd.concat([df2] * 10)
+
+    py_out = df1.merge(df4, left_on=["A"], right_on=["A"])
+    filter_cond = (py_out["C"] > py_out["B"]) | (py_out["D"] < (py_out["B"]))
+    py_out = py_out[filter_cond]
+    check_func(
+        impl,
+        (df1, df4, "inner"),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+
 def test_merge_general_cond_strings(memory_leak_check):
     """
     test merge(): with general condition expressions like "left.A == right.A"

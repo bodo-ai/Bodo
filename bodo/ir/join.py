@@ -733,7 +733,8 @@ def _gen_general_cond_cfunc(join_node, typemap):
     right_col_to_ind = _get_col_to_ind(join_node.right_keys, join_node.right_vars)
 
     table_getitem_funcs = {"bodo": bodo, "numba": numba}
-    func_text = "def f(left_table, right_table, left_data1, right_data1, left_ind, right_ind):\n"
+    na_check_name = "NOT_NA"
+    func_text = "def f(left_table, right_table, left_data1, right_data1, left_null_bitmap, right_null_bitmap, left_ind, right_ind):\n"
     expr, func_text, left_col_nums = _replace_column_accesses(
         expr,
         left_col_to_ind,
@@ -743,6 +744,7 @@ def _gen_general_cond_cfunc(join_node, typemap):
         func_text,
         "left",
         len(join_node.left_keys),
+        na_check_name,
     )
     expr, func_text, right_col_nums = _replace_column_accesses(
         expr,
@@ -753,6 +755,7 @@ def _gen_general_cond_cfunc(join_node, typemap):
         func_text,
         "right",
         len(join_node.right_keys),
+        na_check_name,
     )
     func_text += f"  return {expr}"
 
@@ -761,6 +764,8 @@ def _gen_general_cond_cfunc(join_node, typemap):
     cond_func = loc_vars["f"]
 
     c_sig = types.bool_(
+        types.voidptr,
+        types.voidptr,
         types.voidptr,
         types.voidptr,
         types.voidptr,
@@ -781,6 +786,7 @@ def _replace_column_accesses(
     func_text,
     table_name,
     n_keys,
+    na_check_name,
 ):
     """replace column accesses in join condition expression with an intrinsic that loads
     values from table data pointers.
@@ -810,6 +816,28 @@ def _replace_column_accesses(
             col_dtype, c_ind
         )
         expr = expr.replace(cname, val_varname)
+
+        # We should only require an NA check if the column is also present
+        na_cname = f"({na_check_name}.{table_name}.{c})"
+        if na_cname in expr:
+            array_typ = typemap[col_vars[c].name]
+            na_check_fname = f"nacheck_{table_name}_val_{c_ind}"
+            na_val_varname = f"_bodo_isna_{table_name}_val_{c_ind}"
+            if isinstance(
+                array_typ, bodo.libs.int_arr_ext.IntegerArrayType
+            ) or array_typ in [
+                bodo.libs.bool_arr_ext.boolean_array,
+                bodo.libs.str_arr_ext.string_array_type,
+            ]:
+                func_text += f"  {na_val_varname} = {na_check_fname}({table_name}_null_bitmap, {table_name}_ind)\n"
+            else:
+                func_text += f"  {na_val_varname} = {na_check_fname}({table_name}_data1, {table_name}_ind)\n"
+
+            table_getitem_funcs[
+                na_check_fname
+            ] = bodo.libs.array._gen_row_na_check_intrinsic(array_typ, c_ind)
+            expr = expr.replace(na_cname, na_val_varname)
+
         # only append the column if it is not a key
         if c_ind >= n_keys:
             col_nums.append(c_ind)
