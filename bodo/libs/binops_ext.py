@@ -7,8 +7,11 @@
 
 import operator
 
+import numba
 from numba.core import types
+from numba.core.imputils import lower_builtin
 from numba.core.typing.builtins import machine_ints
+from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import overload
 
 import bodo
@@ -42,7 +45,76 @@ from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
-from bodo.utils.typing import BodoError, is_timedelta_type
+from bodo.utils.typing import BodoError, is_overload_bool, is_timedelta_type
+
+
+class SeriesCmpOpTemplate(AbstractTemplate):
+    """
+    Split Series Comparison Operators into
+    separate Typing and Lowering to Reduce
+    Compilation Time.
+    """
+    def generic(self, args, kws):
+        # Builtin operators don't support kws
+        # and are always binary
+        assert not kws
+        assert len(args) == 2
+        lhs, rhs = args
+        # We only want to call the series implementation if
+        # we can't use cmp_timeseries, there are is no dataframe
+        # and there is at least 1 Series
+        if cmp_timeseries(lhs, rhs) or (isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType)) or not((isinstance(lhs, SeriesType) or isinstance(rhs, SeriesType))):
+            return
+
+        # Check that lhs and rhs can be legally compared
+        # TODO: Replace with a cheaper/more complete check?
+        lhs_arr = lhs.data if isinstance(lhs, SeriesType) else lhs
+        rhs_arr = rhs.data if isinstance(rhs, SeriesType) else rhs
+        recursed_args = (lhs_arr, rhs_arr)
+        error_msg = f"{lhs} {numba.core.utils.OPERATORS_TO_BUILTINS[self.key]} {rhs} not supported"
+        # Check types by resolving the subsequent function
+        try:
+            ret_arr_typ = self.context.resolve_function_type(self.key, recursed_args, {}).return_type
+        except Exception as e:
+            raise BodoError(error_msg)
+        # If ret_arr_typ is a boolean TRUE for !=, False for ==, then this equality
+        # check isn't supported on the array. As a result we raise a BodoError. There may
+        # be some cases i.e. S == None where this should be supported,
+        # but these are rare.
+        if is_overload_bool(ret_arr_typ):
+            raise BodoError(error_msg)
+
+        index_typ = lhs.index if isinstance(lhs, SeriesType) else rhs.index
+        name_typ = lhs.name_typ if isinstance(lhs, SeriesType) else rhs.name_typ
+        # Construct the returned series. The series is always some boolean array
+        ret_dtype = types.bool_
+        ret_type = SeriesType(ret_dtype, ret_arr_typ, index_typ, name_typ)
+        return ret_type(*args)
+
+
+def series_cmp_op_lower(op):
+    def lower_impl(context, builder, sig, args):
+        """
+        Lowering for Series comparison operators. This should
+        be unused unless we are using a compilation path with
+        only the Numba pipeline.
+        """
+        impl = bodo.hiframes.series_impl.create_binary_op_overload(op)(*sig.args)
+        # Since this may pick up comparisons that should be rejected, if we don't
+        # have a series grab the generic overload.
+        # There are two types of inputs that should be rejected:
+        #
+        # 1 input is a DataFrame:
+        #           df == S (although this behavior is deprecated)
+        #
+        # At least one Series has Timestamp/datetime data:
+        #           S(dt64) == S(dt64)
+        #
+        if impl is None:
+            impl = create_overload_cmp_operator(op)(*sig.args)
+        return context.compile_internal(builder, impl, sig, args)
+
+    return lower_impl
 
 
 ### Operator.add
@@ -312,7 +384,8 @@ def create_overload_cmp_operator(op):
 
         # series
         if isinstance(lhs, SeriesType) or isinstance(rhs, SeriesType):
-            return bodo.hiframes.series_impl.create_binary_op_overload(op)(lhs, rhs)
+            # Use the Series typing template instead.
+            return
 
         # DataFrames
         if isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType):
@@ -866,9 +939,17 @@ def _install_cmp_ops():
         operator.gt,
         operator.le,
     ):
+        # Install Series typing
+        infer_global(op)(SeriesCmpOpTemplate)
+        # Install the series lowering
+        # TODO: Update the lower builtin to be more accurate. We want
+        # to match on any implementation handled by Bodo and not Numba.
+        lower_impl = series_cmp_op_lower(op)
+        lower_builtin(op, SeriesType, types.Any)(lower_impl)
+        lower_builtin(op, types.Any, SeriesType)(lower_impl)
+        # Include the generic overload
         overload_impl = create_overload_cmp_operator(op)
         overload(op, no_unliteral=True)(overload_impl)
-
 
 _install_cmp_ops()
 
