@@ -3,8 +3,10 @@
 """
 import llvmlite.binding as ll
 import numba
+import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
+from numba.core.typing.templates import signature
 from numba.extending import intrinsic, models, register_model
 
 import bodo
@@ -2009,8 +2011,8 @@ def get_search_regex(in_arr, case, pat, out_arr):  # pragma: no cover
 def _gen_row_access_intrinsic(col_dtype, c_ind):
     """Generate an intrinsic for loading a value from a table column with 'col_dtype'
     data type. 'c_ind' is the index of the column within the table.
-    The intrinsic's input is an array of data pointers for the table's data, and a row
-    index.
+    The intrinsic's input is an array of pointers for the table's data either array
+    info or data depending on the type and a row index.
 
     For example, col_dtype=int64, c_ind=1, table=[A_data_ptr, B_data_ptr, C_data_ptr],
     row_ind=2 will return 6 for the table below.
@@ -2030,7 +2032,7 @@ def _gen_row_access_intrinsic(col_dtype, c_ind):
 
         @intrinsic
         def getitem_func(typingctx, table_t, ind_t):
-            def codegen(context, builder, signature, args):
+            def codegen(context, builder, sig, args):
                 table, row_ind = args
                 # cast void* to void**
                 table = builder.bitcast(table, lir.IntType(8).as_pointer().as_pointer())
@@ -2055,7 +2057,7 @@ def _gen_row_access_intrinsic(col_dtype, c_ind):
 
         @intrinsic
         def getitem_func(typingctx, table_t, ind_t):
-            def codegen(context, builder, signature, args):
+            def codegen(context, builder, sig, args):
                 table, row_ind = args
                 fnty = lir.FunctionType(
                     lir.IntType(8).as_pointer(),
@@ -2076,7 +2078,7 @@ def _gen_row_access_intrinsic(col_dtype, c_ind):
                 args = (table, col_ind, row_ind, size)
                 data_ptr = builder.call(getitem_fn, args)
                 return context.make_tuple(
-                    builder, signature.return_type, [data_ptr, builder.load(size)]
+                    builder, sig.return_type, [data_ptr, builder.load(size)]
                 )
 
             return (
@@ -2088,4 +2090,140 @@ def _gen_row_access_intrinsic(col_dtype, c_ind):
 
     raise BodoError(
         f"General Join Conditions with '{col_dtype}' column data type not supported"
+    )
+
+
+def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
+    """Generate an intrinsic for checking is a value is NA from a table column with
+    array type 'col_array_dtype'. 'c_ind' is the index of the column within the table.
+    The intrinsic's input is an array of data pointers or nullbit map depending on
+    the type and a row index.
+
+    For example, col_dtype=StringArray, c_ind=1, table=[A_bitmap, B_bitmap, C_bitmap],
+    row_ind=2 will return True.
+    A  B     C
+    1  NA    7
+    2  "qe"  8
+    3  "ef"  9
+    """
+    if (
+        isinstance(col_array_dtype, bodo.libs.int_arr_ext.IntegerArrayType)
+        or col_array_dtype
+        in [
+            bodo.libs.bool_arr_ext.boolean_array,
+            bodo.libs.str_arr_ext.string_array_type,
+        ]
+        or (
+            isinstance(col_array_dtype, types.Array)
+            and col_array_dtype.dtype == bodo.datetime_date_type
+        )
+    ):
+        # These arrays use a null bitmap to store NA values.
+        @intrinsic
+        def checkna_func(typingctx, table_t, ind_t):
+            def codegen(context, builder, sig, args):
+                null_bitmaps, row_ind = args
+                # cast void* to void**
+                null_bitmaps = builder.bitcast(
+                    null_bitmaps, lir.IntType(8).as_pointer().as_pointer()
+                )
+                # get null bitmap for input column and cast to proper data type
+                col_ind = lir.Constant(lir.IntType(64), c_ind)
+                col_ptr = builder.load(builder.gep(null_bitmaps, [col_ind]))
+                null_bitmap = builder.bitcast(
+                    col_ptr, context.get_data_type(types.bool_).as_pointer()
+                )
+                is_na = bodo.utils.cg_helpers.get_bitmap_bit(
+                    builder, null_bitmap, row_ind
+                )
+                # IS NA is non-zero if null else 0.
+                not_na = builder.icmp_unsigned(
+                    "!=", is_na, lir.Constant(lir.IntType(8), 0)
+                )
+                # Since the & is bitwise we need the result to be either -1 or 0,
+                # so we sign extend the result.
+                return builder.sext(not_na, lir.IntType(8))
+
+            # Return int8 because we don't want the actual bit
+            return types.int8(types.voidptr, types.int64), codegen
+
+        return checkna_func
+
+    elif isinstance(col_array_dtype, types.Array):
+        col_dtype = col_array_dtype.dtype
+        if col_dtype in [
+            bodo.datetime64ns,
+            bodo.timedelta64ns,
+        ]:
+            # Datetime arrays represent NULL by using pd._libs.iNaT
+            @intrinsic
+            def checkna_func(typingctx, table_t, ind_t):
+                def codegen(context, builder, sig, args):
+                    table, row_ind = args
+                    # cast void* to void**
+                    table = builder.bitcast(
+                        table, lir.IntType(8).as_pointer().as_pointer()
+                    )
+                    # get data pointer for input column and cast to proper data type
+                    col_ind = lir.Constant(lir.IntType(64), c_ind)
+                    col_ptr = builder.load(builder.gep(table, [col_ind]))
+                    col_ptr = builder.bitcast(
+                        col_ptr, context.get_data_type(col_dtype).as_pointer()
+                    )
+                    value = builder.load(builder.gep(col_ptr, [row_ind]))
+                    not_na = builder.icmp_unsigned(
+                        "!=", value, lir.Constant(lir.IntType(64), pd._libs.iNaT)
+                    )
+                    # Since the & is bitwise we need the result to be either -1 or 0,
+                    # so we sign extend the result.
+                    return builder.sext(not_na, lir.IntType(8))
+
+                # Return int8 because we don't want the actual bit
+                return types.int8(types.voidptr, types.int64), codegen
+
+            return checkna_func
+
+        elif isinstance(col_dtype, types.Float):
+            # If we have float NA values are stored as nan.
+            # In this situation we need to check isnan. If we assume IEEE-754 Floating Point,
+            # this check is simply checking certain bits
+            @intrinsic
+            def checkna_func(typingctx, table_t, ind_t):
+                def codegen(context, builder, sig, args):
+                    table, row_ind = args
+                    # cast void* to void**
+                    table = builder.bitcast(
+                        table, lir.IntType(8).as_pointer().as_pointer()
+                    )
+                    # get data pointer for input column and cast to proper data type
+                    col_ind = lir.Constant(lir.IntType(64), c_ind)
+                    col_ptr = builder.load(builder.gep(table, [col_ind]))
+                    col_ptr = builder.bitcast(
+                        col_ptr, context.get_data_type(col_dtype).as_pointer()
+                    )
+
+                    # Get the float value
+                    value = builder.load(builder.gep(col_ptr, [row_ind]))
+
+                    isnan_sig = signature(
+                        types.bool_,
+                        col_dtype,
+                    )
+
+                    # This function is a lowering function so we can call it directly
+                    is_na = numba.np.npyfuncs.np_real_isnan_impl(
+                        context, builder, isnan_sig, (value,)
+                    )
+
+                    # Since the & is bitwise we need the result to be either -1 or 0, so
+                    # sign extend and flip all of the bits
+                    return builder.not_(builder.sext(is_na, lir.IntType(8)))
+
+                # Return int8 because we don't want the actual bit
+                return types.int8(types.voidptr, types.int64), codegen
+
+            return checkna_func
+
+    raise BodoError(
+        f"General Join Conditions with '{col_array_dtype}' column type not supported"
     )
