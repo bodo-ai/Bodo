@@ -309,3 +309,33 @@ def test_series_groupby_max_min_cat_unordered(memory_leak_check):
         match="categorical column must be ordered in groupby built-in function",
     ):
         bodo.jit(test_impl2)(S)
+
+
+@pytest.mark.slow
+def test_cmp_errors(memory_leak_check):
+    def test_impl1(S, val):
+        return S > val
+
+    def test_impl2(S, val):
+        return S == val
+
+    def test_impl3(S, val):
+        return S != val
+
+    S = pd.Series([1, 2, 3, 1, 7, 8])
+    val = "a"
+    with pytest.raises(
+        BodoError,
+        match="series\\(int64, array\\(int64, 1d, C\\), RangeIndexType\\(none\\), none, REP\\) > unicode_type not supported",
+    ):
+        bodo.jit(test_impl1)(S, val)
+    with pytest.raises(
+        BodoError,
+        match="series\\(int64, array\\(int64, 1d, C\\), RangeIndexType\\(none\\), none, REP\\) == unicode_type not supported",
+    ):
+        bodo.jit(test_impl2)(S, val)
+    with pytest.raises(
+        BodoError,
+        match="series\\(int64, array\\(int64, 1d, C\\), RangeIndexType\\(none\\), none, REP\\) != unicode_type not supported",
+    ):
+        bodo.jit(test_impl3)(S, val)

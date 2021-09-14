@@ -3529,9 +3529,11 @@ def create_binary_op_overload(op):
 
             return impl_dt64
 
-        # Handle Offsets separation because addition is not defined on the array or scalar datetime64
+        # Handle Offsets separation because addition/substraction
+        # is not defined on the array or scalar datetime64
         if (
-            isinstance(lhs, SeriesType)
+            op in [operator.add, operator.sub]
+            and isinstance(lhs, SeriesType)
             and lhs.dtype == bodo.datetime64ns
             and is_offsets_type(rhs)
         ):
@@ -3631,7 +3633,9 @@ def create_binary_op_overload(op):
 
 
 # overloads taken care of in libs/binops_ext.py
-skips = list(explicit_binop_funcs_two_ways) + list(explicit_binop_funcs_single.keys())
+skips = list(explicit_binop_funcs_two_ways.keys()) + list(
+    explicit_binop_funcs_single.keys()
+)
 
 
 def _install_binary_ops():
