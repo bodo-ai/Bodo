@@ -276,16 +276,15 @@ class DataFrameAttribute(AttributeTemplate):
         func_name = "DataFrame.head"
 
         # Obtain a the pysig and folded args
-        full_args = (df,) + args
-        arg_names = ("df", "n")
+        arg_names = ("n",)
         arg_defaults = {"n": 5}
 
         pysig, folded_args = bodo.utils.typing.fold_typing_args(
-            func_name, full_args, kws, arg_names, arg_defaults
+            func_name, args, kws, arg_names, arg_defaults
         )
 
         # Check typing on arguments
-        n_arg = folded_args[1]
+        n_arg = folded_args[0]
         if not is_overload_int(n_arg):
             raise BodoError(f"{func_name}(): 'n' must be an Integer")
 
