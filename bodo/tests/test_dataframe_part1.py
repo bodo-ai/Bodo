@@ -2022,10 +2022,6 @@ def test_df_set_index(df_value, memory_leak_check):
     if isinstance(df_value.iloc[:, 0].dtype, pd.core.arrays.integer._IntegerDtype):
         return
 
-    # TODO: [BE-1246] Support binary index type
-    if isinstance(df_value.iloc[0, 0], bytes):
-        return
-
     # # TODO(ehsan): test non-str columns using 'df_value.columns[0]' instead of 'A" when
     # # Numba can convert freevars to literals
 
@@ -2193,7 +2189,6 @@ def test_df_duplicated():
     check_func(impl, (df,), sort_output=True)
 
 
-@pytest.mark.skip("TODO: support df.duplicated for binary data [BE-1277]")
 def test_df_duplicated_binary_values():
     def impl(df):
         return df.duplicated()

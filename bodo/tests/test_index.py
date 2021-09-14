@@ -920,6 +920,7 @@ def test_init_binary_array_bad_numpy_arr(memory_leak_check):
         pd.Float64Index([10.1, 12.1]),
         pd.UInt64Index([10, 12]),
         pd.Index(["A", "B"] * 4),
+        pytest.param(pd.Index([b"A", b"B"] * 4), id="binary_idx"),
         pd.RangeIndex(1, 15, 2),
         pd.RangeIndex(-4, 8, 4),
         pd.RangeIndex(-10, -1, -3),
