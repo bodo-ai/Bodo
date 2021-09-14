@@ -1160,6 +1160,8 @@ def overload_series_head(S, n=5):
 
 # Include lowering for safety.
 @lower_builtin("series.head", SeriesType, types.Integer)
+# Include Omitted in case the arguement isn't provided
+@lower_builtin("series.head", SeriesType, types.Omitted)
 def series_head_lower(context, builder, sig, args):
     impl = overload_series_head(*sig.args)
     return context.compile_internal(builder, impl, sig, args)

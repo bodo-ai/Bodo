@@ -602,6 +602,8 @@ def overload_dataframe_head(df, n=5):
 
 # Include lowering for safety.
 @lower_builtin("df.head", DataFrameType, types.Integer)
+# Include Omitted in case the arguement isn't provided
+@lower_builtin("df.head", DataFrameType, types.Omitted)
 def dataframe_head_lower(context, builder, sig, args):
     impl = overload_dataframe_head(*sig.args)
     return context.compile_internal(builder, impl, sig, args)
