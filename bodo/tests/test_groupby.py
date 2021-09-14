@@ -103,7 +103,6 @@ from bodo.utils.typing import BodoError
                 }
             ),
             id="binary_key_df",
-            marks=pytest.mark.skip("Needs support for binary indexes, see [BE-1246]"),
         ),
         # Binary value and decimal key
         pytest.param(
@@ -645,7 +644,6 @@ def test_agg_str_key(memory_leak_check):
     check_func(impl, (df,), sort_output=True)
 
 
-@pytest.mark.skip("Needs support for Binary index type, see [BE-1246]")
 def test_agg_binary_key(memory_leak_check):
     """
     Test Groupby.agg() with binary keys
@@ -2153,9 +2151,7 @@ def test_median_nullable_int_bool(memory_leak_check):
         ),
         pd.DataFrame(
             {
-                # TODO: change A to be binary column
-                # Grouping by binary columns unsupported due to lack of binary index, see [BE-1246]
-                "A": [1, 1, 1, 3, 3, 2, 6],
+                "A": [b"a", b"aaa", b"aaa", b"aaa", b"asdfa", b"a", b"aaa"],
                 "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
             }
         ),
@@ -2206,9 +2202,7 @@ def test_nunique_select_col_missing_keys(memory_leak_check):
     )
     df_bin = pd.DataFrame(
         {
-            # TODO: change A to be binary column
-            # Grouping by binary columns unsupported due to lack of binary index, see [BE-1246]
-            "A": [1, np.nan, 1, 2, 2, np.nan, 1],
+            "A": [b"aaa", np.nan, b"baaa", b"baaa", b"aaa", np.nan, b"aaa"],
             "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
         }
     )
@@ -5455,7 +5449,7 @@ def test_groupby_apply_na_key(dropna):
                     "B": [10.2, 11.1, 1.1, 2.2, 2.2, 1.3, 3.4, 4.5],
                 },
             ),
-            marks=pytest.mark.skip("Needs support for binary indexes, see [BE-1246]"),
+            id="binary_case",
         ),
         # Boolean
         pd.DataFrame(

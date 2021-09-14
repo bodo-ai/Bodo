@@ -2709,11 +2709,6 @@ def test_series_map_args(memory_leak_check):
 def test_series_groupby_supported_types(series_val):
     """ Test Series.groupby with all Bodo supported Types """
 
-    # TODO(keaton): this should be fixed by changes in the binary_grpby PR
-    # remove this skip when that gets merged.
-    if isinstance(series_val.values[0], bytes):
-        return
-
     def test_impl(S):
         return S.groupby(level=0).max()
 
@@ -2745,10 +2740,6 @@ def test_series_groupby_by_arg_supported_types(series_val, memory_leak_check):
 
     # TODO: [BE-347]
     if series_val.dtype == np.bool_ or is_bool_object_series(series_val):
-        return
-
-    # TODO: needs support for Binary index type, see BE-1246
-    if isinstance(series_val.values[0], bytes):
         return
 
     if isinstance(series_val.values[0], list):

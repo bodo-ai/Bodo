@@ -1162,7 +1162,7 @@ def test_series_sort_values(series_val):
 def test_series_repeat(series_val):
     """Test Series.repeat() method"""
 
-    # TODO: support for binary type, see BE-1269
+    # TODO: support for binary type, see BE-1320
     if isinstance(series_val.values[0], bytes):
         return
 
