@@ -29,6 +29,7 @@ from numba.extending import intrinsic, overload
 from numba.np.arrayobj import get_itemsize, make_array, populate_array
 
 import bodo
+from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -521,6 +522,13 @@ def empty_like_type_overload(n, arr):
             return [""] * n
 
         return empty_like_type_str_list
+
+    if isinstance(arr, types.List) and arr.dtype == bytes_type:
+
+        def empty_like_type_binary_list(n, arr):  # pragma: no cover
+            return [b""] * n
+
+        return empty_like_type_binary_list
 
     # nullable int arr
     if isinstance(arr, IntegerArrayType):
