@@ -1642,8 +1642,10 @@ def fold_typing_args(
     max_args = len(arg_names)
     passed_args = len(args) + len(kws)
     if passed_args > max_args:
+        max_args_plural = "argument" if max_args == 1 else "arguments"
+        passed_args_plural = "was" if passed_args == 1 else "were"
         raise BodoError(
-            f"{func_name}(): Too many arguments specified. Function takes {max_args} arguments, but {passed_args} were provided."
+            f"{func_name}(): Too many arguments specified. Function takes {max_args} {max_args_plural}, but {passed_args} {passed_args_plural} provided."
         )
     # Generate the pysig
     pysig = bodo.utils.typing.construct_pysig(arg_names, defaults)
