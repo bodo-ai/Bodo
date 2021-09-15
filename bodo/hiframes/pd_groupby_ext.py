@@ -1563,7 +1563,7 @@ def get_group_indices_overload(keys, dropna, _is_parallel):
     func_text += "    table = arr_info_list_to_table(info_list)\n"
     func_text += "    group_labels = np.empty(len(keys[0]), np.int64)\n"
     func_text += "    sort_idx = np.empty(len(keys[0]), np.int64)\n"
-    func_text += "    ngroups = get_groupby_labels(table, group_labels.ctypes, sort_idx.ctypes, dropna)\n"
+    func_text += "    ngroups = get_groupby_labels(table, group_labels.ctypes, sort_idx.ctypes, dropna, _is_parallel)\n"
     func_text += "    delete_table_decref_arrays(table)\n"
     func_text += "    ev.finalize()\n"
     func_text += "    return sort_idx, group_labels, ngroups\n"
@@ -1612,18 +1612,18 @@ def generate_slices(labels, ngroups):  # pragma: no cover
     return starts, ends
 
 
-def shuffle_dataframe(df, keys):  # pragma: no cover
-    return df, keys
+def shuffle_dataframe(df, keys, _is_parallel):  # pragma: no cover
+    return df, keys, _is_parallel
 
 
 @overload(shuffle_dataframe)
-def overload_shuffle_dataframe(df, keys):
+def overload_shuffle_dataframe(df, keys, _is_parallel):
     """shuffle a dataframe using a tuple of key arrays."""
     n_cols = len(df.columns)
     n_keys = len(keys.types)
     data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
 
-    func_text = "def impl(df, keys):\n"
+    func_text = "def impl(df, keys, _is_parallel):\n"
     # create C++ table from input arrays
     for i in range(n_cols):
         func_text += f"  in_arr{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
@@ -1636,7 +1636,7 @@ def overload_shuffle_dataframe(df, keys):
         "array_to_info(in_index_arr)",
     )
     func_text += "  table = arr_info_list_to_table(info_list)\n"
-    func_text += f"  out_table = shuffle_table(table, {n_keys}, 1)\n"
+    func_text += f"  out_table = shuffle_table(table, {n_keys}, _is_parallel, 1)\n"
 
     # extract arrays from C++ table
     for i in range(n_keys):

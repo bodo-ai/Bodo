@@ -25,7 +25,6 @@ from bodo.libs.array import (
     hash_join_table,
     info_from_table,
     info_to_array,
-    shuffle_table,
 )
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
@@ -687,7 +686,6 @@ def join_distributed_run(
             "parallel_asof_comm": parallel_asof_comm,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
-            "shuffle_table": shuffle_table,
             "hash_join_table": hash_join_table,
             "info_from_table": info_from_table,
             "info_to_array": info_to_array,

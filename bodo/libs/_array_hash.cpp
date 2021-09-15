@@ -184,14 +184,16 @@ static void hash_na_string(const uint32_t seed, uint32_t* hash_value) {
  * @param null_bitmap: the bitmap array for the values.
  * @param n_rows: the number of rows of the table.
  * @param seed: the seed of the computation.
+ * @param is_parallel: whether we run in parallel or not.
  *
  * Right now, the bitmask is not used in the computation, which
  * may be a problem to consider later on.
  */
 static void hash_array_string(uint32_t* out_hashes, char* data,
                               offset_t* offsets, uint8_t* null_bitmask,
-                              size_t n_rows, const uint32_t seed) {
-    tracing::Event ev("hash_array_string");
+                              size_t n_rows, const uint32_t seed,
+                              bool is_parallel) {
+    tracing::Event ev("hash_array_string", is_parallel);
     offset_t start_offset = 0;
     uint32_t na_hash;
     hash_na_string(seed, &na_hash);
@@ -391,10 +393,11 @@ void hash_arrow_array(uint32_t* out_hashes,
  * @param[in] array: the list of columns in input
  * @param n_rows: the number of rows of the table.
  * @param seed: the seed of the computation.
+ * @param is_parallel: whether we run in parallel or not.
  *
  */
 void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                const uint32_t seed) {
+                const uint32_t seed, bool is_parallel) {
     // dispatch to proper function
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
@@ -405,9 +408,9 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
         return hash_arrow_array(out_hashes, list_offsets, n_rows, array->array);
     }
     if (array->arr_type == bodo_array_type::STRING) {
-        return hash_array_string(out_hashes, (char*)array->data1,
-                                 (offset_t*)array->data2,
-                                 (uint8_t*)array->null_bitmask, n_rows, seed);
+        return hash_array_string(
+            out_hashes, (char*)array->data1, (offset_t*)array->data2,
+            (uint8_t*)array->null_bitmask, n_rows, seed, is_parallel);
     }
     if (array->arr_type == bodo_array_type::LIST_STRING) {
         return hash_array_list_string(
@@ -486,9 +489,9 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
 
 // https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L60
 #if defined(_MSC_VER)
-#   define BOOST_FUNCTIONAL_HASH_ROTL32(x, r) _rotl(x,r)
+#define BOOST_FUNCTIONAL_HASH_ROTL32(x, r) _rotl(x, r)
 #else
-#   define BOOST_FUNCTIONAL_HASH_ROTL32(x, r) (x << r) | (x >> (32 - r))
+#define BOOST_FUNCTIONAL_HASH_ROTL32(x, r) (x << r) | (x >> (32 - r))
 #endif
 
 // https://github.com/boostorg/container_hash/blob/504857692148d52afe7110bcb96cf837b0ced9d7/include/boost/container_hash/hash.hpp#L316
@@ -501,12 +504,12 @@ static inline void hash_combine_boost(uint32_t& h1, uint32_t k1) {
     const uint32_t c2 = 0x1b873593;
 
     k1 *= c1;
-    k1 = BOOST_FUNCTIONAL_HASH_ROTL32(k1,15);
+    k1 = BOOST_FUNCTIONAL_HASH_ROTL32(k1, 15);
     k1 *= c2;
 
     h1 ^= k1;
-    h1 = BOOST_FUNCTIONAL_HASH_ROTL32(h1,13);
-    h1 = h1*5+0xe6546b64;
+    h1 = BOOST_FUNCTIONAL_HASH_ROTL32(h1, 13);
+    h1 = h1 * 5 + 0xe6546b64;
 }
 
 // -------------------------------------------------------------
@@ -696,12 +699,12 @@ void coherent_hash_array_inner_double(uint32_t* out_hashes, array_info* array,
 
 void coherent_hash_array(uint32_t* out_hashes, array_info* array,
                          array_info* ref_array, size_t n_rows,
-                         const uint32_t seed) {
+                         const uint32_t seed, bool is_parallel = true) {
     // For those types, no type conversion is ever needed.
     if (array->arr_type == bodo_array_type::ARROW ||
         array->arr_type == bodo_array_type::STRING ||
         array->arr_type == bodo_array_type::LIST_STRING) {
-        return hash_array(out_hashes, array, n_rows, seed);
+        return hash_array(out_hashes, array, n_rows, seed, is_parallel);
     }
     // Now we are in NUMPY / NULLABLE_INT_BOOL. Getting into hot waters.
     // For DATE / DATETIME / TIMEDELTA / DECIMAL no type conversion is allowed
@@ -710,12 +713,12 @@ void coherent_hash_array(uint32_t* out_hashes, array_info* array,
         array->dtype == Bodo_CTypes::TIMEDELTA ||
         array->dtype == Bodo_CTypes::DECIMAL ||
         array->dtype == Bodo_CTypes::_BOOL) {
-        return hash_array(out_hashes, array, n_rows, seed);
+        return hash_array(out_hashes, array, n_rows, seed, is_parallel);
     }
     // If we have the same type on left or right then no need
     if (array->arr_type == ref_array->arr_type ||
         array->dtype == ref_array->dtype) {
-        return hash_array(out_hashes, array, n_rows, seed);
+        return hash_array(out_hashes, array, n_rows, seed, is_parallel);
     }
     // If both are unsigned int, we convert to uint64_t
     if (is_unsigned_integer(array->dtype) &&
@@ -998,12 +1001,12 @@ uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
 }
 
 uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
-                    const uint32_t seed) {
-    tracing::Event ev("hash_keys");
+                    const uint32_t seed, bool is_parallel) {
+    tracing::Event ev("hash_keys", is_parallel);
     size_t n_rows = (size_t)key_arrs[0]->length;
     uint32_t* hashes = new uint32_t[n_rows];
     // hash first array
-    hash_array(hashes, key_arrs[0], n_rows, seed);
+    hash_array(hashes, key_arrs[0], n_rows, seed, is_parallel);
     // combine other array hashes
     for (size_t i = 1; i < key_arrs.size(); i++) {
         hash_array_combine(hashes, key_arrs[i], n_rows, seed);

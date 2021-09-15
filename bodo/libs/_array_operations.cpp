@@ -1,4 +1,5 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
+#include "_array_operations.h"
 #include <boost/xpressive/xpressive.hpp>
 #include <functional>
 #include <random>
@@ -8,7 +9,6 @@
 #include "_bodo_common.h"
 #include "_distributed.h"
 #include "_shuffle.h"
-#include "_array_operations.h"
 #include "gfx/timsort.hpp"
 
 #undef DEBUG_DD_SYMBOL
@@ -33,7 +33,7 @@
  * @param in_values the list of values that we need to check with
  */
 static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
-                              array_info* in_values) {
+                              array_info* in_values, bool is_parallel) {
     CheckEqualityArrayType(in_arr, in_values);
     if (out_arr->dtype != Bodo_CTypes::_BOOL) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
@@ -44,11 +44,13 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
 
     int64_t len_values = in_values->length;
     std::vector<uint32_t> hashes_values(len_values);
-    hash_array(hashes_values.data(), in_values, (size_t)len_values, seed);
+    hash_array(hashes_values.data(), in_values, (size_t)len_values, seed,
+               is_parallel);
 
     int64_t len_in_arr = in_arr->length;
     std::vector<uint32_t> hashes_in_arr(len_in_arr);
-    hash_array(hashes_in_arr.data(), in_arr, (size_t)len_in_arr, seed);
+    hash_array(hashes_in_arr.data(), in_arr, (size_t)len_in_arr, seed,
+               is_parallel);
 
     std::function<bool(int64_t, int64_t)> equal_fct =
         [&](int64_t const& pos1, int64_t const& pos2) -> bool {
@@ -95,7 +97,7 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
                 bool is_parallel) {
     try {
         if (!is_parallel) {
-            array_isin_kernel(out_arr, in_arr, in_values);
+            array_isin_kernel(out_arr, in_arr, in_values, is_parallel);
             decref_array(out_arr);
             decref_array(in_arr);
             decref_array(in_values);
@@ -108,11 +110,11 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
 
         int64_t num_keys = 1;
         table_info* shuf_table_in_values =
-            shuffle_table(&table_in_values, num_keys);
+            shuffle_table(&table_in_values, num_keys, is_parallel);
         // we need the comm_info and hashes for the reverse shuffling
         mpi_comm_info comm_info(table_in_arr->columns);
         uint32_t* hashes =
-            hash_keys_table(table_in_arr, 1, SEED_HASH_PARTITION);
+            hash_keys_table(table_in_arr, 1, SEED_HASH_PARTITION, is_parallel);
         comm_info.set_counts(hashes);
         table_info* shuf_table_in_arr =
             shuffle_table_kernel(table_in_arr, hashes, comm_info);
@@ -123,7 +125,7 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
                         out_arr->num_categories);
         // Calling isin on the shuffled info
         array_isin_kernel(shuf_out_arr, shuf_table_in_arr->columns[0],
-                          shuf_table_in_values->columns[0]);
+                          shuf_table_in_values->columns[0], is_parallel);
 
         // Deleting the data after usage
         delete_table_decref_arrays(shuf_table_in_values);
@@ -421,16 +423,18 @@ struct KeyEqualDropDuplicates {
  * @param in_table : the input table
  * @param num_keys : the number of keys
  * @param dropna: whether we drop null keys or not.
+ * @param is_parallel: whether we run in parallel or not.
  * @return the table to be used.
  */
 static table_info* drop_duplicates_keys_inner(table_info* in_table,
                                               int64_t num_keys,
-                                              bool dropna = true) {
+                                              bool dropna = true,
+                                              bool is_parallel = true) {
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<array_info*> key_arrs(in_table->columns.begin(),
                                       in_table->columns.begin() + num_keys);
     uint32_t seed = SEED_HASH_CONTAINER;
-    uint32_t* hashes = hash_keys(key_arrs, seed);
+    uint32_t* hashes = hash_keys(key_arrs, seed, is_parallel);
     HashDropDuplicates hash_fct{hashes};
     KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
     UNORD_MAP_CONTAINER<size_t, size_t, HashDropDuplicates,
@@ -490,6 +494,7 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
  *        keep = 2 corresponds to the case of keep=False : remove all duplicates
  * @param step: integer specifying the work done
  *              2 corresponds to the first step of the operation where we
+ * @param is_parallel: whether we run in parallel or not.
  * @param hashes: the precomputed hashes to use for the hash table. If set to
  *                `nullptr` then the hashes are computed inside this function
  *                and deleted at the end. If passed they are not deleted.
@@ -498,10 +503,11 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
  * of the operation after the rows have been merged on the computation
  * @return the table to be used.
  */
-table_info* drop_duplicates_table_inner(
-    table_info* in_table, int64_t num_keys, int64_t keep, int step, bool dropna,
-    uint32_t* hashes) {
-    tracing::Event ev("drop_duplicates_table_inner");
+table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
+                                        int64_t keep, int step,
+                                        bool is_parallel, bool dropna,
+                                        uint32_t* hashes) {
+    tracing::Event ev("drop_duplicates_table_inner", is_parallel);
     ev.add_attribute("table_nrows_before", size_t(in_table->nrows()));
     if (ev.is_tracing()) {
         size_t global_table_nbytes = table_global_memory_size(in_table);
@@ -514,8 +520,7 @@ table_info* drop_duplicates_table_inner(
         key_arrs[iKey] = in_table->columns[iKey];
 
     uint32_t seed = SEED_HASH_CONTAINER;
-    if (hashes == nullptr)
-        hashes = hash_keys(key_arrs, seed);
+    if (hashes == nullptr) hashes = hash_keys(key_arrs, seed, is_parallel);
     HashDropDuplicates hash_fct{hashes};
     KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
     UNORD_MAP_CONTAINER<size_t, size_t, HashDropDuplicates,
@@ -624,14 +629,15 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
 #endif
     // serial case
     if (!is_parallel) {
-        return drop_duplicates_keys_inner(in_table, num_keys, dropna);
+        return drop_duplicates_keys_inner(in_table, num_keys, dropna,
+                                          is_parallel);
     }
     // parallel case
     // pre reduction of duplicates
     table_info* red_table =
-        drop_duplicates_keys_inner(in_table, num_keys, dropna);
+        drop_duplicates_keys_inner(in_table, num_keys, dropna, is_parallel);
     // shuffling of values
-    table_info* shuf_table = shuffle_table(red_table, num_keys, 0);
+    table_info* shuf_table = shuffle_table(red_table, num_keys, is_parallel, 0);
     // no need to decref since shuffle_table() steals a reference
     delete_table(red_table);
     // reduction after shuffling
@@ -639,8 +645,8 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
     // Set dropna=False for drop_duplicates_table_inner because
     // drop_duplicates_keys_inner should have already removed any NA
     // values
-    table_info* ret_table =
-        drop_duplicates_table_inner(shuf_table, num_keys, keep, 1, false);
+    table_info* ret_table = drop_duplicates_table_inner(
+        shuf_table, num_keys, keep, 1, is_parallel, false);
     delete_table(shuf_table);
 #ifdef DEBUG_DD
     std::cout << "OUTPUT : drop_duplicates_keys ret_table=\n";
@@ -680,23 +686,24 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
         if (!is_parallel) {
             if (total_cols != -1) num_keys = total_cols;
             return drop_duplicates_table_inner(in_table, num_keys, keep, 1,
-                                               dropna);
+                                               is_parallel, dropna);
         }
         // parallel case
         // pre reduction of duplicates
         table_info* red_table;
         if (total_cols == -1) total_cols = num_keys;
-        red_table =
-            drop_duplicates_table_inner(in_table, total_cols, keep, 2, dropna);
+        red_table = drop_duplicates_table_inner(in_table, total_cols, keep, 2,
+                                                is_parallel, dropna);
         // shuffling of values
-        table_info* shuf_table = shuffle_table(red_table, num_keys);
+        table_info* shuf_table =
+            shuffle_table(red_table, num_keys, is_parallel);
         // no need to decref since shuffle_table() steals a reference
         delete_table(red_table);
         // reduction after shuffling
         // We don't drop NA values again because the first
         // drop_duplicates_table_inner should have already handled this
-        table_info* ret_table =
-            drop_duplicates_table_inner(shuf_table, total_cols, keep, 1, false);
+        table_info* ret_table = drop_duplicates_table_inner(
+            shuf_table, total_cols, keep, 1, is_parallel, false);
         delete_table(shuf_table);
 #ifdef DEBUG_DD
         std::cout << "OUTPUT drop_duplicates_table. ret_table=\n";

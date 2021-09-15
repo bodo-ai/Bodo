@@ -178,6 +178,7 @@ struct SecondLevelKeyEqualHashJoinTable {
  *
  */
 uint32_t* hash_data_cols_table(const std::vector<array_info*>& in_table,
-                               int64_t* col_nums, size_t n_cols, uint32_t seed);
+                               int64_t* col_nums, size_t n_cols, uint32_t seed,
+                               bool is_parallel);
 
 #endif  // _JOIN_HASHING_H_INCLUDED

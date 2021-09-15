@@ -21,18 +21,19 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
  *
  * @param key_arrs: input keys to hashThe hashes on output.
  * @param seed: the seed of the computation.
+ * @param is_parallel: whether we run in parallel or not.
  * @return hash keys
  *
  */
 uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
-                    const uint32_t seed);
+                    const uint32_t seed, bool is_parallel);
 
 uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
                              std::vector<array_info*> const& ref_key_arrs,
                              const uint32_t seed);
 
 void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                const uint32_t seed);
+                const uint32_t seed, bool is_parallel);
 
 /**
  * Function for the getting table keys and returning its hashes
@@ -40,15 +41,16 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
  * @param in_table: the input table
  * @param num_keys : the number of keys
  * @param seed: the seed of the computation.
+ * @param is_parallel: whether we run in parallel or not.
  * @return hash keys
  *
  */
 inline uint32_t* hash_keys_table(table_info* in_table, size_t num_keys,
-                                 uint32_t seed) {
-    tracing::Event ev("hash_keys_table");
+                                 uint32_t seed, bool is_parallel) {
+    tracing::Event ev("hash_keys_table", is_parallel);
     std::vector<array_info*> key_arrs(in_table->columns.begin(),
                                       in_table->columns.begin() + num_keys);
-    return hash_keys(key_arrs, seed);
+    return hash_keys(key_arrs, seed, is_parallel);
 }
 
 inline uint32_t* coherent_hash_keys_table(table_info* in_table,

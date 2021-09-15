@@ -1129,7 +1129,8 @@ bool calc_use_robin_map(size_t nunique_hashes, tracing::Event* ev = nullptr) {
         }
         if (ev) {
             ev->add_attribute("robin_map_load_factor", robin_map_load_factor);
-            ev->add_attribute("hopscotch_map_load_factor", hopscotch_map_load_factor);
+            ev->add_attribute("hopscotch_map_load_factor",
+                              hopscotch_map_load_factor);
         }
     }
     return use_robin_map;
@@ -1147,14 +1148,15 @@ bool calc_use_robin_map(size_t nunique_hashes, tracing::Event* ev = nullptr) {
  * @param[in,out] grp_info: The grouping_info structure that we are populating
  * @param key_drop_nulls : whether to drop null keys
  * @param nrows : number of input rows
+ * @param is_parallel: true if data is distributed
  */
 template <typename T>
 static void get_group_info_loop(T& key_to_group,
                                 std::vector<array_info*>& key_cols,
                                 grouping_info& grp_info,
-                                const bool key_drop_nulls,
-                                const int64_t nrows) {
-    tracing::Event ev("get_group_info_loop");
+                                const bool key_drop_nulls, const int64_t nrows,
+                                bool is_parallel) {
+    tracing::Event ev("get_group_info_loop", is_parallel);
     // Start at 1 because I'm going to use 0 to mean nothing was inserted yet
     // in the map (but note that the group values recorded in grp_info go from
     // 0 to num_groups - 1)
@@ -1165,12 +1167,14 @@ static void get_group_info_loop(T& key_to_group,
     // To not duplicate code, we put the common portion of the loop in
     // MAIN_LOOP_BODY macro
 
-#define MAIN_LOOP_BODY \
-    int64_t& group = key_to_group[i]; /* this inserts 0 into the map if key doesn't exist */ \
-    if (group == 0) { \
-        group = next_group++;  /* this updates the value in the map without another lookup */ \
-        grp_info.group_to_first_row.emplace_back(i); \
-    } \
+#define MAIN_LOOP_BODY                                                      \
+    int64_t& group = key_to_group[i]; /* this inserts 0 into the map if key \
+                                         doesn't exist */                   \
+    if (group == 0) {                                                       \
+        group = next_group++; /* this updates the value in the map without  \
+                                 another lookup */                          \
+        grp_info.group_to_first_row.emplace_back(i);                        \
+    }                                                                       \
     grp_info.row_to_group[i] = group - 1
 
     if (!key_drop_nulls) {
@@ -1241,8 +1245,8 @@ void get_group_info_impl(Map& key_to_group, tracing::Event& ev,
                          std::vector<array_info*>& key_cols, uint32_t*& hashes,
                          const size_t nunique_hashes,
                          const bool check_for_null_keys, const bool key_dropna,
-                         const double load_factor) {
-    tracing::Event ev_alloc("get_group_info_alloc");
+                         const double load_factor, bool is_parallel) {
+    tracing::Event ev_alloc("get_group_info_alloc", is_parallel);
     key_to_group.max_load_factor(load_factor);
     key_to_group.reserve(nunique_hashes);
     ev_alloc.add_attribute("map bucket_count", key_to_group.bucket_count());
@@ -1266,7 +1270,7 @@ void get_group_info_impl(Map& key_to_group, tracing::Event& ev,
     ev.add_attribute("g_key_drop_nulls", key_drop_nulls);
 
     get_group_info_loop<Map>(key_to_group, key_cols, grp_info, key_drop_nulls,
-                             table->nrows());
+                             table->nrows(), is_parallel);
     grp_info.num_groups = grp_info.group_to_first_row.size();
     ev.add_attribute("num_groups", size_t(grp_info.num_groups));
     do_map_dealloc<true>(hashes, key_to_group);
@@ -1288,12 +1292,14 @@ void get_group_info_impl(Map& key_to_group, tracing::Event& ev,
  * @param[in] check_for_null_keys whether to check for null keys. If a key is
  * null and key_dropna=True that row will not be mapped to any group
  * @param[in] key_dropna whether to allow NA values in group keys or not.
+ * @param[in] is_parallel: true if data is distributed
  */
 void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
                     size_t nunique_hashes,
                     std::vector<grouping_info>& grp_infos,
-                    bool check_for_null_keys, bool key_dropna) {
-    tracing::Event ev("get_group_info");
+                    bool check_for_null_keys, bool key_dropna,
+                    bool is_parallel) {
+    tracing::Event ev("get_group_info", is_parallel);
     if (tables.size() == 0) {
         throw std::runtime_error("get_group_info: tables is empty");
     }
@@ -1302,7 +1308,7 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table->columns.begin(), table->columns.begin() + table->num_keys);
     if (hashes == nullptr) {
-        hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE);
+        hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
         nunique_hashes = get_nunique_hashes(hashes, table->nrows());
     }
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
@@ -1319,7 +1325,7 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
     rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);
     get_group_info_impl(key_to_group_rh_flat, ev, grp_info, table, key_cols,
                         hashes, nunique_hashes, check_for_null_keys, key_dropna,
-                        UNORDERED_MAP_MAX_LOAD_FACTOR);
+                        UNORDERED_MAP_MAX_LOAD_FACTOR, is_parallel);
 
     if (tables.size() > 1) {
         // This case is not currently used
@@ -1331,11 +1337,10 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
 template <typename T>
 static int64_t get_groupby_labels_loop(T& key_to_group,
                                        std::vector<array_info*>& key_cols,
-                                       int64_t* row_to_group,
-                                       int64_t* sort_idx,
+                                       int64_t* row_to_group, int64_t* sort_idx,
                                        const bool key_drop_nulls,
-                                       const int64_t nrows) {
-    tracing::Event ev("get_groupby_labels_loop");
+                                       const int64_t nrows, bool is_parallel) {
+    tracing::Event ev("get_groupby_labels_loop", is_parallel);
     // Start at 1 because I'm going to use 0 to mean nothing was inserted yet
     // in the map (but note that the group values recorded in grp_info go from
     // 0 to num_groups - 1)
@@ -1348,16 +1353,18 @@ static int64_t get_groupby_labels_loop(T& key_to_group,
 
     std::vector<std::vector<int64_t>> group_rows;
 
-#define MAIN_LOOP_BODY \
-    int64_t& group = key_to_group[i]; /* this inserts 0 into the map if key doesn't exist */ \
-    if (group == 0) { \
-        group = next_group++;  /* this updates the value in the map without another lookup */ \
-        group_rows.emplace_back(); \
-    } \
-    group_rows[group - 1].push_back(i); \
+#define MAIN_LOOP_BODY                                                      \
+    int64_t& group = key_to_group[i]; /* this inserts 0 into the map if key \
+                                         doesn't exist */                   \
+    if (group == 0) {                                                       \
+        group = next_group++; /* this updates the value in the map without  \
+                                 another lookup */                          \
+        group_rows.emplace_back();                                          \
+    }                                                                       \
+    group_rows[group - 1].push_back(i);                                     \
     row_to_group[i] = group - 1
 
-    //keep track of how many NA values in the column
+    // keep track of how many NA values in the column
     int64_t na_pos = 0;
     if (!key_drop_nulls) {
         for (int64_t i = 0; i < nrows; i++) {
@@ -1367,8 +1374,9 @@ static int64_t get_groupby_labels_loop(T& key_to_group,
         for (int64_t i = 0; i < nrows; i++) {
             if (does_row_has_nulls(key_cols, i)) {
                 row_to_group[i] = -1;
-                //We need to keep position of all values in the sort_idx regardless of being dropped or not
-                //Indexes of all NA values are first in sort_idx since their group number is -1
+                // We need to keep position of all values in the sort_idx
+                // regardless of being dropped or not Indexes of all NA values
+                // are first in sort_idx since their group number is -1
                 sort_idx[na_pos] = i;
                 na_pos++;
                 continue;
@@ -1393,9 +1401,9 @@ int64_t get_groupby_labels_impl(Map& key_to_group, tracing::Event& ev,
                                 std::vector<array_info*>& key_cols,
                                 uint32_t*& hashes, const size_t nunique_hashes,
                                 const bool check_for_null_keys,
-                                const bool key_dropna,
-                                const double load_factor) {
-    tracing::Event ev_alloc("get_groupby_labels_alloc");
+                                const bool key_dropna, const double load_factor,
+                                bool is_parallel) {
+    tracing::Event ev_alloc("get_groupby_labels_alloc", is_parallel);
     key_to_group.max_load_factor(load_factor);
     key_to_group.reserve(nunique_hashes);
     ev_alloc.add_attribute("map bucket_count", key_to_group.bucket_count());
@@ -1410,9 +1418,9 @@ int64_t get_groupby_labels_impl(Map& key_to_group, tracing::Event& ev,
     ev.add_attribute("g_key_dropna", key_dropna);
     ev.add_attribute("g_key_drop_nulls", key_drop_nulls);
 
-    const int64_t num_groups =
-        get_groupby_labels_loop<Map>(key_to_group, key_cols, out_labels,
-                                     sort_idx, key_drop_nulls, table->nrows());
+    const int64_t num_groups = get_groupby_labels_loop<Map>(
+        key_to_group, key_cols, out_labels, sort_idx, key_drop_nulls,
+        table->nrows(), is_parallel);
     ev.add_attribute("num_groups", num_groups);
     do_map_dealloc<false>(hashes, key_to_group);
     return num_groups;
@@ -1426,11 +1434,13 @@ int64_t get_groupby_labels_impl(Map& key_to_group, tracing::Event& ev,
  * @param[out] out_labels output array to fill
  * @param[out] sort_idx sorted group indices
  * @param[in] key_dropna whether to allow NA values in group keys or not.
+ * @param is_parallel: true if data is distributed
  * @return int64_t total number of groups
  */
 int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
-                           int64_t* sort_idx, bool key_dropna) {
-    tracing::Event ev("get_groupby_labels");
+                           int64_t* sort_idx, bool key_dropna,
+                           bool is_parallel) {
+    tracing::Event ev("get_groupby_labels", is_parallel);
     ev.add_attribute("input_table_nrows", table->nrows());
     // TODO(ehsan): refactor to avoid code duplication with get_group_info
     // This function is similar to get_group_info. See that function for
@@ -1438,7 +1448,7 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
     table->num_keys = table->columns.size();
     std::vector<array_info*> key_cols = table->columns;
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
-    uint32_t* hashes = hash_keys(key_cols, seed);
+    uint32_t* hashes = hash_keys(key_cols, seed, is_parallel);
 
     size_t nunique_hashes = get_nunique_hashes(hashes, table->nrows());
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
@@ -1452,10 +1462,10 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
         robin_hood::unordered_flat_map<int64_t, int64_t, HashLookupIn32bitTable,
                                        KeyEqualLookupIn32bitTable>;
     rh_flat_t key_to_group_rh_flat({}, hash_fct, equal_fct);
-    return get_groupby_labels_impl(key_to_group_rh_flat, ev, out_labels,
-                                   sort_idx, table, key_cols, hashes,
-                                   nunique_hashes, check_for_null_keys,
-                                   key_dropna, UNORDERED_MAP_MAX_LOAD_FACTOR);
+    return get_groupby_labels_impl(
+        key_to_group_rh_flat, ev, out_labels, sort_idx, table, key_cols, hashes,
+        nunique_hashes, check_for_null_keys, key_dropna,
+        UNORDERED_MAP_MAX_LOAD_FACTOR, is_parallel);
 }
 
 /**
@@ -1473,12 +1483,14 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
  * @param[in] consider_missing: whether to return the list of missing rows or
  * not
  * @param[in] key_dropna whether to allow NA values in group keys or not.
+ * @param[in] is_parallel: true if data is distributed
  */
 void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
                             size_t nunique_hashes,
                             std::vector<grouping_info>& grp_infos,
-                            const bool consider_missing, bool key_dropna) {
-    tracing::Event ev("get_group_info_iterate");
+                            const bool consider_missing, bool key_dropna,
+                            bool is_parallel) {
+    tracing::Event ev("get_group_info_iterate", is_parallel);
     if (tables.size() == 0) {
         throw std::runtime_error("get_group_info: tables is empty");
     }
@@ -1489,7 +1501,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
     // tables to get an accurate nunique_hashes estimate. We can do it, but
     // it would mean calculating all hashes in advance
     if (hashes == nullptr) {
-        hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE);
+        hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
         nunique_hashes = get_nunique_hashes(hashes, table->nrows());
     }
     grp_infos.emplace_back();
@@ -1552,7 +1564,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
         table = tables[j];
         key_cols = std::vector<array_info*>(
             table->columns.begin(), table->columns.begin() + table->num_keys);
-        hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE);
+        hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
         grp_infos.emplace_back();
         grouping_info& grp_info = grp_infos.back();
         grp_info.row_to_group.resize(table->nrows());
@@ -5430,7 +5442,8 @@ class GroupbyPipeline {
         }
 
         // get hashes of keys
-        hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION);
+        hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION,
+                                 is_parallel);
         size_t nunique_hashes_global;
         // get estimate of number of unique hashes to guide optimization.
         // if shuffle_before_update=true we are going to shuffle everything
@@ -5615,10 +5628,10 @@ class GroupbyPipeline {
             const bool consider_missing =
                 cumulative_op || shift_op || transform_op;
             get_group_info_iterate(tables, hashes, nunique_hashes, grp_infos,
-                                   consider_missing, key_dropna);
+                                   consider_missing, key_dropna, is_parallel);
         } else
             get_group_info(tables, hashes, nunique_hashes, grp_infos, true,
-                           key_dropna);
+                           key_dropna, is_parallel);
         grouping_info& grp_info = grp_infos[0];
         grp_info.dispatch_table = dispatch_table;
         grp_info.dispatch_info = dispatch_info;
@@ -5667,7 +5680,8 @@ class GroupbyPipeline {
      */
     void shuffle() {
         tracing::Event ev("shuffle", is_parallel);
-        table_info* shuf_table = shuffle_table(update_table, num_keys);
+        table_info* shuf_table =
+            shuffle_table(update_table, num_keys, is_parallel);
 #ifdef DEBUG_GROUPBY
         std::cout << "After shuffle_table_kernel. shuf_table=\n";
         DEBUG_PrintSetOfColumn(std::cout, shuf_table->columns);
@@ -5695,7 +5709,7 @@ class GroupbyPipeline {
         grp_infos.clear();
         std::vector<table_info*> tables = {update_table};
         get_group_info(tables, hashes, nunique_hashes, grp_infos, false,
-                       key_dropna);
+                       key_dropna, is_parallel);
         grouping_info& grp_info = grp_infos[0];
         num_groups = grp_info.num_groups;
         grp_info.dispatch_table = dispatch_table;
@@ -5883,7 +5897,8 @@ class GroupbyPipeline {
                 // a later step. Setting dropna=True here removes NA
                 // from the keys, which we do not want
                 tmp2 = drop_duplicates_table_inner(tmp, tmp->ncols(), 0, 1,
-                                                   false, key_value_hashes);
+                                                   is_parallel, false,
+                                                   key_value_hashes);
                 delete tmp;
                 tmp = tmp2;
             }
@@ -5893,16 +5908,17 @@ class GroupbyPipeline {
                 if (drop_duplicates)
                     // Note that tmp here no longer contains the
                     // original input arrays
-                    tmp2 = shuffle_table(tmp, tmp->ncols());
+                    tmp2 = shuffle_table(tmp, tmp->ncols(), is_parallel);
                 else
                     // Since the arrays are unmodified we can reuse the hashes
-                    tmp2 = shuffle_table(tmp, tmp->ncols(), false,
+                    tmp2 = shuffle_table(tmp, tmp->ncols(), is_parallel, false,
                                          key_value_hashes);
             } else {
                 if (drop_duplicates)
-                    tmp2 = shuffle_table(tmp, num_keys);
+                    tmp2 = shuffle_table(tmp, num_keys, is_parallel);
                 else
-                    tmp2 = shuffle_table(tmp, num_keys, false, hashes);
+                    tmp2 = shuffle_table(tmp, num_keys, is_parallel, false,
+                                         hashes);
             }
             delete[] key_value_hashes;
             delete tmp;
@@ -6613,9 +6629,9 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     delete_table(red_table);
     // Now building the map_container.
     uint32_t* hashes_full =
-        hash_keys_table(full_table, num_keys, SEED_HASH_MULTIKEY);
+        hash_keys_table(full_table, num_keys, SEED_HASH_MULTIKEY, is_parallel);
     uint32_t* hashes_in_table =
-        hash_keys_table(in_table, num_keys, SEED_HASH_MULTIKEY);
+        hash_keys_table(in_table, num_keys, SEED_HASH_MULTIKEY, is_parallel);
     std::vector<array_info*> concat_column(
         full_table->columns.begin(), full_table->columns.begin() + num_keys);
     concat_column.insert(concat_column.end(), in_table->columns.begin(),

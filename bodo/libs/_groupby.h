@@ -82,9 +82,11 @@ table_info* pivot_groupby_and_aggregate(
  * @param out_labels output array to fill
  * @param sort_idx output array to fill
  * @param key_dropna: whether to include NA in key groups or not.
+ * @param is_parallel: true if data is distributed
  * @return int64_t total number of groups
  */
 int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
-                           int64_t* sort_idx, bool key_dropna);
+                           int64_t* sort_idx, bool key_dropna,
+                           bool is_parallel);
 
 #endif  // _GROUPBY_H_INCLUDED

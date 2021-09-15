@@ -1458,8 +1458,9 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
 
 // NOTE: Steals a reference from the input table.
 table_info* shuffle_table(table_info* in_table, int64_t n_keys,
-                          int32_t keep_comm_info, uint32_t* hashes) {
-    tracing::Event ev("shuffle_table");
+                          bool is_parallel, int32_t keep_comm_info,
+                          uint32_t* hashes) {
+    tracing::Event ev("shuffle_table", is_parallel);
     // error checking
     if (in_table->ncols() <= 0 || n_keys <= 0) {
         Bodo_PyErr_SetString(PyExc_RuntimeError, "Invalid input shuffle table");
@@ -1470,7 +1471,8 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
     mpi_comm_info* comm_info = new mpi_comm_info(in_table->columns);
     // computing the hash data structure
     if (hashes == nullptr)
-        hashes = hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION);
+        hashes =
+            hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION, is_parallel);
     comm_info->set_counts(hashes);
 
     table_info* table = shuffle_table_kernel(in_table, hashes, *comm_info);
@@ -1486,9 +1488,9 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
 }
 
 table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys,
-                                     int32_t keep_comm_info) {
+                                     bool is_parallel, int32_t keep_comm_info) {
     try {
-        return shuffle_table(in_table, n_keys, keep_comm_info);
+        return shuffle_table(in_table, n_keys, is_parallel, keep_comm_info);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -2533,11 +2535,11 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
 }
 
 table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
-                                           int64_t n_pes) {
+                                           int64_t n_pes, bool is_parallel) {
     try {
         int64_t n_rows = in_table->nrows();
         uint32_t* hashes =
-            hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION);
+            hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION, is_parallel);
 
         std::vector<array_info*> out_arrs;
         array_info* out_arr = alloc_array(

@@ -44,16 +44,19 @@ struct shuffle_info {
  *
  * @param in_table : the input table.
  * @param n_keys   : the number of keys for comparison.
+ * @param is_parallel: true because this function is called with distributed
+ * data only.
  * @param keep_comm_info : specifies if shuffle information should be kept in
  * output table, to be used for reverse shuffle later (e.g. in groupby apply).
  * @param hashes : provide precalculated hashes
  * @return the new table after shuffling
  */
 table_info* shuffle_table(table_info* in_table, int64_t n_keys,
-                          int32_t keep_comm_info = 0,
+                          bool is_parallel = true, int32_t keep_comm_info = 0,
                           uint32_t* hashes = nullptr);
 
 table_info* shuffle_table_py_entrypt(table_info* in_table, int64_t n_keys,
+                                     bool is_parallel = true,
                                      int32_t keep_comm_info = 0);
 
 /**
@@ -152,10 +155,13 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
  * @param in_table: the input table
  * @param n_keys  : the number of keys to be used for the hash
  * @param n_pes   : the number of processor considered
+ * @param is_parallel: true because this function is call in parallel_join_impl
+ * only
  * @return the table containing a single column with the nodes
  */
 table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
-                                           int64_t n_pes);
+                                           int64_t n_pes,
+                                           bool is_parallel = true);
 
 /** Compute whether we need to do a reshuffling or not for performance reasons.
     The dilemna is following:
