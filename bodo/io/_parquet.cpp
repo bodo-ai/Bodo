@@ -13,9 +13,9 @@
 #include "arrow/record_batch.h"
 #include "parquet/arrow/reader.h"
 
+#include "../libs/_array_hash.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_datetime_ext.h"
-#include "../libs/_array_hash.h"
 #include "_fs_io.h"
 #include "_parquet_reader.h"
 
@@ -24,11 +24,12 @@
 #include "parquet/arrow/writer.h"
 
 /**
- * This holds the arrow parquet readers and other information that this process needs
- * to read its chunk of a Parquet dataset.
+ * This holds the arrow parquet readers and other information that this process
+ * needs to read its chunk of a Parquet dataset.
  */
 struct DatasetReader {
-    // Arrow parquet file readers, only for the files that this process has to read
+    // Arrow parquet file readers, only for the files that this process has to
+    // read
     std::vector<std::shared_ptr<parquet::arrow::FileReader>> readers;
     // for each file in readers, store the value of each partition
     // column (value is stored as the categorical code). Note that a given
@@ -54,14 +55,15 @@ struct DatasetReader {
  * @param file_name : file or directory of parquet files
  * @param is_parallel : true if processes will read chunks of the dataset
  * @param bucket_region : S3 bucket region (when reading from S3)
- * @param filters : PyObject passed to pyarrow.parquet.ParquetDataset filters argument
- *                  to remove rows from scanned data
+ * @param filters : PyObject passed to pyarrow.parquet.ParquetDataset filters
+ * argument to remove rows from scanned data
  * @param tot_rows_to_read : total number of rows to read from the dataset
  * (starting from the beginning)
  */
 DatasetReader *get_dataset_reader(char *file_name, bool is_parallel,
-                                  char *bucket_region, PyObject* filters,
-                                  PyObject* storage_options, int64_t tot_rows_to_read);
+                                  char *bucket_region, PyObject *filters,
+                                  PyObject *storage_options,
+                                  int64_t tot_rows_to_read);
 void del_dataset_reader(DatasetReader *reader);
 int64_t get_pq_total_rows(DatasetReader *reader);
 
@@ -86,7 +88,8 @@ void pack_null_bitmap(uint8_t *out_nulls, std::vector<bool> &null_vec,
  * Fill partition column for this rank's chunk (in partitioned datasets).
  * @param ds_reader : Dataset reader (only files that this rank reads)
  * @param part_col_idx : Partition column index from 0 to # partitions - 1
- * @param out_data : buffer to fill (allocated in code generated in parquet_pio.py)
+ * @param out_data : buffer to fill (allocated in code generated in
+ * parquet_pio.py)
  * @param cat_dtype : int categorical dtype used to fill the array
  */
 void pq_gen_partition_column(DatasetReader *ds_reader, int64_t part_col_idx,
@@ -148,8 +151,9 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
                            PyLong_FromVoidPtr((void *)(&get_pq_total_rows)));
     PyObject_SetAttrString(m, "pq_read",
                            PyLong_FromVoidPtr((void *)(&pq_read)));
-    PyObject_SetAttrString(m, "get_pq_local_num_rows",
-                           PyLong_FromVoidPtr((void *)(&get_pq_local_num_rows)));
+    PyObject_SetAttrString(
+        m, "get_pq_local_num_rows",
+        PyLong_FromVoidPtr((void *)(&get_pq_local_num_rows)));
     PyObject_SetAttrString(m, "pq_read_string",
                            PyLong_FromVoidPtr((void *)(&pq_read_string)));
     PyObject_SetAttrString(m, "pq_read_list_string",
@@ -158,33 +162,35 @@ PyMODINIT_FUNC PyInit_parquet_cpp(void) {
                            PyLong_FromVoidPtr((void *)(&pq_read_array_item)));
     PyObject_SetAttrString(m, "pq_read_arrow_array",
                            PyLong_FromVoidPtr((void *)(&pq_read_arrow_array)));
-    PyObject_SetAttrString(m, "pq_gen_partition_column",
-                           PyLong_FromVoidPtr((void *)(&pq_gen_partition_column)));
+    PyObject_SetAttrString(
+        m, "pq_gen_partition_column",
+        PyLong_FromVoidPtr((void *)(&pq_gen_partition_column)));
     PyObject_SetAttrString(m, "pq_write",
                            PyLong_FromVoidPtr((void *)(&pq_write)));
     PyObject_SetAttrString(m, "pq_write_partitioned",
                            PyLong_FromVoidPtr((void *)(&pq_write_partitioned)));
     PyObject_SetAttrString(m, "get_stats_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
+                           PyLong_FromVoidPtr((void *)(&get_stats_alloc)));
     PyObject_SetAttrString(m, "get_stats_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_free)));
+                           PyLong_FromVoidPtr((void *)(&get_stats_free)));
     PyObject_SetAttrString(m, "get_stats_mi_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
+                           PyLong_FromVoidPtr((void *)(&get_stats_mi_alloc)));
     PyObject_SetAttrString(m, "get_stats_mi_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
+                           PyLong_FromVoidPtr((void *)(&get_stats_mi_free)));
 
     return m;
 }
 
-
 /**
- * Get values for all partition columns of a piece of pyarrow.parquet.ParquetDataset
- * and store in ds_reader (see DatasetReader for details)
+ * Get values for all partition columns of a piece of
+ * pyarrow.parquet.ParquetDataset and store in ds_reader (see DatasetReader for
+ * details)
  * @param ds_reader : Dataset reader (only files that this rank reads)
  * @param piece : ParquetDataset piece (a single parquet file)
  */
 void get_partition_info(DatasetReader *ds_reader, PyObject *piece) {
-    PyObject *partition_keys_py = PyObject_GetAttrString(piece, "partition_keys");
+    PyObject *partition_keys_py =
+        PyObject_GetAttrString(piece, "partition_keys");
     if (PyList_Size(partition_keys_py) > 0) {
         ds_reader->part_vals.emplace_back();
         std::vector<int64_t> &vals = ds_reader->part_vals.back();
@@ -193,7 +199,7 @@ void get_partition_info(DatasetReader *ds_reader, PyObject *piece) {
         PyObject *key_val_tuple;
         while ((key_val_tuple = PyIter_Next(part_keys_iter))) {
             // PyTuple_GetItem returns borrowed reference, no need to decref
-            PyObject* part_val_py = PyTuple_GetItem(key_val_tuple, 1);
+            PyObject *part_val_py = PyTuple_GetItem(key_val_tuple, 1);
             int64_t part_val = PyLong_AsLongLong(part_val_py);
             vals.emplace_back(part_val);
             Py_DECREF(key_val_tuple);
@@ -204,96 +210,206 @@ void get_partition_info(DatasetReader *ds_reader, PyObject *piece) {
 }
 
 DatasetReader *get_dataset_reader(char *file_name, bool parallel,
-                                  char *bucket_region, PyObject* filters,
-                                  PyObject* storage_options, int64_t tot_rows_to_read) {
+                                  char *bucket_region, PyObject *filters,
+                                  PyObject *storage_options,
+                                  int64_t tot_rows_to_read) {
     try {
-    tracing::Event ev("get_dataset_reader", parallel);
-    auto gilstate = PyGILState_Ensure();
+        tracing::Event ev("get_dataset_reader", parallel);
+        auto gilstate = PyGILState_Ensure();
 
-    DatasetReader *ds_reader = new DatasetReader();
-    ds_reader->bucket_region = bucket_region;
+        DatasetReader *ds_reader = new DatasetReader();
+        ds_reader->bucket_region = bucket_region;
 
-    assert (storage_options != Py_None);
+        assert(storage_options != Py_None);
 
-    // Extract values from the storage_options dict
-    // Check that it's a dictionary, else throw an error
-    if (PyDict_Check(storage_options)) {
-        // Get value of "anon". Returns NULL if it doesn't exist in the dict.
-        // No need to decref s3fs_anon_py, PyDict_GetItemString returns borrowed ref
-        PyObject* s3fs_anon_py = PyDict_GetItemString(storage_options, "anon");
-        if (s3fs_anon_py != NULL && s3fs_anon_py == Py_True) {
-            ds_reader->s3fs_anon = true;
+        // Extract values from the storage_options dict
+        // Check that it's a dictionary, else throw an error
+        if (PyDict_Check(storage_options)) {
+            // Get value of "anon". Returns NULL if it doesn't exist in the
+            // dict. No need to decref s3fs_anon_py, PyDict_GetItemString
+            // returns borrowed ref
+            PyObject *s3fs_anon_py =
+                PyDict_GetItemString(storage_options, "anon");
+            if (s3fs_anon_py != NULL && s3fs_anon_py == Py_True) {
+                ds_reader->s3fs_anon = true;
+            }
+        } else {
+            throw std::runtime_error(
+                "parquet.cpp::get_dataset_reader: storage_options is not a "
+                "python dictionary.");
         }
-    } else {
-        throw std::runtime_error("parquet.cpp::get_dataset_reader: storage_options is not a python dictionary.");
-    }
 
-    // import bodo.io.parquet_pio
-    PyObject *pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
+        // import bodo.io.parquet_pio
+        PyObject *pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
 
-    // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name, true, filters=filters, storage_options)
-    PyObject *ds = PyObject_CallMethod(pq_mod, "get_parquet_dataset", "sOOO",
-                                       file_name, Py_True, filters, 
-                                       storage_options);
-    Py_DECREF(filters);
-    Py_DECREF(storage_options);
-    if (PyErr_Occurred()) return NULL;
+        // ds = bodo.io.parquet_pio.get_parquet_dataset(file_name, true,
+        // filters=filters, storage_options)
+        PyObject *ds =
+            PyObject_CallMethod(pq_mod, "get_parquet_dataset", "sOOO",
+                                file_name, Py_True, filters, storage_options);
+        Py_DECREF(filters);
+        Py_DECREF(storage_options);
+        if (PyErr_Occurred()) return NULL;
 
-    Py_DECREF(pq_mod);
+        Py_DECREF(pq_mod);
 
-    // total_rows = ds._bodo_total_rows
-    PyObject *total_rows_py = PyObject_GetAttrString(ds, "_bodo_total_rows");
-    int64_t total_rows = PyLong_AsLongLong(total_rows_py);
-    Py_DECREF(total_rows_py);
-    ds_reader->total_rows = total_rows;
+        // total_rows = ds._bodo_total_rows
+        PyObject *total_rows_py =
+            PyObject_GetAttrString(ds, "_bodo_total_rows");
+        int64_t total_rows = PyLong_AsLongLong(total_rows_py);
+        Py_DECREF(total_rows_py);
+        ds_reader->total_rows = total_rows;
 
-    // prefix = ds._prefix
-    PyObject *prefix_py = PyObject_GetAttrString(ds, "_prefix");
-    ds_reader->prefix = PyUnicode_AsUTF8(prefix_py);
-    Py_DECREF(prefix_py);
+        // prefix = ds._prefix
+        PyObject *prefix_py = PyObject_GetAttrString(ds, "_prefix");
+        ds_reader->prefix = PyUnicode_AsUTF8(prefix_py);
+        Py_DECREF(prefix_py);
 
-    // all_pieces = ds.pieces
-    PyObject *all_pieces = PyObject_GetAttrString(ds, "pieces");
-    size_t num_pieces = PyObject_Length(all_pieces);
-    ev.add_attribute("g_num_pieces", num_pieces);
-    Py_DECREF(ds);
+        // all_pieces = ds.pieces
+        PyObject *all_pieces = PyObject_GetAttrString(ds, "pieces");
+        size_t num_pieces = PyObject_Length(all_pieces);
+        ev.add_attribute("g_num_pieces", num_pieces);
+        Py_DECREF(ds);
 
-    // iterate through pieces next
-    PyObject *iterator = PyObject_GetIter(all_pieces);
-    Py_DECREF(all_pieces);
-    PyObject *piece;
+        // iterate through pieces next
+        PyObject *iterator = PyObject_GetIter(all_pieces);
+        Py_DECREF(all_pieces);
+        PyObject *piece;
 
-    if (iterator == NULL) {
-        PyGILState_Release(gilstate);
-        return ds_reader;
-    }
+        if (iterator == NULL) {
+            PyGILState_Release(gilstate);
+            return ds_reader;
+        }
 
-    if (!parallel) {
-        // the process will read the whole dataset
-        // head-only optimization ("limit pushdown"): user code may only use df.head()
-        // so we just read the necessary rows
-        ds_reader->count = (tot_rows_to_read != -1) ? std::min(tot_rows_to_read, total_rows) : total_rows;
+        if (!parallel) {
+            // the process will read the whole dataset
+            // head-only optimization ("limit pushdown"): user code may only use
+            // df.head() so we just read the necessary rows
+            ds_reader->count = (tot_rows_to_read != -1)
+                                   ? std::min(tot_rows_to_read, total_rows)
+                                   : total_rows;
+
+            std::vector<std::string> file_paths;
+            if (total_rows > 0) {
+                // get filepath for every piece
+                while ((piece = PyIter_Next(iterator))) {
+                    PyObject *num_rows_piece_py =
+                        PyObject_GetAttrString(piece, "_bodo_num_rows");
+                    int64_t num_rows_piece =
+                        PyLong_AsLongLong(num_rows_piece_py);
+                    Py_DECREF(num_rows_piece_py);
+                    if (num_rows_piece > 0) {
+                        // p = piece.path
+                        PyObject *p = PyObject_GetAttrString(piece, "path");
+                        const char *c_path = PyUnicode_AsUTF8(p);
+                        // prepend the prefix to the path
+                        file_paths.emplace_back(ds_reader->prefix +
+                                                std::string(c_path));
+                        // for this parquet file: store partition value of each
+                        // partition column in ds_reader
+                        get_partition_info(ds_reader, piece);
+                        Py_DECREF(p);
+                    }
+                    Py_DECREF(piece);
+                }
+            }
+
+            Py_DECREF(iterator);
+
+            pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
+            PyObject *num_files_py = PyLong_FromSsize_t(file_paths.size());
+            PyObject *ret = PyObject_CallMethod(
+                pq_mod, "adjust_nofiles_limit_py", "O", num_files_py);
+            Py_DECREF(pq_mod);
+            Py_DECREF(num_files_py);
+            Py_DECREF(ret);
+            // open and store file readers for my pieces
+            for (auto &fpath : file_paths) {
+                std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
+                pq_init_reader(fpath.c_str(), &arrow_reader, bucket_region,
+                               ds_reader->s3fs_anon);
+                ds_reader->readers.push_back(arrow_reader);
+            }
+
+            if (PyErr_Occurred()) return NULL;
+            PyGILState_Release(gilstate);
+            return ds_reader;
+        }
+
+        // is parallel (this process will read a chunk of dataset)
+
+        // calculate the portion of rows that this process needs to read
+        size_t rank = dist_get_rank();
+        size_t nranks = dist_get_size();
+        int64_t start_row_global = dist_get_start(total_rows, nranks, rank);
+        ds_reader->count = dist_get_node_portion(total_rows, nranks, rank);
+
+        // head-only optimization ("limit pushdown"): user code may only use
+        // df.head() so we just read the necessary rows This reads the data in
+        // an imbalanced way. The assumed use case is printing df.head() which
+        // looks better if the data is in fewer ranks.
+        // TODO: explore if balancing data is necessary for some use cases
+        if (tot_rows_to_read != -1) {
+            // no rows to read on this process
+            if (start_row_global >= tot_rows_to_read) {
+                start_row_global = 0;
+                ds_reader->count = 0;
+            }
+            // there may be fewer rows to read
+            else {
+                int64_t new_end = std::min(start_row_global + ds_reader->count,
+                                           tot_rows_to_read);
+                ds_reader->count = new_end - start_row_global;
+            }
+        }
 
         std::vector<std::string> file_paths;
-        if (total_rows > 0) {
-            // get filepath for every piece
+        // get file paths only for the pieces that correspond to my chunk
+        if (ds_reader->count > 0) {
+            int64_t count_rows =
+                0;  // total number of rows of all the pieces we iterate through
+            int64_t num_rows_my_files =
+                0;  // number of rows in opened files (excluding any rows in the
+                    // first file that will be skipped if the process starts
+                    // reading in the middle of the file)
             while ((piece = PyIter_Next(iterator))) {
                 PyObject *num_rows_piece_py =
                     PyObject_GetAttrString(piece, "_bodo_num_rows");
                 int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
                 Py_DECREF(num_rows_piece_py);
-                if (num_rows_piece > 0) {
-                    // p = piece.path
+
+                // we skip all initial pieces whose total row count is less than
+                // start_row_global (first row of my chunk). after that, we get
+                // file paths for all subsequent pieces until the number of rows
+                // in opened pieces is greater or equal to number of rows in my
+                // chunk
+                if ((num_rows_piece > 0) &&
+                    (start_row_global < count_rows + num_rows_piece)) {
+                    if (file_paths.size() == 0) {
+                        ds_reader->start_row_first_file =
+                            start_row_global - count_rows;
+                        num_rows_my_files +=
+                            num_rows_piece - ds_reader->start_row_first_file;
+                    } else {
+                        num_rows_my_files += num_rows_piece;
+                    }
+                    // open and store file reader for this piece
                     PyObject *p = PyObject_GetAttrString(piece, "path");
                     const char *c_path = PyUnicode_AsUTF8(p);
                     // prepend the prefix to the path
-                    file_paths.emplace_back(ds_reader->prefix + std::string(c_path));
+                    file_paths.emplace_back(ds_reader->prefix +
+                                            std::string(c_path));
                     // for this parquet file: store partition value of each
                     // partition column in ds_reader
                     get_partition_info(ds_reader, piece);
                     Py_DECREF(p);
                 }
+
                 Py_DECREF(piece);
+
+                count_rows += num_rows_piece;
+                // finish when number of rows of opened files covers my chunk
+                if (num_rows_my_files >= ds_reader->count) break;
             }
         }
 
@@ -301,119 +417,26 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
 
         pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
         PyObject *num_files_py = PyLong_FromSsize_t(file_paths.size());
-        PyObject *ret = PyObject_CallMethod(pq_mod, "adjust_nofiles_limit_py", "O", num_files_py);
+        PyObject *ret = PyObject_CallMethod(pq_mod, "adjust_nofiles_limit_py",
+                                            "O", num_files_py);
         Py_DECREF(pq_mod);
         Py_DECREF(num_files_py);
         Py_DECREF(ret);
+        tracing::Event ev_fopen("open_files", parallel);
         // open and store file readers for my pieces
-        for (auto& fpath : file_paths) {
+        for (auto &fpath : file_paths) {
             std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
-            pq_init_reader(fpath.c_str(), &arrow_reader, bucket_region, ds_reader->s3fs_anon);
+            pq_init_reader(fpath.c_str(), &arrow_reader, bucket_region,
+                           ds_reader->s3fs_anon);
             ds_reader->readers.push_back(arrow_reader);
         }
+        ev_fopen.finalize();
+        ev.add_attribute("num_rows", size_t(ds_reader->count));
+        ev.add_attribute("num_files", ds_reader->readers.size());
 
         if (PyErr_Occurred()) return NULL;
         PyGILState_Release(gilstate);
         return ds_reader;
-    }
-
-    // is parallel (this process will read a chunk of dataset)
-
-    // calculate the portion of rows that this process needs to read
-    size_t rank = dist_get_rank();
-    size_t nranks = dist_get_size();
-    int64_t start_row_global = dist_get_start(total_rows, nranks, rank);
-    ds_reader->count = dist_get_node_portion(total_rows, nranks, rank);
-
-    // head-only optimization ("limit pushdown"): user code may only use df.head()
-    // so we just read the necessary rows
-    // This reads the data in an imbalanced way. The assumed use case is printing df.head()
-    // which looks better if the data is in fewer ranks.
-    // TODO: explore if balancing data is necessary for some use cases
-    if (tot_rows_to_read != -1) {
-        // no rows to read on this process
-        if (start_row_global >= tot_rows_to_read) {
-            start_row_global = 0;
-            ds_reader->count = 0;
-        }
-        // there may be fewer rows to read
-        else {
-            int64_t new_end = std::min(start_row_global + ds_reader->count, tot_rows_to_read);
-            ds_reader->count = new_end - start_row_global;
-        }
-    }
-
-    std::vector<std::string> file_paths;
-    // get file paths only for the pieces that correspond to my chunk
-    if (ds_reader->count > 0) {
-        int64_t count_rows =
-            0;  // total number of rows of all the pieces we iterate through
-        int64_t num_rows_my_files =
-            0;  // number of rows in opened files (excluding any rows in the
-                // first file that will be skipped if the process starts
-                // reading in the middle of the file)
-        while ((piece = PyIter_Next(iterator))) {
-            PyObject *num_rows_piece_py =
-                PyObject_GetAttrString(piece, "_bodo_num_rows");
-            int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
-            Py_DECREF(num_rows_piece_py);
-
-            // we skip all initial pieces whose total row count is less than
-            // start_row_global (first row of my chunk). after that, we get
-            // file paths for all subsequent pieces until the number of rows
-            // in opened pieces is greater or equal to number of rows in my
-            // chunk
-            if ((num_rows_piece > 0) &&
-                (start_row_global < count_rows + num_rows_piece)) {
-                if (file_paths.size() == 0) {
-                    ds_reader->start_row_first_file =
-                        start_row_global - count_rows;
-                    num_rows_my_files +=
-                        num_rows_piece - ds_reader->start_row_first_file;
-                } else {
-                    num_rows_my_files += num_rows_piece;
-                }
-                // open and store file reader for this piece
-                PyObject *p = PyObject_GetAttrString(piece, "path");
-                const char *c_path = PyUnicode_AsUTF8(p);
-                // prepend the prefix to the path
-                file_paths.emplace_back(ds_reader->prefix + std::string(c_path));
-                // for this parquet file: store partition value of each
-                // partition column in ds_reader
-                get_partition_info(ds_reader, piece);
-                Py_DECREF(p);
-            }
-
-            Py_DECREF(piece);
-
-            count_rows += num_rows_piece;
-            // finish when number of rows of opened files covers my chunk
-            if (num_rows_my_files >= ds_reader->count) break;
-        }
-    }
-
-    Py_DECREF(iterator);
-
-    pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
-    PyObject *num_files_py = PyLong_FromSsize_t(file_paths.size());
-    PyObject *ret = PyObject_CallMethod(pq_mod, "adjust_nofiles_limit_py", "O", num_files_py);
-    Py_DECREF(pq_mod);
-    Py_DECREF(num_files_py);
-    Py_DECREF(ret);
-    tracing::Event ev_fopen("open_files", parallel);
-    // open and store file readers for my pieces
-    for (auto& fpath : file_paths) {
-        std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
-        pq_init_reader(fpath.c_str(), &arrow_reader, bucket_region, ds_reader->s3fs_anon);
-        ds_reader->readers.push_back(arrow_reader);
-    }
-    ev_fopen.finalize();
-    ev.add_attribute("num_rows", size_t(ds_reader->count));
-    ev.add_attribute("num_files", ds_reader->readers.size());
-
-    if (PyErr_Occurred()) return NULL;
-    PyGILState_Release(gilstate);
-    return ds_reader;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
@@ -422,13 +445,9 @@ DatasetReader *get_dataset_reader(char *file_name, bool parallel,
 
 void del_dataset_reader(DatasetReader *reader) { delete reader; }
 
-int64_t get_pq_local_num_rows(DatasetReader *reader) {
-    return reader->count;
-}
+int64_t get_pq_local_num_rows(DatasetReader *reader) { return reader->count; }
 
-int64_t get_pq_total_rows(DatasetReader *reader) {
-    return reader->total_rows;
-}
+int64_t get_pq_total_rows(DatasetReader *reader) { return reader->total_rows; }
 
 int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,
                 int64_t column_idx, uint8_t *out_data, int out_dtype,
@@ -449,7 +468,8 @@ int64_t pq_read(DatasetReader *ds_reader, int64_t real_column_idx,
 
             pq_read_single_file(file_reader, real_column_idx, column_idx,
                                 out_data + read_rows * dtype_size, out_dtype,
-                                start, rows_to_read, out_nulls, read_rows, is_categorical);
+                                start, rows_to_read, out_nulls, read_rows,
+                                is_categorical);
             read_rows += rows_to_read;
             start = 0;  // start becomes 0 after reading non-empty first chunk
         }
@@ -720,7 +740,7 @@ void pq_gen_partition_column_T(DatasetReader *ds_reader, int64_t part_col_idx,
     T *cur_offset = out_data;
     int64_t rows_filled = 0;
     int64_t start = ds_reader->start_row_first_file;
-    for (size_t i=0; i < ds_reader->readers.size(); i++) {
+    for (size_t i = 0; i < ds_reader->readers.size(); i++) {
         auto file_reader = ds_reader->readers[i];
         // XXX get number of rows from first column in parquet file
         int64_t file_size = pq_get_size_single_file(file_reader, 0);
@@ -742,15 +762,20 @@ void pq_gen_partition_column(DatasetReader *ds_reader, int64_t part_col_idx,
     try {
         switch (cat_dtype) {
             case Bodo_CTypes::INT8:
-                return pq_gen_partition_column_T<int8_t>(ds_reader, part_col_idx, (int8_t*)out_data);
+                return pq_gen_partition_column_T<int8_t>(
+                    ds_reader, part_col_idx, (int8_t *)out_data);
             case Bodo_CTypes::INT16:
-                return pq_gen_partition_column_T<int16_t>(ds_reader, part_col_idx, (int16_t*)out_data);
+                return pq_gen_partition_column_T<int16_t>(
+                    ds_reader, part_col_idx, (int16_t *)out_data);
             case Bodo_CTypes::INT32:
-                return pq_gen_partition_column_T<int32_t>(ds_reader, part_col_idx, (int32_t*)out_data);
+                return pq_gen_partition_column_T<int32_t>(
+                    ds_reader, part_col_idx, (int32_t *)out_data);
             case Bodo_CTypes::INT64:
-                return pq_gen_partition_column_T<int64_t>(ds_reader, part_col_idx, (int64_t*)out_data);
+                return pq_gen_partition_column_T<int64_t>(
+                    ds_reader, part_col_idx, (int64_t *)out_data);
             default:
-                throw std::runtime_error("pq_gen_partition_column: unrecognized categorical dtype");
+                throw std::runtime_error(
+                    "pq_gen_partition_column: unrecognized categorical dtype");
         }
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -927,12 +952,12 @@ void bodo_array_to_arrow(
         ::arrow::internal::ChunkedBinaryBuilder *builder;
         if (array->dtype == Bodo_CTypes::BINARY) {
             schema_vector.push_back(arrow::field(col_name, arrow::binary()));
-            builder = new ::arrow::internal::ChunkedBinaryBuilder(kBinaryChunksize, pool);
-        }
-        else
-        {
+            builder = new ::arrow::internal::ChunkedBinaryBuilder(
+                kBinaryChunksize, pool);
+        } else {
             schema_vector.push_back(arrow::field(col_name, arrow::utf8()));
-            builder = new ::arrow::internal::ChunkedStringBuilder(kBinaryChunksize, pool);
+            builder = new ::arrow::internal::ChunkedStringBuilder(
+                kBinaryChunksize, pool);
         }
         char *cur_str = array->data1;
         offset_t *offsets = (offset_t *)array->data2;
@@ -1004,7 +1029,6 @@ struct partition_write_info {
     std::vector<int64_t> rows;  // rows in this partition
 };
 
-
 Bodo_Fs::FsEnum filesystem_type(const char *fname) {
     Bodo_Fs::FsEnum fs_type;
     if (strncmp(fname, "s3://", 5) == 0) {
@@ -1056,15 +1080,16 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
     // (see array_info::val_to_str)
 
     if (!is_parallel)
-        throw std::runtime_error("to_parquet partitioned not implemented in sequential mode");
+        throw std::runtime_error(
+            "to_parquet partitioned not implemented in sequential mode");
 
     // new_table will have partition columns at the beginning and the rest after
     // (to use multi_col_key for hashing which assumes that keys are at the
     // beginning), and we will then drop the partition columns from it for
     // writing
-    table_info* new_table = new table_info();
+    table_info *new_table = new table_info();
     std::vector<bool> is_part_col(table->ncols(), false);
-    std::vector<array_info*> partition_cols;
+    std::vector<array_info *> partition_cols;
     std::vector<std::string> part_col_names;
     offset_t *offsets = (offset_t *)col_names_arr->data2;
     for (int i = 0; i < num_partition_cols; i++) {
@@ -1081,7 +1106,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
     }
 
     const uint32_t seed = SEED_HASH_PARTITION;
-    uint32_t* hashes = hash_keys(partition_cols, seed);
+    uint32_t *hashes = hash_keys(partition_cols, seed, is_parallel);
     UNORD_MAP_CONTAINER<multi_col_key, partition_write_info, multi_col_key_hash>
         key_to_partition;
 
@@ -1093,7 +1118,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
     new_table->num_keys = num_partition_cols;
     for (int64_t i = 0; i < new_table->nrows(); i++) {
         multi_col_key key(hashes[i], new_table, i);
-        partition_write_info& p = key_to_partition[key];
+        partition_write_info &p = key_to_partition[key];
         if (p.rows.size() == 0) {
             // generate output file name
             p.fpath = std::string(_path_name) + "/";
@@ -1125,10 +1150,10 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
 
     for (auto it = key_to_partition.begin(); it != key_to_partition.end();
          it++) {
-        const partition_write_info& p = it->second;
+        const partition_write_info &p = it->second;
         // RetrieveTable steals the reference but we still need them
         for (auto a : new_table->columns) incref_array(a);
-        table_info* part_table =
+        table_info *part_table =
             RetrieveTable(new_table, p.rows, new_table->ncols());
         // NOTE: we pass is_parallel=False because we already took care of
         // is_parallel here

@@ -334,10 +334,11 @@ table_info* hash_join_table(
         // Now computing the hashes that will be used in the hash map
         // or compared to the hash map.
         //
-        uint32_t* hashes_left =
-            hash_keys_table(work_left_table, n_key, SEED_HASH_JOIN);
-        uint32_t* hashes_right =
-            hash_keys_table(work_right_table, n_key, SEED_HASH_JOIN);
+        bool parallel_trace = (left_parallel || right_parallel);
+        uint32_t* hashes_left = hash_keys_table(work_left_table, n_key,
+                                                SEED_HASH_JOIN, parallel_trace);
+        uint32_t* hashes_right = hash_keys_table(
+            work_right_table, n_key, SEED_HASH_JOIN, parallel_trace);
         // Compute the ratio of the table sizes on the current rank.
         // This is used when determining which table populates the
         // hash map.
@@ -529,9 +530,9 @@ table_info* hash_join_table(
                 short_data_key_cols = cond_func_right_columns;
                 short_data_key_n_cols = cond_func_right_column_len;
             }
-            short_nonequal_key_hashes =
-                hash_data_cols_table(short_table->columns, short_data_key_cols,
-                                     short_data_key_n_cols, SEED_HASH_JOIN);
+            short_nonequal_key_hashes = hash_data_cols_table(
+                short_table->columns, short_data_key_cols,
+                short_data_key_n_cols, SEED_HASH_JOIN, parallel_trace);
             // [BE-1078]: Should this use statistics to influence how much we
             // reserve?
             second_level_hash_maps.reserve(short_table_rows);

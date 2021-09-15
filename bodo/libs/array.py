@@ -1438,7 +1438,9 @@ def delete_table(typingctx, table_t=None):
 
 # TODO Add a test for this
 @intrinsic
-def shuffle_table(typingctx, table_t, n_keys_t, keep_comm_info_t):  # pragma: no cover
+def shuffle_table(
+    typingctx, table_t, n_keys_t, _is_parallel, keep_comm_info_t
+):  # pragma: no cover
     """shuffle input table so that rows with same key are on the same process.
     Steals a reference from the input table.
     'keep_comm_info' parameter specifies if shuffle information should be kept in
@@ -1449,7 +1451,12 @@ def shuffle_table(typingctx, table_t, n_keys_t, keep_comm_info_t):  # pragma: no
     def codegen(context, builder, sig, args):  # pragma: no cover
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(32)],
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(1),
+                lir.IntType(32),
+            ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="shuffle_table"
@@ -1460,7 +1467,7 @@ def shuffle_table(typingctx, table_t, n_keys_t, keep_comm_info_t):  # pragma: no
         )  # pragma: no cover
         return ret
 
-    return table_type(table_t, types.int64, types.int32), codegen
+    return table_type(table_t, types.int64, types.boolean, types.int32), codegen
 
 
 class ShuffleInfoType(types.Type):
@@ -1957,7 +1964,7 @@ def groupby_and_aggregate(
 
 get_groupby_labels = types.ExternalFunction(
     "get_groupby_labels",
-    types.int64(table_type, types.voidptr, types.voidptr, types.boolean),
+    types.int64(table_type, types.voidptr, types.voidptr, types.boolean, types.bool_),
 )
 
 
