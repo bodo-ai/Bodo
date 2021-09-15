@@ -830,7 +830,7 @@ def test_df_head_too_many_args(memory_leak_check):
     df = pd.DataFrame({"A": [1, 23, 4, 1, 1, 7]})
     with pytest.raises(
         BodoError,
-        match="Too many arguments specified. Function takes 2 arguments, but 3 were provided.",
+        match="Too many arguments specified. Function takes 1 argument, but 2 were provided.",
     ):
         bodo.jit(impl)(df)
 
