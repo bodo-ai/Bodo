@@ -1489,6 +1489,7 @@ def check_caching(mod, testname, impl, args1, args2=None):
         # reset state to make sure only the cached version is used next
         engine = bodo_func.overloads[sig].library._codegen._engine
         bodo.ir.aggregate.gb_agg_cfunc_addr.clear()
+        bodo.ir.join.join_gen_cond_cfunc_addr.clear()
         bodo_func._reset_overloads()
         engine._defined_symbols.clear()
         del engine, bodo_func

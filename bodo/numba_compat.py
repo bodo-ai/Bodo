@@ -1235,6 +1235,20 @@ def resolve_gb_agg_funcs(cres):
             gb_agg_cfunc_addr[sym] = cres.library.get_pointer_to_function(sym)
 
 
+# TODO maybe we can do this in another function that we already monkey patch
+# like _compile_for_args or our own decorator
+def resolve_join_general_cond_funcs(cres):
+    from bodo.ir.join import join_gen_cond_cfunc_addr
+
+    # TODO? could there be a situation where we load multiple bodo functions
+    # and name clashing occurs?
+    for sym in cres.library._codegen._engine._defined_symbols:
+        if sym.startswith("cfunc") and (
+            "get_join_cond_addr" not in sym or "bodo_join_gen_cond" in sym
+        ):
+            join_gen_cond_cfunc_addr[sym] = cres.library.get_pointer_to_function(sym)
+
+
 def compile(self, sig):
     import numba.core.event as ev
     from numba.core import sigutils
@@ -1272,6 +1286,7 @@ def compile(self, sig):
             cres = self._cache.load_overload(sig, self.targetctx)
             if cres is not None:
                 resolve_gb_agg_funcs(cres)  # Bodo change
+                resolve_join_general_cond_funcs(cres)  # Bodo change
                 self._cache_hits[sig] += 1
                 # XXX fold this in add_overload()? (also see compiler.py)
                 if not cres.objectmode:
@@ -1342,6 +1357,11 @@ def _get_module_for_linking(self):
                 if "bodo_gb_udf_eval" in fn.name:
                     continue
                 if "bodo_gb_apply_general_udfs" in fn.name:
+                    continue
+            # Bodo change: skip general join condition cfuncs, to avoid turning them
+            # into weak symbols that are discarded
+            if "get_join_cond_addr" not in fn.name:
+                if "bodo_join_gen_cond" in fn.name:
                     continue
             to_fix.append(fn.name)
     if nfuncs == 0:
