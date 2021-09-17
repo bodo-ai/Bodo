@@ -5,15 +5,17 @@ from collections import defaultdict
 import numba
 import numpy as np
 import pandas as pd
+from llvmlite import ir as lir
 from numba import generated_jit
-from numba.core import ir, ir_utils, typeinfer, types
+from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
     compile_to_numba_ir,
+    next_label,
     replace_arg_nodes,
     replace_vars_inner,
     visit_vars_inner,
 )
-from numba.extending import overload
+from numba.extending import intrinsic, overload
 
 import bodo
 from bodo.libs.array import (
@@ -66,7 +68,85 @@ from bodo.utils.typing import (
     is_nullable_type,
     to_nullable_type,
 )
-from bodo.utils.utils import alloc_arr_tup, debug_prints
+from bodo.utils.utils import alloc_arr_tup, debug_prints, is_null_pointer
+
+# TODO: it's probably a bad idea for these to be global. Maybe try moving them
+# to a context or dispatcher object somehow
+# Maps symbol name to cfunc object that implements a general condition function.
+# This dict is used only when compiling
+join_gen_cond_cfunc = {}
+# Maps symbol name to cfunc address (used when compiling and loading from cache)
+# When compiling, this is populated in join.py::_gen_general_cond_cfunc
+# When loading from cache, this is populated in numba_compat.py::resolve_join_general_cond_funcs
+# when the compiled result is loaded from cache
+join_gen_cond_cfunc_addr = {}
+
+
+@intrinsic
+def add_join_gen_cond_cfunc_sym(typingctx, func, sym):
+    """This "registers" a cfunc that implements a general join condition
+    so it can be cached. It does two things:
+    - Generate a dummy call to the cfunc to make sure the symbol is not
+      discarded during linking
+    - Add cfunc library to the library of the Bodo function being compiled
+      (necessary for caching so that the cfunc is part of the cached result)
+    """
+
+    def codegen(context, builder, signature, args):
+        # generate dummy call to the cfunc
+        # Assume signature is
+        # types.bool_(
+        #   types.voidptr,
+        #   types.voidptr,
+        #   types.voidptr,
+        #   types.voidptr,
+        #   types.voidptr,
+        #   types.voidptr,
+        #   types.int64,
+        #   types.int64,
+        # )
+        # See: _gen_general_cond_cfunc
+        sig = func.signature
+        fnty = lir.FunctionType(
+            lir.IntType(1),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(64),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(builder.module, fnty, sym._literal_value)
+        builder.call(
+            fn_tp,
+            [
+                context.get_constant_null(sig.args[0]),
+                context.get_constant_null(sig.args[1]),
+                context.get_constant_null(sig.args[2]),
+                context.get_constant_null(sig.args[3]),
+                context.get_constant_null(sig.args[4]),
+                context.get_constant_null(sig.args[5]),
+                context.get_constant(types.int64, 0),
+                context.get_constant(types.int64, 0),
+            ],
+        )
+        # add cfunc library to the library of the Bodo function being compiled.
+        context.add_linking_libs([join_gen_cond_cfunc[sym._literal_value]._library])
+        return
+
+    return types.none(func, sym), codegen
+
+
+@numba.jit
+def get_join_cond_addr(name):
+    """ Resolve address of cfunc given by its symbol name """
+    with numba.objmode(addr="int64"):
+        addr = join_gen_cond_cfunc_addr[name]
+    return addr
 
 
 class Join(ir.Stmt):
@@ -604,8 +684,9 @@ def join_distributed_run(
 
     # Generate a general join condition function if it exists
     # and determine the data columns it needs.
-    cfunc_cond_address, left_col_nums, right_col_nums = _gen_general_cond_cfunc(
-        join_node, typemap
+    general_cond_cfunc, left_col_nums, right_col_nums = _gen_general_cond_cfunc(
+        join_node,
+        typemap,
     )
 
     if join_node.how == "asof":
@@ -639,6 +720,7 @@ def join_distributed_run(
             join_node.loc,
             join_node.indicator,
             join_node.is_na_equal,
+            general_cond_cfunc,
             left_col_nums,
             right_col_nums,
         )
@@ -691,9 +773,13 @@ def join_distributed_run(
             "info_to_array": info_to_array,
             "delete_table": delete_table,
             "delete_table_decref_arrays": delete_table_decref_arrays,
-            "cfunc_cond": cfunc_cond_address,
+            "add_join_gen_cond_cfunc_sym": add_join_gen_cond_cfunc_sym,
+            "get_join_cond_addr": get_join_cond_addr,
         }
     )
+    if general_cond_cfunc:
+        glbs.update({"general_cond_cfunc": general_cond_cfunc})
+
     f_block = compile_to_numba_ir(
         join_impl,
         glbs,
@@ -724,15 +810,23 @@ def _gen_general_cond_cfunc(join_node, typemap):
     """
     expr = join_node.gen_cond_expr
     if not expr:
-        return 0, [], []
+        return None, [], []
+
+    label_suffix = next_label()
 
     # get column name to table column index
     left_col_to_ind = _get_col_to_ind(join_node.left_keys, join_node.left_vars)
     right_col_to_ind = _get_col_to_ind(join_node.right_keys, join_node.right_vars)
 
-    table_getitem_funcs = {"bodo": bodo, "numba": numba}
+    table_getitem_funcs = {
+        "bodo": bodo,
+        "numba": numba,
+        "is_null_pointer": is_null_pointer,
+    }
     na_check_name = "NOT_NA"
-    func_text = "def f(left_table, right_table, left_data1, right_data1, left_null_bitmap, right_null_bitmap, left_ind, right_ind):\n"
+    func_text = f"def bodo_join_gen_cond{label_suffix}(left_table, right_table, left_data1, right_data1, left_null_bitmap, right_null_bitmap, left_ind, right_ind):\n"
+    func_text += "  if is_null_pointer(left_table):\n"
+    func_text += "    return False\n"
     expr, func_text, left_col_nums = _replace_column_accesses(
         expr,
         left_col_to_ind,
@@ -759,7 +853,7 @@ def _gen_general_cond_cfunc(join_node, typemap):
 
     loc_vars = {}
     exec(func_text, table_getitem_funcs, loc_vars)
-    cond_func = loc_vars["f"]
+    cond_func = loc_vars[f"bodo_join_gen_cond{label_suffix}"]
 
     c_sig = types.bool_(
         types.voidptr,
@@ -772,7 +866,10 @@ def _gen_general_cond_cfunc(join_node, typemap):
         types.int64,
     )
     cfunc_cond = numba.cfunc(c_sig, nopython=True)(cond_func)
-    return cfunc_cond.address, left_col_nums, right_col_nums
+    # Store the function inside join_gen_cond_cfunc
+    join_gen_cond_cfunc[cfunc_cond.native_name] = cfunc_cond
+    join_gen_cond_cfunc_addr[cfunc_cond.native_name] = cfunc_cond.address
+    return cfunc_cond, left_col_nums, right_col_nums
 
 
 def _replace_column_accesses(
@@ -924,6 +1021,7 @@ def _gen_local_hash_join(
     loc,
     indicator,
     is_na_equal,
+    general_cond_cfunc,
     left_col_nums,
     right_col_nums,
 ):
@@ -1024,6 +1122,14 @@ def _gen_local_hash_join(
     )
     func_text += f"    left_table_cond_columns = np.array({left_col_nums if len(left_col_nums) > 0 else [-1]}, dtype=np.int64)\n"
     func_text += f"    right_table_cond_columns = np.array({right_col_nums if len(right_col_nums) > 0 else [-1]}, dtype=np.int64)\n"
+    if general_cond_cfunc:
+        func_text += f"    cfunc_cond = add_join_gen_cond_cfunc_sym(general_cond_cfunc, '{general_cond_cfunc.native_name}')\n"
+        func_text += (
+            f"    cfunc_cond = get_join_cond_addr('{general_cond_cfunc.native_name}')\n"
+        )
+    else:
+        func_text += "    cfunc_cond = 0\n"
+
     func_text += "    out_table = hash_join_table(table_left, table_right, {}, {}, {}, {}, {}, vect_same_key.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {}, {}, {}, cfunc_cond, left_table_cond_columns.ctypes, {}, right_table_cond_columns.ctypes, {})\n".format(
         left_parallel,
         right_parallel,
