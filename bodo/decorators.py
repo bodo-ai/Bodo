@@ -296,13 +296,6 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
         "fusion": True,
     }
 
-    pipeline_class = (
-        bodo.compiler.BodoCompiler if pipeline_class is None else pipeline_class
-    )
-    if "distributed" in options and isinstance(options["distributed"], bool):
-        dist = options.pop("distributed")
-        pipeline_class = pipeline_class if dist else bodo.compiler.BodoCompilerSeq
-
     # turn off automatic distribution detection for args/returns if some distribution
     # is manually specified by the user
     if "distributed" in options or "distributed_block" in options:
@@ -310,6 +303,13 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
             options["args_maybe_distributed"] = False
         if "returns_maybe_distributed" not in options:
             options["returns_maybe_distributed"] = False
+
+    pipeline_class = (
+        bodo.compiler.BodoCompiler if pipeline_class is None else pipeline_class
+    )
+    if "distributed" in options and isinstance(options["distributed"], bool):
+        dist = options.pop("distributed")
+        pipeline_class = pipeline_class if dist else bodo.compiler.BodoCompilerSeq
 
     numba_jit = numba.jit(
         signature_or_function, pipeline_class=pipeline_class, **options

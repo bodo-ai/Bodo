@@ -1672,6 +1672,82 @@ def test_bodo_meta_jit_calls(memory_leak_check):
     assert count_array_OneD_Vars() == 0
 
 
+def test_dist_type_change_multi_func1(memory_leak_check):
+    """test a corner case in multi-function case where distribution of output of a
+    dispatcher call is not set properly [BE-1328]
+    """
+
+    # distribution of df should be set to 1D and q1/q2 calls shouldn't cause errors
+    @bodo.jit
+    def load_df():
+        df = pd.DataFrame({"A": np.arange(10)})
+        return df
+
+    @bodo.jit
+    def q1(df):
+        pass
+
+    @bodo.jit
+    def q2(df):
+        pass
+
+    @bodo.jit
+    def test():
+        df = load_df()
+        q1(df)
+        q2(df)
+
+    test()
+
+
+def test_dist_type_change_multi_func2(memory_leak_check):
+    """test a corner case in multi-function case where distribution of a dispatcher call
+    input variable changes (forced by another dispatcher), leading to data type change
+    which requires dispatcher recompilation
+    """
+
+    @bodo.jit(distributed=False)
+    def q1(df):
+        pass
+
+    @bodo.jit
+    def q2(df):
+        pass
+
+    @bodo.jit
+    def test():
+        df = pd.DataFrame({"A": np.arange(10)})
+        q1(df)
+        q2(df)
+
+    test()
+
+
+def test_dist_type_change_multi_func3(memory_leak_check):
+    """same as test_dist_type_change_multi_func1 but checks for tuple return in load_df"""
+
+    @bodo.jit
+    def load_df():
+        df = pd.DataFrame({"A": np.arange(10)})
+        return (df,)
+
+    @bodo.jit
+    def q1(df):
+        pass
+
+    @bodo.jit
+    def q2(df):
+        pass
+
+    @bodo.jit
+    def test():
+        (df,) = load_df()
+        q1(df)
+        q2(df)
+
+    test()
+
+
 def _check_scatterv(data, n):
     """check the output of scatterv() on 'data'"""
     recv_data = bodo.scatterv(data)

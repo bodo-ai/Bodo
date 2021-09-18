@@ -299,11 +299,7 @@ class DistributedAnalysis:
         # update distribution info of data types since necessary during return and for
         # potentially replacing calls to other JIT functions
         for vname, dist in array_dists.items():
-            typ = self.typemap.pop(vname)
-            # TODO: make sure all distributable types have a 'dist' attribute
-            if hasattr(typ, "dist"):
-                typ = typ.copy(dist=dist)
-            self.typemap[vname] = typ
+            self.typemap[vname] = _update_type_dist(self.typemap.pop(vname), dist)
 
         # update return type since distribution hints may have changed (can cause
         # lowering error otherwise)
@@ -2129,13 +2125,13 @@ class DistributedAnalysis:
             "variable '{}' is marked as distributed by '{}' but not possible to"
             " distribute in caller function '{}'.\nDistributed diagnostics:\n{}"
         )
-
         metadata = self._handle_dispatcher_args(dispatcher, rhs, array_dists, err_msg)
 
         # check return value for distributed flag
         is_return_distributed = metadata.get("is_return_distributed", False)
         # is_return_distributed is a list in tuple case which specifies distributions of
         # individual elements
+        lhs_typ = self.typemap[lhs]
         if isinstance(is_return_distributed, list):
             # check distributions of tuple elements for errors
             for i, is_dist in enumerate(is_return_distributed):
@@ -2149,12 +2145,7 @@ class DistributedAnalysis:
                         )
                     )
             self._set_var_dist(
-                lhs,
-                array_dists,
-                [
-                    Distribution.OneD_Var if v else Distribution.REP
-                    for v in is_return_distributed
-                ],
+                lhs, array_dists, _get_ret_new_dist(lhs_typ, is_return_distributed)
             )
         else:
             if (
@@ -2171,9 +2162,7 @@ class DistributedAnalysis:
                     )
                 )
             self._set_var_dist(
-                lhs,
-                array_dists,
-                Distribution.OneD_Var if is_return_distributed else Distribution.REP,
+                lhs, array_dists, _get_ret_new_dist(lhs_typ, is_return_distributed)
             )
 
     def _handle_dispatcher_args(self, dispatcher, rhs, array_dists, err_msg):
@@ -2236,6 +2225,11 @@ class DistributedAnalysis:
 
         # check arguments not flagged as distributed and recompile with correct
         # distributions if necessary
+        if arg_types not in dispatcher.overloads:
+            # some other dispatcher may have changed variable distributions in types,
+            # so overload signature may not match anymore and needs recompilation
+            # see test_dist_type_change_multi_func2
+            self._recompile_func(rhs, dispatcher.__name__)
         metadata = dispatcher.overloads[arg_types].metadata
         recompile = False
         new_arg_types = list(arg_types)
@@ -2266,16 +2260,8 @@ class DistributedAnalysis:
                     "input of another Bodo call without distributed flag",
                 )
         if recompile:
-            self._add_diag_info(
-                f"Recompiling {dispatcher.__name__} since argument data distribution changed after analysis"
-            )
             arg_types = tuple(new_arg_types)
-            self.calltypes.pop(rhs)
-            self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
-                self.typingctx,
-                tuple(self.typemap[v.name] for v in rhs.args),
-                {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()},
-            )
+            self._recompile_func(rhs, dispatcher.__name__)
 
         metadata = dispatcher.overloads[arg_types].metadata
         return metadata
@@ -2957,6 +2943,18 @@ class DistributedAnalysis:
 
         return concat_reduce_vars
 
+    def _recompile_func(self, rhs, fname):
+        """Recompile function call due to distribution change in input data types"""
+        self._add_diag_info(
+            f"Recompiling {fname} since argument data distribution changed after analysis"
+        )
+        self.calltypes.pop(rhs)
+        self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+            self.typingctx,
+            tuple(self.typemap[v.name] for v in rhs.args),
+            {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()},
+        )
+
     def _add_diag_info(self, info):
         """append diagnostics info to be displayed in distributed diagnostics output"""
         if info not in self.diag_info:
@@ -2967,6 +2965,34 @@ class DistributedAnalysis:
         if v in self.metadata["parfors"]["var_rename_map"]:
             return self.metadata["parfors"]["var_rename_map"][v]
         return v
+
+
+def _update_type_dist(typ, dist):
+    """update distribution value of typ if typ has a 'dist' attribute"""
+    # TODO(ehsan): need to handle list/dict of tuple cases?
+    if isinstance(dist, list) and isinstance(typ, types.BaseTuple):
+        return types.BaseTuple.from_types(
+            [_update_type_dist(t, dist[i]) for i, t in enumerate(typ.types)]
+        )
+    # TODO: make sure all distributable types have a 'dist' attribute
+    if hasattr(typ, "dist"):
+        typ = typ.copy(dist=dist)
+    return typ
+
+
+def _get_ret_new_dist(lhs_typ, is_return_distributed):
+    """get new distribution of return value based on is_return_distributed flag"""
+    if isinstance(is_return_distributed, list):
+        return [
+            _get_ret_new_dist(lhs_typ.types[i], v)
+            for i, v in enumerate(is_return_distributed)
+        ]
+    new_dist = Distribution.REP
+    if is_return_distributed:
+        new_dist = Distribution.OneD_Var
+        if hasattr(lhs_typ, "dist"):
+            new_dist = lhs_typ.dist
+    return new_dist
 
 
 def _is_1D_or_1D_Var_arr(arr_name, array_dists):
