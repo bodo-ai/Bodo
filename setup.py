@@ -19,6 +19,35 @@ np_compile_args = np_misc.get_info("npymath")
 
 is_win = platform.system() == "Windows"
 development_mode = "develop" in sys.argv
+if development_mode:
+    if "--no-ccache" not in sys.argv:
+        import shutil
+        if shutil.which("ccache"):
+            if "ccache" not in os.environ["CC"]:
+                # ccache is very useful when developing C++ code, because on
+                # rebuild it will only recompile the cpp files that have been
+                # modified.
+                # This only modifies the environment variables CC and CXX
+                # during execution of `python setup.py develop`.
+                # With newer compiler versions on Linux, we have to set both CC
+                # and CXX variables for ccache to work, and have to set CC to
+                # the C++ compiler to avoid compile-time and dynamic linking
+                # errors
+                os.environ["CC"] = f"ccache {os.environ['CXX']}"
+                os.environ["CXX"] = f"ccache {os.environ['CXX']}"
+        else:
+            print(
+                """
+ccache not found. ccache is strongly recommended when developing
+C++ code to greatly improve recompilation times. Install ccache
+with `conda install ccache -c conda-forge`
+
+Use --no-ccache to build without ccache.
+                """
+            )
+            exit(1)
+    else:
+        sys.argv.remove("--no-ccache")
 clean_mode = "clean" in sys.argv
 
 

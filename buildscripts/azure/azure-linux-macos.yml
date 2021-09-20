@@ -64,7 +64,7 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      python setup.py develop
+      python setup.py develop --no-ccache
     displayName: 'Build'
 
   - script: |

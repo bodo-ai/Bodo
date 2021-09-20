@@ -30,6 +30,6 @@ export BODO_VERSION=` python -c "import versioneer; print(versioneer.get_version
 # popd
 
 # build Bodo
-python setup.py develop
+python setup.py develop --no-ccache
 # TODO: fix regular install
 # python setup.py build install
