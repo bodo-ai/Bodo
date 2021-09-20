@@ -235,6 +235,9 @@ Data manipulations:
     ``right_index``, and ``indicator`` are supported but should be constant values.
   * The output dataframe is not sorted by default for better parallel performance (Pandas may preserve key order depending on `how`).
     One can use explicit sort if needed.
+  * Bodo additionally supports more complex merge conditions not available in standard Pandas. Please refer to
+    :ref:`general_merge_conditions` for more information.
+
 
 * :func:`pandas.merge_asof` (similar arguments to `merge`)
 
@@ -1086,3 +1089,35 @@ However, this can cause errors if a distributed dataset is passed to Bodo, and s
 processor has non-string data.
 This corner case can usually be avoided by load balancing
 the data across processors to avoid empty arrays.
+
+
+.. _general_merge_conditions:
+
+General Merge Conditions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Within Pandas, the merge criteria supported by `pd.merge` are limited to equality between 1
+or more pairs of keys. For some use cases, this is not sufficient and more generalized
+support is necessary. For example, with these limitations, a ``left outer join`` where
+``df1.A == df2.B & df2.C < df1.A`` cannot be efficiently computed.
+
+Bodo supports these use cases by allowing users to pass general merge conditions to ``pd.merge``.
+We plan to contribute this feature to Pandas to ensure full compatibility of Bodo and Pandas code.
+
+General merge conditions are performed by providing the condition as a string via the `on` argument. Columns in the left table
+are referred to by `left.{column name}` and columns in the right table are referred to by `right.{column name}`.
+
+To execute the example above, a user would use this function call::
+
+    @bodo.jit
+    def general_merge(df1, df2):
+        return df1.merge(df2, on="left.A == right.B & right.C < left.A", how="left")
+
+These calls have a few additional requirement:
+
+  * The condition must be constant string.
+  * The condition must be of the form ``cond_1 & ... & cond_N`` where at least one ``cond_i``
+    is a simple equality. This restriction will be removed in a future release.
+  * The columns specified in these conditions are limited to certain column types.
+    We currently support `boolean`, `integer`, `float`, `datetime64`, `timedelta64`, `datetime.date`,
+    and `string` columns.
