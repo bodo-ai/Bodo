@@ -212,3 +212,27 @@ def test_dataframe_optional_scalar(memory_leak_check):
 
     # Pandas can avoid nullable so the types don't match
     check_func(impl, (df,), check_dtype=False)
+
+
+def test_dataframe_is_none(memory_leak_check):
+    """
+    Test that dataframe is None can compile and keep the dataframe distributed.
+    """
+
+    def impl1(df):
+        return df is None
+
+    def impl2(df):
+        return df is not None
+
+    df = pd.DataFrame(
+        {
+            "A": np.arange(100) % 10,
+            "B": -np.arange(100),
+        }
+    )
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+    # Test that none still works
+    check_func(impl1, (None,))
+    check_func(impl2, (None,))
