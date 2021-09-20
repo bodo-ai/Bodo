@@ -3946,3 +3946,38 @@ numba.core.caching._IPythonCacheLocator.from_function = (
 
 
 #########   End Jupyter Notebook Caching Changes #########
+
+
+#########   Changes for Omitted  #########
+
+
+def Omitted__init__(self, value):
+    self._value = value
+    # Bodo change: Store self._value_key for different implementation for hashable args
+    try:
+        hash(value)
+        self._value_key = value
+    except Exception:
+        self._value_key = id(value)
+    super(types.Omitted, self).__init__("omitted(default=%r)" % (value,))
+
+
+@property
+def Omitted_key(self):
+    # Bodo change: Use stored self._value_key instead of id(self._value)
+    return type(self._value), self._value_key
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.types.misc.Omitted.__init__)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "4ee9f821c8bd45d9c27396a1046fb5e2d9456b308c260c0b56af9a322feaa817"
+    ):  # pragma: no cover
+        warnings.warn("Omitted __init__ has changed")
+
+numba.core.types.misc.Omitted.__init__ = Omitted__init__
+
+# NOTE: We can't check if key has changed because it is a property.
+
+numba.core.types.misc.Omitted.key = Omitted_key
