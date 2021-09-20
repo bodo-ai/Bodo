@@ -42,15 +42,17 @@ class SqlReader(ir.Stmt):
         self.out_vars = out_vars
         self.out_types = out_types
         self.loc = loc
+        self.limit = req_limit(sql_request)
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadSql(sql_request={}, connection={}, col_names={}, types={}, vars={})".format(
+        return "{} = ReadSql(sql_request={}, connection={}, col_names={}, types={}, vars={}, limit={})".format(
             self.df_out,
             self.sql_request,
             self.connection,
             self.df_colnames,
             self.out_types,
             self.out_vars,
+            self.limit,
         )
 
 
@@ -105,6 +107,7 @@ def sql_distributed_run(
         typingctx,
         targetctx,
         sql_node.connection.split(":")[0],  # capture db type from connection string
+        sql_node.limit,
         parallel,
     )
 
@@ -178,7 +181,35 @@ def sqlalchemy_check_():  # pragma: no cover
         raise BodoError(message)
 
 
-def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, db_type, parallel):
+def req_limit(sql_request):
+    """
+    Processes a SQL requests and search for a LIMIT in the outermost
+    query. If it encounters just a limit, it returns the max rows requested.
+    Otherwise, it returns None (which incidates a count calculation will need
+    to be added to the query).
+    """
+    import re
+
+    # Regex checks that a query ends with "LIMIT NUM_ROWS"
+    # ignoring any surrounding whitespace
+    #
+    # This should always refer to the outermost table
+    # (because inner tables should always be wrapped in parentheses).
+    # This regex may fail to detect the limit in some cases, but it
+    # shouldn't ever incorrectly detect a limit.
+    #
+    # TODO: Replace a proper SQL parser (i.e. BodoSQL).
+    limit_regex = re.compile(r"LIMIT\s+(\d+)\s*$", re.IGNORECASE)
+    m = limit_regex.search(sql_request)
+    if m:
+        return int(m.group(1))
+    else:
+        return None
+
+
+def _gen_sql_reader_py(
+    col_names, col_typs, typingctx, targetctx, db_type, limit, parallel
+):
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
     typ_strs = [
         "{}='{}'".format(s_cname, _get_dtype_str(t))
@@ -241,16 +272,17 @@ def _gen_sql_reader_py(col_names, col_typs, typingctx, targetctx, db_type, paral
         func_text += "  sqlalchemy_check()\n"
         if parallel:
             func_text += "  rank = bodo.libs.distributed_api.get_rank()\n"
-            func_text += '  with objmode(nb_row="int64"):\n'
-            func_text += f"    if rank == {MPI_ROOT}:\n"
-            func_text += (
-                "      sql_cons = 'select count(*) from (' + sql_request + ') x'\n"
-            )
-            func_text += "      frame = pd.read_sql(sql_cons, conn)\n"
-            func_text += "      nb_row = frame.iat[0,0]\n"
-            func_text += "    else:\n"
-            func_text += "      nb_row = 0\n"
-            func_text += "  nb_row = bcast_scalar(nb_row)\n"
+            if limit is not None:
+                func_text += f"  nb_row = {limit}\n"
+            else:
+                func_text += '  with objmode(nb_row="int64"):\n'
+                func_text += f"     if rank == {MPI_ROOT}:\n"
+                func_text += "         sql_cons = 'select count(*) from (' + sql_request + ') x'\n"
+                func_text += "         frame = pd.read_sql(sql_cons, conn)\n"
+                func_text += "         nb_row = frame.iat[0,0]\n"
+                func_text += "         bcast_scalar(nb_row)\n"
+                func_text += "     else:\n"
+                func_text += "         nb_row = bcast_scalar(0)\n"
             func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
             func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
             # Snowflake doesn't provide consistent output in different processes with

@@ -1,15 +1,11 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import operator
 import random
 
-import numba
 import numpy as np
 import pandas as pd
-import pymysql
 import pytest
 
 import bodo
-from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.tests.utils import check_func, get_start_end
 
 sql_user_pass_and_hostname = (
@@ -104,6 +100,75 @@ def test_read_sql_hardcoded_time_offset_aws(memory_leak_check):
         return frame
 
     check_func(test_impl_offset, ())
+
+
+def test_read_sql_hardcoded_limit_aws(memory_leak_check):
+    def test_impl_limit():
+        sql_request = "select * from employees limit 1000"
+        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(test_impl_limit, ())
+
+
+def test_sql_limit_inference():
+    f = bodo.ir.sql_ext.req_limit
+    # Simple query
+    sql_request = "select * from employees limit 1000"
+    assert f(sql_request) == 1000
+    # White space
+    sql_request = "select * from employees limit 1000   "
+    assert f(sql_request) == 1000
+    # White space
+    sql_request = "select * from employees limit 1000 \n\n\n\n  "
+    assert f(sql_request) == 1000
+
+    # Check that we do not match with an offset
+    sql_request = "select * from employees limit 1, 1000"
+    assert f(sql_request) is None
+    sql_request = "select * from employees limit 1000 offset 1"
+    assert f(sql_request) is None
+
+    # Check that we select the right limit in a nested query
+    sql_request = "with table1 as (select * from employees limit 1000) select * from table1 limit 500"
+    assert f(sql_request) == 500
+
+    # Check that we don't select an inner limit
+    sql_request = "select * from employees, (select table1.A, table2.B from table1 FULL OUTER join table2 on table1.A = table2.A limit 1000)"
+    assert f(sql_request) is None
+
+
+def test_limit_inferrence_small_table(memory_leak_check):
+    """
+    Checks that a query where the limit is much larger than the size
+    of the table succeeds. We create a very small table and then set
+    the limit to be much greater than the table size.
+    """
+
+    def write_sql(df, table_name, conn):
+        df.to_sql(table_name, conn, if_exists="replace")
+
+    conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+    table_name = "test_small_table"
+
+    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+    # Create the table once.
+    if bodo.get_rank() == 0:
+        write_sql(df, table_name, conn)
+    bodo.barrier()
+
+    def test_impl_limit():
+        """
+        Test receiving the table with limit 1000 while there are only
+        10 rows.
+        """
+        sql_request = "select A from test_small_table limit 1000"
+        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(test_impl_limit, ())
 
 
 def test_read_sql_hardcoded_twocol_aws(memory_leak_check):
