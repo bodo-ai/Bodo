@@ -468,6 +468,30 @@ class DistributedAnalysis:
             self._analyze_arg(lhs, rhs, array_dists)
             return
         else:
+            if is_expr(rhs, "binop") and rhs.fn in (operator.is_, operator.is_not):
+                # Provide distributed support for is None
+                arg1, arg2 = rhs.lhs, rhs.rhs
+                # If arg2 is None, we want to keep arg1's distribution
+                if self.typemap[arg2.name] == types.none:
+                    # If the first arg is a Series or dataframe, we want to produce a warning
+                    # because this is a common bug.
+                    arg1_typ = self.typemap[arg1.name]
+                    # TODO: Can we move this warning into typing?
+                    if rhs.fn == operator.is_:
+                        code_expr = "is None"
+                        pandas_fn = "isna"
+                    else:
+                        code_expr = "is not None"
+                        pandas_fn = "notna"
+                    if isinstance(arg1_typ, (bodo.DataFrameType, bodo.SeriesType)):
+                        obj_name = (
+                            "DataFrame"
+                            if isinstance(arg1_typ, bodo.DataFrameType)
+                            else "Series"
+                        )
+                        warning_msg = f"User code checks if a {obj_name} {code_expr} at {arg1.loc}. This checks that the {obj_name} object {code_expr}, not the contents, and is a common bug. To check the contents, please use '{obj_name}.{pandas_fn}()'."
+                        warnings.warn(BodoWarning(warning_msg))
+                    return
             msg = "unsupported expression in distributed analysis"
             if isinstance(rhs, (ir.FreeVar, ir.Global)):
                 msg = "constant global values are replicated"

@@ -541,3 +541,19 @@ def test_series_apply_numpy_func_non_ufunc(memory_leak_check):
     S = pd.Series(list(np.arange(100) + list(np.arange(100))))
     with pytest.raises(BodoError, match="user-defined function not supported"):
         bodo.jit(impl1)(S)
+
+
+def test_series_is_none(memory_leak_check):
+    """
+    Test that series is None can compile and keep the series distributed.
+    """
+
+    def impl1(S):
+        return S is None
+
+    def impl2(S):
+        return S is not None
+
+    S = pd.Series(np.arange(100))
+    check_func(impl1, (S,))
+    check_func(impl2, (S,))
