@@ -541,12 +541,14 @@ struct mpi_comm_info {
      * - send_count_sub_sub / recv_count_sub_sub
      * Those are used for the shuffling of data1/data2/data3 and their sizes.
      * @param hashes : hashes of all the rows
+     * @param is_parallel: true if data is distributed (used to indicate whether 
+     *                     tracing should be parallel or not)
      * @param filter : Bloom filter. Rows whose hash is not in the filter will
      * be discarded from shuffling. If no filter is provided no filtering will
      * happen.
      */
     void set_counts(
-        uint32_t const* const hashes,
+        uint32_t const* const hashes, bool is_parallel, 
         SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr);
 };
 

@@ -33,8 +33,9 @@ table_info* hash_join_table(
     // Does this join need an additional cond_func
     const bool uses_cond_func = cond_func != nullptr;
     try {
+        bool parallel_trace = (left_parallel || right_parallel);
         using BloomFilter = SimdBlockFilterFixed<::hashing::SimpleMixSplit>;
-        tracing::Event ev("hash_join_table");
+        tracing::Event ev("hash_join_table", parallel_trace);
         // Reading the MPI settings
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -140,7 +141,7 @@ table_info* hash_join_table(
                 left_total_memory < CritMemorySize &&
                 left_total_memory < (right_total_memory / double(n_pes) *
                                      global_short_to_local_long_ratio_limit)) {
-                work_left_table = gather_table(left_table, -1, all_gather);
+                work_left_table = gather_table(left_table, -1, all_gather, parallel_trace);
                 free_work_left = true;
                 work_right_table = right_table;
                 left_replicated = true;
@@ -150,7 +151,7 @@ table_info* hash_join_table(
                            (left_total_memory / double(n_pes) *
                             global_short_to_local_long_ratio_limit)) {
                 work_left_table = left_table;
-                work_right_table = gather_table(right_table, -1, all_gather);
+                work_right_table = gather_table(right_table, -1, all_gather, parallel_trace);
                 free_work_right = true;
                 right_replicated = true;
             } else {
@@ -219,7 +220,7 @@ table_info* hash_join_table(
                     if (make_bloom_left) {
                         left_cardinality =
                             std::get<1>(get_nunique_hashes_global(
-                                hashes_left, left_table_nrows));
+                                hashes_left, left_table_nrows, parallel_trace));
                         size_t bloom_left_bytes =
                             bloom_size_bytes(left_cardinality);
                         if ((bloom_left_bytes > MAX_BLOOM_SIZE) ||
@@ -231,7 +232,7 @@ table_info* hash_join_table(
                     if (make_bloom_right) {
                         right_cardinality =
                             std::get<1>(get_nunique_hashes_global(
-                                hashes_right, right_table_nrows));
+                                hashes_right, right_table_nrows, parallel_trace));
                         size_t bloom_right_bytes =
                             bloom_size_bytes(right_cardinality);
                         if ((bloom_right_bytes > MAX_BLOOM_SIZE) ||
@@ -244,7 +245,7 @@ table_info* hash_join_table(
                     ev.add_attribute("g_make_bloom_right", make_bloom_right);
 
                     if (make_bloom_left) {
-                        tracing::Event ev_bloom("make_bloom");
+                        tracing::Event ev_bloom("make_bloom", parallel_trace);
                         // A bloom filter is a set, and we need to know how
                         // many unique elements we are inserting so that the
                         // implementation chooses a buffer size that guarantees
@@ -264,7 +265,7 @@ table_info* hash_join_table(
                         ev_bloom.add_attribute("which", "left");
                     }
                     if (make_bloom_right) {
-                        tracing::Event ev_bloom("make_bloom");
+                        tracing::Event ev_bloom("make_bloom", parallel_trace);
                         bloom_right = new BloomFilter(right_cardinality);
                         bloom_right->AddAll(hashes_right, 0, right_table_nrows);
                         bloom_right->union_reduction();
@@ -334,7 +335,6 @@ table_info* hash_join_table(
         // Now computing the hashes that will be used in the hash map
         // or compared to the hash map.
         //
-        bool parallel_trace = (left_parallel || right_parallel);
         uint32_t* hashes_left = hash_keys_table(work_left_table, n_key,
                                                 SEED_HASH_JOIN, parallel_trace);
         uint32_t* hashes_right = hash_keys_table(
@@ -465,7 +465,7 @@ table_info* hash_join_table(
         bool long_miss_needs_reduction =
             long_table_outer && long_replicated && !short_replicated;
 
-        tracing::Event ev_tuples("compute_tuples");
+        tracing::Event ev_tuples("compute_tuples", parallel_trace);
         if (ev_tuples.is_tracing()) {
             ev_tuples.add_attribute("short_table_rows", short_table_rows);
             ev_tuples.add_attribute("long_table_rows", long_table_rows);
@@ -477,7 +477,7 @@ table_info* hash_join_table(
             short_table_rows, short_table_hashes, long_table_hashes};
         joinHashFcts::KeyEqualHashJoinTable equal_fct{
             short_table_rows, n_key, short_table, long_table, is_na_equal};
-        tracing::Event ev_alloc_map("alloc_hashmap");
+        tracing::Event ev_alloc_map("alloc_hashmap", parallel_trace);
 
         // The entList contains the identical keys with the corresponding rows.
         // We address the entry by the row index. We store all the rows which
@@ -568,7 +568,7 @@ table_info* hash_join_table(
             // The first entry is going to be the index for the boolean array.
             // This code path will be selected whenever we have an OUTER merge.
 
-            tracing::Event ev_groups("calc_groups");
+            tracing::Event ev_groups("calc_groups", parallel_trace);
             // TODO: Refactor code paths into helper functions.
             if (uses_cond_func) {
                 // If 'uses_cond_func' we have a separate insertion process. We
@@ -763,7 +763,7 @@ table_info* hash_join_table(
             // This code path is selected whenever the short table is an inner
             // join.
 
-            tracing::Event ev_groups("calc_groups");
+            tracing::Event ev_groups("calc_groups", parallel_trace);
             // TODO: Refactor code paths into helper functions.
             if (uses_cond_func) {
                 // If 'uses_cond_func' we have a separate check to search
@@ -920,7 +920,7 @@ table_info* hash_join_table(
                 }
             }
         }
-        tracing::Event ev_clear_map("dealloc_hashmap");
+        tracing::Event ev_clear_map("dealloc_hashmap", parallel_trace);
         // Data structures used during computation of the tuples can become
         // quite large and their deallocation can take a non-negligible amount
         // of time. We dealloc them here to free memory for the next stage and
@@ -1027,7 +1027,7 @@ table_info* hash_join_table(
         // Inserting the optional column in the case of merging on column and
         // index.
         if (optional_col) {
-            tracing::Event ev_fill_optional("fill_optional");
+            tracing::Event ev_fill_optional("fill_optional", parallel_trace);
             size_t i = 0;
             bool map_integer_type = false;
             array_info* left_arr = work_left_table->columns[i];
@@ -1049,7 +1049,7 @@ table_info* hash_join_table(
         }
 
         // Inserting the Left side of the table
-        tracing::Event ev_fill_left("fill_left");
+        tracing::Event ev_fill_left("fill_left", parallel_trace);
         int idx = 0;
         for (size_t i = 0; i < n_tot_left; i++) {
             if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
@@ -1098,7 +1098,7 @@ table_info* hash_join_table(
             idx++;
         }
         ev_fill_left.finalize();
-        tracing::Event ev_fill_right("fill_right");
+        tracing::Event ev_fill_right("fill_right", parallel_trace);
         // Inserting the right side of the table.
         for (size_t i = 0; i < n_tot_right; i++) {
             // There are two cases where we put the column in output:
@@ -1130,7 +1130,7 @@ table_info* hash_join_table(
         // Create indicator column if indicator=True
         size_t num_rows = ListPairWrite.size();
         if (indicator) {
-            tracing::Event ev_indicator("create_indicator");
+            tracing::Event ev_indicator("create_indicator", parallel_trace);
             array_info* indicator_col =
                 alloc_array(num_rows, -1, -1, bodo_array_type::CATEGORICAL,
                             Bodo_CTypes::INT8, 0, 3);
