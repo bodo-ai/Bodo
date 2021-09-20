@@ -38,8 +38,20 @@ def connector_array_analysis(node, equiv_set, typemap, array_analysis):
 
 
 def connector_distributed_analysis(node, array_dists):
+    """
+    Common distributed analysis function shared by
+    various connectors.
+    """
+    # Import inside function to avoid circular import
+    from bodo.ir.sql_ext import SqlReader
+
+    # If we have a SQL node with an inferred limit, we may have a
+    # 1D-Var distribution
+    if isinstance(node, SqlReader) and node.limit is not None:
+        out_dist = Distribution.OneD_Var
+    else:
+        out_dist = Distribution.OneD
     # all output arrays should have the same distribution
-    out_dist = Distribution.OneD
     for v in node.out_vars:
         if v.name in array_dists:
             out_dist = Distribution(min(out_dist.value, array_dists[v.name].value))
