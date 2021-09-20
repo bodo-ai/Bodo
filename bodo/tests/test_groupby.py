@@ -2176,9 +2176,9 @@ def test_nunique_select_col(df_uniq, memory_leak_check):
         A = df.groupby("A")["B"].nunique(dropna=False)
         return A
 
-    check_func(impl1, (df_uniq,), sort_output=True)
-    check_func(impl2, (df_uniq,), sort_output=True)
-    check_func(impl3, (df_uniq,), sort_output=True)
+    check_func(impl1, (df_uniq,), sort_output=True, reset_index=True)
+    check_func(impl2, (df_uniq,), sort_output=True, reset_index=True)
+    check_func(impl3, (df_uniq,), sort_output=True, reset_index=True)
 
 
 def test_nunique_select_col_missing_keys(memory_leak_check):
@@ -2206,9 +2206,9 @@ def test_nunique_select_col_missing_keys(memory_leak_check):
             "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
         }
     )
-    check_func(impl1, (df_int,), sort_output=True)
-    check_func(impl1, (df_str,), sort_output=True)
-    check_func(impl1, (df_bin,), sort_output=True)
+    check_func(impl1, (df_int,), sort_output=True, reset_index=True)
+    check_func(impl1, (df_str,), sort_output=True, reset_index=True)
+    check_func(impl1, (df_bin,), sort_output=True, reset_index=True)
 
 
 def test_filtered_count(memory_leak_check):
