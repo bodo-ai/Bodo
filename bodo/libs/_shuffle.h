@@ -108,10 +108,11 @@ table_info* coherent_shuffle_table(
  *                       i_node = hash_to_rank(i_row, n_pes)
  *                       for the nodes of rank not equal to 0.
  * @param comm_info    : the array for the communication.
+ * @param is_parallel: Used to indicate whether tracing should be parallel or not
  * @return the new table after the shuffling.
  */
 table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
-                                 mpi_comm_info const& comm_info);
+                                 mpi_comm_info const& comm_info, bool is_parallel = true);
 
 /** Reverse shuffling a table from all nodes to all the other nodes.
  *
@@ -131,10 +132,11 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
  *                    for the nodes of rank not equal to 0 since it is not
  *                    read for those nodes.
  * @param n_cols    : the number of columns of the keys.
+ * @param is_parallel: Used to indicate whether tracing should be parallel or not
  * @return the table equal to in_table but available on all the nodes.
  */
 table_info* broadcast_table(table_info* ref_table, table_info* in_table,
-                            size_t n_cols);
+                            size_t n_cols, bool is_parallel);
 
 /** Gather a table.
  *
@@ -143,11 +145,12 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
  *     If -1 then all columns are used. Otherwise, the first n_cols_i columns
  * are gather.
  * @param all_gather   : Whether to do all_gather or not.
+ * @param is_parallel: Used to indicate whether tracing should be parallel or not
  * @return the table obtained by concatenating the tables
  *         on the node 0.
  */
 table_info* gather_table(table_info* in_table, int64_t n_cols_i,
-                         bool all_gather);
+                         bool all_gather, bool is_parallel);
 
 /** Getting the computing node on which a row belongs to
  *

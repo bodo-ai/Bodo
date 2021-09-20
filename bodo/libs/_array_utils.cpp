@@ -1752,8 +1752,8 @@ void MPI_hyper_log_log_merge(void* in, void* inout, int* len,
 // the hashes with our MurmurHash3_x64_32, and uses 1 MB of memory
 #define HLL_SIZE 20
 
-size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len) {
-    tracing::Event ev("get_nunique_hashes");
+size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len, bool is_parallel) {
+    tracing::Event ev("get_nunique_hashes", is_parallel);
     hll::HyperLogLog hll(HLL_SIZE);
     hll.addAll(hashes, len);
     const size_t est = std::min(static_cast<size_t>(hll.estimate()), len);
@@ -1761,9 +1761,9 @@ size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len) {
     return est;
 }
 
-std::pair<size_t, size_t> get_nunique_hashes_global(uint32_t const* const hashes, const size_t len) {
-    tracing::Event ev("get_nunique_hashes_global");
-    tracing::Event ev_local("get_nunique_hashes_local");
+std::pair<size_t, size_t> get_nunique_hashes_global(uint32_t const* const hashes, const size_t len, bool is_parallel) {
+    tracing::Event ev("get_nunique_hashes_global", is_parallel);
+    tracing::Event ev_local("get_nunique_hashes_local", is_parallel);
     hll::HyperLogLog hll(HLL_SIZE);
     hll.addAll(hashes, len);
     size_t local_est = static_cast<size_t>(hll.estimate());

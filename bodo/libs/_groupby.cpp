@@ -1219,10 +1219,10 @@ struct KeyEqualLookupIn32bitTable {
 // both get_group_info and get_groupby_labes use the dealloc measurement, so
 // share that code.
 template <bool CalledFromGroupInfo, typename Map>
-void do_map_dealloc(uint32_t*& hashes, Map& key_to_group) {
+void do_map_dealloc(uint32_t*& hashes, Map& key_to_group, bool is_parallel) {
     tracing::Event ev_dealloc(CalledFromGroupInfo
                                   ? "get_group_info_dealloc"
-                                  : "get_groupby_labels_dealloc");
+                                  : "get_groupby_labels_dealloc", is_parallel);
     delete[] hashes;
     hashes = nullptr;  // updates hashes ptr at caller
 
@@ -1273,7 +1273,7 @@ void get_group_info_impl(Map& key_to_group, tracing::Event& ev,
                              table->nrows(), is_parallel);
     grp_info.num_groups = grp_info.group_to_first_row.size();
     ev.add_attribute("num_groups", size_t(grp_info.num_groups));
-    do_map_dealloc<true>(hashes, key_to_group);
+    do_map_dealloc<true>(hashes, key_to_group, is_parallel);
 }
 }  // namespace
 
@@ -1309,7 +1309,7 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
         table->columns.begin(), table->columns.begin() + table->num_keys);
     if (hashes == nullptr) {
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
-        nunique_hashes = get_nunique_hashes(hashes, table->nrows());
+        nunique_hashes = get_nunique_hashes(hashes, table->nrows(), is_parallel);
     }
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
     grp_infos.emplace_back();
@@ -1422,7 +1422,7 @@ int64_t get_groupby_labels_impl(Map& key_to_group, tracing::Event& ev,
         key_to_group, key_cols, out_labels, sort_idx, key_drop_nulls,
         table->nrows(), is_parallel);
     ev.add_attribute("num_groups", num_groups);
-    do_map_dealloc<false>(hashes, key_to_group);
+    do_map_dealloc<false>(hashes, key_to_group, is_parallel);
     return num_groups;
 }
 }  // namespace
@@ -1450,7 +1450,7 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
     uint32_t* hashes = hash_keys(key_cols, seed, is_parallel);
 
-    size_t nunique_hashes = get_nunique_hashes(hashes, table->nrows());
+    size_t nunique_hashes = get_nunique_hashes(hashes, table->nrows(), is_parallel);
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
     const int64_t n_keys = table->num_keys;
 
@@ -1502,7 +1502,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
     // it would mean calculating all hashes in advance
     if (hashes == nullptr) {
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
-        nunique_hashes = get_nunique_hashes(hashes, table->nrows());
+        nunique_hashes = get_nunique_hashes(hashes, table->nrows(), is_parallel);
     }
     grp_infos.emplace_back();
     grouping_info& grp_info = grp_infos.back();
@@ -2245,16 +2245,19 @@ struct KeyEqualNuniqueComputationString {
  * The nunique_computation function. It uses the symbolic information to compute
  * the nunique results.
  *
- * @param The column on which we do the computation
- * @param The array containing information on how the rows are organized
- * @param The boolean dropna indicating whether we drop or not the NaN values
+ * @param arr The column on which we do the computation
+ * @param out_arr[out] The column which contains nunique results
+ * @param grp_info The array containing information on how the rows are organized
+ * @param dropna The boolean dropna indicating whether we drop or not the NaN values
  * from the nunique computation.
+ * @param is_parallel: true if data is distributed (used to indicate whether tracing 
+ * should be parallel or not)
  */
 template <typename ARRAY>
 typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
 nunique_computation(array_info* arr, array_info* out_arr,
-                    grouping_info const& grp_info, bool const& dropna) {
-    tracing::Event ev("nunique_computation");
+                    grouping_info const& grp_info, bool const& dropna, bool const& is_parallel) {
+    tracing::Event ev("nunique_computation", is_parallel);
     size_t num_group = grp_info.group_to_first_row.size();
     if (num_group == 0) return;
     if (arr->arr_type == bodo_array_type::NUMPY) {
@@ -2427,7 +2430,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
 template <typename ARRAY>
 typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
 nunique_computation(array_info* arr, ARRAY* out_arr,
-                    grouping_info const& grp_info, bool const& skipna) {
+                    grouping_info const& grp_info, bool const& skipna, bool const& is_parallel) {
     Bodo_PyErr_SetString(PyExc_RuntimeError,
                          "while nunique makes sense for pivot_table/crosstab "
                          "the functionality is missing right now");
@@ -4900,9 +4903,9 @@ template <typename ARRAY>
 class NUniqueColSet : public BasicColSet<ARRAY> {
    public:
     NUniqueColSet(array_info* in_col, bool _dropna, table_info* nunique_table,
-                  bool do_combine)
+                  bool do_combine, bool _is_parallel)
         : BasicColSet<ARRAY>(in_col, Bodo_FTypes::nunique, do_combine),
-          dropna(_dropna),
+          dropna(_dropna), is_parallel(_is_parallel),
           my_nunique_table(nunique_table) {}
 
     virtual ~NUniqueColSet() {
@@ -4917,17 +4920,18 @@ class NUniqueColSet : public BasicColSet<ARRAY> {
             aggfunc_output_initialize(this->update_cols[0],
                                       Bodo_FTypes::sum);  // zero initialize
             nunique_computation<ARRAY>(this->in_col, this->update_cols[0],
-                                       grp_infos[my_nunique_table->id], dropna);
+                                       grp_infos[my_nunique_table->id], dropna, is_parallel);
         } else {
             // use default grouping_info
             nunique_computation<ARRAY>(this->in_col, this->update_cols[0],
-                                       grp_infos[0], dropna);
+                                       grp_infos[0], dropna, is_parallel);
         }
     }
 
    private:
     bool dropna;
     table_info* my_nunique_table = nullptr;
+    bool is_parallel;
 };
 
 template <typename ARRAY>
@@ -5129,7 +5133,7 @@ template <typename ARRAY>
 BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
                                int ftype, bool do_combine, bool skipna,
                                int64_t periods, int64_t transform_func,
-                               int n_udf, int* udf_n_redvars = nullptr,
+                               int n_udf, bool is_parallel, int* udf_n_redvars = nullptr,
                                table_info* udf_table = nullptr,
                                int udf_table_idx = 0,
                                table_info* nunique_table = nullptr);
@@ -5142,7 +5146,7 @@ class TransformColSet : public BasicColSet<ARRAY> {
         : BasicColSet<ARRAY>(in_col, ftype, false), transform_func(_func_num) {
         transform_op_col =
             makeColSet<ARRAY>(in_col, nullptr, transform_func, do_combine,
-                              false, 0, transform_func, 0);
+                              false, 0, transform_func, 0, true); //is_parallel = true
     }
     virtual ~TransformColSet() {
         if (transform_op_col != nullptr) delete transform_op_col;
@@ -5323,7 +5327,7 @@ template <typename ARRAY>
 BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
                                int ftype, bool do_combine, bool skipna,
                                int64_t periods, int64_t transform_func,
-                               int n_udf, int* udf_n_redvars,
+                               int n_udf, bool is_parallel, int* udf_n_redvars,
                                table_info* udf_table, int udf_table_idx,
                                table_info* nunique_table) {
     switch (ftype) {
@@ -5337,7 +5341,7 @@ BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
             return new MedianColSet<ARRAY>(in_col, skipna);
         case Bodo_FTypes::nunique:
             return new NUniqueColSet<ARRAY>(in_col, skipna, nunique_table,
-                                            do_combine);
+                                            do_combine, is_parallel);
         case Bodo_FTypes::cumsum:
         case Bodo_FTypes::cummin:
         case Bodo_FTypes::cummax:
@@ -5453,11 +5457,11 @@ class GroupbyPipeline {
                 // nunique_hashes_global is currently only used for gb.nunique
                 // heuristic
                 std::tie(nunique_hashes, nunique_hashes_global) =
-                    get_nunique_hashes_global(hashes, in_table->nrows());
+                    get_nunique_hashes_global(hashes, in_table->nrows(), is_parallel);
             else
-                nunique_hashes = get_nunique_hashes(hashes, in_table->nrows());
+                nunique_hashes = get_nunique_hashes(hashes, in_table->nrows(), is_parallel);
         } else if (!is_parallel) {
-            nunique_hashes = get_nunique_hashes(hashes, in_table->nrows());
+            nunique_hashes = get_nunique_hashes(hashes, in_table->nrows(), is_parallel);
         }
 
         if (is_parallel && (dispatch_table == nullptr) && !has_udf &&
@@ -5502,11 +5506,11 @@ class GroupbyPipeline {
             // We do this more complicated construction because we may
             // need the hashes and comm_info later.
             comm_info_ptr = new mpi_comm_info(in_table->columns);
-            comm_info_ptr->set_counts(hashes);
+            comm_info_ptr->set_counts(hashes, is_parallel);
             // shuffle_table_kernel steals the reference but we still
             // need it for the code after C++ groupby
             for (auto a : in_table->columns) incref_array(a);
-            in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr);
+            in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr, is_parallel);
             if (!(cumulative_op || shift_op || transform_op)) {
                 delete[] hashes;
                 delete comm_info_ptr;
@@ -5547,12 +5551,12 @@ class GroupbyPipeline {
                         nunique_tables[i]->columns[num_keys];
                     col_sets.push_back(makeColSet<ARRAY>(
                         nunique_col, index_col, ftypes[j], do_combine, skipna,
-                        periods, transform_func, n_udf, udf_n_redvars,
+                        periods, transform_func, n_udf, is_parallel, udf_n_redvars,
                         udf_table, udf_table_idx, nunique_tables[i]));
                 } else {
                     col_sets.push_back(makeColSet<ARRAY>(
                         col, index_col, ftypes[j], do_combine, skipna, periods,
-                        transform_func, n_udf, udf_n_redvars, udf_table,
+                        transform_func, n_udf, is_parallel, udf_n_redvars, udf_table,
                         udf_table_idx));
                 }
                 if (ftypes[j] == Bodo_FTypes::udf ||
@@ -5574,7 +5578,7 @@ class GroupbyPipeline {
         if (col_sets.size() == 0 && ftypes[0] == Bodo_FTypes::size) {
             col_sets.push_back(makeColSet<ARRAY>(
                 in_table->columns[0], index_col, ftypes[0], do_combine, skipna,
-                periods, transform_func, n_udf, udf_n_redvars, udf_table,
+                periods, transform_func, n_udf, is_parallel, udf_n_redvars, udf_table,
                 udf_table_idx));
         }
 
@@ -5802,7 +5806,7 @@ class GroupbyPipeline {
      */
     void gb_nunique_preprocess(int* ftypes, int num_funcs,
                                size_t nunique_hashes_global) {
-        tracing::Event ev("gb_nunique_preprocess");
+        tracing::Event ev("gb_nunique_preprocess", is_parallel);
         if (!is_parallel)
             throw std::runtime_error(
                 "gb_nunique_preprocess called for non-distributed data");
@@ -5864,7 +5868,7 @@ class GroupbyPipeline {
 
             // Compute the local fraction of unique hashes
             size_t nunique_keyval_hashes =
-                get_nunique_hashes(key_value_hashes, n_rows);
+                get_nunique_hashes(key_value_hashes, n_rows, is_parallel);
             float local_fraction_unique_hashes =
                 static_cast<float>(nunique_keyval_hashes) /
                 static_cast<float>(n_rows);
@@ -6625,7 +6629,7 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     }
     // We are below threshold. Now doing an allgather for determining the keys.
     bool all_gather = true;
-    table_info* full_table = gather_table(red_table, num_keys, all_gather);
+    table_info* full_table = gather_table(red_table, num_keys, all_gather, is_parallel);
     delete_table(red_table);
     // Now building the map_container.
     uint32_t* hashes_full =

@@ -115,9 +115,9 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
         mpi_comm_info comm_info(table_in_arr->columns);
         uint32_t* hashes =
             hash_keys_table(table_in_arr, 1, SEED_HASH_PARTITION, is_parallel);
-        comm_info.set_counts(hashes);
+        comm_info.set_counts(hashes, is_parallel);
         table_info* shuf_table_in_arr =
-            shuffle_table_kernel(table_in_arr, hashes, comm_info);
+            shuffle_table_kernel(table_in_arr, hashes, comm_info, is_parallel);
         // Creation of the output array.
         int64_t len = shuf_table_in_arr->columns[0]->length;
         array_info* shuf_out_arr =
@@ -155,13 +155,15 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     }
 }
 
-//
-//   SORT VALUES
-//
 
+/**
+ *   SORT VALUES
+ * 
+ * @param is_parallel: true if data is distributed (used to indicate whether tracing should be parallel or not)
+ */
 table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
-                                    int64_t* vect_ascending, bool na_position) {
-    tracing::Event ev("sort_values_table_local");
+                                    int64_t* vect_ascending, bool na_position, bool is_parallel) {
+    tracing::Event ev("sort_values_table_local", is_parallel);
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_key = size_t(n_key_t);
 #ifdef DEBUG_SORT_LOCAL_SYMBOL
@@ -235,13 +237,13 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, bool na_position,
                               bool parallel) {
     try {
-        tracing::Event ev("sort_values_table");
+        tracing::Event ev("sort_values_table", parallel);
         int64_t n_local = in_table->nrows();
         table_info* local_sort = sort_values_table_local(
-            in_table, n_key_t, vect_ascending, na_position);
+            in_table, n_key_t, vect_ascending, na_position, parallel);
         if (!parallel) return local_sort;
         // preliminary definitions.
-        tracing::Event ev_sample("sort sampling");
+        tracing::Event ev_sample("sort sampling", parallel);
         int n_pes, myrank;
         int mpi_root = 0;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -294,14 +296,14 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 
         // Collecting all samples
         bool all_gather = false;
-        table_info* all_samples = gather_table(samples, n_key_t, all_gather);
+        table_info* all_samples = gather_table(samples, n_key_t, all_gather, parallel);
         delete_table(samples);
 
         // Computing the bounds (splitters) on root
         table_info* pre_bounds = nullptr;
         if (myrank == mpi_root) {
             table_info* all_samples_sort = sort_values_table_local(
-                all_samples, n_key_t, vect_ascending, na_position);
+                all_samples, n_key_t, vect_ascending, na_position, parallel);
             int64_t n_samples = all_samples_sort->nrows();
             int64_t step = ceil(double(n_samples) / double(n_pes));
             std::vector<int64_t> ListIdxBounds(n_pes - 1);
@@ -315,17 +317,17 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             // all ranks need to trace the event
             // TODO the right way would be to call sort_values_table_local with
             // an empty table
-            tracing::Event ev_dummy("sort_values_table_local");
+            tracing::Event ev_dummy("sort_values_table_local", parallel);
         }
         delete_table(all_samples);
 
         // broadcasting the bounds
         // The local_sort is used as reference for the data type of the array.
         // This is because pre_bounds is NULL for ranks != 0
-        table_info* bounds = broadcast_table(local_sort, pre_bounds, n_key_t);
+        table_info* bounds = broadcast_table(local_sort, pre_bounds, n_key_t, parallel);
         if (myrank == mpi_root) delete_table(pre_bounds);
         // Now computing to which process it all goes.
-        tracing::Event ev_hashes("compute_destinations");
+        tracing::Event ev_hashes("compute_destinations", parallel);
         std::vector<uint32_t> hashes_v(n_local);
         uint32_t node_id = 0;
         for (int64_t i = 0; i < n_local; i++) {
@@ -345,17 +347,17 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 
         // Now shuffle all the data
         mpi_comm_info comm_info(local_sort->columns);
-        comm_info.set_counts(hashes_v.data());
+        comm_info.set_counts(hashes_v.data(), parallel);
         ev_hashes.finalize();
         ev_sample.finalize();
         table_info* collected_table =
-            shuffle_table_kernel(local_sort, hashes_v.data(), comm_info);
+            shuffle_table_kernel(local_sort, hashes_v.data(), comm_info, parallel);
         // NOTE: shuffle_table_kernel decrefs input arrays
         delete_table(local_sort);
 
         // Final local sorting
         table_info* ret_table = sort_values_table_local(
-            collected_table, n_key_t, vect_ascending, na_position);
+            collected_table, n_key_t, vect_ascending, na_position, parallel);
         delete_table(collected_table);
         return ret_table;
     } catch (const std::exception& e) {
@@ -901,7 +903,7 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         if (parallel) {
             bool all_gather = true;
             size_t n_cols = tab_out->ncols();
-            table_info* tab_ret = gather_table(tab_out, n_cols, all_gather);
+            table_info* tab_ret = gather_table(tab_out, n_cols, all_gather, parallel);
             delete_table(tab_out);
 #ifdef DEBUG_SAMPLE
             std::cout << "sample_table : tab_ret\n";

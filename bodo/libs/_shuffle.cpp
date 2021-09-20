@@ -72,9 +72,9 @@ static void calc_disp(std::vector<T>& disps, std::vector<T> const& counts) {
 }
 
 void mpi_comm_info::set_counts(
-    uint32_t const* const hashes,
+    uint32_t const* const hashes, bool is_parallel,
     SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter) {
-    tracing::Event ev("set_counts");
+    tracing::Event ev("set_counts", is_parallel);
     ev.add_attribute("n_rows", n_rows);
     // get send count
     // -1 indicates that a row is dropped (not sent anywhere)
@@ -174,13 +174,16 @@ void mpi_comm_info::set_counts(
     return;
 }
 
+/**
+ * @param is_parallel: Used to indicate whether tracing should be parallel or not
+ */
 template <class T>
 static void fill_send_array_inner(T* send_buff, const T* data,
                                   std::vector<int64_t> const& send_disp,
                                   const size_t n_rows,
                                   const std::vector<int>& row_dest,
-                                  bool filter) {
-    tracing::Event ev("fill_send_array_inner");
+                                  bool filter, bool is_parallel) {
+    tracing::Event ev("fill_send_array_inner", is_parallel);
     std::vector<int64_t> tmp_offset(send_disp);
     if (!filter) {
         for (size_t i = 0; i < n_rows; i++) {
@@ -197,11 +200,14 @@ static void fill_send_array_inner(T* send_buff, const T* data,
     }
 }
 
+/**
+ * @param is_parallel: Used to indicate whether tracing should be parallel or not
+ */
 static void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data,
                                           std::vector<int64_t> const& send_disp,
                                           const size_t n_rows,
-                                          const std::vector<int>& row_dest) {
-    tracing::Event ev("fill_send_array_inner_decimal");
+                                          const std::vector<int>& row_dest, bool is_parallel) {
+    tracing::Event ev("fill_send_array_inner_decimal", is_parallel);
     std::vector<int64_t> tmp_offset(send_disp);
     for (size_t i = 0; i < n_rows; i++) {
         if (row_dest[i] == -1) continue;
@@ -223,14 +229,15 @@ static void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data,
   @param send_disp        : the sending array of displacements
   @param send_disp_sub    : the sending array of sub displacements
   @param n_rows           : the number of rows.
+  @param is_parallel: Used to indicate whether tracing should be parallel or not
  */
 static void fill_send_array_string_inner(
     // XXX send_length_buff was allocated as offset_t but treating as uint32
     char* send_data_buff, uint32_t* send_length_buff, char* arr_data,
     offset_t* arr_offsets, std::vector<int64_t> const& send_disp,
     std::vector<int64_t> const& send_disp_sub, const size_t n_rows,
-    const std::vector<int>& row_dest) {
-    tracing::Event ev("fill_send_array_string_inner");
+    const std::vector<int>& row_dest, bool is_parallel) {
+    tracing::Event ev("fill_send_array_string_inner", is_parallel);
     std::vector<int64_t> tmp_offset(send_disp);
     std::vector<int64_t> tmp_offset_sub(send_disp_sub);
     for (size_t i = 0; i < n_rows; i++) {
@@ -324,14 +331,17 @@ static void fill_send_array_null_inner(
     return;
 }
 
+/**
+ * @param is_parallel: Used to indicate whether tracing should be parallel or not
+ */
 static void fill_send_array(array_info* send_arr, array_info* in_arr,
                             std::vector<int64_t> const& send_disp,
                             std::vector<int64_t> const& send_disp_sub,
                             std::vector<int64_t> const& send_disp_sub_sub,
                             std::vector<int64_t> const& send_disp_null,
                             int n_pes, const std::vector<int>& row_dest,
-                            bool filter) {
-    tracing::Event ev("fill_send_array");
+                            bool filter, bool is_parallel) {
+    tracing::Event ev("fill_send_array", is_parallel);
     const size_t n_rows = (size_t)in_arr->length;
     // dispatch to proper function
     // TODO: general dispatcher
@@ -342,63 +352,63 @@ static void fill_send_array(array_info* send_arr, array_info* in_arr,
     if (in_arr->dtype == Bodo_CTypes::_BOOL)
         return fill_send_array_inner<bool>((bool*)send_arr->data1,
                                            (bool*)in_arr->data1, send_disp,
-                                           n_rows, row_dest, filter);
+                                           n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::INT8)
         return fill_send_array_inner<int8_t>((int8_t*)send_arr->data1,
                                              (int8_t*)in_arr->data1, send_disp,
-                                             n_rows, row_dest, filter);
+                                             n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::UINT8)
         return fill_send_array_inner<uint8_t>(
             (uint8_t*)send_arr->data1, (uint8_t*)in_arr->data1, send_disp,
-            n_rows, row_dest, filter);
+            n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::INT16)
         return fill_send_array_inner<int16_t>(
             (int16_t*)send_arr->data1, (int16_t*)in_arr->data1, send_disp,
-            n_rows, row_dest, filter);
+            n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::UINT16)
         return fill_send_array_inner<uint16_t>(
             (uint16_t*)send_arr->data1, (uint16_t*)in_arr->data1, send_disp,
-            n_rows, row_dest, filter);
+            n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::INT32)
         return fill_send_array_inner<int32_t>(
             (int32_t*)send_arr->data1, (int32_t*)in_arr->data1, send_disp,
-            n_rows, row_dest, filter);
+            n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::UINT32)
         return fill_send_array_inner<uint32_t>(
             (uint32_t*)send_arr->data1, (uint32_t*)in_arr->data1, send_disp,
-            n_rows, row_dest, filter);
+            n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::INT64)
         return fill_send_array_inner<int64_t>(
             (int64_t*)send_arr->data1, (int64_t*)in_arr->data1, send_disp,
-            n_rows, row_dest, filter);
+            n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::UINT64)
         return fill_send_array_inner<uint64_t>(
             (uint64_t*)send_arr->data1, (uint64_t*)in_arr->data1, send_disp,
-            n_rows, row_dest, filter);
+            n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::DATE ||
         in_arr->dtype == Bodo_CTypes::DATETIME ||
         in_arr->dtype == Bodo_CTypes::TIMEDELTA)
         return fill_send_array_inner<int64_t>(
             (int64_t*)send_arr->data1, (int64_t*)in_arr->data1, send_disp,
-            n_rows, row_dest, filter);
+            n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::FLOAT32)
         return fill_send_array_inner<float>((float*)send_arr->data1,
                                             (float*)in_arr->data1, send_disp,
-                                            n_rows, row_dest, filter);
+                                            n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::FLOAT64)
         return fill_send_array_inner<double>((double*)send_arr->data1,
                                              (double*)in_arr->data1, send_disp,
-                                             n_rows, row_dest, filter);
+                                             n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::DECIMAL)
         return fill_send_array_inner_decimal((uint8_t*)send_arr->data1,
                                              (uint8_t*)in_arr->data1, send_disp,
-                                             n_rows, row_dest);
+                                             n_rows, row_dest, is_parallel);
     if (in_arr->arr_type == bodo_array_type::STRING) {
         fill_send_array_string_inner(
             /// XXX casting data2 offset_t to uint32
             (char*)send_arr->data1, (uint32_t*)send_arr->data2,
             (char*)in_arr->data1, (offset_t*)in_arr->data2, send_disp,
-            send_disp_sub, n_rows, row_dest);
+            send_disp_sub, n_rows, row_dest, is_parallel);
         fill_send_array_null_inner((uint8_t*)send_arr->null_bitmask,
                                    (uint8_t*)in_arr->null_bitmask,
                                    send_disp_null, n_pes, n_rows, row_dest);
@@ -521,6 +531,9 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
                              recv_count_null, recv_count);
 }
 
+/**
+ * @param is_parallel: Used to indicate whether tracing should be parallel or not
+ */
 static void shuffle_array(array_info* send_arr, array_info* out_arr,
                           std::vector<int64_t> const& send_count,
                           std::vector<int64_t> const& recv_count,
@@ -538,8 +551,8 @@ static void shuffle_array(array_info* send_arr, array_info* out_arr,
                           std::vector<int64_t> const& recv_count_null,
                           std::vector<int64_t> const& send_disp_null,
                           std::vector<int64_t> const& recv_disp_null,
-                          std::vector<uint8_t>& tmp_null_bytes) {
-    tracing::Event ev("shuffle_array");
+                          std::vector<uint8_t>& tmp_null_bytes, bool is_parallel) {
+    tracing::Event ev("shuffle_array", is_parallel);
     if (send_arr->arr_type == bodo_array_type::LIST_STRING) {
         // index_offsets
         MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::UINT32);
@@ -990,8 +1003,8 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
   accordingly. 2b) Second do the shuffling of data between all processors.
  */
 table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
-                                 mpi_comm_info const& comm_info) {
-    tracing::Event ev("shuffle_table_kernel");
+                                 mpi_comm_info const& comm_info, bool is_parallel) {
+    tracing::Event ev("shuffle_table_kernel", is_parallel);
     if (ev.is_tracing()) {
         ev.add_attribute("table_nrows_before", size_t(in_table->nrows()));
         ev.add_attribute("filtered", comm_info.filtered);
@@ -1045,7 +1058,7 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                             comm_info.send_disp_sub[i],
                             comm_info.send_disp_sub_sub[i],
                             comm_info.send_disp_null, n_pes, comm_info.row_dest,
-                            comm_info.filtered);
+                            comm_info.filtered, is_parallel);
 
             shuffle_array(
                 send_arr, out_arr, comm_info.send_count, comm_info.recv_count,
@@ -1056,7 +1069,7 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                 comm_info.recv_count_sub_sub[i], comm_info.send_disp_sub_sub[i],
                 comm_info.recv_disp_sub_sub[i], comm_info.send_count_null,
                 comm_info.recv_count_null, comm_info.send_disp_null,
-                comm_info.recv_disp_null, tmp_null_bytes);
+                comm_info.recv_disp_null, tmp_null_bytes, is_parallel);
             if (in_arr->arr_type == bodo_array_type::LIST_STRING)
                 shuffle_list_string_null_bitmask(in_arr, out_arr, comm_info,
                                                  comm_info.row_dest);
@@ -1473,9 +1486,9 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
     if (hashes == nullptr)
         hashes =
             hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION, is_parallel);
-    comm_info->set_counts(hashes);
+    comm_info->set_counts(hashes, is_parallel);
 
-    table_info* table = shuffle_table_kernel(in_table, hashes, *comm_info);
+    table_info* table = shuffle_table_kernel(in_table, hashes, *comm_info, is_parallel);
     if (keep_comm_info) {
         table->comm_info = comm_info;
         table->hashes = hashes;
@@ -1547,9 +1560,11 @@ table_info* coherent_shuffle_table(
     if (hashes == nullptr)
         hashes = coherent_hash_keys_table(in_table, ref_table, n_keys,
                                           SEED_HASH_PARTITION);
+    //coherent_shuffle_table only called in join with parallel options.
+    // is_parallel = true
     // Prereq to calling shuffle_table_kernel
-    comm_info.set_counts(hashes, filter);
-    table_info* table = shuffle_table_kernel(in_table, hashes, comm_info);
+    comm_info.set_counts(hashes, true, filter);
+    table_info* table = shuffle_table_kernel(in_table, hashes, comm_info, true);
     if (delete_hashes) delete[] hashes;
     return table;
 }
@@ -1798,11 +1813,12 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
    @param ref_table : the reference table used for the datatype
    @param in_table : the table that is broadcasted.
    @param n_cols : the number of columns in output
+   @param is_parallel: Used to indicate whether tracing should be parallel or not
    @return the table put in all the nodes
 */
 table_info* broadcast_table(table_info* ref_table, table_info* in_table,
-                            size_t n_cols) {
-    tracing::Event ev("broadcast_table");
+                            size_t n_cols, bool is_parallel) {
+    tracing::Event ev("broadcast_table", is_parallel);
 #ifdef DEBUG_BROADCAST
     std::cout << "INPUT of broadcast_table. ref_table=\n";
     DEBUG_PrintRefct(std::cout, ref_table->columns);
@@ -2236,9 +2252,12 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
     }
 }
 
+/**
+ * @param is_parallel: Used to indicate whether tracing should be parallel or not
+ */
 table_info* gather_table(table_info* in_table, int64_t n_cols_i,
-                         bool all_gather) {
-    tracing::Event ev("gather_table");
+                         bool all_gather, bool is_parallel = true) {
+    tracing::Event ev("gather_table", is_parallel);
 #ifdef DEBUG_GATHER
     std::cout << "INPUT of gather_table. in_table=\n";
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
@@ -2652,9 +2671,9 @@ table_info* shuffle_renormalization_group(table_info* in_table,
     }
     //
     mpi_comm_info comm_info(in_table->columns);
-    comm_info.set_counts(hashes.data());
+    comm_info.set_counts(hashes.data(), parallel);
     table_info* ret_table =
-        shuffle_table_kernel(in_table, hashes.data(), comm_info);
+        shuffle_table_kernel(in_table, hashes.data(), comm_info, parallel);
     if (random) {
         // data arrives ordered by source and for each source in its original
         // (not random) order, so we need to do a local random shuffle
