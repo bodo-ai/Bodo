@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 from numba.core import ir, ir_utils, types
 from numba.core.compiler_machinery import register_pass
+from numba.core.extending import register_jitable
 from numba.core.ir_utils import (
     GuardException,
     compute_cfg_from_blocks,
@@ -337,16 +338,11 @@ class TypingTransforms:
 
         # try loop unrolling if some const values couldn't be resolved
         if self._require_const:
-            for var, label in self._require_const.items():
-                changed = guard(self._try_loop_unroll_for_const, var, label)
-                # perform one unroll in each transform round only since multiple cases
-                # may be covered at the same time
-                if changed:
-                    break
+            self._try_loop_unroll_for_const()
 
         # try unrolling a loop with constant range if everything else failed
         if self.change_required and not self.changed and not self.needs_transform:
-            guard(self._try_unroll_const_loop)
+            self._try_unroll_const_loop()
 
         # find transformed variables that are not used anymore so they can be removed
         # removing cases like agg dicts may be necessary since not type stable
@@ -483,7 +479,7 @@ class TypingTransforms:
             slice_var = tup_list[1]
 
             # get const value of slice
-            col_slice = guard(
+            col_slice = guard_const(
                 get_const_value_inner,
                 self.func_ir,
                 slice_var,
@@ -605,7 +601,7 @@ class TypingTransforms:
 
     def _run_setitem_df(self, inst, target_typ, idx_typ, idx_var, nodes, label):
         """transform df setitem nodes, e.g. df["B"] = 3"""
-        idx_const = guard(
+        idx_const = guard_const(
             get_const_value_inner,
             self.func_ir,
             idx_var,
@@ -808,7 +804,9 @@ class TypingTransforms:
                 # try to find new column names
                 try:
                     err_msg = "Setting dataframe columns requires constant names"
-                    columns = self._get_const_value(inst.value, label, err_msg)
+                    columns = self._get_const_value(
+                        inst.value, label, inst.loc, err_msg
+                    )
                 except (GuardException, BodoConstUpdatedError):
                     return [inst]
 
@@ -1893,6 +1891,29 @@ class TypingTransforms:
             raise e2
         return value
 
+    def _try_loop_unroll_for_const(self):
+        """Try loop unrolling to find constant values in 'self._require_const'
+        During unrolling, one loop may need some other loop to unroll to find its
+        iteration space. See test_unroll_loop::impl8
+        """
+        consts = self._require_const.copy()
+        for var, label in consts.items():
+            changed = guard_const(self._try_loop_unroll_for_const_inner, var, label)
+            # perform one unroll in each transform round only since multiple cases
+            # may be covered at the same time
+            if changed:
+                break
+
+        # If unrolling attempt added new constant value requirements, try unrolling to
+        # potentially satisfy the new requirements
+        if len(consts) != len(self._require_const):
+            for var, label in self._require_const.items():
+                if var in consts:
+                    continue
+                changed = guard_const(self._try_loop_unroll_for_const_inner, var, label)
+                if changed:
+                    break
+
     def _try_unroll_const_loop(self):
         """Try to unroll a loop with constant iteration range if possible. Otherwise,
         throw GuardException.
@@ -1900,20 +1921,27 @@ class TypingTransforms:
         """
         cfg = compute_cfg_from_blocks(self.func_ir.blocks)
         loops = cfg.loops()
-        for loop in loops.values():
+        # unroll loops in program order to find constant dependencies more quickly
+        for loop in sorted(loops.values(), key=lambda l: l.header):
             # consider only well-structured loops
             if len(loop.entries) != 1 or len(loop.exits) != 1:
                 continue
-            loop_index_var = self._get_loop_index_var(loop)
-            iter_vals = self._get_loop_const_iter_vals(loop_index_var)
-            # start the unroll transform
-            # no more GuardException since we can't bail out from this point
-            self._unroll_loop(loop, loop_index_var, iter_vals)
-            return  # only unroll one loop at a time
+            if guard_const(self._try_unroll_const_loop_inner, loop):
+                return  # only unroll one loop at a time
 
-        raise GuardException("const loop to unroll not found")
+    def _try_unroll_const_loop_inner(self, loop):
+        """unroll loop if possible and return True.
+        Otherwise, raises GuardException or BodoConstUpdatedError
+        """
+        loop_index_var = self._get_loop_index_var(loop)
+        iter_vals = self._get_loop_const_iter_vals(loop_index_var)
+        # start the unroll transform
+        # no more GuardException since we can't bail out from this point
+        self._unroll_loop(loop, loop_index_var, iter_vals)
+        self._remove_container_updates(self.func_ir.blocks[list(loop.entries)[0]])
+        return True
 
-    def _try_loop_unroll_for_const(self, var, label):
+    def _try_loop_unroll_for_const_inner(self, var, label):
         """Try loop unrolling to make variable 'var' constant in block 'label' if:
         1) 'label' is in a for loop body
         2) iteration range of the loop is constant
@@ -1936,7 +1964,9 @@ class TypingTransforms:
             (is_container_update and self._updated_in_loop(var, loop))
             or self._vars_dependant(var, loop_index_var)
         )
-        iter_vals = self._get_loop_const_iter_vals(loop_index_var)
+        iter_vals = self._get_loop_const_iter_vals(
+            loop_index_var, True, list(loop.entries)[0]
+        )
 
         # avoid unrolling very large loops (too many iterations and/or body statements)
         unroll_size = len(iter_vals) * sum(
@@ -1946,11 +1976,108 @@ class TypingTransforms:
 
         # start the unroll transform
         # no more GuardException since we can't bail out from this point
+        if is_container_update:
+            # remove patterns like 'if cond: mylist.append()' to enable update removal
+            self._transform_container_if_update(loop)
         self._unroll_loop(loop, loop_index_var, iter_vals)
 
         if is_container_update:
             self._remove_container_updates(self.func_ir.blocks[list(loop.entries)[0]])
 
+        return True
+
+    def _transform_container_if_update(self, loop):
+        """Remove patterns like 'if cond: mylist.append()' to enable update removal in
+        _remove_container_updates() which requires a single loop body without control
+        flow. See test_unroll_loop::impl8.
+        For example:
+            for c in [...]:
+                if val in c:
+                    l.append(c)
+        is converted to:
+            for c in [...]:
+                if_list_append(l, val in c, c)
+        """
+        for l in loop.body.copy():
+            block = self.func_ir.blocks[l]
+            if guard(self._transform_if_update_inner, block, loop):
+                break
+
+    def _transform_if_update_inner(self, block, loop):
+        """Pattern match conditional list update inside loop body and remove the control
+        flow if possible. For example, the IR for 'if cond: mylist.append()' can be:
+                $14contains_op.5.13 = ...
+                bool16.14 = global(bool: <class 'bool'>)
+                $16pred.15 = call bool16.14($14contains_op.5.13, func=bool16.14,
+                    args=(Var($14contains_op.5.13, colname_check2.py:7),), kws=(),
+                    vararg=None, target=None)
+                branch $16pred.15, 42, 49
+            label 42:
+                $20list_append.3.17 = getattr(value=$phi18.0.5, attr=append)
+                $20list_append.4.18 = call $20list_append.3.17(x.10,
+                    func=$20list_append.3.17, args=(Var(x.10, colname_check2.py:7),),
+                    kws=(), vararg=None, target=None)
+                jump 49
+            label 49:
+                jump 18
+        which is converted to:
+                $14contains_op.5.13 = ...
+                bool16.14 = global(bool: <class 'bool'>)
+                $16pred.15 = call bool16.14($14contains_op.5.13, func=bool16.14,
+                    args=(Var($14contains_op.5.13, colname_check2.py:7),), kws=(),
+                    vararg=None, target=None)
+                if_list_append_call.20 = global(if_list_append: ...)
+                $20list_append.4.18 = call if_list_append_call.20($phi18.0.5,
+                    $16pred.15, x.10, func=if_list_append_call.20, args=[Var($phi18.0.5,
+                    colname_check2.py:7), Var($16pred.15, colname_check2.py:7),
+                    Var(x.10, colname_check2.py:7)], kws=(), vararg=None, target=None)
+        """
+        # TODO(ehsan): support other container update calls in addition to list.append()
+        # pattern match conditional update pattern
+        require(isinstance(block.terminator, ir.Branch))
+        cond_block = self.func_ir.blocks[block.terminator.truebr]
+        require(
+            isinstance(cond_block.terminator, ir.Jump)
+            and cond_block.terminator.target == block.terminator.falsebr
+        )
+        require(len(cond_block.body) == 3)
+        require(is_assign(cond_block.body[0]) and is_assign(cond_block.body[1]))
+        getattr_assign = cond_block.body[0]
+        call_assign = cond_block.body[1]
+        require(
+            is_expr(getattr_assign.value, "getattr")
+            and isinstance(
+                self.typemap.get(getattr_assign.value.value.name, None),
+                (types.List, types.ListType),
+            )
+        )
+        require(getattr_assign.value.attr == "append")
+        require(
+            is_call(call_assign.value)
+            and call_assign.value.func.name == getattr_assign.target.name
+        )
+
+        # convert to a single block with if_list_append() call
+        branch_node = block.body.pop()
+        loc = block.loc
+        scope = block.scope
+        new_call_var = ir.Var(scope, mk_unique_var("if_list_append_call"), loc)
+        new_call_var_assign = ir.Assign(
+            ir.Global("if_list_append", if_list_append, loc), new_call_var, loc
+        )
+        call_args = [
+            getattr_assign.value.value,
+            branch_node.cond,
+            call_assign.value.args[0],
+        ]
+        new_call_assign = ir.Assign(
+            ir.Expr.call(new_call_var, call_args, (), loc), call_assign.target, loc
+        )
+        next_block = self.func_ir.blocks.pop(branch_node.falsebr)
+        self.func_ir.blocks.pop(branch_node.truebr)
+        block.body += [new_call_var_assign, new_call_assign] + next_block.body
+        loop.body.remove(branch_node.truebr)
+        loop.body.remove(branch_node.falsebr)
         return True
 
     def _remove_container_updates(self, block):
@@ -1979,7 +2106,7 @@ class TypingTransforms:
                         continue
                     # match container update calls and avoid the update if possible
                     # e.g. a = []; a.append(2) -> a = [2]
-                    new_nodes = guard(
+                    new_nodes = guard_const(
                         self._try_remove_container_update, stmt, defined_containers
                     )
                     if new_nodes:
@@ -1987,14 +2114,12 @@ class TypingTransforms:
                         continue
                     # potential container update call that couldn't be handled in
                     # _try_remove_container_update()
-                    fdef = guard(find_callname, self.func_ir, stmt.value)
-                    if (
-                        fdef
-                        and len(fdef) == 2
-                        and isinstance(fdef[1], ir.Var)
-                        and fdef[1].name in defined_containers
-                    ):
-                        defined_containers -= self._equiv_vars[fdef[1].name]
+                    call_info = guard_const(
+                        self._get_container_call_info, stmt.value, defined_containers
+                    )
+                    if call_info is not None:
+                        _, cont_var = call_info
+                        defined_containers -= self._equiv_vars[cont_var.name]
                 # getattr nodes like a.append are handled when they are called (above)
                 if stmt.value.op == "getattr":
                     continue
@@ -2007,21 +2132,31 @@ class TypingTransforms:
                         defined_containers -= self._equiv_vars[v.name]
         block.body = const_nodes + block.body
 
+    def _get_container_call_info(self, expr, defined_containers):
+        """Get call name and container variable for container call 'expr'"""
+        fdef = find_callname(self.func_ir, expr)
+        require(fdef and len(fdef) == 2)
+        require(
+            (
+                fdef == ("if_list_append", "bodo.transforms.typing_pass")
+                and expr.args[0].name in defined_containers
+            )
+            or (isinstance(fdef[1], ir.Var) and fdef[1].name in defined_containers)
+        )
+        require(isinstance(fdef[0], str))
+        return fdef[0], expr.args[0] if fdef[0] == "if_list_append" else fdef[1]
+
     def _try_remove_container_update(self, stmt, defined_containers):
         """try to remove container update if possible.
         E.g. a = []; a.append(2) -> a = [2]
         Otherwise, raise GuardException.
         """
         # match container update call, e.g. a.append(2)
-        fdef = find_callname(self.func_ir, stmt.value)
-        require(
-            fdef
-            and len(fdef) == 2
-            and isinstance(fdef[1], ir.Var)
-            and fdef[1].name in defined_containers
+        func_name, cont_var = self._get_container_call_info(
+            stmt.value, defined_containers
         )
-        require(isinstance(fdef[0], str))
-        container_def = get_definition(self.func_ir, fdef[1])
+
+        container_def = get_definition(self.func_ir, cont_var)
         require(
             isinstance(container_def, ir.Expr)
             and container_def.op in ("build_list", "build_set", "call")
@@ -2051,25 +2186,30 @@ class TypingTransforms:
             raise GuardException("Invalid container def")
 
         # update container value by calling the actual update function
+        args = stmt.value.args[1:] if func_name == "if_list_append" else stmt.value.args
         arg_vals = [
             get_const_value_inner(
                 self.func_ir, v, self.arg_types, self.typemap, self._updated_containers
             )
-            for v in stmt.value.args
+            for v in args
         ]
-        out_val = getattr(container_val, fdef[0])(*arg_vals)
+        if func_name == "if_list_append":
+            out_val = if_list_append(container_val, *arg_vals)
+        else:
+            out_val = getattr(container_val, func_name)(*arg_vals)
 
         nodes = []
 
         # replace container variable in getattr with dummy to avoid use detection later
         # e.g. a.append -> dummy.append
-        func_var_def = get_definition(self.func_ir, stmt.value.func)
-        require(is_expr(func_var_def, "getattr"))
-        dummy_val = [1] if container_def.op == "build_list" else {1}
-        # no more GuardException from here on since IR is being modified
-        func_var_def.value = _create_const_var(
-            dummy_val, fdef[1].name, fdef[1].scope, fdef[1].loc, nodes
-        )
+        if func_name != "if_list_append":
+            func_var_def = get_definition(self.func_ir, stmt.value.func)
+            require(is_expr(func_var_def, "getattr"))
+            dummy_val = [1] if container_def.op == "build_list" else {1}
+            # no more GuardException from here on since IR is being modified
+            func_var_def.value = _create_const_var(
+                dummy_val, cont_var.name, cont_var.scope, cont_var.loc, nodes
+            )
 
         # update original container definition, e.g. a = [] -> a = [2]
         if container_def.op == "call" and find_callname(
@@ -2079,13 +2219,13 @@ class TypingTransforms:
             container_def.op = "build_set"
             container_def._kws = {"items": []}
         container_def.items = [
-            _create_const_var(v, fdef[1].name, fdef[1].scope, fdef[1].loc, nodes)
+            _create_const_var(v, cont_var.name, cont_var.scope, cont_var.loc, nodes)
             for v in container_val
         ]
         # replace update call with constant output, e.g. b = a.append(2) - > b = None
         self.func_ir._definitions[stmt.target.name].remove(stmt.value)
         stmt.value = _create_const_var(
-            out_val, fdef[1].name, fdef[1].scope, fdef[1].loc, nodes
+            out_val, cont_var.name, cont_var.scope, cont_var.loc, nodes
         )
         self.func_ir._definitions[stmt.target.name].append(stmt.value)
 
@@ -2202,11 +2342,13 @@ class TypingTransforms:
         require(ind_var is not None)
         return ind_var
 
-    def _get_loop_const_iter_vals(self, ind_var):
+    def _get_loop_const_iter_vals(self, ind_var, force_const=False, loop_entry=0):
         """get constant iteration values for loop given its index variable.
         Matches this call sequence generated by Numba
         index_var = pair_first(iternext(getiter(loop_iterations)))
         Raises GuardException if couldn't find constant values
+        force_const=True flag means that iteration values are known to be necessary,
+        and we need to eventually force them to be constant (using _get_const_value)
         """
         pair_first_expr = get_definition(self.func_ir, ind_var)
         require(is_expr(pair_first_expr, "pair_first"))
@@ -2214,9 +2356,12 @@ class TypingTransforms:
         require(is_expr(iternext_expr, "iternext"))
         getiter_expr = get_definition(self.func_ir, iternext_expr.value)
         require(is_expr(getiter_expr, "getiter"))
+        iter_var = getiter_expr.value
+        if force_const:
+            return self._get_const_value(iter_var, loop_entry, iter_var.loc)
         return get_const_value_inner(
             self.func_ir,
-            getiter_expr.value,
+            iter_var,
             self.arg_types,
             self.typemap,
             self._updated_containers,
@@ -2447,6 +2592,21 @@ def _find_updated_containers(blocks, topo_order):
             updated_containers[w] = m
 
     return updated_containers, equiv_vars
+
+
+def guard_const(func, *args, **kwargs):
+    """Same as guard(), but also checks for BodoConstUpdatedError"""
+    try:
+        return func(*args, **kwargs)
+    except (GuardException, BodoConstUpdatedError):
+        return None
+
+
+@register_jitable
+def if_list_append(l, cond, value):
+    """helper function to call list.append() if a condition is True"""
+    if cond:
+        l.append(value)
 
 
 def _set_updated_container(varname, update_func, updated_containers, equiv_vars):

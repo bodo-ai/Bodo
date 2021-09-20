@@ -629,6 +629,14 @@ def get_const_value_inner(
             )
         )
 
+    # bool() call
+    if call_name == ("bool", "builtins"):
+        return bool(
+            get_const_value_inner(
+                func_ir, var_def.args[0], arg_types, typemap, updated_containers
+            )
+        )
+
     # format() call
     if call_name == ("format", "builtins"):
         arg = get_const_value_inner(
