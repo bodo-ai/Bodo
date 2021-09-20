@@ -2380,6 +2380,12 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
             df = pd.concat((df, new_df), axis=1)
         return df
 
+    # [BE-1332] two dependent loops need to unroll, and there is conditional list update
+    def impl8(df):
+        for c_name in [x for x in df.columns if "E" in x]:
+            df[f"{c_name}_copy"] = df[c_name]
+        return df
+
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     check_func(impl1, (df,))
@@ -2391,6 +2397,15 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
     check_func(impl5, (n,))
     check_func(impl6, (n,))
     check_func(impl7, (n,))
+    df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "AE2": np.arange(n) ** 2,
+            "C": np.ones(n),
+            "E": np.ones(n) + 1,
+        }
+    )
+    check_func(impl8, (df,), copy_input=True)
 
 
 @pytest.mark.slow
