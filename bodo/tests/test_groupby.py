@@ -2151,8 +2151,32 @@ def test_median_nullable_int_bool(memory_leak_check):
         ),
         pd.DataFrame(
             {
-                "A": [b"a", b"aaa", b"aaa", b"aaa", b"asdfa", b"a", b"aaa"],
-                "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
+                "A": [
+                    b"a",
+                    b"aaa",
+                    b"aaa",
+                    b"aaa",
+                    b"asdfa",
+                    b"a",
+                    b"aaa",
+                    b"lkjds",
+                    b"cfghjk",
+                    b"mnbvbcfgjh",
+                    b"poiuh",
+                ],
+                "B": [
+                    b"ccc",
+                    np.nan,
+                    b"bb",
+                    b"aa",
+                    np.nan,
+                    b"ggg",
+                    b"rr",
+                    b"sdalk",
+                    b"sdlks",
+                    b"qwergj",
+                    b"ghytrf",
+                ],
             }
         ),
     ],
@@ -2202,8 +2226,30 @@ def test_nunique_select_col_missing_keys(memory_leak_check):
     )
     df_bin = pd.DataFrame(
         {
-            "A": [b"aaa", np.nan, b"baaa", b"baaa", b"aaa", np.nan, b"aaa"],
-            "B": [b"ccc", np.nan, b"bb", b"aa", np.nan, b"ggg", b"rr"],
+            "A": [
+                b"aaa",
+                np.nan,
+                b"baaa",
+                b"baaa",
+                b"aaa",
+                np.nan,
+                b"aaa",
+                b"asdf",
+                b"anmb",
+                b"asdjhfsdf",
+            ],
+            "B": [
+                b"ccc",
+                np.nan,
+                b"bb",
+                b"aa",
+                np.nan,
+                b"ggg",
+                b"rr",
+                b"aksjdhg",
+                b"aasdfnmb",
+                b"adjmnbfsdf",
+            ],
         }
     )
     check_func(impl1, (df_int,), sort_output=True, reset_index=True)
