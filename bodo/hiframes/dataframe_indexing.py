@@ -50,10 +50,144 @@ class DataFrameGetItemTemplate(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 2
+        if isinstance(args[0], DataFrameType):
+            return self.typecheck_df_getitem(args)
+        elif isinstance(args[0], DataFrameLocType):
+            return self.typecheck_loc_getitem(args)
+        else:
+            return
+
+    def typecheck_loc_getitem(self, args):
+        # Currently, typechecks the following uses of df.loc:
+        # df.loc[bool_ary],
+        # df.loc[slice/bool_ary, col_ind],
+        # df.loc[int, scalar col_ind] for dataframe with RangeIndex,
+
+        # As these were the test cases in dataframe_part2
+        # This may need to be expanded in
+
+        I = args[0]
+        idx = args[1]
+
+        df = I.df_type
+
+        # df with multi-level column names returns a lower level dataframe
+        # Not currently supported
+        if isinstance(df.columns[0], tuple):
+            raise_bodo_error(
+                "DataFrame.loc[] getitem (location-based indexing) with multi-indexed columns not supported yet"
+            )
+
+        # df.loc[idx] with idx = array of bools
+        # TODO: add slice to this case when it's supported in the overload
+        if (
+            is_list_like_index_type(idx) and idx.dtype == types.bool_
+        ):  # or isinstance(idx, types.SliceType):
+            df_idx_inds = idx
+            new_data_type = df.data
+            new_columns = df.columns
+            # Update index type for boolean indexing since that converts
+            # range to numeric
+            new_index_type = self.replace_range_with_numeric_idx_if_needed(
+                df, df_idx_inds
+            )
+            ret = DataFrameType(new_data_type, new_index_type, new_columns)
+            return ret(*args)
+
+        # df.loc[idx, col_ind]
+        if isinstance(idx, types.BaseTuple) and len(idx) == 2:
+
+            df_index_indexer_type = idx.types[0]
+            df_columns_indexer_type = idx.types[1]
+
+            # df.loc[scalar int, col_ind] (for range index only)
+            if isinstance(df_index_indexer_type, types.Integer):
+                if not isinstance(df.index, bodo.hiframes.pd_index_ext.RangeIndexType):
+                    raise_bodo_error(
+                        "Dataframe.loc[int, col_ind] getitem only supported for dataframes with RangeIndexes"
+                    )
+
+                # df.loc[scalar idx, "A"]
+                if is_overload_constant_str(df_columns_indexer_type):
+                    col_index_value = get_overload_const_str(df_columns_indexer_type)
+
+                    if col_index_value not in df.columns:
+                        raise_bodo_error(
+                            "dataframe {} does not include column {}".format(
+                                df, col_index_value
+                            )
+                        )
+                    col_num = df.columns.index(col_index_value)
+                    return (df.data[col_num].dtype)(*args)
+
+                # TODO: support df.loc[scalar int, ["A", "B"]] or df.loc[scalar int, [True, False, True]]
+                else:
+                    raise_bodo_error(
+                        f"DataFrame.loc[] getitem (location-based indexing) using {idx} not supported yet."
+                    )  # pragma: no cover
+
+            if (
+                is_list_like_index_type(df_index_indexer_type)
+                and df_index_indexer_type.dtype == types.bool_
+            ) or isinstance(df_index_indexer_type, types.SliceType):
+                new_index_type = self.replace_range_with_numeric_idx_if_needed(
+                    df, df_index_indexer_type
+                )
+                # df.loc[slice/bool_ary, "A"]
+                if is_overload_constant_str(df_columns_indexer_type):
+                    column_index_val = get_overload_const_str(df_columns_indexer_type)
+
+                    if column_index_val not in df.columns:
+                        raise_bodo_error(
+                            f"dataframe {df} does not include column {column_index_val}"
+                        )
+                    col_num = df.columns.index(column_index_val)
+                    data_type = df.data[col_num]
+                    dtype = data_type.dtype
+                    name_typ = types.literal(df.columns[col_num])
+                    ret = bodo.SeriesType(dtype, data_type, new_index_type, name_typ)
+                    return ret(*args)
+
+                # df.loc[slice/bool_ary, ["A", "B"]] or df.loc[slice/bool_ary, [True, False, True]]
+                elif is_overload_constant_list(df_columns_indexer_type):
+                    df_col_inds_literal = get_overload_const_list(
+                        df_columns_indexer_type
+                    )
+
+                    if df_columns_indexer_type.dtype == types.bool_:
+                        if len(df.columns) != len(df_col_inds_literal):
+                            raise_bodo_error(
+                                f"dataframe {df} has {len(df.columns)} columns, but boolean array used with DataFrame.loc[] {df_col_inds_literal} has {len(df_col_inds_literal)} values"
+                            )
+
+                        new_names = []
+                        new_data = []
+                        for i in range(len(df_col_inds_literal)):
+                            if df_col_inds_literal[i]:
+                                new_names.append(df.columns[i])
+                                new_data.append(df.data[i])
+                        new_cols = tuple()
+
+                        ret = DataFrameType(
+                            tuple(new_data), new_index_type, tuple(new_names)
+                        )
+                        return ret(*args)
+
+                    elif df_columns_indexer_type.dtype == bodo.string_type:
+                        (new_cols, new_data) = self.get_kept_cols_and_data(
+                            df, df_col_inds_literal
+                        )
+                        ret = DataFrameType(new_data, new_index_type, new_cols)
+                        return ret(*args)
+
+        raise_bodo_error(
+            f"DataFrame.loc[] getitem (location-based indexing) using {idx} not supported yet."
+        )  # pragma: no cover
+
+    def typecheck_df_getitem(self, args):
         df = args[0]
         ind = args[1]
-        if not isinstance(df, DataFrameType):
-            return
+
         # A = df["column"]
         if is_overload_constant_str(ind) or is_overload_constant_int(ind):
             ind_val = (
@@ -97,14 +231,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
             data_type = df.data
             # Update index type for boolean indexing since that converts
             # range to numeric
-            index_type = (
-                bodo.hiframes.pd_index_ext.NumericIndexType(
-                    types.int64, df.index.name_typ
-                )
-                if not isinstance(ind, types.SliceType)
-                and isinstance(df.index, bodo.hiframes.pd_index_ext.RangeIndexType)
-                else df.index
-            )
+            index_type = self.replace_range_with_numeric_idx_if_needed(df, ind)
             columns = df.columns
             ret = DataFrameType(data_type, index_type, columns)
             return ret(*args)
@@ -112,20 +239,42 @@ class DataFrameGetItemTemplate(AbstractTemplate):
         elif is_overload_constant_list(ind):
             # Check that all columns named are in the dataframe
             ind_columns = get_overload_const_list(ind)
-            for c in ind_columns:
-                if c not in df.columns:
-                    raise_bodo_error(
-                        "Column {} not found in dataframe columns {}".format(
-                            c, df.columns
-                        )
-                    )
-            columns = tuple(get_overload_const_list(ind))
-            data_type = tuple(df.data[df.columns.index(name)] for name in columns)
+            (columns, data_type) = self.get_kept_cols_and_data(df, ind_columns)
             index_type = df.index
             ret = DataFrameType(data_type, index_type, columns)
             return ret(*args)
         # TODO: error-checking test
         raise_bodo_error(f"df[] getitem using {ind} not supported")  # pragma: no cover
+
+    def get_kept_cols_and_data(self, df, cols_to_keep_list):
+        """helper function for getitem typing. Takes a dataframe, and a list of columns to keep,
+        and returns the data_type, and the columns for a dataframe containing only those columns.
+        Throws an error if cols_to_keep_list contains a column that is not present in the input
+        dataframe."""
+        # Check that all columns named are in the dataframe
+        for c in cols_to_keep_list:
+            if c not in df.columns:
+                raise_bodo_error(
+                    "Column {} not found in dataframe columns {}".format(c, df.columns)
+                )
+        columns = tuple(cols_to_keep_list)
+        data_type = tuple(df.data[df.columns.index(name)] for name in columns)
+        return (columns, data_type)
+
+    def replace_range_with_numeric_idx_if_needed(self, df, ind):
+        """
+        helper function for getitem typing. This function is used to get the output
+        index type of a getitem on a Series/Dataframe with a rangeIndex, using a
+        slice or a list of bools on the rows.
+        Using a list of bools will result in a numeric index instead of a range index.
+        """
+        new_index_type = (
+            bodo.hiframes.pd_index_ext.NumericIndexType(types.int64, df.index.name_typ)
+            if not isinstance(ind, types.SliceType)
+            and isinstance(df.index, bodo.hiframes.pd_index_ext.RangeIndexType)
+            else df.index
+        )
+        return new_index_type
 
 
 DataFrameGetItemTemplate._no_unliteral = True
@@ -140,6 +289,7 @@ def getitem_df_lower(context, builder, sig, args):
 
 
 def df_getitem_overload(df, ind):
+    # This check shouldn't be needeed, but it can't hurt to keep it in
     if not isinstance(df, DataFrameType):
         return
     # A = df["column"]
@@ -494,8 +644,15 @@ def overload_series_loc(s):
 
 
 # df.loc[] getitem
-@overload(operator.getitem, no_unliteral=True)
+@lower_builtin(operator.getitem, DataFrameLocType, types.Any)
+def loc_getitem_lower(context, builder, sig, args):
+    impl = overload_loc_getitem(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
 def overload_loc_getitem(I, idx):
+
+    # This check shouldn't be needeed, but it can't hurt to keep it in
     if not isinstance(I, DataFrameLocType):
         return
 

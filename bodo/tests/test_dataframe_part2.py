@@ -1798,6 +1798,113 @@ def test_loc_col_select(memory_leak_check):
     check_func(impl4, (n,))
 
 
+@pytest.mark.slow
+def test_getitem_loc_integer_cols():
+
+    # TODO: BE-1325, support non string literals for scalar case
+    # def impl1(df):
+    #     return df.loc[0, 1]
+
+    def impl2(df):
+        return df.loc[:, [True, False, True, True, False, True]]
+
+    def impl3(df):
+        return df.loc[:, [1, 2, 3]]
+
+    df = pd.DataFrame(
+        data=np.arange(36).reshape(6, 6),
+        columns=np.arange(6),
+    )
+
+    # check_func(impl1, (df,))
+    check_func(impl2, (df,))
+    check_func(impl3, (df,))
+
+
+@pytest.mark.skip("Coverage gaps for df.loc, see BE-1324")
+def test_loc_getitem_gaps():
+    df = pd.DataFrame(
+        data=np.arange(36).reshape(6, 6),
+        columns=np.arange(6),
+    )
+
+    def impl(df):
+        return df.loc[0]
+
+    def impl2(df):
+        return df.loc[:0]
+
+    check_func(impl, (df,))
+    check_func(impl2, (df,))
+
+
+@pytest.mark.skip("TODO: add support for multi level getitem, see BE-1324")
+def test_getitem_loc_multi_level_supported():
+    """
+    tests loc getitem on a dataframe with MultiIndexed columns/rows
+    """
+
+    def impl1(df):
+        return df.loc[[True, True, False, False, True, False]]
+
+    def impl2(df):
+        return df.loc[df.A.CC > 2]
+
+    def impl3(df):
+        return df.loc[:0, "A"]
+
+    def impl4(df):
+        return df.loc[:0, ["A", "B"]]
+
+    def impl5(df):
+        return df.loc[:0, [True, True, False, False, True, False]]
+
+    def impl6(df):
+        return df.loc[:0, df.columns.get_level_values(0) > "A"]
+
+    def impl7(df):
+        return df.loc[[True, True, False, False, True, False], "A"]
+
+    def impl8(df):
+        return df.loc[df.A.CC > 2, "A"]
+
+    # rep
+    def impl9(df):
+        return df.loc[[True, True, False, False, True, False], ["A", "B"]]
+
+    def impl10(df):
+        return df.loc[df.A.CC > 2, ["A", "B"]]
+
+    # rep
+    def impl11(df):
+        return df.loc[
+            [True, True, False, False, True, False],
+            [True, True, False, False, True, False],
+        ]
+
+    def impl12(df):
+        return df.loc[df.A.CC > 2, df.columns.get_level_values(0) > "A"]
+
+    df = pd.DataFrame(
+        data=np.arange(36).reshape(6, 6),
+        columns=pd.MultiIndex.from_product((["A", "B"], ["CC", "DD", "EE"])),
+        index=pd.MultiIndex.from_product(([0, 1], [1, 2, 3])),
+    )
+
+    check_func(impl1, (df,), dist_test=False)
+    check_func(impl2, (df,))
+    check_func(impl3, (df,))
+    check_func(impl4, (df,))
+    check_func(impl5, (df,), dist_test=False)
+    check_func(impl6, (df,))
+    check_func(impl7, (df,), dist_test=False)
+    check_func(impl8, (df,))
+    check_func(impl9, (df,), dist_test=False)
+    check_func(impl10, (df,))
+    check_func(impl11, (df,), dist_test=False)
+    check_func(impl12, (df,))
+
+
 def test_loc_setitem(memory_leak_check):
     """test df.loc[idx, col_ind] setitem where col_ind is a list of column names or bools"""
 
