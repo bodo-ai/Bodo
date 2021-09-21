@@ -1500,7 +1500,7 @@ def dict_to_const_keys_var_values_lists(
     keys = []
     values = []
     needs_transform = False
-    for i in range(dict_def.size):
+    for i in range(len(dict_items)):
         key, value = dict_items[i]
         try:
             key_const = get_const_value_inner(
