@@ -66,6 +66,13 @@ from bodo.utils.typing import (
 )
 
 
+def check_sklearn_version():
+    if not bodo.compiler._is_sklearn_supported_version:
+        msg = f" Bodo requires at most version {bodo.compiler._max_sklearn_ver_str} of scikit-learn.\n \
+            Installed version is {sklearn.__version__}.\n"
+        raise BodoError(msg)
+
+
 def random_forest_model_fit(m, X, y):
     # TODO check that random_state behavior matches sklearn when
     # the training is distributed (does not apply currently)
@@ -220,6 +227,7 @@ def sklearn_ensemble_RandomForestClassifier_overload(
     ccp_alpha=0.0,
     max_samples=None,
 ):
+    check_sklearn_version()
 
     # TODO n_jobs should be left unspecified so should probably throw an error if used
 
@@ -280,6 +288,7 @@ def parallel_predict_regression(m, X):
     Each rank has its own copy of the model and predicts for its
     own set of data.
     """
+    check_sklearn_version()
 
     def _model_predict_impl(m, X):  # pragma: no cover
 
@@ -304,6 +313,7 @@ def parallel_predict(m, X):
     own set of data.
     This strategy is the same for a lot of classifier estimators.
     """
+    check_sklearn_version()
 
     def _model_predict_impl(m, X):  # pragma: no cover
         with numba.objmode(result="int64[:]"):
@@ -334,6 +344,7 @@ def parallel_score(
     Then, gather and get mean of all scores.
     This strategy is the same for a lot of estimators.
     """
+    check_sklearn_version()
 
     def _model_score_impl(
         m, X, y, sample_weight=None, _is_data_distributed=False
@@ -356,6 +367,7 @@ def parallel_score(
 
 @overload_method(BodoRandomForestClassifierType, "predict", no_unliteral=True)
 def overload_model_predict(m, X):
+    check_sklearn_version()
     """Overload Random Forest Classifier predict. (Data parallelization)"""
     return parallel_predict(m, X)
 
@@ -472,6 +484,7 @@ def overload_precision_score(
     y_true, y_pred, average="binary", _is_data_distributed=False
 ):
 
+    check_sklearn_version()
     if is_overload_none(average):
         # this case returns an array of floats, one for each label
         if is_overload_false(_is_data_distributed):
@@ -534,6 +547,7 @@ def overload_precision_score(
 @overload(sklearn.metrics.recall_score, no_unliteral=True)
 def overload_recall_score(y_true, y_pred, average="binary", _is_data_distributed=False):
 
+    check_sklearn_version()
     if is_overload_none(average):
         # this case returns an array of floats, one for each label
         if is_overload_false(_is_data_distributed):
@@ -596,6 +610,7 @@ def overload_recall_score(y_true, y_pred, average="binary", _is_data_distributed
 @overload(sklearn.metrics.f1_score, no_unliteral=True)
 def overload_f1_score(y_true, y_pred, average="binary", _is_data_distributed=False):
 
+    check_sklearn_version()
     if is_overload_none(average):
         # this case returns an array of floats, one for each label
         if is_overload_false(_is_data_distributed):
@@ -736,6 +751,7 @@ def overload_mean_squared_error(
     vs not provided for type unification purposes.
     """
 
+    check_sklearn_version()
     if (
         is_overload_constant_str(multioutput)
         and get_overload_const_str(multioutput) == "raw_values"
@@ -898,6 +914,7 @@ def overload_mean_absolute_error(
     vs not provided for type unification purposes.
     """
 
+    check_sklearn_version()
     if (
         is_overload_constant_str(multioutput)
         and get_overload_const_str(multioutput) == "raw_values"
@@ -1070,6 +1087,7 @@ def overload_accuracy_score(
     vs not provided for type unification purposes.
     """
 
+    check_sklearn_version()
     if is_overload_false(_is_data_distributed):
 
         if is_overload_none(sample_weight):
@@ -1302,6 +1320,7 @@ def overload_r2_score(
     vs not provided for type unification purposes.
     """
 
+    check_sklearn_version()
     # Check that value of multioutput is valid
     if is_overload_constant_str(multioutput) and get_overload_const_str(
         multioutput
@@ -1515,6 +1534,8 @@ def sklearn_linear_model_SGDRegressor_overload(
     warm_start=False,
     average=False,
 ):
+    check_sklearn_version()
+
     def _sklearn_linear_model_SGDRegressor_impl(
         loss="squared_loss",
         penalty="l2",
@@ -1570,6 +1591,8 @@ def overload_sgdr_model_fit(
     y,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
+    check_sklearn_version()
+
     def _model_sgdr_fit_impl(m, X, y, _is_data_distributed=False):  # pragma: no cover
 
         # TODO: Rebalance the data X and y to be the same size on every rank
@@ -1667,6 +1690,8 @@ def sklearn_linear_model_SGDClassifier_overload(
     warm_start=False,
     average=False,
 ):
+    check_sklearn_version()
+
     def _sklearn_linear_model_SGDClassifier_impl(
         loss="hinge",
         penalty="l2",
@@ -1782,6 +1807,7 @@ def overload_sgdc_model_fit(
     y,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
+    check_sklearn_version()
     """
     Provide implementations for the fit function.
     In case input is replicated, we simply call sklearn,
@@ -1897,6 +1923,8 @@ def sklearn_cluster_kmeans_overload(
     n_jobs="deprecated",
     algorithm="auto",
 ):
+    check_sklearn_version()
+
     def _sklearn_cluster_kmeans_impl(
         n_clusters=8,
         init="k-means++",
@@ -2189,6 +2217,8 @@ def sklearn_naive_bayes_multinomialnb_overload(
     fit_prior=True,
     class_prior=None,
 ):
+    check_sklearn_version()
+
     def _sklearn_naive_bayes_multinomialnb_impl(
         alpha=1.0,
         fit_prior=True,
@@ -2425,6 +2455,8 @@ def sklearn_linear_model_logistic_regression_overload(
     n_jobs=None,
     l1_ratio=None,
 ):
+    check_sklearn_version()
+
     def _sklearn_linear_model_logistic_regression_impl(
         penalty="l2",
         dual=False,
@@ -2607,6 +2639,8 @@ def sklearn_linear_model_linear_regression_overload(
     copy_X=True,
     n_jobs=None,
 ):
+    check_sklearn_version()
+
     def _sklearn_linear_model_linear_regression_impl(
         fit_intercept=True,
         normalize=False,
@@ -2748,6 +2782,8 @@ def sklearn_linear_model_lasso_overload(
     random_state=None,
     selection="cyclic",
 ):
+    check_sklearn_version()
+
     def _sklearn_linear_model_lasso_impl(
         alpha=1.0,
         fit_intercept=True,
@@ -2895,6 +2931,8 @@ def sklearn_linear_model_ridge_overload(
     solver="auto",
     random_state=None,
 ):
+    check_sklearn_version()
+
     def _sklearn_linear_model_ridge_impl(
         alpha=1.0,
         fit_intercept=True,
@@ -3054,6 +3092,8 @@ def sklearn_svm_linear_svc_overload(
     random_state=None,
     max_iter=1000,
 ):
+    check_sklearn_version()
+
     def _sklearn_svm_linear_svc_impl(
         penalty="l2",
         loss="squared_hinge",
@@ -3209,6 +3249,8 @@ def sklearn_preprocessing_standard_scaler_overload(
     Provide implementation for __init__ functions of StandardScaler.
     We simply call sklearn in objmode.
     """
+
+    check_sklearn_version()
 
     def _sklearn_preprocessing_standard_scaler_impl(
         copy=True, with_mean=True, with_std=True
@@ -3511,6 +3553,7 @@ def overload_train_test_split(
     If data is distributed and shuffle=False, use slicing and then rebalance across ranks
     If data is distributed and shuffle=True, generate a global train/test mask, shuffle, and rebalance across ranks.
     """
+    check_sklearn_version()
     # TODO: Check if labels is None and change output accordingly
     # no_labels = False
     # if is_overload_none(labels):
@@ -3716,6 +3759,8 @@ def sklearn_preprocessing_minmax_scaler_overload(
     We simply call sklearn in objmode.
     """
 
+    check_sklearn_version()
+
     def _sklearn_preprocessing_minmax_scaler_impl(
         feature_range=(0, 1),
         copy=True,
@@ -3902,6 +3947,8 @@ def sklearn_preprocessing_label_encoder_overload():
     We simply call sklearn in objmode.
     """
 
+    check_sklearn_version()
+
     def _sklearn_preprocessing_label_encoder_impl():  # pragma: no cover
 
         with numba.objmode(m="preprocessing_label_encoder_type"):
@@ -4076,6 +4123,8 @@ def sklearn_hashing_vectorizer_overload(
     We simply call sklearn in objmode.
     """
 
+    check_sklearn_version()
+
     def _sklearn_hashing_vectorizer_impl(
         input="content",
         encoding="utf-8",
@@ -4211,6 +4260,8 @@ def overload_sklearn_rf_regressor(
     """
 
     # TODO n_jobs should be left unspecified so should probably throw an error if used
+
+    check_sklearn_version()
 
     def _sklearn_ensemble_RandomForestRegressor_impl(
         n_estimators=100,
@@ -4379,6 +4430,8 @@ def sklearn_count_vectorizer_overload(
     We simply call sklearn in objmode.
     """
 
+    check_sklearn_version()
+
     def _sklearn_count_vectorizer_impl(
         input="content",
         encoding="utf-8",
@@ -4460,6 +4513,7 @@ def overload_count_vectorizer_fit_transform(
     Then, run fit_transform with combined vocabulary
     If replicated, simply call fit_transform on each rank.
     """
+    check_sklearn_version()
     types.csr_matrix_int64_int64 = CSRMatrixType(types.int64, types.int64)
     if is_overload_true(_is_data_distributed):
         types.dict_str_int = types.DictType(types.unicode_type, types.int64)
@@ -4522,6 +4576,8 @@ def overload_count_vectorizer_fit_transform(
 )
 def overload_count_vectorizer_get_feature_names(m):
     """Array mapping from feature integer indices to feature name."""
+
+    check_sklearn_version()
 
     def impl(m):  # pragma: no cover
         with numba.objmode(result=bodo.string_array_type):

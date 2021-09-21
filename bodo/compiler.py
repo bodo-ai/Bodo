@@ -49,10 +49,26 @@ from bodo.transforms.typing_pass import BodoTypeInference
 from bodo.transforms.untyped_pass import UntypedPass
 from bodo.utils.utils import is_assign, is_call_assign, is_expr
 
+_is_sklearn_supported_version = False
+_max_sklearn_version = (0, 24, 2)
+_max_sklearn_ver_str = ".".join(str(x) for x in _max_sklearn_version)
 try:
+    # Create capturing group for major, minor, and bugfix version numbers.
+    # last number could have string e.g. `dev0`
+    import re
+
     import sklearn  # noqa
 
     import bodo.libs.sklearn_ext  # noqa  # side effect: initialize Numba extensions
+
+    regex = re.compile(r"(\d+)\.(\d+)\..*(\d+)")
+    sklearn_version = sklearn.__version__
+    m = regex.match(sklearn_version)
+    if m:
+        ver = tuple(map(int, m.groups()))
+        if ver <= _max_sklearn_version:
+            _is_sklearn_supported_version = True
+
 except ImportError:
     # TODO if sklearn is not installed, trying to use sklearn inside
     # bodo functions should give more meaningful errors than:
