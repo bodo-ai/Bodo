@@ -4,6 +4,7 @@ according to Bodo requirements (using partial typing).
 """
 import copy
 import itertools
+import operator
 import types as pytypes
 import warnings
 from collections import defaultdict
@@ -1958,7 +1959,8 @@ class TypingTransforms:
             ...
         """
         # get loop info and make sure unrolling is possible
-        loop, is_container_update = self._get_enclosing_loop(var, label)
+        cfg = compute_cfg_from_blocks(self.func_ir.blocks)
+        loop, is_container_update = self._get_enclosing_loop(var, label, cfg)
         loop_index_var = self._get_loop_index_var(loop)
         require(
             (is_container_update and self._updated_in_loop(var, loop))
@@ -1978,7 +1980,7 @@ class TypingTransforms:
         # no more GuardException since we can't bail out from this point
         if is_container_update:
             # remove patterns like 'if cond: mylist.append()' to enable update removal
-            self._transform_container_if_update(loop)
+            self._transform_container_if_update(loop, cfg)
         self._unroll_loop(loop, loop_index_var, iter_vals)
 
         if is_container_update:
@@ -1986,7 +1988,7 @@ class TypingTransforms:
 
         return True
 
-    def _transform_container_if_update(self, loop):
+    def _transform_container_if_update(self, loop, cfg):
         """Remove patterns like 'if cond: mylist.append()' to enable update removal in
         _remove_container_updates() which requires a single loop body without control
         flow. See test_unroll_loop::impl8.
@@ -2001,6 +2003,7 @@ class TypingTransforms:
         for l in loop.body.copy():
             block = self.func_ir.blocks[l]
             if guard(self._transform_if_update_inner, block, loop):
+                guard(self._transform_if_update_branch, l, block, loop, cfg)
                 break
 
     def _transform_if_update_inner(self, block, loop):
@@ -2073,12 +2076,71 @@ class TypingTransforms:
         new_call_assign = ir.Assign(
             ir.Expr.call(new_call_var, call_args, (), loc), call_assign.target, loc
         )
-        next_block = self.func_ir.blocks.pop(branch_node.falsebr)
+        # NOTE: cannot remove branch_node.falsebr block since it may be target of
+        # another block (not necessary also, _unroll_loop simplifies CFG), see [BE-1354]
         self.func_ir.blocks.pop(branch_node.truebr)
-        block.body += [new_call_var_assign, new_call_assign] + next_block.body
+        block.body += [
+            new_call_var_assign,
+            new_call_assign,
+            ir.Jump(branch_node.falsebr, loc),
+        ]
         loop.body.remove(branch_node.truebr)
-        loop.body.remove(branch_node.falsebr)
         return True
+
+    def _transform_if_update_branch(self, label, block, loop, cfg):
+        """Pattern match extra condition for list update and remove the control
+        flow if possible. For example, transform
+        'if cond1: if_list_append(mylist, cond2, val)' to
+        'if_list_append(mylist, cond1 and cond2, val)'.
+        This repeats execution of the nodes in block containing 'if_list_append' even
+        when cond1 is false, so we have to check these conditions for safety:
+        1) nodes are side-effect free
+        2) the defined variables are not used in any other loop body block
+        3) variables defined later are not used
+        TODO(ehsan): generalize to more than two conditions
+        """
+
+        # make sure there is a single previous block that branches to this block
+        preds = list(cfg.predecessors(label))
+        require(len(preds) == 1)
+        prev_label = preds[0][0]
+        prev_block = self.func_ir.blocks[prev_label]
+        require(
+            isinstance(prev_block.terminator, ir.Branch)
+            and prev_block.terminator.truebr == label
+            and prev_block.terminator.falsebr == block.terminator.target
+        )
+
+        # make sure nodes are side-effect free and don't use variables defined later
+        defined_vars = set()
+        for stmt in reversed(block.body[:-3]):
+            rhs = stmt.value
+            require(is_assign(stmt))
+            require(self._has_no_side_effect(rhs))
+            defined_vars.add(stmt.target.name)
+            # ensure later defined variables are not used in previous statements
+            used_vars = {v.name for v in stmt.list_vars() if v.name != stmt.target.name}
+            require(not used_vars & defined_vars)
+
+        # make sure defined variables are not used in other loop blocks
+        for l in loop.body:
+            if l == label:
+                continue
+            for stmt in self.func_ir.blocks[l].body:
+                require(not defined_vars & {v.name for v in stmt.list_vars()})
+
+        # combine branch condition with if_append_call and convert branch to jump
+        loc = block.loc
+        prev_cond = prev_block.terminator.cond
+        prev_block.body[-1] = ir.Jump(label, block.loc)
+        if_append_call = block.body[-2].value
+        cond_var = if_append_call.args[1]
+        new_cond_var = ir.Var(block.scope, mk_unique_var("new_cond"), loc)
+        cond_assign = ir.Assign(
+            ir.Expr.binop(operator.and_, prev_cond, cond_var, loc), new_cond_var, loc
+        )
+        if_append_call.args[1] = new_cond_var
+        block.body.insert(-2, cond_assign)
 
     def _remove_container_updates(self, block):
         """remove container updates from 'block' statements if possible.
@@ -2290,12 +2352,11 @@ class TypingTransforms:
 
         self.changed = True
 
-    def _get_enclosing_loop(self, var, label):
+    def _get_enclosing_loop(self, var, label, cfg):
         """find enclosing loop for block 'label' if possible. Also return True if the
         loop updates a container.
         Otherwise, raise GuardException.
         """
-        cfg = compute_cfg_from_blocks(self.func_ir.blocks)
         label_doms = cfg.dominators()[label]
         loops = cfg.loops()
         for loop in loops.values():
@@ -2407,6 +2468,20 @@ class TypingTransforms:
                             return True
 
         return False
+
+    def _has_no_side_effect(self, expr):
+        """return True if 'expr' is an IR node without side-effect
+        TODO(ehsan): use has_no_side_effect() to be less conservative?
+        """
+        return (
+            isinstance(expr, (ir.Const, ir.Global, ir.FreeVar))
+            or (isinstance(expr, ir.Expr) and expr.op not in ("inplace_binop", "call"))
+            or (
+                is_call(expr)
+                and guard(find_callname, self.func_ir, expr, self.typemap)
+                == ("bool", "builtins")
+            )
+        )
 
     def _add_to_transformed_vars(self, varname):
         """add variable 'varname' to the set of transformed variables to be removed

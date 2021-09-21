@@ -2493,6 +2493,12 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
             df[f"{c_name}_copy"] = df[c_name]
         return df
 
+    # [BE-1354] extra condition in comprehension to be removed
+    def impl9(df):
+        for c_name in [x for x in df.columns if "E" in x if "A" not in x]:
+            df[f"{c_name}_copy"] = df[c_name]
+        return df
+
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     check_func(impl1, (df,))
@@ -2513,6 +2519,7 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
         }
     )
     check_func(impl8, (df,), copy_input=True)
+    check_func(impl9, (df,), copy_input=True)
 
 
 @pytest.mark.slow
