@@ -438,6 +438,13 @@ def get_const_value_inner(
         )
         return var_def.fn(arg1, arg2)
 
+    # unary op (op s1)
+    if is_expr(var_def, "unary"):
+        val = get_const_value_inner(
+            func_ir, var_def.value, arg_types, typemap, updated_containers
+        )
+        return var_def.fn(val)
+
     # df.columns case
     if is_expr(var_def, "getattr") and typemap:
         obj_typ = typemap.get(var_def.value.name, None)
