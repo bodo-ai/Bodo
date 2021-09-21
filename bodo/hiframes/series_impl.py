@@ -3483,6 +3483,11 @@ explicit_binop_funcs_single = {
 }
 explicit_binop_funcs = set()
 
+split_logical_binops_funcs = [
+    operator.or_,
+    operator.and_,
+]
+
 
 def _install_explicit_binary_ops():
     for op, list_name in explicit_binop_funcs_two_ways.items():
@@ -3633,8 +3638,10 @@ def create_binary_op_overload(op):
 
 
 # overloads taken care of in libs/binops_ext.py
-skips = list(explicit_binop_funcs_two_ways.keys()) + list(
-    explicit_binop_funcs_single.keys()
+skips = (
+    list(explicit_binop_funcs_two_ways.keys())
+    + list(explicit_binop_funcs_single.keys())
+    + split_logical_binops_funcs
 )
 
 

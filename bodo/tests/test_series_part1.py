@@ -2784,3 +2784,67 @@ def test_series_map(S, memory_leak_check):
         return S.map(lambda a: 2 * a)
 
     check_func(test_impl, (S,))
+
+
+@pytest.mark.parametrize(
+    "arg1",
+    [
+        pd.Series([1, 2, 3] * 4),
+        pd.Series([-12, None, 14, None] * 3, dtype="Int64"),
+    ],
+)
+@pytest.mark.parametrize(
+    "arg2",
+    [
+        pd.Series([0, -1, 2, None] * 3, dtype="Int64"),
+        pd.Series([1, 2, 3] * 4),
+        np.array([3, -1, 5] * 4),
+        1,
+        0,
+    ],
+)
+def test_series_and_or_int(arg1, arg2, memory_leak_check):
+    """Tests support for pd.Series &/|, with integer data"""
+
+    # https://github.com/pandas-dev/pandas/issues/34463
+    # Pandas doesn't currently support and/or between
+    # two Nullable Integer Arrays, or nullable integer Arrays and
+    # scalars but it most likely will in the future.
+    assert re.compile(r"1.3.*").match(
+        pd.__version__
+    ), "Check support for pd.IntegerArray's and/or"
+
+    # Lambda functions used for setting expected output:
+    or_scalar = lambda v, x: v if pd.isna(v) else v | x
+    and_scalar = lambda v, x: v if pd.isna(v) else v & x
+
+    # Workaround for the aformentioned issue with and/or with Nullable Integer Arrays
+    arg1_null_series = isinstance(arg1, pd.Series) and arg1.dtype.name == "Int64"
+    arg2_null_series = isinstance(arg2, pd.Series) and arg2.dtype.name == "Int64"
+    if arg1_null_series and arg2_null_series:
+        pyOutputOr = arg1.fillna(1).astype(np.int64) | arg2.fillna(1).astype(np.int64)
+        pyOutputOr[arg1.isna() | arg2.isna()] = None
+        pyOutputOr = pyOutputOr.astype(arg1.dtype)
+        pyOutputAnd = arg1.fillna(1).astype(np.int64) & arg2.fillna(1).astype(np.int64)
+        pyOutputAnd[arg1.isna() | arg2.isna()] = None
+        pyOutputAnd = pyOutputAnd.astype(arg1.dtype)
+    elif arg1_null_series and isinstance(arg2, int):
+        pyOutputOr = arg1.apply(or_scalar, x=arg2)
+        pyOutputAnd = arg1.apply(and_scalar, x=arg2)
+    elif arg2_null_series and isinstance(arg2, int):
+        pyOutputOr = arg2.apply(or_scalar, x=arg1)
+        pyOutputAnd = arg2.apply(and_scalar, x=arg1)
+    else:
+        pyOutputOr = None
+        pyOutputAnd = None
+
+    def impl_and(lhs, rhs):
+        return lhs & rhs
+
+    def impl_or(lhs, rhs):
+        return lhs | rhs
+
+    check_func(impl_and, (arg1, arg2), py_output=pyOutputAnd)
+    check_func(impl_and, (arg2, arg1), py_output=pyOutputAnd)
+    check_func(impl_or, (arg1, arg2), py_output=pyOutputOr)
+    check_func(impl_or, (arg2, arg1), py_output=pyOutputOr)

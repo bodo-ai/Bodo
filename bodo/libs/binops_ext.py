@@ -54,6 +54,7 @@ class SeriesCmpOpTemplate(AbstractTemplate):
     separate Typing and Lowering to Reduce
     Compilation Time.
     """
+
     def generic(self, args, kws):
         # Builtin operators don't support kws
         # and are always binary
@@ -63,7 +64,11 @@ class SeriesCmpOpTemplate(AbstractTemplate):
         # We only want to call the series implementation if
         # we can't use cmp_timeseries, there are is no dataframe
         # and there is at least 1 Series
-        if cmp_timeseries(lhs, rhs) or (isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType)) or not((isinstance(lhs, SeriesType) or isinstance(rhs, SeriesType))):
+        if (
+            cmp_timeseries(lhs, rhs)
+            or (isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType))
+            or not (isinstance(lhs, SeriesType) or isinstance(rhs, SeriesType))
+        ):
             return
 
         # Check that lhs and rhs can be legally compared
@@ -74,7 +79,9 @@ class SeriesCmpOpTemplate(AbstractTemplate):
         error_msg = f"{lhs} {numba.core.utils.OPERATORS_TO_BUILTINS[self.key]} {rhs} not supported"
         # Check types by resolving the subsequent function
         try:
-            ret_arr_typ = self.context.resolve_function_type(self.key, recursed_args, {}).return_type
+            ret_arr_typ = self.context.resolve_function_type(
+                self.key, recursed_args, {}
+            ).return_type
         except Exception as e:
             raise BodoError(error_msg)
         # If ret_arr_typ is a boolean TRUE for !=, False for ==, then this equality
@@ -115,6 +122,70 @@ def series_cmp_op_lower(op):
         return context.compile_internal(builder, impl, sig, args)
 
     return lower_impl
+
+
+class SeriesAndOrTyper(AbstractTemplate):
+    """
+    Operator template used for doing typing for bitwise and logical (And/Or) with pandas series.
+
+    Currently, while pandas allows and/or between non null booleans and integers, we restrict
+    and/or to only operate between two boolean types, or two integer types.
+    """
+
+    def generic(self, args, kws):
+        assert len(args) == 2
+        # No kws supported, as builtin operators do not accept them
+        assert not kws
+
+        lhs, rhs = args
+
+        if not (isinstance(lhs, SeriesType) or isinstance(rhs, SeriesType)):
+            return
+
+        lhs_arr = lhs.data if isinstance(lhs, SeriesType) else lhs
+        rhs_arr = rhs.data if isinstance(rhs, SeriesType) else rhs
+        recursed_args = (lhs_arr, rhs_arr)
+        # TODO: check this error msg is what I want it to be
+        error_msg = f"{lhs} {numba.core.utils.OPERATORS_TO_BUILTINS[self.key]} {rhs} not supported"
+        try:
+            ret_arr_typ = self.context.resolve_function_type(
+                self.key, recursed_args, {}
+            ).return_type
+        except Exception:
+            raise BodoError(error_msg)
+
+        index_typ = lhs.index if isinstance(lhs, SeriesType) else rhs.index
+        name_typ = lhs.name_typ if isinstance(lhs, SeriesType) else rhs.name_typ
+        # Construct the returned series. The series should either be a boolean array,
+        # or an integer array
+        ret_dtype = ret_arr_typ.dtype
+        ret_type = SeriesType(ret_dtype, ret_arr_typ, index_typ, name_typ)
+        return ret_type(*args)
+
+
+def lower_series_and_or(op):
+    """
+    Returns a lowering implementation for Or/And with pandas series types, to be used with lower_builtin
+    """
+
+    def lower_and_or_impl(context, builder, sig, args):  # pragma no cover
+        impl = bodo.hiframes.series_impl.create_binary_op_overload(op)(*sig.args)
+        # To my understanding, there is only one input type that might be incorrectly matched,
+        # and that is
+        #
+        # 1 input is a DataFrame:
+        #           df & S
+        #
+        if impl is None:
+            lhs, rhs = sig.args
+            if isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType):
+                impl = bodo.hiframes.dataframe_impl.create_binary_op_overload(op)(
+                    *sig.args
+                )
+
+        return context.compile_internal(builder, impl, sig, args)
+
+    return lower_and_or_impl
 
 
 ### Operator.add
@@ -273,7 +344,9 @@ def create_overload_arith_op(op):
                 return bodo.libs.str_arr_ext.overload_mul_operator_str_arr(lhs, rhs)
 
             if mul_date_offset_and_int(lhs, rhs):
-                return bodo.hiframes.pd_offsets_ext.overload_mul_date_offset_types(lhs, rhs)
+                return bodo.hiframes.pd_offsets_ext.overload_mul_date_offset_types(
+                    lhs, rhs
+                )
 
             raise_error_if_not_numba_supported(op, lhs, rhs)
 
@@ -471,9 +544,28 @@ def mul_timedelta_and_int(lhs, rhs):
     )
     return lhs_td or rhs_td
 
+
 def mul_date_offset_and_int(lhs, rhs):
-    lhs_offset = lhs in [week_type, month_end_type, month_begin_type, date_offset_type] and isinstance(rhs, types.Integer)
-    rhs_offset = rhs in [week_type, month_end_type, month_begin_type, date_offset_type] and isinstance(lhs, types.Integer)
+    lhs_offset = (
+        lhs
+        in [
+            week_type,
+            month_end_type,
+            month_begin_type,
+            date_offset_type,
+        ]
+        and isinstance(rhs, types.Integer)
+    )
+    rhs_offset = (
+        rhs
+        in [
+            week_type,
+            month_end_type,
+            month_begin_type,
+            date_offset_type,
+        ]
+        and isinstance(lhs, types.Integer)
+    )
     return lhs_offset or rhs_offset
 
 
@@ -929,6 +1021,17 @@ def raise_error_if_not_numba_supported(op, lhs, rhs):
     raise BodoError(f"{op} operator not supported for data types {lhs} and {rhs}.")
 
 
+def _install_series_and_or():
+    """Installs the overloads for series and/or operations"""
+    for op in (operator.or_, operator.and_):
+        infer_global(op)(SeriesAndOrTyper)
+        lower_impl = lower_series_and_or
+        lower_builtin(op, SeriesType, types.Any)(lower_impl)
+        lower_builtin(op, types.Any, SeriesType)(lower_impl)
+
+
+_install_series_and_or()
+
 ## Install operator overloads
 def _install_cmp_ops():
     for op in (
@@ -950,6 +1053,7 @@ def _install_cmp_ops():
         # Include the generic overload
         overload_impl = create_overload_cmp_operator(op)
         overload(op, no_unliteral=True)(overload_impl)
+
 
 _install_cmp_ops()
 
