@@ -339,3 +339,34 @@ def test_cmp_errors(memory_leak_check):
         match="series\\(int64, array\\(int64, 1d, C\\), RangeIndexType\\(none\\), none, REP\\) != unicode_type not supported",
     ):
         bodo.jit(test_impl3)(S, val)
+
+
+@pytest.mark.slow
+def test_and_or_typing_errors(memory_leak_check):
+    """Currently, bodo doesn't allow and/or between int/boolean types. Checks that we raise a reasonable error"""
+
+    def test_and(S1, S2):
+        return S1 & S2
+
+    def test_or(S1, S2):
+        return S1 | S2
+
+    int_s = pd.Series([1, 2, 3] * 3)
+    bool_s = pd.Series([True, False, True] * 3, dtype="boolean")
+    import re
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "series(int64, array(int64, 1d, C), RangeIndexType(none), none, REP) & series(bool, BooleanArrayType(), RangeIndexType(none), none, REP) not supported"
+        ),
+    ):
+        bodo.jit(test_and)(int_s, bool_s)
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "series(int64, array(int64, 1d, C), RangeIndexType(none), none, REP) | series(bool, BooleanArrayType(), RangeIndexType(none), none, REP) not supported"
+        ),
+    ):
+        bodo.jit(test_or)(int_s, bool_s)
