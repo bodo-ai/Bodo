@@ -44,7 +44,7 @@ such as Numba on Ubuntu Linux::
     # for PySpark testing:
     # conda install -c conda-forge pyspark openjdk
     # Required for ML tests
-    # conda install -c conda-forge scikit-learn
+    # conda install -c conda-forge scikit-learn=0.24.2
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo
@@ -103,6 +103,8 @@ On Windows
     # conda install -c conda-forge gcsfs
     # The following is required for matplotlib Testing
     # conda install -c conda-forge matplotlib
+    # Required for ML tests
+    # conda install -c conda-forge scikit-learn=0.24.2
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo

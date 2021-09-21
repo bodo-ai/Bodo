@@ -131,7 +131,7 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge scikit-learn
+      conda install -y -c conda-forge scikit-learn=0.24.2
     displayName: 'Setup scikit-learn testing'
 
   - script: |
