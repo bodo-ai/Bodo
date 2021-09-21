@@ -75,6 +75,12 @@ class SeriesCmpOpTemplate(AbstractTemplate):
         # TODO: Replace with a cheaper/more complete check?
         lhs_arr = lhs.data if isinstance(lhs, SeriesType) else lhs
         rhs_arr = rhs.data if isinstance(rhs, SeriesType) else rhs
+        # Timestamp and Timestamp need to be unboxed if compared to dt64/td64 array
+        if lhs_arr in (bodo.pd_timestamp_type, bodo.pd_timedelta_type) and rhs_arr.dtype in (bodo.datetime64ns, bodo.timedelta64ns):
+            lhs_arr = rhs_arr.dtype
+        elif rhs_arr in (bodo.pd_timestamp_type, bodo.pd_timedelta_type) and lhs_arr.dtype in (bodo.datetime64ns, bodo.timedelta64ns):
+            rhs_arr = lhs_arr.dtype
+
         recursed_args = (lhs_arr, rhs_arr)
         error_msg = f"{lhs} {numba.core.utils.OPERATORS_TO_BUILTINS[self.key]} {rhs} not supported"
         # Check types by resolving the subsequent function
@@ -1025,7 +1031,8 @@ def _install_series_and_or():
     """Installs the overloads for series and/or operations"""
     for op in (operator.or_, operator.and_):
         infer_global(op)(SeriesAndOrTyper)
-        lower_impl = lower_series_and_or
+        lower_impl = lower_series_and_or(op)
+        lower_builtin(op, SeriesType, SeriesType)(lower_impl)
         lower_builtin(op, SeriesType, types.Any)(lower_impl)
         lower_builtin(op, types.Any, SeriesType)(lower_impl)
 
@@ -1048,6 +1055,7 @@ def _install_cmp_ops():
         # TODO: Update the lower builtin to be more accurate. We want
         # to match on any implementation handled by Bodo and not Numba.
         lower_impl = series_cmp_op_lower(op)
+        lower_builtin(op, SeriesType, SeriesType)(lower_impl)
         lower_builtin(op, SeriesType, types.Any)(lower_impl)
         lower_builtin(op, types.Any, SeriesType)(lower_impl)
         # Include the generic overload
