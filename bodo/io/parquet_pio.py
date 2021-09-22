@@ -506,13 +506,15 @@ def _gen_pq_reader_py(
     local_types = {}
     if partition_names is None:
         partition_names = []
+
+    sanitized_col_names = [sanitize_varname(c_name) for c_name in col_names]
     for c_name, (real_col_ind, col_ind), col_siz, c_typ, is_all_null in zip(
-        col_names, col_indices, col_nb_fields, out_types, null_col_map
+        sanitized_col_names, col_indices, col_nb_fields, out_types, null_col_map
     ):
         # avoid generating column read call if only dataset length is needed
         if meta_head_only_info and meta_head_only_info[0] is None:
             # generate dummy "A = None" to make sure column A is defined for later code
-            func_text += f"  {sanitize_varname(c_name)} = None\n"
+            func_text += f"  {c_name} = None\n"
             continue
         if c_name in partition_names:
             # partition columns are handled below
@@ -545,9 +547,7 @@ def _gen_pq_reader_py(
 
     func_text += "  del_dataset_reader(ds_reader)\n"
     func_text += f"  ev.finalize()\n"
-    func_text += "  return (total_rows, {},)\n".format(
-        ", ".join(f"{sanitize_varname(c)}" for c in col_names)
-    )
+    func_text += "  return (total_rows, {},)\n".format(", ".join(sanitized_col_names))
     loc_vars = {}
     glbs = {
         "get_dataset_reader": _get_dataset_reader,
@@ -589,7 +589,6 @@ def gen_column_read(
     is_all_null,
     local_types,
 ):
-    cname = sanitize_varname(cname)
     # Check if there was an error in the C++ code. If so, raise it.
     func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
 
@@ -676,7 +675,7 @@ def gen_column_partition(
     partition_name,
     partition_type,
 ):
-    cname = sanitize_varname(partition_name)
+    cname = partition_name
     cat_dtype = pd.CategoricalDtype(partition_type.categories, partition_type.ordered)
     cat_dtype_name = "part_pd_cat_dtype_{}".format(part_col_idx)
     func_text += "  {} = bodo.hiframes.pd_categorical_ext.alloc_categorical_array(loc_size, {})\n".format(

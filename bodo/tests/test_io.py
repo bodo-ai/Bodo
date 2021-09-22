@@ -3320,5 +3320,16 @@ class TestIO(unittest.TestCase):
                 )
 
 
+@pytest.mark.slow
+def test_read_parquet_read_sanitize_colnames(memory_leak_check):
+    """tests that parquet read works when reading a dataframe with column names
+    that must be sanitized when generating the func_text"""
+
+    def read_impl(path):
+        return pd.read_parquet(path)
+
+    check_func(read_impl, ("bodo/tests/data/sanitization_test.pq",))
+
+
 if __name__ == "__main__":
     unittest.main()
