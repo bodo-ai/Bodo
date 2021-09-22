@@ -168,6 +168,10 @@ def init_groupby(typingctx, obj_type, by_type, as_index_type=None, dropna_type=N
         keys = tuple(get_overload_const_list(by_type))
     elif is_literal_type(by_type):
         keys = (get_literal_value(by_type),)
+    else:
+        assert (
+            False
+        ), "Reached unreachable code in init_groupby; there is an validate_groupby_spec"
 
     selection = list(obj_type.columns)
     for k in keys:

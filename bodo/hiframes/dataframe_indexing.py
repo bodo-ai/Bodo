@@ -637,7 +637,7 @@ def init_dataframe_loc(typingctx, obj=None):
 
 
 @overload_attribute(DataFrameType, "loc")
-def overload_series_loc(s):
+def overload_dataframe_loc(s):
     return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_loc(
         s
     )  # pragma: no cover

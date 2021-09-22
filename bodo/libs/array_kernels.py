@@ -82,7 +82,7 @@ def isna(arr, i):  # pragma: no cover
     return False
 
 
-@overload(isna, no_unliteral=True)
+@overload(isna)
 def overload_isna(arr, i):
     i = types.unliteral(i)
     # String array
