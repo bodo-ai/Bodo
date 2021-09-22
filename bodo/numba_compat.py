@@ -3981,3 +3981,50 @@ numba.core.types.misc.Omitted.__init__ = Omitted__init__
 # NOTE: We can't check if key has changed because it is a property.
 
 numba.core.types.misc.Omitted.key = Omitted_key
+
+
+#########   End Changes for Omitted  #########
+
+#########   Changes for Caching  #########
+
+# TODO: [BE-1356] Remove these changes
+
+
+def _overload_template_get_impl(self, args, kws):
+    """Get implementation given the argument types.
+
+    Returning a Dispatcher object.  The Dispatcher object is cached
+    internally in `self._impl_cache`.
+    """
+    # Bodo change: Avoid looking at compiler flags. Inlining
+    # and typing produce different compiler flags in certain places,
+    # which leads to excessive compilation.
+    cache_key = self.context, tuple(args), tuple(kws.items())
+    try:
+        impl, args = self._impl_cache[cache_key]
+        return impl, args
+    except KeyError:
+        # pass and try outside the scope so as to not have KeyError with a
+        # nested addition error in the case the _build_impl fails
+        pass
+    impl, args = self._build_impl(cache_key, args, kws)
+    return impl, args
+
+
+if _check_numba_change:
+    lines = inspect.getsource(
+        numba.core.typing.templates._OverloadFunctionTemplate._get_impl
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "fc53b28d15fb9a6694afcfa33a85f7e448b874aa7c040e2ac71f71a3c78f60df"
+    ):  # pragma: no cover
+        warnings.warn("_OverloadFunctionTemplate _get_impl has changed")
+
+
+numba.core.typing.templates._OverloadFunctionTemplate._get_impl = (
+    _overload_template_get_impl
+)
+
+
+#########   End Changes for Caching  #########
