@@ -1945,12 +1945,12 @@ def overload_isna(obj):
 
 
 # Use function decorator to enable stacked inlining
-overload(pd.isna, inline="always", no_unliteral=True)(overload_isna)
-overload(pd.isnull, inline="always", no_unliteral=True)(overload_isna)
+overload(pd.isna, inline="always")(overload_isna)
+overload(pd.isnull, inline="always")(overload_isna)
 
 
-@overload(pd.isna, no_unliteral=True)
-@overload(pd.isnull, no_unliteral=True)
+@overload(pd.isna)
+@overload(pd.isnull)
 def overload_isna_scalar(obj):
     # ignore cases handled above
     if (

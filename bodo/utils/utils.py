@@ -713,7 +713,7 @@ def alloc_type(n, t, s=None):  # pragma: no cover
     return np.empty(n, t.dtype)
 
 
-@overload(alloc_type, no_unliteral=True)
+@overload(alloc_type)
 def overload_alloc_type(n, t, s=None):
     """Allocate an array with type 't'. 'n' is length of the array. 's' is a tuple for
     arrays with variable size elements (e.g. strings), providing the number of elements

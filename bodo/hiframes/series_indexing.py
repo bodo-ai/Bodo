@@ -480,7 +480,7 @@ def overload_series_loc(s):
     return lambda s: bodo.hiframes.series_indexing.init_series_loc(s)
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem)
 def overload_series_loc_getitem(I, idx):
     if not isinstance(I, SeriesLocType):
         return
@@ -520,7 +520,7 @@ def overload_series_loc_getitem(I, idx):
     )  # pragma: no cover
 
 
-@overload(operator.setitem, no_unliteral=True)
+@overload(operator.setitem)
 def overload_series_loc_setitem(I, idx, val):
     if not isinstance(I, SeriesLocType):
         return
@@ -548,7 +548,7 @@ def overload_series_loc_setitem(I, idx, val):
 ######################## __getitem__/__setitem__ ########################
 
 
-@overload(operator.getitem, no_unliteral=True)
+@overload(operator.getitem)
 def overload_series_getitem(S, idx):
     # XXX: Series getitem performs both label-based and location-based indexing
     if isinstance(S, SeriesType):

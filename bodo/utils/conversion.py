@@ -37,7 +37,7 @@ def coerce_to_ndarray(
     return data
 
 
-@overload(coerce_to_ndarray, no_unliteral=True)
+@overload(coerce_to_ndarray)
 def overload_coerce_to_ndarray(
     data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None
 ):

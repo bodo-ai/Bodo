@@ -1381,7 +1381,7 @@ def _fill_null_arrays(data_dict, col_names, df_len, dtype):
             data_dict[c] = null_arr
 
 
-@overload(len, no_unliteral=True)  # TODO: avoid lowering?
+@overload(len)  # TODO: avoid lowering?
 def df_len_overload(df):
     if not isinstance(df, DataFrameType):
         return
