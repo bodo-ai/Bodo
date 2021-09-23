@@ -820,6 +820,35 @@ class TestSeries(unittest.TestCase):
             S = pd.Series([" bbCD ", "ABC", " mCDm ", np.nan, "abc"])
             check_func(test_impl, (S,))
 
+    def test_series_strip_with_args(self):
+        strip_methods = (
+            "lstrip",
+            "rstrip",
+            "strip",
+        )
+        for method in strip_methods:
+            func_text = "def test_impl(S, to_strip):\n"
+            func_text += "  return S.str.{}(to_strip)\n".format(method)
+            loc_vars = {}
+            exec(func_text, {"bodo": bodo}, loc_vars)
+            test_impl = loc_vars["test_impl"]
+            S = pd.Series(
+                [
+                    "\n \tbbCD\t ",
+                    "\tABC ",
+                    " mCDm\t",
+                    "\nabc\n",
+                    " bbCD ",
+                    "ABC",
+                    " mCDm ",
+                    np.nan,
+                    "abc",
+                ]
+            )
+            check_func(test_impl, (S, " "))
+            check_func(test_impl, (S, "\t"))
+            check_func(test_impl, (S, "\t\n "))
+
     def test_series_str2bool(self):
         str2bool_methods = (
             "isalnum",
