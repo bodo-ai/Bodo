@@ -3656,7 +3656,7 @@ def _install_binary_ops():
             continue
         overload_impl = create_binary_op_overload(op)
         # NOTE: cannot use inline="always". See test_pd_categorical
-        overload(op, no_unliteral=True)(overload_impl)
+        overload(op)(overload_impl)
 
 
 _install_binary_ops()

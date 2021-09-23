@@ -1827,7 +1827,7 @@ def _install_binary_ops():
         if op in skips:
             continue
         overload_impl = create_binary_op_overload(op)
-        overload(op, no_unliteral=True)(overload_impl)
+        overload(op)(overload_impl)
 
 
 _install_binary_ops()

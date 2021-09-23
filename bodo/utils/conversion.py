@@ -1333,7 +1333,7 @@ def get_array_if_series_or_index(data):  # pragma: no cover
     return data
 
 
-@overload(get_array_if_series_or_index, no_unliteral=True)
+@overload(get_array_if_series_or_index)
 def overload_get_array_if_series_or_index(data):
     from bodo.hiframes.pd_series_ext import SeriesType
 
