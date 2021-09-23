@@ -842,6 +842,31 @@ class TestString(unittest.TestCase):
             arg = " bbCD "
             self.assertEqual(bodo_func(arg), test_impl(arg))
 
+    def test_strip_args(self):
+        strip_methods = [
+            "lstrip",
+            "rstrip",
+            "strip",
+        ]
+        for method in strip_methods:
+            loc_vars = {}
+            globs = {}
+            func_text1 = "def test_impl1(_str):\n"
+            func_text1 += "  return _str.{}(' ')\n".format(method)
+            exec(func_text1, globs, loc_vars)
+            test_impl1 = loc_vars["test_impl1"]
+
+            loc_vars = {}
+            func_text2 = "def test_impl2(_str):\n"
+            func_text2 += "  return _str.{}('\\n')\n".format(method)
+            exec(func_text2, globs, loc_vars)
+            test_impl2 = loc_vars["test_impl2"]
+
+            arg1 = " bbCD "
+            arg2 = "\n \tbbCD\t \n"
+            check_func(test_impl1, (arg1,))
+            check_func(test_impl2, (arg2,))
+
     def test_str2bool(self):
         str2bool_methods = [
             "isalnum",
