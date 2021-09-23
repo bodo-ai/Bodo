@@ -619,14 +619,6 @@ class SeriesPass:
     def _run_getattr(self, assign, rhs):
         rhs_type = self.typemap[rhs.value.name]  # get type of rhs value "S"
 
-        # import bodosql's BodoSQLContextType if installed
-        # avoiding top-level import to prevent circular import issues
-        try:  # pragma: no cover
-            from bodosql.context_ext import BodoSQLContextType
-        except:
-            # workaround: something that makes isinstance(type, BodoSQLContextType) always false
-            BodoSQLContextType = int
-
         if isinstance(rhs_type, SeriesStrMethodType) and rhs.attr == "_obj":
             rhs_def = guard(get_definition, self.func_ir, rhs.value)
             # conditional on S.str is not supported since aliasing, ... can't
@@ -854,16 +846,24 @@ class SeriesPass:
 
         # optimize away bodo_sql_context.dataframes if
         # init_sql_context(names, dataframes) can be found
-        if (
-            isinstance(rhs_type, BodoSQLContextType) and rhs.attr == "dataframes"
-        ):  # pragma: no cover
+        #
+        # Note we delay checking BodoSQLContextType until we find a possible match
+        # to avoid paying the import overhead for Bodo calls with no BodoSQL.
+        if hasattr(rhs, "attr") and rhs.attr == "dataframes":  # pragma: no cover
             sql_ctx_def = guard(get_definition, self.func_ir, rhs.value)
             if guard(find_callname, self.func_ir, sql_ctx_def, self.typemap) == (
                 "init_sql_context",
                 "bodosql.context_ext",
             ):
-                assign.value = sql_ctx_def.args[1]
-                return [assign]
+                # Try import BodoSQL and check the type
+                try:  # pragma: no cover
+                    from bodosql.context_ext import BodoSQLContextType
+                except:
+                    # workaround: something that makes isinstance(type, BodoSQLContextType) always false
+                    BodoSQLContextType = int
+                if isinstance(rhs_type, BodoSQLContextType):
+                    assign.value = sql_ctx_def.args[1]
+                    return [assign]
 
         # optimize out spark_df._df if possible
         if (

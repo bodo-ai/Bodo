@@ -909,15 +909,6 @@ class TypingTransforms:
         return [inst]
 
     def _run_call(self, assign, rhs, label):
-
-        # import bodosql's BodoSQLContextType if installed
-        # avoiding top-level import to prevent circular import issues
-        try:  # pragma: no cover
-            from bodosql.context_ext import BodoSQLContextType
-        except:
-            # workaround: something that makes isinstance(type, BodoSQLContextType) always false
-            BodoSQLContextType = int
-
         fdef = guard(find_callname, self.func_ir, rhs, self.typemap)
         if fdef is None:  # pragma: no cover
             # TODO: test coverage
@@ -948,14 +939,28 @@ class TypingTransforms:
 
         # handle BodoSQLContextType.sql() calls here since the generated code cannot
         # be handled in regular overloads (requires Bodo's untyped pass, typing pass)
-        if (
-            isinstance(func_mod, ir.Var)
-            and isinstance(
-                self._get_method_obj_type(func_mod, rhs.func), BodoSQLContextType
-            )
-            and func_name in ("sql", "_test_sql_unoptimized", "convert_to_pandas")
+        #
+        # Note we delay checking BodoSQLContextType until we find a possible match
+        # to avoid paying the import overhead for Bodo calls with no BodoSQL.
+        if isinstance(func_mod, ir.Var) and func_name in (
+            "sql",
+            "_test_sql_unoptimized",
+            "convert_to_pandas",
         ):  # pragma: no cover
-            return self._run_call_bodosql_sql(assign, rhs, func_mod, func_name, label)
+
+            # Try import BodoSQL and check the type
+            try:  # pragma: no cover
+                from bodosql.context_ext import BodoSQLContextType
+            except:
+                # workaround: something that makes isinstance(type, BodoSQLContextType) always false
+                BodoSQLContextType = int
+
+            if isinstance(
+                self._get_method_obj_type(func_mod, rhs.func), BodoSQLContextType
+            ):
+                return self._run_call_bodosql_sql(
+                    assign, rhs, func_mod, func_name, label
+                )
 
         # throw proper error when calling a non-JIT function
         if isinstance(
