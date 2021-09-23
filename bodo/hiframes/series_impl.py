@@ -339,9 +339,13 @@ def overload_series_round(S, decimals=0):
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         numba.parfors.parfor.init_prange()
         n = len(arr)
-        out_arr = np.empty(n, arr.dtype)
+        # Need alloc type here, as the arr dtype can be a nullable pandas type
+        out_arr = bodo.utils.utils.alloc_type(n, arr, (-1,))
         for i in numba.parfors.parfor.internal_prange(n):
-            out_arr[i] = np.round(arr[i], decimals)
+            if pd.isna(arr[i]):
+                bodo.libs.array_kernels.setna(out_arr, i)
+            else:
+                out_arr[i] = np.round(arr[i], decimals)
 
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
