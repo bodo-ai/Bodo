@@ -1744,7 +1744,8 @@ def test_groupby_agg_const_dict(memory_leak_check):
     check_func(impl18, (df,), sort_output=True, check_dtype=False)
 
 
-def test_groupby_agg_func_list(memory_leak_check):
+def test_groupby_agg_func_list():
+    # TODO: Restore memory leak check
     """
     Test groupy.agg with list of functions in const dict input
     """

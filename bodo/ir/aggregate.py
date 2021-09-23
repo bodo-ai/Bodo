@@ -2518,7 +2518,15 @@ def _mv_read_only_init_vars(init_nodes, parfor, eval_nodes):
                 and v not in parfor_defs
             ):
                 const_nodes.append(stmt)
-                i_uses |= stmt_uses
+                # If we add a variable to the body, update the
+                # uses + defs. Uses matter because there may
+                # be depedencies
+                # i.e.
+                # $data.515.582 = const(int, 3)
+                # rhs_arr.500 = $data.515.582
+                # Defs shouldn't matter but keeps information correct
+                parfor_uses |= stmt_uses
+                parfor_defs.add(v)
                 continue
         i_uses |= stmt_uses
         new_init_nodes.append(stmt)
@@ -2999,8 +3007,6 @@ def gen_update_func(
         return numba.njit(lambda A: ())
 
     num_red_vars = len(redvars)
-    var_types = [pm.typemap[v] for v in redvars]
-
     num_in_vars = 1
 
     # create input value variable for each reduction variable
