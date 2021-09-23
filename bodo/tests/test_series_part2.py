@@ -2825,6 +2825,7 @@ def test_series_astype_num_constructors(memory_leak_check):
     [
         pd.Series([1.1234, np.nan, 3.31111, 2.1334, 5.1, -6.3], dtype="float32"),
         pd.Series([1, 3, 5, -4, -3]),
+        pd.Series([0, -123, 12, None, 4], dtype="Int64"),
     ],
 )
 @pytest.mark.parametrize("d", [0, 2])
