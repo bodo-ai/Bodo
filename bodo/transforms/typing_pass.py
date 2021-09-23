@@ -1809,7 +1809,7 @@ class TypingTransforms:
             # skip if argument not specified or literal already
             if var == "":
                 continue
-            if is_literal_type(self.typemap.get(var.name, None)):
+            if self._is_constant_var(var.name):
                 if var.name in self._updated_containers:
                     # loop unrolling can potentially make updated lists constants
                     if self.ran_transform:
@@ -1896,6 +1896,19 @@ class TypingTransforms:
             self._require_const[var] = label
             raise e2
         return value
+
+    def _is_constant_var(self, varname):
+        """Return True if 'varname' is a constant variable in the IR"""
+        # empty list/set/dict values cannot be typed currently but they are constant
+        # TODO(ehsan): handle empty list/set/dict in typing
+        var_def = guard(get_definition, self.func_ir, varname)
+        if (
+            isinstance(var_def, ir.Expr)
+            and var_def.op in ("build_list", "build_set", "build_map")
+            and not var_def.items
+        ):
+            return True
+        return is_literal_type(self.typemap.get(varname, None))
 
     def _try_loop_unroll_for_const(self):
         """Try loop unrolling to find constant values in 'self._require_const'

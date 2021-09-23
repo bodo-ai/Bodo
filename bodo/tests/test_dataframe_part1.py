@@ -582,6 +582,21 @@ def test_create_df_force_const(memory_leak_check):
     check_func(impl2, (3, 11))
 
 
+def test_force_const_empty_list(memory_leak_check):
+    """
+    Make sure forcing an empty list value to be constant does not hang in typing
+    [BE-1353]
+    """
+
+    def impl(df, a, i):
+        column_list = a[:i]
+        return df.groupby(column_list).sum()
+
+    df = pd.DataFrame({"A": [1, 2, 3]})
+    with pytest.raises(numba.core.errors.TypingError):
+        bodo.jit(impl)(df, ["A", "B"], 0)
+
+
 @pytest.mark.slow
 def test_df_from_np_array_bool(memory_leak_check):
     """
