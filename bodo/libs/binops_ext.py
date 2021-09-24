@@ -195,7 +195,7 @@ def lower_series_and_or(op):
 
 
 ### Operator.add
-def overload_add_operator(lhs, rhs):
+def overload_add_operator_scalars(lhs, rhs):
     """Overload types specific to the add operator only.
     Note that the order is important.
     Please don't change unless it's intentional.
@@ -236,15 +236,11 @@ def overload_add_operator(lhs, rhs):
             lhs, rhs
         )
 
-    # String arrays
-    if lhs == string_array_type or types.unliteral(lhs) == string_type:
-        return bodo.libs.str_arr_ext.overload_add_operator_string_array(lhs, rhs)
-
     raise_error_if_not_numba_supported(operator.add, lhs, rhs)
 
 
 ### Operator.sub
-def overload_sub_operator(lhs, rhs):
+def overload_sub_operator_scalars(lhs, rhs):
     """Overload types specific to the sub operator only.
     Note that the order is important.
     Please don't change unless it's intentional.
@@ -292,6 +288,34 @@ def create_overload_arith_op(op):
 
         ## ---- start off with redirecting common overloads to some or common to all arith ops:
 
+        # Start of Dataframe Operations
+        if isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType):
+            return bodo.hiframes.dataframe_impl.create_binary_op_overload(op)(lhs, rhs)
+
+        # Start of Series Operations
+
+        # Time Series for add and sub operators
+        if time_series_operation(lhs, rhs) and (op in [operator.add, operator.sub]):
+            return bodo.hiframes.series_dt_impl.create_bin_op_overload(op)(lhs, rhs)
+
+        # Generic series
+        if isinstance(lhs, SeriesType) or isinstance(rhs, SeriesType):
+            return bodo.hiframes.series_impl.create_binary_op_overload(op)(lhs, rhs)
+
+        # Start of Index Operations
+
+        # index and timestamp:
+        if sub_dt_index_and_timestamp(lhs, rhs) and op == operator.sub:
+            return bodo.hiframes.pd_index_ext.overload_sub_operator_datetime_index(
+                lhs, rhs
+            )
+
+        # Rest of Index Types:
+        if operand_is_index(lhs) or operand_is_index(rhs):
+            return bodo.hiframes.pd_index_ext.create_binary_op_overload(op)(lhs, rhs)
+
+        # Start of Array Operations
+
         # non null integer array op pandas timedelta
         if args_td_and_int_array(lhs, rhs):
             return bodo.libs.int_arr_ext.get_int_array_op_pd_td(op)(lhs, rhs)
@@ -304,38 +328,21 @@ def create_overload_arith_op(op):
         if lhs == boolean_array or rhs == boolean_array:
             return bodo.libs.bool_arr_ext.create_op_overload(op, 2)(lhs, rhs)
 
-        # Time Series for add and sub operators
-        if time_series_operation(lhs, rhs) and (op in [operator.add, operator.sub]):
-            return bodo.hiframes.series_dt_impl.create_bin_op_overload(op)(lhs, rhs)
+        # String arrays
+        if op == operator.add and (
+            lhs == string_array_type or types.unliteral(lhs) == string_type
+        ):
+            return bodo.libs.str_arr_ext.overload_add_operator_string_array(lhs, rhs)
 
-        # series
-        if isinstance(lhs, SeriesType) or isinstance(rhs, SeriesType):
-            return bodo.hiframes.series_impl.create_binary_op_overload(op)(lhs, rhs)
-
-        ## Index types, in order
-        # index and timestamp:
-        if sub_dt_index_and_timestamp(lhs, rhs) and op == operator.sub:
-            return bodo.hiframes.pd_index_ext.overload_sub_operator_datetime_index(
-                lhs, rhs
-            )
-
-        # Rest of Index Types:
-        if operand_is_index(lhs) or operand_is_index(rhs):
-            return bodo.hiframes.pd_index_ext.create_binary_op_overload(op)(lhs, rhs)
-
-        # DataFrames
-        if isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType):
-            return bodo.hiframes.dataframe_impl.create_binary_op_overload(op)(lhs, rhs)
-
-        # --------- end of common operators
+        # Start of Misc Operations
 
         # add operator
         if op == operator.add:
-            return overload_add_operator(lhs, rhs)
+            return overload_add_operator_scalars(lhs, rhs)
 
         # sub operator
         if op == operator.sub:
-            return overload_sub_operator(lhs, rhs)
+            return overload_sub_operator_scalars(lhs, rhs)
 
         # mul operator
         if op == operator.mul:
@@ -405,57 +412,12 @@ def create_overload_cmp_operator(op):
     """ create overloads for the comparison operators. """
 
     def overload_cmp_operator(lhs, rhs):
-        # datetime.date
-        if lhs == datetime_date_type and rhs == datetime_date_type:
-            return bodo.hiframes.datetime_date_ext.create_cmp_op_overload(op)(lhs, rhs)
 
-        # datetime.date and datetime.datetime
-        if can_cmp_date_datetime(lhs, rhs, op):
-            return bodo.hiframes.datetime_date_ext.create_datetime_date_cmp_op_overload(
-                op
-            )(lhs, rhs)
+        # Start of Dataframe Operations
+        if isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType):
+            return bodo.hiframes.dataframe_impl.create_binary_op_overload(op)(lhs, rhs)
 
-        # datetime.date array
-        if lhs == datetime_date_array_type or rhs == datetime_date_array_type:
-            return bodo.hiframes.datetime_date_ext.create_cmp_op_overload_arr(op)(
-                lhs, rhs
-            )
-
-        # datetime.datetime
-        if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
-            return bodo.hiframes.datetime_datetime_ext.create_cmp_op_overload(op)(
-                lhs, rhs
-            )
-
-        # datetime.timedelta
-        if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
-            return bodo.hiframes.datetime_timedelta_ext.create_cmp_op_overload(op)(
-                lhs, rhs
-            )
-
-        # datetime.timedelta array
-        if lhs == datetime_timedelta_array_type or rhs == datetime_timedelta_array_type:
-            impl = bodo.hiframes.datetime_timedelta_ext.create_cmp_op_overload(op)
-            return impl(lhs, rhs)
-
-        # pd.timedelta
-        if cmp_timedeltas(lhs, rhs):
-            impl = bodo.hiframes.datetime_timedelta_ext.pd_create_cmp_op_overload(op)
-            return impl(lhs, rhs)
-
-        # Datetime Index and String
-        if cmp_dt_index_to_string(lhs, rhs):
-            return bodo.hiframes.pd_index_ext.overload_binop_dti_str(op)(lhs, rhs)
-
-        # Index Types
-        if operand_is_index(lhs) or operand_is_index(rhs):
-            return bodo.hiframes.pd_index_ext.create_binary_op_overload(op)(lhs, rhs)
-
-        # timestamp
-        if cmp_timestamp_or_date(lhs, rhs):
-            return bodo.hiframes.pd_timestamp_ext.create_timestamp_cmp_op_overload(op)(
-                lhs, rhs
-            )
+        # Start of Series Operations
 
         # time series (order matters: time series check should be before the generic series check)
         if cmp_timeseries(lhs, rhs):
@@ -466,9 +428,19 @@ def create_overload_cmp_operator(op):
             # Use the Series typing template instead.
             return
 
-        # DataFrames
-        if isinstance(lhs, DataFrameType) or isinstance(rhs, DataFrameType):
-            return bodo.hiframes.dataframe_impl.create_binary_op_overload(op)(lhs, rhs)
+        # Start of Array Operations
+
+        # datetime.date array
+        # TODO: this will steal ops from can_cmp_date_datetime case, check if this causes error
+        if lhs == datetime_date_array_type or rhs == datetime_date_array_type:
+            return bodo.hiframes.datetime_date_ext.create_cmp_op_overload_arr(op)(
+                lhs, rhs
+            )
+
+        # datetime.timedelta array
+        if lhs == datetime_timedelta_array_type or rhs == datetime_timedelta_array_type:
+            impl = bodo.hiframes.datetime_timedelta_ext.create_cmp_op_overload(op)
+            return impl(lhs, rhs)
 
         # str_arr
         if lhs == string_array_type or rhs == string_array_type:
@@ -490,6 +462,47 @@ def create_overload_cmp_operator(op):
 
         if binary_array_cmp(lhs, rhs):
             return bodo.libs.binary_arr_ext.create_binary_cmp_op_overload(op)(lhs, rhs)
+
+        # Datetime Index and String
+        if cmp_dt_index_to_string(lhs, rhs):
+            return bodo.hiframes.pd_index_ext.overload_binop_dti_str(op)(lhs, rhs)
+
+        # Index Types
+        if operand_is_index(lhs) or operand_is_index(rhs):
+            return bodo.hiframes.pd_index_ext.create_binary_op_overload(op)(lhs, rhs)
+
+        # datetime.date to datetime.date comparison
+        if lhs == datetime_date_type and rhs == datetime_date_type:
+            return bodo.hiframes.datetime_date_ext.create_cmp_op_overload(op)(lhs, rhs)
+
+        # datetime.date and datetime.datetime
+        if can_cmp_date_datetime(lhs, rhs, op):
+            return bodo.hiframes.datetime_date_ext.create_datetime_date_cmp_op_overload(
+                op
+            )(lhs, rhs)
+
+        # datetime.datetime
+        if lhs == datetime_datetime_type and rhs == datetime_datetime_type:
+            return bodo.hiframes.datetime_datetime_ext.create_cmp_op_overload(op)(
+                lhs, rhs
+            )
+
+        # datetime.timedelta
+        if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:
+            return bodo.hiframes.datetime_timedelta_ext.create_cmp_op_overload(op)(
+                lhs, rhs
+            )
+
+        # pd.timedelta
+        if cmp_timedeltas(lhs, rhs):
+            impl = bodo.hiframes.datetime_timedelta_ext.pd_create_cmp_op_overload(op)
+            return impl(lhs, rhs)
+
+        # timestamp
+        if cmp_timestamp_or_date(lhs, rhs):
+            return bodo.hiframes.pd_timestamp_ext.create_timestamp_cmp_op_overload(op)(
+                lhs, rhs
+            )
 
         # if supported by Numba, pass
         if cmp_op_supported_by_numba(lhs, rhs):
@@ -952,6 +965,9 @@ def arith_op_supported_by_numba(op, lhs, rhs):
 def cmp_op_supported_by_numba(lhs, rhs):
     """ Signatures supported by Numba for cmp operator. """
 
+    # arrays
+    arrs = isinstance(lhs, types.Array) or isinstance(rhs, types.Array)
+
     # Lists
     lists = isinstance(lhs, types.ListType) and isinstance(rhs, types.ListType)
 
@@ -990,9 +1006,6 @@ def cmp_op_supported_by_numba(lhs, rhs):
 
     # dictionaries
     dicts = isinstance(lhs, types.DictType) and isinstance(rhs, types.DictType)
-
-    # arrays
-    arrs = isinstance(lhs, types.Array) or isinstance(rhs, types.Array)
 
     # enums
     enums = isinstance(lhs, types.EnumMember) and isinstance(rhs, types.EnumMember)
