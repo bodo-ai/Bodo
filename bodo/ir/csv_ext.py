@@ -314,7 +314,7 @@ def _gen_csv_reader_py(
     # and specify the rest of the dtypes in the `df.astype` call.
 
     # dtypes to specify directly in the `pd.read_csv` call
-    pd_read_csv_dtype_strs = ", ".join(
+    pd_read_csv_dtype_text = ", ".join(
         [
             "{}:{}".format(idx, _get_pd_dtype_str(t))
             for idx, t in zip(usecols, col_typs)
@@ -322,7 +322,7 @@ def _gen_csv_reader_py(
         ]
     )
     # dtypes to specify in the `df.astype` call done right after the `pd.read_csv` call
-    df_astype_dtype_strs = ", ".join(
+    df_astype_dtype_text = ", ".join(
         [
             "{}:{}".format(idx, _get_pd_dtype_str(t))
             for idx, t in zip(usecols, col_typs)
@@ -354,19 +354,27 @@ def _gen_csv_reader_py(
     func_text += "  if bodo.utils.utils.is_null_pointer(f_reader):\n"
     func_text += "      raise FileNotFoundError('File does not exist')\n"
     func_text += "  with objmode({}):\n".format(typ_strs)
-    func_text += "    df = pd.read_csv(f_reader,\n"
+    func_text += "    if f_reader.get_chunk_size() == 0:\n"
+    cols = ", ".join(f"{sc}" for sc in usecols)
+    # Pass str as default dtype. Non-str column types will be
+    # assigned with `astype` below.
+    func_text += f"        df = pd.DataFrame(columns=[{cols}], dtype=str)\n"
+    func_text += "    else:\n"
+    func_text += "      df = pd.read_csv(f_reader,\n"
     # header is always None here because header information was found in untyped pass.
     # this pd.read_csv() happens at runtime and is passing a file reader(f_reader)
     # to pandas. f_reader skips the header, so we have to tell pandas header=None.
-    func_text += "      header=None,\n"
-    func_text += "      parse_dates=[{}],\n".format(date_inds)
-    # Check explanation near the declaration of `pd_read_csv_dtype_strs` for why we specify
+    func_text += "        header=None,\n"
+    func_text += "        parse_dates=[{}],\n".format(date_inds)
+    # Check explanation near the declaration of `pd_read_csv_dtype_text` for why we specify
     # only some types here directly
-    func_text += "      dtype={{{}}},\n".format(pd_read_csv_dtype_strs)
-    func_text += "      usecols={}, sep='{}', low_memory=False)\n".format(usecols, sep)
-    # Check explanation near the declaration of `df_astype_dtype_strs` for why we specify
+    func_text += "        dtype={{{}}},\n".format(pd_read_csv_dtype_text)
+    func_text += "        usecols={}, sep='{}', low_memory=False)\n".format(
+        usecols, sep
+    )
+    # Check explanation near the declaration of `df_astype_dtype_text` for why we specify
     # some types here rather than directly in the `pd.read_csv` call.
-    func_text += "    typemap = {{{}}}\n".format(df_astype_dtype_strs)
+    func_text += "    typemap = {{{}}}\n".format(df_astype_dtype_text)
     func_text += f"    astype(df, typemap, {True if parallel else False})\n"
     for col_idx, s_cname in zip(usecols, sanitized_cnames):
         func_text += "    {} = df[{}].values\n".format(s_cname, col_idx)
