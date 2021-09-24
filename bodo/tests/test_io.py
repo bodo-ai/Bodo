@@ -2798,6 +2798,26 @@ def test_file_not_found(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_csv_np_gt_rows(datapath, memory_leak_check):
+    """Test when number of rows < number of ranks (np) with
+    read_csv(). "small_data.csv" has one row.
+    Running with np>1 will not fail
+    """
+    fname = datapath("small_data.csv")
+
+    def impl1():
+        return pd.read_csv(fname)
+
+    check_func(impl1, (), check_dtype=False)
+
+    # Test usecols
+    def impl2():
+        return pd.read_csv(fname, usecols=["A", "C"])
+
+    check_func(impl2, (), check_dtype=False)
+
+
+@pytest.mark.slow
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"

@@ -194,6 +194,11 @@ static void stream_reader_dealloc(stream_reader *self) {
     Py_TYPE(self)->tp_free(self);
 }
 
+// Needed to return size of data to Python code
+static PyObject *stream_reader_get_chunk_size(stream_reader *self) {
+    return PyLong_FromSsize_t(self->chunk_size);
+}
+
 // alloc a HPTAIO object
 static PyObject *stream_reader_new(PyTypeObject *type, PyObject *args,
                                    PyObject *kwds) {
@@ -250,7 +255,9 @@ static void stream_reader_init(stream_reader *self, FileReader *ifs,
         return;
     }
     // seek to our chunk beginning
-    bool ok = self->ifs->seek(start);
+    // only if sz > 0
+    bool ok = true;
+    if (sz > 0) ok = self->ifs->seek(start);
     if (!ok) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "Could not seek to start position");
@@ -322,6 +329,12 @@ static PyMethodDef stream_reader_methods[] = {
         (PyCFunction)stream_reader_read,
         METH_VARARGS,
         "Read at most n characters, returned as a unicode.",
+    },
+    {
+        "get_chunk_size",
+        (PyCFunction)stream_reader_get_chunk_size,
+        METH_VARARGS,
+        "Return size of the chunk in bytes.",
     },
     {NULL} /* Sentinel */
 };
@@ -623,7 +636,6 @@ class PathInfo {
                         file_names.push_back(path);
                         file_sizes.push_back(fsize);
                     }
-
                 }
             }
         }
@@ -1182,8 +1194,8 @@ void balance_rows(MemReader *reader) {
     if (min == max) return;  // already balanced
 
     // get total number of rows in global dataset
-    int64_t total_rows =
-        std::accumulate(num_rows_ranks.begin(), num_rows_ranks.end(), int64_t(0));
+    int64_t total_rows = std::accumulate(num_rows_ranks.begin(),
+                                         num_rows_ranks.end(), int64_t(0));
 
     // by default don't send or receive anything. this is changed below as
     // needed
