@@ -909,51 +909,116 @@ def create_nullable_logical_op_overload(op):
         if not is_valid_boolean_array_logical_op(val1, val2):
             return
 
-        # All implementations are almost identical, differing only
-        # on the logical check and array vs scalar code. To simplfy
-        # the code being generate we allocate these output variables
-        # once at the start based on if the inputs are arrays and
-        # if we are doing AND or OR.
+        # To simplfy the code being generate we allocate these output
+        # variables once at the start based on if the inputs are arrays.
         is_val1_arr = bodo.utils.utils.is_array_typ(val1, False)
         is_val2_arr = bodo.utils.utils.is_array_typ(val2, False)
-        truth_prefix = "not " if not is_or else ""
         len_arr = "val1" if is_val1_arr else "val2"
-        val1_elem = "val1[i]" if is_val1_arr else "val1"
-        val2_elem = "val2[i]" if is_val2_arr else "val2"
 
         func_text = "def impl(val1, val2):\n"
-        func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += f"  n = len({len_arr})\n"
         func_text += (
             "  out_arr = bodo.utils.utils.alloc_type(n, bodo.boolean_array, (-1,))\n"
         )
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-        if is_val1_arr and is_val2_arr:
-            func_text += "    if bodo.libs.array_kernels.isna(val1, i) and bodo.libs.array_kernels.isna(val2, i):\n"
-            func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
-            func_text += "      continue\n"
         if is_val1_arr:
-            func_text += "    if bodo.libs.array_kernels.isna(val1, i):\n"
-            func_text += f"      if {truth_prefix}{val2_elem}:\n"
-            func_text += f"       out_arr[i] = {val2_elem}\n"
-            func_text += "      else:\n"
-            func_text += "        bodo.libs.array_kernels.setna(out_arr, i)\n"
-            func_text += "      continue\n"
+            null1 = "bodo.libs.array_kernels.isna(val1, i)\n"
+            inner_val1 = "val1[i]"
+        else:
+            null1 = "False\n"
+            inner_val1 = "val1"
         if is_val2_arr:
-            func_text += "    if bodo.libs.array_kernels.isna(val2, i):\n"
-            func_text += f"      if {truth_prefix}{val1_elem}:\n"
-            func_text += f"       out_arr[i] = {val1_elem}\n"
-            func_text += "      else:\n"
-            func_text += "        bodo.libs.array_kernels.setna(out_arr, i)\n"
-            func_text += "      continue\n"
-        func_text += f"    out_arr[i] = operator.{'or_' if is_or else 'and_'}({val1_elem}, {val2_elem})\n"
+            null2 = "bodo.libs.array_kernels.isna(val2, i)\n"
+            inner_val2 = "val2[i]"
+        else:
+            null2 = "False\n"
+            inner_val2 = "val2"
+        if is_or:
+            func_text += f"    result, isna_val = compute_or_body({null1}, {null2}, {inner_val1}, {inner_val2})\n"
+        else:
+            func_text += f"    result, isna_val = compute_and_body({null1}, {null2}, {inner_val1}, {inner_val2})\n"
+        func_text += "    if isna_val:\n"
+        func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
+        func_text += "      continue\n"
+        func_text += "    out_arr[i] = result\n"
         func_text += "  return out_arr\n"
         loc_vars = {}
-        exec(func_text, {"bodo": bodo, "numba": numba, "operator": operator}, loc_vars)
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                "numba": numba,
+                "compute_and_body": compute_and_body,
+                "compute_or_body": compute_or_body,
+            },
+            loc_vars,
+        )
         impl = loc_vars["impl"]
         return impl
 
     return bool_array_impl
+
+
+def compute_or_body(null1, null2, val1, val2):  # pragma: no cover
+    pass
+
+
+@overload(compute_or_body)
+def overload_compute_or_body(null1, null2, val1, val2):
+    """
+    Separate function to compute the body of an OR.
+    This is used to reduce the amount of IR generated.
+
+    This returns a tuple of values (RESULT, ISNA)
+    matching the result if the result should be null.
+    """
+    # Null sematics have the following behavior:
+    # NULL | NULL -> NULL
+    # NULL | True -> True
+    # NULL | False -> NULL
+
+    def impl(null1, null2, val1, val2):  # pragma: no cover
+        if null1 and null2:
+            return (False, True)
+        elif null1:
+            return (val2, val2 == False)
+        elif null2:
+            return (val1, val1 == False)
+        else:
+            return (val1 | val2, False)
+
+    return impl
+
+
+def compute_and_body(null1, null2, val1, val2):  # pragma: no cover
+    pass
+
+
+@overload(compute_and_body)
+def overload_compute_and_body(null1, null2, val1, val2):
+    """
+    Separate function to compute the body of an AND.
+    This is used to reduce the amount of IR generated.
+
+    This returns a tuple of values (RESULT, ISNA)
+    matching the result if the result should be null.
+    """
+    # Null sematics have the following behavior:
+    # NULL & NULL -> NULL
+    # NULL & True -> NULL
+    # NULL & False -> False
+
+    def impl(null1, null2, val1, val2):  # pragma: no cover
+        if null1 and null2:
+            return (False, True)
+        elif null1:
+            return (val2, val2 == True)
+        elif null2:
+            return (val1, val1 == True)
+        else:
+            return (val1 & val2, False)
+
+    return impl
 
 
 def create_boolean_array_logical_lower_impl(op):
