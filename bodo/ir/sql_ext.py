@@ -280,9 +280,9 @@ def _gen_sql_reader_py(
                 func_text += "         sql_cons = 'select count(*) from (' + sql_request + ') x'\n"
                 func_text += "         frame = pd.read_sql(sql_cons, conn)\n"
                 func_text += "         nb_row = frame.iat[0,0]\n"
-                func_text += "         bcast_scalar(nb_row)\n"
                 func_text += "     else:\n"
-                func_text += "         nb_row = bcast_scalar(0)\n"
+                func_text += "         nb_row = 0\n"
+                func_text += "  nb_row = bcast_scalar(nb_row)\n"
             func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
             func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
             # Snowflake doesn't provide consistent output in different processes with
