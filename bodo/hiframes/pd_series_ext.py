@@ -435,7 +435,7 @@ def get_series_payload(context, builder, series_type, value):
 
 
 @intrinsic
-def _get_series_data(typingctx, series_typ=None):
+def get_series_data(typingctx, series_typ=None):
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
             context, builder, signature.args[0], args[0]
@@ -448,7 +448,7 @@ def _get_series_data(typingctx, series_typ=None):
 
 
 @intrinsic
-def _get_series_index(typingctx, series_typ=None):
+def get_series_index(typingctx, series_typ=None):
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
             context, builder, signature.args[0], args[0]
@@ -463,7 +463,7 @@ def _get_series_index(typingctx, series_typ=None):
 
 
 @intrinsic
-def _get_series_name(typingctx, series_typ=None):
+def get_series_name(typingctx, series_typ=None):
     def codegen(context, builder, signature, args):
         series_payload = get_series_payload(
             context, builder, signature.args[0], args[0]
@@ -475,24 +475,6 @@ def _get_series_name(typingctx, series_typ=None):
 
     sig = signature(series_typ.name_typ, series_typ)
     return sig, codegen
-
-
-# this function should be used for getting S._data for alias analysis to work
-# no_cpython_wrapper since Array(DatetimeDate) cannot be boxed
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def get_series_data(S):
-    return lambda S: _get_series_data(S)
-
-
-# TODO: use separate index type instead of just storing array
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def get_series_index(S):
-    return lambda S: _get_series_index(S)
-
-
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def get_series_name(S):
-    return lambda S: _get_series_name(S)
 
 
 # array analysis extension
