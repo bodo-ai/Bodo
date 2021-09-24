@@ -729,7 +729,7 @@ def _get_dataframe_data(typingctx, df_typ=None):
 
 
 @intrinsic
-def _get_dataframe_index(typingctx, df_typ=None):
+def get_dataframe_index(typingctx, df_typ=None):
     def codegen(context, builder, signature, args):
         dataframe_payload = get_dataframe_payload(
             context, builder, signature.args[0], args[0]
@@ -772,12 +772,6 @@ def get_dataframe_data_impl(df, i):
 def lower_get_dataframe_data(context, builder, sig, args):
     impl = get_dataframe_data_impl(*sig.args)
     return context.compile_internal(builder, impl, sig, args)
-
-
-# TODO: use separate index type instead of just storing array
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def get_dataframe_index(df):
-    return lambda df: _get_dataframe_index(df)  # pragma: no cover
 
 
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
