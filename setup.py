@@ -18,10 +18,12 @@ import versioneer
 np_compile_args = np_misc.get_info("npymath")
 
 is_win = platform.system() == "Windows"
+is_mac = platform.system() == "Darwin"
 development_mode = "develop" in sys.argv
 if development_mode:
     if "--no-ccache" not in sys.argv:
         import shutil
+
         if shutil.which("ccache"):
             if "ccache" not in os.environ["CC"]:
                 # ccache is very useful when developing C++ code, because on
@@ -97,9 +99,13 @@ if is_win:
     eca_c = ["/O2"]
     ela = ["/std:c++17"]
 else:
-    # -march=haswell is used to enable AVX2 support (required by SIMD bloom
-    # filter implementation)
-    eca = ["-std=c++17", "-g0", "-O3", "-march=haswell"]
+    if is_mac:
+        # Mac on CI can't support AVX2
+        eca = ["-std=c++17", "-g0", "-O3"]
+    else:
+        # -march=haswell is used to enable AVX2 support (required by SIMD bloom
+        # filter implementation)
+        eca = ["-std=c++17", "-g0", "-O3", "-march=haswell"]
     eca_c = ["-g0", "-O3"]
     ela = ["-std=c++17"]
 
@@ -263,6 +269,10 @@ ext_hdist = Extension(
 ext_str = Extension(
     name="bodo.libs.hstr_ext",
     sources=["bodo/libs/_str_ext.cpp", "bodo/libs/_bodo_common.cpp"],
+    depends=[
+        "bodo/libs/_bodo_common.h",
+        "bodo/libs/_bodo_common.cpp",
+    ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
     define_macros=np_compile_args["define_macros"],
     extra_compile_args=eca,
@@ -276,7 +286,10 @@ ext_str = Extension(
 ext_decimal = Extension(
     name="bodo.libs.decimal_ext",
     sources=["bodo/libs/_decimal_ext.cpp", "bodo/libs/_bodo_common.cpp"],
-    depends=["bodo/libs/_bodo_common.h", "bodo/libs/_bodo_common.cpp"],
+    depends=[
+        "bodo/libs/_bodo_common.h",
+        "bodo/libs/_bodo_common.cpp",
+    ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
     define_macros=np_compile_args["define_macros"],
     extra_compile_args=eca,
@@ -311,6 +324,7 @@ ext_arr = Extension(
         "bodo/libs/_join.h",
         "bodo/libs/_join_hashing.h",
         "bodo/libs/hyperloglog.hpp",
+        "bodo/libs/simd-block-fixed.h",
     ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
     # -fno-strict-aliasing required by bloom filter implementation (see comment
