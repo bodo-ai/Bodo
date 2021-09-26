@@ -2120,6 +2120,7 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
     # include NOT_NA for the checks we insert
     resolver = {"left": 0, "right": 0, "NOT_NA": 0}
     env = pd.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
+    clean_func = pd.core.computation.parsing.clean_column_name
 
     def append_null_checks(expr_node, null_set):
         """Create a new expr appending by append NOTNA & checks
@@ -2128,7 +2129,15 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
         if not null_set:
             return expr_node
         null_check_str = " & ".join(list(null_set))
-        null_expr, _, _ = _parse_query_expr(null_check_str, env, [], [], None)
+        # Generate the clean versions of the column name for the NOT_NA checks.
+        # These should ensure that column names that can't be parsed properly
+        # as Python identifiers are not modified. We append "NOT_NA" as the
+        # first half of the key because all elements in the null set should
+        # start with NOT_NA.
+        null_cleaned = {("NOT_NA", clean_func(col)): col for col in null_set}
+        null_expr, _, _ = _parse_query_expr(
+            null_check_str, env, [], [], None, join_cleaned_cols=null_cleaned
+        )
         # _disallow_scalar_only_bool_ops accesses actual value which is not possible
         saved__disallow_scalar_only_bool_ops = (
             pd.core.computation.ops.BinOp._disallow_scalar_only_bool_ops
@@ -2203,6 +2212,10 @@ def _extract_equal_conds(expr_node):
     e.g. "left.A == right.A & left.B < 3" -> ["A"], ["B"], "left.B < 3"
     """
     # "left.A == right.A" -> ["A"], ["A"], None (means there is no non-equality condition)
+
+    if not hasattr(expr_node, "op"):
+        # If the expression node is a scalar, just return the expression
+        return [], [], expr_node
     if (
         expr_node.op == "=="
         and _is_col_access(expr_node.lhs)
@@ -2262,7 +2275,36 @@ def _parse_merge_cond(on_str, left_columns, left_data, right_columns, right_data
     resolver = {"left": 0, "right": 0}
     # create fake environment for Expr to enable parsing
     env = pd.core.computation.scope.ensure_scope(2, {}, {}, (resolver,))
-    parsed_expr, _, _ = _parse_query_expr(on_str, env, [], [], None)
+    col_map = dict()
+    # When Pandas parses the query expression, all column names
+    # that are not valid identifiers will be "cleaned" to become a
+    # name that is a valid identifier
+    #
+    # For example:  2#7 -> 2__HASH__7
+    #
+    # We need to keep the original column names, so we "clean" each
+    # column to determined what it will be transformed into. We then
+    # map this name back to the original column names so the conversion
+    # avoids errors. If two "cleaned" columns conflict, we raise an exception
+    # because we cannot tell what column is being referenced.
+    #
+    # https://github.com/pandas-dev/pandas/blob/cd13e3a42d03f2c3f93b1de3e04352d01aac2241/pandas/core/computation/parsing.py#L96
+    clean_func = pd.core.computation.parsing.clean_column_name
+    for name, col_list in (
+        ("left", left_columns),
+        ("right", right_columns),
+    ):
+        for col in col_list:
+            clean_col = clean_func(col)
+            escape_key = (name, clean_col)
+            if escape_key in col_map:
+                raise BodoException(
+                    f"pd.merge(): {name} table contains two columns that are escaped to the same Python identifier '{col}' and '{col_map[clean_col]}' Please rename one of these columns. To avoid this issue, please use names that are valid Python identifiers."
+                )
+            col_map[escape_key] = col
+    parsed_expr, _, _ = _parse_query_expr(
+        on_str, env, [], [], None, join_cleaned_cols=col_map
+    )
     left_on, right_on, simplified_expr = _extract_equal_conds(parsed_expr.terms)
     return (
         left_on,
@@ -4025,9 +4067,19 @@ class SetDfColInfer(AbstractTemplate):
         return ret(*args)
 
 
-def _parse_query_expr(expr, env, columns, cleaned_columns, index_name=None):
+def _parse_query_expr(
+    expr,
+    env,
+    columns,
+    cleaned_columns,
+    index_name=None,
+    join_cleaned_cols=(),
+):
     """Parses expression string for DataFrame.query() call handling.
     Patches Pandas query expr parsing code to avoid evaluating values during parsing.
+
+    join_cleaned_cols are used by general join condition to detect
+    non-valid identifiers.
     """
     used_cols = {}
 
@@ -4102,6 +4154,13 @@ def _parse_query_expr(expr, env, columns, cleaned_columns, index_name=None):
                 )
         else:
             value_str = str(self.visit(value))
+
+        escape_key = (value_str, attr)
+
+        # convert column names back the original string
+        if escape_key in join_cleaned_cols:
+            attr = join_cleaned_cols[escape_key]
+
         name = value_str + "." + attr
         if name.startswith(sentinel):
             name = name[len(sentinel) :]

@@ -2034,6 +2034,7 @@ def _gen_row_access_intrinsic(col_dtype, c_ind):
         bodo.datetime_date_type,
         bodo.datetime64ns,
         bodo.timedelta64ns,
+        types.bool_,
     ]:
         # This code path just returns the data.
 
