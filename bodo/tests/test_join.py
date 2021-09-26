@@ -2109,6 +2109,72 @@ def test_merge_general_cond_caching(memory_leak_check):
     pd.testing.assert_frame_equal(py_out, bodo_out2)
 
 
+def test_merge_general_non_identifier_columns(memory_leak_check):
+    """
+    tests merge() with columns that are not valid python identifiers,
+    encapsulated in a backtic
+    """
+
+    def impl(df1, df2):
+        return df1.merge(
+            df2, on="left.`$A` == right.`apply` and left.`exec` == right.`!@$%^&*`"
+        )
+
+    df1 = pd.DataFrame(
+        {
+            "$A": [1, 2, 1, 1, 3, 2, 3],
+            "exec": [1, 2, 1, 1, 3, 2, 3],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "apply": [3, 2, 1, 3, 2, 1, 2],
+            "!@$%^&*": [1, 2, 1, 1, 3, 2, 3],
+        }
+    )
+    py_out = df1.merge(df2, left_on=["$A", "exec"], right_on=["apply", "!@$%^&*"])
+    check_func(
+        impl,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+
+def test_merge_general_bool_columns(memory_leak_check):
+    """
+    tests merge() with boolean columns
+    """
+
+    def impl(df1, df2):
+        return df1.merge(df2, on="left.`A` == right.`A` and left.`B1` and right.`B2`")
+
+    df1 = pd.DataFrame(
+        {
+            "A": [1, 2, 1, 1, 3, 2, 3],
+            "B1": [True, True, True, True, False, True, False],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": [3, 2, 1, 3, 2, 1, 2],
+            "B2": [False, True, True, True, False, True, False],
+        }
+    )
+    py_out = df1.merge(df2, left_on=["A"], right_on=["A"])
+    py_out = py_out[py_out["B1"] & py_out["B2"]]
+    check_func(
+        impl,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+
 @pytest.mark.slow
 def test_merge_match_key_types(memory_leak_check):
     """

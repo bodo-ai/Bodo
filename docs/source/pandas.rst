@@ -1111,7 +1111,7 @@ To execute the example above, a user would use this function call::
 
     @bodo.jit
     def general_merge(df1, df2):
-        return df1.merge(df2, on="left.A == right.B & right.C < left.A", how="left")
+        return df1.merge(df2, on="left.`A` == right.`B` & right.`C` < left.`A`", how="left")
 
 These calls have a few additional requirement:
 
