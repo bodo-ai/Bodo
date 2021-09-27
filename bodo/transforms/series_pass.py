@@ -761,7 +761,6 @@ class SeriesPass:
             )
 
         if isinstance(rhs_type, DatetimeIndexType):
-            # TODO: test this inlining
             if (
                 rhs.attr in bodo.hiframes.pd_timestamp_ext.date_fields
                 and not rhs.attr == "is_leap_year"
@@ -778,7 +777,6 @@ class SeriesPass:
                 return replace_func(self, impl, [rhs.value])
 
         if isinstance(rhs_type, TimedeltaIndexType):
-            # TODO: test this inlining
             if rhs.attr in bodo.hiframes.pd_timestamp_ext.timedelta_fields:
                 impl = bodo.hiframes.pd_index_ext.gen_tdi_field_impl(rhs.attr)
                 return replace_func(self, impl, [rhs.value])

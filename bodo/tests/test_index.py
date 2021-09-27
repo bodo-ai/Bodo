@@ -407,9 +407,9 @@ def test_index_copy(index, memory_leak_check):
 
 @pytest.fixture(
     params=[
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
+        pd.date_range(start="2018-04-14", end="2018-04-24", periods=10),
         pytest.param(
-            pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+            pd.date_range(start="2018-04-24", end="2018-04-30", periods=10, name="A"),
             marks=pytest.mark.slow,
         ),
     ]
@@ -429,6 +429,7 @@ def test_datetime_index_unbox(dti_val, memory_leak_check):
 
 @pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.date_fields)
 def test_datetime_field(dti_val, field, memory_leak_check):
+    """tests datetime index.field. This should be inlined in series pass"""
 
     func_text = "def impl(A):\n"
     func_text += "  return A.{}\n".format(field)
@@ -436,28 +437,16 @@ def test_datetime_field(dti_val, field, memory_leak_check):
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
 
-    bodo_func = bodo.jit(impl)
-    if field not in [
-        "is_leap_year",
-        "is_month_start",
-        "is_month_end",
-        "is_quarter_start",
-        "is_quarter_end",
-        "is_year_start",
-        "is_year_end",
-        "week",
-    ]:
-        pd.testing.assert_index_equal(bodo_func(dti_val), impl(dti_val))
-    else:
-        np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
+    check_func(impl, (dti_val,))
 
 
 def test_datetime_date(dti_val, memory_leak_check):
+    """tests datetime index.field. This should be inlined in series pass"""
+
     def impl(A):
         return A.date
 
-    bodo_func = bodo.jit(impl)
-    np.testing.assert_array_equal(bodo_func(dti_val), impl(dti_val))
+    check_func(impl, (dti_val,))
 
 
 def test_datetime_min(dti_val, memory_leak_check):
@@ -768,16 +757,15 @@ def test_init_timedelta_index_array_analysis(memory_leak_check):
 
 @pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.timedelta_fields)
 def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
+    """tests timdelta index.field. This should be inlined in series pass"""
+
     func_text = "def impl(A):\n"
     func_text += "  return A.{}\n".format(field)
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     impl = loc_vars["impl"]
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_index_equal(
-        bodo_func(timedelta_index_val), impl(timedelta_index_val)
-    )
+    check_func(impl, (timedelta_index_val,))
 
 
 @pytest.mark.parametrize(
