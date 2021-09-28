@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 import bodo
+import bodo.tests.dataframe_common
 from bodo.tests.dataframe_common import *  # noqa
 from bodo.tests.utils import (
     AnalysisTestPipeline,
@@ -881,6 +882,20 @@ def test_df_apply_datetime(memory_leak_check):
     # boolean array
     df = pd.DataFrame({"A": [True, False, False, True, True, False]})
     check_func(test_impl, (df,))
+
+
+def test_udf_other_module(memory_leak_check):
+    """Test Bodo compiler pipeline replacement for a UDF function dependency in another
+    module [BE-1315]
+    """
+
+    def impl():
+        df = pd.DataFrame({"A": np.ones(4)})
+        return df.apply(
+            lambda r: bodo.tests.dataframe_common.udf_dep(r["A"] + 3), axis=1
+        )
+
+    check_func(impl, ())
 
 
 def test_dataframe_pipe():

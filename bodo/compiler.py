@@ -280,6 +280,38 @@ class InlinePass(FunctionPass):
         return True
 
 
+def _convert_bodo_dispatcher_to_udf(rhs, func_ir):
+    """Update Bodo dispatcher calls to use the UDF pipeline (e.g. set distribued=False)"""
+
+    # find the actual function value, could be in current global names (e.g. "myfunc()")
+    # or called from another module (e.g. "mymod.myfunc()")
+    func_def = guard(get_definition, func_ir, rhs.func)
+    if isinstance(func_def, (ir.Global, ir.FreeVar, ir.Const)):
+        func_val = func_def.value
+    else:
+        # match "mymod.myfunc()" call pattern and get the global function value
+        fdef = guard(find_callname, func_ir, rhs)
+        if not (fdef and isinstance(fdef[0], str) and isinstance(fdef[1], str)):
+            return
+
+        func_name, func_mod = fdef
+        try:
+            import importlib
+
+            mod = importlib.import_module(func_mod)
+            func_val = getattr(mod, func_name)
+        except:
+            return
+
+    # replace regular bodo compiler pipeline with bodo udf pipeline
+    if (
+        isinstance(func_val, CPUDispatcher)
+        and issubclass(func_val._compiler.pipeline_class, BodoCompiler)
+        and func_val._compiler.pipeline_class != BodoCompilerUDF
+    ):
+        func_val._compiler.pipeline_class = BodoCompilerUDF
+
+
 @register_pass(mutates_CFG=True, analysis_only=False)
 class ConvertCallsUDFPass(FunctionPass):
     """Make sure all JUT functions called inside UDFs use the UDF pipeline to avoid
@@ -300,17 +332,7 @@ class ConvertCallsUDFPass(FunctionPass):
         for block in state.func_ir.blocks.values():
             for inst in block.body:
                 if is_call_assign(inst):
-                    func_def = guard(get_definition, state.func_ir, inst.value.func)
-
-                    if (
-                        isinstance(func_def, (ir.Global, ir.FreeVar))
-                        and isinstance(func_def.value, CPUDispatcher)
-                        and issubclass(
-                            func_def.value._compiler.pipeline_class, BodoCompiler
-                        )
-                        and func_def.value._compiler.pipeline_class != BodoCompilerUDF
-                    ):
-                        func_def.value._compiler.pipeline_class = BodoCompilerUDF
+                    _convert_bodo_dispatcher_to_udf(inst.value, state.func_ir)
 
         return True
 

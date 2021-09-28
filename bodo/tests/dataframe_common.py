@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import bodo
+
 
 # TODO: other possible df types like dt64, td64, ...
 @pytest.fixture(
@@ -221,3 +223,9 @@ def select_dtypes_df(request):
 )
 def na_test_obj(request):
     return request.param
+
+
+# simple UDF dependency for test_udf_other_module
+@bodo.jit
+def udf_dep(n):
+    return np.arange(n).sum()
