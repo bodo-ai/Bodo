@@ -75,36 +75,39 @@ def array_op_describe(arr):  # pragma: no cover
     pass
 
 
+def array_op_describe_impl(arr):  # pragma: no cover
+    a_count = array_op_count(arr)
+    a_min = array_op_min(arr)
+    a_max = array_op_max(arr)
+    a_mean = array_op_mean(arr)
+    a_std = array_op_std(arr)
+    q25 = array_op_quantile(arr, 0.25)
+    q50 = array_op_quantile(arr, 0.5)
+    q75 = array_op_quantile(arr, 0.75)
+    return (a_count, a_mean, a_std, a_min, q25, q50, q75, a_max)
+
+
+def array_op_describe_dt_impl(arr):  # pragma: no cover
+    # Pandas doesn't return std for describe of datetime64 data
+    # https://github.com/pandas-dev/pandas/blob/059c8bac51e47d6eaaa3e36d6a293a22312925e6/pandas/core/describe.py#L328
+    a_count = array_op_count(arr)
+    a_min = array_op_min(arr)
+    a_max = array_op_max(arr)
+    a_mean = array_op_mean(arr)
+    q25 = array_op_quantile(arr, 0.25)
+    q50 = array_op_quantile(arr, 0.5)
+    q75 = array_op_quantile(arr, 0.75)
+    return (a_count, a_mean, a_min, q25, q50, q75, a_max)
+
+
 @overload(array_op_describe)
 def overload_array_op_describe(arr):
     # Pandas doesn't return std for describe of datetime64 data
     # https://github.com/pandas-dev/pandas/blob/059c8bac51e47d6eaaa3e36d6a293a22312925e6/pandas/core/describe.py#L328
     if arr.dtype == bodo.datetime64ns:
+        return array_op_describe_dt_impl
 
-        def impl_dt(arr):  # pragma: no cover
-            a_count = array_op_count(arr)
-            a_min = array_op_min(arr)
-            a_max = array_op_max(arr)
-            a_mean = array_op_mean(arr)
-            q25 = array_op_quantile(arr, 0.25)
-            q50 = array_op_quantile(arr, 0.5)
-            q75 = array_op_quantile(arr, 0.75)
-            return (a_count, a_mean, a_min, q25, q50, q75, a_max)
-
-        return impl_dt
-
-    def impl(arr):  # pragma: no cover
-        a_count = array_op_count(arr)
-        a_min = array_op_min(arr)
-        a_max = array_op_max(arr)
-        a_mean = array_op_mean(arr)
-        a_std = array_op_std(arr)
-        q25 = array_op_quantile(arr, 0.25)
-        q50 = array_op_quantile(arr, 0.5)
-        q75 = array_op_quantile(arr, 0.75)
-        return (a_count, a_mean, a_std, a_min, q25, q50, q75, a_max)
-
-    return impl
+    return array_op_describe_impl
 
 
 def array_op_min(arr):  # pragma: no cover

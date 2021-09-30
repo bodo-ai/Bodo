@@ -1490,6 +1490,24 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
+        if fdef == ("array_op_describe", "bodo.libs.array_ops") and (
+            self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            # If describe is parallel, replace with a bodo compiled implementation
+            # to handle parallelism.
+            import bodo.libs.parallel_ops as parallel_ops
+
+            impl = parallel_ops.get_array_op_describe_dispatcher(
+                self.typemap[rhs.args[0].name]
+            )
+            return compile_func_single_block(
+                eval("lambda arr: f(arr)"),
+                (rhs.args[0],),
+                assign.target,
+                self,
+                extra_globals={"bodo.libs.parallel_ops": parallel_ops, "f": impl},
+            )
+
         if fdef == ("duplicated", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
