@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
 from bodo.tests.utils import check_func
@@ -236,3 +237,33 @@ def test_dataframe_is_none(memory_leak_check):
     # Test that none still works
     check_func(impl1, (None,))
     check_func(impl2, (None,))
+
+
+@pytest.mark.slow
+def test_describe_many_columns(memory_leak_check):
+    """
+    Runs df.describe on a dataframe with 25 columns.
+    If df.describe is inlined, this will take more than
+    1 hour.
+    If df.describe is not inlined as expected, this should take
+    closer to 12 seconds. To avoid failures due to small variations,
+    we will check this tests take no longer than 1 minute.
+    """
+
+    def impl(df):
+        return df.describe()
+
+    df = pd.DataFrame(
+        columns=np.arange(25), data=np.arange(1000 * 25).reshape(1000, 25)
+    )
+    import time
+
+    t0 = time.time()
+    check_func(impl, (df,), is_out_distributed=False)
+    compilation_time = time.time() - t0
+    # Determine the max compilation time on any rank to avoid hangs.
+    comm = MPI.COMM_WORLD
+    compilation_time = comm.allreduce(compilation_time, op=MPI.MAX)
+    assert (
+        compilation_time < 60
+    ), "df.describe() took too long to compile. Possible regression?"

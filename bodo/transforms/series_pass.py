@@ -2438,7 +2438,6 @@ class SeriesPass:
             "mean",
             "sum",
             "prod",
-            "describe",
             "var",
             "std",
             "quantile",

@@ -1618,6 +1618,9 @@ class DistributedAnalysis:
         if fdef == ("set_null_bits_to_value", "bodo.libs.str_arr_ext"):
             return
 
+        if fdef == ("array_op_describe", "bodo.libs.array_ops"):
+            return
+
         if fdef == (
             "_series_dropna_str_alloc_impl_inner",
             "bodo.hiframes.series_kernels",
