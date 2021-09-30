@@ -418,6 +418,45 @@ the final output columns (``a`` vs ``A``).
 
         SELECT LEAST(A, B, C) FROM table1
 
+* `PIVOT`
+
+    The ``PIVOT`` clause is used to transpose specific data rows in one or more columns into
+    a set of columns in a new DataFrame::
+
+        SELECT col1, ..., colN FROM table_name PIVOT (
+            AGG_FUNC_1(colName or pivotVar) AS alias1, ...,  AGG_FUNC_N(colName or pivotVar) as aliasN
+            FOR pivotVar IN (ROW_VALUE_1 as row_alias_1, ..., ROW_VALUE_N as row_alias_N)
+        )
+
+
+    ``PIVOT`` produces a new column for each pair of pivotVar and aggregation functions.
+
+    For example::
+
+        SELECT single_sum_a, single_avg_c, triple_sum_a, triple_avg_c FROM table1 PIVOT (
+            SUM(A) AS sum_a, AVG(C) AS avg_c
+            FOR A IN (1 as single, 3 as triple)
+        )
+
+    Here ``single_sum_a`` will contain sum(A) where ``A = 1``, single_avg_c will contain AVG(C) where ``A = 1``
+    etc.
+
+    If you explicitly specify other columns as the output, those columns will be used to group the pivot columns.
+    For example::
+
+        SELECT B, single_sum_a, single_avg_c, triple_sum_a, triple_avg_c FROM table1 PIVOT (
+            SUM(A) AS sum_a, AVG(C) AS avg_c
+            FOR A IN (1 as single, 3 as triple)
+        )
+
+    Contains 1 row for each unique group in B. The pivotVar can also require values
+    to match in multiple columns. For example::
+
+        SELECT * FROM table1 PIVOT (
+            SUM(A) AS sum_a, AVG(C) AS avg_c
+            FOR (A, B) IN ((1, 4) as col1, (2, 5) as col2)
+        )
+
 * `With`
 
     The ``WITH`` clause can be used to name subqueries::
@@ -870,6 +909,14 @@ the final output columns (``a`` vs ``A``).
             Given a timestamp value, returns a timestamp value that is the
             last day in the same month as timestamp_val.
 
+        - UTC_TIMESTAMP()
+
+            Returns the current UTC date and time as a Timestamp value.
+
+        - UTC_DATE()
+
+            Returns the current UTC date as a Timestamp value.
+
 
 
 * String Functions
@@ -1051,6 +1098,125 @@ the final output columns (``a`` vs ``A``).
         Returns the first non NULL argument, or NULL if no non NULL argument is found. Requires at least
         two arguments. If Arguments do noth have the same type, Bodo SQL will attempt to cast them to a
         common datatype, which is currently undefined behavior.
+
+
+* Window Functions
+
+    Window functions can be used to compute an aggregation across a row and its surrounding rows.
+    Most window functions have the following syntax::
+
+        SELECT WINDOW_FN(ARG1, ..., ARGN) OVER (PARTITION BY PARTITION_COLUMN_1, ..., PARTITION_COLUMN_N ORDER BY SORT_COLUMN_1, ..., SORT_COLUMN_N ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>) FROM table_name"
+
+    The ``ROWS BETWEEN ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>`` section is used to specify the window over which to compute the function. A bound can
+    can come before the current row, using `PRECEDING` or after the current row, using `FOLLOWING`. The bounds can be relative
+    (i.e. ``N PRECEDING``) or they can be absolute using the ``UNBOUNDED`` keyword. These bounds are inclusive.
+
+    For example::
+
+        SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM table1
+
+    Computes a sum for each row of the current row, the row preceding, and the row following. In contrast::
+
+        SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING) FROM table1
+
+    Computes the cumulative sum because the window always starts at the first row and grows by 1 for each subsequent row.
+
+    Window functions execute by performing a series of steps which influences the final output.
+
+        1. Partion by the PARTITION_COLUMN. This effectively performs a groupby on the provided PARTITION_COLUMN.
+
+        2. Sort each group according to the Order By clause.
+
+        3. Apply the function over the "window" given by the window.
+
+        4. Shuffle the data back to the original ordering.
+
+    For BodoSQL, ``PARTITION BY`` and ``ORDER BY`` are required, but ``ROWS BETWEEN`` is optional. If
+    ``ROWS BETWEEN`` is not specified then it defaults to computing the result over the enitre window.
+    Currently BodoSQL supports the following Window functions:
+
+        - MAX(COLUMN_EXPRESSION)
+
+            Compute the maximum value over the window or NULL if the window is empty.
+
+        - MIN(COLUMN_EXPRESSION)
+
+            Compute the minimum value over the window or NULL if the window is empty.
+
+        - COUNT(COLUMN_EXPRESSION)
+
+            Compute the number of non-NULL entries in a window.
+
+        - COUNT(*)
+
+            Compute the number of entries in a window.
+
+        - SUM(COLUMN_EXPRESSION)
+
+            Compute the sum over the window or NULL if the window is empty.
+
+        - AVG(COLUMN_EXPRESSION)
+
+            Compute the avergage over the window or NULL if the window is empty.
+
+        - STDDEV(COLUMN_EXPRESSION)
+
+            Compute the standard deviation for a sample over the window or NULL if the window is empty.
+
+        - STDDEV_POP(COLUMN_EXPRESSION)
+
+            Compute the standard deviation for a population over the window or NULL if the window is empty.
+
+        - VARIANCE(COLUMN_EXPRESSION)
+
+            Compute the variance for a sample over the window or NULL if the window is empty.
+
+
+        - VAR_POP(COLUMN_EXPRESSION)
+
+            Compute the variance for a population over the window or NULL if the window is empty.
+
+        - LEAD(COLUMN_EXPRESSION, N)
+
+            Returns the row that follows the current row by N. If there are fewer than N rows
+            the follow the current row in the window, it returns NULL. N must be a literal
+            non-negative integer.
+
+            This function cannot be used with ``ROWS BETWEEN``.
+
+
+        - LAG(COLUMN_EXPRESSION, N)
+
+            Returns the row that precedes the current row by N. If there are fewer than N rows
+            the precede the current row in the window, it returns NULL. N must be a literal
+            non-negative integer.
+
+            This function cannot be used with ``ROWS BETWEEN``.
+
+        - FIRST_VALUE(COLUMN_EXPRESSION)
+
+            Select the first value in the window or NULL if the window is empty.
+
+        - LAST_VALUE(COLUMN_EXPRESSION)
+
+            Select the last value in the window or NULL if the window is empty.
+
+        - NTH_VALUE(COLUMN_EXPRESSION, N)
+
+            Select the Nth value in the window (1-indexed) or NULL if the window is empty.
+            If N is greater or than the window size, this returns NULL.
+
+        - NTILE(N)
+
+            Divides the paritioned groups into N buckets based on ordering. For example if N=3
+            and there are 30 rows in a partition, the first 10 are assigned 1, the next 10
+            are assigned 2, and the final 10 are assigned 3.
+
+        - ROW_NUMBER()
+
+            Compute an increasing row number (starting at 1) for each row. This function
+            cannot be used with ``ROWS BETWEEN``.
+
 
 
 .. _supported_dataframe_data_types:

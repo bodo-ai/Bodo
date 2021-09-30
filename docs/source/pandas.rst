@@ -463,8 +463,8 @@ Reshaping, sorting:
 
 Time series-related:
 
-* :meth:`pandas.Series.shift` (supports numeric, boolean, datetime.date, and string types, and
-  only the `periods` argument supported)
+* :meth:`pandas.Series.shift` (supports numeric, boolean, datetime.date, datetime64, timedelta64, and string types.
+  Only the `periods` argument is supported)
 
 Datetime properties:
 
@@ -514,18 +514,18 @@ String handling:
 * :meth:`pandas.Series.str.len`
 * :meth:`pandas.Series.str.ljust`
 * :meth:`pandas.Series.str.lower`
-* :meth:`pandas.Series.str.lstrip`
+* :meth:`pandas.Series.str.lstrip` `to_strip` argument supported.
 * :meth:`pandas.Series.str.pad`
 * :meth:`pandas.Series.str.repeat`
 * :meth:`pandas.Series.str.replace` `regex` argument supported.
 * :meth:`pandas.Series.str.rfind`
 * :meth:`pandas.Series.str.rjust`
-* :meth:`pandas.Series.str.rstrip`
+* :meth:`pandas.Series.str.rstrip` `to_strip` argument supported.
 * :meth:`pandas.Series.str.slice`
 * :meth:`pandas.Series.str.slice_replace`
 * :meth:`pandas.Series.str.split`
 * :meth:`pandas.Series.str.startswith`
-* :meth:`pandas.Series.str.strip`
+* :meth:`pandas.Series.str.strip` `to_strip` argument supported.
 * :meth:`pandas.Series.str.swapcase`
 * :meth:`pandas.Series.str.title`
 * :meth:`pandas.Series.str.upper`
@@ -1105,7 +1105,7 @@ Bodo supports these use cases by allowing users to pass general merge conditions
 We plan to contribute this feature to Pandas to ensure full compatibility of Bodo and Pandas code.
 
 General merge conditions are performed by providing the condition as a string via the `on` argument. Columns in the left table
-are referred to by `left.{column name}` and columns in the right table are referred to by `right.{column name}`.
+are referred to by `left.`{column name}`` and columns in the right table are referred to by `right.`{column name}``.
 
 To execute the example above, a user would use this function call::
 
