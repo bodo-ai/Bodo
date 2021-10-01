@@ -47,57 +47,26 @@ or use :ref:`Jupyter Notebook <jupyter>`.
 
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Installation and Setup
+   :maxdepth: 4
 
-   source/install
-   source/enterprise
-   source/ipyparallel
-   source/bodo_platform_aws
-   source/bodo_platform_azure
-   source/bodo_platform
-
-
+   source/installation_and_setup/index
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Programming with Bodo
+   :maxdepth: 4
 
-   source/getting_started
-   source/user_guide
-   source/file_io
-   source/pandas
-   source/numpy
-   source/ml
-   source/dl
-   source/data_visualization
-   source/not_supported
-   source/advanced
-   source/BodoSQL
-   source/e3
+   source/programming_with_bodo/index
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Migration from Spark
+   :maxdepth: 4
 
-   source/spark
-   source/sparkcheatsheet
-
+   source/migration_from_spark/index
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Performance and Diagnostics
+   :maxdepth: 4
 
-   source/caching
-   source/performance
-   source/compilation
-   source/troubleaws
-   source/troubleazure
+   source/performance_and_diagnostics/index
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Help and Reference
+   :maxdepth: 4
 
-   source/releases
-   source/eula
-   source/prev_doc_link
+   source/help_and_reference/index

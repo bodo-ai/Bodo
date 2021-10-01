@@ -2,7 +2,7 @@
 
 
 Installing Bodo Community Edition
-==================================
+=================================
 
 Bodo can be installed as a Python package using the ``conda`` command (See :ref:`conda`).
 We recommend creating a ``conda`` environment and installing
