@@ -14,6 +14,9 @@ Here are the expected behaviors for manual triggers:
 
 Giving Customers Access to Binaries
 -----------------------------------
+
+NOTE: Only applicable for special cases where we want to give customers access to binaries that we can't publish on our conda channel under any label. In general we should ask customers to use the `bodo.ai` conda channel. Minireleases are published on the `/bodo.ai/label/dev` channel.
+
 By default, we give customers access to our ``bodo.ai`` and ``bodo.ai-dev`` conda channels on Artifactory which hold the official and engineering releases respectively.
 
 - To generate a customer token, trigger the `CodeBuild pipeline <https://us-east-2.console.aws.amazon.com/codesuite/codebuild/427443013497/projects/generate-customer-token>`_ passing in the environment variable ``conda_username`` the customer username for which you would like to generate a token.
