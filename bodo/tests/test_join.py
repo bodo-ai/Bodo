@@ -541,6 +541,69 @@ def test_merge_common_cols(df1, df2, memory_leak_check):
     )
 
 
+@pytest.mark.slow
+def test_merge_suffix_included(memory_leak_check):
+    """
+    Merge between two data columns that would conflict
+    if a column incorrectly tried to add a suffix.
+    """
+    df_right = pd.DataFrame(
+        {
+            "key": np.arange(20),
+            "name_x": np.arange(20),
+        }
+    )
+    df_left = pd.DataFrame(
+        {
+            "key": np.arange(20),
+            "name_y": np.arange(20),
+        }
+    )
+    df = pd.DataFrame(
+        {
+            "key": np.arange(20),
+            "name": ["fwfwe", "#424"] * 10,
+        }
+    )
+
+    def impl(df1, df2):
+        return df1.merge(df2, on="key")
+
+    # Make sure name doesn't check for name_x
+    check_func(impl, (df, df_right), sort_output=True, reset_index=True)
+    # Make sure name doesn't check for name_y
+    check_func(impl, (df_left, df), sort_output=True, reset_index=True)
+
+
+@pytest.mark.slow
+def test_merge_suffix_collision(memory_leak_check):
+    """
+    Merge between two data columns where a suffix
+    conflicts with the original columns.
+    """
+    df_left = pd.DataFrame(
+        {
+            "key": np.arange(20),
+            "name": np.arange(20),
+            "name_x": np.arange(20),
+            "name_y": np.arange(20),
+        }
+    )
+    df_right = pd.DataFrame(
+        {
+            "key": np.arange(20),
+            "name": ["fwfwe", "#424"] * 10,
+            "name_x": ["fwfwe", "#424"] * 10,
+            "name_y": ["fwfwe", "#424"] * 10,
+        }
+    )
+
+    def impl(df1, df2):
+        return df1.merge(df2, on="key")
+
+    check_func(impl, (df_left, df_right), sort_output=True, reset_index=True)
+
+
 def test_merge_disjoint_keys1(memory_leak_check):
     """
     Test merge(): 'how' = inner on specified integer column

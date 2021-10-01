@@ -229,6 +229,15 @@ class Join(ir.Stmt):
                 for c in right_vars.keys()
             }
         )
+        # Keep the suffix to track possible collisions
+        # See test_join::test_merge_suffix_included
+        # and test_join::test_merge_suffix_collision
+        #
+        # Remove $_bodo_index_ as it should never create a suffix.
+        # This name is reserved.
+        if "$_bodo_index_" in add_suffix:
+            add_suffix.remove("$_bodo_index_")
+        self.add_suffix = add_suffix
 
     def __repr__(self):  # pragma: no cover
         out_cols = ""
@@ -645,27 +654,33 @@ def join_distributed_run(
         ",".join(right_other_names), "," if len(right_other_names) != 0 else ""
     )
     out_keys = []
+
     for cname in join_node.left_keys:
-        if str(cname) + join_node.suffix_x in join_node.out_data_vars:
+        if cname in join_node.add_suffix:
             cname_work = str(cname) + join_node.suffix_x
         else:
             cname_work = cname
+        assert cname_work in join_node.out_data_vars
         out_keys.append(join_node.out_data_vars[cname_work])
     for i, cname in enumerate(join_node.right_keys):
         if not join_node.vect_same_key[i] and not join_node.is_join:
-            cname_work = str(cname) + join_node.suffix_y
-            if not cname_work in join_node.out_data_vars:
+
+            if cname in join_node.add_suffix:
+                cname_work = str(cname) + join_node.suffix_y
+            else:
                 cname_work = cname
             assert cname_work in join_node.out_data_vars
             out_keys.append(join_node.out_data_vars[cname_work])
 
     def _get_out_col_var(cname, is_left):
-        if is_left and str(cname) + join_node.suffix_x in join_node.out_data_vars:
-            return join_node.out_data_vars[str(cname) + join_node.suffix_x]
-        if not is_left and str(cname) + join_node.suffix_y in join_node.out_data_vars:
-            return join_node.out_data_vars[str(cname) + join_node.suffix_y]
-
-        return join_node.out_data_vars[cname]
+        if cname in join_node.add_suffix:
+            if is_left:
+                cname_work = str(cname) + join_node.suffix_x
+            else:
+                cname_work = str(cname) + join_node.suffix_y
+        else:
+            cname_work = cname
+        return join_node.out_data_vars[cname_work]
 
     merge_out = out_optional_key_vars + tuple(out_keys)
     merge_out += tuple(
