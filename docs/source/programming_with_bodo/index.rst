@@ -4,7 +4,6 @@ Programming with Bodo
 .. toctree::
    :glob:
 
-   getting_started
    user_guide
    file_io
    pandas

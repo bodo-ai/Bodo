@@ -47,6 +47,13 @@ or use :ref:`Jupyter Notebook <jupyter>`.
 
 
 .. toctree::
+   :maxdepth: 1
+   :caption: Getting Started
+
+   source/getting_started
+
+
+.. toctree::
    :maxdepth: 4
 
    source/installation_and_setup/index
