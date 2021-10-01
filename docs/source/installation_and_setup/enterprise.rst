@@ -38,7 +38,7 @@ the key is this::
 
 
 Automated ``BODO_LICENSE`` environment variable Setup
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+------------
 
 You can automate setting of the ``BODO_LICENSE`` environment variable in your ``~/.bashrc`` script (or the ``~/.zshrc`` script for macOS) using::
 
