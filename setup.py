@@ -109,10 +109,6 @@ else:
     eca_c = ["-g0", "-O3"]
     ela = ["-std=c++17"]
 
-BODO_TRACING_SUPPORT = False
-if development_mode:
-    BODO_TRACING_SUPPORT = True  # compile tracing code in tracing.pyx
-    eca += ["-DBODO_ENABLE_TRACING"]  # enable tracing support in bodo/libs/tracing.h
 
 MPI_LIBS = ["mpi"]
 if "setup_centos7" in os.environ:
@@ -573,6 +569,6 @@ setup(
     + cythonize(
         _cython_ext_mods + [ext_pyfs, ext_tracing],
         compiler_directives={"language_level": "3"},
-        compile_time_env=dict(BODO_TRACING_SUPPORT=BODO_TRACING_SUPPORT),
+        compile_time_env=dict(BODO_DEV_BUILD=development_mode),
     ),
 )

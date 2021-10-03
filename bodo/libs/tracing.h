@@ -15,7 +15,6 @@ class Event {
 public:
 
     Event(const std::string& name, bool is_parallel=true, bool sync=true) {
-#ifdef BODO_ENABLE_TRACING
         // TODO pass aggregate and sync options for finalize here in case
         // we want to use these options on Event destruction when going out of
         // scope
@@ -34,11 +33,9 @@ public:
             Py_DECREF(event_ctor);
         }
         Py_DECREF(tracing_mod);
-#endif
     }
 
     ~Event() {
-#ifdef BODO_ENABLE_TRACING
         if (event_py != nullptr) {
             // If PyErr_Occurred we don't call finalize(), because it calls
             // into Python, triggering a new (different) error.
@@ -47,60 +44,45 @@ public:
             if (!finalized && !PyErr_Occurred()) finalize();
             Py_DECREF(event_py);
         }
-#endif
     }
 
     bool is_tracing() { return tracing; }
 
     void add_attribute(const std::string& name, size_t value) {
-#ifdef BODO_ENABLE_TRACING
         if (event_py)
             PyObject_CallMethod(event_py, "add_attribute", "sn", name.c_str(), value);
-#endif
     }
 
     void add_attribute(const std::string& name, int64_t value) {
-#ifdef BODO_ENABLE_TRACING
         if (event_py)
             PyObject_CallMethod(event_py, "add_attribute", "sL", name.c_str(), value);
-#endif
     }
 
     void add_attribute(const std::string& name, int value) {
-#ifdef BODO_ENABLE_TRACING
         if (event_py)
             PyObject_CallMethod(event_py, "add_attribute", "si", name.c_str(), value);
-#endif
     }
 
     void add_attribute(const std::string& name, double value) {
-#ifdef BODO_ENABLE_TRACING
         if (event_py)
             PyObject_CallMethod(event_py, "add_attribute", "sd", name.c_str(), value);
-#endif
     }
 
     void add_attribute(const std::string& name, float value) {
-#ifdef BODO_ENABLE_TRACING
         if (event_py)
             PyObject_CallMethod(event_py, "add_attribute", "sf", name.c_str(), value);
-#endif
     }
 
     void finalize(bool aggregate=true, bool sync=true) {
-#ifdef BODO_ENABLE_TRACING
         // call event_py.finalize(aggregate=aggregate, sync=sync)
         if (event_py)
             PyObject_CallMethod(event_py, "finalize", "ii", int(sync), int(aggregate));
-#endif
         finalized = true;
     }
 
     void add_attribute(const std::string& name, const std::string& value) {
-#ifdef BODO_ENABLE_TRACING
         if (event_py)
             PyObject_CallMethod(event_py, "add_attribute", "ss", name.c_str(), value.c_str());
-#endif
     }
 
 private:
