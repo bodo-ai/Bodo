@@ -1,5 +1,5 @@
-Programming with Bodo
-=====================
+Performance and Diagnostics
+===========================
 
 .. toctree::
    :glob:
