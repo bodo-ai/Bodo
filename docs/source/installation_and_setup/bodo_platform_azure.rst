@@ -24,21 +24,21 @@ a. `Contact Bodo <https://bodo.ai/contact>`_ to be onboarded onto Bodo Cloud Pla
    use a unique name such as `firstname_lastname` for the **Organization Name** field.
 #. Check the box for accepting terms and conditions and click on ``SIGN UP``:
 
-    .. image:: platform_onboarding_screenshots/signup.png
+    .. image:: ../platform_onboarding_screenshots/signup.png
         :align: center
         :alt: Signup-Page
 
 #. A page confirming that an activation link was sent to your email will appear.
    Please open the email and click on the activation link:
 
-    .. image:: platform_onboarding_screenshots/signup-conf.png
+    .. image:: ../platform_onboarding_screenshots/signup-conf.png
         :align: center
         :alt: Signup-Page-Confirmation
 
    Clicking on the confirmation link will take you to the bodo platform page
    where you can use your newly created credentials to sign in:
 
-        .. image:: platform_onboarding_screenshots/login.png
+        .. image:: ../platform_onboarding_screenshots/login.png
             :align: center
             :alt: Login-Page
 
@@ -50,7 +50,7 @@ Setting Azure Credentials
 To use Bodo on Azure, you need to link your Azure account to the Bodo platform. This can be done either using the *Settings* page
 in the left bar or the first item in the *Onboarding* list highlighted in green as shown in the picture below:
 
-.. image:: platform_onboarding_screenshots/dashboard-az.png
+.. image:: ../platform_onboarding_screenshots/dashboard-az.png
     :align: center
     :alt: Dashboard
 
@@ -69,7 +69,7 @@ Execute the following command to create a service principal::
 
 where `APP_ID` is the Application ID for Bodo-Platform which is displayed on the *Settings* Page.
 
-.. image:: platform_onboarding_screenshots/az-portal-create-sp.png
+.. image:: ../platform_onboarding_screenshots/az-portal-create-sp.png
     :align: center
     :alt: Create SP on Azure Portal
 
@@ -79,7 +79,7 @@ resource group. If you provide an existing resource group, only permissions at t
 go to the IAM section of your subscription or resource group and add a `Contributor` Role to the service principal you created
 for the Bodo Platform Application.
 
-.. image:: platform_onboarding_screenshots/az-assign-sp-role.png
+.. image:: ../platform_onboarding_screenshots/az-assign-sp-role.png
     :align: center
     :alt: Assign SP a Role
 
@@ -89,13 +89,13 @@ Once you have created the service principal and assigned a role to it, you are n
 
 #. Enter your Azure subscription ID in the **Subscription ID** field. You can find this in the *Subscription Overview*. 
 
-    .. image:: platform_onboarding_screenshots/az-subscription-id.png
+    .. image:: ../platform_onboarding_screenshots/az-subscription-id.png
         :align: center
         :alt: Azure subscription ID
 
 #. Enter your Azure Tenant ID in the **Tenant ID** field. You can find this in *Azure AD*.
 
-    .. image:: platform_onboarding_screenshots/az-tenant-id.png
+    .. image:: ../platform_onboarding_screenshots/az-tenant-id.png
         :align: center
         :alt: Azure Tenant ID
 
@@ -127,7 +127,7 @@ Ensure that the following resource providers are registered on your Azure subscr
 * Microsoft.Resources
 * Microsoft.Storage
 
-.. image:: platform_onboarding_screenshots/az-resource-providers.png
+.. image:: ../platform_onboarding_screenshots/az-resource-providers.png
   :align: center
   :alt: Azure Required Resource Providers
 
@@ -187,14 +187,14 @@ The organization level resources persist in the user account so they can be used
 However, if you need to remove these resources for any reason (Azure resource limits, etc.), an option to do so is provided.
 Navigate to the *Settings* page and click on ``Show Advanced`` in the bottom-right corner. 
 
-.. image:: platform_onboarding_screenshots/settings-az-ac-cleanup.png
+.. image:: ../platform_onboarding_screenshots/settings-az-ac-cleanup.png
     :align: center
     :alt: Settings-Account-Cleanup
 
 
 This will bring up a section called *Azure Resource Cleanup*. 
 
-.. image:: platform_onboarding_screenshots/settings-adv-az-ac-cleanup.png
+.. image:: ../platform_onboarding_screenshots/settings-adv-az-ac-cleanup.png
     :align: center
     :alt: Advanced-Settings-Account-Cleanup
 
@@ -206,7 +206,7 @@ Else, the request will be rejected, and you'll be asked to remove all clusters i
 Removing active clusters (including clusters with a *FAILED* status) is necessary because 
 this process will make them inaccessible to the platform.
 
-.. image:: platform_onboarding_screenshots/az-acc-cleanup-completion.png
+.. image:: ../platform_onboarding_screenshots/az-acc-cleanup-completion.png
     :align: center
     :alt: Advanced-Settings-Account-Cleanup Completion
 
@@ -227,34 +227,34 @@ Bodo Platform's service principal, we require users to do this step manually.
 
 #. Navigate to *Key vaults* on your `Azure Portal <https://portal.azure.com>`_.
 
-    .. image:: platform_onboarding_screenshots/az-manual-kv-purge-portal.png
+    .. image:: ../platform_onboarding_screenshots/az-manual-kv-purge-portal.png
         :align: center
         :alt: Azure Portal KVs
 
 #. Click on ``Manage deleted vaults``. In the form, select the subscription associated with Bodo KeyVault to see a list of
    deleted key vaults. 
 
-    .. image:: platform_onboarding_screenshots/az-manual-kv-purge-kvs.png
+    .. image:: ../platform_onboarding_screenshots/az-manual-kv-purge-kvs.png
         :align: center
         :alt: Azure Portal KVs List
    
 #. Select the key vault with `bodo` in its name, click on ``Purge`` and confirm by clicking ``Delete``.
 
-    .. image:: platform_onboarding_screenshots/az-manual-kv-purge-step.png
+    .. image:: ../platform_onboarding_screenshots/az-manual-kv-purge-step.png
         :align: center
         :alt: Azure Portal KV Purge Step
 
 #. As shown in the notification, the purge process can take up to 10 minutes to complete. The purged key vault may continue to
    show up on the list of deleted key vaults until it has been successfully purged.
 
-    .. image:: platform_onboarding_screenshots/az-manual-kv-purge-notification.png
+    .. image:: ../platform_onboarding_screenshots/az-manual-kv-purge-notification.png
       :align: center
       :alt: Azure Portal KV Purge Notification
 
 #. Once the key vault has been successfully purged, the list of deleted keyvaults should not feature it. At this point you can
    use the Bodo Platform again to provision clusters, etc. 
 
-    .. image:: platform_onboarding_screenshots/az-manual-kv-purge-completion.png
+    .. image:: ../platform_onboarding_screenshots/az-manual-kv-purge-completion.png
       :align: center
       :alt: Azure Portal KV Purge Completion
 
