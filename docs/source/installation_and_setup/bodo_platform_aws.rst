@@ -25,21 +25,21 @@ a. Subscribe through the `AWS Marketplace <https://aws.amazon.com/marketplace/pp
    use a unique name such as `firstname_lastname` for the **Organization Name** field.
 #. Check the box for accepting terms and conditions and click on ``SIGN UP``:
 
-    .. image:: platform_onboarding_screenshots/signup.png
+    .. image:: ../platform_onboarding_screenshots/signup.png
         :align: center
         :alt: Signup-Page
 
 #. A page confirming that an activation link was sent to your email will appear.
    Please open the email and click on the activation link:
 
-    .. image:: platform_onboarding_screenshots/signup-conf.png
+    .. image:: ../platform_onboarding_screenshots/signup-conf.png
         :align: center
         :alt: Signup-Page-Confirmation
 
    Clicking on the confirmation link will take you to the bodo platform page
    where you can use your newly created credentials to sign in:
 
-        .. image:: platform_onboarding_screenshots/login.png
+        .. image:: ../platform_onboarding_screenshots/login.png
             :align: center
             :alt: Login-Page
 
@@ -51,7 +51,7 @@ Setting AWS Credentials
 To use Bodo on AWS, you need to link your AWS account to the Bodo platform. This can be done either using the *Settings* page
 in the left bar or the first item in the *Onboarding* list highlighted in green as shown in the picture below:
 
-.. image:: platform_onboarding_screenshots/dashboard.png
+.. image:: ../platform_onboarding_screenshots/dashboard.png
     :align: center
     :alt: Dashboard
 
@@ -77,13 +77,13 @@ Create the IAM Role Manually
 #. Enter the Bodo Platform Account ID `481633624848` in the **Account ID** field.
 #. Check the ``Require external ID`` option.
 
-    .. image:: create_role_screenshots/create_iam_role_manual_form_step1.png
+    .. image:: ../create_role_screenshots/create_iam_role_manual_form_step1.png
         :align: center
         :alt: Create Role Form Step 1
 
     In the **External ID** field, copy over the External ID from the *Settings* page on the Bodo Platform.    
 
-    .. image:: create_role_screenshots/create_iam_role_manual_externalId.png
+    .. image:: ../create_role_screenshots/create_iam_role_manual_externalId.png
         :align: center
         :alt: External ID Platform
 
@@ -92,7 +92,7 @@ Create the IAM Role Manually
 #. Click the ``Next: Review`` button.
 #. In the **Role name** field, enter a role name, e.g. `BodoPlatformUser`.
 
-    .. image:: create_role_screenshots/create_iam_role_manual_review_step.png
+    .. image:: ../create_role_screenshots/create_iam_role_manual_review_step.png
         :align: center
         :alt: Create Role Form Review
 
@@ -100,13 +100,13 @@ Create the IAM Role Manually
 #. In the list of IAM Roles, click on the role you just created.
 #. Click on ``Add inline policy``.
 
-    .. image:: create_role_screenshots/create_role_manual_summary_page.png
+    .. image:: ../create_role_screenshots/create_role_manual_summary_page.png
         :align: center
         :alt: Create Role Summary Page
 
 #. Click the ``JSON`` tab.
 
-    .. image:: create_role_screenshots/create_iam_role_manual_policy_editor.png
+    .. image:: ../create_role_screenshots/create_iam_role_manual_policy_editor.png
         :align: center
         :alt: Create Role Manual Policy Editor
 
@@ -116,7 +116,7 @@ Create the IAM Role Manually
 #. In the *Name* field, add a policy name, e.g. `Bodo-Platform-User-Policy`. Click on ``Create policy``. You will be taken back to the Role Summary.
 #. From the role summary, copy the ``Role ARN``. This is the value that you will enter into the **Role ARN** field on the *Setting* Page on the Bodo Platform.
 
-    .. image:: create_role_screenshots/create_iam_role_manual_final_summary.png
+    .. image:: ../create_role_screenshots/create_iam_role_manual_final_summary.png
         :align: center
         :alt: Create Role Final Summary
 
@@ -129,13 +129,13 @@ Let the Bodo Platform create the IAM Role
    to create/retrieve your AWS access key ID and secret access key.
 #. Click on ``Create Role For Me`` below the **Role ARN** field on the Setting page. This will open up a panel.
 
-    .. image:: create_role_screenshots/create_role_via_platform_create_role_button.png
+    .. image:: ../create_role_screenshots/create_role_via_platform_create_role_button.png
         :align: center
         :alt: Create Role Button on Platform
 
 #. Enter the Access Keys created in step 1 in the form and click on ``CREATE ROLE``.
 
-    .. image:: create_role_screenshots/create_role_via_platform_enter_access_keys.png
+    .. image:: ../create_role_screenshots/create_role_via_platform_enter_access_keys.png
         :align: center
         :alt: Enter Access Keys to create role on Platform
     
@@ -145,7 +145,7 @@ Let the Bodo Platform create the IAM Role
 #. We will use the provided Access Keys to create an IAM Role in your AWS Account. 
 #. The created Role ARN will be displayed on the same form.
 
-    .. image:: create_role_screenshots/create_role_via_platform_generated_role.png
+    .. image:: ../create_role_screenshots/create_role_via_platform_generated_role.png
         :align: center
         :alt: Role ARN generated on the Platform
 
@@ -239,14 +239,14 @@ The organization level resources persist in the user account so they can be used
 However, if you need to remove these resources for any reason (AWS limits, etc.), an option to do so is provided.
 Navigate to the *Settings* page and click on ``Show Advanced`` in the bottom-right corner. 
 
-.. image:: platform_onboarding_screenshots/settings-ac-cleanup.png
+.. image:: ../platform_onboarding_screenshots/settings-ac-cleanup.png
     :align: center
     :alt: Settings-Account-Cleanup
 
 
 This will bring up a section called *AWS Resource Cleanup*. 
 
-.. image:: platform_onboarding_screenshots/settings-adv-ac-cleanup.png
+.. image:: ../platform_onboarding_screenshots/settings-adv-ac-cleanup.png
     :align: center
     :alt: Advanced-Settings-Account-Cleanup
 
