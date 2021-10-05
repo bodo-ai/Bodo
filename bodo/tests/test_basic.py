@@ -727,6 +727,13 @@ def test_updated_container_binop(memory_leak_check):
             a.append(str(i))
         return pd.DataFrame(np.ones((3, 3)), columns=a)
 
+    # avoid unroll if loop is too large (general const loop case)
+    def impl7(n):
+        out = []
+        for i in range(n):
+            out.append([i, "A"])
+        return out
+
     with pytest.raises(
         BodoError,
         match="argument 'columns' requires a constant value but variable '.*' is updated inplace using 'append'",
@@ -753,6 +760,9 @@ def test_updated_container_binop(memory_leak_check):
         match="argument 'columns' requires a constant value but variable '.*' is updated inplace using 'append'",
     ):
         bodo.jit(impl6)(30000)
+
+    with pytest.raises(numba.errors.TypingError):
+        bodo.jit(impl7)(30000)
 
 
 def test_updated_container_df_rename():
