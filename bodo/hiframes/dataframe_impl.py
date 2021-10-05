@@ -290,14 +290,14 @@ def overload_dataframe_astype(df, dtype, copy=True, errors="raise"):
             else dict(get_overload_constant_series(dtype))
         )
         data_args = ", ".join(
-            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {_get_dtype_str(dtype_const[c])}, copy)"
+            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {_get_dtype_str(dtype_const[c])}, copy, from_series=True)"
             if c in dtype_const
             else f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
             for i, c in enumerate(df.columns)
         )
     else:
         data_args = ", ".join(
-            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), dtype, copy)"
+            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), dtype, copy, from_series=True)"
             for i in range(len(df.columns))
         )
 
