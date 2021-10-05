@@ -126,7 +126,7 @@ html_theme_options = {
 html_show_sphinx = False
 html_copy_source = False
 html_show_sourcelink = False
-html_logo = "./source/img/logo.png"
+html_logo = "./_static/img/logo.png"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
