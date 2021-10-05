@@ -19,7 +19,7 @@ Bodo can be installed using `Conda <https://docs.conda.io>`_ easily::
 
 This command installs Bodo Community Edition by default, which is free and
 works on up to 4 cores. Please `contact us <https://bodo.ai/contact/>`_ for trial licenses
-You can also `request a 30 day free trial<https://bodo.ai/try-bodo>`_ on up to 128 cores. If you need a trial license for even more cores, please `contact us <https://bodo.ai/contact/>`_. 
+You can also `request a 30 day free trial <https://bodo.ai/try-bodo>`_ on up to 128 cores. If you need a trial license for even more cores, please `contact us <https://bodo.ai/contact/>`_.
 See :ref:`install` for more details of setting up Bodo.
 
 
