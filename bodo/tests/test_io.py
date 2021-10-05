@@ -706,6 +706,10 @@ def test_read_write_parquet():
                         start="1998-04-24", end="1998-04-29", periods=num_elements
                     )
                 )
+                if num_elements >= 20:
+                    # set some elements to NaT
+                    dates[4] = None
+                    dates[17] = None
                 df[col_name] = dates
                 df._datetime_col = col_name
             elif dtype == "nested_arrow0":

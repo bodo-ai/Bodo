@@ -262,6 +262,9 @@ struct array_info {
         return ((T*)data1)[idx];
     }
 
+    template <typename T>
+    const T& at(size_t idx) const { return ((T*)data1)[idx]; }
+
     bool get_null_bit(size_t idx) const {
         return GetBit((uint8_t*)null_bitmask, idx);
     }

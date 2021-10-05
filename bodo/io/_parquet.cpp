@@ -919,6 +919,17 @@ void bodo_array_to_arrow(
                 // input from Bodo uses int64 for datetimes (datetime64[ns])
                 in_num_bytes = sizeof(int64_t) * array->length;
                 type = arrow::timestamp(arrow::TimeUnit::NANO);
+                // convert Bodo NaT to Arrow null bitmap
+                for (int64_t i = 0; i < array->length; i++) {
+                    if (array->at<int64_t>(i) == std::numeric_limits<int64_t>::min()) {
+                        // if value is NaT (equals std::numeric_limits<int64_t>::min())
+                        // we set it as a null element in output Arrow array
+                        null_count_++;
+                        SetBitTo(null_bitmap->mutable_data(), i, false);
+                    } else {
+                        SetBitTo(null_bitmap->mutable_data(), i, true);
+                    }
+                }
                 break;
             default:
                 std::cerr << "Fatal error: invalid dtype found in conversion"

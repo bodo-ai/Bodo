@@ -396,6 +396,15 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
             }
         }
     }
+    // set NaTs for datetime null values
+    if (null_bitmap_buff != nullptr && out_dtype == Bodo_CTypes::DATETIME) {
+        int64_t* data = (int64_t*)out_data;
+        for (int64_t i = 0; i < rows_to_read; i++) {
+            if (!::arrow::BitUtil::GetBit(null_bitmap_buff, i + rows_to_skip)) {
+                data[i] = std::numeric_limits<int64_t>::min();
+            }
+        }
+    }
     return;
 }
 
