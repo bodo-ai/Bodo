@@ -1,6 +1,7 @@
 parameters:
   name: ''
   vmImage: ''
+  caching_test: false
   matrix: []
 
 jobs:
@@ -170,7 +171,9 @@ jobs:
       pip install pytest pytest-azurepipelines
       cd $HOME/bodo-inc
       cp `python -c "import bodo; print(bodo.__file__[:-11])"`pytest.ini .
-      if [[ "$NP" -eq 3 ]] && [[ "${{ parameters.name }}" == "Linux" ]]; then
+      if [[ "${{ parameters.caching_test }}" == "true" ]]; then
+        python -m bodo.runtests_caching.py "$NP" bodo/tests/caching_tests/
+      elif [[ "$NP" -eq 3 ]] && [[ "${{ parameters.name }}" == "Linux" ]]; then
         python -m bodo.runtests "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       else
         python -m bodo.runtests "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER) and firsthalf"

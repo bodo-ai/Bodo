@@ -1,15 +1,14 @@
 """Utility functions for testing such as check_func() that tests a function.
 """
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-import glob
 import io
-import os
 import random
 import string
 import time
 import types as pytypes
 import warnings
 from decimal import Decimal
+from enum import Enum
 
 import numba
 import numpy as np
@@ -23,6 +22,18 @@ from numba.core.untyped_passes import PreserveIR
 import bodo
 from bodo.utils.typing import BodoWarning, dtype_to_array_type
 from bodo.utils.utils import is_distributable_tuple_typ, is_distributable_typ
+
+
+class InputDist(Enum):
+    """
+    Enum used to represent the various
+    distributed analysis options for input
+    data.
+    """
+
+    REP = 0
+    OneD = 1
+    OneDVar = 2
 
 
 def count_array_REPs():
@@ -1463,55 +1474,104 @@ def _check_typing_issues(val):
             raise e
 
 
-def check_caching(mod, testname, impl, args1, args2=None):
-    """Test caching by compiling a function with Bodo in sequential mode with
+def check_caching(
+    impl,
+    args,
+    is_cached,
+    input_dist,
+    check_names=False,
+    check_dtype=False,
+    sort_output=False,
+    copy_input=False,
+    atol=1e-08,
+    rtol=1e-05,
+    reset_index=False,
+    convert_columns_to_pandas=False,
+    check_categorical=True,
+    set_columns_name_to_none=False,
+    reorder_columns=False,
+    py_output=None,
+    is_out_dist=True,
+):
+    """Test caching by compiling a BodoSQL function with
     cache=True, then running it again loading from cache.
-    mod: module object where the test is defined
-    testname: name of the test function in mod
+
+    This function also tests correctness for the specified input distribution.
+
     impl: the function to compile
-    args1: arguments to pass to the function the first time it's called
-    args2: arguments to pass to the function the second time it's called
+    args: arguments to pass to the function
+    is_cached: true if we expect the function to already be cached, false if we do not.
+    input_dist: The InputDist for the dataframe argumennts. This is used
+        in the flags for compiling the function.
     """
-    try:
-        if args2 is None:
-            args2 = args1
-        # compile impl in sequential mode with cache=True
-        bodo_func = bodo.jit(
-            cache=True, returns_maybe_distributed=False, args_maybe_distributed=False
-        )(impl)
-        bodo_out1 = bodo_func(*args1)
-        bodo.barrier()
-        # get signature of compiled function
-        sig = bodo_func.signatures[0]
-        # assert that it wasn't loaded from cache
-        assert bodo_func._cache_hits[sig] == 0
-        assert bodo_func._cache_misses[sig] == 1
-        # reset state to make sure only the cached version is used next
-        engine = bodo_func.overloads[sig].library._codegen._engine
-        bodo.ir.aggregate.gb_agg_cfunc_addr.clear()
-        bodo.ir.join.join_gen_cond_cfunc_addr.clear()
-        bodo_func._reset_overloads()
-        engine._defined_symbols.clear()
-        del engine, bodo_func
-        # now get the function by loading from cache
-        bodo_func = bodo.jit(
-            cache=True, returns_maybe_distributed=False, args_maybe_distributed=False
-        )(impl)
-        bodo_out2 = bodo_func(*args2)
-        bodo.barrier()
+    if py_output is None:
+        py_output = impl(*args)
+
+    # compile impl in the correct dist
+    if input_dist == InputDist.OneD or input_dist == InputDist.OneDVar:
+        args = tuple(
+            _get_dist_arg(
+                a,
+                copy=copy_input,
+                var_length=(InputDist.OneDVar == input_dist),
+                check_typing_issues=True,
+            )
+            for a in args
+        )
+
+    all_args_distributed_block = input_dist == InputDist.OneD
+    all_args_distributed_varlength = input_dist == InputDist.OneDVar
+    all_returns_distributed = input_dist != InputDist.REP and is_out_dist
+    returns_maybe_distributed = input_dist != InputDist.REP and is_out_dist
+    args_maybe_distributed = input_dist != InputDist.REP
+    bodo_func = bodo.jit(
+        cache=True,
+        all_args_distributed_block=all_args_distributed_block,
+        all_args_distributed_varlength=all_args_distributed_varlength,
+        all_returns_distributed=all_returns_distributed,
+        returns_maybe_distributed=returns_maybe_distributed,
+        args_maybe_distributed=args_maybe_distributed,
+    )(impl)
+
+    bodo_output = bodo_func(*args)
+
+    # correctness check, copied from the various check_func's
+    if convert_columns_to_pandas:
+        bodo_output = convert_non_pandas_columns(bodo_output)
+    if returns_maybe_distributed:
+        bodo_output = _gather_output(bodo_output)
+    if set_columns_name_to_none:
+        bodo_output.columns.name = None
+    if reorder_columns:
+        bodo_output.sort_index(axis=1, inplace=True)
+    passed = 1
+    if not returns_maybe_distributed or bodo.get_rank() == 0:
+        passed = _test_equal_guard(
+            bodo_output,
+            py_output,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
+            check_categorical,
+            atol,
+            rtol,
+        )
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size()
+
+    bodo.barrier()
+
+    # get signature of compiled function
+    sig = bodo_func.signatures[0]
+
+    if is_cached:
         # assert that it was loaded from cache
         assert bodo_func._cache_hits[sig] == 1
         assert bodo_func._cache_misses[sig] == 0
-        return bodo_out1, bodo_out2
-    finally:
-        if bodo.get_rank() == 0:
-            thisdir = os.path.dirname(mod.__file__)
-            for f in glob.glob(
-                os.path.join(
-                    thisdir,
-                    "__pycache__",
-                    mod.__name__.split(".")[-1] + "." + testname + "*",
-                )
-            ):
-                os.remove(f)
-        bodo.barrier()
+    else:
+        # assert that it wasn't loaded from cache
+        assert bodo_func._cache_hits[sig] == 0
+        assert bodo_func._cache_misses[sig] == 1
+
+    return bodo_output

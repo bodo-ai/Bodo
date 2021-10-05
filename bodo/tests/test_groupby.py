@@ -3,7 +3,6 @@ import datetime
 import random
 import re
 import string
-import sys
 from decimal import Decimal
 
 import numba
@@ -15,7 +14,6 @@ import bodo
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
     DistTestPipeline,
-    check_caching,
     check_func,
     check_parallel_coherency,
     convert_non_pandas_columns,
@@ -1893,41 +1891,6 @@ def test_groupby_nunique_dropna(memory_leak_check):
 
     check_func(impl0, (df,), sort_output=True)
     check_func(impl1, (df,), sort_output=True)
-
-
-def test_groupby_agg_caching(memory_leak_check):
-    """Test compiling function that uses groupby.agg(udf) with cache=True
-    and loading from cache"""
-
-    def impl(df):
-        A = df.groupby("A").agg(lambda x: x.max() - x.min())
-        return A
-
-    def impl2(df):
-        def g(X):
-            z = X.iloc[0] + X.iloc[2]
-            return X.iloc[0] + z
-
-        A = df.groupby("A").agg(g)
-        return A
-
-    df = pd.DataFrame({"A": [0, 0, 1, 1, 1, 0], "B": range(6)})
-
-    # test impl (regular UDF)
-    py_out = impl(df)
-    bodo_out1, bodo_out2 = check_caching(
-        sys.modules[__name__], "test_groupby_agg_caching", impl, (df,)
-    )
-    pd.testing.assert_frame_equal(py_out, bodo_out1)
-    pd.testing.assert_frame_equal(py_out, bodo_out2)
-
-    # test impl2 (general UDF)
-    py_out = impl2(df)
-    bodo_out1, bodo_out2 = check_caching(
-        sys.modules[__name__], "test_groupby_agg_caching", impl2, (df,)
-    )
-    pd.testing.assert_frame_equal(py_out, bodo_out1)
-    pd.testing.assert_frame_equal(py_out, bodo_out2)
 
 
 def g(x):

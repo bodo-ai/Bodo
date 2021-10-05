@@ -6,7 +6,6 @@ import glob
 import operator
 import os
 import re
-import sys
 import unittest
 
 import numba
@@ -16,7 +15,7 @@ import pytest
 
 import bodo
 from bodo.libs.str_arr_ext import str_arr_from_sequence
-from bodo.tests.utils import check_caching, check_func
+from bodo.tests.utils import check_func
 
 
 @pytest.mark.slow
@@ -156,22 +155,6 @@ def test_f_strings():
     check_func(impl1, (3,))
     check_func(impl2, (4,))
     check_func(impl3, (12,))
-
-
-def test_format_cache(memory_leak_check):
-    """
-    test caching for string formatting
-    """
-
-    def impl():
-        return "{}".format(3)
-
-    py_out = impl()
-    bodo_out1, bodo_out2 = check_caching(
-        sys.modules[__name__], "test_format_cache", impl, ()
-    )
-    assert py_out == bodo_out1
-    assert py_out == bodo_out2
 
 
 def test_get_list_string(memory_leak_check):
