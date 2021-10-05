@@ -361,3 +361,9 @@ def is_slow_run(request):
     Return a flag on whether it is a slow test run (to skip some tests)
     """
     return "not slow" not in request.session.config.option.markexpr
+
+
+def pytest_addoption(parser):
+    """Used with caching tests, stores if the --is_cached flag was used when calling pytest
+    into the pytestconfig"""
+    parser.addoption("--is_cached", action="store_true", default=False)

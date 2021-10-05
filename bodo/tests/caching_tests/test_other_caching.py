@@ -1,0 +1,72 @@
+# Copyright (C) 2019 Bodo Inc. All rights reserved.
+import pandas as pd
+
+from bodo.tests.utils import check_caching
+from caching_tests_common import fn_distribution, is_cached
+
+
+def test_groupby_agg_caching(fn_distribution, is_cached):
+    # TODO: investigate/fix memory leak check, see BE-1375
+    """Test compiling function that uses groupby.agg(udf) with cache=True
+    and loading from cache"""
+
+    def impl(df):
+        A = df.groupby("A").agg(lambda x: x.max() - x.min())
+        return A
+
+    def impl2(df):
+        def g(X):
+            z = X.iloc[0] + X.iloc[2]
+            return X.iloc[0] + z
+
+        A = df.groupby("A").agg(g)
+        return A
+
+    df = pd.DataFrame({"A": [0, 0, 1, 1, 1, 0], "B": range(6)})
+
+    # test impl (regular UDF)
+    check_caching(impl, (df,), is_cached, fn_distribution)
+
+    # test impl2 (general UDF)
+    check_caching(impl2, (df,), is_cached, fn_distribution)
+
+
+def test_merge_general_cond_caching(fn_distribution, is_cached, memory_leak_check):
+    """
+    test merge(): with general condition expressions like "left.A == right.A"
+    """
+
+    def impl(df1, df2):
+        return df1.merge(df2, on="right.D <= left.B + 1 & left.A == right.A")
+
+    df1 = pd.DataFrame({"A": [1, 2, 1, 1, 3, 2, 3], "B": [1, 2, 3, 1, 2, 3, 1]})
+    df2 = pd.DataFrame(
+        {
+            "A": [4, 1, 2, 3, 2, 1, 4],
+            "C": [3, 2, 1, 3, 2, 1, 2],
+            "D": [1, 2, 3, 4, 5, 6, 7],
+        }
+    )
+    py_out = df1.merge(df2, left_on=["A"], right_on=["A"])
+    py_out = py_out.query("D <= B + 1")
+
+    check_caching(
+        impl,
+        (df1, df2),
+        is_cached,
+        fn_distribution,
+        py_output=py_out,
+        reset_index=True,
+        sort_output=True,
+    )
+
+
+def test_format_cache(fn_distribution, is_cached, memory_leak_check):
+    """
+    test caching for string formatting
+    """
+
+    def impl():
+        return "{}".format(3)
+
+    check_caching(impl, (), is_cached, fn_distribution, is_out_dist=False)

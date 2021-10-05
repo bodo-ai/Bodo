@@ -4,7 +4,6 @@
 import os
 import random
 import string
-import sys
 import unittest
 from decimal import Decimal
 
@@ -16,14 +15,12 @@ import pytest
 import bodo
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
-    check_caching,
     check_func,
     count_array_REPs,
     count_parfor_REPs,
     gen_random_decimal_array,
     gen_random_list_string_array,
     get_start_end,
-    sort_dataframe_values_index,
 )
 
 
@@ -2133,43 +2130,6 @@ def test_merge_general_eq_cond(memory_leak_check):
         check_dtype=False,
         py_output=py_out,
     )
-
-
-def test_merge_general_cond_caching(memory_leak_check):
-    """
-    test merge(): with general condition expressions like "left.A == right.A"
-    """
-
-    def impl(df1, df2):
-        return df1.merge(df2, on="right.D <= left.B + 1 & left.A == right.A")
-
-    df1 = pd.DataFrame({"A": [1, 2, 1, 1, 3, 2, 3], "B": [1, 2, 3, 1, 2, 3, 1]})
-    df2 = pd.DataFrame(
-        {
-            "A": [4, 1, 2, 3, 2, 1, 4],
-            "C": [3, 2, 1, 3, 2, 1, 2],
-            "D": [1, 2, 3, 4, 5, 6, 7],
-        }
-    )
-    py_out = df1.merge(df2, left_on=["A"], right_on=["A"])
-    py_out = py_out.query("D <= B + 1")
-
-    # Sort and drop index
-    py_out = sort_dataframe_values_index(py_out)
-    py_out.reset_index(inplace=True, drop=True)
-
-    bodo_out1, bodo_out2 = check_caching(
-        sys.modules[__name__], "test_merge_general_cond_caching", impl, (df1, df2)
-    )
-    # Sort and drop index
-    bodo_out1 = sort_dataframe_values_index(bodo_out1)
-    bodo_out1.reset_index(inplace=True, drop=True)
-
-    bodo_out2 = sort_dataframe_values_index(bodo_out2)
-    bodo_out2.reset_index(inplace=True, drop=True)
-
-    pd.testing.assert_frame_equal(py_out, bodo_out1)
-    pd.testing.assert_frame_equal(py_out, bodo_out2)
 
 
 def test_merge_general_non_identifier_columns(memory_leak_check):

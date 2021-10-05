@@ -13,6 +13,7 @@ bodo/io/__pycache__
 bodo/ir/__pycache__
 bodo/libs/__pycache__
 bodo/tests/__pycache__
+bodo/tests/caching_tests/__pycache__
 bodo/transforms/__pycache__
 bodo/utils/__pycache__
 demo/__pycache__

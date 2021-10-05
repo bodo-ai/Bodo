@@ -52,6 +52,7 @@ stages:
       name: macOS
       vmImage: macOS-latest
       useNumbaDev: false
+      caching_test: false
       matrix:
         TEST_1P_SLOW:
           NP: 1
@@ -82,6 +83,7 @@ stages:
       name: Linux
       vmImage: ubuntu-latest
       useNumbaDev: false
+      caching_test: false
       matrix:
         TEST_1P_SLOW:
           NP: 1
@@ -115,4 +117,27 @@ stages:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: not slow and not firsthalf
+
+  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      name: macOS
+      vmImage: macOS-latest
+      useNumbaDev: false
+      caching_test: true
+      matrix:
+        MACOS_CACHING_TEST:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: ''
+  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      name: Linux
+      vmImage: ubuntu-latest
+      useNumbaDev: false
+      caching_test: true
+      matrix:
+        LINUX_CACHING_TEST:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: ''
 

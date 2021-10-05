@@ -5,7 +5,6 @@ import os
 import random
 import shutil
 import subprocess
-import sys
 import unittest
 from decimal import Decimal
 
@@ -23,7 +22,6 @@ from bodo.tests.utils import (
     SeriesOptTestPipeline,
     _get_dist_arg,
     _test_equal_guard,
-    check_caching,
     check_func,
     count_array_REPs,
     count_parfor_REPs,
@@ -572,25 +570,6 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
         check_func(impl2, (), only_seq=True)
 
 
-@pytest.mark.smoke
-def test_read_csv_cache(datapath, memory_leak_check):
-    """
-    test read_csv with cache=True
-    """
-    fname = datapath("csv_data1.csv")
-
-    def impl():
-        df = pd.read_csv(fname, names=["A", "B", "C", "D"], compression=None)
-        return df.C
-
-    py_out = impl()
-    bodo_out1, bodo_out2 = check_caching(
-        sys.modules[__name__], "test_read_csv_cache", impl, ()
-    )
-    pd.testing.assert_series_equal(py_out, bodo_out1)
-    pd.testing.assert_series_equal(py_out, bodo_out2)
-
-
 def test_h5_remove_dead(datapath, memory_leak_check):
     """make sure dead hdf5 read calls are removed properly"""
     fname = datapath("lr.hdf5")
@@ -625,99 +604,6 @@ def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
         # in parallel mode, the path is a directory containing multiple
         # parquet files (one per process)
         shutil.rmtree(bodo_pq_path, ignore_errors=True)
-
-
-@pytest.mark.smoke
-def test_read_parquet_cache(datapath, memory_leak_check):
-    """
-    test read_parquet with cache=True
-    """
-
-    def impl(fname):
-        return pd.read_parquet(fname)
-
-    fname = datapath("groupby3.pq")
-    py_out = impl(fname)
-    bodo_out1, bodo_out2 = check_caching(
-        sys.modules[__name__], "test_read_parquet_cache", impl, (fname,)
-    )
-    pd.testing.assert_frame_equal(py_out, bodo_out1)
-    pd.testing.assert_frame_equal(py_out, bodo_out2)
-
-
-def test_read_parquet_cache_fname_arg(datapath, memory_leak_check):
-    """
-    test read_parquet with cache=True and passing different file name as
-    argument to the Bodo function
-    """
-
-    def impl(fname):
-        return pd.read_parquet(fname)
-
-    fname1 = datapath("int_nulls_single.pq")
-    fname2 = datapath("int_nulls_multi.pq")
-
-    py_out = impl(fname1)
-    py_out = py_out.astype({"A": "Int64"})
-    bodo_out1, bodo_out2 = check_caching(
-        sys.modules[__name__],
-        "test_read_parquet_cache_fname_arg",
-        impl,
-        (fname1,),
-        (fname2,),
-    )
-    pd.testing.assert_frame_equal(py_out, bodo_out1)
-    pd.testing.assert_frame_equal(py_out, bodo_out2)
-
-
-def test_read_csv_cache_fname_arg(datapath, memory_leak_check):
-    """
-    test read_csv with cache=True and passing different file name as
-    argument to the Bodo function
-    """
-
-    def impl(fname):
-        return pd.read_csv(fname)
-
-    fname1 = datapath("example.csv")
-    fname2 = datapath("example_multi.csv")  # directory of csv files
-
-    py_out = impl(fname1)
-    py_out = py_out.astype({"three": "boolean"})
-    bodo_out1, bodo_out2 = check_caching(
-        sys.modules[__name__],
-        "test_read_csv_cache_fname_arg",
-        impl,
-        (fname1,),
-        (fname2,),
-    )
-    pd.testing.assert_frame_equal(py_out, bodo_out1)
-    pd.testing.assert_frame_equal(py_out, bodo_out2)
-
-
-def test_read_json_cache_fname_arg(datapath, memory_leak_check):
-    """
-    test read_json with cache=True and passing different file name as
-    argument to the Bodo function
-    """
-
-    def impl(fname):
-        return pd.read_json(fname, orient="records", lines=True)
-
-    fname1 = datapath("example.json")
-    fname2 = datapath("example_single.json")  # directory with one json file
-
-    py_out = impl(fname1)
-    py_out = py_out.astype({"three": "boolean"})
-    bodo_out1, bodo_out2 = check_caching(
-        sys.modules[__name__],
-        "test_read_json_cache_fname_arg",
-        impl,
-        (fname1,),
-        (fname2,),
-    )
-    pd.testing.assert_frame_equal(py_out, bodo_out1)
-    pd.testing.assert_frame_equal(py_out, bodo_out2)
 
 
 # TODO: Add memory_leak_check when bugs are resolved.
