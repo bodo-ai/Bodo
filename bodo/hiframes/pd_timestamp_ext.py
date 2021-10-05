@@ -888,6 +888,7 @@ def str_2d(a):  # pragma: no cover
 
 @overload(str, no_unliteral=True)
 def ts_str_overload(a):
+    # isoformat omits nanosecond values, see BE-1407
     if a == pd_timestamp_type:
         return lambda a: a.isoformat(" ")
 
@@ -2084,3 +2085,17 @@ class CmpOpNe(CompDT64):
 @typeof_impl.register(calendar._localized_month)
 def typeof_python_calendar(val, c):
     return types.Tuple([types.StringLiteral(v) for v in val])
+
+
+@overload(str)
+def overload_datetime64_str(val):
+    if val == bodo.datetime64ns:
+        # for right now, just going to use isoformat. This will omit fractional values,
+        # similar to how the current str(timestamp) implementation omits fractional values.
+        # see BE-1407
+        def impl(val):  # pragma: no cover
+            return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
+                val
+            ).isoformat("T")
+
+        return impl

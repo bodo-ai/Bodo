@@ -598,20 +598,27 @@ def fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):  # pragma: no co
 
 
 @overload(fix_arr_dtype, no_unliteral=True)
-def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
+def overload_fix_arr_dtype(
+    data, new_dtype, copy=None, nan_to_str=True, from_series=False
+):
     """convert data to new_dtype, copy if copy parameter is not None.
     'nan_to_str' specifies string conversion for np.nan values: write as 'nan'
-    or actual NA (Pandas has inconsistent behavior in APIs)"""
+    or actual NA (Pandas has inconsistent behavior in APIs).
+
+    'from_series' specifies if the data originates from a series. This is useful for some
+    operations where the casting behavior changes depending on if the input is a Series
+    or an Array (specifically, S.astype(str) vs S.values.astype(str))
+    """
     # TODO: support copy=True and copy=False when literals are passed reliably
     do_copy = not is_overload_none(copy)
 
     if is_overload_none(new_dtype):
         if do_copy:
             return (
-                lambda data, new_dtype, copy=None, nan_to_str=True: data.copy()
+                lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data.copy()
             )  # pragma: no cover
         return (
-            lambda data, new_dtype, copy=None, nan_to_str=True: data
+            lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data
         )  # pragma: no cover
 
     # convert to string
@@ -622,7 +629,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
         if isinstance(data.dtype, types.Integer):
 
             def impl_int_str(
-                data, new_dtype, copy=None, nan_to_str=True
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
             ):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
                 n = len(data)
@@ -649,7 +656,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
             # Desired Bodo Behavior:
             #   pd.Series([b"a", b"c"]).astypes(str) == pd.Series(["a", "c"])
             def impl_binary(
-                data, new_dtype, copy=None, nan_to_str=True
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
             ):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
                 n = len(data)
@@ -666,30 +673,58 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
 
             return impl_binary
 
-        def impl_str(data, new_dtype, copy=None, nan_to_str=True):  # pragma: no cover
-            numba.parfors.parfor.init_prange()
-            n = len(data)
-            A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
-            for j in numba.parfors.parfor.internal_prange(n):
+        if is_overload_true(from_series):
 
-                if bodo.libs.array_kernels.isna(data, j):
-                    if nan_to_str:
-                        A[j] = "nan"
-                    else:
-                        bodo.libs.array_kernels.setna(A, j)
-                    continue
+            def impl_str_series(
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
+            ):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(data)
+                A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
+                for j in numba.parfors.parfor.internal_prange(n):
 
-                A[j] = str(data[j])
+                    if bodo.libs.array_kernels.isna(data, j):
+                        if nan_to_str:
+                            A[j] = "nan"
+                        else:
+                            bodo.libs.array_kernels.setna(A, j)
+                        continue
 
-            return A
+                    # this is needed, as dt Series.astype(str) produces different output
+                    # then Series.values.astype(str)
+                    A[j] = str(box_if_dt64(data[j]))
 
-        return impl_str
+                return A
+
+            return impl_str_series
+        else:
+
+            def impl_str_array(
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
+            ):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(data)
+                A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
+                for j in numba.parfors.parfor.internal_prange(n):
+
+                    if bodo.libs.array_kernels.isna(data, j):
+                        if nan_to_str:
+                            A[j] = "nan"
+                        else:
+                            bodo.libs.array_kernels.setna(A, j)
+                        continue
+
+                    A[j] = str(data[j])
+
+                return A
+
+            return impl_str_array
 
     # convert to Categorical with predefined CategoricalDtype
     if isinstance(new_dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
 
         def impl_cat_dtype(
-            data, new_dtype, copy=None, nan_to_str=True
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
         ):  # pragma: no cover
             n = len(data)
             numba.parfors.parfor.init_prange()
@@ -719,7 +754,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
     ):
         # find categorical dtype from data first and reuse the explicit dtype impl
         def impl_category(
-            data, new_dtype, copy=None, nan_to_str=True
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
         ):  # pragma: no cover
             # find categories in data
             cats = bodo.libs.array_kernels.unique(data)
@@ -740,12 +775,12 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
     # Matching data case
     if do_copy and data.dtype == nb_dtype:
         return (
-            lambda data, new_dtype, copy=None, nan_to_str=True: data.copy()
+            lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data.copy()
         )  # pragma: no cover
 
     if data.dtype == nb_dtype:
         return (
-            lambda data, new_dtype, copy=None, nan_to_str=True: data
+            lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data
         )  # pragma: no cover
 
     # nullable int array case
@@ -754,7 +789,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
         if isinstance(data.dtype, types.Float):
 
             def impl_float(
-                data, new_dtype, copy=None, nan_to_str=True
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
             ):  # pragma: no cover
                 n = len(data)
                 numba.parfors.parfor.init_prange()
@@ -770,7 +805,9 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
             return impl_float
         else:
             # data is a string array or integer array (nullable or non-nullable)
-            def impl(data, new_dtype, copy=None, nan_to_str=True):  # pragma: no cover
+            def impl(
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
+            ):  # pragma: no cover
                 n = len(data)
                 numba.parfors.parfor.init_prange()
                 B = bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
@@ -790,7 +827,9 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
     # nullable bool array case
     if nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
 
-        def impl_bool(data, new_dtype, copy=None, nan_to_str=True):  # pragma: no cover
+        def impl_bool(
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
+        ):  # pragma: no cover
             n = len(data)
             numba.parfors.parfor.init_prange()
             B = bodo.libs.bool_arr_ext.alloc_bool_array(n)
@@ -808,7 +847,9 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
 
         if data.dtype == bodo.string_type:
             # Support String Arrays using objmode
-            def impl_str(data, new_dtype, copy=None, nan_to_str=True):
+            def impl_str(
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
+            ):
                 # Keep the objmode in a separate function for
                 # inlining purposes.
                 return bodo.hiframes.pd_timestamp_ext.series_str_dt64_astype(data)
@@ -819,7 +860,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
             # Support Date Arrays using objmode
             # TODO: Replace with a native impl
             def impl_date(
-                data, new_dtype, copy=None, nan_to_str=True
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
             ):  # pragma: no cover
                 return bodo.hiframes.pd_timestamp_ext.datetime_date_arr_to_dt64_arr(
                     data
@@ -833,7 +874,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
         ]:
             # Nullable Integer/boolean/timedelta64 arrays
             def impl_numeric(
-                data, new_dtype, copy=None, nan_to_str=True
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
             ):  # pragma: no cover
                 n = len(data)
                 numba.parfors.parfor.init_prange()
@@ -854,7 +895,9 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
 
         if data.dtype == bodo.string_type:
             # Support String Arrays using objmode
-            def impl_str(data, new_dtype, copy=None, nan_to_str=True):
+            def impl_str(
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
+            ):
                 # Keep the objmode in a separate function for
                 # inlining purposes.
                 return bodo.hiframes.pd_timestamp_ext.series_str_td64_astype(data)
@@ -868,7 +911,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
             if do_copy:
                 # Nullable Integer/boolean/datetime64 arrays
                 def impl_numeric(
-                    data, new_dtype, copy=None, nan_to_str=True
+                    data, new_dtype, copy=None, nan_to_str=True, from_series=False
                 ):  # pragma: no cover
                     n = len(data)
                     numba.parfors.parfor.init_prange()
@@ -887,7 +930,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
                 return impl_numeric
 
             else:
-                return lambda data, new_dtype, copy=None, nan_to_str=True: data.view(
+                return lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data.view(
                     "int64"
                 )  # pragma: no cover
 
@@ -897,7 +940,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
     ):
 
         def impl_datelike_to_integer(
-            data, new_dtype, copy=None, nan_to_str=True
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
         ):  # pragma: no cover
             n = len(data)
             numba.parfors.parfor.init_prange()
@@ -912,7 +955,7 @@ def overload_fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):
         return impl_datelike_to_integer
 
     if data.dtype != nb_dtype:
-        return lambda data, new_dtype, copy=None, nan_to_str=True: data.astype(
+        return lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data.astype(
             nb_dtype
         )  # pragma: no cover
 

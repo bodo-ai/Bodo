@@ -1207,6 +1207,48 @@ def test_dt64_astype_int64(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_dt64_astype_str(memory_leak_check):
+    """
+    Test for astype from a dt64 Series to string type.
+    """
+
+    # TODO: add tests for datetimes with nanosecond values if/when
+    # str(timestamp) gets support for nonsecond values
+
+    def test_impl1(S):
+        return S.astype(str)
+
+    def test_impl2(S):
+        return S.astype(str, copy=False)
+
+    def test_scalar_impl(dt_val):
+        return str(dt_val)
+
+    # There is also a minor bug in the current version of str(timestamp):
+    #
+    # bodo.jit(lambda: str(pd.Timestamp("2020-12-01 13:56:03.172")) )() == '2020-12-01 13:56:03'
+    # str(pd.Timestamp("2020-12-01 13:56:03.172")) ==                      '2020-12-01 13:56:03.172000'
+    #
+    # we floor to second to avoid this issue.
+    S = pd.Series(
+        [
+            np.datetime64("2007-01-01T03:30"),
+            np.datetime64("2020-12-01T13:56:03.172"),
+            np.datetime64("2021-03-03"),
+        ]
+        * 4
+    ).dt.floor("s")
+    arr = S.values
+
+    # array implementation is currently failing, see BE-1388
+    check_func(test_impl1, (S,))
+    # check_func(test_impl1, (arr,))
+    check_func(test_impl2, (S,))
+    # check_func(test_impl2, (arr,))
+    check_func(test_scalar_impl, (S[0],))
+
+
+@pytest.mark.slow
 def test_td64_astype_int64(memory_leak_check):
     """
     Test for astype from a td64 Series to various numeric types.
