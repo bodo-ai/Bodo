@@ -250,7 +250,8 @@ Save this code in ``load_data.py`` and run on two cores
 (output prints of the cores are mixed)::
 
     $ mpiexec -n 2 python load_data.py
-    pandas dataframe:  pandas dataframe:                   A        B
+    pandas dataframe:  pandas dataframe:
+                     A        B
     0              NaT        0
     1       2013-01-03        1
     2       2013-01-03        2
@@ -264,7 +265,7 @@ Save this code in ``load_data.py`` and run on two cores
     9999999 2015-09-29  9999999
 
     [10000000 rows x 2 columns]
-                    A        B
+                     A        B
     0              NaT        0
     1       2013-01-03        1
     2       2013-01-03        2
@@ -278,7 +279,8 @@ Save this code in ``load_data.py`` and run on two cores
     9999999 2015-09-29  9999999
 
     [10000000 rows x 2 columns]
-    Bodo dataframe:  Bodo dataframe:                   A        B
+    Bodo dataframe:  Bodo dataframe:
+                     A        B
     0       1970-01-01        0
     1       2013-01-03        1
     2       2013-01-03        2
@@ -291,7 +293,8 @@ Save this code in ``load_data.py`` and run on two cores
     4999998 2014-05-17  4999998
     4999999 2014-05-17  4999999
 
-    [5000000 rows x 2 columns]                 A        B
+    [5000000 rows x 2 columns]
+                     A        B
     5000000 2014-05-18  5000000
     5000001 2014-05-18  5000001
     5000002 2014-05-18  5000002
