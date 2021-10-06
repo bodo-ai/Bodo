@@ -53,6 +53,7 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_true,
     parse_dtype,
+    raise_bodo_error,
 )
 
 
@@ -645,6 +646,13 @@ def overload_bool_sum(A):
 
 @overload_method(BooleanArrayType, "astype", no_unliteral=True)
 def overload_bool_arr_astype(A, dtype, copy=True):
+
+    # If dtype is a string, force it to be a literal
+    if dtype == types.unicode_type:
+        raise_bodo_error(
+            "BooleanArray.astype(): 'dtype' when passed as string must be a constant value"
+        )
+
     # same dtype case
     if dtype == types.bool_:
         # copy=False

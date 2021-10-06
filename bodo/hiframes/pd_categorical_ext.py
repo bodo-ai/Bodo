@@ -40,6 +40,7 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
     is_scalar_type,
+    raise_bodo_error,
 )
 
 
@@ -384,6 +385,12 @@ def get_code_for_value(cat_dtype, val):
 
 @overload_method(CategoricalArrayType, "astype", inline="always", no_unliteral=True)
 def overload_cat_arr_astype(A, dtype, copy=True):
+    # If dtype is a string, force it to be a literal
+    if dtype == types.unicode_type:
+        raise_bodo_error(
+            "CategoricalArray.astype(): 'dtype' when passed as string must be a constant value"
+        )
+
     nb_dtype = bodo.utils.typing.parse_dtype(dtype)
     # only supports converting back to original data currently
     if not nb_dtype == A.dtype.elem_type:  # pragma: no cover
