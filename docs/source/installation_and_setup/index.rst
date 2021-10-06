@@ -5,6 +5,7 @@ Installation and Setup
    :glob:
 
    install
+   recommended_tools
    enterprise
    ipyparallel
    bodo_platform_aws

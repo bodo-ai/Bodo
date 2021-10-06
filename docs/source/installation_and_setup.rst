@@ -9,6 +9,7 @@ This is a test
    :glob:
 
    source/install
+   source/recommended_tools
    source/enterprise
    source/ipyparallel
    source/bodo_platform_aws
