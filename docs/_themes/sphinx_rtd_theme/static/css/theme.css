@@ -179,6 +179,7 @@ table {
 }
 td {
   vertical-align: top;
+  white-space: normal !important;
 }
 .chromeframe {
   margin: 0.2em 0;
