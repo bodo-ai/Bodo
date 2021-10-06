@@ -267,3 +267,26 @@ def test_describe_many_columns(memory_leak_check):
     assert (
         compilation_time < 60
     ), "df.describe() took too long to compile. Possible regression?"
+
+
+@pytest.mark.parametrize(
+    "dt_like_series",
+    [
+        pd.Series([pd.Timestamp(2021, 4, 3), None] * 10),
+        pd.Series([pd.Timedelta(days=-2), None] * 10),
+    ],
+)
+def test_optional_fusion(memory_leak_check, dt_like_series):
+    """
+    Checks that pd.DataFrame can be used on multiple series
+    operations with optional types. This triggers a parfor fusion
+    that keeps values as optional types when merging functions
+    (see BE-1396)
+    """
+
+    def impl(S):
+        return pd.DataFrame(
+            {"A": S.apply(lambda x: (None if (pd.isna(x)) else x)).isna()}
+        )
+
+    check_func(impl, (dt_like_series,))
