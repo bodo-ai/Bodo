@@ -1,5 +1,4 @@
 import datetime
-import operator
 
 import numba
 from numba.core import cgutils, types
@@ -8,6 +7,7 @@ from numba.extending import (
     NativeValue,
     box,
     intrinsic,
+    lower_cast,
     make_attribute_wrapper,
     models,
     overload,
@@ -318,3 +318,26 @@ def overload_sub_operator_datetime_datetime(lhs, rhs):
             return base
 
         return impl
+
+
+@lower_cast(
+    types.Optional(numba.core.types.NPTimedelta("ns")),
+    numba.core.types.NPTimedelta("ns"),
+)
+@lower_cast(
+    types.Optional(numba.core.types.NPDatetime("ns")), numba.core.types.NPDatetime("ns")
+)
+def optional_dt64_to_dt64(context, builder, fromty, toty, val):
+    optval = context.make_helper(builder, fromty, value=val)
+    validbit = cgutils.as_bool_bit(builder, optval.valid)
+    with builder.if_else(validbit) as (then, orelse):
+        with then:
+            res_if = context.cast(builder, optval.data, fromty.type, toty)
+            then_bb = builder.block
+        with orelse:
+            res_else = numba.np.npdatetime.NAT
+            orelse_bb = builder.block
+    res = builder.phi(res_if.type)
+    res.add_incoming(res_if, then_bb)
+    res.add_incoming(res_else, orelse_bb)
+    return res
