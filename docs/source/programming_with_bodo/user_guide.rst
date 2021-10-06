@@ -1352,7 +1352,7 @@ example code below demonstrates calling plot with a sample of the data:
 
 
 
-.. image:: bodo_tutorial_files/bodo_tutorial_85_1.png
+.. image:: ../bodo_tutorial_files/bodo_tutorial_85_1.png
 
 
 Collections of Distributed Data

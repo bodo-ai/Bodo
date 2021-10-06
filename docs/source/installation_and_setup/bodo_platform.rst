@@ -11,7 +11,7 @@ Creating Clusters
 
 In the left bar click on *Clusters* (or click on the second step in the *Onboarding* list):
 
-.. image:: platform_onboarding_screenshots/side-clusters.png
+.. image:: ../platform_onboarding_screenshots/side-clusters.png
     :align: center
     :alt: Sidebar-Clusters
     :scale: 25
@@ -40,32 +40,32 @@ and jobs (see :ref:`running_a_job`). Therefore, if you don't plan to attach a no
 (and use it via `ssh` instead), it's recommended to set this to `Never`, since otherwise the cluster will 
 be removed after the set time.
 
-.. image:: platform_onboarding_screenshots/cluster-form.png
+.. image:: ../platform_onboarding_screenshots/cluster-form.png
     :align: center
     :alt: Cluster-creation-form
 
 Finally click on ``CREATE``.
 You will see that a new task for creating the cluster has been created.
 
-.. image:: platform_onboarding_screenshots/cluster-status-new.png
+.. image:: ../platform_onboarding_screenshots/cluster-status-new.png
     :align: center
     :alt: Cluster-Status-New
 
 The status is updated to *INPROGRESS* when the task starts executing and cluster creation is in progress.
 
-.. image:: platform_onboarding_screenshots/cluster-status-ip.png
+.. image:: ../platform_onboarding_screenshots/cluster-status-ip.png
     :align: center
     :alt: Cluster-Status-InProgress
 
 You can click on the ``Details`` drop down to monitor the progress for the cluster creation.
 
-.. image:: platform_onboarding_screenshots/cluster-info.png
+.. image:: ../platform_onboarding_screenshots/cluster-info.png
     :align: center
     :alt: Cluster-Info
 
 Once the cluster is successfully created and ready to use, the status is updated to *FINISHED*.
 
-.. image:: platform_onboarding_screenshots/cluster-status-done.png
+.. image:: ../platform_onboarding_screenshots/cluster-status-done.png
     :align: center
     :alt: Cluster-Status-Finished
 
@@ -76,7 +76,7 @@ Attaching a Notebook to a Cluster
 
 Go to the notebooks page by clicking on *Notebooks* in the left bar (or on the third green step in the *Onboarding* list at the top).
 
-.. image:: platform_onboarding_screenshots/side-nbs.png
+.. image:: ../platform_onboarding_screenshots/side-nbs.png
     :align: center
     :alt: Sidebar-Notebooks
     :scale: 25
@@ -89,25 +89,25 @@ from the **Instance type** drop down list.
 Note that this node is for running the Jupyter notebook itself, and will not run cluster workloads.
 Lastly, select a cluster for attaching the notebook from the **Cluster** drop down menu and and click on ``CREATE``.
 
-.. image:: platform_onboarding_screenshots/nb-form.png
+.. image:: ../platform_onboarding_screenshots/nb-form.png
     :align: center
     :alt: Notebook-Creation-Form
 
 After clicking ``CREATE``, a new task for creating the notebook and its corresponding node is created.
 
-.. image:: platform_onboarding_screenshots/nb-status-new.png
+.. image:: ../platform_onboarding_screenshots/nb-status-new.png
     :align: center
     :alt: Notebook-Status-New
 
 The status updates to *INPROGRESS* when the task starts executing.
 
-.. image:: platform_onboarding_screenshots/nb-status-ip.png
+.. image:: ../platform_onboarding_screenshots/nb-status-ip.png
     :align: center
     :alt: Notebook-Status-InProgress
 
 After creating the notebook, the platform runs readiness probe checks:
 
-.. image:: platform_onboarding_screenshots/nb-status-rp.png
+.. image:: ../platform_onboarding_screenshots/nb-status-rp.png
     :align: center
     :alt: Notebook-Status-ReadinessProbe
 
@@ -115,7 +115,7 @@ The notebook is ready to use after all checks are complete.
 ``OPEN NOTEBOOK`` will open the notebook in the current browser page,
 while the dropdown allows opening the notebook in a new tab.
 
-.. image:: platform_onboarding_screenshots/nb-status-done.png
+.. image:: ../platform_onboarding_screenshots/nb-status-done.png
     :align: center
     :alt: Notebook-Status-Finished
 
@@ -136,14 +136,14 @@ to attach a Notebook to a cluster.
 
 Then, go the cluster tab and find your cluster. Click on ``DETAILS`` and copy the cluster `UUID`.
 
-.. image:: platform_onboarding_screenshots/cluster-ip-info.png
+.. image:: ../platform_onboarding_screenshots/cluster-ip-info.png
     :align: center
     :alt: Cluster-UUID-Info
 
 Next, go to the notebooks tab and select ``OPEN NOTEBOOK``. In the *Launcher*, click
 on ``Terminal``.
 
-.. image:: platform_onboarding_screenshots/notebook-terminal.png
+.. image:: ../platform_onboarding_screenshots/notebook-terminal.png
     :align: center
     :alt: Notebook-Terminal
 
@@ -159,7 +159,7 @@ First, navigate to the clusters tabs and select ``Create a Cluster``. Click on
 Then, click on ``Add your IP`` in the **Access from IP address** section to enable
 accessing your cluster from your machine.
 
-.. image:: platform_onboarding_screenshots/cluster-create-advanced-settings.png
+.. image:: ../platform_onboarding_screenshots/cluster-create-advanced-settings.png
     :align: center
     :alt: Cluster-Creation-Advanced-Settings
 
@@ -170,7 +170,7 @@ addresses for your cluster nodes. Use any of the IP addresses as the ssh
 destination. In addition, also copy the cluster UUID which will be needed
 to execute commands across the cluster.
 
-.. image:: platform_onboarding_screenshots/cluster-ip-info.png
+.. image:: ../platform_onboarding_screenshots/cluster-ip-info.png
     :align: center
     :alt: Cluster-IP-Info
 
@@ -227,7 +227,7 @@ Bodo Cloud Platform has support for running scheduled (and immediate)
 Python jobs without the need for Jupyter Notebooks. To create a Job, navigate
 to the Jobs page by selecting *Jobs* in the left bar.
 
-.. image:: platform_onboarding_screenshots/side-jobs.png
+.. image:: ../platform_onboarding_screenshots/side-jobs.png
     :align: center
     :alt: Sidebar-Jobs
     :scale: 25
@@ -256,7 +256,7 @@ and NOT the path when cloning the repository, *i.e.* your path SHOULD NOT end in
 your S3 bucket must be in the same region as your cluster.
 
 
-.. image:: platform_onboarding_screenshots/jobs-form-standard.png
+.. image:: ../platform_onboarding_screenshots/jobs-form-standard.png
     :align: center
     :alt: Jobs-Forms-Standard
 
@@ -271,7 +271,7 @@ variables in **Other**.
 
 Once your form is complete, select ``CREATE`` to begin your job. 
 
-.. image:: platform_onboarding_screenshots/jobs-form-advanced.png
+.. image:: ../platform_onboarding_screenshots/jobs-form-advanced.png
     :align: center
     :alt: Jobs-Forms-Advanced
 
@@ -280,7 +280,7 @@ Once you've provided all the necessary details, select ``CREATE`` to begin your 
 created in your jobs page.
 
 
-.. image:: platform_onboarding_screenshots/jobs-new.png
+.. image:: ../platform_onboarding_screenshots/jobs-new.png
     :align: center
     :alt: New-Job
 
@@ -289,7 +289,7 @@ If you created a cluster specifically for this job, a new cluster
 will also appear in your clusters page.
 
 
-.. image:: platform_onboarding_screenshots/jobs-cluster-inprogress.png
+.. image:: ../platform_onboarding_screenshots/jobs-cluster-inprogress.png
     :align: center
     :alt: New-Job-Cluster
 
@@ -298,7 +298,7 @@ Your job will begin once it reaches its scheduled time and any necessary cluster
 Then your job will transition to being *INPROGRESS*.
 
 
-.. image:: platform_onboarding_screenshots/jobs-inprogress.png
+.. image:: ../platform_onboarding_screenshots/jobs-inprogress.png
     :align: center
     :alt: InProgress-Job
 
@@ -309,7 +309,7 @@ that you may need by pressing ``DETAILS`` followed by ``SHOW LOGS``. If a cluste
 specifically created for this job, it will be deleted after the job finishes.
 
 
-.. image:: platform_onboarding_screenshots/jobs-finished.png
+.. image:: ../platform_onboarding_screenshots/jobs-finished.png
     :align: center
     :alt: Finished-Job
 
