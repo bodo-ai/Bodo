@@ -8,10 +8,10 @@ Programming with Bodo
    file_io
    pandas
    numpy
+   require_constants
    ml
    dl
    data_visualization
    not_supported
    advanced
    BodoSQL
-   e3
