@@ -281,6 +281,12 @@ def overload_dataframe_astype(df, dtype, copy=True, errors="raise"):
     args_default_dict = {"copy": True, "errors": "raise"}
     check_unsupported_args("df.astype", args_dict, args_default_dict)
 
+    # If dtype is a string, force it to be a literal
+    if dtype == types.unicode_type:
+        raise_bodo_error(
+            "DataFrame.astype(): 'dtype' when passed as string must be a constant value"
+        )
+
     # just call astype() on all column arrays
     # TODO: support categorical, dt64, etc.
     if is_overload_constant_dict(dtype) or is_overload_constant_series(dtype):

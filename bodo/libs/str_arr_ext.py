@@ -60,6 +60,7 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
     parse_dtype,
+    raise_bodo_error,
 )
 
 # flag for creating pd.arrays.StringArray when boxing Bodo's native string array
@@ -2015,6 +2016,12 @@ def overload_str_arr_ndim(A):
 
 @overload_method(StringArrayType, "astype", no_unliteral=True)
 def overload_str_arr_astype(A, dtype, copy=True):
+
+    # If dtype is a string, force it to be a literal
+    if dtype == types.unicode_type:
+        raise_bodo_error(
+            "StringArray.astype(): 'dtype' when passed as string must be a constant value"
+        )
 
     # same dtype case
     if isinstance(dtype, types.Function) and dtype.key[0] == str:

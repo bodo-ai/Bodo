@@ -869,3 +869,22 @@ def test_df_corr_unknown_kws(memory_leak_check):
         match="got an unexpected keyword argument 'unknown_arg'",
     ):
         bodo.jit(impl)(df)
+
+
+def test_astype_non_constant_string(memory_leak_check):
+    """
+    Checks that calling DataFrame.astype(str_value) with a string that
+    is not a compile time constant will produce a reasonable BodoError.
+    """
+
+    def impl(df, type_str):
+        return df.astype(type_str[0])
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4] * 10})
+    type_str = ["uint64"]
+
+    with pytest.raises(
+        BodoError,
+        match="DataFrame.astype\\(\\): 'dtype' when passed as string must be a constant value",
+    ):
+        bodo.jit(impl)(df, type_str)

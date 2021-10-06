@@ -1255,6 +1255,12 @@ def overload_series_astype(S, dtype, copy=True, errors="raise"):
     arg_defaults = dict(errors="raise")
     check_unsupported_args("Series.astype", unsupported_args, arg_defaults)
 
+    # If dtype is a string, force it to be a literal
+    if dtype == types.unicode_type:
+        raise_bodo_error(
+            "Series.astype(): 'dtype' when passed as string must be a constant value"
+        )
+
     # TODO: other data types like datetime, records/tuples
     def impl(S, dtype, copy=True, errors="raise"):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)

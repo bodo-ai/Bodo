@@ -56,6 +56,7 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
     parse_dtype,
+    raise_bodo_error,
     to_nullable_type,
 )
 
@@ -632,6 +633,13 @@ def overload_int_arr_astype(A, dtype, copy=True):
     # dtype becomes NumberClass if type reference is passed
     # see convert_to_nullable_tup in array_kernels.py
     # see test_series_concat_convert_to_nullable
+
+    # If dtype is a string, force it to be a literal
+    if dtype == types.unicode_type:
+        raise_bodo_error(
+            "IntegerArray.astype(): 'dtype' when passed as string must be a constant value"
+        )
+
     if isinstance(dtype, types.NumberClass):
         dtype = dtype.dtype
 
