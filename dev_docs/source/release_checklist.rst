@@ -8,7 +8,7 @@ the last release. For example, use the following filter on GitHub: ``is:pr is:cl
 
 2. Change ``:caption:`` field in ``docs/index.rst`` to ``Version year.month`` (ex. 2020.04).
 
-3. Go to `redirect <https://github.com/Bodo-inc/Bodo/tree/master/docs/_static/redirect>`_ , create a new ``Year_Month.html`` (ex. 2020_04.rst) file. Fill in redirect url like ``<meta http-equiv="refresh" content="0; url=/2020.04/index.html" />``.
+3. Go to `redirect <https://github.com/Bodo-inc/Bodo/tree/master/docs/_static/redirect>`_ , create a new ``Year_Month.html`` (ex. 2020_04.rst) file. Fill in redirect url like ``<meta http-equiv="refresh" content="0; url=../../../2020.04/index.html" />``.
 
 4. Update `previous documentation list <https://github.com/Bodo-inc/Bodo/blob/master/docs/source/prev_doc_link.rst>`_
 
