@@ -736,6 +736,94 @@ def test_sort_values_two_columns_nan(n, len_siz, memory_leak_check):
     )
 
 
+def test_sort_values_na_position_list(memory_leak_check):
+    """Test with two columns with some NaN entries, sorting over both using different
+    nulls first/last values"""
+
+    def test_impl1(df1):
+        df2 = df1.sort_values(
+            by=["A", "B"], ascending=True, na_position=["last", "first"], axis=0
+        )
+        return df2
+
+    def test_impl2(df1):
+        df2 = df1.sort_values(
+            by=["A", "B"], ascending=True, na_position=["first", "last"], axis=0
+        )
+        return df2
+
+    def test_impl3(df1):
+        df2 = df1.sort_values(
+            by=["A", "B"], ascending=False, na_position=["last", "first"], axis=0
+        )
+        return df2
+
+    def test_impl4(df1):
+        df2 = df1.sort_values(
+            by=["A", "B"], ascending=False, na_position=["first", "last"], axis=0
+        )
+        return df2
+
+    n = 100
+    len_siz = 4
+
+    def get_random_column(n, n_row):
+        str_vals = []
+        for _ in range(n):
+            prob = random.randint(1, 5)
+            if prob == 1:
+                val = np.nan
+            else:
+                val = random.randint(1, len_siz)
+            str_vals.append(val)
+        return str_vals
+
+    def get_random_dataframe_two_columns(n, len_siz):
+        df = pd.DataFrame(
+            {"A": get_random_column(n, len_siz), "B": get_random_column(n, len_siz)}
+        )
+        return df
+
+    random.seed(5)
+    df1 = get_random_dataframe_two_columns(n, len_siz)
+    # Pandas can't support multiple na_position values, so we use py_output
+    # Here we always sort by column A and for column B we replace with NA with
+    # a value that matches where FIRST LAST would place null values
+    def create_py_output(df, ascending, na_position_list):
+        df_copy = df.copy(deep=True)
+        if ascending:
+            if na_position_list[1] == "first":
+                na_value = -1
+            else:
+                na_value = len_siz + 1
+        else:
+            if na_position_list[1] == "first":
+                na_value = len_siz + 1
+            else:
+                na_value = -1
+
+        df_copy["B"] = df_copy["B"].fillna(na_value)
+        output_df = df_copy.sort_values(
+            by=["A", "B"], ascending=ascending, na_position=na_position_list[0]
+        )
+        # Restore NaN
+        output_df["B"][output_df["B"] == na_value] = np.nan
+        return output_df
+
+    check_func(
+        test_impl1, (df1,), py_output=create_py_output(df1, True, ["last", "first"])
+    )
+    check_func(
+        test_impl2, (df1,), py_output=create_py_output(df1, True, ["first", "last"])
+    )
+    check_func(
+        test_impl3, (df1,), py_output=create_py_output(df1, False, ["last", "first"])
+    )
+    check_func(
+        test_impl4, (df1,), py_output=create_py_output(df1, False, ["first", "last"])
+    )
+
+
 def test_sort_values_by_index(memory_leak_check):
     """Sorting with a non-trivial index"""
 

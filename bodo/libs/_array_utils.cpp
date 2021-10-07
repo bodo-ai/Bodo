@@ -1217,11 +1217,12 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
                            size_t const& shift_key1, size_t const& iRow1,
                            std::vector<array_info*> const& columns2,
                            size_t const& shift_key2, size_t const& iRow2,
-                           bool const& na_position) {
+                           int64_t* na_position) {
     // iteration over the list of key for the comparison.
     for (size_t iKey = 0; iKey < n_key; iKey++) {
         bool ascending = vect_ascending[iKey];
-        bool na_position_bis = (!na_position) ^ ascending;
+        bool na_last = na_position[iKey];
+        bool na_position_bis = (!na_last) ^ ascending;
         int test = KeyComparisonAsPython_Column(
             na_position_bis, columns1[shift_key1 + iKey], iRow1,
             columns2[shift_key2 + iKey], iRow2);
@@ -1752,7 +1753,8 @@ void MPI_hyper_log_log_merge(void* in, void* inout, int* len,
 // the hashes with our MurmurHash3_x64_32, and uses 1 MB of memory
 #define HLL_SIZE 20
 
-size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len, bool is_parallel) {
+size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len,
+                          bool is_parallel) {
     tracing::Event ev("get_nunique_hashes", is_parallel);
     hll::HyperLogLog hll(HLL_SIZE);
     hll.addAll(hashes, len);
@@ -1761,7 +1763,8 @@ size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len, bool i
     return est;
 }
 
-std::pair<size_t, size_t> get_nunique_hashes_global(uint32_t const* const hashes, const size_t len, bool is_parallel) {
+std::pair<size_t, size_t> get_nunique_hashes_global(
+    uint32_t const* const hashes, const size_t len, bool is_parallel) {
     tracing::Event ev("get_nunique_hashes_global", is_parallel);
     tracing::Event ev_local("get_nunique_hashes_local", is_parallel);
     hll::HyperLogLog hll(HLL_SIZE);
@@ -1784,9 +1787,8 @@ std::pair<size_t, size_t> get_nunique_hashes_global(uint32_t const* const hashes
     {
         MPI_Op mpi_hll_op;
         MPI_Op_create(&MPI_hyper_log_log_merge, true, &mpi_hll_op);
-        MPI_Reduce(hll.data().data(), hll_registers.data(),
-                   hll.data().size(), MPI_UNSIGNED_CHAR, mpi_hll_op, 0,
-                   MPI_COMM_WORLD);
+        MPI_Reduce(hll.data().data(), hll_registers.data(), hll.data().size(),
+                   MPI_UNSIGNED_CHAR, mpi_hll_op, 0, MPI_COMM_WORLD);
         MPI_Op_free(&mpi_hll_op);
     }
 

@@ -1629,7 +1629,7 @@ def sort_values_table(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
-                lir.IntType(1),
+                lir.IntType(8).as_pointer(),
                 lir.IntType(1),
             ],
         )
@@ -1643,7 +1643,7 @@ def sort_values_table(
         return ret
 
     return (
-        table_type(table_t, types.int64, types.voidptr, types.boolean, types.boolean),
+        table_type(table_t, types.int64, types.voidptr, types.voidptr, types.boolean),
         codegen,
     )
 

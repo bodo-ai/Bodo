@@ -642,7 +642,15 @@ class DataFramePass:
         df_var, by_var, ascending_var, inplace_var, na_position_var = rhs.args
         df_typ = self.typemap[df_var.name]
         inplace = guard(find_const, self.func_ir, inplace_var)
-        na_position = guard(find_const, self.func_ir, na_position_var)
+        # error_msg should be unused
+        error_msg = "df.sort_values(): 'na_position' must be a literal constant of type str or a constant list of str with 1 entry per key column"
+        na_position = guard(
+            get_const_value,
+            na_position_var,
+            self.func_ir,
+            error_msg,
+            typemap=self.typemap,
+        )
 
         # find key array for sort ('by' arg)
         by_type = self.typemap[by_var.name]

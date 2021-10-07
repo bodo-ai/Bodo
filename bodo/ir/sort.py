@@ -57,10 +57,18 @@ class Sort(ir.Stmt):
         self.df_in_vars = df_in_vars
         self.df_out_vars = df_out_vars
         self.inplace = inplace
-        if na_position == "last":
-            self.na_position_b = True
+        if isinstance(na_position, str):
+            if na_position == "last":
+                self.na_position_b = (True,) * len(key_arrs)
+            else:
+                self.na_position_b = (False,) * len(key_arrs)
         else:
-            self.na_position_b = False
+            self.na_position_b = tuple(
+                [
+                    True if col_na_position == "last" else False
+                    for col_na_position in na_position
+                ]
+            )
         if isinstance(ascending_list, bool):
             ascending_list = (ascending_list,) * len(key_arrs)
         self.ascending_list = ascending_list
@@ -434,8 +442,11 @@ def get_sort_cpp_section(
     func_text += "  vect_ascending = np.array([{}])\n".format(
         ",".join("1" if x else "0" for x in ascending_list)
     )
-    func_text += "  out_table = sort_values_table(table_total, {}, vect_ascending.ctypes, {}, {})\n".format(
-        key_count, na_position_b, parallel_b
+    func_text += "  na_position = np.array([{}])\n".format(
+        ",".join("1" if x else "0" for x in na_position_b)
+    )
+    func_text += "  out_table = sort_values_table(table_total, {}, vect_ascending.ctypes, na_position.ctypes, {})\n".format(
+        key_count, parallel_b
     )
     idx = 0
     list_key_str = []

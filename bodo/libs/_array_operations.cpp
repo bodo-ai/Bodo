@@ -155,28 +155,18 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
     }
 }
 
-
 /**
  *   SORT VALUES
- * 
- * @param is_parallel: true if data is distributed (used to indicate whether tracing should be parallel or not)
+ *
+ * @param is_parallel: true if data is distributed (used to indicate whether
+ * tracing should be parallel or not)
  */
 table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
-                                    int64_t* vect_ascending, bool na_position, bool is_parallel) {
+                                    int64_t* vect_ascending,
+                                    int64_t* na_position, bool is_parallel) {
     tracing::Event ev("sort_values_table_local", is_parallel);
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_key = size_t(n_key_t);
-#ifdef DEBUG_SORT_LOCAL_SYMBOL
-    std::cout << "n_key_t=" << n_key_t << " na_position=" << na_position
-              << "\n";
-    for (int64_t iKey = 0; iKey < n_key_t; iKey++)
-        std::cout << "iKey=" << iKey << "/" << n_key_t
-                  << "  vect_ascending=" << vect_ascending[iKey] << "\n";
-    std::cout << "INPUT (sort_values_table):\n";
-    DEBUG_PrintRefct(std::cout, in_table->columns);
-    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-    std::cout << "n_rows=" << n_rows << " n_key=" << n_key << "\n";
-#endif
     std::vector<int64_t> ListIdx(n_rows);
     for (size_t i = 0; i < n_rows; i++) ListIdx[i] = i;
 
@@ -189,8 +179,9 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
         // less parameters around
         array_info* key_col = in_table->columns[0];
         bool ascending = vect_ascending[0];
+        bool na_last = na_position[0];
         if (ascending) {
-            const bool na_position_bis = (!na_position) ^ ascending;
+            const bool na_position_bis = (!na_last) ^ ascending;
             const auto f = [&](size_t const& iRow1,
                                size_t const& iRow2) -> bool {
                 int test = KeyComparisonAsPython_Column(
@@ -200,7 +191,7 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
             };
             gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
         } else {
-            const bool na_position_bis = (!na_position) ^ ascending;
+            const bool na_position_bis = (!na_last) ^ ascending;
             const auto f = [&](size_t const& iRow1,
                                size_t const& iRow2) -> bool {
                 int test = KeyComparisonAsPython_Column(
@@ -221,20 +212,11 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
         gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
     }
     table_info* ret_table = RetrieveTable(in_table, ListIdx, -1);
-#ifdef DEBUG_SORT_LOCAL_SYMBOL
-    std::cout << "OUTPUT (sort_values_table_local) in_table:\n";
-    DEBUG_PrintRefct(std::cout, in_table->columns);
-    std::cout << "OUTPUT (sort_values_table_local) ret_table:\n";
-    DEBUG_PrintRefct(std::cout, ret_table->columns);
-#ifdef DEBUG_SORT_LOCAL_FULL
-    DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
-#endif
-#endif
     return ret_table;
 }
 
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
-                              int64_t* vect_ascending, bool na_position,
+                              int64_t* vect_ascending, int64_t* na_position,
                               bool parallel) {
     try {
         tracing::Event ev("sort_values_table", parallel);
@@ -296,7 +278,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
 
         // Collecting all samples
         bool all_gather = false;
-        table_info* all_samples = gather_table(samples, n_key_t, all_gather, parallel);
+        table_info* all_samples =
+            gather_table(samples, n_key_t, all_gather, parallel);
         delete_table(samples);
 
         // Computing the bounds (splitters) on root
@@ -324,7 +307,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         // broadcasting the bounds
         // The local_sort is used as reference for the data type of the array.
         // This is because pre_bounds is NULL for ranks != 0
-        table_info* bounds = broadcast_table(local_sort, pre_bounds, n_key_t, parallel);
+        table_info* bounds =
+            broadcast_table(local_sort, pre_bounds, n_key_t, parallel);
         if (myrank == mpi_root) delete_table(pre_bounds);
         // Now computing to which process it all goes.
         tracing::Event ev_hashes("compute_destinations", parallel);
@@ -350,8 +334,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         comm_info.set_counts(hashes_v.data(), parallel);
         ev_hashes.finalize();
         ev_sample.finalize();
-        table_info* collected_table =
-            shuffle_table_kernel(local_sort, hashes_v.data(), comm_info, parallel);
+        table_info* collected_table = shuffle_table_kernel(
+            local_sort, hashes_v.data(), comm_info, parallel);
         // NOTE: shuffle_table_kernel decrefs input arrays
         delete_table(local_sort);
 
@@ -903,7 +887,8 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
         if (parallel) {
             bool all_gather = true;
             size_t n_cols = tab_out->ncols();
-            table_info* tab_ret = gather_table(tab_out, n_cols, all_gather, parallel);
+            table_info* tab_ret =
+                gather_table(tab_out, n_cols, all_gather, parallel);
             delete_table(tab_out);
 #ifdef DEBUG_SAMPLE
             std::cout << "sample_table : tab_ret\n";

@@ -3284,10 +3284,25 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
         )
 
     # make sure 'na_position' is correctly specified
-    if not is_overload_constant_str(na_position):
+    if is_overload_constant_str(na_position):
+        # Pandas by default only supports a string
+        na_position = get_overload_const_str(na_position)
+        if na_position not in ("first", "last"):
+            raise BodoError(
+                "sort_values(): na_position should either be 'first' or 'last'"
+            )
+    elif is_overload_constant_list(na_position):
+        # Bodo supports a list to sort DataFrame column orders differently
+        na_position_list = get_overload_const_list(na_position)
+        for na_position in na_position_list:
+            if na_position not in ("first", "last"):
+                raise BodoError(
+                    "sort_values(): Every value in na_position should either be 'first' or 'last'"
+                )
+    else:
         raise_const_error(
-            "sort_values(): na_position parameter must be a literal constant of type str, not "
-            "{na_position}".format(na_position=na_position)
+            "sort_values(): na_position parameter must be a literal constant of type str or a constant "
+            f"list of str with 1 entry per key column, not {na_position}"
         )
 
     na_position = get_overload_const_str(na_position)
