@@ -871,6 +871,7 @@ def test_df_corr_unknown_kws(memory_leak_check):
         bodo.jit(impl)(df)
 
 
+@pytest.mark.slow
 def test_astype_non_constant_string(memory_leak_check):
     """
     Checks that calling DataFrame.astype(str_value) with a string that

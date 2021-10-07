@@ -372,6 +372,7 @@ def test_and_or_typing_errors(memory_leak_check):
         bodo.jit(test_or)(int_s, bool_s)
 
 
+@pytest.mark.slow
 def test_astype_non_constant_string(memory_leak_check):
     """
     Checks that calling Series.astype(str_value) with a string that
@@ -379,12 +380,11 @@ def test_astype_non_constant_string(memory_leak_check):
     """
 
     def impl(S, type_str):
-        return S.astype(type_str)
+        return S.astype(type_str[0])
 
     S = pd.Series([1, 2, 3, 4] * 10)
-    type_str = "uint64"
+    type_str = ["uint64"]
 
-    # TODO: Determine why DataFrame.astype can determine the argument is a constant but series can't.
     with pytest.raises(
         BodoError,
         match="Series.astype\\(\\): 'dtype' when passed as string must be a constant value",

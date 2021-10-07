@@ -593,7 +593,9 @@ def _is_str_dtype(dtype):
 
 
 # TODO: use generated_jit with IR inlining
-def fix_arr_dtype(data, new_dtype, copy=None, nan_to_str=True):  # pragma: no cover
+def fix_arr_dtype(
+    data, new_dtype, copy=None, nan_to_str=True, from_series=False
+):  # pragma: no cover
     return data
 
 
@@ -602,7 +604,7 @@ def overload_fix_arr_dtype(
     data, new_dtype, copy=None, nan_to_str=True, from_series=False
 ):
     """convert data to new_dtype, copy if copy parameter is not None.
-    'nan_to_str' specifies string conversion for np.nan values: write as 'nan'
+    'nan_to_str' specifies string conversion for NA values: write as '<NA>'
     or actual NA (Pandas has inconsistent behavior in APIs).
 
     'from_series' specifies if the data originates from a series. This is useful for some
@@ -673,7 +675,33 @@ def overload_fix_arr_dtype(
 
             return impl_binary
 
-        if is_overload_true(from_series):
+        if is_overload_true(from_series) and data.dtype in (
+            bodo.datetime64ns,
+            bodo.timedelta64ns,
+        ):
+
+            def impl_str_dt_series(
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
+            ):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(data)
+                A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
+                for j in numba.parfors.parfor.internal_prange(n):
+
+                    if bodo.libs.array_kernels.isna(data, j):
+                        if nan_to_str:
+                            A[j] = "NaT"
+                        else:
+                            bodo.libs.array_kernels.setna(A, j)
+                        continue
+
+                    # this is needed, as dt Series.astype(str) produces different output
+                    # then Series.values.astype(str)
+                    A[j] = str(box_if_dt64(data[j]))
+
+                return A
+
+            return impl_str_dt_series
 
             def impl_str_series(
                 data, new_dtype, copy=None, nan_to_str=True, from_series=False
@@ -685,7 +713,7 @@ def overload_fix_arr_dtype(
 
                     if bodo.libs.array_kernels.isna(data, j):
                         if nan_to_str:
-                            A[j] = "nan"
+                            A[j] = "<NA>"
                         else:
                             bodo.libs.array_kernels.setna(A, j)
                         continue
