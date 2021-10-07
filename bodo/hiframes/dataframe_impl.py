@@ -272,7 +272,9 @@ def _get_dtype_str(dtype):
 
 
 @overload_method(DataFrameType, "astype", inline="always", no_unliteral=True)
-def overload_dataframe_astype(df, dtype, copy=True, errors="raise"):
+def overload_dataframe_astype(
+    df, dtype, copy=True, errors="raise", _bodo_nan_to_str=True
+):
     # check unsupported arguments
     args_dict = {
         "copy": copy,
@@ -296,18 +298,18 @@ def overload_dataframe_astype(df, dtype, copy=True, errors="raise"):
             else dict(get_overload_constant_series(dtype))
         )
         data_args = ", ".join(
-            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {_get_dtype_str(dtype_const[c])}, copy, from_series=True)"
+            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {_get_dtype_str(dtype_const[c])}, copy, nan_to_str=_bodo_nan_to_str, from_series=True)"
             if c in dtype_const
             else f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
             for i, c in enumerate(df.columns)
         )
     else:
         data_args = ", ".join(
-            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), dtype, copy, from_series=True)"
+            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), dtype, copy, nan_to_str=_bodo_nan_to_str, from_series=True)"
             for i in range(len(df.columns))
         )
 
-    header = "def impl(df, dtype, copy=True, errors='raise'):\n"
+    header = "def impl(df, dtype, copy=True, errors='raise', _bodo_nan_to_str=True):\n"
     return _gen_init_df(header, df.columns, data_args)
 
 

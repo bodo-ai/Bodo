@@ -557,3 +557,39 @@ def test_series_is_none(memory_leak_check):
     S = pd.Series(np.arange(100))
     check_func(impl1, (S,))
     check_func(impl2, (S,))
+
+
+def test_astype_str_null(memory_leak_check):
+    """
+    Checks that astype(str) converts Null values to strings
+    """
+
+    def impl(S):
+        return S.astype(str)
+
+    S = pd.Series([1, 2, 4, None, 7] * 10, dtype="Int64")
+    check_func(impl, (S,))
+
+    S = pd.Series([pd.Timestamp(2021, 5, 4, 1), None] * 25)
+    check_func(impl, (S,))
+
+
+def test_astype_str_keep_null(memory_leak_check):
+    """
+    Checks that astype(str) keeps null values null when _bodo_nan_to_str=False
+    """
+
+    def impl(S):
+        return S.astype(str, _bodo_nan_to_str=False)
+
+    S = pd.Series([1, 2, 4, None, 7] * 10, dtype="Int64")
+    # This is a Bodo specific arg so use py_output
+    py_output = S.astype(str)
+    py_output[py_output == "<NA>"] = None
+    check_func(impl, (S,), py_output=py_output)
+
+    S = pd.Series([pd.Timestamp(2021, 5, 4, 1), None] * 25)
+    # This is a Bodo specific arg so use py_output
+    py_output = S.astype(str)
+    py_output[py_output == "NaT"] = None
+    check_func(impl, (S,), py_output=py_output)

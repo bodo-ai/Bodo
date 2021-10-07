@@ -1252,6 +1252,9 @@ class TypingTransforms:
                 (0, "normalize"),
                 (1, "sort"),
             ],
+            "astype": [
+                (0, "dtype"),
+            ],
         }
 
         if func_name in series_call_const_args:

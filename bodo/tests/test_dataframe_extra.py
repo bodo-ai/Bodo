@@ -290,3 +290,41 @@ def test_optional_fusion(memory_leak_check, dt_like_series):
         )
 
     check_func(impl, (dt_like_series,))
+
+
+def test_astype_str_null(memory_leak_check):
+    """
+    Checks that astype(str) converts Null values to strings
+    """
+
+    def impl(df):
+        return df.astype(str)
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series([1, 2, 4, None, 7] * 10, dtype="Int64"),
+            "B": [pd.Timestamp(2021, 5, 4, 1), None] * 25,
+        }
+    )
+    check_func(impl, (df,))
+
+
+def test_astype_str_keep_null(memory_leak_check):
+    """
+    Checks that astype(str) keeps null values null when _bodo_nan_to_str=False
+    """
+
+    def impl(S):
+        return S.astype(str, _bodo_nan_to_str=False)
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series([1, 2, 4, None, 7] * 10, dtype="Int64"),
+            "B": [pd.Timestamp(2021, 5, 4, 1), None] * 25,
+        }
+    )
+    # This is a Bodo specific arg so use py_output
+    py_output = df.astype(str)
+    py_output["A"][py_output["A"] == "<NA>"] = None
+    py_output["B"][py_output["B"] == "NaT"] = None
+    check_func(impl, (df,), py_output=py_output)
