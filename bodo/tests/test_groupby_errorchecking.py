@@ -1885,6 +1885,18 @@ def test_agg_unsupported_types(test_cumulatives_df, memory_leak_check):
         bodo.jit(impl1)(test_cumulatives_df)
 
 
+def test_cum_noncum_mix(memory_leak_check):
+    """Tests that mixing cumulative and regular aggregations
+    produces a reasonable error message."""
+    def impl(df):
+        return df.groupby('A')['B'].agg(("sum", "cumsum"))
+
+    df = pd.DataFrame({"A":[1,2,3,4] * 4,"B":[2,3,4,5] * 4})
+    with pytest.raises(BodoError, match="Cannot mix cumulative operations with other aggregation functions"):
+        bodo.jit(impl)(df)
+
+
+
 # ------------------------------ df.groupby().transform()------------------------------ #
 @pytest.mark.slow
 def test_transform_args(memory_leak_check):

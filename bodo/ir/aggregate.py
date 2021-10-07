@@ -581,6 +581,7 @@ class Aggregate(ir.Stmt):
         same_index,
         return_key,
         loc,
+        func_name,
         dropna=True,
         pivot_arr=None,
         pivot_values=None,
@@ -615,6 +616,7 @@ class Aggregate(ir.Stmt):
         self.same_index = same_index
         self.return_key = return_key
         self.loc = loc
+        self.func_name = func_name
         self.dropna = dropna
         # pivot_table handling
         self.pivot_arr = pivot_arr
@@ -1811,9 +1813,8 @@ def gen_top_level_agg_func(
             len(agg_node.gb_info_out) == len(allfuncs) * n_pivot
         ), "invalid number of groupby outputs"
     if num_cum_funcs > 0:
-        assert num_cum_funcs == len(
-            allfuncs
-        ), "Cannot mix cumulative operations with other aggregation functions"
+        if num_cum_funcs != len(allfuncs):
+            raise BodoError(f"{agg_node.func_name}(): Cannot mix cumulative operations with other aggregation functions", loc=agg_node.loc)
         do_combine = False  # same as median and nunique
 
     if udf_func_struct is not None:

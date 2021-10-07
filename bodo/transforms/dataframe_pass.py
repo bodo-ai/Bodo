@@ -1366,6 +1366,7 @@ class DataFramePass:
             same_index,
             return_key,
             lhs.loc,
+            func_name,
             grp_typ.dropna,
         )
         nodes.append(agg_node)
@@ -1927,6 +1928,7 @@ class DataFramePass:
             same_index,
             return_key,
             lhs.loc,
+            func_name,
             dropna,
             pivot_arr,
             pivot_values,
@@ -2018,6 +2020,7 @@ class DataFramePass:
             same_index,
             return_key,
             lhs.loc,
+            "pandas.crosstab",
             dropna,
             pivot_arr,
             pivot_values,
