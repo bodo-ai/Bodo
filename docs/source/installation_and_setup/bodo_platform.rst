@@ -14,7 +14,7 @@ In the left bar click on *Clusters* (or click on the second step in the *Onboard
 .. image:: ../platform_onboarding_screenshots/side-clusters.png
     :align: center
     :alt: Sidebar-Clusters
-    :scale: 25
+    :width: 175
 
 This will take you to the *Clusters* page. At the top right corner, click on
 ``Create Cluster`` which opens the cluster creation form. First, choose a name for your cluster and
@@ -79,7 +79,7 @@ Go to the notebooks page by clicking on *Notebooks* in the left bar (or on the t
 .. image:: ../platform_onboarding_screenshots/side-nbs.png
     :align: center
     :alt: Sidebar-Notebooks
-    :scale: 25
+    :width: 175
 
 This will take you to the *Notebooks* page. At the top right corner, click on the ``Create Notebook`` button which opens
 the notebook creation form.
@@ -230,7 +230,7 @@ to the Jobs page by selecting *Jobs* in the left bar.
 .. image:: ../platform_onboarding_screenshots/side-jobs.png
     :align: center
     :alt: Sidebar-Jobs
-    :scale: 25
+    :width: 175
 
 This pages displays any *INPROGRESS* jobs you have previously
 scheduled and allows you to schedule new Jobs. At the top right corner, click on
