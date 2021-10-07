@@ -9,8 +9,8 @@
 // ------------------------------------------------
 // Always include robin and hopscotch maps because they are used regardless of
 // default hash map implementation
-#include <include/tsl/robin_map.h>
 #include <include/tsl/hopscotch_map.h>
+#include <include/tsl/robin_map.h>
 
 // Choose default implementation for unordered map and set
 #undef USE_STD
@@ -512,7 +512,8 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
  * @param columns2 the list of columns of the second table
  * @param shift_key2 the column for the second key
  * @param iRow2 the row of the second key
- * @param na_position: if true NaN values are largest, if false smallest.
+ * @param na_position: the vector of null locations. if true NaN values are
+ * largest, if false smallest.
  * @return true if (shift_key1,iRow1) < (shift_key2,iRow2) , false otherwise
  */
 bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
@@ -520,7 +521,7 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
                            size_t const& shift_key1, size_t const& iRow1,
                            std::vector<array_info*> const& columns2,
                            size_t const& shift_key2, size_t const& iRow2,
-                           bool const& na_position);
+                           int64_t* na_position);
 
 int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
                                  size_t const& iRow1, array_info* arr2,
@@ -619,17 +620,21 @@ inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
  * Given an array of hashes, returns estimate of number of unique hashes.
  * @param hashes: pointer to array of hashes
  * @param len: number of hashes
- * @param is_parallel: true if data is distributed (used to indicate whether tracing should be parallel or not)
+ * @param is_parallel: true if data is distributed (used to indicate whether
+ * tracing should be parallel or not)
  */
-size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len, bool is_parallel);
+size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len,
+                          bool is_parallel);
 
 /**
  * Given an array of hashes, returns estimate of number of unique hashes
  * of the local array, and global estimate doing a reduction over all ranks.
  * @param hashes: pointer to array of hashes
  * @param len: number of hashes
- * @param is_parallel: true if data is distributed (used to indicate whether tracing should be parallel or not)
+ * @param is_parallel: true if data is distributed (used to indicate whether
+ * tracing should be parallel or not)
  */
-std::pair<size_t, size_t> get_nunique_hashes_global(uint32_t const* const hashes, const size_t len, bool is_parallel);
+std::pair<size_t, size_t> get_nunique_hashes_global(
+    uint32_t const* const hashes, const size_t len, bool is_parallel);
 
 #endif  // _ARRAY_UTILS_H_INCLUDED
