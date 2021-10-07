@@ -5579,6 +5579,7 @@ footer span.commit code {
 .rst-content img {
   max-width: 100%;
   height: auto;
+  padding: 30px 0;
 }
 .rst-content div.figure,
 .rst-content figure {
