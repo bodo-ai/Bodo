@@ -80,6 +80,10 @@ def visit_vars_connector(node, callback, cbdata):
     if node.connector_typ in ("csv", "parquet", "json"):
         node.file_name = visit_vars_inner(node.file_name, callback, cbdata)
 
+    if node.connector_typ == "csv":
+        node.nrows = visit_vars_inner(node.nrows, callback, cbdata)
+        node.skiprows = visit_vars_inner(node.skiprows, callback, cbdata)
+
     if node.connector_typ == "parquet" and node.filters:
         for predicate in node.filters:
             for i in range(len(predicate)):
@@ -102,6 +106,13 @@ def connector_usedefs(node, use_set=None, def_set=None):
     def_set.update({v.name for v in node.out_vars})
     if node.connector_typ in ("csv", "parquet", "json"):
         use_set.add(node.file_name.name)
+
+    if node.connector_typ == "csv":
+        # Default value of nrows=-1, skiprows=0
+        if isinstance(node.nrows, numba.core.ir.Var):
+            use_set.add(node.nrows.name)
+        if isinstance(node.skiprows, numba.core.ir.Var):
+            use_set.add(node.skiprows.name)
 
     if node.connector_typ == "parquet" and node.filters:
         use_set.update(
@@ -138,6 +149,9 @@ def apply_copies_connector(
                 val = predicate[i]
                 # e.g. handle ("A", "==", v)
                 predicate[i] = (val[0], val[1], replace_vars_inner(val[2], var_dict))
+    if node.connector_typ == "csv":
+        node.nrows = replace_vars_inner(node.nrows, var_dict)
+        node.skiprows = replace_vars_inner(node.skiprows, var_dict)
 
 
 def build_connector_definitions(node, definitions=None):

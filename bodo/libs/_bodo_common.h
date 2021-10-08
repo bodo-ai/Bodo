@@ -544,14 +544,14 @@ struct mpi_comm_info {
      * - send_count_sub_sub / recv_count_sub_sub
      * Those are used for the shuffling of data1/data2/data3 and their sizes.
      * @param hashes : hashes of all the rows
-     * @param is_parallel: true if data is distributed (used to indicate whether 
+     * @param is_parallel: true if data is distributed (used to indicate whether
      *                     tracing should be parallel or not)
      * @param filter : Bloom filter. Rows whose hash is not in the filter will
      * be discarded from shuffling. If no filter is provided no filtering will
      * happen.
      */
     void set_counts(
-        uint32_t const* const hashes, bool is_parallel, 
+        uint32_t const* const hashes, bool is_parallel,
         SimdBlockFilterFixed<::hashing::SimpleMixSplit>* filter = nullptr);
 };
 
@@ -700,6 +700,33 @@ inline struct numpy_arr_payload make_numpy_array_payload(
     p.strides = _strides;
     return p;
 }
+#endif
+
+#ifdef MS_WINDOWS
+
+#define NOMINMAX
+#include <windows.h>
+
+inline size_t getTotalSystemMemory() {
+    MEMORYSTATUSEX status;
+    status.dwLength = sizeof(status);
+    GlobalMemoryStatusEx(&status);
+    auto memory_size = static_cast<size_t>(status.ullTotalPhys);
+    return memory_size;
+}
+
+#else
+
+#include <unistd.h>
+
+#define getTotalSystemMemory()                   \
+    ({                                           \
+        unsigned long long memory_size;          \
+        long pages = sysconf(_SC_PHYS_PAGES);    \
+        long page_size = sysconf(_SC_PAGE_SIZE); \
+        memory_size = pages * page_size;         \
+        static_cast<size_t>(memory_size);        \
+    })
 #endif
 
 #endif /* BODO_COMMON_H_INCLUDED_ */

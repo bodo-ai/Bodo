@@ -62,7 +62,13 @@ from bodo.utils.transform import (
     fix_struct_return,
     set_call_expr_arg,
 )
-from bodo.utils.typing import BodoError, BodoWarning, to_nullable_type, FileInfo
+from bodo.utils.typing import (
+    BodoError,
+    BodoWarning,
+    to_nullable_type,
+    FileInfo,
+    is_overload_int,
+)
 from bodo.utils.utils import check_java_installation
 
 
@@ -1191,13 +1197,56 @@ class UntypedPass:
         index_col = self._get_const_arg("read_csv", rhs.args, kws, 5, "index_col", -1)
         usecols = self._get_const_arg("read_csv", rhs.args, kws, 6, "usecols", "")
         dtype_var = get_call_expr_arg("read_csv", rhs.args, kws, 10, "dtype", "")
-        skiprows = self._get_const_arg("read_csv", rhs.args, kws, 16, "skiprows", 0)
+        _skiprows = get_call_expr_arg(
+            "read_csv", rhs.args, kws, 16, "skiprows", default=ir.Const(0, lhs.loc)
+        )
+        # skiprows must be constant known at compile time or variable with column names provided by the user
+        # Reason: Bodo needs a constant value for skiprows as it uses read_csv to get file information.
+        # When skiprows is used, column name changes.
+        # To allow variables, we set skiprows to 0 and this means that we don't get same column names as Pandas
+        # Solution: let user specify column names.
+        try:
+            if isinstance(_skiprows, ir.Const):
+                skiprows_val = _skiprows.value
+            else:
+                skiprows_val = get_const_value_inner(
+                    self.func_ir, _skiprows, arg_types=self.args
+                )
+        except GuardException:
+            # raise error if skiprows is used but not constant without column names
+            if _skiprows != "" and col_names == 0:
+                raise BodoError(
+                    "pd.read_csv(): column names must be provided if 'skiprows' is not constant known at compile-time"
+                )
+            # Otherwise set skiprows = 0 since it's needed for CSVFileInfo
+            skiprows_val = 0
+        # TODO: fix type checking
+        # This checks type if skiprows is a variable not expression (i.e. binary operation or function call).
+        skiprows_def = guard(get_definition, self.func_ir, _skiprows)
+        if isinstance(skiprows_def, (ir.Const, ir.Global, ir.FreeVar, ir.Var)):
+            val = skiprows_def.value
+            if not is_overload_int(val):
+                raise BodoError("pd.read_csv: skiprows must be integer.")
+        elif isinstance(skiprows_def, ir.Expr) and skiprows_def.op == "make_function":
+            # TODO: BE-1405
+            raise BodoError("pd.read_csv: skiprows with callable not supported yet")
+
         date_cols = self._get_const_arg(
             "read_csv", rhs.args, kws, 23, "parse_dates", [], typ="int or str"
         )
         compression = self._get_const_arg(
             "read_csv", rhs.args, kws, 32, "compression", "infer"
         )
+        _nrows = get_call_expr_arg(
+            "read_csv", rhs.args, kws, 18, "nrows", default=ir.Const(-1, lhs.loc)
+        )
+        # TODO: fix type checking
+        nrows_def = guard(get_definition, self.func_ir, _nrows)
+        # This works only if nrows is a variable not expression (i.e. binary operation or function call).
+        if isinstance(nrows_def, (ir.Const, ir.Global, ir.FreeVar, ir.Var)):
+            val = nrows_def.value
+            if not is_overload_int(val):
+                raise BodoError("pd.read_csv: nrows must be integer.")
 
         # check unsupported arguments
         supported_args = (
@@ -1212,6 +1261,7 @@ class UntypedPass:
             "skiprows",
             "parse_dates",
             "compression",
+            "nrows",
         )
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
@@ -1255,7 +1305,7 @@ class UntypedPass:
                 self.func_ir,
                 msg,
                 arg_types=self.args,
-                file_info=CSVFileInfo(sep, skiprows, header, compression),
+                file_info=CSVFileInfo(sep, skiprows_val, header, compression),
             )
 
             got_schema = False
@@ -1269,7 +1319,7 @@ class UntypedPass:
                     got_schema = True
             if not got_schema:
                 df_type = _get_csv_df_type_from_file(
-                    fname_const, sep, skiprows, header, compression
+                    fname_const, sep, skiprows_val, header, compression
                 )
             dtypes = df_type.data
             usecols = list(range(len(dtypes))) if usecols == "" else usecols
@@ -1336,7 +1386,8 @@ class UntypedPass:
                 lhs.loc,
                 header,
                 compression,
-                skiprows,
+                _nrows,
+                _skiprows,
             )
         ]
 
@@ -2363,6 +2414,7 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
     file reader, and pass it to pandas.
     Only rank 0 looks at the file to infer df type, then broadcasts.
     """
+
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD

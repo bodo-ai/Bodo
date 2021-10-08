@@ -2688,6 +2688,76 @@ def test_file_not_found(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_csv_nrows(memory_leak_check):
+    """Test pd.read_csv with nrows argument """
+    fname = os.path.join("bodo", "tests", "data", "example.csv")
+
+    def impl1():
+        return pd.read_csv(fname, nrows=2)
+
+    check_func(impl1, (), check_dtype=False)
+
+    # Test nrows as variable.
+    nrows = 6
+
+    def impl2():
+        return pd.read_csv(fname, nrows=nrows)
+
+    check_func(impl2, (), check_dtype=False)
+
+    # Test nrows + skiprows
+    def impl3():
+        return pd.read_csv(fname, skiprows=2, nrows=4)
+
+    check_func(impl3, (), check_dtype=False)
+
+    # Test with names provided
+    fname = os.path.join("bodo", "tests", "data", "csv_data1.csv")
+
+    def impl4():
+        df = pd.read_csv(
+            fname,
+            names=["A", "B", "C", "D"],
+            dtype={"A": int, "B": float, "C": float, "D": int},
+            nrows=2,
+            skiprows=1,
+        )
+        return df.B.values
+
+    check_func(impl4, (), check_dtype=False)
+
+
+@pytest.mark.slow
+def test_csv_skiprows_var(memory_leak_check):
+    """Test pd.read_csv with skiprows argument as variable"""
+    fname = os.path.join("bodo", "tests", "data", "example.csv")
+
+    skip = 3
+
+    def impl_skip():
+        ans = pd.read_csv(fname, skiprows=skip)
+        return ans
+
+    check_func(impl_skip, (), check_dtype=False)
+
+    # Test skiprows using loop index variable
+    # set dtype=str since Bodo sets uniform type for the whole column
+    # while Pandas sets type per chunk, resulting in miexed type output
+    def impl_loop():
+        nrows = 3
+        colnames = ["A", "B", "C", "D", "E"]
+        df_all = []
+        for i in range(4):
+            df = pd.read_csv(
+                fname, skiprows=(i * nrows), nrows=nrows, names=colnames, dtype=str
+            )
+            df_all.append(df)
+        return pd.concat(df_all)
+
+    check_func(impl_loop, (), check_dtype=False, sort_output=True)
+
+
+@pytest.mark.slow
 def test_csv_np_gt_rows(datapath, memory_leak_check):
     """Test when number of rows < number of ranks (np) with
     read_csv(). "small_data.csv" has one row.
