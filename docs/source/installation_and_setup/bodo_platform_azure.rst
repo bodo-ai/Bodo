@@ -159,6 +159,8 @@ that the Bodo Platform creates in your account to enable clusters and notebooks.
   * - `Virtual Network with Subnets and NAT Gateway <https://azure.microsoft.com/en-us/services/virtual-network/>`_,
       `Public IP <https://docs.microsoft.com/en-us/azure/virtual-network/associate-public-ip-address-vm>`_,
       `NIC <https://docs.microsoft.com/en-us/azure/virtual-network/virtual-network-network-interface-vm>`_,
+      `Proximity Placement Groups <https://docs.microsoft.com/en-us/azure/virtual-machines/co-location>`_,
+      `Availability Sets <https://docs.microsoft.com/en-us/azure/virtual-machines/availability-set-overview>`_,
       `Security Groups <https://docs.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview>`_, ...
     - Secure networking for clusters/notebooks
   * - `Blob Containers <https://azure.microsoft.com/en-us/services/storage/blobs/>`_,
