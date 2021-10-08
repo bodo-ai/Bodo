@@ -37,6 +37,7 @@ class CsvReader(ir.Stmt):
         loc,
         header,
         compression,
+        nrows,
         skiprows=0,
     ):
         self.connector_typ = "csv"
@@ -49,12 +50,19 @@ class CsvReader(ir.Stmt):
         self.usecols = usecols
         self.loc = loc
         self.skiprows = skiprows
+        self.nrows = nrows
         self.header = header
         self.compression = compression
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={})".format(
-            self.df_out, self.file_name, self.df_colnames, self.out_types, self.out_vars
+        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={})".format(
+            self.df_out,
+            self.file_name,
+            self.df_colnames,
+            self.out_types,
+            self.out_vars,
+            self.nrows,
+            self.skiprows,
         )
 
 
@@ -122,8 +130,8 @@ def csv_distributed_run(
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
     # get column variables
     arg_names = ", ".join("arr" + str(i) for i in range(n_cols))
-    func_text = "def csv_impl(fname):\n"
-    func_text += "    ({},) = _csv_reader_py(fname)\n".format(arg_names)
+    func_text = "def csv_impl(fname, nrows, skiprows):\n"
+    func_text += f"    ({arg_names},) = _csv_reader_py(fname, nrows, skiprows)\n"
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -137,7 +145,6 @@ def csv_distributed_run(
         typingctx,
         targetctx,
         parallel,
-        csv_node.skiprows,
         csv_node.header,
         csv_node.compression,
     )
@@ -147,11 +154,11 @@ def csv_distributed_run(
         {"_csv_reader_py": csv_reader_py},
         typingctx=typingctx,
         targetctx=targetctx,
-        arg_typs=(string_type,),
+        arg_typs=(string_type, types.int64, types.int64),
         typemap=typemap,
         calltypes=calltypes,
     ).blocks.popitem()[1]
-    replace_arg_nodes(f_block, [csv_node.file_name])
+    replace_arg_nodes(f_block, [csv_node.file_name, csv_node.nrows, csv_node.skiprows])
     nodes = f_block.body[:-3]
     for i in range(len(csv_node.out_vars)):
         nodes[-len(csv_node.out_vars) + i].target = csv_node.out_vars[i]
@@ -248,6 +255,16 @@ def _get_pd_dtype_str(t):
 compiled_funcs = []
 
 
+@numba.njit
+def check_nrows_skiprows_value(nrows, skiprows):
+    """ Check at runtime that nrows and skiprows values are >= 0 """
+    # Corner case: if user did nrows=-1, this will pass. -1 to mean all rows.
+    if nrows < -1:
+        raise ValueError("pd.read_csv: nrows must be integer >= 0.")
+    if skiprows < 0:
+        raise ValueError("pd.read_csv: skiprows must be integer >= 0.")
+
+
 def astype(df, typemap, parallel):
     message = ""
     for col_name, col_type in typemap.items():
@@ -280,7 +297,6 @@ def _gen_csv_reader_py(
     typingctx,
     targetctx,
     parallel,
-    skiprows,
     header,
     compression,
 ):
@@ -339,14 +355,14 @@ def _gen_csv_reader_py(
     if compression is None:
         compression = "uncompressed"  # Arrow's representation
 
-    func_text = "def csv_reader_py(fname):\n"
+    func_text = "def csv_reader_py(fname, nrows, skiprows):\n"
+    func_text += "  check_nrows_skiprows_value(nrows, skiprows)\n"
     # check_java_installation is a check for hdfs that java is installed
     func_text += "  check_java_installation(fname)\n"
-    func_text += "  skiprows = {}\n".format(skiprows)
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={parallel})\n"
     func_text += "  f_reader = bodo.ir.csv_ext.csv_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
-    func_text += "    {}, skiprows, -1, {}, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region) )\n".format(
+    func_text += "    {}, skiprows, nrows, {}, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region) )\n".format(
         parallel, has_header, compression
     )
     # Check if there was an error in the C++ code. If so, raise it.

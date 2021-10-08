@@ -37,6 +37,7 @@ extern MPI_Datatype decimal_mpi_type;
 
 static int dist_get_rank() __UNUSED__;
 static int dist_get_size() __UNUSED__;
+static int dist_get_node_count() __UNUSED__;
 static int64_t dist_get_start(int64_t total, int num_pes,
                               int node_id) __UNUSED__;
 static int64_t dist_get_end(int64_t total, int num_pes, int node_id) __UNUSED__;
@@ -136,6 +137,35 @@ static void* get_dummy_ptr() { return hpat_dummy_ptr; }
 
 static size_t get_mpi_req_num_bytes() __UNUSED__;
 static size_t get_mpi_req_num_bytes() { return sizeof(MPI_Request); }
+
+/*
+ * Returns how many nodes in the cluster
+ * Creates subcommunicators based on shared memory
+ * split type and then counts how many rank0
+ * the cluster has
+ */
+static int dist_get_node_count() {
+    int is_initialized;
+    MPI_Initialized(&is_initialized);
+    if (!is_initialized) MPI_Init(NULL, NULL);
+
+    int rank, is_rank0, nodes;
+    MPI_Comm shmcomm;
+
+    // Split comm, into comms that has same shared memory
+    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL,
+                        &shmcomm);
+    MPI_Comm_rank(shmcomm, &rank);
+
+    // Identify rank 0 in each node
+    is_rank0 = (rank == 0) ? 1 : 0;
+
+    // Sum how many rank0 found
+    MPI_Allreduce(&is_rank0, &nodes, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+    MPI_Comm_free(&shmcomm);
+    return nodes;
+}
 
 static int dist_get_rank() {
     int is_initialized;
@@ -250,33 +280,34 @@ static void dist_reduce(char* in_ptr, char* out_ptr, int op_enum,
 
         char* in_val_ptr = in_ptr + sizeof(int64_t);
 
-        // MPI doesn't support values smaller than int and unsigned values, so cast
-        // values when they don't fit originally.
-        // TODO: Add support value_size > struct_val_size (int64 and long on Windows)
-        // and equal size but unsigned uint64 and long on Linux
+        // MPI doesn't support values smaller than int and unsigned values, so
+        // cast values when they don't fit originally.
+        // TODO: Add support value_size > struct_val_size (int64 and long on
+        // Windows) and equal size but unsigned uint64 and long on Linux
         int struct_val_size = val_idx_struct_size - sizeof(MPI_INT);
         if (struct_val_size > value_size) {
             // Case 1: uint32 and long on Linux
             if (struct_val_size == sizeof(int64_t)) {
-                uint32_t orig_val = *((uint32_t *) in_val_ptr);
-                int64_t value = (int64_t) orig_val;
-                memcpy(in_val_rank, (char *) &value, struct_val_size);
-            // Case 2: Values smaller than int32_t (int8, uint8, int16, uint16)
-            // TODO: Can int be smaller on Windows?
+                uint32_t orig_val = *((uint32_t*)in_val_ptr);
+                int64_t value = (int64_t)orig_val;
+                memcpy(in_val_rank, (char*)&value, struct_val_size);
+                // Case 2: Values smaller than int32_t (int8, uint8, int16,
+                // uint16)
+                // TODO: Can int be smaller on Windows?
             } else if (struct_val_size == sizeof(int32_t)) {
                 int32_t value = 0;
                 switch (type_enum) {
                     case Bodo_CTypes::INT8:
-                        value = (int32_t) *((int8_t *) in_val_ptr);
+                        value = (int32_t) * ((int8_t*)in_val_ptr);
                         break;
                     case Bodo_CTypes::UINT8:
-                        value = (int32_t) *((uint8_t *) in_val_ptr);
+                        value = (int32_t) * ((uint8_t*)in_val_ptr);
                         break;
                     case Bodo_CTypes::INT16:
-                        value = (int32_t) *((int16_t *) in_val_ptr);
+                        value = (int32_t) * ((int16_t*)in_val_ptr);
                         break;
                     case Bodo_CTypes::UINT16:
-                        value = (int32_t) *((uint16_t *) in_val_ptr);
+                        value = (int32_t) * ((uint16_t*)in_val_ptr);
                         break;
                 }
                 memcpy(in_val_rank, &value, struct_val_size);
@@ -450,9 +481,8 @@ static MPI_Datatype get_val_rank_MPI_typ(int typ_enum) {
         return MPI_DATATYPE_NULL;
     }
     MPI_Datatype types_list[] = {
-        MPI_2INT, MPI_2INT, MPI_2INT, MPI_2INT,
-        MPI_LONG_INT,      MPI_FLOAT_INT,     MPI_DOUBLE_INT, MPI_LONG_INT,
-        MPI_2INT, MPI_2INT};
+        MPI_2INT,      MPI_2INT,       MPI_2INT,     MPI_2INT, MPI_LONG_INT,
+        MPI_FLOAT_INT, MPI_DOUBLE_INT, MPI_LONG_INT, MPI_2INT, MPI_2INT};
     return types_list[typ_enum];
 }
 
@@ -720,63 +750,65 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
                                     int64_t n_elems_rhs, int64_t* p,
                                     int64_t p_len) {
     try {
-    if (len != p_len) {
-        throw std::runtime_error(
+        if (len != p_len) {
+            throw std::runtime_error(
                 "_distributed.h::permutation_array_index: Array length and "
                 "permutation index length should match!");
-    }
+        }
 
-    MPI_Datatype element_t;
-    MPI_Type_contiguous(elem_size, MPI_UNSIGNED_CHAR, &element_t);
-    MPI_Type_commit(&element_t);
+        MPI_Datatype element_t;
+        MPI_Type_contiguous(elem_size, MPI_UNSIGNED_CHAR, &element_t);
+        MPI_Type_commit(&element_t);
 
-    auto num_ranks = dist_get_size();
-    auto rank = dist_get_rank();
-    // dest_ranks contains the destination rank for each element i in rhs
-    auto dest_ranks = find_dest_ranks(rank, n_elems_rhs, num_ranks, p, p_len);
-    auto send_counts = find_send_counts(dest_ranks, num_ranks, elem_size);
-    auto send_disps = find_disps(send_counts);
-    auto recv_counts = find_recv_counts(num_ranks, send_counts);
-    auto recv_disps = find_disps(recv_counts);
+        auto num_ranks = dist_get_size();
+        auto rank = dist_get_rank();
+        // dest_ranks contains the destination rank for each element i in rhs
+        auto dest_ranks =
+            find_dest_ranks(rank, n_elems_rhs, num_ranks, p, p_len);
+        auto send_counts = find_send_counts(dest_ranks, num_ranks, elem_size);
+        auto send_disps = find_disps(send_counts);
+        auto recv_counts = find_recv_counts(num_ranks, send_counts);
+        auto recv_disps = find_disps(recv_counts);
 
-    auto offsets = send_disps;
-    std::vector<unsigned char> send_buf(dest_ranks.size() * elem_size);
-    for (size_t i = 0; i < dest_ranks.size(); ++i) {
-        auto send_buf_offset = offsets[dest_ranks[i]]++ * elem_size;
-        auto* send_buf_begin = send_buf.data() + send_buf_offset;
-        auto* rhs_begin = rhs + i * elem_size;
-        std::copy(rhs_begin, rhs_begin + elem_size, send_buf_begin);
-    }
+        auto offsets = send_disps;
+        std::vector<unsigned char> send_buf(dest_ranks.size() * elem_size);
+        for (size_t i = 0; i < dest_ranks.size(); ++i) {
+            auto send_buf_offset = offsets[dest_ranks[i]]++ * elem_size;
+            auto* send_buf_begin = send_buf.data() + send_buf_offset;
+            auto* rhs_begin = rhs + i * elem_size;
+            std::copy(rhs_begin, rhs_begin + elem_size, send_buf_begin);
+        }
 
-    MPI_Alltoallv(send_buf.data(), send_counts.data(), send_disps.data(),
-                  element_t, lhs, recv_counts.data(), recv_disps.data(),
-                  element_t, MPI_COMM_WORLD);
+        MPI_Alltoallv(send_buf.data(), send_counts.data(), send_disps.data(),
+                      element_t, lhs, recv_counts.data(), recv_disps.data(),
+                      element_t, MPI_COMM_WORLD);
 
-    // Let us assume that the global data array is [a b c d e f g h] and the
-    // permutation array that we would like to apply to it is [2 7 5 6 4 3 1 0].
-    // Hence, the resultant permutation is [c h f g e d b a].  Assuming that
-    // there are two ranks, each receiving 4 data items, and we are rank 0,
-    // after MPI_Alltoallv returns, we receive the chunk [c f g h] that
-    // corresponds to the sorted chunk of our permutation, which is [2 5 6 7].
-    // In order to recover the positions of [c f g h] in the target permutation
-    // we first argsort our chunk of permutation array:
-    auto begin = p + dist_get_start(p_len, num_ranks, rank);
-    int64_t size_after_shuffle = dist_get_node_portion(p_len, num_ranks, rank);
-    auto p1 = arg_sort(begin, size_after_shuffle);
+        // Let us assume that the global data array is [a b c d e f g h] and the
+        // permutation array that we would like to apply to it is [2 7 5 6 4 3 1
+        // 0]. Hence, the resultant permutation is [c h f g e d b a].  Assuming
+        // that there are two ranks, each receiving 4 data items, and we are
+        // rank 0, after MPI_Alltoallv returns, we receive the chunk [c f g h]
+        // that corresponds to the sorted chunk of our permutation, which is [2
+        // 5 6 7]. In order to recover the positions of [c f g h] in the target
+        // permutation we first argsort our chunk of permutation array:
+        auto begin = p + dist_get_start(p_len, num_ranks, rank);
+        int64_t size_after_shuffle =
+            dist_get_node_portion(p_len, num_ranks, rank);
+        auto p1 = arg_sort(begin, size_after_shuffle);
 
-    // The result of the argsort, stored in p1, is [0 2 3 1].  This tells us how
-    // the chunk we have received is different from the target permutation we
-    // want to achieve.  Hence, to achieve the target permutation, we need to
-    // sort our data chunk based on p1.  One way of sorting array A based on the
-    // values of array B, is to argsort array B and apply the permutation to
-    // array A.  Therefore, we argsort p1:
-    auto p2 = arg_sort(p1.data(), size_after_shuffle);
+        // The result of the argsort, stored in p1, is [0 2 3 1].  This tells us
+        // how the chunk we have received is different from the target
+        // permutation we want to achieve.  Hence, to achieve the target
+        // permutation, we need to sort our data chunk based on p1.  One way of
+        // sorting array A based on the values of array B, is to argsort array B
+        // and apply the permutation to array A.  Therefore, we argsort p1:
+        auto p2 = arg_sort(p1.data(), size_after_shuffle);
 
-    // which gives us [0 3 1 2], and apply the resultant permutation to our data
-    // chunk to obtain the target permutation.
-    apply_permutation(lhs, elem_size, p2);
+        // which gives us [0 3 1 2], and apply the resultant permutation to our
+        // data chunk to obtain the target permutation.
+        apply_permutation(lhs, elem_size, p2);
 
-    MPI_Type_free(&element_t);
+        MPI_Type_free(&element_t);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;
@@ -889,93 +921,95 @@ static void oneD_reshape_shuffle(char* output, char* input,
                                  int64_t in_lower_dims_size, int n_dest_ranks,
                                  int* dest_ranks) {
     try {
-    int num_pes = dist_get_size();
-    int rank = dist_get_rank();
+        int num_pes = dist_get_size();
+        int rank = dist_get_rank();
 
-    // local sizes on all ranks
-    std::vector<int64_t> all_old_dim0_local_sizes(num_pes);
-    MPI_Allgather(&old_dim0_local_len, 1, MPI_INT64_T,
-                  all_old_dim0_local_sizes.data(), 1, MPI_INT64_T,
-                  MPI_COMM_WORLD);
-    // dim0 start offset (not byte offset) on all pes
-    std::vector<int64_t> all_old_starts(num_pes);
-    all_old_starts[0] = 0;
-    for (size_t i = 1; i < (size_t)num_pes; i++)
-        all_old_starts[i] =
-            all_old_starts[i - 1] + all_old_dim0_local_sizes[i - 1];
+        // local sizes on all ranks
+        std::vector<int64_t> all_old_dim0_local_sizes(num_pes);
+        MPI_Allgather(&old_dim0_local_len, 1, MPI_INT64_T,
+                      all_old_dim0_local_sizes.data(), 1, MPI_INT64_T,
+                      MPI_COMM_WORLD);
+        // dim0 start offset (not byte offset) on all pes
+        std::vector<int64_t> all_old_starts(num_pes);
+        all_old_starts[0] = 0;
+        for (size_t i = 1; i < (size_t)num_pes; i++)
+            all_old_starts[i] =
+                all_old_starts[i - 1] + all_old_dim0_local_sizes[i - 1];
 
-    // map rank in COMM_WORLD to rank in destination group
-    std::vector<int> group_rank(num_pes, -1);
-    if (n_dest_ranks <= 0) {
-        // using all ranks in COMM_WORLD
-        n_dest_ranks = num_pes;
-        for (int i = 0; i < num_pes; i++) group_rank[i] = i;
-    } else {
-        for (int i = 0; i < n_dest_ranks; i++) group_rank[dest_ranks[i]] = i;
-    }
+        // map rank in COMM_WORLD to rank in destination group
+        std::vector<int> group_rank(num_pes, -1);
+        if (n_dest_ranks <= 0) {
+            // using all ranks in COMM_WORLD
+            n_dest_ranks = num_pes;
+            for (int i = 0; i < num_pes; i++) group_rank[i] = i;
+        } else {
+            for (int i = 0; i < n_dest_ranks; i++)
+                group_rank[dest_ranks[i]] = i;
+        }
 
-    // get my old and new data interval and convert to byte offsets
-    int64_t my_old_start = all_old_starts[rank] * in_lower_dims_size;
-    int64_t my_new_start = 0;
-    if (group_rank[rank] >= 0)
-        my_new_start = dist_get_start(new_dim0_global_len, n_dest_ranks,
-                                      group_rank[rank]) *
-                       out_lower_dims_size;
-    int64_t my_old_end =
-        (all_old_starts[rank] + old_dim0_local_len) * in_lower_dims_size;
-    int64_t my_new_end = 0;
-    if (group_rank[rank] >= 0)
-        my_new_end =
-            dist_get_end(new_dim0_global_len, n_dest_ranks, group_rank[rank]) *
-            out_lower_dims_size;
-
-    std::vector<int64_t> send_counts(num_pes);
-    std::vector<int64_t> recv_counts(num_pes);
-    std::vector<int64_t> send_disp(num_pes);
-    std::vector<int64_t> recv_disp(num_pes);
-
-    int64_t curr_send_offset = 0;
-    int64_t curr_recv_offset = 0;
-
-    for (int i = 0; i < num_pes; i++) {
-        send_disp[i] = curr_send_offset;
-        recv_disp[i] = curr_recv_offset;
-
-        // get pe's old and new data interval and convert to byte offsets
-        int64_t pe_old_start = all_old_starts[i] * in_lower_dims_size;
-        int64_t pe_new_start = 0;
-        if (group_rank[i] >= 0)
-            pe_new_start = dist_get_start(new_dim0_global_len, n_dest_ranks,
-                                          group_rank[i]) *
+        // get my old and new data interval and convert to byte offsets
+        int64_t my_old_start = all_old_starts[rank] * in_lower_dims_size;
+        int64_t my_new_start = 0;
+        if (group_rank[rank] >= 0)
+            my_new_start = dist_get_start(new_dim0_global_len, n_dest_ranks,
+                                          group_rank[rank]) *
                            out_lower_dims_size;
-        int64_t pe_old_end = (all_old_starts[i] + all_old_dim0_local_sizes[i]) *
-                             in_lower_dims_size;
-        int64_t pe_new_end = 0;
-        if (group_rank[i] >= 0)
-            pe_new_end =
-                dist_get_end(new_dim0_global_len, n_dest_ranks, group_rank[i]) *
-                out_lower_dims_size;
+        int64_t my_old_end =
+            (all_old_starts[rank] + old_dim0_local_len) * in_lower_dims_size;
+        int64_t my_new_end = 0;
+        if (group_rank[rank] >= 0)
+            my_new_end = dist_get_end(new_dim0_global_len, n_dest_ranks,
+                                      group_rank[rank]) *
+                         out_lower_dims_size;
 
-        send_counts[i] = 0;
-        recv_counts[i] = 0;
+        std::vector<int64_t> send_counts(num_pes);
+        std::vector<int64_t> recv_counts(num_pes);
+        std::vector<int64_t> send_disp(num_pes);
+        std::vector<int64_t> recv_disp(num_pes);
 
-        // if sending to processor (interval overlap)
-        if (pe_new_end > my_old_start && pe_new_start < my_old_end) {
-            send_counts[i] = std::min(my_old_end, pe_new_end) -
-                             std::max(my_old_start, pe_new_start);
-            curr_send_offset += send_counts[i];
+        int64_t curr_send_offset = 0;
+        int64_t curr_recv_offset = 0;
+
+        for (int i = 0; i < num_pes; i++) {
+            send_disp[i] = curr_send_offset;
+            recv_disp[i] = curr_recv_offset;
+
+            // get pe's old and new data interval and convert to byte offsets
+            int64_t pe_old_start = all_old_starts[i] * in_lower_dims_size;
+            int64_t pe_new_start = 0;
+            if (group_rank[i] >= 0)
+                pe_new_start = dist_get_start(new_dim0_global_len, n_dest_ranks,
+                                              group_rank[i]) *
+                               out_lower_dims_size;
+            int64_t pe_old_end =
+                (all_old_starts[i] + all_old_dim0_local_sizes[i]) *
+                in_lower_dims_size;
+            int64_t pe_new_end = 0;
+            if (group_rank[i] >= 0)
+                pe_new_end = dist_get_end(new_dim0_global_len, n_dest_ranks,
+                                          group_rank[i]) *
+                             out_lower_dims_size;
+
+            send_counts[i] = 0;
+            recv_counts[i] = 0;
+
+            // if sending to processor (interval overlap)
+            if (pe_new_end > my_old_start && pe_new_start < my_old_end) {
+                send_counts[i] = std::min(my_old_end, pe_new_end) -
+                                 std::max(my_old_start, pe_new_start);
+                curr_send_offset += send_counts[i];
+            }
+
+            // if receiving from processor (interval overlap)
+            if (my_new_end > pe_old_start && my_new_start < pe_old_end) {
+                recv_counts[i] = std::min(pe_old_end, my_new_end) -
+                                 std::max(pe_old_start, my_new_start);
+                curr_recv_offset += recv_counts[i];
+            }
         }
 
-        // if receiving from processor (interval overlap)
-        if (my_new_end > pe_old_start && my_new_start < pe_old_end) {
-            recv_counts[i] = std::min(pe_old_end, my_new_end) -
-                             std::max(pe_old_start, my_new_start);
-            curr_recv_offset += recv_counts[i];
-        }
-    }
-
-    bodo_alltoallv(input, send_counts, send_disp, MPI_CHAR, output, recv_counts,
-                   recv_disp, MPI_CHAR, MPI_COMM_WORLD);
+        bodo_alltoallv(input, send_counts, send_disp, MPI_CHAR, output,
+                       recv_counts, recv_disp, MPI_CHAR, MPI_COMM_WORLD);
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;

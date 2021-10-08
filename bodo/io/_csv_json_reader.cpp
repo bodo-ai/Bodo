@@ -1113,6 +1113,55 @@ void skip_rows(MemReader *reader, int64_t skiprows, bool is_parallel) {
 }
 
 /**
+ * Read first n rows of the global dataset. Note that if data is distributed,
+ * this may require reading a variable number of rows on multiple ranks.
+ * The MemReaders can be in any state for this function to work, but it should
+ * only be called once, and rows should be balanced afterwards with
+ * balance_rows() because this function can modify a variable number of rows on
+ * multiple ranks.
+ * @param reader : MemReader whose data we want to modify
+ * @param nrows: number of rows to read (in global dataset)
+ * @param is_parallel: indicates if data is distributed or replicated
+ */
+void set_nrows(MemReader *reader, int64_t nrows, bool is_parallel) {
+    if (nrows <= 0) return;
+    // we need to know the row offsets to set specific number of rows to read
+    reader->calc_row_offsets();
+    if (is_parallel) {
+        int my_rank = dist_get_rank();
+        int num_ranks = dist_get_size();
+        // first allgather the number of rows on every rank
+        int64_t num_rows = reader->get_num_rows();
+        std::vector<int64_t> num_rows_ranks(
+            num_ranks);  // number of rows in each rank
+        MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
+                      MPI_INT64_T, MPI_COMM_WORLD);
+
+        // determine the number of rows we need to read on each rank,
+        // and modify data accordingly
+        for (int rank = 0; rank < num_ranks; rank++) {
+            int64_t local_nrows = std::min(nrows, num_rows_ranks[rank]);
+            if (rank == my_rank) {
+                int64_t total_bytes = reader->row_offsets[local_nrows];
+                reader->data.resize(total_bytes);
+                return;
+            }
+            nrows -= local_nrows;
+            // Remove data from rest of ranks that has nrows==0
+            if (nrows == 0) {
+                int64_t total_bytes = 0;
+                reader->data.resize(total_bytes);
+                break;
+            }
+        }
+    } else {
+        // data is replicated, so read same number of rows on every rank
+        // we just need to modify the end offset/remove data after end offset
+        reader->data.resize(reader->row_offsets[nrows]);
+        return;
+    }
+}
+/**
  * For balance_rows function below, calculate the number of rows that
  * this rank will send to other ranks.
  * The calculation ensures that each rank has
@@ -1242,7 +1291,135 @@ void balance_rows(MemReader *reader) {
 
     reader->set_data(recvbuf);  // mem reader takes ownership of the buffer
 }
+/**
+ * Read uncompressed file(s) in chunks to find actual start and end of the data
+ * to be loaded based on skiprows and nrows values.
+ * @param file_names: list of file names
+ * @param file_sizes: list of file sizes in bytes
+ * @param header_size_bytes: csv header bytes
+ * @param fs : File system to read from
+ * @param skiprows: number of rows to skip reading from the beginning
+ * @param nrows: total number of rows to read from beginning or after skiprows
+ * if requested
+ * @param global_start[out]: global starting position
+ * @param global_end[out]: global end position
+ */
+void read_file_info(const std::vector<std::string> &file_names,
+                    const std::vector<int64_t> &file_sizes,
+                    size_t header_size_bytes,
+                    std::shared_ptr<arrow::fs::FileSystem> fs, int64_t skiprows,
+                    int64_t nrows, int64_t &global_start, int64_t &global_end,
+                    char row_separator) {
+    const int64_t CHUNK_SIZE = 8192;
+    std::vector<char> local_data(CHUNK_SIZE);
+    // Bytes skipped based on how many rows to skip when using skiprows
+    int64_t total_skipped = 0;
+    // Bytes to read based on how many rows to read when using nrows
+    int64_t nrows_bytes = 0;
+    // Start byte position to start read requested data.
+    int64_t skipped_start_pos = 0;
+    for (size_t file_i = 0; file_i < file_sizes.size(); file_i++) {
+        int64_t fsize = file_sizes[file_i] - header_size_bytes;
+        int64_t bytes_left_to_read = fsize;
+        int64_t chunk_start = header_size_bytes;
+        arrow::Result<std::shared_ptr<arrow::io::RandomAccessFile>>
+            file_result = fs->OpenInputFile(file_names[file_i]);
+        CHECK_ARROW(file_result, "read_file_info", "fs->OpenInputFile")
+        std::shared_ptr<arrow::io::RandomAccessFile> file =
+            file_result.ValueOrDie();
+        arrow::Status status;
+        // Read file in chunks of CHUNK_SIZE bytes
+        // Scan for row_separator to identify position of the row to skip and/or
+        // read.
+        while (chunk_start < fsize) {
+            int64_t chunk_end =
+                chunk_start + std::min(CHUNK_SIZE, bytes_left_to_read);
+            int64_t read_size = chunk_end - chunk_start;
+            status = file->Seek(chunk_start);
+            arrow::Result<int64_t> bytes_read_result =
+                file->Read(read_size, local_data.data());
+            CHECK_ARROW(bytes_read_result, "read_file_info", "file->Read")
+            int64_t bytes_read = bytes_read_result.ValueOrDie();
+            if (bytes_read == 0) break;
+            bytes_left_to_read -= read_size;
+            // check for row_separator in new data read
+            // keep track how of many bytes to skip from the beginning of the
+            // whole dataset
+            // 1. skiprows
+            if (skiprows > 0) {
+                for (int64_t i = 0; i < bytes_read; i++) {
+                    if (local_data[i] == row_separator) {
+                        // skip empty lines
+                        if (i > 0 && local_data[i - 1] == row_separator)
+                            continue;
+                        skiprows--;
+                        // When skiprows==0, relative start pos will be start of
+                        // next row. global_start is how many bytes skipped in
+                        // the chunk + any previous skipped chunks
+                        // skipped_start_pos is relative start position to the
+                        // current chunk Store it to use with nrows
+                        if (!skiprows) {
+                            skipped_start_pos = i + 1;
+                            global_start = total_skipped + skipped_start_pos;
+                            break;
+                        }
+                    }
+                }
+                // If skiprows>0, add bytes_read to total bytes to skip
+                if (skiprows) total_skipped += bytes_read;
+            }
 
+            // 2. nrows
+            // Start nrows count only after skiprows reach 0
+            if (!skiprows && nrows > 0) {
+                // Start reading rest of current chunk (skipped_start_pos = new
+                // char after skipped bytes) Then, continue reading whole chunks
+                // (skipped_start_pos=0)
+                for (int64_t i = skipped_start_pos; i < bytes_read; i++) {
+                    if (local_data[i] == row_separator) {
+                        // skip empty lines
+                        if (i > skipped_start_pos &&
+                            local_data[i - 1] == row_separator)
+                            continue;
+                        nrows--;
+                        // global_end is global end offset for dataset reading
+                        // It's computed as how many bytes to read after
+                        // global_position
+                        // bytes read so far in this chunk + previous bytes of
+                        // previous chunks excluding after skipped_start_pos
+                        // (needed for when both nrows and skiprows fall in the
+                        // same chunk to avoid counting `skipped_start_pos`
+                        // twice)
+                        if (!nrows) {
+                            global_end = global_start + nrows_bytes + i + 1 -
+                                         skipped_start_pos;
+                            break;
+                        }
+                    }
+                }
+                if (nrows) nrows_bytes += (bytes_read - skipped_start_pos);
+                // Reset at end of loop since the first chunk nrows start
+                // reading could be continuing a read of a chunk skiprows read
+                // part of it Next chunk(s) to read will be read exclusively for
+                // nrows so we set it to 0.
+                skipped_start_pos = 0;
+            }
+            chunk_start = chunk_end;
+            // If the code already scanned through all skiprows and nrows,
+            // it got the required information (global_start/global_end) and
+            // no need to read more chunks in this file.
+            if (!skiprows && !nrows) break;
+        }  // end-while-true
+        // If scan reached start and end position, no need to read more files.
+        if (!skiprows && !nrows) break;
+    }  // end-for-loop-all-files
+}
+// If skiprows and/or nrows are used
+// This is the threshold used to determine whether there's enough memory for
+// the whole dataset to be loaded first, then compute nrows/skiprows.
+// If datasize is more than 60% of the memory size of all nodes,
+// then we opt to scan data first
+#define MEMORY_LOAD_FACTOR 0.6  // TODO: tune-it
 /**
  * Read my chunk of CSV/JSON dataset.
  * @param fname : path specifying *all* CSV/JSON file(s) to read (not
@@ -1250,6 +1427,7 @@ void balance_rows(MemReader *reader) {
  * @param suffix : "csv" or "json"
  * @param is_parallel : indicates whether data is distributed or replicated
  * @param skiprows : number of rows to skip in global dataset
+ * @param nrows: number of rows to read in global dataset
  * @param json_lines : true if JSON file is in JSON Lines format (one row/record
  * per line)
  * @param csv_header : true if CSV files contain headers
@@ -1261,9 +1439,6 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
                                        bool csv_header,
                                        const char *compression_pyarg,
                                        const char *bucket_region) {
-    // TODO nrows looks like it is not used. remove
-
-    // TODO check that skiprows >= 0
     try {
         CHECK(fname != NULL, "NULL filename provided.");
 
@@ -1285,6 +1460,15 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
             return NULL;
         }
         const std::string compression = path_info.get_compression_scheme();
+        // This flag is used to indicate whether the data is larger than memory
+        // available
+        // We use it to determine which path to take for computing start
+        // position and size of data to read. If data is too large to fit, we
+        // should read the file(s) in chunks and compute the offset and size of
+        // data to read (if skiprows and/or nrows is used) 2nd path, load the
+        // whole data and then compute offset and size of data to read
+
+        bool is_low_memory = false;
 
         if (compression == "uncompressed") {
             const std::vector<std::string> &file_names =
@@ -1294,18 +1478,68 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
             if (csv_header)
                 header_size_bytes = get_header_size(
                     file_names[0], file_sizes[0], path_info, '\n');
-            // total size excluding headers
-            int64_t total_size =
+            // 0= total_size, 1=start_pos, 2=end_pos
+            std::vector<int64_t> bytes_meta_data(3);
+            // total_size: total size excluding headers
+            bytes_meta_data[0] =
                 path_info.get_size() - (file_names.size() * header_size_bytes);
             // now determine which files to read from and what portion from each
             // file this is based on partitioning of global dataset based on
             // bytes. As such, this first phase can end up with rows of data in
             // multiple processes
             int64_t start_global = 0;
-            int64_t end_global = total_size;
+            int64_t end_global = bytes_meta_data[0];
+            // Find memory across all nodes.
+            // Assumes cluster is uniform (i.e. same node type for all clusters)
+            // TODO: Non-uniform cluster
+            // Allreduce(first rank/node, SUM(node_sys_memory))
+            size_t cluster_sys_memory =
+                getTotalSystemMemory() * dist_get_node_count();
+            is_low_memory = (((double)bytes_meta_data[0] / cluster_sys_memory) >
+                             MEMORY_LOAD_FACTOR);
+            // If one of the ranks has is_low_memory true,
+            // all ranks should switch to scanning first.
+            MPI_Allreduce(MPI_IN_PLACE, &is_low_memory, 1, MPI_C_BOOL, MPI_LOR,
+                          MPI_COMM_WORLD);
+
+            // If skiprows and/or nrows are used and we decided to scan first,
+            // start_global and/or end_global will be shifted.
+            // Rank 0 computes these new offsets and
+            // stores starting offset based on skiprows in start_pos. Default 0
+            // stores ending offset based on nrows in end_pos. Default end of
+            // file(s) computes new total_size start_pos
+            // global_start
+            bytes_meta_data[1] = start_global;
+            // global_end
+            bytes_meta_data[2] = end_global;
+            // Special case when nrows=0, we don't read from disk
+            if (nrows == 0) {
+                bytes_meta_data[0] = 0;
+                bytes_meta_data[1] = 0;
+                bytes_meta_data[2] = 0;
+            }
+            if ((skiprows || nrows > 0) && is_low_memory) {
+                // rank 0 finds update start, end offsets, and total size.
+                if (rank == 0) {
+                    read_file_info(file_names, file_sizes, header_size_bytes,
+                                   path_info.get_fs(), skiprows, nrows,
+                                   bytes_meta_data[1], bytes_meta_data[2],
+                                   row_separator);
+                    bytes_meta_data[0] =
+                        bytes_meta_data[2] - bytes_meta_data[1];
+                }
+                MPI_Bcast(bytes_meta_data.data(), 3, MPI_INT64_T, 0,
+                          MPI_COMM_WORLD);
+            }
             if (is_parallel) {
-                start_global = dist_get_start(total_size, num_ranks, rank);
-                end_global = dist_get_end(total_size, num_ranks, rank);
+                start_global =
+                    bytes_meta_data[1] +
+                    dist_get_start(bytes_meta_data[0], num_ranks, rank);
+                end_global = bytes_meta_data[1] +
+                             dist_get_end(bytes_meta_data[0], num_ranks, rank);
+            } else {
+                start_global = bytes_meta_data[1];
+                end_global = bytes_meta_data[2];
             }
             int64_t to_read = end_global - start_global;
             mem_reader = new MemReader(to_read, row_separator, !json_lines);
@@ -1379,8 +1613,15 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
             }
         }
 
-        // skip rows if requested
-        skip_rows(mem_reader, skiprows, is_parallel);
+        // Execute these only weren't done earlier (based on memory
+        // availability)
+        if (!is_low_memory) {
+            // skip rows if requested
+            skip_rows(mem_reader, skiprows, is_parallel);
+
+            // read nrows if requested
+            set_nrows(mem_reader, nrows, is_parallel);
+        }
 
         // shuffle data so that each rank has required number of rows
         if (is_parallel) balance_rows(mem_reader);
@@ -1409,12 +1650,12 @@ extern "C" PyObject *file_chunk_reader(const char *fname, const char *suffix,
         return NULL;
     }
 }
+#undef MEMORY_LOAD_FACTOR
 
 extern "C" PyObject *csv_file_chunk_reader(const char *fname, bool is_parallel,
                                            int64_t skiprows, int64_t nrows,
                                            bool header, const char *compression,
                                            const char *bucket_region) {
-    // TODO nrows not used??
     return file_chunk_reader(fname, "csv", is_parallel, skiprows, nrows, true,
                              header, compression, bucket_region);
 }
