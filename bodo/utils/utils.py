@@ -1084,8 +1084,8 @@ def nanstd_ddof1(a):  # pragma: no cover
     return np.sqrt(nanvar_ddof1(a))
 
 
-def has_h5py():
-    """returns True if h5py and hdf5 support are installed"""
+def has_supported_h5py():
+    """returns True if supported versions of h5py and hdf5 are installed"""
     try:
         import h5py  # noqa
 
@@ -1095,13 +1095,16 @@ def has_h5py():
     except ImportError:
         _has_h5py = False
     else:
-        _has_h5py = True
+        # NOTE: _hdf5 import fails if proper hdf5 version is not installed, but we
+        # should check h5py as well since there may be an extra pip installation
+        # see [BE-1382]
+        _has_h5py = h5py.version.hdf5_version_tuple[1] == 10
     return _has_h5py
 
 
 def check_h5py():
     """raise error if h5py/hdf5 is not installed"""
-    if not has_h5py():
+    if not has_supported_h5py():
         raise BodoError("install 'h5py' package to enable hdf5 support")
 
 

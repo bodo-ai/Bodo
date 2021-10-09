@@ -126,7 +126,7 @@ import bodo.io
 import bodo.utils
 import bodo.utils.typing
 
-if bodo.utils.utils.has_h5py():
+if bodo.utils.utils.has_supported_h5py():
     from bodo.io import h5  # noqa
 
 
