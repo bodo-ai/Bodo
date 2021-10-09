@@ -103,6 +103,7 @@ class UntypedPass:
         # save names of arguments and return values to catch invalid dist annotation
         self._arg_names = set()
         self._return_varnames = set()
+        self._has_h5py = bodo.utils.utils.has_supported_h5py()
 
     def run(self):
         """run untyped pass transform"""
@@ -186,6 +187,18 @@ class UntypedPass:
         # save arg name to catch invalid dist annotations
         if isinstance(rhs, ir.Arg):
             self._arg_names.add(rhs.name)
+
+        # Throw proper error if the user has installed an unsupported HDF5 version
+        # see [BE-1382]
+        # TODO(ehsan): the code may not use "h5py" directly ("from h5py import File")
+        # but that's rare and not high priority at this time
+        if (
+            not self._has_h5py
+            and isinstance(rhs, (ir.Const, ir.Global, ir.FreeVar))
+            and isinstance(rhs.value, pytypes.ModuleType)
+            and rhs.value.__name__ == "h5py"
+        ):  # pragma: no cover
+            raise BodoError("Bodo requires HDF5 1.10 for h5py support", rhs.loc)
 
         if isinstance(rhs, ir.Expr):
             if rhs.op == "call":
@@ -389,7 +402,7 @@ class UntypedPass:
 
     def _run_getitem(self, assign, rhs, label):
         # fix type for f['A'][:] dset reads
-        if bodo.utils.utils.has_h5py():
+        if self._has_h5py:
             lhs = assign.target.name
             h5_nodes = self.h5_handler.handle_possible_h5_read(assign, lhs, rhs)
             if h5_nodes is not None:

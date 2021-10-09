@@ -26,10 +26,8 @@ from bodo.libs.str_ext import (
 from bodo.utils.typing import is_overload_none, parse_dtype
 from bodo.utils.utils import numba_to_c_type
 
-if bodo.utils.utils.has_h5py():
+if bodo.utils.utils.has_supported_h5py():
     import h5py
-
-    assert h5py.version.hdf5_version_tuple[1] == 10, "only hdf5 1.10 supported"
     import llvmlite.binding as ll
 
     from bodo.io import _hdf5
@@ -84,13 +82,6 @@ h5dataset_or_group_type = H5DatasetOrGroupType()
 
 h5file_data_type = types.int64
 
-if bodo.utils.utils.has_h5py():
-    # hid_t is 32bit in 1.8 but 64bit in 1.10
-    if h5py.version.hdf5_version_tuple[1] == 8:
-        h5file_data_type = types.int32
-    else:
-        assert h5py.version.hdf5_version_tuple[1] == 10
-
 
 @register_model(H5FileType)
 @register_model(H5DatasetType)
@@ -136,7 +127,7 @@ h5_open = types.ExternalFunction(
 )
 
 
-if bodo.utils.utils.has_h5py():
+if bodo.utils.utils.has_supported_h5py():
 
     @overload(h5py.File)
     def overload_h5py_file(
