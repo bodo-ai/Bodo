@@ -428,11 +428,13 @@ ext_json = Extension(
 )
 
 ext_parquet = Extension(
-    name="bodo.io.parquet_cpp",
+    name="bodo.io.arrow_cpp",
     sources=[
         "bodo/io/_fs_io.cpp",
-        "bodo/io/_parquet.cpp",
-        "bodo/io/_parquet_reader.cpp",
+        "bodo/io/arrow.cpp",
+        "bodo/io/arrow_reader.cpp",
+        "bodo/io/parquet_reader.cpp",
+        "bodo/io/parquet_write.cpp",
         "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_decimal_ext.cpp",
         "bodo/libs/_array_utils.cpp",
@@ -447,7 +449,7 @@ ext_parquet = Extension(
         "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_decimal_ext.h",
         "bodo/io/_fs_io.h",
-        "bodo/io/_parquet_reader.h",
+        "bodo/io/arrow_reader.h",
         "bodo/libs/_murmurhash3.h",
     ],
     libraries=pq_libs + np_compile_args["libraries"] + ["arrow_python"],

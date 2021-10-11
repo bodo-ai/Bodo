@@ -255,12 +255,7 @@ struct array_info {
           num_categories(_num_categories) {}
 
     template <typename T>
-    T& at(size_t idx) {
-#ifdef DEBUG_ARRAY_ACCESS
-        std::cout << "     at access SINGLE for idx=" << idx << "\n";
-#endif
-        return ((T*)data1)[idx];
-    }
+    T& at(size_t idx) { return ((T*)data1)[idx]; }
 
     template <typename T>
     const T& at(size_t idx) const { return ((T*)data1)[idx]; }
@@ -373,6 +368,9 @@ array_info* alloc_nullable_array(int64_t length,
 
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes);
+
+array_info* alloc_list_string_array(int64_t n_lists, array_info* string_arr,
+                                    int64_t extra_null_bytes);
 
 array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
                                     int64_t n_chars, int64_t extra_null_bytes);
@@ -666,7 +664,7 @@ void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size,
                            void* in);
 NRT_MemInfo* alloc_array_item_arr_meminfo();
 
-Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type);
+Bodo_CTypes::CTypeEnum arrow_to_bodo_type(std::shared_ptr<arrow::DataType> type);
 
 void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
                        array_info** infos, int64_t& lengths_pos,

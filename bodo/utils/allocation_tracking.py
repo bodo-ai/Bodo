@@ -2,7 +2,7 @@ import llvmlite.binding as ll
 import numba
 from numba.core import types
 
-from bodo.io import parquet_cpp
+from bodo.io import arrow_cpp
 from bodo.libs import array_ext, decimal_ext, quantile_alg
 
 ll.add_symbol("get_stats_alloc_arr", array_ext.get_stats_alloc)
@@ -15,10 +15,10 @@ ll.add_symbol("get_stats_mi_alloc_dec", decimal_ext.get_stats_mi_alloc)
 ll.add_symbol("get_stats_mi_free_dec", decimal_ext.get_stats_mi_free)
 ll.add_symbol("get_stats_alloc_qa", quantile_alg.get_stats_alloc)
 ll.add_symbol("get_stats_free_qa", quantile_alg.get_stats_free)
-ll.add_symbol("get_stats_alloc_pq", parquet_cpp.get_stats_alloc)
-ll.add_symbol("get_stats_free_pq", parquet_cpp.get_stats_free)
-ll.add_symbol("get_stats_mi_alloc_pq", parquet_cpp.get_stats_mi_alloc)
-ll.add_symbol("get_stats_mi_free_pq", parquet_cpp.get_stats_mi_free)
+ll.add_symbol("get_stats_alloc_pq", arrow_cpp.get_stats_alloc)
+ll.add_symbol("get_stats_free_pq", arrow_cpp.get_stats_free)
+ll.add_symbol("get_stats_mi_alloc_pq", arrow_cpp.get_stats_mi_alloc)
+ll.add_symbol("get_stats_mi_free_pq", arrow_cpp.get_stats_mi_free)
 ll.add_symbol("get_stats_mi_alloc_qa", quantile_alg.get_stats_mi_alloc)
 ll.add_symbol("get_stats_mi_free_qa", quantile_alg.get_stats_mi_free)
 

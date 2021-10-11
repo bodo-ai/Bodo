@@ -1123,9 +1123,20 @@ def info_to_array(typingctx, info_type, array_type):
                 int_arr_type, context, builder, in_info
             )
             # set categorical dtype of output array to be same as input array
-            dtype = cgutils.create_struct_proxy(arr_type)(
-                context, builder, args[1]
-            ).dtype
+            if isinstance(array_type, types.TypeRef):
+                assert (
+                    arr_type.dtype.categories is not None
+                ), "info_to_array: unknown categories"
+                cat_dtype_const = pd.CategoricalDtype(
+                    arr_type.dtype.categories, arr_type.dtype.ordered
+                )
+                dtype = context.get_constant_generic(
+                    builder, arr_type.dtype, cat_dtype_const
+                )
+            else:
+                dtype = cgutils.create_struct_proxy(arr_type)(
+                    context, builder, args[1]
+                ).dtype
             out_arr.dtype = dtype
             context.nrt.incref(builder, arr_type.dtype, dtype)
             return out_arr._getvalue()

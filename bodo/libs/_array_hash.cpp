@@ -309,8 +309,7 @@ void apply_arrow_numeric_hash(
     uint32_t* out_hashes, std::vector<offset_t> const& list_offsets,
     size_t const& n_rows,
     std::shared_ptr<arrow::PrimitiveArray> const& primitive_array) {
-    arrow::Type::type typ = primitive_array->type()->id();
-    Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(typ);
+    Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(primitive_array->type());
     uint64_t siztype = numpy_item_size[bodo_typ];
     char* value_ptr = (char*)primitive_array->values()->data();
     for (size_t i_row = 0; i_row < n_rows; i_row++) {

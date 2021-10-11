@@ -891,8 +891,7 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             if (epair.second) {
                 int test = 0;
                 // TODO: implement other types
-                arrow::Type::type typ = primitive_array1->type()->id();
-                Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(typ);
+                Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(primitive_array1->type());
                 size_t siz_typ = numpy_item_size[bodo_typ];
                 char* ptr1 = (char*)primitive_array1->values()->data() +
                              siz_typ * n_pos1_s;

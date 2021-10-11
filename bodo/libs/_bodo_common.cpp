@@ -56,8 +56,8 @@ void bodo_common_init() {
     NRT_MemSys_init();
 }
 
-Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
-    switch (type) {
+Bodo_CTypes::CTypeEnum arrow_to_bodo_type(std::shared_ptr<arrow::DataType> type) {
+    switch (type->id()) {
         case arrow::Type::INT8:
             return Bodo_CTypes::INT8;
         case arrow::Type::UINT8:
@@ -80,9 +80,19 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(arrow::Type::type type) {
             return Bodo_CTypes::FLOAT64;
         case arrow::Type::DECIMAL:
             return Bodo_CTypes::DECIMAL;
+        case arrow::Type::TIMESTAMP:
+            return Bodo_CTypes::DATETIME;
+        case arrow::Type::STRING:
+            return Bodo_CTypes::STRING;
+        case arrow::Type::BINARY:
+            return Bodo_CTypes::BINARY;
+        case arrow::Type::DATE32:
+            return Bodo_CTypes::DATE;
+        case arrow::Type::BOOL:
+            return Bodo_CTypes::_BOOL;
         // TODO Date, Datetime, Timedelta, String, Bool
         default: {
-            throw std::runtime_error("arrow_to_bodo_type : Unsupported type");
+            throw std::runtime_error("arrow_to_bodo_type : Unsupported type " + type->ToString());
         }
     }
 }
@@ -235,14 +245,11 @@ void dtor_array_item_arr(array_item_arr_payload* payload, int64_t size,
         NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
 }
 
-array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
-                                    int64_t n_chars, int64_t extra_null_bytes) {
-    // allocate string data array
-    array_info* data_arr = alloc_array(
-        n_strings, n_chars, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
-        Bodo_CTypes::UINT8, extra_null_bytes, 0);
-    NRT_MemInfo* meminfo_string_array = data_arr->meminfo;
-    delete data_arr;
+array_info* alloc_list_string_array(int64_t n_lists, array_info* string_arr, int64_t extra_null_bytes) {
+    int64_t n_strings = string_arr->length;
+    int64_t n_chars = string_arr->n_sub_elems;
+    NRT_MemInfo* meminfo_string_array = string_arr->meminfo;
+    delete string_arr;
 
     // allocate array(item) array payload
     NRT_MemInfo* meminfo_array_item = NRT_MemInfo_alloc_dtor_safe(
@@ -267,6 +274,16 @@ array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
         (char*)sub_payload->offsets.data, (char*)payload->offsets.data,
         (char*)payload->null_bitmap.data, (char*)sub_payload->null_bitmap.data,
         meminfo_array_item, NULL);
+}
+
+array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
+                                    int64_t n_chars, int64_t extra_null_bytes) {
+    // allocate string data array
+    array_info* data_arr = alloc_array(
+        n_strings, n_chars, -1, bodo_array_type::arr_type_enum::ARRAY_ITEM,
+        Bodo_CTypes::UINT8, extra_null_bytes, 0);
+
+    return alloc_list_string_array(n_lists, data_arr, extra_null_bytes);
 }
 
 /**
@@ -463,8 +480,7 @@ int64_t arrow_array_memory_size(std::shared_ptr<arrow::Array> arr) {
         int64_t siz_null_bitmap = n_bytes;
         std::shared_ptr<arrow::PrimitiveArray> prim_arr =
             std::dynamic_pointer_cast<arrow::PrimitiveArray>(arr);
-        arrow::Type::type typ = prim_arr->type()->id();
-        Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(typ);
+        Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(prim_arr->type());
         int64_t siz_typ = numpy_item_size[bodo_typ];
         int64_t siz_primitive_data = siz_typ * n_rows;
         return siz_null_bitmap + siz_primitive_data;
@@ -784,7 +800,7 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         lengths[lengths_pos++] = primitive_array->length();
 
         Bodo_CTypes::CTypeEnum dtype =
-            arrow_to_bodo_type(primitive_array->type_id());
+            arrow_to_bodo_type(primitive_array->type());
 
         // allocate output arrays and copy data
         array_info* data =
