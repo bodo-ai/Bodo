@@ -772,7 +772,7 @@ std::shared_ptr<arrow::Buffer> shuffle_arrow_primitive_buffer(
     std::shared_ptr<arrow::PrimitiveArray> const& input_array,
     const std::vector<int>& row_dest) {
     // Typing stuff
-    arrow::Type::type typ = input_array->type()->id();
+    auto typ = input_array->type();
     Bodo_CTypes::CTypeEnum dtype = arrow_to_bodo_type(typ);
     uint64_t siztype = numpy_item_size[dtype];
     MPI_Datatype mpi_typ = get_MPI_typ(dtype);
@@ -1623,7 +1623,7 @@ std::shared_ptr<arrow::Buffer> broadcast_arrow_primitive_buffer(
     // broadcasting type size
     int64_t siz_typ = 0;
     if (myrank == mpi_root) {
-        arrow::Type::type typ = arr->type()->id();
+        auto typ = arr->type();
         Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(typ);
         siz_typ = numpy_item_size[bodo_typ];
     }
@@ -2125,7 +2125,7 @@ std::shared_ptr<arrow::Buffer> gather_arrow_primitive_buffer(
     int n_pes, myrank, mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-    arrow::Type::type typ = arr->type()->id();
+    auto typ = arr->type();
     Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(typ);
     int64_t siz_typ = numpy_item_size[bodo_typ];
     // Determination of sizes

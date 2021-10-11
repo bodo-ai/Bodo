@@ -235,22 +235,6 @@ def remove_hiframes(rhs, lives, call_list):
     if len(call_list) == 2 and call_list[0] == "copy":
         return True
 
-    # TODO: probably not reachable here since only used in backend?
-    if (
-        call_list == [bodo.io.parquet_pio.read_parquet]
-        and rhs.args[2].name not in lives
-    ):  # pragma: no cover
-        return True
-
-    # can't add these to no_side_effect_call_tuples due to import issues, TODO: fix
-    # TODO: probably not reachable here since only used in backend?
-    if call_tuple in (
-        (bodo.io.parquet_pio.get_pq_local_num_rows,),
-        (bodo.io.parquet_pio.read_parquet_str,),
-        (bodo.io.parquet_pio.read_parquet_array_item,),
-    ):  # pragma: no cover
-        return True
-
     # the call is dead if the read array is dead
     # TODO: return array from call to avoid using lives
     if call_list == ["h5read", "h5_api", "io", bodo] and rhs.args[5].name not in lives:

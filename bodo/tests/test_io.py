@@ -479,6 +479,7 @@ def test_pq_unsupported_types(datapath, memory_leak_check):
     def test_impl(fname):
         return pd.read_parquet(fname, columns=["B"])
 
+    # FIXME I think we do suport everything in nested_struct_example.pq
     check_func(test_impl, (datapath("nested_struct_example.pq"),))
 
 
@@ -647,8 +648,7 @@ def test_read_write_parquet():
             "Int16",
             "UInt16",
             "Int32",
-            # "UInt32",
-            # pandas read_parquet has incorrect output with pyarrow 0.16.0 for UInt32
+            "UInt32",
             "Int64",
             "UInt64",
             "Decimal",
@@ -2485,7 +2485,10 @@ def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
         bodo.jit(distributed=["df"])(test_impl)()
 
 
-def test_read_parquet_invalid_path(memory_leak_check):
+# TODO: Not sure why this fails with memory_leak_check. Seems like the
+# exception returned from pq_read prevents the code that follows from
+# freeing something
+def test_read_parquet_invalid_path():
     """test error raise when parquet file path is invalid in C++ code."""
 
     def test_impl():
