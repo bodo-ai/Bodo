@@ -250,7 +250,8 @@ The following figure illustrates what happens when processes call
 ``bodo.barrier()``. When barrier is called, a process pauses and waits
 until all other processes have reached the barrier:
 
-.. figure:: img/barrier.svg
+.. figure:: ../img/barrier.svg
+   :align: center
    :alt: Process synchronization with Barrier
 
    Process synchronization with Barrier
@@ -733,7 +734,8 @@ processes, effectively replicating the data:
 Parallel I/O
 ------------
 
-.. figure:: img/file-read.jpg
+.. figure:: ../img/file-read.jpg
+   :align: center
    :alt: Bodo reads file chunks in parallel
 
    Bodo reads file chunks in parallel
@@ -1352,8 +1354,8 @@ example code below demonstrates calling plot with a sample of the data:
 
 
 
-.. image:: ../bodo_tutorial_files/bodo_tutorial_85_1.png
-
+.. image:: ../bodo_tutorial_files/bodo_tutorial_84_1.png
+   :align: center
 
 Collections of Distributed Data
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
