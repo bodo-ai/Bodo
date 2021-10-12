@@ -681,7 +681,7 @@ def is_heterogeneous_tuple_type(t):
     return isinstance(t, types.BaseTuple) and not isinstance(t, types.UniTuple)
 
 
-def parse_dtype(dtype):
+def parse_dtype(dtype, func_name=None):
     """Parse dtype type specified in various forms into actual numba type
     (e.g. StringLiteral("int32") to types.int32)
     """
@@ -715,7 +715,10 @@ def parse_dtype(dtype):
         return numba.np.numpy_support.from_dtype(np.dtype(d_str))
     except:
         pass
-    raise BodoError(f"invalid dtype {dtype}")
+    if func_name is not None:
+        raise BodoError(f"{func_name}(): invalid dtype {dtype}")
+    else:
+        raise BodoError(f"invalid dtype {dtype}")
 
 
 def is_list_like_index_type(t):

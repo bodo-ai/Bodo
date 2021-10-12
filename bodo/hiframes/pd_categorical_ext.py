@@ -391,7 +391,7 @@ def overload_cat_arr_astype(A, dtype, copy=True):
             "CategoricalArray.astype(): 'dtype' when passed as string must be a constant value"
         )
 
-    nb_dtype = bodo.utils.typing.parse_dtype(dtype)
+    nb_dtype = bodo.utils.typing.parse_dtype(dtype, "CategoricalArray.astype")
     # only supports converting back to original data currently
     if not nb_dtype == A.dtype.elem_type:  # pragma: no cover
         raise BodoError(

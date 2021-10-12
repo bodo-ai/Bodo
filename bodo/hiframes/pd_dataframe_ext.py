@@ -1217,7 +1217,7 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     # TODO: support other input combinations
     # TODO: error checking
     if not is_overload_constant_bool(copy):  # pragma: no cover
-        raise BodoError("pd.DataFrame(): copy argument should be constant")
+        raise BodoError("pd.DataFrame(): 'copy' argument should be a constant boolean")
 
     copy = get_overload_const(copy)
 
@@ -1285,7 +1285,7 @@ def _get_df_args(data, index, columns, dtype, copy):
         # TODO: error checking
         if not (isinstance(data, types.Array) and data.ndim == 2):  # pragma: no cover
             raise BodoError(
-                "pd.DataFrame() supports constant dictionary and array input"
+                "pd.DataFrame() only supports constant dictionary and array input"
             )
         if is_overload_none(columns):  # pragma: no cover
             raise BodoError(

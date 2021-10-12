@@ -2029,7 +2029,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
         return lambda A, dtype, copy=True: A  # pragma: no cover
 
     # numpy dtypes
-    nb_dtype = parse_dtype(dtype)
+    nb_dtype = parse_dtype(dtype, "StringArray.astype")
 
     # TODO: support other dtypes if any
     # TODO: error checking

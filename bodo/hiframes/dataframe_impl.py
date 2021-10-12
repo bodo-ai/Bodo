@@ -515,6 +515,7 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
     # Check that at least one of include or exclude exists
     include_none = is_overload_none(include)
     exclude_none = is_overload_none(exclude)
+    fname = "DataFrame.select_dtypes"
 
     if include_none and exclude_none:
         raise_bodo_error(
@@ -533,10 +534,10 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         # If the input is a list process each elem in the list
         if is_overload_constant_list(include):
             include = get_overload_const_list(include)
-            include_types = [dtype_to_array_type(parse_dtype(elem)) for elem in include]
+            include_types = [dtype_to_array_type(parse_dtype(elem, fname)) for elem in include]
         # If its a scalar then just make it a list of 1 element
         elif is_legal_input(include):
-            include_types = [dtype_to_array_type(parse_dtype(include))]
+            include_types = [dtype_to_array_type(parse_dtype(include, fname))]
         else:
             raise_bodo_error(
                 "DataFrame.select_dtypes() only supports constant strings or types as arguments"
@@ -556,10 +557,10 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         # If the input is a list process each elem in the list
         if is_overload_constant_list(exclude):
             exclude = get_overload_const_list(exclude)
-            exclude_types = [dtype_to_array_type(parse_dtype(elem)) for elem in exclude]
+            exclude_types = [dtype_to_array_type(parse_dtype(elem, fname)) for elem in exclude]
         # If its a scalar then just make it a list of 1 element
         elif is_legal_input(exclude):
-            exclude_types = [dtype_to_array_type(parse_dtype(exclude))]
+            exclude_types = [dtype_to_array_type(parse_dtype(exclude, fname))]
         else:
             raise_bodo_error(
                 "DataFrame.select_dtypes() only supports constant strings or types as arguments"
