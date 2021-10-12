@@ -1,4 +1,4 @@
-# Bodo 
+# Bodo
 
 [![Build Status](https://dev.azure.com/bodo-inc/Bodo/_apis/build/status/Bodo-inc.Bodo?branchName=master)](https://dev.azure.com/bodo-inc/Bodo/_build/latest?definitionId=1&branchName=master)
 [![codecov](https://codecov.io/gh/Bodo-inc/Bodo/branch/master/graph/badge.svg?token=zYHQy0R9ck)](https://codecov.io/gh/Bodo-inc/Bodo)
@@ -25,7 +25,8 @@ alternatives like [Apache Spark](http://spark.apache.org).
 - [Release Checklist](https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/source/release_checklist.rst)
 
 - [Customer Ops](https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/source/customer_ops.rst)
-	
+- [Additional Relevant Documentation](https://bodo.atlassian.net/wiki/spaces/DEV/overview)
+
 To build the Development guide locally and view it with your browser, follow instructions [here](https://github.com/Bodo-inc/Bodo/blob/master/dev_docs/source/dev_process.rst#building-documentation).
 
 Bodo Documentation: https://docs.bodo.ai
