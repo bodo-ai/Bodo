@@ -19,10 +19,10 @@
 #
 # import os
 # import sys
-# sys.path.insert(0, os.path.abspath('.'))
 
 import os
 import sys
+sys.path.insert(0, os.path.abspath('.'))
 
 import sphinx_rtd_theme
 
@@ -86,7 +86,7 @@ language = None
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = "sphinx"
+pygments_style = "friendly"
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True
@@ -117,7 +117,7 @@ html_theme_options = {
     'style_nav_header_background': 'none',
     # Toc options
     'collapse_navigation': False,
-    'sticky_navigation': True,
+    'sticky_navigation': False,
     'navigation_depth': 4,
     'includehidden': True,
     'titles_only': False
