@@ -4886,7 +4886,7 @@ html {
 .wy-menu-vertical li.current a {
   color: grey;
   border-right: 1px solid #c9c9c9;
-  padding: 0.4045em 2.427em;
+  padding: 0.4045em 2.6em;
 }
 .wy-menu-vertical li.current a:hover {
   background: #252b3f;
@@ -4912,7 +4912,7 @@ html {
 }
 .wy-menu-vertical li.current > a,
 .wy-menu-vertical li.on a {
-  color: #cfcfcf;
+  color: #fcfcfc;
   /* font-weight: 700; */
   position: relative;
   /* background: #fcfcfc; */
@@ -5011,7 +5011,7 @@ html {
   display: block;
 }
 .wy-menu-vertical li.toctree-l2.current > a {
-  padding: 0.4045em 2.427em;
+  padding: 0.4045em 2.6em;
 }
 .wy-menu-vertical li.toctree-l2.current li.toctree-l3 > a {
   padding: 0.4045em 1.618em 0.4045em 4.045em;
@@ -5096,7 +5096,7 @@ html {
   display: block;
   position: relative;
   font-size: 90%;
-  color: #d9d9d9;
+  color: #fcfcfc;
 }
 .wy-menu-vertical a:hover {
   background-color: #252b3f;
@@ -5579,7 +5579,6 @@ footer span.commit code {
 .rst-content img {
   max-width: 100%;
   height: auto;
-  padding: 30px 0;
 }
 .rst-content div.figure,
 .rst-content figure {
