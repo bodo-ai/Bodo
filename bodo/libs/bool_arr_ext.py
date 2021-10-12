@@ -673,7 +673,7 @@ def overload_bool_arr_astype(A, dtype, copy=True):
             return impl
 
     # numpy dtypes
-    nb_dtype = parse_dtype(dtype)
+    nb_dtype = parse_dtype(dtype, "BooleanArray.astype")
     # NA positions are assigned np.nan for float output
     if isinstance(nb_dtype, types.Float):
 

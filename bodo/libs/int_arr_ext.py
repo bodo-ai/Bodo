@@ -671,7 +671,7 @@ def overload_int_arr_astype(A, dtype, copy=True):
         )
 
     # numpy dtypes
-    nb_dtype = parse_dtype(dtype)
+    nb_dtype = parse_dtype(dtype, "IntegerArray.astype")
     # NA positions are assigned np.nan for float output
     if isinstance(nb_dtype, types.Float):
 

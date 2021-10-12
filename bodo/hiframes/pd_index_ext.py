@@ -57,6 +57,7 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
     raise_bodo_error,
+    parse_dtype,
 )
 
 _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
@@ -572,9 +573,13 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
 
     data_dtype = getattr(data, "dtype", None)
     if not is_overload_none(dtype):
-        elem_type = dtype.dtype
+        elem_type = parse_dtype(dtype, "pandas.Index")
     else:
         elem_type = data_dtype
+
+    # Add a special error message for object dtypes
+    if isinstance(elem_type, types.misc.PyObject):
+        raise BodoError("pd.Index() object 'dtype' is not specific enough for typing. Please provide a more exact type (e.g. str).")
 
     # Range index:
     if isinstance(data, RangeIndexType):
