@@ -1404,7 +1404,11 @@ class TypingTransforms:
 
         # we can now change the IR/code since all checks are done (including
         # _replace_load_deref_code)
-        for i in freevar_inds:
+
+        # Pop the freevar indices in reverse order to ensure everything
+        # stays in the same position
+        # i.e. convert [0, 1, 2] to [2, 1, 0]
+        for i in reversed(sorted(freevar_inds)):
             items.pop(i)
 
         new_co_varnames = (
@@ -1443,7 +1447,10 @@ class TypingTransforms:
             if None not in var_types:
                 self.typemap[args_var.name] = types.Tuple(var_types)
             self.func_ir._definitions[args_var.name] = [tuple_expr]
-            apply_assign.value.kws.append(("args", args_var))
+            # kws may be a tuple (at least if empty), so create a new list rather than append
+            apply_assign.value.kws = list(apply_assign.value.kws) + [
+                ("args", args_var),
+            ]
         else:
             # guard check for find_build_tuple done in _ensure_apply_call_use
             tup_list = find_build_tuple(self.func_ir, args_var)
