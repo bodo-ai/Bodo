@@ -68,7 +68,7 @@ With Bodo::
 
 With PySpark::	
 
-    data = spark.read.csv('country_vaccinations_by_manufacturer.csv',header = True)
+    data = spark.read.csv('country_vaccinations_by_manufacturer.csv', header = True)
 
 
 .. _Display the Schema of the DataFrame:
@@ -116,7 +116,7 @@ With PySpark::
                   StructField('vaccine', StringType(), True),
                   StructField('total_vaccinations', IntegerType(), True)]
 
-    data = spark.read.csv('country_vaccinations_by_manufacturer.csv',header = True, 
+    data = spark.read.csv('country_vaccinations_by_manufacturer.csv', header = True,
                       schema = StructType(fields = new_schema))
     data.printSchema()
 

@@ -385,7 +385,8 @@ def _gen_csv_reader_py(
     # Check explanation near the declaration of `pd_read_csv_dtype_text` for why we specify
     # only some types here directly
     func_text += "        dtype={{{}}},\n".format(pd_read_csv_dtype_text)
-    func_text += "        usecols={}, sep='{}', low_memory=False)\n".format(
+    # NOTE: using repr() for sep to support cases like "\n" properly
+    func_text += "        usecols={}, sep={!r}, low_memory=False)\n".format(
         usecols, sep
     )
     # Check explanation near the declaration of `df_astype_dtype_text` for why we specify
