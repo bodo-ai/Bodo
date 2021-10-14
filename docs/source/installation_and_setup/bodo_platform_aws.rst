@@ -110,7 +110,7 @@ Create the IAM Role Manually
         :align: center
         :alt: Create Role Manual Policy Editor
 
-#. Bodo Cloud Platform requires a specific set of AWS permissions which are documented in :download:`Bodo-Platform Policy <downloadables/bodo-platform.json>`. 
+#. Bodo Cloud Platform requires a specific set of AWS permissions which are documented in :download:`Bodo-Platform Policy <../downloadables/bodo-platform.json>`.
    Paste the contents of the linked JSON file into the policy editor. 
 #. Click on ``Review policy``.
 #. In the *Name* field, add a policy name, e.g. `Bodo-Platform-User-Policy`. Click on ``Create policy``. You will be taken back to the Role Summary.
