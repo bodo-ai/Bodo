@@ -1921,6 +1921,15 @@ def test_csv_sep_arg(datapath, memory_leak_check):
         ),
         check_dtype=False,
     )
+    # testing reading whole lines with sep="\n"
+    check_func(
+        test_impl,
+        (
+            fname,
+            "\n",
+        ),
+        check_dtype=False,
+    )
 
     compressed_names = compress_file(fname)
     try:

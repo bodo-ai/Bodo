@@ -98,6 +98,16 @@ For CSV, the syntax is also the same as Pandas::
 
 Unlike ``read_csv`` in regular Pandas, Bodo can read a directory that contains multiple partitioned CSV files as well.
 
+
+Use ``sep="\n"`` to read text files line by line into a single-column dataframe
+(without creating separate columns, useful when text data is unstructured
+or there are too many columns to read efficiently)::
+
+    @bodo.jit
+    def read_test():
+        df = pd.read_csv("example.csv", sep="\n", names=["value"], dtype={"value": "str"})
+        return df
+
 .. note::
 
 

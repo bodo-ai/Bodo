@@ -5,8 +5,31 @@ PySpark Bodo Cheatsheet
 
 References of PySpark methods and their Python equivalents supported by Bodo.
 
+- :ref:`pssession`
 - :ref:`psdataframe`
 - :ref:`psfunctions`
+
+
+.. _pssession:
+
+pyspark.sql.SparkSession
+~~~~~~~~~~~~~~~~~~~~~~~~
+The table below is a reference of SparkSession methods and their equivalents in Python,
+which are supported by Bodo.
+
+.. list-table::
+  :header-rows: 1
+
+  * - PySpark Method
+    - Python Equivalent
+  * - :meth:`pyspark.sql.SparkSession.read.csv`
+    - ``pd.read_csv()``
+  * - :meth:`pyspark.sql.SparkSession.read.text`
+    - ``pd.read_csv("file.txt", sep="\n", names=["value"], dtype={"value": "str"})``
+  * - :meth:`pyspark.sql.SparkSession.read.parquet`
+    - ``pd.read_parquet()``
+  * - :meth:`pyspark.sql.SparkSession.read.json`
+    - ``pd.read_json()``
 
 .. _psdataframe:
 
