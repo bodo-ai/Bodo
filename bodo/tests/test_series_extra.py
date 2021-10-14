@@ -593,3 +593,16 @@ def test_astype_str_keep_null(memory_leak_check):
     py_output = S.astype(str)
     py_output[py_output == "NaT"] = None
     check_func(impl, (S,), py_output=py_output)
+
+
+def test_series_apply_multi_freevar(memory_leak_check):
+    """
+    Bug revealed by starschema in BodoSQL. Ensures that if you
+    have multiple freevars all of them are properly removed.
+    """
+
+    def impl(S, freevar1, freevar2):
+        return S.apply(lambda x: x + freevar1 + freevar2)
+
+    S = pd.Series(np.arange(100))
+    check_func(impl, (S, 2, 5))
