@@ -481,6 +481,23 @@ def test_diag_for_return_error(memory_leak_check):
         impl(11)
 
 
+def test_diag_code_loc(memory_leak_check):
+    """make sure code location info is printed along with diagnostics info"""
+
+    @bodo.jit(distributed=["S2"])
+    def impl():
+        S2 = pd.Series([1, 2, 3])
+        return S2
+
+    with pytest.raises(
+        BodoError,
+        match=(
+            r"Tuples and lists are not distributed by default(?s:.*)pd.Series\(\[1, 2, 3\]\)"
+        ),
+    ):
+        impl()
+
+
 def test_dist_flag_warn1(memory_leak_check):
     """raise a warning when distributed flag is used for variables other than arguments
     and return values.
@@ -1262,7 +1279,10 @@ def test_dist_warning1(memory_leak_check):
         return np.linalg.slogdet(A)
 
     if bodo.get_rank() == 0:  # warning is thrown only on rank 0
-        with pytest.warns(BodoWarning, match="No parallelism found for function"):
+        with pytest.warns(
+            BodoWarning,
+            match=r"No parallelism found for function(?s:.*)np.linalg.slogdet",
+        ):
             bodo.jit(impl)(10)
     else:
         bodo.jit(impl)(10)
