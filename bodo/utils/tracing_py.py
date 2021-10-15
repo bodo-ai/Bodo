@@ -95,3 +95,31 @@ def tracing_start_overload(trace_fname=None):
             bodo.utils.tracing.start(trace_fname=trace_fname)
 
     return _tracing_start_overload_impl
+
+
+@overload(bodo.utils.tracing.stop, no_unliteral=True)
+def tracing_stop_overload():
+    def _tracing_stop_overload_impl():  # pragma: no cover
+        with numba.objmode:
+            bodo.utils.tracing.stop()
+
+    return _tracing_stop_overload_impl
+
+
+@overload(bodo.utils.tracing.is_tracing, no_unliteral=True)
+def tracing_is_tracing_overload():
+    def _tracing_is_tracing_overload_impl():  # pragma: no cover
+        with numba.objmode(b="types.boolean"):
+            b = bodo.utils.tracing.is_tracing()
+        return b
+
+    return _tracing_is_tracing_overload_impl
+
+
+@overload(bodo.utils.tracing.dump, no_unliteral=True)
+def tracing_dump_overload(fname=None, clear_traces=True):
+    def _tracing_dump_overload_impl(fname=None, clear_traces=True):  # pragma: no cover
+        with numba.objmode:
+            bodo.utils.tracing.dump(fname=fname, clear_traces=clear_traces)
+
+    return _tracing_dump_overload_impl

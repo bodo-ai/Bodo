@@ -1,5 +1,4 @@
 import atexit
-import json
 import os
 import time
 import numpy as np
@@ -99,6 +98,7 @@ def dump(fname=None, clear_traces=True):
             )
             trace_obj = {"num_ranks": num_ranks}
             import bodo
+            import json
             trace_obj["bodo_version"] = bodo.__version__
             for var in os.environ:
                 if "MPI" in var or var.startswith("FI_"):
