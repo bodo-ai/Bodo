@@ -2166,6 +2166,38 @@ def test_merge_general_non_identifier_columns(memory_leak_check):
     )
 
 
+def test_merge_general_non_identifier_cond_columns(memory_leak_check):
+    """
+    Test non-identifier columns used directly as a condition rather than in a comparison.
+    This helps test that name escapes work properly.
+    """
+
+    def impl(df1, df2):
+        return df1.merge(df2, on="left.`A` == right.`B` & left.`__bodo_dummy__4=_left`")
+
+    df1 = pd.DataFrame(
+        {
+            "A": [1, 2, 1, 1, 3, 2, 3],
+            "__bodo_dummy__4=_left": [True, False, True, True, True, True, False],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "B": [1, 2, 2, 1, 3, 2, 1],
+        }
+    )
+    py_out = df1.merge(df2, left_on=["A"], right_on=["B"])
+    py_out = py_out[py_out["__bodo_dummy__4=_left"]]
+    check_func(
+        impl,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+
 def test_merge_general_bool_columns(memory_leak_check):
     """
     tests merge() with boolean columns
