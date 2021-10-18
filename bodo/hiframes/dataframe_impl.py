@@ -534,7 +534,9 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         # If the input is a list process each elem in the list
         if is_overload_constant_list(include):
             include = get_overload_const_list(include)
-            include_types = [dtype_to_array_type(parse_dtype(elem, fname)) for elem in include]
+            include_types = [
+                dtype_to_array_type(parse_dtype(elem, fname)) for elem in include
+            ]
         # If its a scalar then just make it a list of 1 element
         elif is_legal_input(include):
             include_types = [dtype_to_array_type(parse_dtype(include, fname))]
@@ -557,7 +559,9 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         # If the input is a list process each elem in the list
         if is_overload_constant_list(exclude):
             exclude = get_overload_const_list(exclude)
-            exclude_types = [dtype_to_array_type(parse_dtype(elem, fname)) for elem in exclude]
+            exclude_types = [
+                dtype_to_array_type(parse_dtype(elem, fname)) for elem in exclude
+            ]
         # If its a scalar then just make it a list of 1 element
         elif is_legal_input(exclude):
             exclude_types = [dtype_to_array_type(parse_dtype(exclude, fname))]
@@ -2137,7 +2141,8 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
 
         if not null_set:
             return expr_node
-        null_check_str = " & ".join(list(null_set))
+        # Generate the null check strings, inserting ` `
+        null_check_str = " & ".join(["NOT_NA.`" + x + "`" for x in null_set])
         # Generate the clean versions of the column name for the NOT_NA checks.
         # These should ensure that column names that can't be parsed properly
         # as Python identifiers are not modified. We append "NOT_NA" as the
@@ -2208,7 +2213,7 @@ def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_dat
                 data = right_data
             arr_type = data[cols.index(col_name)]
             if bodo.utils.typing.is_nullable(arr_type):
-                null_set.add("NOT_NA." + expr_node.name)
+                null_set.add(expr_node.name)
         return expr_node
 
     null_set = set()
