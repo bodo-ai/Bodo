@@ -10,7 +10,9 @@ Supported formats
 -----------------
 
 Currently, Bodo supports I/O for `Parquet <http://parquet.apache.org/>`_,
-CSV, SQL, JSON, `HDF5 <http://www.h5py.org/>`_ , and Numpy binaries formats. Also see :ref:`Supported Pandas Operations <pandas>` for supported arguments.
+CSV, SQL, JSON, `HDF5 <http://www.h5py.org/>`_ , and Numpy binaries formats.
+
+Also see :ref:`Supported Pandas Operations <pandas>` for supported arguments.
 
 .. _parquet-section:
 
@@ -348,16 +350,39 @@ For example::
         Y = f['responses'][:]
 
 
-.. _input-array-types:
+.. _non-constant-filepaths:
 
-Input array types
------------------
+Non Constant filepaths
+---------------------
 
-Bodo needs to know the types of input arrays. If the file name is a constant
-string or function argument, Bodo tries to look at the file at compile time
-and recognize the types.
-Otherwise, the user is responsible for providing the types similar to
-`Numba's typing syntax
+When reading from a file, Bodo needs to know the types of the resulting dataframe.
+If the file name is a constant string or function argument, Bodo can look at
+the file at compile time and infer the types. If the the filepath is not constant,
+this information must be supplied by the user. For `pd.read_csv` and `pd.read_excel`,
+this information can be supplied through the `names` and `dtypes` keyword arguments::
+
+        @bodo.jit
+        def example_csv(fname1, fname2, flag)):
+            if flag:
+                file_name = fname1
+            else:
+                file_name = fname2
+            return pd.read_csv(file_name, names = ["A", "B", "C"], dtype={"A": int, "B": float, "C": str})
+
+        @bodo.jit
+        def example_excel(fname1, fname2, flag)):
+            if flag:
+                    file_name = fname1
+            else:
+                file_name = fname2
+            return pd.read_excel(
+                file_name,
+                names=["A", "B", "C", "D", "E"],
+                dtype={"A": int, "B": float, "C": str, "D": str, "E": np.bool_},
+            )
+
+For the remaining Pandas read functions, the existing APIs do not currently allow this information to be supplied.
+Users can still provide this information by adding type information in the ``bodo.jit`` decorator, similar to `Numba's typing syntax
 <http://numba.pydata.org/numba-doc/latest/reference/types.html>`_. For
 example::
 
@@ -373,6 +398,7 @@ example::
         else:
             file_name = fname2
         df = pd.read_parquet(file_name)
+        return df
 
 
      @bodo.jit(locals={'X': bodo.float64[:,:], 'Y': bodo.float64[:]})
@@ -384,6 +410,9 @@ example::
          f = h5py.File(file_name, "r")
          X = f['points'][:]
          Y = f['responses'][:]
+
+For the complete list of supported types, please see the :ref:`Pandas dtype section <pandas-dtype>`.
+In the event that the dtypes are improperly specified, Bodo will throw a runtime error.
 
 
 File Systems

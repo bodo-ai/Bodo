@@ -3323,5 +3323,231 @@ def test_read_parquet_read_sanitize_colnames(memory_leak_check):
     check_func(read_impl, ("bodo/tests/data/sanitization_test.pq",))
 
 
+@pytest.mark.slow
+def test_csv_non_constant_filepath_error(datapath):
+
+    f1 = datapath("csv_data_cat1.csv")
+
+    @bodo.jit
+    def impl():
+        for filepath in [f1]:
+            df = pd.read_csv(
+                filepath,
+            )
+        return df
+
+    @bodo.jit
+    def impl2():
+        for filepath in [f1]:
+            df = pd.read_csv(
+                filepath,
+                names=["A", "B", "C"],
+            )
+        return df
+
+    @bodo.jit
+    def impl3():
+        for filepath in [f1]:
+            df = pd.read_csv(
+                filepath,
+                dtype={
+                    "A": int,
+                    "B": str,
+                    "C": str,
+                },
+            )
+        return df
+
+    def impl4():
+        for filepath in [f1]:
+            df = pd.read_csv(
+                filepath,
+                names=["A", "B", "C"],
+                dtype={"A": int, "B": str, "C": str},
+            )
+        return df
+
+    msg = r".*pd.read_csv\(\) requires explicit type annotation using the 'names' and 'dtype' arguments if the filename is not constant. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths.*"
+
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(lambda: impl())()
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(lambda: impl2())()
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(lambda: impl3())()
+    check_func(impl4, ())
+
+
+@pytest.mark.slow
+def test_json_non_constant_filepath_error(datapath):
+
+    f1 = datapath("example.json")
+
+    @bodo.jit
+    def impl():
+        for filepath in [f1]:
+            df = pd.read_json(filepath, orient="records", lines=True)
+        return df
+
+    @bodo.jit
+    def impl2():
+        for filepath in [f1]:
+            df = pd.read_json(
+                filepath,
+                orient="records",
+                lines=True,
+                dtype={
+                    "one": float,
+                    "two": str,
+                    "three": np.bool_,
+                    "four": float,
+                    "five": str,
+                },
+            )
+        return df
+
+    @bodo.jit(
+        locals={
+            "df": {
+                "one": bodo.float64[:],
+                "two": bodo.string_array_type,
+                "three": bodo.boolean_array,
+                "four": bodo.float64[:],
+                "five": bodo.string_array_type,
+            }
+        }
+    )
+    def impl3():
+        for filepath in [f1]:
+            df = pd.read_json(
+                filepath,
+                orient="records",
+                lines=True,
+            )
+        return df
+
+    msg = r".*pd.read_json\(\) requires explicit type annotation using the numba typing system when the filename is not a compile time constant. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths.*"
+
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(lambda: impl())()
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(lambda: impl2())()
+    bodo.jit(lambda: impl3())()
+
+
+@pytest.mark.skip(
+    "TODO: Support type anotation for multiline non constant json filepath (BE-1421)"
+)
+def test_multiline_json_non_constant_filepath(datapath):
+    f1 = datapath("multiline_obj.json")
+
+    @bodo.jit(
+        locals={
+            "df": {
+                "RecordNumber": bodo.int64[:],
+                "Zipcode": bodo.int64[:],
+                "ZipCodeType": bodo.string_array_type,
+                "City": bodo.string_array_type,
+                "State": bodo.string_array_type,
+            }
+        }
+    )
+    def impl():
+        for filepath in [f1]:
+            df = pd.read_json(
+                filepath,
+                orient="records",
+                lines=True,
+            )
+        return df
+
+    bodo.jit(lambda: impl())()
+
+
+@pytest.mark.slow
+def test_excel_non_constant_filepath_error(datapath):
+
+    f1 = datapath("data.xlsx")
+
+    @bodo.jit
+    def impl():
+        for filepath in [f1]:
+            df = pd.read_excel(
+                filepath,
+            )
+        return df
+
+    @bodo.jit
+    def impl2():
+        for filepath in [f1]:
+            df = pd.read_excel(
+                filepath,
+                names=["A", "B", "C", "D", "E"],
+            )
+        return df
+
+    @bodo.jit
+    def impl3():
+        for filepath in [f1]:
+            df = pd.read_excel(
+                filepath,
+                dtype={"A": int, "B": float, "C": str, "D": str, "E": np.bool_},
+            )
+        return df
+
+    def impl4():
+        for filepath in [f1]:
+            df = pd.read_excel(
+                filepath,
+                names=["A", "B", "C", "D", "E"],
+                dtype={"A": int, "B": float, "C": str, "D": str, "E": np.bool_},
+            )
+        return df
+
+    msg1 = r".*pd.read_excel\(\) requires explicit type annotation using the 'names' and 'dtype' arguments if the filename is not constant. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths.*"
+    msg2 = r".*pd.read_excel\(\): both 'dtype' and 'names' should be provided if either is provided.*"
+
+    with pytest.raises(BodoError, match=msg1):
+        bodo.jit(lambda: impl())()
+    with pytest.raises(BodoError, match=msg2):
+        bodo.jit(lambda: impl2())()
+    with pytest.raises(BodoError, match=msg2):
+        bodo.jit(lambda: impl3())()
+    # TODO: Support read excel for n=3, see BE-1420
+    check_func(impl4, (), only_seq=True)
+
+
+@pytest.mark.slow
+def test_pq_non_constant_filepath_error(datapath):
+    f1 = datapath("example.parquet")
+
+    @bodo.jit
+    def impl():
+        for filepath in [f1]:
+            pd.read_parquet(filepath)
+
+    @bodo.jit(
+        locals={
+            "df": {
+                "one": bodo.float64[:],
+                "two": bodo.string_array_type,
+                "three": bodo.boolean_array,
+                "four": bodo.float64[:],
+                "five": bodo.string_array_type,
+            }
+        }
+    )
+    def impl2():
+        for filepath in [f1]:
+            df = pd.read_parquet(filepath)
+        return df
+
+    msg = r".*Parquet schema not available. Either path argument should be constant for Bodo to look at the file at compile time or schema should be provided. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths.*"
+
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(lambda: impl())()
+    bodo.jit(lambda: impl2())()
+
+
 if __name__ == "__main__":
     unittest.main()
