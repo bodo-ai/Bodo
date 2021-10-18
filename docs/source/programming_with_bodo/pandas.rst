@@ -59,7 +59,7 @@ are supported.
   Arbitrary-precision Python `decimal.Decimal` values are converted with precision of 38 and scale of 18.
 
 
-In addition, it may be desirable to specify type annotations in some cases (e.g. :ref:`file I/O array input types <input-array-types>`).
+In addition, it may be desirable to specify type annotations in some cases (e.g. :ref:`file I/O array input types <non-constant-filepaths>`).
 Typically these types are array types and they all can be accessed directly from the `bodo` module.
 The following table can be used to select the necessary Bodo Type based upon the desired Python, Numpy, or Pandas type.
 
@@ -154,7 +154,7 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
   * Arguments ``sep``, ``delimiter``, ``header``, ``names``,
     ``index_col``, ``usecols``, ``dtype``, ``nrows``, ``skiprows``, and ``parse_dates`` are supported.
   * Either ``names`` and ``dtype`` arguments should be provided to enable type inference,
-    or ``filepath_or_buffer`` should be inferrable as a constant string for Bodo to infer types by looking at the file at compile time.
+    or ``filepath_or_buffer`` should be inferrable as a constant string. This is required so bodo can infer the types at compile time, see `compile time constants <https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html>`
   * ``names``, ``usecols``, ``parse_dates`` should be constant lists.
   * ``dtype`` should be a constant dictionary of strings and types.
   * If ``skiprows`` is not a constant, ``names`` must be provided to enable type inference.  
@@ -166,8 +166,7 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
   * only arguments ``io``, ``sheet_name``, ``header``, ``names``, ``comment``, ``dtype``, ``skiprows``, ``parse_dates`` are supported.
   * ``io`` should be a string and is required.
   * Either ``names`` and ``dtype`` arguments should be provided to enable type inference,
-    or ``io`` should be inferrable as a constant string for Bodo to infer types by looking at the file at
-    compile time.
+    or ``io`` should be inferrable as a constant string. This is required so bodo can infer the types at compile time, see `compile time constants <https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html>`
   * ``sheet_name``, ``header``, ``comment``, and ``skiprows`` should be constant if provided.
   * ``names`` and ``parse_dates`` should be constant lists if provided.
   * ``dtype`` should be a constant dictionary of strings and types if provided.
@@ -188,7 +187,7 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
   * Argument ``anon`` of ``storage_options`` is supported for S3 filepaths.
   * If ``path`` can be inferred as a constant (e.g. it is a function argument),
     Bodo finds the schema from file at compilation time.
-    Otherwise, schema should be provided. For example::
+    Otherwise, schema should be provided using the `numba syntax <https://numba.pydata.org/numba-doc/latest/reference/types.html>`. For example::
 
       @bodo.jit(locals={'df':{'A': bodo.float64[:],
                               'B': bodo.string_array_type}})
@@ -203,8 +202,7 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
   * Argument ``filepath_or_buffer`` is supported: it can point to a single JSON file, or a directory containing multiple partitioned JSON files. When reading a directory, the JSON files inside the directory must be `JSON Lines text file format <http://jsonlines.org/>`_ with ``json`` file extension.
   * Argument ``orient = 'records'`` is used as default, instead of Pandas' default ``'columns'`` for dataframes. ``'records'`` is the only supported value for ``orient``.
   * Argument ``typ`` is supported. ``'frame'`` is the only supported value for ``typ``.
-  * ``dtype`` argument should be provided to enable type inference, or ``filepath_or_buffer`` should be inferrable as a constant string for Bodo
-    to infer types by looking at the file at compile time (not supported for multi-line JSON files)
+  * ``filepath_or_buffer`` should either be inferrable as a constant string, or the user should specify the types using the numba syntax (not supported for multi-line JSON files). This is required so bodo can infer the types at compile time, see `compile time constants <https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html>`.
   * Arguments ``convert_dates``, ``precise_float``, ``lines`` are supported.
 
 * :func:`pandas.DataFrame.to_sql`

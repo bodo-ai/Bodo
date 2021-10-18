@@ -1143,8 +1143,8 @@ class UntypedPass:
         if dtype_var == "":
             # infer column names and types from constant filename
             msg = (
-                "pd.read_excel() requires explicit type "
-                "annotation using 'dtype' if filename is not constant"
+                "pd.read_excel() requires explicit type annotation using "
+                "the 'names' and 'dtype' arguments if the filename is not constant. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths"
             )
             fname_const = get_const_value(
                 fname_var, self.func_ir, msg, arg_types=self.args
@@ -1311,7 +1311,7 @@ class UntypedPass:
             # infer column names and types from constant filename
             msg = (
                 "pd.read_csv() requires explicit type "
-                "annotation using 'dtype' if filename is not constant"
+                "annotation using the 'names' and 'dtype' arguments if the filename is not constant. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths"
             )
             fname_const = get_const_value(
                 fname,
@@ -1523,10 +1523,7 @@ class UntypedPass:
         # not explicitly passed with dtype
         # not reading from s3 & hdfs
         # not reading from directory
-        msg = (
-            "pd.read_json() requires explicit type "
-            "annotation using 'dtype' if filename is not constant"
-        )
+        msg = "pd.read_json() requires explicit type annotation using the numba typing system when the filename is not a compile time constant. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths"
         fname_const = get_const_value(
             fname,
             self.func_ir,
@@ -1540,6 +1537,7 @@ class UntypedPass:
         if dtype_var == "":
             # can only read partial of the json file
             # when orient == 'records' && lines == True
+            # TODO: check this
             if not lines:
                 raise BodoError(
                     "pd.read_json() requires explicit type annotation using 'dtype',"
