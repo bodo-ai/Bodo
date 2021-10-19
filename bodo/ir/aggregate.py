@@ -2099,7 +2099,7 @@ def compile_to_optimized_ir(func, arg_typs, typingctx, targetctx):
     )
     TypeAnnotation = namedtuple("TypeAnnotation", ["typemap", "calltypes"])
     ta = TypeAnnotation(typemap, calltypes)
-    # The new Numba 0.50 inliner requires the pipline state itselft to be a member of
+    # The new Numba 0.50 inliner requires the pipeline state itself to be a member of
     # the pipeline state. To emulate it using a namedtuple (which is immutable), we
     # create a pipline first with the required data and add it to another one.
     pm = DummyPipeline(
@@ -2162,6 +2162,15 @@ def compile_to_optimized_ir(func, arg_typs, typingctx, targetctx):
             # TODO: support NA in UDFs
             if is_call_assign(stmt) and find_callname(f_ir, stmt.value) == (
                 "isna",
+                "bodo.libs.array_kernels",
+            ):
+                f_ir._definitions[stmt.target.name].remove(stmt.value)
+                stmt.value = ir.Const(False, stmt.loc)
+                f_ir._definitions[stmt.target.name].append(stmt.value)
+            # remove setna() calls since NA cannot be handled in UDFs yet
+            # TODO: support NA in UDFs
+            if is_call_assign(stmt) and find_callname(f_ir, stmt.value) == (
+                "setna",
                 "bodo.libs.array_kernels",
             ):
                 f_ir._definitions[stmt.target.name].remove(stmt.value)
@@ -2486,6 +2495,7 @@ def _mv_read_only_init_vars(init_nodes, parfor, eval_nodes):
     """
     if not parfor:
         return init_nodes
+
 
     # get parfor body usedefs
     use_defs = compute_use_defs(parfor.loop_body)
@@ -3043,6 +3053,7 @@ def gen_update_func(
                 red_ir_vars[ind] = stmt.target
             new_body.append(stmt)
         bl.body = new_body
+
 
     redvar_in_names = ["v{}".format(i) for i in range(num_red_vars)]
     in_names = ["in{}".format(i) for i in range(num_in_vars)]

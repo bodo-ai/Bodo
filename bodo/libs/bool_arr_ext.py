@@ -945,10 +945,13 @@ def create_nullable_logical_op_overload(op):
             func_text += f"    result, isna_val = compute_or_body({null1}, {null2}, {inner_val1}, {inner_val2})\n"
         else:
             func_text += f"    result, isna_val = compute_and_body({null1}, {null2}, {inner_val1}, {inner_val2})\n"
+        # We need to place the setna in the first block for setitem/getitem elimination to work properly
+        # in the parfor handling in aggregate.py. See test_groupby.py::test_groupby_agg_nullable_or
+        # https://github.com/numba/numba/blob/bce065548dd3cb0a3540dde73673c378ad8d37fc/numba/parfors/parfor.py#L4110
+        func_text += "    out_arr[i] = result\n"
         func_text += "    if isna_val:\n"
         func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
         func_text += "      continue\n"
-        func_text += "    out_arr[i] = result\n"
         func_text += "  return out_arr\n"
         loc_vars = {}
         exec(
