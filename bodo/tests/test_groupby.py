@@ -1774,6 +1774,38 @@ def test_groupby_agg_func_list():
     assert not dist_IR_contains(f_ir, "global(cpp_cb_general:")
 
 
+def test_groupby_agg_nullable_or():
+    # TODO: Restore memory leak check
+    """
+    Test groupy.agg with & and | can take the optimized path
+    """
+
+    def impl(df):
+        return df.groupby("A").agg(
+            {
+                "D": lambda x: ((x == "AA") | (x <= "BB")).sum(),
+            }
+        )
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "D": ["AA", "B", "BB", "B", "AA", "AA", "B"],
+            "B": [-8.1, 2.1, 3.1, 1.1, 5.1, 6.1, 7.1],
+            "C": [3, 5, 6, 5, 4, 4, 3],
+        },
+        index=np.arange(10, 17),
+    )
+    check_func(impl, (df,), sort_output=True, check_dtype=False)
+    # make sure regular optimized UDF path is taken
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
+    bodo_func(df)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    # general UDF codegen adds call to cpp_cb_general as a global
+    assert not dist_IR_contains(f_ir, "global(cpp_cb_general:")
+
+
+
 @pytest.mark.parametrize(
     "df",
     [

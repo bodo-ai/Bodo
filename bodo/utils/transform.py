@@ -167,6 +167,7 @@ no_side_effect_call_tuples = {
     ("timedelta64_to_integer", "pd_timestamp_ext", "hiframes", bodo),
     ("integer_to_timedelta64", "pd_timestamp_ext", "hiframes", bodo),
     ("npy_datetimestruct_to_datetime", "pd_timestamp_ext", "hiframes", bodo),
+    ("isna", "array_kernels", "libs", bodo),
     # TODO: handle copy properly, copy of some types can have side effects?
     ("copy",),
     ("from_iterable_impl", "typing", "utils", bodo),
@@ -244,6 +245,10 @@ def remove_hiframes(rhs, lives, call_list):
         call_list == ["move_str_binary_arr_payload", "str_arr_ext", "libs", bodo]
         and rhs.args[0].name not in lives
     ):
+        return True
+
+    # the call is dead if the updated array is dead
+    if call_list == ["setna", "array_kernels", "libs", bodo] and rhs.args[0].name not in lives:
         return True
 
     # TODO: needed?
