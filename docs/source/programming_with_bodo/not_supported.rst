@@ -116,7 +116,7 @@ Referring to dataframe columns (e.g. `df["A"]`) requires constants for schema st
         return s
 
     f(pd.DataFrame({"A": [1, 2, 1], "B": [4, 5, 6]}))
-    # BodoError: df[] getitem using unicode_type not supported
+    # BodoError: df[] getitem selecting a subset of columns requires providing constant column names. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html
 
 
 Variable Types and Functions
