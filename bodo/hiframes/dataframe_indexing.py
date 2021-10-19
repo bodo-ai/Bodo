@@ -120,8 +120,14 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                     col_num = df.columns.index(col_index_value)
                     return (df.data[col_num].dtype)(*args)
 
+                if isinstance(df_columns_indexer_type, types.UnicodeType):
+                    raise_bodo_error(
+                        f"DataFrame.loc[] getitem (location-based indexing) requires constant column names. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
+                    )  # pragma: no cover
+
                 # TODO: support df.loc[scalar int, ["A", "B"]] or df.loc[scalar int, [True, False, True]]
                 else:
+                    # In this case, we don't need a constant column name error warning, since we don't support df.loc[scalar int, ["A", "B"]] with either constant or non constant cols.
                     raise_bodo_error(
                         f"DataFrame.loc[] getitem (location-based indexing) using {idx} not supported yet."
                     )  # pragma: no cover
@@ -148,6 +154,11 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                     ret = bodo.SeriesType(dtype, data_type, new_index_type, name_typ)
                     return ret(*args)
 
+                if isinstance(df_columns_indexer_type, types.UnicodeType):
+                    raise_bodo_error(
+                        f"DataFrame.loc[] getitem (location-based indexing) requires constant column names. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
+                    )  # pragma: no cover
+
                 # df.loc[slice/bool_ary, ["A", "B"]] or df.loc[slice/bool_ary, [True, False, True]]
                 elif is_overload_constant_list(df_columns_indexer_type):
                     df_col_inds_literal = get_overload_const_list(
@@ -158,7 +169,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                         if len(df.columns) != len(df_col_inds_literal):
                             raise_bodo_error(
                                 f"dataframe {df} has {len(df.columns)} columns, but boolean array used with DataFrame.loc[] {df_col_inds_literal} has {len(df_col_inds_literal)} values"
-                            )
+                            )  # pragma: no cover
 
                         new_names = []
                         new_data = []
@@ -180,8 +191,9 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                         ret = DataFrameType(new_data, new_index_type, new_cols)
                         return ret(*args)
 
+        # this needs to have a constant warning, as the non constant list could either be indexing with column names or bool indexing
         raise_bodo_error(
-            f"DataFrame.loc[] getitem (location-based indexing) using {idx} not supported yet."
+            f"DataFrame.loc[] getitem (location-based indexing) using {idx} not supported yet. If you are trying to select a subset of the columns by passing a list of column names, that list must be a compile time constant. See https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
         )  # pragma: no cover
 
     def typecheck_df_getitem(self, args):
@@ -224,6 +236,13 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                 name_typ = types.literal(df.columns[col_num])
                 ret = bodo.SeriesType(dtype, data_type, index_type, name_typ)
                 return ret(*args)
+
+        if isinstance(ind, types.Integer) or isinstance(ind, types.UnicodeType):
+            # if we have non constant integer/string getitem, raise an error
+            raise_bodo_error(
+                "df[] getitem selecting a subset of columns requires providing constant column names. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
+            )  # pragma: no cover
+
         # df1 = df[df.A > 5] or df1 = df[:n]
         if (is_list_like_index_type(ind) and ind.dtype == types.bool_) or isinstance(
             ind, types.SliceType
@@ -243,8 +262,14 @@ class DataFrameGetItemTemplate(AbstractTemplate):
             index_type = df.index
             ret = DataFrameType(data_type, index_type, columns)
             return ret(*args)
+
+        # In this case, we need to raise a more general error, as a non constant list
+        # could be an attempt by the user to select a subset of rows with an integer list,
+        # or an attempt to select a subset of columns with a list of non constant column names
         # TODO: error-checking test
-        raise_bodo_error(f"df[] getitem using {ind} not supported")  # pragma: no cover
+        raise_bodo_error(
+            f"df[] getitem using {ind} not supported. If you are trying to select a subset of the columns, you must provide the column names you are selecting as a constant. See https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
+        )  # pragma: no cover
 
     def get_kept_cols_and_data(self, df, cols_to_keep_list):
         """helper function for getitem typing. Takes a dataframe, and a list of columns to keep,
@@ -292,6 +317,7 @@ def df_getitem_overload(df, ind):
     # This check shouldn't be needeed, but it can't hurt to keep it in
     if not isinstance(df, DataFrameType):
         return
+
     # A = df["column"]
     if is_overload_constant_str(ind) or is_overload_constant_int(ind):
         ind_val = (
@@ -330,6 +356,7 @@ def df_getitem_overload(df, ind):
             bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df),
             ind_val,
         )  # pragma: no cover
+
     # A = df[["C1", "C2"]]
     # TODO: support int names
     if is_overload_constant_list(ind):
@@ -460,7 +487,7 @@ def overload_iloc_getitem(I, idx):
             or is_overload_constant_int(idx.types[1])
         ):
             raise_bodo_error(
-                "idx2 in df.iloc[idx1, idx2] should be a constant integer or constant list of integers"
+                "idx2 in df.iloc[idx1, idx2] should be a constant integer or constant list of integers. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
             )
 
         num_cols = len(df.data)
@@ -530,7 +557,9 @@ def overload_iloc_getitem(I, idx):
         and isinstance(idx[0], types.SliceType)
         and isinstance(idx[1], types.SliceType)
     ):  # pragma: no cover
-        raise_bodo_error("slice2 in df.iloc[slice1,slice2] should be constant")
+        raise_bodo_error(
+            "slice2 in df.iloc[slice1,slice2] should be constant. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
+        )
 
     raise_bodo_error(f"df.iloc[] getitem using {idx} not supported")  # pragma: no cover
 
@@ -817,7 +846,7 @@ def overload_iat_getitem(I, idx):
             )
         if not is_overload_constant_int(idx.types[1]):
             raise_bodo_error(
-                "DataFrame.iat getitem: column index must be a constant integer"
+                "DataFrame.iat getitem: column index must be a constant integer. For more informaton, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
             )
         col_ind = get_overload_const_int(idx.types[1])
 
@@ -847,7 +876,7 @@ def overload_iat_setitem(I, idx, val):
             )
         if not is_overload_constant_int(idx.types[1]):
             raise_bodo_error(
-                "DataFrame.iat setitem: column index must be a constant integer"
+                "DataFrame.iat setitem: column index must be a constant integer. For more informaton, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
             )
         col_ind = get_overload_const_int(idx.types[1])
 

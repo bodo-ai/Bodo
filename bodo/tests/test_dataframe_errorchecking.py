@@ -889,3 +889,169 @@ def test_astype_non_constant_string(memory_leak_check):
         match="DataFrame.astype\\(\\): 'dtype' when passed as string must be a constant value",
     ):
         bodo.jit(impl)(df, type_str)
+
+
+# TODO: re add in later PR. Not marking in the PR because of Sonar
+# @pytest.mark.slow
+def test_df_getitem_non_const_columname_error(memory_leak_check):
+    g = bodo.jit(lambda a: a)
+
+    @bodo.jit
+    def f(df, a):
+        return df[g(a)]
+
+    df = pd.DataFrame({"A": [1, 2, 3]})
+    df = pd.DataFrame({1: [1, 2, 3]})
+
+    message = r"df\[\] getitem selecting a subset of columns requires providing constant column names. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
+    with pytest.raises(BodoError, match=message):
+        f(df, "A")
+    with pytest.raises(BodoError, match=message):
+        f(df, 1)
+
+
+# TODO: re add in later PR. Not marking in the PR because of Sonar
+# @pytest.mark.slow
+def test_df_getitem_non_const_columname_list_error(memory_leak_check):
+    g = bodo.jit(lambda a: a)
+
+    @bodo.jit
+    def f(df, a):
+        return df[g(a)]
+
+    df = pd.DataFrame({"A": [1, 2, 3]})
+    df = pd.DataFrame({1: [1, 2, 3]})
+
+    message = r"df\[\] getitem using .* not supported. If you are trying to select a subset of the columns, you must provide the column names you are selecting as a constant. See https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
+    with pytest.raises(BodoError, match=message):
+        f(df, ["A"])
+    with pytest.raises(BodoError, match=message):
+        f(df, [1])
+
+
+# TODO: re add in later PR. Not marking in the PR because of Sonar
+# @pytest.mark.slow
+def test_df_loc_getitem_non_const_columname_error(memory_leak_check):
+    g = bodo.jit(lambda a: a)
+
+    @bodo.jit
+    def f(df, a):
+        x = df.loc[0, g(a)]
+        return x
+
+    @bodo.jit
+    def f2(df, a):
+        return df.loc[1:, g(a)]
+
+    df = pd.DataFrame({"A": np.arange(10)})
+    # TODO: add when loc supports indexing with integer col names
+    # df = pd.DataFrame({1: [1, 2, 3]})
+
+    message = r"DataFrame.loc\[\] getitem \(location-based indexing\) requires constant column names. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
+    with pytest.raises(BodoError, match=message):
+        f(df, "A")
+    with pytest.raises(BodoError, match=message):
+        f2(df, "A")
+
+
+# TODO: re add in later PR. Not marking in the PR because of Sonar
+# @pytest.mark.slow
+def test_df_loc_getitem_non_const_columname_list_error(memory_leak_check):
+    g = bodo.jit(lambda a: a)
+
+    @bodo.jit
+    def f(df, a):
+        x = df.loc[0, g(a)]
+        return x
+
+    @bodo.jit
+    def f2(df, a):
+        return df.loc[1:, g(a)]
+
+    df = pd.DataFrame({"A": np.arange(10)})
+    # TODO: add when loc supports indexing with integer col names
+    # df = pd.DataFrame({1: [1, 2, 3]})
+
+    message = r"DataFrame.loc\[\] getitem \(location-based indexing\) using .* not supported yet. If you are trying to select a subset of the columns by passing a list of column names, that list must be a compile time constant. See https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
+
+    # TODO: re add this check when we support it in df.loc
+    # with pytest.raises(BodoError, match=message):
+    #     f(df, ["A"])
+    with pytest.raises(BodoError, match=message):
+        f2(df, ["A"])
+
+
+# TODO: re add in later PR. Not marking in the PR because of Sonar
+# @pytest.mark.slow
+def test_df_iloc_getitem_non_const_columname_error(memory_leak_check):
+    g = bodo.jit(lambda a: a)
+
+    @bodo.jit
+    def f(df, a):
+        x = df.iloc[0, g(a)]
+        return x
+
+    @bodo.jit
+    def f2(df, a):
+        return df.iloc[1:, g(a)]
+
+    df = pd.DataFrame({"A": np.arange(10)})
+
+    message = r"idx2 in df.iloc\[idx1, idx2\] should be a constant integer or constant list of integers. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
+    with pytest.raises(BodoError, match=message):
+        f(df, 1)
+    with pytest.raises(BodoError, match=message):
+        f2(df, [1])
+
+
+# TODO: re add in later PR. Not marking in the PR because of Sonar
+# @pytest.mark.slow
+def test_df_iloc_getitem_non_const_slice_error(memory_leak_check):
+    g = bodo.jit(lambda a: a)
+
+    @bodo.jit
+    def f(df, a):
+        x = df.iloc[1:, g(a)]
+        return x
+
+    df = pd.DataFrame({"A": np.arange(10)})
+
+    message = r"slice2 in df.iloc\[slice1,slice2\] should be constant. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
+
+    with pytest.raises(BodoError, match=message):
+        f(df, slice(0, 1))
+
+
+# TODO: re add in later PR. Not marking in the PR because of Sonar
+# @pytest.mark.slow
+def test_df_iat_getitem_non_const_error(memory_leak_check):
+    g = bodo.jit(lambda a: a)
+
+    @bodo.jit
+    def f(df, a):
+        x = df.iat[1, g(a)]
+        return x
+
+    df = pd.DataFrame({"A": np.arange(10)})
+
+    message = r"DataFrame.iat getitem: column index must be a constant integer. For more informaton, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
+
+    with pytest.raises(BodoError, match=message):
+        f(df, 0)
+
+
+# TODO: re add in later PR. Not marking in the PR because of Sonar
+# @pytest.mark.slow
+def test_df_iat_setitem_non_const_error(memory_leak_check):
+    g = bodo.jit(lambda a: a)
+
+    @bodo.jit
+    def f(df, a):
+        df.iat[1, g(a)] = -1
+
+    df = pd.DataFrame({"A": np.arange(10)})
+
+    message = r"DataFrame.iat setitem: column index must be a constant integer. For more informaton, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
+
+    with pytest.raises(BodoError, match=message):
+        f(df, 0)

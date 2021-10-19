@@ -2520,7 +2520,10 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
     check_func(impl2, (df,))
     if is_slow_run:
         check_func(impl3, (n,))
-    with pytest.raises(BodoError, match="getitem using"):
+    with pytest.raises(
+        BodoError,
+        match=r"df\[\] getitem selecting a subset of columns requires providing constant column names. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html",
+    ):
         bodo.jit(impl4)(df)
     check_func(impl5, (n,))
     check_func(impl6, (n,))
