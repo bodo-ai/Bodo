@@ -157,7 +157,7 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
     or ``filepath_or_buffer`` should be inferrable as a constant string. This is required so bodo can infer the types at compile time, see `compile time constants <https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html>`
   * ``names``, ``usecols``, ``parse_dates`` should be constant lists.
   * ``dtype`` should be a constant dictionary of strings and types.
-  * If ``skiprows`` is not a constant, ``names`` must be provided to enable type inference.  
+  * If ``skiprows`` is not a constant, ``names`` must be provided to enable type inference.
   * When a CSV file is read in parallel (distributed mode) and each process reads only a portion of the file, reading columns that contain line breaks is not supported.
 
 * :func:`pandas.read_excel`
@@ -202,7 +202,7 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
   * Argument ``filepath_or_buffer`` is supported: it can point to a single JSON file, or a directory containing multiple partitioned JSON files. When reading a directory, the JSON files inside the directory must be `JSON Lines text file format <http://jsonlines.org/>`_ with ``json`` file extension.
   * Argument ``orient = 'records'`` is used as default, instead of Pandas' default ``'columns'`` for dataframes. ``'records'`` is the only supported value for ``orient``.
   * Argument ``typ`` is supported. ``'frame'`` is the only supported value for ``typ``.
-  * ``filepath_or_buffer`` should either be inferrable as a constant string, or the user should specify the types using the numba syntax (not supported for multi-line JSON files). This is required so bodo can infer the types at compile time, see `compile time constants <https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html>`.
+  * ``filepath_or_buffer`` must be inferrable as a constant string. This is required so bodo can infer the types at compile time, see `compile time constants <https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html>`.
   * Arguments ``convert_dates``, ``precise_float``, ``lines`` are supported.
 
 * :func:`pandas.DataFrame.to_sql`

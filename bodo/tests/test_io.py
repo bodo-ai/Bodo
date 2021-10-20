@@ -3426,42 +3426,14 @@ def test_json_non_constant_filepath_error(datapath):
             )
         return df
 
-    msg = r".*pd.read_json\(\) requires explicit type annotation using the numba typing system when the filename is not a compile time constant. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths.*"
+    msg = r".*pd.read_json\(\) requires the filename to be a compile time constant. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths.*"
 
     with pytest.raises(BodoError, match=msg):
         bodo.jit(lambda: impl())()
     with pytest.raises(BodoError, match=msg):
         bodo.jit(lambda: impl2())()
-    bodo.jit(lambda: impl3())()
-
-
-@pytest.mark.skip(
-    "TODO: Support type anotation for multiline non constant json filepath (BE-1421)"
-)
-def test_multiline_json_non_constant_filepath(datapath):
-    f1 = datapath("multiline_obj.json")
-
-    @bodo.jit(
-        locals={
-            "df": {
-                "RecordNumber": bodo.int64[:],
-                "Zipcode": bodo.int64[:],
-                "ZipCodeType": bodo.string_array_type,
-                "City": bodo.string_array_type,
-                "State": bodo.string_array_type,
-            }
-        }
-    )
-    def impl():
-        for filepath in [f1]:
-            df = pd.read_json(
-                filepath,
-                orient="records",
-                lines=True,
-            )
-        return df
-
-    bodo.jit(lambda: impl())()
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(lambda: impl3())()
 
 
 @pytest.mark.slow
