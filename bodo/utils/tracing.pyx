@@ -100,6 +100,7 @@ def dump(fname=None, clear_traces=True):
             import bodo
             import json
             trace_obj["bodo_version"] = bodo.__version__
+            trace_obj["num_nodes"] = bodo.libs.distributed_api.get_num_nodes()
             for var in os.environ:
                 if "MPI" in var or var.startswith("FI_"):
                     trace_obj[var] = os.environ[var]
