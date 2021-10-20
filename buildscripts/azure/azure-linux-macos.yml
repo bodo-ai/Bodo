@@ -5,6 +5,8 @@ parameters:
 
 jobs:
 - job: ${{ parameters.name }}
+  variables:
+    - group: SnowflakeCredentials
   timeoutInMinutes: 240
   pool:
     vmImage: ${{ parameters.vmImage }}
@@ -57,7 +59,7 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge pymysql sqlalchemy
+      conda install -y -c conda-forge pymysql sqlalchemy snowflake-connector-python snowflake-sqlalchemy
     displayName: 'Setup MySQL testing'
 
   - script: |
@@ -85,4 +87,7 @@ jobs:
       else
         python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER)" bodo/tests/
       fi
+    env:
+      SF_USER: $(SNOWFLAKE_USER)
+      SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
     displayName: 'Test'

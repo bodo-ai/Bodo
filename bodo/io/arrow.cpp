@@ -28,7 +28,10 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                           table_info *categories_table, int *partition_cols_idx,
                           int num_partition_cols, const char *compression,
                           bool is_parallel, const char *bucket_region);
-// ----------------------------------------------------------
+
+// --------- function defined in snowflake_reader.cpp ---------
+table_info* snowflake_read(const char* query, const char* conn, bool parallel,
+                           int64_t n_fields, int32_t* is_nullable);
 
 PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     PyObject *m;
@@ -46,6 +49,8 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
                            PyLong_FromVoidPtr((void *)(&pq_write)));
     PyObject_SetAttrString(m, "pq_write_partitioned",
                            PyLong_FromVoidPtr((void *)(&pq_write_partitioned)));
+    PyObject_SetAttrString(m, "snowflake_read",
+                           PyLong_FromVoidPtr((void *)(&snowflake_read)));
     PyObject_SetAttrString(m, "get_stats_alloc",
                            PyLong_FromVoidPtr((void *)(&get_stats_alloc)));
     PyObject_SetAttrString(m, "get_stats_free",

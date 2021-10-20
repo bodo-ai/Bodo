@@ -2383,6 +2383,7 @@ def _get_sql_df_type_from_db(sql_const, con_const):
     Only rank zero accesses the database, then broadcasts.
     """
     from mpi4py import MPI
+    from urllib.parse import urlparse
 
     comm = MPI.COMM_WORLD
 
@@ -2390,7 +2391,23 @@ def _get_sql_df_type_from_db(sql_const, con_const):
     if bodo.get_rank() == 0:
         rows_to_read = 100  # TODO: tune this
         sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
-        df = pd.read_sql(sql_call, con_const)
+        if urlparse(con_const).scheme == "snowflake":
+            import snowflake.connector
+            from bodo.io.snowflake import get_connection_params
+
+            conn_params = get_connection_params(con_const)
+            conn = snowflake.connector.connect(**conn_params)
+            df = conn.cursor().execute(sql_call).fetch_pandas_all()
+
+            # Ensure column name case matches Pandas/sqlalchemy. See:
+            # https://github.com/snowflakedb/snowflake-sqlalchemy#object-name-case-handling
+            # If a name is returned as all uppercase by the Snowflake connector
+            # it means it is case insensitive or it was inserted as all
+            # uppercase with double quotes. In both of these situations
+            # pd.read_sql() returns the name with all lower case
+            df.columns = [x.lower() if x.isupper() else x for x in df.columns]
+        else:
+            df = pd.read_sql(sql_call, con_const)
         df_type = numba.typeof(df)
         # always convert to nullable type since initial rows of a column could be all
         # int for example, but later rows could have NAs
