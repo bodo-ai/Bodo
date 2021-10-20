@@ -6,19 +6,26 @@ version for this task.
 """
 
 import numba
+import numpy as np
 import pandas as pd  # noqa
-from numba.core import ir, ir_utils, typeinfer
+from numba.core import ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
 import bodo
 import bodo.ir.connector
 from bodo import objmode  # noqa
 from bodo.ir.csv_ext import _get_dtype_str
+from bodo.libs.array import (
+    delete_table,
+    info_from_table,
+    info_to_array,
+    table_type,
+)
 from bodo.libs.distributed_api import bcast, bcast_scalar
-from bodo.libs.str_ext import string_type
+from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.utils.typing import BodoError
-from bodo.utils.utils import sanitize_varname
+from bodo.utils.utils import check_and_propagate_cpp_exception, sanitize_varname
 
 MPI_ROOT = 0
 
@@ -269,45 +276,77 @@ def _gen_sql_reader_py(
     # usage.
     if bodo.sql_access_method == "multiple_access_nb_row_first":
         func_text = "def sql_reader_py(sql_request, conn):\n"
-        func_text += "  sqlalchemy_check()\n"
-        if parallel:
-            func_text += "  rank = bodo.libs.distributed_api.get_rank()\n"
-            if limit is not None:
-                func_text += f"  nb_row = {limit}\n"
-            else:
-                func_text += '  with objmode(nb_row="int64"):\n'
-                func_text += f"     if rank == {MPI_ROOT}:\n"
-                func_text += "         sql_cons = 'select count(*) from (' + sql_request + ') x'\n"
-                func_text += "         frame = pd.read_sql(sql_cons, conn)\n"
-                func_text += "         nb_row = frame.iat[0,0]\n"
-                func_text += "     else:\n"
-                func_text += "         nb_row = 0\n"
-                func_text += "  nb_row = bcast_scalar(nb_row)\n"
-            func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
-            func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
-            # Snowflake doesn't provide consistent output in different processes with
-            # LIMIT/OFFSET case and row_number() is recommended instead
-            if db_type == "snowflake":
-                func_text += "    start_num = offset + 1\n"
-                func_text += "    end_num = offset + limit + 1\n"
-                func_text += f"    sql_cons = 'select {', '.join(col_names)} from (select row_number() over (order by 1) as row_num, * from (' + sql_request + ')) where row_num >=' + str(start_num) + ' and row_num <' + str(end_num)\n"
-                str_cols = [f"'{c}'" for c in col_names]
-                func_text += f"    col_names = ({','.join(str_cols)}{',' if len(str_cols) > 0 else ''})\n"
-                func_text += "    df_ret = read_snowflake(sql_cons, conn, col_names)\n"
-            else:
+        if db_type == "snowflake":
+            local_types = {}
+            for i, c_typ in enumerate(col_typs):
+                local_types[f"col_{i}_type"] = c_typ
+            func_text += (
+                f"  ev = bodo.utils.tracing.Event('read_snowflake', {parallel})\n"
+            )
+
+            def is_nullable(typ):  # TODO refactor
+                return bodo.utils.utils.is_array_typ(typ, False) and (
+                    not isinstance(typ, types.Array)  # or is_dtype_nullable(typ.dtype)
+                )
+
+            nullable_cols = [int(is_nullable(c_typ)) for c_typ in col_typs]
+            func_text += f"  out_table = snowflake_read(unicode_to_utf8(sql_request), unicode_to_utf8(conn), {parallel}, {len(col_names)}, np.array({nullable_cols}, dtype=np.int32).ctypes)\n"
+            func_text += "  check_and_propagate_cpp_exception()\n"
+            for i, c_name in enumerate(sanitized_cnames):
+                func_text += f"  {c_name} = info_to_array(info_from_table(out_table, {i}), col_{i}_type)\n"
+            func_text += "  delete_table(out_table)\n"
+            func_text += f"  ev.finalize()\n"
+        else:
+            func_text += "  sqlalchemy_check()\n"
+            if parallel:
+                func_text += "  rank = bodo.libs.distributed_api.get_rank()\n"
+                if limit is not None:
+                    func_text += f"  nb_row = {limit}\n"
+                else:
+                    func_text += '  with objmode(nb_row="int64"):\n'
+                    func_text += f"     if rank == {MPI_ROOT}:\n"
+                    func_text += "         sql_cons = 'select count(*) from (' + sql_request + ') x'\n"
+                    func_text += "         frame = pd.read_sql(sql_cons, conn)\n"
+                    func_text += "         nb_row = frame.iat[0,0]\n"
+                    func_text += "     else:\n"
+                    func_text += "         nb_row = 0\n"
+                    func_text += "  nb_row = bcast_scalar(nb_row)\n"
+                func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
+                func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
                 func_text += f"    sql_cons = 'select {', '.join(col_names)} from (' + sql_request + ') x LIMIT ' + str(limit) + ' OFFSET ' + str(offset)\n"
                 func_text += "    df_ret = pd.read_sql(sql_cons, conn)\n"
-        else:
-            func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
-            func_text += "    df_ret = pd.read_sql(sql_request, conn)\n"
-        # We assumed that sanitized_cnames and col_names are list of strings
-        for s_cname, cname in zip(sanitized_cnames, col_names):
-            func_text += "    {} = df_ret['{}'].values\n".format(s_cname, cname)
+            else:
+                func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
+                func_text += "    df_ret = pd.read_sql(sql_request, conn)\n"
+            # We assumed that sanitized_cnames and col_names are list of strings
+            for s_cname, cname in zip(sanitized_cnames, col_names):
+                func_text += "    {} = df_ret['{}'].values\n".format(s_cname, cname)
         func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
 
-    glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
-    # {'objmode': objmode,
-    # 'pd': pd, 'np': np}
+    glbls = {"bodo": bodo}
+    if db_type == "snowflake":
+        glbls.update(local_types)
+        glbls.update(
+            {
+                "np": np,
+                "unicode_to_utf8": unicode_to_utf8,
+                "check_and_propagate_cpp_exception": check_and_propagate_cpp_exception,
+                "snowflake_read": _snowflake_read,
+                "info_to_array": info_to_array,
+                "info_from_table": info_from_table,
+                "delete_table": delete_table,
+            }
+        )
+    else:
+        glbls.update(
+            {
+                "sqlalchemy_check": sqlalchemy_check,
+                "pd": pd,
+                "objmode": objmode,
+                "bcast_scalar": bcast_scalar,
+            }
+        )
+
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     sql_reader_py = loc_vars["sql_reader_py"]
@@ -318,50 +357,19 @@ def _gen_sql_reader_py(
     return jit_func
 
 
-def read_snowflake(sql_cons, conn, expected_colnames):
-    """read query from Snowflake using its connector"""
-    try:
-        import snowflake.connector
-        import sqlalchemy
-    except ImportError:
-        raise BodoError(
-            "pd.read_sql(): reading from Snowflake requires snowflake connector. Install using 'conda install snowflake-sqlalchemy snowflake-connector-python -c bodo.ai -c conda-forge'"
-        )
+_snowflake_read = types.ExternalFunction(
+    "snowflake_read",
+    table_type(
+        types.voidptr,
+        types.voidptr,
+        types.boolean,
+        types.int64,
+        types.voidptr,
+    ),
+)
 
-    # get connection parameters from connection string
-    # some paramters could be part of address or extra paramters
-    # "snowflake://user:pw@account/db/schema?warehouse=XL_WH"
-    # "snowflake://account/?user=user&password=pw&database=db&schema=schema&warehouse=XL_WH"
-    conn_url = sqlalchemy.engine.url._parse_rfc1738_args(conn)
-    params = {}
-    if conn_url.username:
-        params["user"] = conn_url.username
-    if conn_url.password:
-        params["password"] = conn_url.password
-    if conn_url.host:
-        params["account"] = conn_url.host
-    if conn_url.database:
-        # sqlalchemy reads "db/schema" as just database name so need to split schema
-        db = conn_url.database.split("/")[0]
-        params["database"] = db
-        if "/" in conn_url.database:
-            params["schema"] = conn_url.database.split("/")[1]
-    if conn_url.port:
-        params["port"]: conn_url.port
-    params.update(conn_url.query)
+import llvmlite.binding as ll
 
-    ctx = snowflake.connector.connect(**params)
-    cur = ctx.cursor()
-    cur.execute(sql_cons)
-    df = cur.fetch_pandas_all()
-    # sqlalchemy uses lowercase for case insensitive cases but Snowflake uses upper case
-    # case sensitive cases use quotes
-    # see https://github.com/snowflakedb/snowflake-sqlalchemy
-    #
-    # To handle this, we check if the column names are uppercase and the expected datatype
-    # is lowercase. If so we convert the columns. TODO: Make sure this is fully robust/we
-    # don't handle case sensitivity in the Snowflake connector properly.
-    df.columns = [
-        expected_colnames[i] if s.isupper() else s for i, s in enumerate(df.columns)
-    ]
-    return df
+from bodo.io import arrow_cpp
+
+ll.add_symbol("snowflake_read", arrow_cpp.snowflake_read)

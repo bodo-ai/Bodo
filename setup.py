@@ -434,6 +434,7 @@ ext_parquet = Extension(
         "bodo/io/arrow.cpp",
         "bodo/io/arrow_reader.cpp",
         "bodo/io/parquet_reader.cpp",
+        "bodo/io/snowflake_reader.cpp",
         "bodo/io/parquet_write.cpp",
         "bodo/libs/_bodo_common.cpp",
         "bodo/libs/_decimal_ext.cpp",

@@ -1,0 +1,120 @@
+// Copyright (C) 2021 Bodo Inc. All rights reserved.
+
+// Implementation of SnowflakeReader (subclass of ArrowDataframeReader) with
+// functionality that is specific to reading from Snowflake
+
+#include "arrow_reader.h"
+
+// -------- SnowflakeReader --------
+
+class SnowflakeReader : public ArrowDataframeReader {
+   public:
+    /**
+     * Initialize SnowflakeReader.
+     * See snowflake_read function below for description of arguments.
+     */
+    SnowflakeReader(const char* _query, const char* _conn, bool _parallel,
+                    int* selected_fields, int64_t num_selected_fields,
+                    int32_t* is_nullable)
+        : ArrowDataframeReader(_parallel, -1, selected_fields,
+                               num_selected_fields, is_nullable),
+          query(_query),
+          conn(_conn) {
+        // initialize reader
+        init();
+    }
+
+    virtual ~SnowflakeReader() { Py_XDECREF(sf_conn); }
+
+    /// A piece is a snowflake.connector.result_batch.ArrowResultBatch
+    virtual size_t get_num_pieces() const { return batches.size(); }
+
+   protected:
+    virtual void add_piece(PyObject* piece) {
+        Py_INCREF(piece);  // keeping a reference to this piece
+        batches.push_back(piece);
+    }
+
+    virtual PyObject* get_dataset() {
+        // import bodo.io.snowflake
+        PyObject* sf_mod = PyImport_ImportModule("bodo.io.snowflake");
+        if (PyErr_Occurred()) throw std::runtime_error("python");
+
+        // ds = bodo.io.snowflake.get_dataset(query, conn)
+        PyObject* ds =
+            PyObject_CallMethod(sf_mod, "get_dataset", "ss", query, conn);
+        Py_DECREF(sf_mod);
+        if (PyErr_Occurred()) throw std::runtime_error("python");
+
+        sf_conn = PyObject_GetAttrString(ds, "conn");
+        if (sf_conn == NULL)
+            throw std::runtime_error(
+                "Could not retrieve conn attribute of snowflake dataset");
+        return ds;
+    }
+
+    virtual std::shared_ptr<arrow::Schema> get_schema(PyObject* dataset) {
+        PyObject* schema_py = PyObject_GetAttrString(dataset, "schema");
+        // see
+        // https://arrow.apache.org/docs/python/extending.html#using-pyarrow-from-c-and-cython-code
+        auto schema_ = arrow::py::unwrap_schema(schema_py).ValueOrDie();
+        Py_DECREF(schema_py);
+        return schema_;
+    }
+
+    virtual void append_piece_builder(size_t piece_idx, TableBuilder& builder) {
+        int64_t offset = 0;
+        if (piece_idx == 0) offset = start_row_first_piece;
+        PyObject* batch = batches[piece_idx];
+        PyObject* arrow_table_py = PyObject_CallMethod(batch, "to_arrow", "O", sf_conn);
+        auto table = arrow::py::unwrap_table(arrow_table_py).ValueOrDie();
+        int64_t length = std::min(rows_left, table->num_rows() - offset);
+        // pass zero-copy slice to TableBuilder to append to read data
+        builder.append(table->Slice(offset, length));
+        rows_left -= length;
+        // releasing reference to batch since it's not needed anymore
+        Py_DECREF(batch);
+        Py_DECREF(arrow_table_py);
+    }
+
+   private:
+    const char* query;  // query passed to pd.read_sql()
+    const char* conn;   // connection string passed to pd.read_sql()
+
+    // batches that this process is going to read
+    // A batch is a snowflake.connector.result_batch.ArrowResultBatch
+    std::vector<PyObject*> batches;
+    // instance of snowflake.connector.connection.SnowflakeConnection, used to
+    // read the batches
+    PyObject* sf_conn = nullptr;
+};
+
+/**
+ * Read data from snowflake given a query.
+ *
+ * @param query : SQL query
+ * @param conn : connection string URL
+ * @param parallel: true if reading in parallel
+ * @param n_fields : Number of fields (columns) in Arrow data to retrieve
+ * @param is_nullable : array of bools that indicates which of the fields is
+ * nullable
+ * @return table containing all the arrays read
+ */
+table_info* snowflake_read(const char* query, const char* conn, bool parallel,
+                           int64_t n_fields, int32_t* is_nullable) {
+    try {
+        std::vector<int> selected_fields(n_fields);
+        for (auto i = 0; i < n_fields; i++)
+            selected_fields[i] = static_cast<int>(i);
+        SnowflakeReader reader(query, conn, parallel, selected_fields.data(),
+                               n_fields, is_nullable);
+        return reader.read();
+    } catch (const std::exception& e) {
+        // if the error string is "python" this means the C++ exception is
+        // a result of a Python exception, so we don't call PyErr_SetString
+        // because we don't want to replace the original Python error
+        if (std::string(e.what()) != "python")
+            PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
+}

@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import os
 import random
 
 import numpy as np
@@ -197,3 +198,23 @@ def test_sql_argument_passing(memory_leak_check):
     sql_request = "select * from employees"
     conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
     check_func(test_impl_arg_passing, (sql_request, conn))
+
+
+# We only run this test on Azure Pipelines because the Snowflake account credentials
+# are stored there (to avoid failing on AWS or our local machines)
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_sql_snowflake(memory_leak_check):
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    username = os.environ["SF_USER"]
+    password = os.environ["SF_PASSWORD"]
+    account = "bodopartner.us-east-1"
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    warehouse = "DEMO_WH"
+    conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?warehouse={warehouse}"
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+    check_func(impl, (query, conn))
