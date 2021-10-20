@@ -78,9 +78,11 @@ def is_tracing():
 
 def dump(fname=None, clear_traces=True):
     """Dump current traces to JSON file"""
-    cdef int rank, num_ranks
+    cdef int rank, num_ranks, num_nodes
     if tracing_supported():
         global traceEvents
+        from bodo.libs.distributed_api import get_num_nodes
+        num_nodes = get_num_nodes()
         MPI_Comm_rank(MPI_COMM_WORLD, &rank)
         MPI_Comm_size(MPI_COMM_WORLD, &num_ranks)
         if num_ranks > 1:
@@ -97,10 +99,10 @@ def dump(fname=None, clear_traces=True):
                 }
             )
             trace_obj = {"num_ranks": num_ranks}
+            trace_obj["num_nodes"] = num_nodes
             import bodo
             import json
             trace_obj["bodo_version"] = bodo.__version__
-            trace_obj["num_nodes"] = bodo.libs.distributed_api.get_num_nodes()
             for var in os.environ:
                 if "MPI" in var or var.startswith("FI_"):
                     trace_obj[var] = os.environ[var]
