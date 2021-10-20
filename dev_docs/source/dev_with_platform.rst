@@ -20,7 +20,7 @@ with the variable ``PLATFORM_DEV_RELEASE`` set to ``true`` on your branch as sho
         :alt: Azure Platform Pipeline set Variable
 
 This will create a new platform-compatible Bodo binary and upload it to the `bodo.ai-platform artifactory channel <https://bodo.jfrog.io/ui/repos/tree/General/bodo.ai-platform>`_. 
-It will then trigger the `bodo-ami repo CI <https://github.com/Bodo-inc/bodo-ami/actions?query=workflow%3Abuild_publish_amis>`_ to create a new AMI and make it available on the `Dev Platform <https://dev.bodo.ai>`_.
+It will then trigger the `bodo-ami repo CI <https://github.com/Bodo-inc/bodo-ami/actions/workflows/build_publish_images.yml>`_ to create a new AMI and make it available on the `Dev Platform <https://dev.bodo.ai>`_.
 The Bodo Version to use will be the same as the Bodo Version as printed by the Azure Pipeline during the *Get Bodo Version* step.
 
     .. figure:: ../figs/azure-platform-get-bodo-version.png
