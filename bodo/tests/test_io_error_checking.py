@@ -5,6 +5,7 @@
 
 import os
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -56,3 +57,16 @@ def test_csv_skiprows_type(memory_leak_check):
 
     with pytest.raises(BodoError, match="callable not supported yet"):
         bodo.jit(impl3)()
+
+
+@pytest.mark.slow
+def test_to_parquet_engine(datapath):
+    msg = r".*DataFrame.to_parquet\(\): only pyarrow engine supported.*"
+
+    @bodo.jit
+    def impl(df):
+        df.to_parquet("test.pq", engine="fastparquet")
+
+    df = pd.DataFrame({"A": np.arange(10)})
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(lambda f: impl(df))(df)
