@@ -1492,8 +1492,15 @@ def gen_objmode_func_overload(func, output_type=None, single_rank=False):
     """generate an objmode overload to support function 'func' with output type
     'output_type'
     """
-    overload_impl = _gen_objmode_overload(func, output_type, single_rank=single_rank)
-    overload(func, no_unliteral=True)(overload_impl)
+    try:
+        overload_impl = _gen_objmode_overload(
+            func, output_type, single_rank=single_rank
+        )
+        overload(func, no_unliteral=True)(overload_impl)
+    except Exception:
+        # If the module has changed in a way we can't support (i.e. varargs in matplotlib),
+        # then don't do the overload
+        pass
 
 
 def gen_objmode_method_overload(
@@ -1502,8 +1509,15 @@ def gen_objmode_method_overload(
     """generate an objmode overload_method to support method 'method'
     (named 'method_name') with output type 'output_type'.
     """
-    overload_impl = _gen_objmode_overload(method, output_type, method_name, single_rank)
-    overload_method(obj_type, method_name, no_unliteral=True)(overload_impl)
+    try:
+        overload_impl = _gen_objmode_overload(
+            method, output_type, method_name, single_rank
+        )
+        overload_method(obj_type, method_name, no_unliteral=True)(overload_impl)
+    except Exception:
+        # If the module has changed in a way we can't support (i.e. varargs in matplotlib),
+        # then don't do the overload
+        pass
 
 
 @infer
