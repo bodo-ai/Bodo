@@ -3065,7 +3065,7 @@ class DistributedAnalysis:
 
     def _add_diag_info(self, info, loc):
         """append diagnostics info to be displayed in distributed diagnostics output"""
-        if info not in self.diag_info:
+        if (info, loc) not in self.diag_info:
             self.diag_info.append((info, loc))
 
     def _get_diag_info_str(self):
