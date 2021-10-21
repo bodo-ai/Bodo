@@ -1272,7 +1272,8 @@ def test_dist_warning1(memory_leak_check):
     to unsupported function
     """
 
-    def impl(n):
+    @bodo.jit
+    def f(n):
         A = np.ones((n, n))
         # using a function we are not likely to support for warning test
         # should be changed when/if we support slogdet()
@@ -1283,9 +1284,15 @@ def test_dist_warning1(memory_leak_check):
             BodoWarning,
             match=r"No parallelism found for function(?s:.*)np.linalg.slogdet",
         ):
-            bodo.jit(impl)(10)
+            f(10)
     else:
-        bodo.jit(impl)(10)
+        f(10)
+
+    # make sure diag info doesn't have repetition [BE-1493]
+    assert (
+        len(f.overloads[f.signatures[0]].metadata["distributed_diagnostics"].diag_info)
+        == 1
+    )
 
 
 @pytest.mark.slow
