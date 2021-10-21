@@ -2048,6 +2048,13 @@ def to_parquet_overload(
     # TODO handle possible **kwargs options?
     _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
+
+    if not is_overload_none(engine) and get_overload_const_str(engine) not in (
+        "auto",
+        "pyarrow",
+    ):  # pragma: no cover
+        raise BodoError("DataFrame.to_parquet(): only pyarrow engine supported")
+
     if not is_overload_none(compression) and get_overload_const_str(
         compression
     ) not in {"snappy", "gzip", "brotli"}:
