@@ -385,6 +385,13 @@ def is_distributable_tuple_typ(var_typ):
             isinstance(var_typ, types.DictType)
             and is_distributable_tuple_typ(var_typ.value_type)
         )
+        or (
+            isinstance(var_typ, types.iterators.EnumerateType)
+            and (
+                is_distributable_typ(var_typ.yield_type[1])
+                or is_distributable_tuple_typ(var_typ.yield_type[1])
+            )
+        )
     )
 
 

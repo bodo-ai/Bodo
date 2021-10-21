@@ -152,12 +152,13 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
   * :ref:`example usage and more system specific instructions <csv-section>`
   * ``filepath_or_buffer`` should be a string and is required. It could be pointing to a single CSV file, or a directory containing multiple partitioned CSV files (must have ``csv`` file extension inside directory).
   * Arguments ``sep``, ``delimiter``, ``header``, ``names``,
-    ``index_col``, ``usecols``, ``dtype``, ``nrows``, ``skiprows``, and ``parse_dates`` are supported.
+    ``index_col``, ``usecols``, ``dtype``, ``nrows``, ``skiprows``, ``chunksize``, and ``parse_dates`` are supported.
   * Either ``names`` and ``dtype`` arguments should be provided to enable type inference,
     or ``filepath_or_buffer`` should be inferrable as a constant string. This is required so bodo can infer the types at compile time, see `compile time constants <https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html>`
   * ``names``, ``usecols``, ``parse_dates`` should be constant lists.
   * ``dtype`` should be a constant dictionary of strings and types.
-  * If ``skiprows`` is not a constant, ``names`` must be provided to enable type inference.
+  * ``skiprows`` must be integer and if it is not a constant, ``names`` must be provided to enable type inference.
+  * ``chunksize`` is supported for uncompressed files only.
   * When a CSV file is read in parallel (distributed mode) and each process reads only a portion of the file, reading columns that contain line breaks is not supported.
 
 * :func:`pandas.read_excel`

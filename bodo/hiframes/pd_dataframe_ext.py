@@ -24,6 +24,7 @@ from numba.extending import (
     intrinsic,
     lower_builtin,
     lower_cast,
+    make_attribute_wrapper,
     models,
     overload,
     overload_attribute,
@@ -89,6 +90,7 @@ from bodo.utils.typing import (
     raise_bodo_error,
     to_nullable_type,
 )
+from bodo.utils.utils import is_null_pointer
 
 _json_write = types.ExternalFunction(
     "json_write",
@@ -265,6 +267,10 @@ class DataFrameModel(models.StructModel):
             ("parent", types.pyobject),
         ]
         super(DataFrameModel, self).__init__(dmm, fe_type, members)
+
+
+# Export meminfo for null checks
+make_attribute_wrapper(DataFrameType, "meminfo", "_meminfo")
 
 
 @infer_getattr
@@ -1382,9 +1388,17 @@ def df_len_overload(df):
 
     if len(df.columns) == 0:  # empty df
         return lambda df: 0  # pragma: no cover
-    return lambda df: len(
-        bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0)
-    )  # pragma: no cover
+
+    def impl(df):  # pragma: no cover
+        # If for some reason we have a null dataframe,
+        # an assumption made in read_csv with chunksize
+        # (see test_csv_chunksize_forloop), then return 0
+        # because this should be a garbage/unused value.
+        if is_null_pointer(df._meminfo):
+            return 0
+        return len(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0))
+
+    return impl
 
 
 # handle getitem for Tuples because sometimes df._data[i] in

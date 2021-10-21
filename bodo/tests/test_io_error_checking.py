@@ -14,6 +14,31 @@ from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
+def test_csv_chunksize_type(memory_leak_check):
+    """
+    Test read_csv(): 'chunksize' with a wrong value or type
+    """
+    fname = os.path.join("bodo", "tests", "data", "example.csv")
+
+    def impl1(fname):
+        return pd.read_csv(fname, chunksize=-1)
+
+    def impl2(fname):
+        return pd.read_csv(fname, chunksize="no thanks")
+
+    with pytest.raises(
+        BodoError,
+        match="pd.read_csv\\(\\) 'chunksize' must be a constant integer >= 1 if provided.",
+    ):
+        bodo.jit(impl1)(fname)
+    with pytest.raises(
+        BodoError,
+        match="pd.read_csv\\(\\) 'chunksize' must be a constant integer >= 1 if provided.",
+    ):
+        bodo.jit(impl2)(fname)
+
+
+@pytest.mark.slow
 def test_csv_nrows_type(memory_leak_check):
     """
     Test read_csv(): 'nrows' wrong value or type

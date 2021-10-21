@@ -381,7 +381,6 @@ class DistributedAnalysis:
         lhs = inst.target.name
         rhs = inst.value
         lhs_typ = self.typemap[lhs]
-
         # treat return casts like assignments
         if is_expr(rhs, "cast"):
             rhs = rhs.value
@@ -456,9 +455,21 @@ class DistributedAnalysis:
             self._analyze_call(
                 lhs, rhs, rhs.func.name, rhs.args, dict(rhs.kws), equiv_set, array_dists
             )
-        # handle for A in arr_container: ...
-        # A = pair_first(iternext(getiter(arr_container)))
-        elif is_expr(rhs, "pair_first") and is_distributable_typ(lhs_typ):
+        # handle both
+        # for A in arr_container: ...
+        # and
+        # for i, A in enumerate(arr_container): ...
+        #
+        #
+        # for A in arr_iter:
+        #    iternext -> Pair<A, is_valid>
+        #    A = pair_first(iternext(getiter(arr_container)))
+        # for i, A in enumerate(arr_iter):
+        #    iternext -> Pair<types.BaseTuple(i, A), is_valid>
+        #    tuple(i, A) = pair_first(iternext(getiter(arr_container)))
+        elif is_expr(rhs, "pair_first") and (
+            is_distributable_typ(lhs_typ) or is_distributable_tuple_typ(lhs_typ)
+        ):
             arr_container = guard(_get_pair_first_container, self.func_ir, rhs)
             if arr_container is not None:
                 self._meet_array_dists(lhs, arr_container.name, array_dists)
@@ -1399,6 +1410,26 @@ class DistributedAnalysis:
 
         if fdef == ("move_str_binary_arr_payload", "bodo.libs.str_arr_ext"):
             self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
+            return
+
+        if fdef == ("enumerate", "builtins"):
+            # Enuemrate only has an impact if the iterable contains an array_like value
+            if is_distributable_tuple_typ(self.typemap[lhs]):
+                # For enumerate the iterator should be the same dist as the value
+                # portion of the enumerate tuple.
+                if lhs not in array_dists:
+                    self._set_var_dist(lhs, array_dists, Distribution.OneD)
+                if rhs.args[0].name not in array_dists:
+                    array_dists[rhs.args[0].name] = Distribution.OneD
+                rhs_dist = array_dists[rhs.args[0].name]
+                # Just look at the value element
+                lhs_dist = array_dists[lhs][1]
+                out_dist = Distribution(min(rhs_dist.value, lhs_dist.value))
+                # Update input and output
+                if rhs_dist != out_dist:
+                    array_dists[rhs.args[0].name] = out_dist
+                if lhs_dist != out_dist:
+                    self._set_var_dist(lhs, array_dists, out_dist)
             return
 
         if fdef == ("get_series_name", "bodo.hiframes.pd_series_ext"):
@@ -2960,6 +2991,10 @@ class DistributedAnalysis:
         tuples (but just the input 'dist' otherwise).
         """
         if is_distributable_tuple_typ(typ):
+            if isinstance(typ, types.iterators.EnumerateType):
+                typ = typ.yield_type[1]
+                # Enumerate is always Tuple(integer, value_type)
+                return [None, self._get_dist(typ, dist)]
             if isinstance(typ, types.List):
                 typ = typ.dtype
             if not isinstance(dist, list):
