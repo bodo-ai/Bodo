@@ -11,3 +11,4 @@ Installation and Setup
    bodo_platform_aws
    bodo_platform_azure
    bodo_platform
+   Databricks_integration
