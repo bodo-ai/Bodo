@@ -831,6 +831,25 @@ def test_unsupported_tz_dtype(memory_leak_check):
         bodo.jit(test_impl)(A)
 
 
+def test_enumerate_unituple(memory_leak_check):
+    """Ensure the enumrate parallel code doesn't break on an enumerate
+    that should produce a unituple."""
+
+    def test_impl(iterable):
+        val_sum = 0
+        count_sum = 0
+        for (
+            i,
+            val,
+        ) in enumerate(iterable):
+            val_sum += val
+            count_sum += i
+        return (val_sum, count_sum)
+
+    t = tuple(np.arange(40))
+    check_func(test_impl, (t,))
+
+
 # TODO: Add memory_leak_check after memory leak is solved.
 def test_literal_list_cast():
     """test when literal list needs to be cast to regular list"""

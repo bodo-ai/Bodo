@@ -1247,6 +1247,14 @@ class UntypedPass:
         date_cols = self._get_const_arg(
             "read_csv", rhs.args, kws, 23, "parse_dates", [], typ="int or str"
         )
+        chunksize = self._get_const_arg(
+            "pandas.read_csv", rhs.args, kws, 31, "chunksize", None, use_default=True
+        )
+        if chunksize is not None and (not isinstance(chunksize, int) or chunksize < 1):
+            raise BodoError(
+                "pd.read_csv() 'chunksize' must be a constant integer >= 1 if provided."
+            )
+
         compression = self._get_const_arg(
             "read_csv", rhs.args, kws, 32, "compression", "infer"
         )
@@ -1273,6 +1281,7 @@ class UntypedPass:
             "dtype",
             "skiprows",
             "parse_dates",
+            "chunksize",
             "compression",
             "nrows",
         )
@@ -1387,27 +1396,12 @@ class UntypedPass:
             dtype_map, date_cols, col_names, lhs
         )
 
-        nodes = [
-            csv_ext.CsvReader(
-                fname,
-                lhs.name,
-                sep,
-                columns,
-                data_arrs,
-                out_types,
-                usecols,
-                lhs.loc,
-                header,
-                compression,
-                _nrows,
-                _skiprows,
-            )
-        ]
+        orig_columns = columns.copy()  # copy since modified below
 
-        columns = columns.copy()  # copy since modified below
         n_cols = len(columns)
         args = ["data{}".format(i) for i in range(n_cols)]
         data_args = args.copy()
+        out_data_types = out_types.copy()
 
         # one column is index
         if index_col != -1 and not (isinstance(index_col, bool) and index_col == False):
@@ -1418,26 +1412,70 @@ class UntypedPass:
             index_arg = "bodo.utils.conversion.convert_to_index({}, '{}')".format(
                 data_args[index_ind], index_col
             )
+            index_typ = type(
+                bodo.utils.typing.get_index_type_from_dtype(out_types[index_ind].dtype)
+            )(types.StringLiteral(index_col))
             columns.remove(index_col)
             data_args.remove(data_args[index_ind])
+            out_data_types.pop(index_ind)
         else:
             # generate RangeIndex as default index
             assert len(data_args) > 0
+            index_ind = -1
             index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
                 data_args[0]
             )
+            index_typ = RangeIndexType(types.none)
+
+        # If we have a chunksize we need to create an iterator, so we determine
+        # the yield DataFrame type directly.
+        if chunksize is not None:
+            df_type = DataFrameType(tuple(out_data_types), index_typ, tuple(columns))
+            out_types = [
+                bodo.io.csv_iterator_ext.CSVIteratorType(
+                    df_type,
+                    orig_columns,
+                    out_types,
+                    usecols,
+                    sep,
+                    index_ind,
+                )
+            ]
+            # Create a new temp var so this is always exactly one variable.
+            data_arrs = [ir.Var(lhs.scope, mk_unique_var("csv_iterator"), lhs.loc)]
+
+        nodes = [
+            csv_ext.CsvReader(
+                fname,
+                lhs.name,
+                sep,
+                orig_columns,
+                data_arrs,
+                out_types,
+                usecols,
+                lhs.loc,
+                header,
+                compression,
+                _nrows,
+                _skiprows,
+                chunksize,
+            )
+        ]
 
         # Below we assume that the columns are strings
         col_var = gen_const_tup(columns)
-        func_text = "def _init_df({}):\n".format(", ".join(args))
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
-            ", ".join(data_args), index_arg, col_var
-        )
-        loc_vars = {}
-        exec(func_text, {}, loc_vars)
-        _init_df = loc_vars["_init_df"]
-
-        nodes += compile_func_single_block(_init_df, data_arrs, lhs)
+        if chunksize is not None:
+            # Generate an assign because init_csv_iterator will happen inside read_csv
+            nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
+        else:
+            func_text = "def _type_func({}):\n".format(", ".join(args))
+            func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
+                ", ".join(data_args), index_arg, col_var
+            )
+            loc_vars = {}
+            exec(func_text, {}, loc_vars)
+            _type_func = loc_vars["_type_func"]
+            nodes += compile_func_single_block(_type_func, data_arrs, lhs)
         return nodes
 
     def _handle_pd_read_json(self, assign, lhs, rhs, label):
@@ -1918,6 +1956,7 @@ class UntypedPass:
         default=None,
         err_msg=None,
         typ=None,
+        use_default=False,
     ):
         """Get constant value for a function call argument. Raise error if the value is
         not constant.
@@ -1939,7 +1978,8 @@ class UntypedPass:
                 raise BodoError(err_msg)
 
         if arg is CONST_NOT_FOUND:
-            if default is not None:
+            # Provide use_default to allow letting None be the default value
+            if use_default or default is not None:
                 return default
             raise BodoError(err_msg)
         return arg

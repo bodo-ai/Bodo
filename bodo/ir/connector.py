@@ -20,6 +20,10 @@ def connector_array_analysis(node, equiv_set, typemap, array_analysis):
         node.connector_typ
     )
 
+    # If we have a csv chunksize the variables don't refer to the data,
+    # so we skip this step.
+    if node.connector_typ == "csv" and node.chunksize is not None:
+        return [], []
     # create correlations for output arrays
     # arrays of output df have same size in first dimension
     # gen size variable for an output column
@@ -175,4 +179,5 @@ register_model(StreamReaderType)(models.OpaqueModel)
 
 @box(StreamReaderType)
 def box_stream_reader(typ, val, c):
+    c.pyapi.incref(val)
     return val

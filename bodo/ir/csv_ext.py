@@ -38,7 +38,8 @@ class CsvReader(ir.Stmt):
         header,
         compression,
         nrows,
-        skiprows=0,
+        skiprows,
+        chunksize,
     ):
         self.connector_typ = "csv"
         self.file_name = file_name
@@ -53,9 +54,12 @@ class CsvReader(ir.Stmt):
         self.nrows = nrows
         self.header = header
         self.compression = compression
+        # If this value is not None, we return an iterator instead of a DataFrame.
+        # When this happens the out_vars are a list with a single CSVReaderType.
+        self.chunksize = chunksize
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={})".format(
+        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={}, self.chunksize={})".format(
             self.df_out,
             self.file_name,
             self.df_colnames,
@@ -63,6 +67,7 @@ class CsvReader(ir.Stmt):
             self.out_vars,
             self.nrows,
             self.skiprows,
+            self.chunksize,
         )
 
 
@@ -82,6 +87,7 @@ csv_file_chunk_reader = types.ExternalFunction(
         types.bool_,
         types.voidptr,
         types.voidptr,
+        types.int64,  # chunksize
     ),
 )
 
@@ -89,6 +95,15 @@ csv_file_chunk_reader = types.ExternalFunction(
 def remove_dead_csv(
     csv_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
 ):
+    if csv_node.chunksize is not None:
+        # If we have a chunksize then we only have 1 variable
+        # that represents the reader for the iterator.
+        # We need different code because the df info shouldn't change.
+        reader = csv_node.out_vars[0]
+        if reader.name not in lives:
+            return None
+        return csv_node
+
     # TODO
     new_df_colnames = []
     new_out_vars = []
@@ -116,6 +131,70 @@ def remove_dead_csv(
 def csv_distributed_run(
     csv_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
+    if csv_node.chunksize is not None:
+        # Iterator Case
+        if array_dists is None:
+            parallel = False
+        else:
+            # If we have a reader its the only out var
+            dist = array_dists[csv_node.out_vars[0].name]
+            parallel = (
+                dist == distributed_pass.Distribution.OneD
+                or dist == distributed_pass.Distribution.OneD_Var
+            )
+
+        # Create a wrapper function that will be compiled. This will return
+        # an iterator.
+        func_text = "def csv_iterator_impl(fname, nrows, skiprows):\n"
+        func_text += f"    reader = _csv_reader_init(fname, nrows, skiprows)\n"
+        func_text += f"    iterator = init_csv_iterator(reader, csv_iterator_type)\n"
+        loc_vars = {}
+        from bodo.io.csv_iterator_ext import init_csv_iterator
+
+        exec(func_text, {}, loc_vars)
+        csv_iterator_impl = loc_vars["csv_iterator_impl"]
+
+        # Generate an inner function to minimize the IR size.
+        init_func_text = "def csv_reader_init(fname, nrows, skiprows):\n"
+
+        # Appends func text to initialize a file stream reader.
+        init_func_text += _gen_csv_file_reader_init(
+            parallel, csv_node.header, csv_node.compression, csv_node.chunksize
+        )
+        init_func_text += "  return f_reader\n"
+        exec(init_func_text, globals(), loc_vars)
+        csv_reader_init = loc_vars["csv_reader_init"]
+
+        # njit the function so it can be called by our outer function.
+        # We keep track of the function for possible dynamic addresses
+        jit_func = numba.njit(csv_reader_init)
+        compiled_funcs.append(jit_func)
+
+        # Compile the outer function into IR
+        f_block = compile_to_numba_ir(
+            csv_iterator_impl,
+            {
+                "_csv_reader_init": jit_func,
+                "init_csv_iterator": init_csv_iterator,
+                "csv_iterator_type": typemap[csv_node.out_vars[0].name],
+            },
+            typingctx=typingctx,
+            targetctx=targetctx,
+            arg_typs=(string_type, types.int64, types.int64),
+            typemap=typemap,
+            calltypes=calltypes,
+        ).blocks.popitem()[1]
+        # Replace the arguments with the values from the csv node
+        replace_arg_nodes(
+            f_block, [csv_node.file_name, csv_node.nrows, csv_node.skiprows]
+        )
+        # Replace the generated return statements with a node that returns
+        # the csv iterator var.
+        nodes = f_block.body[:-3]
+        nodes[-1].target = csv_node.out_vars[0]
+        return nodes
+
+    # Default Case
     parallel = False
     if array_dists is not None:
         parallel = True
@@ -142,8 +221,6 @@ def csv_distributed_run(
         csv_node.out_types,
         csv_node.usecols,
         csv_node.sep,
-        typingctx,
-        targetctx,
         parallel,
         csv_node.header,
         csv_node.compression,
@@ -266,6 +343,9 @@ def check_nrows_skiprows_value(nrows, skiprows):
 
 
 def astype(df, typemap, parallel):
+    """Casts the DataFrame read by pd.read_csv to the specified output types.
+    The parallel flag determines if errors need to be gathered on all ranks.
+    This function is called from inside objmode."""
     message = ""
     for col_name, col_type in typemap.items():
         try:
@@ -289,28 +369,63 @@ def astype(df, typemap, parallel):
             raise TypeError(f"{common_err_msg}\nPlease refer to errors on other ranks.")
 
 
-def _gen_csv_reader_py(
+def _gen_csv_file_reader_init(parallel, header, compression, chunksize):
+    """
+    This function generates the f_reader used by pd.read_csv. This f_reader
+    may be used for a single pd.read_csv call or a csv_reader used inside
+    the csv_iterator.
+    """
+
+    # here, header can either be:
+    #  0 meaning the first row of the file(s) is the header row
+    #  None meaning the file(s) does not contain header
+    has_header = header == 0
+    # With Arrow 2.0.0, gzip and bz2 map to gzip and bz2 directly
+    # and not GZIP and BZ2 like they used to.
+    if compression is None:
+        compression = "uncompressed"  # Arrow's representation
+
+    # Generate the body to create the file chunk reader. This is shared by the iterator and non iterator
+    # implementations.
+    func_text = "  check_nrows_skiprows_value(nrows, skiprows)\n"
+    # check_java_installation is a check for hdfs that java is installed
+    func_text += "  check_java_installation(fname)\n"
+    # if it's an s3 url, get the region and pass it into the c++ code
+    func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={parallel})\n"
+    func_text += "  f_reader = bodo.ir.csv_ext.csv_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
+    func_text += "    {}, skiprows, nrows, {}, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), {})\n".format(
+        parallel, has_header, compression, chunksize
+    )
+    # Check if there was an error in the C++ code. If so, raise it.
+    func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
+    func_text += "  if bodo.utils.utils.is_null_pointer(f_reader):\n"
+    func_text += "      raise FileNotFoundError('File does not exist')\n"
+    return func_text
+
+
+def _gen_read_csv_objmode(
     col_names,
+    sanitized_cnames,
     col_typs,
     usecols,
     sep,
-    typingctx,
-    targetctx,
     parallel,
-    header,
-    compression,
+    check_parallel_runtime,
 ):
-    # TODO: support non-numpy types like strings
-    sanitized_cnames = [sanitize_varname(c) for c in col_names]
-    date_inds = ", ".join(
-        str(i) for i, t in enumerate(col_typs) if t.dtype == types.NPDatetime("ns")
-    )
-    typ_strs = ", ".join(
-        [
-            "{}='{}'".format(s_cname, _get_dtype_str(t))
-            for s_cname, t in zip(sanitized_cnames, col_typs)
-        ]
-    )
+    """
+    Generate a code body that calls into objmode to perform read_csv using
+    the various function parameters. After read_csv finishes, we cast the
+    inferred types to the provided column types, whose implementation
+    depends on if the csv read is parallel or sequential.
+
+    This code is shared by both the main csv node and the csv iterator implementation,
+    but those differ in how parallel can be determined. Since the csv iterator
+    will need to generate this code with a different infrastructure, the parallel vs
+    sequential check must be done at runtime. Setting check_parallel_runtime=True will
+    ignore the parallel flag and instead use the parallel value stored inside the f_reader
+    object (and return it from objmode).
+
+    """
 
     # Pandas' `read_csv` and Bodo's `read_csv` are not exactly equivalent,
     # for instance in a column of `int64` if there is a missing entry,
@@ -345,37 +460,29 @@ def _gen_csv_reader_py(
             if _get_pd_dtype_str(t) != "str"
         ]
     )
-    # here, header can either be:
-    #  0 meaning the first row of the file(s) is the header row
-    #  None meaning the file(s) does not contain header
-    has_header = header == 0
-
-    # With Arrow 2.0.0, gzip and bz2 map to gzip and bz2 directly
-    # and not GZIP and BZ2 like they used to.
-    if compression is None:
-        compression = "uncompressed"  # Arrow's representation
-
-    func_text = "def csv_reader_py(fname, nrows, skiprows):\n"
-    func_text += "  check_nrows_skiprows_value(nrows, skiprows)\n"
-    # check_java_installation is a check for hdfs that java is installed
-    func_text += "  check_java_installation(fname)\n"
-    # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={parallel})\n"
-    func_text += "  f_reader = bodo.ir.csv_ext.csv_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
-    func_text += "    {}, skiprows, nrows, {}, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region) )\n".format(
-        parallel, has_header, compression
+    date_inds = ", ".join(
+        str(i) for i, t in enumerate(col_typs) if t.dtype == types.NPDatetime("ns")
     )
-    # Check if there was an error in the C++ code. If so, raise it.
-    func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
-    func_text += "  if bodo.utils.utils.is_null_pointer(f_reader):\n"
-    func_text += "      raise FileNotFoundError('File does not exist')\n"
-    func_text += "  with objmode({}):\n".format(typ_strs)
+    typ_strs = ", ".join(
+        [
+            "{}='{}'".format(s_cname, _get_dtype_str(t))
+            for s_cname, t in zip(sanitized_cnames, col_typs)
+        ]
+    )
+    parallel_varname = _gen_parallel_flag_name(sanitized_cnames)
+    # _gen_read_csv_objmode() may be called from iternext_impl when
+    # used to generate a csv_iterator. That function doesn't have access
+    # to the parallel flag in CSVNode so we retrieve it from the file reader.
+    if check_parallel_runtime:
+        typ_strs += f", {parallel_varname}='bool_'"
+    func_text = "  with objmode({}):\n".format(typ_strs)
     func_text += "    if f_reader.get_chunk_size() == 0:\n"
     cols = ", ".join(f"{sc}" for sc in usecols)
     # Pass str as default dtype. Non-str column types will be
     # assigned with `astype` below.
-    func_text += f"        df = pd.DataFrame(columns=[{cols}], dtype=str)\n"
+    func_text += f"      df = pd.DataFrame(columns=[{cols}], dtype=str)\n"
     func_text += "    else:\n"
+    # Add extra indent for the read_csv call
     func_text += "      df = pd.read_csv(f_reader,\n"
     # header is always None here because header information was found in untyped pass.
     # this pd.read_csv() happens at runtime and is passing a file reader(f_reader)
@@ -392,9 +499,61 @@ def _gen_csv_reader_py(
     # Check explanation near the declaration of `df_astype_dtype_text` for why we specify
     # some types here rather than directly in the `pd.read_csv` call.
     func_text += "    typemap = {{{}}}\n".format(df_astype_dtype_text)
-    func_text += f"    astype(df, typemap, {True if parallel else False})\n"
+    # _gen_read_csv_objmode() may be called from iternext_impl which doesn't
+    # have access to the parallel flag in the CSVNode so we retrieve it from
+    # the file reader.
+    if check_parallel_runtime:
+        func_text += f"    {parallel_varname} = f_reader.is_parallel()\n"
+    else:
+        func_text += f"    {parallel_varname} = {parallel}\n"
+    func_text += f"    astype(df, typemap, {parallel_varname})\n"
     for col_idx, s_cname in zip(usecols, sanitized_cnames):
         func_text += "    {} = df[{}].values\n".format(s_cname, col_idx)
+    return func_text
+
+
+def _gen_parallel_flag_name(sanitized_cnames):
+    """
+    Get a unique variable name not found in the
+    columns for the parallel flag. This is done
+    because the csv_iterator case requires returning
+    the value from objmode.
+    """
+    parallel_varname = "_parallel_value"
+    while parallel_varname in sanitized_cnames:
+        parallel_varname = "_" + parallel_varname
+    return parallel_varname
+
+
+def _gen_csv_reader_py(
+    col_names,
+    col_typs,
+    usecols,
+    sep,
+    parallel,
+    header,
+    compression,
+):
+    """
+    Function that generates the body for a csv_node when chunksize
+    is not provided (just read a csv). It creates a function that creates
+    a file reader in C++, then calls into pandas to read the csv, and finally
+    returns the relevant columns.
+    """
+    # TODO: support non-numpy types like strings
+    sanitized_cnames = [sanitize_varname(c) for c in col_names]
+    func_text = "def csv_reader_py(fname, nrows, skiprows):\n"
+    # If we reached this code path we don't have a chunksize, so set it to -1
+    func_text += _gen_csv_file_reader_init(parallel, header, compression, -1)
+    func_text += _gen_read_csv_objmode(
+        col_names,
+        sanitized_cnames,
+        col_typs,
+        usecols,
+        sep,
+        parallel=parallel,
+        check_parallel_runtime=False,
+    )
     func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
     # {'objmode': objmode, 'csv_file_chunk_reader': csv_file_chunk_reader,

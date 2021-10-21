@@ -2770,6 +2770,415 @@ def test_csv_skiprows_var(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_csv_chunksize_forloop(datapath, memory_leak_check):
+    """
+    Check the pd.read_csv iterator using chunksize and a for loop.
+    """
+    fname = datapath("example.csv")
+
+    # This test checks array analysis generated shape nodes for this iterator
+    # structure also, since .max() produces a parfor. Array analysis
+    # modifies the IR output for the iterator. Here is an example:
+    # $20for_iter.1 = iternext(value=$18get_iter.7) ['$18get_iter.7', '$20for_iter.1']
+    # $val.156 = pair_first(value=$20for_iter.1) ['$20for_iter.1', '$val.156']
+    # $20for_iter.2_shape.149 = getattr(value=$val.156, attr=shape) ['$20for_iter.2_shape.149', '$val.156']
+    # $20for_iter.2_size0.150 = static_getitem(value=$20for_iter.2_shape.149, index=0, index_var=None, fn=<built-in function getitem>) ['$20for_iter.2_shape.149', '$20for_iter.2_size0.150']
+    # $20for_iter.3 = pair_second(value=$20for_iter.1) ['$20for_iter.1', '$20for_iter.3']
+    # branch $20for_iter.3, 22, 234            ['$20for_iter.3']
+    #
+    # This means that even once iterations are finished, the IR attempts to check
+    # the shape value of the DataFrame which is a null value (potential segfault
+    # if not handled properly).
+    #
+    # We handle this situation in our implementation of len(df), which is what gets produced
+    # when shape is called. Here we check if the meminfo pointer is null and if so return
+    # a garbage value (0) rather than looking at the data. We can do this because we assume
+    # Numba 0 initializes structs with no provided value. Here are the relevant source code lines.
+    #
+    # https://github.com/numba/numba/blob/3131959c98e567d74ab6db402230cfea6ceecafe/numba/core/imputils.py#L335
+    # https://github.com/numba/numba/blob/3131959c98e567d74ab6db402230cfea6ceecafe/numba/core/base.py#L987
+    # https://github.com/numba/numba/blob/3131959c98e567d74ab6db402230cfea6ceecafe/numba/core/cgutils.py#L56
+    # https://github.com/numba/numba/blob/3131959c98e567d74ab6db402230cfea6ceecafe/numba/core/cgutils.py#L130
+    # Note the zfill=True in the last link should show that it is 0 initialized.
+
+    def impl1(fname):
+        total = 0.0
+        for val in pd.read_csv(fname, chunksize=3):
+            result = val["four"].max()
+            total += result
+        return total
+
+    def impl2(fname):
+        total = 0.0
+        for val in pd.read_csv(fname, chunksize=100):
+            # Single chunk
+            result = val["four"].max()
+            total += result
+        return total
+
+    def impl3(fname):
+        total = 0.0
+        for val in pd.read_csv(fname, chunksize=1):
+            # Empty data on all ranks but 0
+            result = val["four"].max()
+            total += result
+        return total
+
+    check_func(impl1, (fname,))
+    check_func(impl2, (fname,))
+    check_func(impl3, (fname,))
+
+
+@pytest.mark.slow
+def test_csv_chunksize_enumerate(datapath, memory_leak_check):
+    """
+    Check the pd.read_csv iterator using chunksize and enumerate.
+    """
+    fname = datapath("example.csv")
+
+    def impl1(fname):
+        total = 0.0
+        count_total = 0
+        for i, val in enumerate(pd.read_csv(fname, chunksize=3)):
+            result = val["four"].max()
+            total += result
+            count_total += i
+        return (count_total, total)
+
+    def impl2(fname):
+        total = 0.0
+        count_total = 0
+        for i, val in enumerate(pd.read_csv(fname, chunksize=100)):
+            # Single chunk
+            result = val["four"].max()
+            total += result
+            count_total += i
+        return (count_total, total)
+
+    def impl3(fname):
+        total = 0.0
+        count_total = 0
+        for i, val in enumerate(pd.read_csv(fname, chunksize=1)):
+            # Empty data on all ranks but 0
+            result = val["four"].max()
+            total += result
+            count_total += i
+        return (count_total, total)
+
+    check_func(impl1, (fname,))
+    check_func(impl2, (fname,))
+    check_func(impl3, (fname,))
+
+
+@pytest.mark.slow
+def test_csv_chunksize_forloop_append(datapath, memory_leak_check):
+    """
+    Check returning a dataframe with the pd.read_csv iterator using
+    chunksize and a for loop.
+    """
+
+    fname = datapath("example.csv")
+
+    def impl1(fname):
+        df_list = []
+        for val in pd.read_csv(fname, chunksize=3):
+            df_list.append(val)
+        return pd.concat(df_list)
+
+    def impl2(fname):
+        df_list = []
+        for val in pd.read_csv(fname, chunksize=100):
+            # Single chunk
+            df_list.append(val)
+        return pd.concat(df_list)
+
+    def impl3(fname):
+        df_list = []
+        for val in pd.read_csv(fname, chunksize=1):
+            # Empty data on all ranks but 0
+            df_list.append(val)
+        return pd.concat(df_list)
+
+    # Check only sequential implementation because previous tests check
+    # situations where the csv read is parallel. Returning a sequential
+    # output should enable checking read_csv with parallel=False
+    check_func(impl1, (fname,), is_out_distributed=False, dist_test=False)
+    check_func(impl2, (fname,), is_out_distributed=False, dist_test=False)
+    check_func(impl3, (fname,), is_out_distributed=False, dist_test=False)
+
+
+@pytest.mark.slow
+def test_csv_chunksize_enumerate_append(datapath, memory_leak_check):
+    """
+    Check returning a dataframe with the pd.read_csv iterator using
+    chunksize and enumerate.
+    """
+
+    fname = datapath("example.csv")
+
+    def impl1(fname):
+        df_list = []
+        count_total = 0
+        for i, val in enumerate(pd.read_csv(fname, chunksize=3)):
+            df_list.append(val)
+            count_total += i
+        return (count_total, pd.concat(df_list))
+
+    def impl2(fname):
+        df_list = []
+        count_total = 0
+        for i, val in enumerate(pd.read_csv(fname, chunksize=100)):
+            # Single chunk
+            df_list.append(val)
+            count_total += i
+        return (count_total, pd.concat(df_list))
+
+    def impl3(fname):
+        df_list = []
+        count_total = 0
+        for i, val in enumerate(pd.read_csv(fname, chunksize=1)):
+            # Empty data on all ranks but 0
+            df_list.append(val)
+            count_total += i
+        return (count_total, pd.concat(df_list))
+
+    # Check only sequential implementation because previous tests check
+    # situations where the csv read is parallel. Returning a sequential
+    # output should enable checking read_csv with parallel=False
+    check_func(impl1, (fname,), is_out_distributed=False, dist_test=False)
+    check_func(impl2, (fname,), is_out_distributed=False, dist_test=False)
+    check_func(impl3, (fname,), is_out_distributed=False, dist_test=False)
+
+
+@pytest.mark.slow
+def test_csv_chunksize_forloop_nested(datapath, memory_leak_check):
+    """
+    Check multiple calls to the pd.read_csv iterator using
+    chunksize and a for loop.
+    """
+
+    fname = datapath("example.csv")
+
+    def impl1(fname, n):
+        total = 0.0
+        for _ in range(n):
+            for val in pd.read_csv(fname, chunksize=3):
+                result = val["four"].max()
+                total += result
+        return total
+
+    def impl2(fname, n):
+        total = 0.0
+        for _ in range(n):
+            for val in pd.read_csv(fname, chunksize=100):
+                # Single chunk
+                result = val["four"].max()
+                total += result
+        return total
+
+    def impl3(fname, n):
+        total = 0.0
+        for _ in range(n):
+            for val in pd.read_csv(fname, chunksize=1):
+                # Empty data on all ranks but 0
+                result = val["four"].max()
+                total += result
+        return total
+
+    check_func(impl1, (fname, 5))
+    check_func(impl2, (fname, 5))
+    check_func(impl3, (fname, 5))
+
+
+@pytest.mark.slow
+def test_csv_chunksize_enumerate_nested(datapath, memory_leak_check):
+    """
+    Check multiple calls to the pd.read_csv iterator using
+    chunksize and enumerate.
+    """
+
+    fname = datapath("example.csv")
+
+    def impl1(fname, n):
+        total = 0.0
+        count_total = 0
+        for _ in range(n):
+            for i, val in enumerate(pd.read_csv(fname, chunksize=3)):
+                result = val["four"].max()
+                total += result
+                count_total += i
+        return (count_total, total)
+
+    def impl2(fname, n):
+        total = 0.0
+        count_total = 0
+        for _ in range(n):
+            for i, val in enumerate(pd.read_csv(fname, chunksize=100)):
+                # Single chunk
+                result = val["four"].max()
+                total += result
+                count_total += i
+        return (count_total, total)
+
+    def impl3(fname, n):
+        total = 0.0
+        count_total = 0
+        for _ in range(n):
+            for i, val in enumerate(pd.read_csv(fname, chunksize=1)):
+                # Empty data on all ranks but 0
+                result = val["four"].max()
+                total += result
+                count_total += i
+        return (count_total, total)
+
+    check_func(impl1, (fname, 5))
+    check_func(impl2, (fname, 5))
+    check_func(impl3, (fname, 5))
+
+
+@pytest.mark.slow
+def test_csv_chunksize_skiprows(datapath, memory_leak_check):
+    """
+    Check multiple calls to the pd.read_csv iterator using
+    chunksize with skiprows
+    """
+
+    fname = datapath("example.csv")
+
+    # skiprows and multiple chunks
+    def impl1(fname, n):
+        total = 0.0
+        count_total = 0
+        for _ in range(n):
+            for i, val in enumerate(pd.read_csv(fname, chunksize=3, skiprows=5)):
+                result = val.iloc[:, 0].max()
+                total += result
+                count_total += i
+        return (count_total, total)
+
+    # skiprows and one chunk
+    def impl2(fname, n):
+        total = 0.0
+        count_total = 0
+        for _ in range(n):
+            for i, val in enumerate(pd.read_csv(fname, chunksize=100, skiprows=5)):
+                # Single chunk
+                result = val.iloc[:, 0].max()
+                total += result
+                count_total += i
+        return (count_total, total)
+
+    # skiprows all rows but one with one chunk on one rank only
+    def impl3(fname, n):
+        total = 0.0
+        count_total = 0
+        for _ in range(n):
+            for i, val in enumerate(pd.read_csv(fname, chunksize=1, skiprows=13)):
+                # Empty data on all ranks but 0
+                result = val.iloc[:, 0].max()
+                total += result
+                count_total += i
+        return (count_total, total)
+
+    check_func(impl1, (fname, 5))
+    check_func(impl2, (fname, 5))
+    check_func(impl3, (fname, 5))
+
+
+@pytest.mark.slow
+def test_csv_chunksize_nrows(datapath, memory_leak_check):
+    """
+    Check multiple calls to the pd.read_csv iterator using
+    chunksize with nrows
+    """
+
+    fname = datapath("example.csv")
+
+    # nrows and multiple chunks
+    def impl1(fname, n):
+        total = 0.0
+        count_total = 0
+        for _ in range(n):
+            for i, val in enumerate(pd.read_csv(fname, chunksize=3, nrows=7)):
+                result = val.iloc[:, 0].max()
+                total += result
+                count_total += i
+        return (count_total, total)
+
+    # nrows and one chunk
+    def impl2(fname, n):
+        total = 0.0
+        count_total = 0
+        for _ in range(n):
+            for i, val in enumerate(pd.read_csv(fname, chunksize=100, nrows=5)):
+                # Single chunk
+                result = val.iloc[:, 0].max()
+                total += result
+                count_total += i
+        return (count_total, total)
+
+    # nrows and chunk on one rank only
+    def impl3(fname, n):
+        total = 0.0
+        count_total = 0
+        for _ in range(n):
+            for i, val in enumerate(pd.read_csv(fname, chunksize=1, nrows=3)):
+                # Empty data on all ranks but 0
+                result = val.iloc[:, 0].max()
+                total += result
+                count_total += i
+        return (count_total, total)
+
+    check_func(impl1, (fname, 5))
+    check_func(impl2, (fname, 5))
+    check_func(impl3, (fname, 5))
+
+
+@pytest.mark.slow
+def test_csv_chunksize_nrows_skiprows(datapath, memory_leak_check):
+    """
+    Check the pd.read_csv iterator using chunksize with nrows/skiprows
+    """
+    fname = datapath("example.csv")
+
+    # nrows, skiprows and multiple chunks
+    def impl1(fname):
+        total = 0.0
+        count_total = 0
+        for i, val in enumerate(pd.read_csv(fname, chunksize=3, nrows=10, skiprows=5)):
+            result = val.iloc[:, 0].max()
+            total += result
+            count_total += i
+        return (count_total, total)
+
+    # nrows, skiprows and one chunk
+    def impl2(fname):
+        total = 0.0
+        count_total = 0
+        for i, val in enumerate(pd.read_csv(fname, chunksize=100, skiprows=4, nrows=5)):
+            # Single chunk
+            result = val.iloc[:, 0].max()
+            total += result
+            count_total += i
+        return (count_total, total)
+
+    # nrows, skiprows and all data on one rank only
+    def impl3(fname):
+        total = 0.0
+        count_total = 0
+        for i, val in enumerate(pd.read_csv(fname, chunksize=1, nrows=10, skiprows=5)):
+            # Empty data on all ranks but 0
+            result = val.iloc[:, 0].max()
+            total += result
+            count_total += i
+        return (count_total, total)
+
+    check_func(impl1, (fname,))
+    check_func(impl2, (fname,))
+    check_func(impl3, (fname,))
+
+
+@pytest.mark.slow
 def test_csv_np_gt_rows(datapath, memory_leak_check):
     """Test when number of rows < number of ranks (np) with
     read_csv(). "small_data.csv" has one row.
