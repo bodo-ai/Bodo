@@ -502,8 +502,11 @@ class SeriesPass:
                 impl = bodo.hiframes.pd_index_ext.overload_datetime_index_getitem(
                     typ1, typ2
                 )
+            elif isinstance(target_typ, bodo.hiframes.pd_index_ext.TimedeltaIndexType):
+                impl = bodo.hiframes.pd_index_ext.overload_timedelta_index_getitem(
+                    typ1, typ2
+                )
             else:
-                # TODO: test timedelta
                 impl = bodo.hiframes.pd_index_ext.overload_index_getitem(typ1, typ2)
             return replace_func(self, impl, (target, idx), pre_nodes=nodes)
 

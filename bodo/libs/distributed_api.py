@@ -2102,7 +2102,8 @@ def bcast_scalar_overload(val):
     # NOTE: scatterv() can call this with string on rank 0 and None on others, or an
     # Optional type
     assert isinstance(val, (types.Integer, types.Float)) or val in [
-        types.NPDatetime("ns"),
+        bodo.datetime64ns,
+        bodo.timedelta64ns,
         bodo.string_type,
         types.none,
         types.bool_,

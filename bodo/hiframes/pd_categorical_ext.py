@@ -393,7 +393,7 @@ def overload_cat_arr_astype(A, dtype, copy=True):
 
     nb_dtype = bodo.utils.typing.parse_dtype(dtype, "CategoricalArray.astype")
     # only supports converting back to original data currently
-    if not nb_dtype == A.dtype.elem_type:  # pragma: no cover
+    if nb_dtype != A.dtype.elem_type:  # pragma: no cover
         raise BodoError(
             f"Converting categorical array {A} to dtype {dtype} not supported yet"
         )
@@ -410,7 +410,7 @@ def overload_cat_arr_astype(A, dtype, copy=True):
             if s == -1:
                 bodo.libs.array_kernels.setna(out_arr, i)
                 continue
-            out_arr[i] = categories[s]
+            out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(categories[s])
         return out_arr
 
     return impl
