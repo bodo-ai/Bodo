@@ -328,3 +328,47 @@ def test_astype_str_keep_null(memory_leak_check):
     py_output["A"][py_output["A"] == "<NA>"] = None
     py_output["B"][py_output["B"] == "NaT"] = None
     check_func(impl, (df,), py_output=py_output)
+
+
+def test_categorical_astype(memory_leak_check):
+    """
+    Test that astype with categorical columns to the underlying
+    elem type works as expected. Needed for BodoSQL.
+    """
+
+    def impl(categorical_table):
+        categorical_table = pd.DataFrame(
+            {
+                "A": categorical_table["A"].astype("str"),
+                "B": categorical_table["B"].astype("Int64"),
+                "C": categorical_table["C"].astype("UInt64"),
+                "D": categorical_table["D"].astype("float64"),
+                "E": categorical_table["E"].astype("datetime64[ns]"),
+                "F": categorical_table["F"].astype("timedelta64[ns]"),
+                "G": categorical_table["G"].astype("boolean"),
+            }
+        )
+        return categorical_table
+
+    df = pd.DataFrame(
+        {
+            # String category
+            "A": pd.Categorical(["anve", "Er2"] * 5),
+            # int64
+            "B": pd.Categorical([5, -32] * 5),
+            # uint64
+            "C": pd.Categorical(pd.array([5, 2] * 5, "uint64")),
+            # float64
+            "D": pd.Categorical([1.1, 2.7] * 5),
+            # dt64
+            "E": pd.Categorical(
+                [pd.Timestamp(2021, 4, 5), pd.Timestamp(2021, 4, 4)] * 5
+            ),
+            # td64
+            "F": pd.Categorical([pd.Timedelta(2), pd.Timedelta(seconds=-4)] * 5),
+            # boolean
+            "G": pd.Categorical([True, False] * 5),
+        }
+    )
+
+    check_func(impl, (df,))

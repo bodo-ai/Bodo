@@ -38,7 +38,7 @@ class ParquetReader(ir.Stmt):
 
     def __repr__(self):  # pragma: no cover
         # TODO
-        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {}, {})".format(
+        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {})".format(
             self.df_out,
             self.file_name.name,
             self.col_names,

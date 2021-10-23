@@ -685,6 +685,9 @@ def parse_dtype(dtype, func_name=None):
     """Parse dtype type specified in various forms into actual numba type
     (e.g. StringLiteral("int32") to types.int32)
     """
+    if isinstance(dtype, types.TypeRef):
+        return dtype.instance_type
+
     # handle constructor functions, e.g. Series.astype(float)
     if isinstance(dtype, types.Function):
         # TODO: other constructor functions?
