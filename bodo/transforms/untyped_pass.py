@@ -67,7 +67,6 @@ from bodo.utils.typing import (
     BodoWarning,
     to_nullable_type,
     FileInfo,
-    is_overload_int,
 )
 from bodo.utils.utils import check_java_installation
 
@@ -1164,10 +1163,13 @@ class UntypedPass:
             if isinstance(dtype_map_const, dict):
                 self._fix_dict_typing(dtype_var)
                 dtype_map = {
-                    c: _dtype_val_to_arr_type(t) for c, t in dtype_map_const.items()
+                    c: _dtype_val_to_arr_type(t, "pd.read_excel", rhs.loc)
+                    for c, t in dtype_map_const.items()
                 }
             else:
-                dtype_map = _dtype_val_to_arr_type(dtype_map_const)
+                dtype_map = _dtype_val_to_arr_type(
+                    dtype_map_const, "pd.read_excel", rhs.loc
+                )
 
             index = RangeIndexType(types.none)
             # TODO: support index_col
@@ -1190,63 +1192,168 @@ class UntypedPass:
         # header='infer', names=None, index_col=None, usecols=None,
         # squeeze=False, prefix=None, mangle_dupe_cols=True, dtype=None,
         # engine=None, converters=None, true_values=None, false_values=None,
-        # skipinitialspace=False, skiprows=None, nrows=None, na_values=None,
-        # keep_default_na=True, na_filter=True, verbose=False,
-        # skip_blank_lines=True, parse_dates=False,
-        # infer_datetime_format=False, keep_date_col=False, date_parser=None,
-        # dayfirst=False, iterator=False, chunksize=None, compression='infer',
-        # thousands=None, decimal=b'.', lineterminator=None, quotechar='"',
-        # quoting=0, escapechar=None, comment=None, encoding=None,
-        # dialect=None, tupleize_cols=None, error_bad_lines=True,
-        # warn_bad_lines=True, skipfooter=0, doublequote=True,
+        # skipinitialspace=False, skiprows=None, skipfooter=0, nrows=None,
+        # na_values=None, keep_default_na=True, na_filter=True, verbose=False,
+        # skip_blank_lines=True, parse_dates=False, infer_datetime_format=False,
+        # keep_date_col=False, date_parser=None, dayfirst=False, cache_dates=True,
+        # iterator=False, chunksize=None, compression='infer', thousands=None,
+        # decimal=b'.', lineterminator=None, quotechar='"', quoting=0,
+        # doublequote=True, escapechar=None, comment=None, encoding=None,
+        # encoding_errors='strict', dialect=None,
+        # error_bad_lines=True, warn_bad_lines=True, on_bad_lines='error',
         # delim_whitespace=False, low_memory=True, memory_map=False,
-        # float_precision=None)
+        # float_precision=None, storage_options=None)
         kws = dict(rhs.kws)
-        fname = get_call_expr_arg("read_csv", rhs.args, kws, 0, "filepath_or_buffer")
-        sep = self._get_const_arg("read_csv", rhs.args, kws, 1, "sep", ",")
-        sep = self._get_const_arg("read_csv", rhs.args, kws, 2, "delimiter", sep)
-        header = self._get_const_arg("read_csv", rhs.args, kws, 3, "header", "infer")
-        col_names = self._get_const_arg("read_csv", rhs.args, kws, 4, "names", 0)
-        index_col = self._get_const_arg("read_csv", rhs.args, kws, 5, "index_col", -1)
-        usecols = self._get_const_arg("read_csv", rhs.args, kws, 6, "usecols", "")
-        dtype_var = get_call_expr_arg("read_csv", rhs.args, kws, 10, "dtype", "")
-        _skiprows = get_call_expr_arg(
-            "read_csv", rhs.args, kws, 16, "skiprows", default=ir.Const(0, lhs.loc)
+
+        # TODO: Can we use fold the arguments even though this untyped pass?
+
+        fname = get_call_expr_arg("pd.read_csv", rhs.args, kws, 0, "filepath_or_buffer")
+        # fname's type is checked at typing pass or when it is forced to be a constant.
+
+        # Users can only provide either sep or delim. Use a dummy default value to track
+        # this behavior.
+        sep_val = self._get_const_arg(
+            "pd.read_csv", rhs.args, kws, 1, "sep", None, use_default=True
         )
+        delim_val = self._get_const_arg(
+            "pd.read_csv", rhs.args, kws, 2, "delimiter", None, use_default=True
+        )
+        sep_arg_name = "sep"
+        if sep_val is None and delim_val is None:
+            # If both arguments are the default, use ","
+            sep = ","
+        elif sep_val is None:
+            sep = delim_val
+            sep_arg_name = "delimiter"
+        elif delim_val is None:
+            sep = sep_val
+        else:
+            raise BodoError(
+                "pd.read_csv() Specified a 'sep' and a 'delimiter'; you can only specify one.",
+                loc=rhs.loc,
+            )
+        # Pandas doesn't catch this error and produces a stack trace, but we need to.
+        if not isinstance(sep, str):
+            raise BodoError(
+                f"pd.read_csv() '{sep_arg_name}' must be a constant string.",
+                loc=rhs.loc,
+            )
+
+        # [BE-869] Bodo can't handle len(sep) > 1 except '\\s+' because the Pandas
+        # C engine can't handle it. Pandas won't use the Python engine because we
+        # set low_memory=True
+        if len(sep) > 1 and sep != "\\s+":
+            raise BodoError(
+                f"pd.read_csv() '{sep_arg_name}' is an invalid separator. Bodo only supports single character separators and '\\s+'.",
+                loc=rhs.loc,
+            )
+
+        header = self._get_const_arg("pd.read_csv", rhs.args, kws, 3, "header", "infer")
+        # Per Pandas documentation (header: int, list of int, default ‘infer’)
+        if header not in ("infer", 0, None):
+            raise BodoError(
+                f"pd.read_csv() 'header' should be one of 'infer', 0, or None",
+                loc=rhs.loc,
+            )
+
+        col_names = self._get_const_arg("pd.read_csv", rhs.args, kws, 4, "names", 0)
+        # Per Pandas documentation (names: array-like). Since columns don't need string types,
+        # we only check that this is a list or tuple (since constant arrays aren't supported).
+        if col_names != 0 and not isinstance(col_names, (list, tuple)):
+            raise BodoError(
+                "pd.read_csv() 'names' should be a constant list if provided",
+                loc=rhs.loc,
+            )
+
+        index_col = self._get_const_arg(
+            "pd.read_csv", rhs.args, kws, 5, "index_col", None, use_default=True
+        )
+        # Per Pandas documentation (index_col: int, str, sequence of int / str, or False, default None).
+        # We don't support sequences yet
+        if (
+            index_col is not None
+            and not isinstance(index_col, (int, str))
+            # isinstance(True, int) == True, so check True is unsupported.
+            or index_col is True
+        ):
+            raise BodoError(
+                "pd.read_csv() 'index_col' must be a constant integer, constant string that matches a column name, or False",
+                loc=rhs.loc,
+            )
+
+        usecols = self._get_const_arg(
+            "pd.read_csv()", rhs.args, kws, 6, "usecols", None, use_default=True
+        )
+        # Per Pandas documentation (usecols: list-like or callable).
+        # We don't support callables yet.
+        if usecols is not None and (not isinstance(usecols, (tuple, list))):
+            raise BodoError(
+                "pd.read_csv() 'usecols' must be a constant list of columns names or column indices if provided",
+                loc=rhs.loc,
+            )
+
+        dtype_var = get_call_expr_arg(
+            "pd.read_csv", rhs.args, kws, 10, "dtype", None, use_default=True
+        )
+
+        _skiprows = get_call_expr_arg(
+            "pd.read_csv", rhs.args, kws, 16, "skiprows", default=None, use_default=True
+        )
+        # Initialize skiprows_val = 0 since it's needed for CSVFileInfo
+        skiprows_val = 0
+
+        # Per Pandas documentation (skiprows: list-like, int or callable)
         # skiprows must be constant known at compile time or variable with column names provided by the user
         # Reason: Bodo needs a constant value for skiprows as it uses read_csv to get file information.
         # When skiprows is used, column name changes.
         # To allow variables, we set skiprows to 0 and this means that we don't get same column names as Pandas
         # Solution: let user specify column names.
-        try:
-            if isinstance(_skiprows, ir.Const):
-                skiprows_val = _skiprows.value
-            else:
-                skiprows_val = get_const_value_inner(
-                    self.func_ir, _skiprows, arg_types=self.args
-                )
-        except GuardException:
-            # raise error if skiprows is used but not constant without column names
-            if _skiprows != "" and col_names == 0:
-                raise BodoError(
-                    "pd.read_csv(): column names must be provided if 'skiprows' is not constant known at compile-time"
-                )
-            # Otherwise set skiprows = 0 since it's needed for CSVFileInfo
-            skiprows_val = 0
-        # TODO: fix type checking
-        # This checks type if skiprows is a variable not expression (i.e. binary operation or function call).
-        skiprows_def = guard(get_definition, self.func_ir, _skiprows)
-        if isinstance(skiprows_def, (ir.Const, ir.Global, ir.FreeVar, ir.Var)):
-            val = skiprows_def.value
-            if not is_overload_int(val):
-                raise BodoError("pd.read_csv: skiprows must be integer.")
-        elif isinstance(skiprows_def, ir.Expr) and skiprows_def.op == "make_function":
-            # TODO: BE-1405
-            raise BodoError("pd.read_csv: skiprows with callable not supported yet")
+        if _skiprows is None:
+            # Skiprows isn't provided so we don't need to check for constant requirement.
+            _skiprows = ir.Const(0, rhs.loc)
+        else:
+            try:
+                if isinstance(_skiprows, ir.Const):
+                    skiprows_val = _skiprows.value
+                else:
+                    skiprows_val = get_const_value_inner(
+                        self.func_ir, _skiprows, arg_types=self.args
+                    )
+            except GuardException:
+                # raise error if skiprows is used but not constant without column names
+                if col_names == 0:
+                    raise BodoError(
+                        "pd.read_csv() column names must be provided if 'skiprows' is not constant known at compile-time",
+                        loc=_skiprows.loc,
+                    )
+
+        if not isinstance(skiprows_val, int):
+            raise BodoError(
+                "pd.read_csv() 'skiprows' must be integer.", loc=_skiprows.loc
+            )
+        elif skiprows_val < 0:
+            # If skiprows is already a constant, check the size at compile time
+            raise BodoError(
+                "pd.read_csv() skiprows must be integer >= 0.", loc=_skiprows.loc
+            )
+
+        _nrows = get_call_expr_arg(
+            "pd.read_csv", rhs.args, kws, 18, "nrows", default=ir.Const(-1, rhs.loc)
+        )
 
         date_cols = self._get_const_arg(
-            "read_csv", rhs.args, kws, 23, "parse_dates", [], typ="int or str"
+            "pd.read_csv", rhs.args, kws, 24, "parse_dates", False, typ="int or str"
         )
+        # Per Pandas documentation (parse_dates: bool or list of int or names or list of lists or dict, default false)
+        # Check for False if the user provides the default value
+        if date_cols == False:
+            date_cols = []
+        if not isinstance(date_cols, (tuple, list)):
+            raise BodoError(
+                "pd.read_csv() 'parse_dates' must be a constant list of column names or column indices if provided",
+                loc=rhs.loc,
+            )
+
         chunksize = self._get_const_arg(
             "pandas.read_csv", rhs.args, kws, 31, "chunksize", None, use_default=True
         )
@@ -1256,48 +1363,136 @@ class UntypedPass:
             )
 
         compression = self._get_const_arg(
-            "read_csv", rhs.args, kws, 32, "compression", "infer"
+            "pd.read_csv", rhs.args, kws, 32, "compression", "infer"
         )
-        _nrows = get_call_expr_arg(
-            "read_csv", rhs.args, kws, 18, "nrows", default=ir.Const(-1, lhs.loc)
-        )
-        # TODO: fix type checking
-        nrows_def = guard(get_definition, self.func_ir, _nrows)
-        # This works only if nrows is a variable not expression (i.e. binary operation or function call).
-        if isinstance(nrows_def, (ir.Const, ir.Global, ir.FreeVar, ir.Var)):
-            val = nrows_def.value
-            if not is_overload_int(val):
-                raise BodoError("pd.read_csv: nrows must be integer.")
-
-        # check unsupported arguments
-        supported_args = (
-            "filepath_or_buffer",
-            "sep",
-            "delimiter",
-            "header",
-            "names",
-            "index_col",
-            "usecols",
-            "dtype",
-            "skiprows",
-            "parse_dates",
-            "chunksize",
-            "compression",
-            "nrows",
-        )
-        unsupported_args = set(kws.keys()) - set(supported_args)
-        if unsupported_args:
-            raise BodoError(
-                "read_csv() arguments {} not supported yet".format(unsupported_args)
-            )
-
-        supported_compression_options = {"infer", "gzip", "bz2", None}
+        # Per Pandas documentation (compression: {'infer', 'gzip', 'bz2', 'zip', 'xz', None}, default ‘infer’)
+        supported_compression_options = ["infer", "gzip", "bz2", "zip", "xz", None]
         if compression not in supported_compression_options:
             raise BodoError(
-                "pd.read_json() compression = {} is not supported."
-                " Supported options are {}".format(
-                    compression, supported_compression_options
+                f"pd.read_csv() 'compression' must be one of {supported_compression_options}",
+                loc=rhs.loc,
+            )
+
+        # List of all possible args and a support default value. This should match the header above.
+        # If a default value is not supported, use None. We provide the default value to enable passing
+        # an argument so long as it matches the default value. For example, if someone provides engine=None
+        # this is logically equivalent to excluding it and we want to minimize code rewrites.
+        total_args = (
+            ("filepath_or_buffer", None),
+            ("sep", ","),
+            ("delimiter", None),
+            ("header", "infer"),
+            ("names", None),
+            ("index_col", None),
+            ("usecols", None),
+            ("squeeze", False),
+            ("prefix", None),
+            ("mangle_dupe_cols", True),
+            ("dtype", None),
+            ("engine", None),
+            ("converters", None),
+            ("true_values", None),
+            ("false_values", None),
+            ("skipinitialspace", False),
+            ("skiprows", None),
+            ("skipfooter", 0),
+            ("nrows", None),
+            ("na_values", None),
+            ("keep_default_na", True),
+            ("na_filter", True),
+            ("verbose", False),
+            ("skip_blank_lines", True),
+            ("parse_dates", False),
+            ("infer_datetime_format", False),
+            ("keep_date_col", False),
+            ("date_parser", None),
+            ("dayfirst", False),
+            ("cache_dates", True),
+            ("iterator", False),
+            ("chunksize", None),
+            ("compression", "infer"),
+            ("thousands", None),
+            ("decimal", b"."),
+            ("lineterminator", None),
+            ("quotechar", '"'),
+            ("quoting", 0),
+            ("doublequote", True),
+            ("escapechar", None),
+            ("comment", None),
+            ("encoding", None),
+            ("encoding_errors", "strict"),
+            ("dialect", None),
+            ("error_bad_lines", True),
+            ("warn_bad_lines", True),
+            ("on_bad_lines", "error"),
+            ("delim_whitespace", False),
+            ("low_memory", True),
+            ("memory_map", False),
+            ("float_precision", None),
+            ("storage_options", None),
+        )
+        # Arguments that are supported
+        supported_args = set(
+            (
+                "filepath_or_buffer",
+                "sep",
+                "delimiter",
+                "header",
+                "names",
+                "index_col",
+                "usecols",
+                "dtype",
+                "skiprows",
+                "nrows",
+                "parse_dates",
+                "chunksize",
+                "compression",
+            )
+        )
+        # Iterate through the provided args. If an argument is in the supported_args,
+        # skip it. Otherwise we check that the value matches the default value.
+        unsupported_args = []
+        for i, arg_pair in enumerate(total_args):
+            name, default = arg_pair
+            if name not in supported_args:
+                try:
+                    # Catch the exceptions because don't want the constant value exception
+                    # Instead we want to indicate the argument isn't supported.
+                    provided_val = self._get_const_arg(
+                        "pd.read_csv", rhs.args, kws, i, name, default, use_default=True
+                    )
+                    if provided_val != default:
+                        unsupported_args.append(name)
+                except BodoError:
+                    # If the value is not a constant then the user tried to use an unsupported argument.
+                    unsupported_args.append(name)
+            # TODO: Replace with folding?
+            # If i < len(args), then the value was passed as an argument (since its in location i).
+            # If we also find it in kws this is an error.
+            if i < len(rhs.args) and name in kws:
+                raise BodoError(
+                    f"pd.read_csv() got multiple values for argument '{name}'.",
+                    loc=rhs.loc,
                 )
+            kws.pop(name, 0)
+
+        if unsupported_args:
+            raise BodoError(
+                f"pd.read_csv() arguments {unsupported_args} not supported yet",
+                loc=rhs.loc,
+            )
+
+        if len(rhs.args) > len(total_args):
+            raise BodoError(
+                f"pd.read_csv() {len(rhs.args)} arguments provided, but this function only accepts {len(total_args)} arguments",
+                loc=rhs.loc,
+            )
+
+        if kws:
+            extra_kws = list(kws.keys())
+            raise BodoError(
+                f"pd.read_csv() Unknown argument(s) {extra_kws} provided.",
+                loc=rhs.loc,
             )
 
         # infer the column names: if no names
@@ -1307,16 +1502,10 @@ class UntypedPass:
         # ``header=None``
         if header == "infer":
             header = 0 if col_names == 0 else None
-        elif header != 0 and header != None:
-            raise BodoError(
-                "pd.read_csv() header should be 'infer', 0, or None, not {}.".format(
-                    header
-                )
-            )
 
         # if inference is required
         dtype_map = {}
-        if dtype_var == "" or col_names == 0:
+        if dtype_var is None or col_names == 0:
             # infer column names and types from constant filename
             msg = (
                 "pd.read_csv() requires explicit type "
@@ -1329,6 +1518,10 @@ class UntypedPass:
                 arg_types=self.args,
                 file_info=CSVFileInfo(sep, skiprows_val, header, compression),
             )
+            if not isinstance(fname_const, str):
+                raise BodoError(
+                    "pd.read_csv() 'filepath_or_buffer' must be a string.", loc=rhs.loc
+                )
 
             got_schema = False
             # get_const_value forces variable to be literal which should convert it to
@@ -1344,7 +1537,7 @@ class UntypedPass:
                     fname_const, sep, skiprows_val, header, compression
                 )
             dtypes = df_type.data
-            usecols = list(range(len(dtypes))) if usecols == "" else usecols
+            usecols = list(range(len(dtypes))) if usecols is None else usecols
             # make sure usecols has column indices (not names)
             usecols = [
                 _get_col_ind_from_name_or_ind(
@@ -1360,18 +1553,18 @@ class UntypedPass:
             col_names = cols
             dtype_map = {c: dtypes[usecols[i]] for i, c in enumerate(col_names)}
 
-        usecols = list(range(len(col_names))) if usecols == "" else usecols
+        usecols = list(range(len(col_names))) if usecols is None else usecols
         # make sure usecols has column indices (not names)
         usecols = [_get_col_ind_from_name_or_ind(c, col_names) for c in usecols]
 
         # handle dtype arg if provided
-        if dtype_var != "":
+        if dtype_var is not None:
             # NOTE: the user may provide dtype for only a subset of columns
 
             dtype_map_const = get_const_value(
                 dtype_var,
                 self.func_ir,
-                "pd.read_csv(): 'dtype' argument should be a constant value",
+                "pd.read_csv() 'dtype' argument should be a constant value",
                 arg_types=self.args,
             )
             if isinstance(dtype_map_const, dict):
@@ -1380,17 +1573,14 @@ class UntypedPass:
                     {
                         col_names[
                             _get_col_ind_from_name_or_ind(c, col_names)
-                        ]: _dtype_val_to_arr_type(t)
+                        ]: _dtype_val_to_arr_type(t, "pd.read_csv", rhs.loc)
                         for c, t in dtype_map_const.items()
                     }
                 )
             else:
-                dtype_map = _dtype_val_to_arr_type(dtype_map_const)
-
-        if col_names == 0:
-            raise BodoError("pd.read_csv() names should be constant list")
-
-        # TODO: support other args
+                dtype_map = _dtype_val_to_arr_type(
+                    dtype_map_const, "pd.read_csv", rhs.loc
+                )
 
         columns, data_arrs, out_types = self._get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
@@ -1404,7 +1594,9 @@ class UntypedPass:
         out_data_types = out_types.copy()
 
         # one column is index
-        if index_col != -1 and not (isinstance(index_col, bool) and index_col == False):
+        if index_col is not None and not (
+            isinstance(index_col, bool) and index_col == False
+        ):
             # convert column number to column name
             if isinstance(index_col, int):
                 index_col = columns[index_col]
@@ -1615,10 +1807,13 @@ class UntypedPass:
             if isinstance(dtype_map_const, dict):
                 self._fix_dict_typing(dtype_var)
                 dtype_map = {
-                    c: _dtype_val_to_arr_type(t) for c, t in dtype_map_const.items()
+                    c: _dtype_val_to_arr_type(t, "pd.read_json", rhs.loc)
+                    for c, t in dtype_map_const.items()
                 }
             else:
-                dtype_map = _dtype_val_to_arr_type(dtype_map_const)
+                dtype_map = _dtype_val_to_arr_type(
+                    dtype_map_const, "pd.read_json", rhs.loc
+                )
 
         columns, data_arrs, out_types = self._get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
@@ -2199,10 +2394,15 @@ def remove_dead_branches(func_ir):
         del func_ir.blocks[dead]
 
 
-def _dtype_val_to_arr_type(t):
+def _dtype_val_to_arr_type(t, func_name, loc):
     """get array type from type value 't' specified in calls like read_csv()
     e.g. "str" -> string_array_type
     """
+    if t == object:
+        # TODO: Add a link to IO dtype documentation when available
+        raise BodoError(
+            f"{func_name}() 'dtype' does not support object dtype.", loc=loc
+        )
 
     if t in ("str", str, "unicode"):
         return string_array_type
@@ -2256,7 +2456,7 @@ def _dtype_val_to_arr_type(t):
     except:
         pass
 
-    raise BodoError(f"invalid dtype value {t}")
+    raise BodoError(f"{func_name}() 'dtype' does not support {t}", loc=loc)
 
 
 def _get_col_ind_from_name_or_ind(c, col_names):
@@ -2504,6 +2704,10 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
                     compression = "gzip"
                 elif fname_const.endswith(".bz2"):
                     compression = "bz2"
+                elif fname_const.endswith(".zip"):
+                    compression = "zip"
+                elif fname_const.endswith(".xz"):
+                    compression = "xz"
                 else:
                     compression = None
 

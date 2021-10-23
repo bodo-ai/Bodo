@@ -891,8 +891,7 @@ def test_astype_non_constant_string(memory_leak_check):
         bodo.jit(impl)(df, type_str)
 
 
-# TODO: re add in later PR. Not marking in the PR because of Sonar
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_df_getitem_non_const_columname_error(memory_leak_check):
     g = bodo.jit(lambda a: a)
 
@@ -910,8 +909,7 @@ def test_df_getitem_non_const_columname_error(memory_leak_check):
         f(df, 1)
 
 
-# TODO: re add in later PR. Not marking in the PR because of Sonar
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_df_getitem_non_const_columname_list_error(memory_leak_check):
     g = bodo.jit(lambda a: a)
 
@@ -929,8 +927,7 @@ def test_df_getitem_non_const_columname_list_error(memory_leak_check):
         f(df, [1])
 
 
-# TODO: re add in later PR. Not marking in the PR because of Sonar
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_df_loc_getitem_non_const_columname_error(memory_leak_check):
     g = bodo.jit(lambda a: a)
 
@@ -954,8 +951,7 @@ def test_df_loc_getitem_non_const_columname_error(memory_leak_check):
         f2(df, "A")
 
 
-# TODO: re add in later PR. Not marking in the PR because of Sonar
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_df_loc_getitem_non_const_columname_list_error(memory_leak_check):
     g = bodo.jit(lambda a: a)
 
@@ -981,8 +977,7 @@ def test_df_loc_getitem_non_const_columname_list_error(memory_leak_check):
         f2(df, ["A"])
 
 
-# TODO: re add in later PR. Not marking in the PR because of Sonar
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_df_iloc_getitem_non_const_columname_error(memory_leak_check):
     g = bodo.jit(lambda a: a)
 
@@ -1004,8 +999,7 @@ def test_df_iloc_getitem_non_const_columname_error(memory_leak_check):
         f2(df, [1])
 
 
-# TODO: re add in later PR. Not marking in the PR because of Sonar
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_df_iloc_getitem_non_const_slice_error(memory_leak_check):
     g = bodo.jit(lambda a: a)
 
@@ -1022,8 +1016,7 @@ def test_df_iloc_getitem_non_const_slice_error(memory_leak_check):
         f(df, slice(0, 1))
 
 
-# TODO: re add in later PR. Not marking in the PR because of Sonar
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_df_iat_getitem_non_const_error(memory_leak_check):
     g = bodo.jit(lambda a: a)
 
@@ -1040,8 +1033,7 @@ def test_df_iat_getitem_non_const_error(memory_leak_check):
         f(df, 0)
 
 
-# TODO: re add in later PR. Not marking in the PR because of Sonar
-# @pytest.mark.slow
+@pytest.mark.slow
 def test_df_iat_setitem_non_const_error(memory_leak_check):
     g = bodo.jit(lambda a: a)
 

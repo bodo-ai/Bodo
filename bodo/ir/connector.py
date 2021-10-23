@@ -65,6 +65,16 @@ def connector_distributed_analysis(node, array_dists):
 
 
 def connector_typeinfer(node, typeinferer):
+    """
+    Set the typing constraints for various connector nodes.
+    This is used for showing type dependencies. As a result,
+    connectors only require that the output columns exactly
+    match the types expected from read_csv.
+
+    While the inputs fields of these nodes have type requirements,
+    these should only be checked after the typemap is finalized
+    because they should not allow the inputs to unify at all.
+    """
     for col_var, typ in zip(node.out_vars, node.out_types):
         typeinferer.lock_type(col_var.name, typ, loc=node.loc)
 

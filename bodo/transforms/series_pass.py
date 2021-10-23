@@ -256,6 +256,10 @@ class SeriesPass:
                         raise BodoError(
                             "DataFrame.columns: new column names should be a constant list"
                         )
+                    elif isinstance(inst, bodo.ir.csv_ext.CsvReader):
+                        # This is a typing check. It doesn't impact typing, but it avoids an
+                        # extra pass over the IR (reducing compilation time).
+                        bodo.ir.csv_ext.check_node_typing(inst, self.typemap)
                 except BodoError as e:
                     raise BodoError(self.curr_loc.strformat() + "\n" + str(e))
 
