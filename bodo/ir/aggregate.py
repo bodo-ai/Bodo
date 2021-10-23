@@ -1814,7 +1814,10 @@ def gen_top_level_agg_func(
         ), "invalid number of groupby outputs"
     if num_cum_funcs > 0:
         if num_cum_funcs != len(allfuncs):
-            raise BodoError(f"{agg_node.func_name}(): Cannot mix cumulative operations with other aggregation functions", loc=agg_node.loc)
+            raise BodoError(
+                f"{agg_node.func_name}(): Cannot mix cumulative operations with other aggregation functions",
+                loc=agg_node.loc,
+            )
         do_combine = False  # same as median and nunique
 
     if udf_func_struct is not None:
@@ -2496,7 +2499,6 @@ def _mv_read_only_init_vars(init_nodes, parfor, eval_nodes):
     if not parfor:
         return init_nodes
 
-
     # get parfor body usedefs
     use_defs = compute_use_defs(parfor.loop_body)
     parfor_uses = set()
@@ -3053,7 +3055,6 @@ def gen_update_func(
                 red_ir_vars[ind] = stmt.target
             new_body.append(stmt)
         bl.body = new_body
-
 
     redvar_in_names = ["v{}".format(i) for i in range(num_red_vars)]
     in_names = ["in{}".format(i) for i in range(num_in_vars)]

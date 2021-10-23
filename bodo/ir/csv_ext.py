@@ -20,6 +20,7 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
+from bodo.utils.typing import BodoError
 from bodo.utils.utils import check_java_installation  # noqa
 from bodo.utils.utils import sanitize_varname
 
@@ -69,6 +70,44 @@ class CsvReader(ir.Stmt):
             self.skiprows,
             self.chunksize,
         )
+
+
+def check_node_typing(node, typemap):
+    """
+    Provides basic type checking for each relevant csv field. These only check values
+    that can be passed as variables and constants are assumed to be checked in
+    untyped_pass.
+    """
+    # Filename must be a string
+    file_name_typ = typemap[node.file_name.name]
+    if types.unliteral(file_name_typ) != types.unicode_type:
+        raise BodoError(
+            f"pd.read_csv(): 'filepath_or_buffer' must be a string. Found type: {file_name_typ}.",
+            node.file_name.loc,
+        )
+    # Skip rows must be an integer, list of integers, or tuple of integers
+    # If the value is a constant, we have already checked types in untyped pass.
+    if not isinstance(node.skiprows, ir.Const):
+        skiprows_typ = typemap[node.skiprows.name]
+        if isinstance(skiprows_typ, types.Dispatcher):
+            raise BodoError(
+                f"pd.read_csv(): 'skiprows' callable not supported yet.",
+                node.file_name.loc,
+            )
+        elif not isinstance(skiprows_typ, types.Integer):
+            raise BodoError(
+                f"pd.read_csv(): 'skiprows' must be an integer. Found type {skiprows_typ}.",
+                loc=node.skiprows.loc,
+            )
+    # nrows must be an integer
+    # If the value is an IR constant, then it is the default value so we don't need to check.
+    if not isinstance(node.nrows, ir.Const):
+        nrows_typ = typemap[node.nrows.name]
+        if not isinstance(nrows_typ, types.Integer):
+            raise BodoError(
+                f"pd.read_csv(): 'nrows' must be an integer. Found type {nrows_typ}.",
+                loc=node.nrows.loc,
+            )
 
 
 import llvmlite.binding as ll

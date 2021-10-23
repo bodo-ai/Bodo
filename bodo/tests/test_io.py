@@ -151,34 +151,6 @@ def test_read_parquet_from_deltalake(memory_leak_check):
     check_func(impl, (), py_output=py_output, check_dtype=False)
 
 
-def test_pq_multiIdx_errcheck(memory_leak_check):
-    """Remove this test when multi index is supported for read_parquet"""
-    np.random.seed(0)
-
-    def impl():
-        df = pd.read_parquet("multi_idx_parquet.pq")
-
-    try:
-        if bodo.libs.distributed_api.get_rank() == 0:
-            arrays = [
-                ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
-                ["one", "two", "one", "two", "one", "two", "one", "two"],
-            ]
-            tuples = list(zip(*arrays))
-            idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second"])
-            df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
-            df.to_parquet("multi_idx_parquet.pq")
-        bodo.barrier()
-        with pytest.raises(
-            BodoError, match="read_parquet: MultiIndex not supported yet"
-        ):
-            bodo.jit(impl)()
-        bodo.barrier()
-    finally:
-        if bodo.libs.distributed_api.get_rank() == 0:
-            os.remove("multi_idx_parquet.pq")
-
-
 @pytest.mark.parametrize(
     "df",
     [
@@ -483,16 +455,6 @@ def test_pq_unsupported_types(datapath, memory_leak_check):
     check_func(test_impl, (datapath("nested_struct_example.pq"),))
 
 
-def test_pq_invalid_column_selection(datapath, memory_leak_check):
-    """test error raise when selected column is not in file schema"""
-
-    def test_impl(fname):
-        return pd.read_parquet(fname, columns=["C"])
-
-    with pytest.raises(BodoError, match="C not in Parquet file schema"):
-        bodo.jit(test_impl)(datapath("nested_struct_example.pq"))
-
-
 def test_pq_decimal(datapath, memory_leak_check):
     def test_impl(fname):
         return pd.read_parquet(fname)
@@ -512,23 +474,6 @@ def test_pq_date32(datapath, memory_leak_check):
 def test_pq_processes_greater_than_string_rows(datapath):
     f = lambda filename: pd.read_parquet(filename)
     check_func(f, [datapath("small_strings.pq")])
-
-
-@pytest.mark.slow
-def test_csv_infer_type_error(datapath):
-    ints = [0] * 1000
-    strings = ["a"] * 1000
-    df = pd.DataFrame({"A": ints + strings})
-    filepath = datapath("test_csv_infer_type_error.csv", check_exists=False)
-    with ensure_clean(filepath):
-        if bodo.get_rank() == 0:
-            df.to_csv(filepath, index=False)
-        bodo.barrier()
-        message = r"pd.read_csv\(\): Bodo could not infer dtypes correctly."
-        with pytest.raises(TypeError, match=message):
-            bodo.jit(lambda: pd.read_csv(filepath), all_returns_distributed=True)()
-        with pytest.raises(TypeError, match=message):
-            bodo.jit(lambda: pd.read_csv(filepath), distributed=False)()
 
 
 def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
@@ -1458,33 +1403,6 @@ def test_write_csv_parallel_unicode(memory_leak_check):
             pd.testing.assert_frame_equal(pd.read_csv(hp_fname), pd.read_csv(pd_fname))
 
 
-def test_pseudo_exception(datapath, memory_leak_check):
-    """Test removal of ForceLiteralArg message"""
-
-    def test_csv(fname):
-        df = pd.read_csv(fname)
-        return df.clip()
-
-    fname = datapath("csv_data1.csv")
-
-    with pytest.raises(Exception) as excinfo:
-        bodo.jit(test_csv)(fname)
-    # Save full traceback as a string
-    csv_track = excinfo.getrepr(style="native")
-    assert "Pseudo-exception" not in str(csv_track)
-
-    def test_pq(file_name):
-        df = pd.read_parquet(file_name)
-        return df.A.WRONG()
-
-    fname = datapath("groupby3.pq")
-    with pytest.raises(Exception) as excinfo:
-        bodo.jit(test_pq)(fname)
-
-    pq_track = excinfo.getrepr(style="native")
-    assert "Pseudo-exception" not in str(pq_track)
-
-
 @pytest.mark.smoke
 def test_h5_read_seq(datapath, memory_leak_check):
     def test_impl(fname):
@@ -1857,23 +1775,6 @@ def test_np_io14(datapath, memory_leak_check):
     np.testing.assert_almost_equal(bodo_func(), test_impl())
 
 
-# TODO(Nick): Add a test for Parallel version with both offset and count.
-@pytest.mark.slow
-def test_np_io_sep_unsupported(datapath, memory_leak_check):
-    fname = datapath("np_file1.dat")
-
-    def test_impl():
-        A = np.fromfile(fname, np.float64, sep=" ")
-        return A.sum()
-
-    bodo_func = bodo.jit(test_impl)
-    with pytest.raises(
-        BodoError, match=r"np.fromfile\(\): sep argument is not supported"
-    ):
-        # Test that we cannot swap the value of sep.
-        bodo_func()
-
-
 def test_csv_double_box(datapath, memory_leak_check):
     """Make sure boxing the output of read_csv() twice doesn't cause crashes
     See dataframe boxing function for extra incref of native arrays.
@@ -1975,6 +1876,17 @@ def test_csv_usecols_names(datapath, memory_leak_check):
 
     def test_impl(fname):
         df = pd.read_csv(fname, usecols=["A", "B"])
+        return df
+
+    fname = datapath("csv_data_infer1.csv")
+    check_func(test_impl, (fname,), check_dtype=False)
+
+
+def test_csv_sep_whitespace(datapath, memory_leak_check):
+    """test that using all whitespace"""
+
+    def test_impl(fname):
+        df = pd.read_csv(fname, sep=r"\s+")
         return df
 
     fname = datapath("csv_data_infer1.csv")
@@ -2318,9 +2230,6 @@ def test_csv_dir_str_arr_multi(datapath, memory_leak_check):
 
 
 @pytest.mark.smoke
-@pytest.mark.skip(
-    reason="TODO: Fails in current Pandas as well. Unskip when we switch to Pandas 1.2.0"
-)
 def test_excel1(datapath, memory_leak_check):
     """Test pd.read_excel()"""
 
@@ -2374,244 +2283,6 @@ def test_excel1(datapath, memory_leak_check):
     check_func(test_impl4, (fname, "Sheet1"), is_out_distributed=False)
     with pytest.raises(BodoError, match="both 'dtype' and 'names' should be provided"):
         bodo.jit(test_impl5)(fname)
-
-
-def test_unsupported_error_checking(memory_leak_check):
-    """make sure BodoError is raised for unsupported call"""
-    # test an example I/O call
-    def test_impl():
-        return pd.read_spss("data.dat")
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_impl)()
-
-
-# TODO: Add memory_leak_check when bugs are resolved.
-def test_csv_invalid_path():
-    """test error raise when CSV file path is invalid and the data types are provided
-    explicitly (so that path check is done in C++ runtime).
-    """
-
-    def test_impl(fname):
-        return pd.read_csv(fname, names=["A"], dtype={"A": np.int64})
-
-    with pytest.raises(RuntimeError, match="invalid path"):
-        bodo.jit(test_impl)("f.csv")
-
-
-def test_csv_invalid_path_const(memory_leak_check):
-    """test error raise when CSV file path provided as constant but is invalid."""
-
-    def test_impl():
-        return pd.read_csv("in_csv.csv")
-
-    with pytest.raises(BodoError, match="No such file or directory"):
-        bodo.jit(test_impl)()
-
-
-def test_csv_repeat_args(memory_leak_check):
-    """
-    test error raise when an untyped pass function provides an argument
-    as both an arg and a kwarg
-    """
-
-    def test_impl():
-        return pd.read_csv("csv_data1.csv", filepath_or_buffer="csv_data1.csv")
-
-    with pytest.raises(
-        BodoError,
-        match=r"read_csv\(\) got multiple values for argument 'filepath_or_buffer'",
-    ):
-        bodo.jit(test_impl)()
-
-
-def test_read_parquet_unsupported_arg(memory_leak_check):
-    """
-    test that an error is raised when unsupported arg is passed.
-    """
-
-    def test_impl():
-        df = pd.read_parquet("some_file.pq", invalid_arg="invalid")
-        return df
-
-    with pytest.raises(
-        BodoError, match=r"read_parquet\(\) arguments {'invalid_arg'} not supported yet"
-    ):
-        bodo.jit(distributed=["df"])(test_impl)()
-
-
-def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
-    """
-    test that an error is raised when unsupported arg for storage_options is passed.
-    """
-
-    def test_impl1():
-        df = pd.read_parquet("some_file.pq", storage_options={"invalid_arg": "invalid"})
-        return df
-
-    def test_impl2():
-        df = pd.read_parquet(
-            "some_file.pq", storage_options={"invalid_arg": "invalid", "anon": True}
-        )
-        return df
-
-    def test_impl3():
-        df = pd.read_parquet("some_file.pq", storage_options="invalid")
-        return df
-
-    with pytest.raises(
-        BodoError,
-        match=r"read_parquet\(\) arguments {'invalid_arg'} for 'storage_options' not supported yet",
-    ):
-        bodo.jit(distributed=["df"])(test_impl1)()
-
-    with pytest.raises(
-        BodoError,
-        match=r"read_parquet\(\) arguments {'invalid_arg'} for 'storage_options' not supported yet",
-    ):
-        bodo.jit(distributed=["df"])(test_impl2)()
-
-    with pytest.raises(
-        BodoError,
-        match="read_parquet: 'storage_options' must be a constant dictionary",
-    ):
-        bodo.jit(distributed=["df"])(test_impl3)()
-
-
-def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
-    """
-    test that an error is raised when non-boolean is passed in for anon in storage_options
-    """
-
-    def test_impl():
-        df = pd.read_parquet("some_file.pq", storage_options={"anon": "True"})
-        return df
-
-    with pytest.raises(
-        BodoError,
-        match="read_parquet: 'anon' in 'storage_options' must be a constant boolean value",
-    ):
-        bodo.jit(distributed=["df"])(test_impl)()
-
-
-# TODO: Not sure why this fails with memory_leak_check. Seems like the
-# exception returned from pq_read prevents the code that follows from
-# freeing something
-def test_read_parquet_invalid_path():
-    """test error raise when parquet file path is invalid in C++ code."""
-
-    def test_impl():
-        df = pd.read_parquet("I_dont_exist.pq")
-        return df
-
-    with pytest.raises(BodoError, match="Passed non-file path"):
-        bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
-
-
-def test_read_csv_incorrect_s3_credentials(memory_leak_check):
-    """test error raise when AWS credentials are incorrect for csv
-    file path passed by another bodo.jit function"""
-
-    filename = "s3://test-pq-2/item.pq"
-    # Save default developer mode value
-    default_mode = numba.core.config.DEVELOPER_MODE
-    # Test as a user
-    numba.core.config.DEVELOPER_MODE = 0
-
-    @bodo.jit
-    def read(filename):
-        df = pd.read_csv(filename)
-        return df
-
-    # Test with passing filename from bodo to bodo call error and S3
-    def test_impl_csv(filename):
-        return read(filename)
-
-    with pytest.raises(BodoError, match="No response body"):
-        bodo.jit(test_impl_csv)(filename)
-
-    # Reset developer mode
-    numba.core.config.DEVELOPER_MODE = default_mode
-
-
-def test_io_error_nested_calls(memory_leak_check):
-    """Test with passing incorrect filename from bodo to bodo call
-    with local file"""
-    # Save default developer mode value
-    default_mode = numba.core.config.DEVELOPER_MODE
-    # Test as a user
-    numba.core.config.DEVELOPER_MODE = 0
-
-    @bodo.jit
-    def test_csv(filename):
-        df = pd.read_csv(filename)
-        return df
-
-    def test_impl_csv(filename):
-        return test_csv(filename)
-
-    filename = "I_dont_exist.csv"
-    with pytest.raises(BodoError, match="No such file or directory"):
-        bodo.jit(test_impl_csv)(filename)
-
-    @bodo.jit
-    def test_pq(filename):
-        df = pd.read_parquet(filename)
-        return df
-
-    def test_impl_pq(filename):
-        return test_pq(filename)
-
-    filename = "I_dont_exist.pq"
-    with pytest.raises(BodoError, match="Passed non-file path"):
-        bodo.jit(test_impl_pq)(filename)
-
-    # Reset developer mode
-    numba.core.config.DEVELOPER_MODE = default_mode
-
-
-def test_read_parquet_incorrect_s3_credentials(memory_leak_check):
-    """test error raise when AWS credentials are incorrect for parquet
-    file path passed by another bodo.jit function"""
-
-    filename = "s3://test-pq-2/item.pq"
-    # Save default developer mode value
-    default_mode = numba.core.config.DEVELOPER_MODE
-    # Test as a user
-    numba.core.config.DEVELOPER_MODE = 0
-
-    @bodo.jit
-    def read(filename):
-        df = pd.read_parquet(filename)
-        return df
-
-    # Test CallConstraint error
-    def test_impl(filename):
-        return read(filename)
-
-    with pytest.raises(BodoError, match="No response body"):
-        bodo.jit(test_impl)(filename)
-
-    # Test ForceLiteralArg error
-    def test_impl2(filename):
-        df = pd.read_parquet(filename)
-        return df
-
-    with pytest.raises(BodoError, match="No response body"):
-        bodo.jit(test_impl2)(filename)
-
-    # Reset developer mode
-    numba.core.config.DEVELOPER_MODE = default_mode
-
-
-def test_read_parquet_invalid_path_const(memory_leak_check):
-    """test error raise when parquet file path provided as constant but is invalid."""
-
-    def test_impl():
-        return pd.read_parquet("I_dont_exist.pq")
-
-    with pytest.raises(BodoError, match="Passed non-file path"):
-        bodo.jit(test_impl)()
 
 
 @pytest.mark.parametrize(
@@ -3196,6 +2867,47 @@ def test_csv_np_gt_rows(datapath, memory_leak_check):
         return pd.read_csv(fname, usecols=["A", "C"])
 
     check_func(impl2, (), check_dtype=False)
+
+
+@pytest.mark.slow
+def test_csv_unsupported_arg_match(memory_leak_check):
+    """
+    Test read_csv(): Test that passing an unsupported arg that matches
+    the default doesn't raise an error
+    """
+    fname = os.path.join("bodo", "tests", "data", "example.csv")
+
+    def impl():
+        # squeeze is provided but not supported. It matches the default
+        # so it should still work.
+        return pd.read_csv(
+            fname,
+            ",",
+            None,
+            "infer",
+            ["A", "B", "C", "D", "E"],
+            None,
+            None,
+            False,
+        )
+
+    check_func(impl, (), check_dtype=False)
+
+
+@pytest.mark.slow
+def test_csv_unsupported_kwarg_match(memory_leak_check):
+    """
+    Test read_csv(): Test that passing an unsupported kwarg that matches
+    the default doesn't raise an error
+    """
+    fname = os.path.join("bodo", "tests", "data", "example.csv")
+
+    def impl():
+        # comment is provided but not supported. It matches the default
+        # so it should still work.
+        return pd.read_csv(fname, comment=None)
+
+    check_func(impl, (), check_dtype=False)
 
 
 @pytest.mark.slow

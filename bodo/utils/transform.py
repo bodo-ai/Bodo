@@ -248,7 +248,10 @@ def remove_hiframes(rhs, lives, call_list):
         return True
 
     # the call is dead if the updated array is dead
-    if call_list == ["setna", "array_kernels", "libs", bodo] and rhs.args[0].name not in lives:
+    if (
+        call_list == ["setna", "array_kernels", "libs", bodo]
+        and rhs.args[0].name not in lives
+    ):
         return True
 
     # TODO: needed?
@@ -354,21 +357,30 @@ def get_stmt_defs(stmt):
 
 
 def get_const_value(
-    var, func_ir, err_msg, typemap=None, arg_types=None, file_info=None
+    var,
+    func_ir,
+    err_msg,
+    typemap=None,
+    arg_types=None,
+    file_info=None,
 ):
     """Get constant value of a variable if possible, otherwise raise error.
     If the variable is argument to the function, force recompilation with literal
     typing of the argument.
     """
+    if hasattr(var, "loc"):
+        loc = var.loc
+    else:
+        loc = None
     try:
         val = get_const_value_inner(
             func_ir, var, arg_types, typemap, file_info=file_info
         )
         if isinstance(val, ir.UndefinedType):
             name = func_ir.get_definition(var.name).name
-            raise BodoError(f"name '{name}' is not defined")
+            raise BodoError(f"name '{name}' is not defined", loc=loc)
     except GuardException:
-        raise BodoError(err_msg)
+        raise BodoError(err_msg, loc=loc)
     return val
 
 
@@ -1145,7 +1157,9 @@ def _get_original_nested_tups(vals):
     return tuple(vals)
 
 
-def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg=None):
+def get_call_expr_arg(
+    f_name, args, kws, arg_no, arg_name, default=None, err_msg=None, use_default=False
+):
     """get a specific argument from all argument variables of a call expr, which could
     be specified either as a positional argument or keyword argument.
     If argument is not specified, an error is raised unless if a default is specified.
@@ -1160,7 +1174,8 @@ def get_call_expr_arg(f_name, args, kws, arg_no, arg_name, default=None, err_msg
         arg = kws[arg_name]
 
     if arg is None:
-        if default is not None:
+        # Check use_default to allow None as a default
+        if use_default or default is not None:
             return default
         if err_msg is None:
             err_msg = "{} requires '{}' argument".format(f_name, arg_name)
