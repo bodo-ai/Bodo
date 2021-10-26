@@ -2382,7 +2382,7 @@ def to_csv_overload(
     index_label=None,
     mode="w",
     encoding=None,
-    compression="infer",
+    compression=None,  # this is different from pandas, default is 'infer'.
     quoting=None,
     quotechar='"',
     line_terminator=None,
@@ -2391,7 +2391,26 @@ def to_csv_overload(
     doublequote=True,
     escapechar=None,
     decimal=".",
+    errors="strict",
+    storage_options=None,
 ):
+
+    check_unsupported_args(
+        "DataFrame.to_csv",
+        {
+            "encoding": encoding,
+            "mode": mode,
+            "errors": errors,
+            "storage_options": storage_options,
+        },
+        {
+            "encoding": None,
+            "mode": "w",
+            "errors": "strict",
+            "storage_options": None,
+        },
+    )
+
     if not (
         is_overload_none(path_or_buf)
         or is_overload_constant_str(path_or_buf)
@@ -2400,6 +2419,29 @@ def to_csv_overload(
         raise BodoError(
             "DataFrame.to_csv(): 'path_or_buf' argument should be None or string"
         )
+    if not is_overload_none(compression):
+        raise BodoError(
+            "DataFrame.to_csv(): 'compression' argument supports only None, which is the default in JIT code."
+        )
+    # best effort warning that compression defaults to None, when users pass in filepaths that would normally be compressed
+    # in pandas.
+    if is_overload_constant_str(path_or_buf):
+        filepath = get_overload_const_str(path_or_buf)
+        if filepath.endswith((".gz", ".bz2", ".zip", ".xz")):
+            import warnings
+
+            from bodo.utils.typing import BodoWarning
+
+            warnings.warn(
+                BodoWarning(
+                    "DataFrame.to_csv(): 'compression' argument defaults to None in JIT code, which is the only supported value."
+                )
+            )
+    if isinstance(columns, types.List):
+        raise BodoError(
+            "DataFrame.to_csv(): 'columns' argument must not be list type. Please convert to tuple type."
+        )
+
     # TODO: refactor when objmode() can understand global string constant
     # String output case
     if is_overload_none(path_or_buf):
@@ -2416,7 +2458,7 @@ def to_csv_overload(
             index_label=None,
             mode="w",
             encoding=None,
-            compression="infer",
+            compression=None,  # this is different from pandas, default is 'infer'.
             quoting=None,
             quotechar='"',
             line_terminator=None,
@@ -2425,6 +2467,8 @@ def to_csv_overload(
             doublequote=True,
             escapechar=None,
             decimal=".",
+            errors="strict",
+            storage_options=None,
         ):  # pragma: no cover
             with numba.objmode(D="unicode_type"):
                 D = df.to_csv(
@@ -2447,6 +2491,8 @@ def to_csv_overload(
                     doublequote,
                     escapechar,
                     decimal,
+                    errors,
+                    storage_options,
                 )
             return D
 
@@ -2464,7 +2510,7 @@ def to_csv_overload(
         index_label=None,
         mode="w",
         encoding=None,
-        compression="infer",
+        compression=None,  # this is different from pandas, default is 'infer'.
         quoting=None,
         quotechar='"',
         line_terminator=None,
@@ -2473,6 +2519,8 @@ def to_csv_overload(
         doublequote=True,
         escapechar=None,
         decimal=".",
+        errors="strict",
+        storage_options=None,
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to csv
@@ -2497,6 +2545,8 @@ def to_csv_overload(
                 doublequote,
                 escapechar,
                 decimal,
+                errors,
+                storage_options,
             )
 
         bodo.io.fs_io.csv_write(path_or_buf, D)

@@ -82,6 +82,7 @@ from bodo.utils.transform import (
     compile_func_single_block,
     get_call_expr_arg,
     get_const_value_inner,
+    set_call_expr_arg,
 )
 from bodo.utils.typing import BodoError, list_cumulative
 from bodo.utils.utils import (
@@ -1892,7 +1893,19 @@ class DistributedPass:
             df_typ = self.typemap[df.name]
             rhs = assign.value
             kws = dict(rhs.kws)
-            fname = args[0]
+
+            fname = get_call_expr_arg(
+                "to_csv",
+                rhs.args,
+                kws,
+                0,
+                "path_or_buf",
+                default=None,
+                use_default=True,
+            )
+            # handle None filepath
+            if fname is None or isinstance(self.typemap[fname.name], types.NoneType):
+                return [assign]
             # convert StringLiteral to Unicode to make ._data available
             self.typemap.pop(fname.name)
             self.typemap[fname.name] = string_type
@@ -1928,7 +1941,7 @@ class DistributedPass:
             self.typemap[none_var.name] = types.none
             none_assign = ir.Assign(ir.Const(None, rhs.loc), none_var, rhs.loc)
             nodes.append(none_assign)
-            rhs.args[0] = none_var
+            set_call_expr_arg(none_var, rhs.args, kws, 0, "path_or_buf")
 
             # str_out = df.to_csv(None)
             str_out = ir.Var(assign.target.scope, mk_unique_var("write_csv"), rhs.loc)
