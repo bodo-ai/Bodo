@@ -477,6 +477,315 @@ def test_pq_processes_greater_than_string_rows(datapath):
     check_func(f, [datapath("small_strings.pq")])
 
 
+@pytest.mark.slow
+def test_csv_infer_type_error(datapath):
+    ints = [0] * 1000
+    strings = ["a"] * 1000
+    df = pd.DataFrame({"A": ints + strings})
+    filepath = datapath("test_csv_infer_type_error.csv", check_exists=False)
+    with ensure_clean(filepath):
+        if bodo.get_rank() == 0:
+            df.to_csv(filepath, index=False)
+        bodo.barrier()
+        message = r"pd.read_csv\(\): Bodo could not infer dtypes correctly."
+        with pytest.raises(TypeError, match=message):
+            bodo.jit(lambda: pd.read_csv(filepath), all_returns_distributed=True)()
+        with pytest.raises(TypeError, match=message):
+            bodo.jit(lambda: pd.read_csv(filepath), distributed=False)()
+
+
+def test_to_csv_none_arg0(memory_leak_check):
+    """checks that passing None as the filepath argument is properly supported"""
+
+    def impl(df):
+        return df.to_csv(path_or_buf=None)
+
+    def impl2(df):
+        return df.to_csv()
+
+    def impl3(df):
+        return df.to_csv(None)
+
+    df = pd.DataFrame({"A": np.arange(100)})
+
+    check_func(impl, (df,), only_seq=True)
+    check_func(impl2, (df,), only_seq=True)
+    check_func(impl3, (df,), only_seq=True)
+
+    # for the distributed cases, the output for each rank is the same as calling
+    # df.to_csv(None) on the distributed dataframe
+    py_out_1d = _get_dist_arg(df).to_csv(None)
+    check_func(impl, (df,), only_1D=True, py_output=py_out_1d)
+    check_func(impl2, (df,), only_1D=True, py_output=py_out_1d)
+    check_func(impl3, (df,), only_1D=True, py_output=py_out_1d)
+
+    py_out_1d_vars = _get_dist_arg(df, var_length=True).to_csv(None)
+    check_func(impl, (df,), only_1DVar=True, py_output=py_out_1d_vars)
+    check_func(impl2, (df,), only_1DVar=True, py_output=py_out_1d_vars)
+    check_func(impl3, (df,), only_1DVar=True, py_output=py_out_1d_vars)
+
+
+def test_to_csv_filepath_as_kwd_arg(memory_leak_check):
+    """checks that passing the filepath as a keyword argument is properly supported"""
+
+    def impl(df, f_name):
+        return df.to_csv(path_or_buf=f_name)
+
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
+    check_CSV_write(impl, df)
+
+
+def test_basic_paralel_write(memory_leak_check):
+    """does a basic test of to_csv with no arguments"""
+
+    def impl(df, f_name):
+        return df.to_csv(f_name)
+
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
+    check_CSV_write(impl, df)
+
+
+def test_to_csv_sep_kwd_arg(memory_leak_check):
+    """tests the sep keyword argument to to_csv."""
+
+    def impl_none(df):
+        return df.to_csv(None, sep="-")
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, sep=":")
+
+    df = pd.DataFrame({"A": np.arange(100)})
+
+    check_to_csv_string_output(df, impl_none)
+    check_CSV_write(impl, df)
+
+
+def test_to_csv_na_rep_kwd_arg(memory_leak_check):
+    """tests the na_rep keyword argument to to_csv."""
+
+    def impl_none(df):
+        return df.to_csv(None, na_rep="NA_VALUE")
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, na_rep="-1")
+
+    df = pd.DataFrame({"A": np.arange(10)}, dtype="Int64")
+    df["A"][0] = None
+
+    check_to_csv_string_output(df, impl_none)
+    check_CSV_write(impl, df)
+
+
+def test_to_csv_float_format_kwd_arg(memory_leak_check):
+    """tests the float_format keyword argument to to_csv."""
+
+    def impl_none(df):
+        return df.to_csv(None, float_format="%.3f")
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, float_format="%.3f")
+
+    # This should generate floats with a large number of decimal places
+    df = pd.DataFrame({"A": [x / 7 for x in range(10)]})
+    check_to_csv_string_output(df, impl_none)
+    check_CSV_write(impl, df)
+
+
+def test_to_csv_columns_kwd_arg(memory_leak_check):
+    """tests the columns keyword argument to to_csv. List input is not currently supported, see BE-1505"""
+
+    def impl_none(df):
+        return df.to_csv(None, columns=("A", "C"))
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, columns=("A", "C"))
+
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
+    check_to_csv_string_output(df, impl_none)
+    check_CSV_write(impl, df)
+
+
+# Header argument tested in test_csv_header_write_read
+
+
+def test_to_csv_index_kwd_arg(memory_leak_check):
+    """tests the index keyword argument to to_csv"""
+
+    def impl_none(df):
+        return df.to_csv(None, index=False)
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, index=False)
+
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
+
+    check_to_csv_string_output(df, impl_none)
+    check_CSV_write(impl, df)
+
+
+def test_to_csv_index_label_kwd_arg(memory_leak_check):
+    """tests the index_label keyword argument to to_csv"""
+
+    def impl_none(df):
+        return df.to_csv(None, index_label=False)
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, index_label=False)
+
+    def impl_none2(df):
+        return df.to_csv(None, index_label="LABEL_")
+
+    def impl2(df, f_name):
+        return df.to_csv(f_name, index_label="LABEL_")
+
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
+    check_to_csv_string_output(df, impl_none)
+    check_to_csv_string_output(df, impl_none2)
+    check_CSV_write(impl, df)
+    check_CSV_write(impl2, df)
+
+
+def test_to_csv_quoting_kwd_arg(memory_leak_check):
+    """tests the quoting keyword argument to to_csv"""
+    import csv
+
+    def impl_none(df):
+        return df.to_csv(None, quoting=csv.QUOTE_ALL)
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, quoting=csv.QUOTE_ALL)
+
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
+    check_to_csv_string_output(df, impl_none)
+    check_CSV_write(
+        impl,
+        df,
+    )
+
+
+def test_to_csv_quotechar_kwd_arg(memory_leak_check):
+    """tests the quotechar keyword argument to to_csv"""
+    import csv
+
+    def impl_none(df):
+        return df.to_csv(None, quoting=csv.QUOTE_ALL, quotechar="Q")
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, quoting=csv.QUOTE_ALL, quotechar="X")
+
+    def read_impl(f_name):
+        return pd.read_csv(f_name, quotechar="X")
+
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
+    check_to_csv_string_output(df, impl_none)
+    check_CSV_write(
+        impl,
+        df,
+        read_impl=read_impl,
+    )
+
+
+def test_to_csv_line_terminator_kwd_arg(memory_leak_check):
+    """tests the line_terminator keyword argument to to_csv"""
+
+    def impl_none(df):
+        return df.to_csv(None, line_terminator="__LINE_TERMINATION__")
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, line_terminator="\t")
+
+    def read_impl(f_name):
+        return pd.read_csv(f_name, lineterminator="\t")
+
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
+    check_to_csv_string_output(df, impl_none)
+    check_CSV_write(
+        impl,
+        df,
+        read_impl=read_impl,
+    )
+
+
+def test_to_csv_chunksize_kwd_arg(memory_leak_check):
+    """tests the chunksize keyword argument to to_csv"""
+
+    def impl_none(df):
+        return df.to_csv(None, chunksize=7)
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, chunksize=7)
+
+    df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
+    check_to_csv_string_output(df, impl_none)
+    check_CSV_write(
+        impl,
+        df,
+    )
+
+
+def test_to_csv_date_format_kwd_arg(memory_leak_check):
+    """tests the date_format keyword argument to to_csv."""
+
+    def impl_none(df):
+        return df.to_csv(None, date_format="%a, %b, %Y, %Z, %x")
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, date_format="%W, %z, %f, %S, %x")
+
+    df = pd.DataFrame(
+        {"A": pd.date_range(start="1998-04-24", end="2000-04-29", periods=100)}
+    )
+    check_to_csv_string_output(df, impl_none)
+    check_CSV_write(
+        impl,
+        df,
+    )
+
+
+def test_to_csv_doublequote_escapechar_kwd_args(memory_leak_check):
+    """tests the doublequote and escapechar keyword argument to to_csv.
+    Doublequote and escapechar need to be tested together, as escapechar is
+    the char used to escape when not double quoting.
+    """
+
+    def impl_none(df):
+        return df.to_csv(
+            None, doublequote=False, quotechar="a", sep="-", escapechar="E"
+        )
+
+    def impl(df, f_name):
+        return df.to_csv(
+            f_name, doublequote=False, quotechar="a", sep="-", escapechar="E"
+        )
+
+    def read_impl(f_name):
+        return pd.read_csv(
+            f_name, doublequote=False, quotechar="a", sep="-", escapechar="E"
+        )
+
+    df = pd.DataFrame({"A": ["a - a - a - a"] * 10})
+    check_to_csv_string_output(df, impl_none)
+    check_CSV_write(impl, df, read_impl=read_impl)
+
+
+def test_to_csv_decimal_kwd_arg(memory_leak_check):
+    """tests the decimal keyword argument to to_csv"""
+
+    def impl_none(df):
+        return df.to_csv(None, decimal="_")
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, decimal="_")
+
+    def read_impl(f_name):
+        return pd.read_csv(f_name, decimal="_")
+
+    # This should generate floats with a large number of decimal places
+    df = pd.DataFrame({"A": [x / 7 for x in range(10)]})
+    check_to_csv_string_output(df, impl_none)
+    check_CSV_write(impl, df, read_impl=read_impl)
+
+
 def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
     """read_csv() handling code uses the first column for creating RangeIndex of the
     output dataframe. In cases where the first column array is dead, it should be
@@ -3427,6 +3736,96 @@ def test_read_parquet_read_sanitize_colnames(memory_leak_check):
         return pd.read_parquet(path)
 
     check_func(read_impl, ("bodo/tests/data/sanitization_test.pq",))
+
+
+def check_CSV_write(
+    write_impl,
+    df,
+    pandas_filename="pandas_out.csv",
+    bodo_filename="bodo_out.csv",
+    read_impl=None,
+):
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    # as of right now, only testing on posix, since it doesn't write to distributed file system
+    # TODO: make this work for non posix
+    if os.name != "posix":
+        return
+    if read_impl == None:
+        read_impl = pd.read_csv
+
+    n_pes = bodo.get_size()
+
+    try:
+        # only do the python CSV write on rank 0,
+        # so the different ranks don't clobber each other.
+        if bodo.get_rank() == 0:
+            write_impl(df, pandas_filename)
+
+        # copied from pq read/write section
+        for mode in ["sequential", "1d-distributed", "1d-distributed-varlength"]:
+            try:
+                try:
+                    if mode == "sequential":
+                        bodo_write = bodo.jit(write_impl)
+                        bodo_write(df, bodo_filename)
+                    elif mode == "1d-distributed":
+                        bodo_write = bodo.jit(
+                            write_impl, all_args_distributed_block=True
+                        )
+                        bodo_write(_get_dist_arg(df, False), bodo_filename)
+                    elif mode == "1d-distributed-varlength":
+                        bodo_write = bodo.jit(
+                            write_impl, all_args_distributed_varlength=True
+                        )
+                        bodo_write(_get_dist_arg(df, False, True), bodo_filename)
+                except Exception as e:
+                    # In the case that one rank raises an exception, make sure that all the
+                    # ranks raise an error, so we don't hang in the barrier.
+                    comm.allgather(e)
+                    raise
+
+                # wait until each rank has finished writing
+                bodo.barrier()
+
+                # read both files with pandas
+                df1 = read_impl(pandas_filename)
+                df2 = read_impl(bodo_filename)
+                # read dataframes must be same as original except for dtypes
+                passed = _test_equal_guard(
+                    df1, df2, sort_output=False, check_names=True, check_dtype=False
+                )
+                n_passed = reduce_sum(passed)
+                assert n_passed == n_pes
+            finally:
+                # cleanup the bodo file
+                # TODO: update this if we use this test on non POSIX
+                if bodo.get_rank() == 0:
+                    try:
+                        os.remove(bodo_filename)
+                    except FileNotFoundError:
+                        pass
+    finally:
+        # cleanup the pandas file
+        try:
+            os.remove(pandas_filename)
+        except FileNotFoundError:
+            pass
+
+
+def check_to_csv_string_output(df, impl):
+    """helper function that insures that output of to_csv is correct when returning a string from JIT code"""
+    check_func(impl, (df,), only_seq=True)
+
+    # check for distributed case, the output for each rank is the same as calling
+    # df.to_csv(None) on the distributed dataframe
+    py_out_1d = impl(_get_dist_arg(df))
+    check_func(impl, (df,), only_1D=True, py_output=py_out_1d)
+
+    py_out_1d_vars = impl(_get_dist_arg(df, var_length=True))
+    check_func(impl, (df,), only_1DVar=True, py_output=py_out_1d_vars)
 
 
 @pytest.mark.slow

@@ -717,6 +717,10 @@ Serialization / IO / conversion:
 Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`file_io`.
 
 * :meth:`pandas.DataFrame.to_csv`
+  * ``compression`` argument defaults to ``None`` in JIT code. This is the only supported value of this argument.
+  * ``mode`` argument supports only the default value ``"w"``.
+  * ``errors`` argument supports only the default value ``strict``.
+  * ``storage_options`` argument supports only the default value ``None``.
 * :meth:`pandas.DataFrame.to_json`
 * :meth:`pandas.DataFrame.to_parquet`
 * :meth:`pandas.DataFrame.to_sql`

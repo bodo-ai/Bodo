@@ -12,7 +12,7 @@ import pytest
 
 import bodo
 from bodo.utils.testing import ensure_clean
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, BodoWarning
 
 
 def test_unsupported_error_checking(memory_leak_check):
@@ -420,6 +420,137 @@ def test_csv_skiprows_type(memory_leak_check):
         bodo.jit(impl2)()
     with pytest.raises(BodoError, match="callable not supported yet"):
         bodo.jit(impl3)()
+
+
+def test_to_csv_columns_list_error(memory_leak_check):
+    """checks that we raise an error to force the users to convert the list to a tuple type.
+    see BE-1505.
+    """
+
+    def impl_none(df):
+        return df.to_csv(None, columns=["A", "C"])
+
+    def impl(df, f_name):
+        return df.to_csv(f_name, columns=["A", "C"])
+
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
+
+    with pytest.raises(
+        BodoError,
+        match=r"DataFrame.to_csv\(\): 'columns' argument must not be list type. Please convert to tuple type.",
+    ):
+        bodo.jit(impl)(df, "foo")
+    with pytest.raises(
+        BodoError,
+        match=r"DataFrame.to_csv\(\): 'columns' argument must not be list type. Please convert to tuple type.",
+    ):
+        bodo.jit(impl_none)(df)
+
+
+def test_to_csv_compression_kwd_arg():
+    """checks that the appropriate errors are raised when compression argument to to_csv"""
+    from bodo.tests.test_io import check_CSV_write
+
+    @bodo.jit
+    def impl(df, f_name):
+        return df.to_csv(f_name, compression="zip")
+
+    def impl2(df, f_name):
+        return df.to_csv(f_name, compression=None)
+
+    def impl3(df, f_name):
+        return df.to_csv(f_name)
+
+    def non_compressed_read_impl(f_name):
+        return pd.read_csv(f_name, compression=None)
+
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
+    check_CSV_write(
+        impl2,
+        df,
+        pandas_filename="pandas_out.zip",
+        bodo_filename="bodo_out.zip",
+        read_impl=non_compressed_read_impl,
+    )
+
+    check_CSV_write(
+        impl3,
+        df,
+        pandas_filename="pandas_out.csv",
+        bodo_filename="bodo_out.zip",
+        read_impl=non_compressed_read_impl,
+    )
+
+    with pytest.raises(
+        BodoError,
+        match=r".*DataFrame.to_csv\(\): 'compression' argument supports only None, which is the default in JIT code.*",
+    ):
+        impl(df, "bodo_out.zip")
+
+
+def test_to_csv_unsupported_kwds_error():
+    """checks that the unsupported keywords to to_csv raise an error"""
+    msg1 = (
+        r".*DataFrame.to_csv\(\): mode parameter only supports default value w[\s | .]*"
+    )
+    msg2 = r".*DataFrame.to_csv\(\): encoding parameter only supports default value None[\s | .]*"
+    msg3 = r".*DataFrame.to_csv\(\): errors parameter only supports default value strict[\s | .]*"
+    msg4 = r".*DataFrame.to_csv\(\): storage_options parameter only supports default value None[\s | .]*"
+
+    @bodo.jit
+    def impl1(df, f_name):
+        return df.to_csv(f_name, mode="a")
+
+    @bodo.jit
+    def impl2(df, f_name):
+        return df.to_csv(f_name, encoding="ascii")
+
+    @bodo.jit
+    def impl3(df, f_name):
+        return df.to_csv(f_name, errors="replace")
+
+    @bodo.jit
+    def impl4(df, f_name):
+        return df.to_csv(f_name, storage_options={"anon": True})
+
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
+
+    with pytest.raises(
+        BodoError,
+        match=msg1,
+    ):
+        impl1(df, "foo.csv")
+
+    with pytest.raises(
+        BodoError,
+        match=msg2,
+    ):
+        impl2(df, "foo.csv")
+
+    with pytest.raises(
+        BodoError,
+        match=msg3,
+    ):
+        impl3(df, "foo.csv")
+
+    with pytest.raises(
+        BodoError,
+        match=msg4,
+    ):
+        impl4(df, "foo.csv")
+
+
+def test_to_csv_filepath_warning():
+    """We raise a best effort warning when the user tries to write to a constant filepath that would normally be compressed"""
+
+    @bodo.jit
+    def impl(df):
+        return df.to_csv("foo.zip")
+
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
+    msg = r".*DataFrame.to_csv\(\): 'compression' argument defaults to None in JIT code, which is the only supported value.*"
+    with pytest.warns(BodoWarning, match=msg):
+        impl(df)
 
 
 @pytest.mark.slow
