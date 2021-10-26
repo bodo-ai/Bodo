@@ -990,15 +990,6 @@ class UntypedPass:
         # schema: pd.read_sql(sql, con, index_col=None,
         # coerce_float=True, params=None, parse_dates=None,
         # columns=None, chunksize=None
-        try:
-            import sqlalchemy  # noqa
-        except ImportError:  # pragma: no cover
-            message = (
-                "Using URI string without sqlalchemy installed."
-                " sqlalchemy can be installed by calling"
-                " 'conda install -c conda-forge sqlalchemy'."
-            )
-            raise BodoError(message)
         kws = dict(rhs.kws)
         sql_var = get_call_expr_arg("read_sql", rhs.args, kws, 0, "sql")
         # The sql request has to be constant
@@ -2710,6 +2701,15 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
                     new_colnames.append(x)
             df.columns = new_colnames
         else:
+            try:
+                import sqlalchemy  # noqa
+            except ImportError:  # pragma: no cover
+                message = (
+                    "Using URI string without sqlalchemy installed."
+                    " sqlalchemy can be installed by calling"
+                    " 'conda install -c conda-forge sqlalchemy'."
+                )
+                raise BodoError(message)
             df = pd.read_sql(sql_call, con_const)
         df_type = numba.typeof(df)
         # always convert to nullable type since initial rows of a column could be all
