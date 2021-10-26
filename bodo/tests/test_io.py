@@ -1330,6 +1330,91 @@ def test_read_partitions_two_level():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
+# TODO: Add memory leak check. Seems to have some leak.
+def test_read_partitions_implicit_and_simple():
+    """test reading and filtering partitioned parquet data with multiple levels
+    of partitions and an implicit and"""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            table = pa.table(
+                {
+                    "a": range(10),
+                    "b": np.random.randn(10),
+                    "c": [1, 2, 3, 4, 5] * 2,
+                    "part": ["a"] * 5 + ["b"] * 5,
+                }
+            )
+            pq.write_to_dataset(table, "pq_data", partition_cols=["c", "part"])
+        bodo.barrier()
+
+        def impl1(path, val):
+            df = pd.read_parquet(path)
+            df = df[df["part"] == "a"]
+            df = df[df["c"] == val]
+            return df
+
+        def impl2(path, val):
+            df = pd.read_parquet(path)
+            df = df[df["part"] == "a"]
+            # This function call should prevent lowering the second filter.
+            sum1 = df["a"].sum()
+            df = df[df["c"] == val]
+            sum2 = df["a"].sum()
+            return sum1 + sum2
+
+        # TODO: match Index
+        check_func(impl1, ("pq_data", 3), reset_index=True)
+        # make sure the ParquetReader node has filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+        bodo_func("pq_data", 3)
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+        check_func(impl1, ("pq_data", 2), reset_index=True)
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree("pq_data", ignore_errors=True)
+
+
+@pytest.mark.skip("TODO: Enable when BE-1500 is resolved")
+def test_read_partitions_implicit_and_detailed(memory_leak_check):
+    """test reading and filtering partitioned parquet data with multiple levels
+    of partitions and a complex implicit and"""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            table = pa.table(
+                {
+                    "a": range(20),
+                    "b": ["a", "b", "c", "d"] * 5,
+                    "c": [1, 2, 3, 4, 5] * 4,
+                    "part": ["a"] * 10 + ["b"] * 10,
+                }
+            )
+            pq.write_to_dataset(table, "pq_data", partition_cols=["b", "c", "part"])
+        bodo.barrier()
+
+        def impl1(path, val):
+            df = pd.read_parquet(path)
+            df = df[(df["part"] == "a") | ((df["b"] != "d") & (df["c"] != 4))]
+            df = df[((df["b"] == "a") & (df["part"] == "b")) | (df["c"] == val)]
+            return df
+
+        # TODO: match Index
+        check_func(impl1, ("pq_data", 3), reset_index=True)
+        # make sure the ParquetReader node has filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+        bodo_func("pq_data", 3)
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+        bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree("pq_data", ignore_errors=True)
+
+
 def test_read_partitions_datetime():
     """test reading and filtering partitioned parquet data for datetime data"""
     import pyarrow as pa
