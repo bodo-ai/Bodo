@@ -466,6 +466,18 @@ class UntypedPass:
         )
         self._check_non_filter_df_use(df_var.name, assign)
         self._reorder_filter_nodes(read_node, index_def, df_var, filters)
+        old_filters = read_node.filters
+        # If there are existing filters then we need to merge them together because this is
+        # an implicit AND. We merge by distributed the AND over ORs
+        # (A or B) AND (C or D) -> AC or AD or BC or BD
+        # See test_read_partitions_implicit_and_detailed for an example usage.
+        if old_filters is not None:
+            new_filters = []
+            for old_or_cond in old_filters:
+                for new_or_cond in filters:
+                    new_filters.append(old_or_cond + new_or_cond)
+            filters = new_filters
+
         # set ParquetReader/SQLReader node filters (no exception was raise until this end point
         # so filters are valid)
         read_node.filters = filters
@@ -490,15 +502,15 @@ class UntypedPass:
                     break
                 require(all(v.name != df_varname for v in stmt.list_vars()))
 
-    def _reorder_filter_nodes(self, read_pq_node, index_def, df_var, filters):
-        """reorder nodes that are used for Parquet partition filtering to be before the
-        ParquetReader node (to be accessible when ParquetReader is run).
+    def _reorder_filter_nodes(self, read_node, index_def, df_var, filters):
+        """reorder nodes that are used for Parquet/SQL partition filtering to be before the
+        Reader node (to be accessible when the Reader is run).
         Throws GuardException if not possible.
         """
         # e.g. [[("a", "0", ir.Var("val"))]] -> {"val"}
         filter_vars = {v[2].name for predicate_list in filters for v in predicate_list}
         # data array variables should not be used in filter expressions directly
-        non_filter_vars = {v.name for v in read_pq_node.list_vars()}
+        non_filter_vars = {v.name for v in read_node.list_vars()}
 
         # find all variables that are potentially used in filter expressions after the
         # reader node
@@ -529,7 +541,7 @@ class UntypedPass:
             ):
                 continue
             # avoid nodes before the reader
-            if stmt is read_pq_node:
+            if stmt is read_node:
                 break
             stmt_vars = {v.name for v in stmt.list_vars()}
 
