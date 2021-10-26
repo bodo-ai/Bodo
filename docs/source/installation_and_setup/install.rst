@@ -8,7 +8,7 @@ Bodo can be installed as a Python package using the ``conda`` command (See :ref:
 We recommend creating a ``conda`` environment and installing
 Bodo and its dependencies in it as shown below::
 
-    conda create -n Bodo python
+    conda create -n Bodo python=3.9
     conda activate Bodo
     conda install bodo -c bodo.ai -c conda-forge
 
