@@ -4163,10 +4163,11 @@ def remove_dead_parfor(
     def trim_empty_parfor_branches(parfor):
         """
         Iterate through the parfor and replaces branches where the true
-        and false labels have identical bodies and replaces them with a
-        jump to one of the blocks. This is only implemented if both
-        the truebr and falsebr are a single jump to the same location,
-        which seems to be the most relevant use case. For example:
+        and false labels lead to the same location and replaces them with a
+        jump to one of the blocks. This is only implemented for only 2 cases:
+
+        1. If both the truebr and falsebr are a single jump to the same
+           location. For example:
 
             branch $60pred.106, 73, 77               ['$60pred.106']
         label 73:
@@ -4181,6 +4182,23 @@ def remove_dead_parfor(
             jump 125                                 []
         label 77:
             jump 125                                 []
+
+        2. If one of the blocks is a single jump that jumps to the
+           other block. For example:
+
+            branch $108pred.467, 384, 404            ['$108pred.467']
+        label 384:
+            jump 404                                 []
+        label 404:
+            return $48return_value.21                ['$48return_value.21']
+
+        is replaced with
+
+            jump 404                                 []
+        label 384:
+            jump 404                                 []
+        label 404:
+            return $48return_value.21                ['$48return_value.21']
 
         """
         changed = False
@@ -4207,6 +4225,28 @@ def remove_dead_parfor(
                                 true_stmt.target, end_stmt.loc
                             )
                             changed = True
+                    # If either block is just a jump to the other block we can remove the branch
+                    elif len(blocks[end_stmt.truebr].body) == 1:
+                        true_stmt = blocks[end_stmt.truebr].body[0]
+                        if (
+                            isinstance(true_stmt, ir.Jump)
+                            and true_stmt.target == end_stmt.falsebr
+                        ):
+                            parfor.loop_body[label].body[-1] = ir.Jump(
+                                true_stmt.target, end_stmt.loc
+                            )
+                            changed = True
+                    elif len(blocks[end_stmt.falsebr].body) == 1:
+                        false_stmt = blocks[end_stmt.falsebr].body[0]
+                        if (
+                            isinstance(false_stmt, ir.Jump)
+                            and false_stmt.target == end_stmt.truebr
+                        ):
+                            parfor.loop_body[label].body[-1] = ir.Jump(
+                                false_stmt.target, end_stmt.loc
+                            )
+                            changed = True
+
         return changed
 
     # End Bodo change

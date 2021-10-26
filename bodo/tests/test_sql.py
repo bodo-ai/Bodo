@@ -364,16 +364,19 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_integer)
     bodo_func(query, conn, int_val)
     _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    # TODO: Remove l_orderkey and l_linenumber when setna parfor dce PR merges
-    _check_connector_columns(bodo_func, ["l_suppkey", "l_orderkey", "l_linenumber"])
+    _check_connector_columns(
+        bodo_func,
+        [
+            "l_suppkey",
+        ],
+    )
 
     str_val = "O"
     check_func(impl_string, (query, conn, str_val), check_dtype=False, reset_index=True)
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_string)
     bodo_func(query, conn, str_val)
     _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    # TODO: Remove l_shipmode and l_linestatus when setna parfor dce PR merges
-    _check_connector_columns(bodo_func, ["l_suppkey", "l_shipmode", "l_linestatus"])
+    _check_connector_columns(bodo_func, ["l_suppkey"])
 
     date_val = datetime.date(1996, 4, 12)
     check_func(impl_date, (query, conn, date_val), check_dtype=False, reset_index=True)
@@ -400,10 +403,7 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_mixed)
     bodo_func(query, conn, int_val, str_val, date_val, ts_val)
     _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    # TODO: Remove l_linenumber, l_shipdate, and l_linestatus when setna parfor dce PR merges
-    _check_connector_columns(
-        bodo_func, ["l_suppkey", "l_linenumber", "l_shipdate", "l_linestatus"]
-    )
+    _check_connector_columns(bodo_func, ["l_suppkey"])
 
 
 def _check_connector_columns(bodo_func, col_names):
