@@ -20,6 +20,7 @@ from bodo.tests.utils import (
     DeadcodeTestPipeline,
     DistTestPipeline,
     SeriesOptTestPipeline,
+    _check_for_io_reader_filters,
     _get_dist_arg,
     _test_equal_guard,
     check_func,
@@ -35,7 +36,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.testing import ensure_clean
 from bodo.utils.typing import BodoError
-from bodo.utils.utils import is_assign, is_call_assign, is_expr
+from bodo.utils.utils import is_call_assign
 
 kde_file = os.path.join("bodo", "tests", "data", "kde.parquet")
 
@@ -938,13 +939,13 @@ def test_read_partitions():
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl2)
         bodo_func("pq_data", "a")
-        _check_for_pq_reader_filters(bodo_func)
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         check_func(impl3, ("pq_data", "a"))
         check_func(impl4, ("pq_data", "a"))
         check_func(impl5, ("pq_data", "a"))
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl5)
         bodo_func("pq_data", "a")
-        _check_for_pq_reader_filters(bodo_func)
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
         bodo.parquet_validate_schema = True
@@ -979,7 +980,7 @@ def test_read_partitions2():
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", 3)
-        _check_for_pq_reader_filters(bodo_func)
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
@@ -1013,7 +1014,7 @@ def test_read_partitions_two_level():
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", 3)
-        _check_for_pq_reader_filters(bodo_func)
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
@@ -1056,7 +1057,7 @@ def test_read_partitions_datetime():
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", "2018-01-02", "2019-10-02")
-        _check_for_pq_reader_filters(bodo_func)
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
@@ -1088,27 +1089,11 @@ def test_read_partitions_large():
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", "2018-01-02", "2019-10-02")
-        _check_for_pq_reader_filters(bodo_func)
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
-
-
-def _check_for_pq_reader_filters(bodo_func):
-    """make sure ParquetReader node has filters set, and the filtering code in the IR
-    is removed
-    """
-    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    pq_read_found = False
-    for stmt in fir.blocks[0].body:
-        if isinstance(stmt, bodo.ir.parquet_ext.ParquetReader):
-            assert stmt.filters is not None
-            pq_read_found = True
-        # filtering code has getitem which should be removed
-        assert not (is_assign(stmt) and is_expr(stmt.value, "getitem"))
-
-    assert pq_read_found
 
 
 def test_read_pq_head_only(datapath):

@@ -98,7 +98,7 @@ def visit_vars_connector(node, callback, cbdata):
         node.nrows = visit_vars_inner(node.nrows, callback, cbdata)
         node.skiprows = visit_vars_inner(node.skiprows, callback, cbdata)
 
-    if node.connector_typ == "parquet" and node.filters:
+    if node.connector_typ in ("parquet", "sql") and node.filters:
         for predicate in node.filters:
             for i in range(len(predicate)):
                 val = predicate[i]
@@ -128,7 +128,7 @@ def connector_usedefs(node, use_set=None, def_set=None):
         if isinstance(node.skiprows, numba.core.ir.Var):
             use_set.add(node.skiprows.name)
 
-    if node.connector_typ == "parquet" and node.filters:
+    if node.connector_typ in ("parquet", "sql") and node.filters:
         use_set.update(
             {v[2].name for predicate_list in node.filters for v in predicate_list}
         )
@@ -157,7 +157,7 @@ def apply_copies_connector(
     node.out_vars = new_out_vars
     if node.connector_typ in ("csv", "parquet", "json"):
         node.file_name = replace_vars_inner(node.file_name, var_dict)
-    if node.connector_typ == "parquet" and node.filters:
+    if node.connector_typ in ("parquet", "sql") and node.filters:
         for predicate in node.filters:
             for i in range(len(predicate)):
                 val = predicate[i]
@@ -176,6 +176,28 @@ def build_connector_definitions(node, definitions=None):
         definitions[col_var.name].append(node)
 
     return definitions
+
+
+def generate_filter_map(filters):
+    """
+    Function used by connectors with filter pushdown. Givens filters, which are
+    either a list of filters in arrow format or None, it returns a dictionary
+    mapping ir.Var.name -> runtime_name and a list of unique ir.Vars.
+    """
+    if filters:
+        filter_vars = []
+        # handle predicate pushdown variables that need to be passed to C++/SQL
+        pred_vars = [v[2] for predicate_list in filters for v in predicate_list]
+        # variables may be repeated due to distribution of Or over And in predicates, so
+        # remove duplicates. Cannot use ir.Var objects in set directly.
+        var_set = set()
+        for var in pred_vars:
+            if var.name not in var_set:
+                filter_vars.append(var)
+            var_set.add(var.name)
+        return {v.name: f"f{i}" for i, v in enumerate(filter_vars)}, filter_vars
+    else:
+        return {}, []
 
 
 class StreamReaderType(types.Opaque):
