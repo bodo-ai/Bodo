@@ -4028,3 +4028,298 @@ numba.core.typing.templates._OverloadFunctionTemplate._get_impl = (
 
 
 #########   End Changes for Caching  #########
+
+#########   Start changes to improve parfor dead code elimination #########
+def remove_dead_parfor(
+    parfor, lives, lives_n_aliases, arg_aliases, alias_map, func_ir, typemap
+):
+    """remove dead code inside parfor including get/sets.
+
+    Bodo Changes:
+        - Remove setna if the result is unused because there are no cross-iteration dependencies
+        - Refactor dead code elimination to convert branches of identical blocks to a jump, to enable
+            removing more code such as branch conditions that are otherwise unused.
+    """
+    from numba.core.analysis import (
+        compute_cfg_from_blocks,
+        compute_live_map,
+        compute_use_defs,
+    )
+    from numba.core.ir_utils import find_topo_order
+    from numba.parfors.parfor import (
+        _add_liveness_return_block,
+        _update_parfor_get_setitems,
+        dummy_return_in_loop_body,
+        get_index_var,
+        remove_dead_parfor_recursive,
+        simplify_parfor_body_CFG,
+    )
+
+    with dummy_return_in_loop_body(parfor.loop_body):
+        labels = find_topo_order(parfor.loop_body)
+
+    # get/setitem replacement should ideally use dataflow to propagate setitem
+    # saved values, but for simplicity we handle the common case of propagating
+    # setitems in the first block (which is dominant) if the array is not
+    # potentially changed in any way
+    first_label = labels[0]
+    first_block_saved_values = {}
+    _update_parfor_get_setitems(
+        parfor.loop_body[first_label].body,
+        parfor.index_var,
+        alias_map,
+        first_block_saved_values,
+        lives_n_aliases,
+    )
+
+    # remove saved first block setitems if array potentially changed later
+    saved_arrs = set(first_block_saved_values.keys())
+    for l in labels:
+        if l == first_label:
+            continue
+        for stmt in parfor.loop_body[l].body:
+            if (
+                isinstance(stmt, ir.Assign)
+                and isinstance(stmt.value, ir.Expr)
+                and stmt.value.op == "getitem"
+                and stmt.value.index.name == parfor.index_var.name
+            ):
+                continue
+            varnames = set(v.name for v in stmt.list_vars())
+            rm_arrs = varnames & saved_arrs
+            for a in rm_arrs:
+                first_block_saved_values.pop(a, None)
+
+    # replace getitems with available value
+    # e.g. A[i] = v; ... s = A[i]  ->  s = v
+    for l in labels:
+        if l == first_label:
+            continue
+        block = parfor.loop_body[l]
+        saved_values = first_block_saved_values.copy()
+        _update_parfor_get_setitems(
+            block.body, parfor.index_var, alias_map, saved_values, lives_n_aliases
+        )
+
+    # after getitem replacement, remove extra setitems
+    blocks = parfor.loop_body.copy()  # shallow copy is enough
+    last_label = max(blocks.keys())
+    return_label, tuple_var = _add_liveness_return_block(
+        blocks, lives_n_aliases, typemap
+    )
+    # jump to return label
+    jump = ir.Jump(return_label, ir.Loc("parfors_dummy", -1))
+    blocks[last_label].body.append(jump)
+    cfg = compute_cfg_from_blocks(blocks)
+    usedefs = compute_use_defs(blocks)
+    live_map = compute_live_map(cfg, blocks, usedefs.usemap, usedefs.defmap)
+    alias_set = set(alias_map.keys())
+
+    for label, block in blocks.items():
+        new_body = []
+        in_lives = {v.name for v in block.terminator.list_vars()}
+        # find live variables at the end of block
+        for out_blk, _data in cfg.successors(label):
+            in_lives |= live_map[out_blk]
+        for stmt in reversed(block.body):
+            # aliases of lives are also live for setitems
+            alias_lives = in_lives & alias_set
+            for v in alias_lives:
+                in_lives |= alias_map[v]
+            if (
+                isinstance(stmt, (ir.StaticSetItem, ir.SetItem))
+                and get_index_var(stmt).name == parfor.index_var.name
+                and stmt.target.name not in in_lives
+                and stmt.target.name not in arg_aliases
+            ):
+                continue
+            # Bodo Change:
+            # If a statement is a function call that normally can be removed only if
+            # arg is no longer live, but no cross iteration side effects,
+            # it can be safely removed if it is only live inside the loop.
+            elif (
+                isinstance(stmt, ir.Assign)
+                and isinstance(stmt.value, ir.Expr)
+                and stmt.value.op == "call"
+            ):
+                fdef = guard(find_callname, func_ir, stmt.value)
+                # So far we only support setna
+                if (
+                    fdef == ("setna", "bodo.libs.array_kernels")
+                    and stmt.value.args[0].name not in in_lives
+                    and stmt.value.args[0].name not in arg_aliases
+                ):
+                    continue
+
+            in_lives |= {v.name for v in stmt.list_vars()}
+            new_body.append(stmt)
+        new_body.reverse()
+        block.body = new_body
+
+    typemap.pop(tuple_var.name)  # remove dummy tuple type
+    blocks[last_label].body.pop()  # remove jump
+
+    # Bodo Change: Helper function to replace branches with jump if blocks are empty
+    def trim_empty_parfor_branches(parfor):
+        """
+        Iterate through the parfor and replaces branches where the true
+        and false labels have identical bodies and replaces them with a
+        jump to one of the blocks. This is only implemented if both
+        the truebr and falsebr are a single jump to the same location,
+        which seems to be the most relevant use case. For example:
+
+            branch $60pred.106, 73, 77               ['$60pred.106']
+        label 73:
+            jump 125                                 []
+        label 77:
+            jump 125                                 []
+
+        is replaced with
+
+            jump 125                                 []
+        label 73:
+            jump 125                                 []
+        label 77:
+            jump 125                                 []
+
+        """
+        changed = False
+        blocks = parfor.loop_body.copy()
+        for label, block in blocks.items():
+            # Only look at the last statment in a block
+            if len(block.body):
+                end_stmt = block.body[-1]
+                if isinstance(end_stmt, ir.Branch):
+                    # If true/false conditions jump to blocks with a single jump to the same location,
+                    # we can replace the branch with that instruction directly.
+                    if (
+                        len(blocks[end_stmt.truebr].body) == 1
+                        and len(blocks[end_stmt.falsebr].body) == 1
+                    ):
+                        true_stmt = blocks[end_stmt.truebr].body[0]
+                        false_stmt = blocks[end_stmt.falsebr].body[0]
+                        if (
+                            isinstance(true_stmt, ir.Jump)
+                            and isinstance(false_stmt, ir.Jump)
+                            and true_stmt.target == false_stmt.target
+                        ):
+                            parfor.loop_body[label].body[-1] = ir.Jump(
+                                true_stmt.target, end_stmt.loc
+                            )
+                            changed = True
+        return changed
+
+    # End Bodo change
+
+    # Bodo Change: Continue doing dead code elimination so long as the control flow
+    # changes + remove unused blocks.
+    changed = True
+    while changed:
+        """
+        Process parfor body recursively.
+        Note that this is the only place in this function that uses the
+        argument lives instead of lives_n_aliases.  The former does not
+        include the aliases of live variables but only the live variable
+        names themselves.  See a comment in this function for how that
+        is used.
+        """
+        remove_dead_parfor_recursive(
+            parfor, lives, arg_aliases, alias_map, func_ir, typemap
+        )
+
+        # Simplify the CFG to squash any unused blocks .
+        simplify_parfor_body_CFG(func_ir.blocks)
+
+        # Prune blocks that are empty to allow eliminating parfor
+        # branches that go to empty blocks. Its only possible to
+        # do more dead code elimination if the control flow has
+        # changed.
+        changed = trim_empty_parfor_branches(parfor)
+
+    # End Bodo change
+
+    # remove parfor if empty
+    is_empty = len(parfor.init_block.body) == 0
+    for block in parfor.loop_body.values():
+        is_empty &= len(block.body) == 0
+    if is_empty:
+        return None
+    return parfor
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.parfors.parfor.remove_dead_parfor)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "1c9b008a7ead13e988e1efe67618d8f87f0b9f3d092cc2cd6bfcd806b1fdb859"
+    ):
+        warnings.warn("remove_dead_parfor has changed")
+
+
+numba.parfors.parfor.remove_dead_parfor = remove_dead_parfor
+numba.core.ir_utils.remove_dead_extensions[
+    numba.parfors.parfor.Parfor
+] = remove_dead_parfor
+
+
+def simplify_parfor_body_CFG(blocks):
+    """simplify CFG of body loops in parfors
+    Bodo Change: Eliminate dead branches and an extra constant
+    (since it won't exist in the type map).
+    """
+    from numba.core.analysis import compute_cfg_from_blocks
+    from numba.core.ir_utils import simplify_CFG
+    from numba.parfors.parfor import Parfor
+
+    n_parfors = 0
+    for block in blocks.values():
+        for stmt in block.body:
+            if isinstance(stmt, Parfor):
+                n_parfors += 1
+                parfor = stmt
+                # add dummy return to enable CFG creation
+                # can't use dummy_return_in_loop_body since body changes
+                last_block = parfor.loop_body[max(parfor.loop_body.keys())]
+                scope = last_block.scope
+                loc = ir.Loc("parfors_dummy", -1)
+                const = ir.Var(scope, mk_unique_var("$const"), loc)
+                last_block.body.append(ir.Assign(ir.Const(0, loc), const, loc))
+                last_block.body.append(ir.Return(const, loc))
+                # Bodo change:
+                # Eliminate any dead blocks as they will break the cfg. Normally
+                # we won't encoutner dead blocks, but when we change the control
+                # flow we might make a block unreachable.
+                cfg = compute_cfg_from_blocks(parfor.loop_body)
+                for dead in cfg.dead_nodes():
+                    del parfor.loop_body[dead]
+                # End Bodo change
+
+                parfor.loop_body = simplify_CFG(parfor.loop_body)
+                # The constant and return value  we added
+                # above will be located in the last block.
+                # We should remove both here.
+                last_block = parfor.loop_body[max(parfor.loop_body.keys())]
+                # Delete the return
+                last_block.body.pop()
+                # Bodo Change:
+                # Delete the constant created above.
+                last_block.body.pop()
+                # End Bodo change
+                # call on body recursively
+                simplify_parfor_body_CFG(parfor.loop_body)
+    return n_parfors
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.parfors.parfor.simplify_parfor_body_CFG)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "437ae96a5e8ec64a2b69a4f23ba8402a1d170262a5400aa0aa7bfe59e03bf726"
+    ):
+        warnings.warn("simplify_parfor_body_CFG has changed")
+
+
+numba.parfors.parfor.simplify_parfor_body_CFG = simplify_parfor_body_CFG
+
+
+#########   End changes to improve parfor dead code elimination   #########
