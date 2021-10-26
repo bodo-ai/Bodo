@@ -249,32 +249,23 @@ def pq_distributed_run(
     """
 
     n_cols = len(pq_node.out_vars)
-    filter_vars = []
     extra_args = ""
     filter_str = "None"
-    if pq_node.filters:
-        # handle predicate pushdown variables that need to be passed to C++
-        pred_vars = [v[2] for predicate_list in pq_node.filters for v in predicate_list]
-        # variables may be repeated due to distribution of Or over And in predicates, so
-        # remove duplicates. Cannot use ir.Var objects in set directly.
-        var_set = set()
-        for var in pred_vars:
-            if var.name not in var_set:
-                filter_vars.append(var)
-            var_set.add(var.name)
-        vararg_map = {v.name: f"f{i}" for i, v in enumerate(filter_vars)}
+    filter_map, filter_vars = bodo.ir.connector.generate_filter_map(pq_node.filters)
+    extra_args = ", ".join(filter_map.values())
+    if filter_map:
         filter_str = "[{}]".format(
             ", ".join(
                 "[{}]".format(
                     ", ".join(
-                        f"('{v[0]}', '{v[1]}', {vararg_map[v[2].name]})"
+                        f"('{v[0]}', '{v[1]}', {filter_map[v[2].name]})"
                         for v in predicate
                     )
                 )
                 for predicate in pq_node.filters
             )
         )
-        extra_args = ", ".join(vararg_map.values())
+        extra_args = ", ".join(filter_map.values())
 
     # get column variables
     arg_names = ", ".join(f"out{i}" for i in range(n_cols))
@@ -827,7 +818,11 @@ def get_parquet_dataset(
         if get_row_counts:
             dataset._bodo_total_rows = comm.allreduce(total_rows_chunk, op=MPI.SUM)
             total_num_row_groups = comm.allreduce(total_row_groups_chunk, op=MPI.SUM)
-            if is_parallel and bodo.get_rank() == 0 and total_num_row_groups < bodo.get_size():
+            if (
+                is_parallel
+                and bodo.get_rank() == 0
+                and total_num_row_groups < bodo.get_size()
+            ):
                 warnings.warn(
                     BodoWarning(
                         f"""Total number of row groups in parquet dataset {fpath} ({total_num_row_groups}) is too small for effective IO parallelization.
@@ -1080,9 +1075,7 @@ from numba.core import cgutils
 if bodo.utils.utils.has_pyarrow():
     from bodo.io import arrow_cpp
 
-    ll.add_symbol(
-        "pq_read", arrow_cpp.pq_read
-    )
+    ll.add_symbol("pq_read", arrow_cpp.pq_read)
     ll.add_symbol("pq_write", arrow_cpp.pq_write)
     ll.add_symbol("pq_write_partitioned", arrow_cpp.pq_write_partitioned)
 

@@ -21,7 +21,12 @@ from numba.core.untyped_passes import PreserveIR
 
 import bodo
 from bodo.utils.typing import BodoWarning, dtype_to_array_type
-from bodo.utils.utils import is_distributable_tuple_typ, is_distributable_typ
+from bodo.utils.utils import (
+    is_assign,
+    is_distributable_tuple_typ,
+    is_distributable_typ,
+    is_expr,
+)
 
 
 class InputDist(Enum):
@@ -1591,3 +1596,19 @@ def check_caching(
         assert bodo_func._cache_misses[sig] == 1
 
     return bodo_output
+
+
+def _check_for_io_reader_filters(bodo_func, node_class):
+    """make sure a Connector node has filters set, and the filtering code in the IR
+    is removed
+    """
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    read_found = False
+    for stmt in fir.blocks[0].body:
+        if isinstance(stmt, node_class):
+            assert stmt.filters is not None
+            read_found = True
+        # filtering code has getitem which should be removed
+        assert not (is_assign(stmt) and is_expr(stmt.value, "getitem"))
+
+    assert read_found

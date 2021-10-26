@@ -39,6 +39,8 @@ class SqlReader(ir.Stmt):
         df_colnames,
         out_vars,
         out_types,
+        converted_colnames,
+        db_type,
         loc,
     ):
         self.connector_typ = "sql"
@@ -48,8 +50,16 @@ class SqlReader(ir.Stmt):
         self.df_colnames = df_colnames
         self.out_vars = out_vars
         self.out_types = out_types
+        # Any columns that had their output name converted by the actual
+        # DB result. This is used by Snowflake because we update the SQL query
+        # to perform dce and we must specify the exact column name (because we quote
+        # escape the names).
+        self.converted_colnames = converted_colnames
         self.loc = loc
         self.limit = req_limit(sql_request)
+        self.db_type = db_type
+        # Support for filter pushdown. Currently only used with snowflake.
+        self.filters = None
 
     def __repr__(self):  # pragma: no cover
         return "{} = ReadSql(sql_request={}, connection={}, col_names={}, types={}, vars={}, limit={})".format(
@@ -102,7 +112,31 @@ def sql_distributed_run(
 
     n_cols = len(sql_node.out_vars)
     arg_names = ", ".join("arr" + str(i) for i in range(n_cols))
-    func_text = "def sql_impl(sql_request, conn):\n"
+    filter_map, filter_vars = bodo.ir.connector.generate_filter_map(sql_node.filters)
+    extra_args = ", ".join(filter_map.values())
+    func_text = f"def sql_impl(sql_request, conn, {extra_args}):\n"
+    if sql_node.filters:
+        # If a predicate should be and together, they will be multiple tuples within the same list.
+        # If predicates should be or together, they will be within separate lists.
+        # i.e.
+        # [[('l_linestatus', '<>', var1), ('l_shipmode', '=', var2))]]
+        # -> -> (l_linestatus <> var1) AND (l_shipmode = var2)
+        # [[('l_linestatus', '<>', var1)], [('l_shipmode', '=', var2))]]
+        # -> (l_linestatus <> var1) OR (l_shipmode = var2)
+        # [[('l_linestatus', '<>', var1)], [('l_shipmode', '=', var2))]]
+        or_conds = []
+        for and_list in sql_node.filters:
+            and_conds = [
+                " ".join(["(", p[0], p[1], "{" + filter_map[p[2].name] + "}", ")"])
+                for p in and_list
+            ]
+            or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")
+        where_cond = " WHERE " + " OR ".join(or_conds)
+        for i, arg in enumerate(filter_map.values()):
+            func_text += f"    {arg} = get_sql_literal({arg})\n"
+        # Append filters via a format string. This format string is created and populated
+        # at runtime because filter variables aren't necessarily constants (but they are scalars).
+        func_text += f'    sql_request = f"{{sql_request}} {where_cond}"\n'
     func_text += "    ({},) = _sql_reader_py(sql_request, conn)\n".format(arg_names)
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -113,32 +147,112 @@ def sql_distributed_run(
         sql_node.out_types,
         typingctx,
         targetctx,
-        sql_node.connection.split(":")[0],  # capture db type from connection string
+        sql_node.db_type,
         sql_node.limit,
         parallel,
     )
 
     f_block = compile_to_numba_ir(
         sql_impl,
-        {"_sql_reader_py": sql_reader_py, "bcast_scalar": bcast_scalar, "bcast": bcast},
+        {
+            "_sql_reader_py": sql_reader_py,
+            "bcast_scalar": bcast_scalar,
+            "bcast": bcast,
+            "get_sql_literal": _get_snowflake_sql_literal,
+        },
         typingctx=typingctx,
         targetctx=targetctx,
-        arg_typs=(string_type, string_type),
+        arg_typs=(string_type, string_type)
+        + tuple(typemap[v.name] for v in filter_vars),
         typemap=typemap,
         calltypes=calltypes,
     ).blocks.popitem()[1]
+
+    # Update the SQL request to remove any unused columns. This is both
+    # an optimization (the SQL engine loads less data) and is needed for
+    # correctness. See test_sql_snowflake_single_column
+    #
+    # Extra consideration needs to be taken for unaliased functions. For example
+    # count(*) may produce a column named count(*). If this is rerun in the query,
+    # an invalid query will result. To resolve this, we will wrap column names in quotes.
+    # In Snowflake this makes the name case sensitive, so we avoid this by undoing any
+    # conversions in the output as needed.
+    if sql_node.db_type == "snowflake":
+        # Snowflake needs to convert all lower case strings back to uppercase
+        used_colnames = [
+            x.upper() if x in sql_node.converted_colnames else x
+            for x in sql_node.df_colnames
+        ]
+        col_str = ", ".join([f'"{x}"' for x in used_colnames])
+    else:
+        # TODO: Determine safe quoting options for other schemas
+        # TODO: Handle possible functions (i.e. count(*)). This is already
+        # an issue in the parallel implementation.
+        # https://bodo.atlassian.net/browse/BE-1502
+        col_str = ", ".join(sql_node.df_colnames)
+
+    updated_sql_request = (
+        "SELECT " + col_str + " FROM (" + sql_node.sql_request + ") as TEMP"
+    )
     replace_arg_nodes(
         f_block,
         [
-            ir.Const(sql_node.sql_request, sql_node.loc),
+            ir.Const(updated_sql_request, sql_node.loc),
             ir.Const(sql_node.connection, sql_node.loc),
-        ],
+        ]
+        + filter_vars,
     )
     nodes = f_block.body[:-3]
     for i in range(len(sql_node.out_vars)):
         nodes[-len(sql_node.out_vars) + i].target = sql_node.out_vars[i]
 
     return nodes
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def _get_snowflake_sql_literal(filter_value):
+    """
+    Given a filter_value, which is python variable,
+    returns a string representation of the filter value
+    that could be used in a Snowflake SQL query.
+    """
+    filter_type = types.unliteral(filter_value)
+    if filter_type == types.unicode_type:
+        # Strings require double $$ to avoid escape characters
+        # https://docs.snowflake.com/en/sql-reference/data-types-text.html#dollar-quoted-string-constants
+        # TODO: Handle strings with $$ inside
+        return lambda filter_value: f"$${filter_value}$$"  # pragma: no cover
+    elif (
+        isinstance(filter_type, (types.Integer, types.Float))
+        or filter_value == types.bool_
+    ):
+        # Numeric and boolean values can just return the string representation
+        return lambda filter_value: str(filter_value)  # pragma: no cover
+    elif filter_type == bodo.pd_timestamp_type:
+        # Timestamp needs to be converted to a timestamp literal
+        def impl(filter_value):  # pragma: no cover
+            nanosecond = filter_value.nanosecond
+            nanosecond_prepend = ""
+            if nanosecond < 10:
+                nanosecond_prepend = "00"
+            elif nanosecond < 100:
+                nanosecond_prepend = "0"
+            # TODO: Refactor once strftime support nanoseconds
+            return f"timestamp '{filter_value.strftime('%Y-%m-%d %H:%M:%S.%f')}{nanosecond_prepend}{nanosecond}'"  # pragma: no cover
+
+        return impl
+    elif filter_type == bodo.datetime_date_type:
+        # datetime.date needs to be converted to a date literal
+        # Just return the string wrapped in quotes.
+        # https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#date
+        return (
+            lambda filter_value: f"date '{filter_value.strftime('%Y-%m-%d')}'"
+        )  # pragma: no cover
+    else:
+        raise BodoError(
+            f"pd.read_sql(): Internal error, unsupported type {filter_type} used in filter pushdown."
+        )
+    # TODO: Support more types (i.e. Interval, datetime64, datetime.datetime)
 
 
 numba.parfors.array_analysis.array_analysis_extensions[
@@ -313,6 +427,8 @@ def _gen_sql_reader_py(
                     func_text += "  nb_row = bcast_scalar(nb_row)\n"
                 func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
                 func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
+                # TODO: Determine how to escape column names in quotes in case we have columns like count(*)
+                # https://bodo.atlassian.net/browse/BE-1502
                 func_text += f"    sql_cons = 'select {', '.join(col_names)} from (' + sql_request + ') x LIMIT ' + str(limit) + ' OFFSET ' + str(offset)\n"
                 func_text += "    df_ret = pd.read_sql(sql_cons, conn)\n"
             else:

@@ -10,6 +10,7 @@ import operator
 import datetime
 import pandas as pd
 import numpy as np
+from urllib.parse import urlparse
 
 import numba
 from numba.core import ir, ir_utils, types
@@ -422,19 +423,33 @@ class UntypedPass:
         return [assign]
 
     def _try_filter_pushdown(self, assign, value_def, index_def):
-        """detect filter pushdown and add filters to ParquetReader IR node if possible.
+        """detect filter pushdown and add filters to ParquetReader or SQLReader IR nodes if possible.
         Throws GuardException if not possible.
         """
         # avoid empty dataframe
         require(len(value_def.args) > 0)
         data_def = get_definition(self.func_ir, value_def.args[0])
         assert is_expr(data_def, "build_tuple"), "invalid data tuple in init_dataframe"
-        read_pq_node = get_definition(self.func_ir, data_def.items[0])
-        require(isinstance(read_pq_node, bodo.ir.parquet_ext.ParquetReader))
+        read_node = get_definition(self.func_ir, data_def.items[0])
         require(
-            all(get_definition(self.func_ir, v) == read_pq_node for v in data_def.items)
+            isinstance(
+                read_node,
+                (bodo.ir.parquet_ext.ParquetReader, bodo.ir.sql_ext.SqlReader),
+            )
         )
-        require(read_pq_node.partition_names)
+        require(
+            all(get_definition(self.func_ir, v) == read_node for v in data_def.items)
+        )
+        if isinstance(read_node, bodo.ir.parquet_ext.ParquetReader):
+            require(read_node.partition_names)
+            partition_names = read_node.partition_names
+        else:
+            # Filter pushdown is only supported for snowflake right now.
+            require(read_node.db_type == "snowflake")
+            # We don't know the partition columns so let any column be used
+            # in the partition. All columns should also reduce the amount of data
+            # loaded from the network as well.
+            partition_names = read_node.df_colnames
 
         # make sure all filters have the right form
         lhs_def = get_definition(self.func_ir, index_def.lhs)
@@ -442,16 +457,18 @@ class UntypedPass:
         df_var = assign.value.value
         filters = self._get_partition_filters(
             index_def,
-            read_pq_node.partition_names,
+            partition_names,
             df_var,
             lhs_def,
             rhs_def,
+            # SQL generates different operators than pyarrow
+            isinstance(read_node, bodo.ir.sql_ext.SqlReader),
         )
         self._check_non_filter_df_use(df_var.name, assign)
-        self._reorder_filter_nodes(read_pq_node, index_def, df_var, filters)
-        # set ParquetReader node filters (no exception was raise until this end point
+        self._reorder_filter_nodes(read_node, index_def, df_var, filters)
+        # set ParquetReader/SQLReader node filters (no exception was raise until this end point
         # so filters are valid)
-        read_pq_node.filters = filters
+        read_node.filters = filters
         # remove filtering code since not necessary anymore
         assign.value = assign.value.value
 
@@ -568,7 +585,7 @@ class UntypedPass:
         return {index_def}
 
     def _get_partition_filters(
-        self, index_def, partition_names, df_var, lhs_def, rhs_def
+        self, index_def, partition_names, df_var, lhs_def, rhs_def, is_sql
     ):
         """get filters for predicate pushdown if possible.
         Returns filters in pyarrow DNF format (e.g. [[("a", "==", 1)][("a", "==", 2)]]):
@@ -584,12 +601,12 @@ class UntypedPass:
             l_def = get_definition(self.func_ir, lhs_def.lhs)
             r_def = get_definition(self.func_ir, lhs_def.rhs)
             left_or = self._get_partition_filters(
-                lhs_def, partition_names, df_var, l_def, r_def
+                lhs_def, partition_names, df_var, l_def, r_def, is_sql
             )
             l_def = get_definition(self.func_ir, rhs_def.lhs)
             r_def = get_definition(self.func_ir, rhs_def.rhs)
             right_or = self._get_partition_filters(
-                rhs_def, partition_names, df_var, l_def, r_def
+                rhs_def, partition_names, df_var, l_def, r_def, is_sql
             )
             return left_or + right_or
 
@@ -605,7 +622,7 @@ class UntypedPass:
                 )
                 new_lhs_rdef = get_definition(self.func_ir, rhs_def.lhs)
                 left_or = self._get_partition_filters(
-                    new_lhs, partition_names, df_var, lhs_def, new_lhs_rdef
+                    new_lhs, partition_names, df_var, lhs_def, new_lhs_rdef, is_sql
                 )
                 # lhs And rhs.rhs (A And C)
                 new_rhs = ir.Expr.binop(
@@ -613,7 +630,7 @@ class UntypedPass:
                 )
                 new_rhs_rdef = get_definition(self.func_ir, rhs_def.rhs)
                 right_or = self._get_partition_filters(
-                    new_rhs, partition_names, df_var, lhs_def, new_rhs_rdef
+                    new_rhs, partition_names, df_var, lhs_def, new_rhs_rdef, is_sql
                 )
                 return left_or + right_or
 
@@ -626,7 +643,7 @@ class UntypedPass:
                 )
                 new_lhs_ldef = get_definition(self.func_ir, lhs_def.lhs)
                 left_or = self._get_partition_filters(
-                    new_lhs, partition_names, df_var, new_lhs_ldef, rhs_def
+                    new_lhs, partition_names, df_var, new_lhs_ldef, rhs_def, is_sql
                 )
                 # lhs.rhs And rhs (C And A)
                 new_rhs = ir.Expr.binop(
@@ -634,7 +651,7 @@ class UntypedPass:
                 )
                 new_rhs_ldef = get_definition(self.func_ir, lhs_def.rhs)
                 right_or = self._get_partition_filters(
-                    new_rhs, partition_names, df_var, new_rhs_ldef, rhs_def
+                    new_rhs, partition_names, df_var, new_rhs_ldef, rhs_def, is_sql
                 )
                 return left_or + right_or
 
@@ -642,33 +659,52 @@ class UntypedPass:
             l_def = get_definition(self.func_ir, lhs_def.lhs)
             r_def = get_definition(self.func_ir, lhs_def.rhs)
             left_or = self._get_partition_filters(
-                lhs_def, partition_names, df_var, l_def, r_def
+                lhs_def, partition_names, df_var, l_def, r_def, is_sql
             )
             l_def = get_definition(self.func_ir, rhs_def.lhs)
             r_def = get_definition(self.func_ir, rhs_def.rhs)
             right_or = self._get_partition_filters(
-                rhs_def, partition_names, df_var, l_def, r_def
+                rhs_def, partition_names, df_var, l_def, r_def, is_sql
             )
             return [left_or[0] + right_or[0]]
 
         # literal case
         # TODO(ehsan): support 'in' and 'not in'
         op_map = {
-            operator.eq: "==",
-            operator.ne: "!=",
+            operator.eq: "=" if is_sql else "==",
+            operator.ne: "<>" if is_sql else "!=",
             operator.lt: "<",
             operator.le: "<=",
             operator.gt: ">",
             operator.ge: ">=",
         }
 
+        # Operator mapping used to support situations
+        # where the column is on the RHS. Since Pyarrow
+        # format is ("col", op, scalar), we must invert certain
+        # operators.
+        right_colname_op_map = {
+            operator.eq: "=" if is_sql else "==",
+            operator.ne: "<>" if is_sql else "!=",
+            operator.lt: ">",
+            operator.le: ">=",
+            operator.gt: "<",
+            operator.ge: "<=",
+        }
+
         require(index_def.fn in op_map)
         left_colname = guard(self._get_col_name, index_def.lhs, df_var)
         right_colname = guard(self._get_col_name, index_def.rhs, df_var)
-        # TODO(ehsan): support column ref on rhs
-        require(left_colname and not right_colname)
+
+        require(
+            (left_colname and not right_colname) or (right_colname and not left_colname)
+        )
+        if right_colname:
+            cond = (right_colname, right_colname_op_map[index_def.fn], index_def.lhs)
+        else:
+            cond = (left_colname, op_map[index_def.fn], index_def.rhs)
         # Pyarrow format, e.g.: [[("a", "==", 2)]]
-        return [[(left_colname, op_map[index_def.fn], index_def.rhs)]]
+        return [[cond]]
 
     def _get_col_name(self, var, df_var):
         """get column name for dataframe column access like df["A"] if possible.
@@ -998,8 +1034,12 @@ class UntypedPass:
                 "read_sql() arguments {} not supported yet".format(unsupported_args)
             )
 
+        # find db type
+        db_type = urlparse(con_const).scheme
         # find df type
-        df_type = _get_sql_df_type_from_db(sql_const, con_const)
+        df_type, converted_colnames = _get_sql_df_type_from_db(
+            sql_const, con_const, db_type
+        )
         dtypes = df_type.data
         dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
         col_names = [c for c in df_type.columns]
@@ -1019,6 +1059,8 @@ class UntypedPass:
                 columns,
                 data_arrs,
                 out_types,
+                converted_colnames,
+                db_type,
                 lhs.loc,
             )
         ]
@@ -2618,20 +2660,22 @@ def _get_excel_df_type_from_file(
     return df_type_or_e
 
 
-def _get_sql_df_type_from_db(sql_const, con_const):
+def _get_sql_df_type_from_db(sql_const, con_const, db_type):
     """access the database to find df type for read_sql() output.
     Only rank zero accesses the database, then broadcasts.
     """
     from mpi4py import MPI
-    from urllib.parse import urlparse
 
     comm = MPI.COMM_WORLD
 
-    df_type = None
+    df_info = None
     if bodo.get_rank() == 0:
+        # Any columns that had their name converted. These need to be reverted
+        # in any dead column elimination
+        converted_colnames = set()
         rows_to_read = 100  # TODO: tune this
         sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
-        if urlparse(con_const).scheme == "snowflake":
+        if db_type == "snowflake":
             import snowflake.connector
             from bodo.io.snowflake import get_connection_params
 
@@ -2645,16 +2689,24 @@ def _get_sql_df_type_from_db(sql_const, con_const):
             # it means it is case insensitive or it was inserted as all
             # uppercase with double quotes. In both of these situations
             # pd.read_sql() returns the name with all lower case
-            df.columns = [x.lower() if x.isupper() else x for x in df.columns]
+            new_colnames = []
+            for x in df.columns:
+                if x.isupper():
+                    converted_colnames.add(x.lower())
+                    new_colnames.append(x.lower())
+                else:
+                    new_colnames.append(x)
+            df.columns = new_colnames
         else:
             df = pd.read_sql(sql_call, con_const)
         df_type = numba.typeof(df)
         # always convert to nullable type since initial rows of a column could be all
         # int for example, but later rows could have NAs
         df_type = to_nullable_type(df_type)
+        df_info = (df_type, converted_colnames)
 
-    df_type = comm.bcast(df_type)
-    return df_type
+    df_type, converted_colnames = comm.bcast(df_info)
+    return df_type, converted_colnames
 
 
 class CSVFileInfo(FileInfo):

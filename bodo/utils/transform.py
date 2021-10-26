@@ -124,6 +124,8 @@ no_side_effect_call_tuples = {
     ("get_bool_arr_bitmap", "bool_arr_ext", "libs", bodo),
     ("init_bool_array", "bool_arr_ext", "libs", bodo),
     ("alloc_bool_array", "bool_arr_ext", "libs", bodo),
+    ("compute_or_body", "bool_arr_ext", "libs", bodo),
+    ("compute_and_body", "bool_arr_ext", "libs", bodo),
     (
         "alloc_datetime_date_array",
         "datetime_date_ext",
