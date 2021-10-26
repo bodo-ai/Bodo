@@ -13,7 +13,7 @@ Installation
 
 Bodo can be installed using `Conda <https://docs.conda.io>`_ easily::
 
-    conda create -n Bodo python
+    conda create -n Bodo python=3.9
     conda activate Bodo
     conda install bodo -c bodo.ai -c conda-forge
 
