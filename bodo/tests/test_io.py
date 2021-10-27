@@ -3866,11 +3866,16 @@ def check_CSV_write(
                             write_impl, all_args_distributed_varlength=True
                         )
                         bodo_write(_get_dist_arg(df, False, True), bodo_filename)
+                    errors = comm.allgather(None)
                 except Exception as e:
                     # In the case that one rank raises an exception, make sure that all the
                     # ranks raise an error, so we don't hang in the barrier.
                     comm.allgather(e)
                     raise
+
+                for e in errors:
+                    if isinstance(e, Exception):
+                        raise e
 
                 # wait until each rank has finished writing
                 bodo.barrier()
@@ -3894,10 +3899,11 @@ def check_CSV_write(
                         pass
     finally:
         # cleanup the pandas file
-        try:
-            os.remove(pandas_filename)
-        except FileNotFoundError:
-            pass
+        if bodo.get_rank() == 0:
+            try:
+                os.remove(pandas_filename)
+            except FileNotFoundError:
+                pass
 
 
 def check_to_csv_string_output(df, impl):
