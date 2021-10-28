@@ -144,16 +144,18 @@ the final output columns (``a`` vs ``A``).
 
 * `ORDER BY`
 
-    The ``ORDER BY`` keyword sorts the resulting dataframe in ascending or descending order. By default, it sorts the records in ascending order.
-    For descending order, the ``DESC`` keyword can be used::
+    The ``ORDER BY`` keyword sorts the resulting dataframe in ascending or descending order, with NULL
+    values either at the start or end of the column. By default, it sorts the records in ascending order
+    with null values at the end. For descending order and nulls at the front, the ``DESC`` and ``NULLS FIRST``
+    keywords can be used::
 
         SELECT <COLUMN_NAMES>
         FROM <TABLE_NAME>
-        ORDER BY <ORDERED_COLUMN_NAMES> ASC|DESC
+        ORDER BY <ORDERED_COLUMN_NAMES> [ASC|DESC] [NULLS FIRST|LAST]
 
     For Example::
 
-        SELECT A, B FROM table1 ORDER BY B, A DESC
+        SELECT A, B FROM table1 ORDER BY B, A DESC NULLS FIRST
 
 
 * `LIMIT`
@@ -767,12 +769,14 @@ the final output columns (``a`` vs ``A``).
         - DATE_ADD(timestamp_val, interval)
 
             Computes a timestamp column by adding an interval column/scalar
-            to a timestamp value
+            to a timestamp value. If the first argument is a string representation
+            of a timestamp, Bodo will cast the value to a timestamp.
 
         - DATE_SUB(timestamp_val, interval)
 
             Computes a timestamp column by subtracting an interval column/scalar
-            to a timestamp value
+            to a timestamp value. If the first argument is a string representation
+            of a timestamp, Bodo will cast the value to a timestamp.
 
         - NOW()
 
@@ -911,11 +915,16 @@ the final output columns (``a`` vs ``A``).
 
         - UTC_TIMESTAMP()
 
-            Returns the current UTC date and time as a Timestamp value.
+            Returns the current UTC date and time as a timestamp value.
 
         - UTC_DATE()
 
             Returns the current UTC date as a Timestamp value.
+
+        - TO_DATE(col_expr)
+
+            Casts the col_expr to a timestamp column truncated to the date
+            portion.
 
 
 
@@ -1264,6 +1273,11 @@ and Bodo data types.
   * - ``BOOLEAN``
     - ``np.bool_``
     - ``bodo.bool_``
+
+
+BodoSQL can also process DataFrames that contain Categorical or Date columns. However,
+Bodo will convert these columns to one of the supported types, which incurs a performance
+cost. We recommend restricting your DataFrames to the directly supported types when possible.
 
 Nullable and Unsigned Types
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

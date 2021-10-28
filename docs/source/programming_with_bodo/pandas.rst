@@ -690,6 +690,7 @@ Reshaping, sorting, transposing:
 * :meth:`pandas.DataFrame.sort_index` `ascending` and `na_position` arguments supported.
 * :meth:`pandas.DataFrame.sort_values` ``by`` argument should be constant string or
   constant list of strings. ``ascending`` and ``na_position`` arguments are supported.
+  ``na_position`` can be a list with 1 value per column.
 * :meth:`pandas.DataFrame.to_string` (not distributed since output is a string)
 
 Combining / joining / merging:
