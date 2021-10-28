@@ -29,17 +29,18 @@ Start a JupyterLab server::
 Start a new notebook and run the following code in a cell to start an IPyParallel cluster::
 
     import ipyparallel as ipp
-    c = ipp.Cluster(profile="mpi", engine_launcher_class='MPI', n=4)
+    import psutil
+    c = ipp.Cluster(profile="mpi", engine_launcher_class='MPI', n=min(psutil.cpu_count(logical=False), 8))
     c.start_cluster_sync()
     rc = c.connect_client_sync()
     rc.wait_for_engines(n=c.n)
     view = rc[:]
     view.activate()
     view.block = True
-    
 
-This starts a local 4-core MPI cluster on your machine. You can now start using 
-the ``%%px`` cell magic to parallelize your code execution, or use ``%autopx`` to
+
+This starts a local N-core MPI cluster on your machine, where N is the minimum of the number of cores on your machine,
+and 8. You can now start using the ``%%px`` cell magic to parallelize your code execution, or use ``%autopx`` to
 run all cells on the IPyParallel cluster by default.
 Read more `here <https://ipyparallel.readthedocs.io/en/latest/tutorial/magics.html#parallel-magic-commands>`_.
 
@@ -57,10 +58,12 @@ Run the following code to verify that your IPyParallel cluster is set up correct
 
 The correct output is::
 
-    Hello World from rank 0. total ranks=4
-    Hello World from rank 1. total ranks=4
-    Hello World from rank 2. total ranks=4
-    Hello World from rank 3. total ranks=4
+    Hello World from rank 0. total ranks=N
+    Hello World from rank 1. total ranks=N
+    ...
+    Hello World from rank N-1. total ranks=N
+
+Where N is the minimum of the number of cores on your machine, and 8.
 
 .. _quickstart_multiple_hosts:
 
@@ -85,7 +88,7 @@ To start an IPyParallel cluster across multiple hosts, you need to do the follow
   for other options such as SSH tunneling.
 
 - Create a machinefile that contains list of IP addresses or host names where you want to launch engines.
-  
+
   .. note::
     Make sure your machinefile is in the following format::
 
@@ -106,7 +109,7 @@ Starting an IPyParallel cluster across multiple hosts requires a couple of addit
     import ipyparallel as ipp
     c = ipp.Cluster(profile="mpi",
                     engine_launcher_class='MPI',
-                    n=4,  # Number of engines, you can change this
+                    n=min(psutil.cpu_count(logical=False), 8),  # Number of engines, you can change this
                     controller_ip='*',
                     controller_args=["--nodb"])
     c.engine_launcher_class.mpi_args = ["-machinefile", <PATH_TO_MACHINEFILE>]
@@ -132,12 +135,12 @@ run the following code to do this::
             'mpiexec',
             '-ppn',
             '1',
-            '-machinefile', 
+            '-machinefile',
             <PATH_TO_MACHINEFILE>,
             'sh',
             '-c',
             f'echo $CONNECTION_INFO > "{connection_file}"'
-            
+
         ]
         p = run(cmd, capture_output=True, text=True, input=None, env=env)
         if p.returncode:
@@ -207,7 +210,7 @@ You are now ready to run your Bodo code. Here's an example of Monte Carlo Pi cal
         pi = 4 * np.sum(x ** 2 + y ** 2 < 1) / n
         print("Execution time:", time.time() - t1, "\nresult:", pi)
         return pi
-    
+
     calc_pi(10000000)
 
 
