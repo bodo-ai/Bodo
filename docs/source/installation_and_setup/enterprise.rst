@@ -24,8 +24,8 @@ In both cases, the file or environment variable must contain the key exactly
 as provided.
 
 If Bodo cannot find the license (environment variable does not exist or is empty,
-and no license file is found), you will only be able to run Bodo on up to 4 cores.
-If you try to run Bodo on more than 4 cores and if Bodo cannot find the license (the environment variable does not exist or is empty, and no license file is found), it will exit with the ``Bodo license not found`` error.
+and no license file is found), you will only be able to run Bodo on up to 8 cores.
+If you try to run Bodo on more than 8 cores and if Bodo cannot find the license (the environment variable does not exist or is empty, and no license file is found), it will exit with the ``Bodo license not found`` error.
 
 If the key content is invalid Bodo will exit with the ``Invalid license``
 error. This typically means that the key is missing data or contains extraneous

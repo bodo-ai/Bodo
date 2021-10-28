@@ -15,7 +15,7 @@ Bodo and its dependencies in it as shown below::
 Bodo uses `MPI <https://en.wikipedia.org/wiki/Message_Passing_Interface>`_ for parallelization,
 which is automatically installed as part of
 the ``conda`` install command above. This command installs Bodo Community Edition by default, which is free and
-works on up to 4 cores. For information on Bodo Enterprise Edition and pricing, please `contact us <https://bodo.ai/contact/>`_ .
+works on up to 8 cores. For information on Bodo Enterprise Edition and pricing, please `contact us <https://bodo.ai/contact/>`_ .
 
 - :ref:`conda`
 - :ref:`optionaldep`
@@ -124,7 +124,7 @@ Save this code in a file called ``example.py``, and run it on a single core as f
 
 Alternatively, to run the code on four cores, you can use ``mpiexec``::
 
-    $ mpiexec -n 4 python example.py
+    $ mpiexec -n 8 python example.py
 
 You may need to delete ``example1.pq`` between consecutive runs.
 

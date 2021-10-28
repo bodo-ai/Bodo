@@ -50,28 +50,28 @@ The output of this code is as follows::
 
 Bodo's parallel speedup can be measured similarly::
 
-	"""	
-	calc_pi.py: computes the value of Pi using Monte-Carlo Integration	
-	"""	
+	"""
+	calc_pi.py: computes the value of Pi using Monte-Carlo Integration
+	"""
 
-	import numpy as np	
-	import bodo	
-	import time	
+	import numpy as np
+	import bodo
+	import time
 
-	@bodo.jit	
-	def calc_pi(n):	
-	    t1 = time.time()	
-	    x = 2 * np.random.ranf(n) - 1	
-	    y = 2 * np.random.ranf(n) - 1	
-	    pi = 4 * np.sum(x**2 + y**2 < 1) / n	
-	    print("Execution time:", time.time()-t1, "\nresult:", pi)	
-	    return pi	
+	@bodo.jit
+	def calc_pi(n):
+	    t1 = time.time()
+	    x = 2 * np.random.ranf(n) - 1
+	    y = 2 * np.random.ranf(n) - 1
+	    pi = 4 * np.sum(x**2 + y**2 < 1) / n
+	    print("Execution time:", time.time()-t1, "\nresult:", pi)
+	    return pi
 
 	calc_pi(2 * 10**8)
 
-Launched on four parallel cores::
+Launched on eight parallel cores::
 
-    $ mpiexec -n 4 python calc_pi.py
+    $ mpiexec -n 8 python calc_pi.py
 	Execution time: 0.5736249439651147
 	result: 3.14161474
 

@@ -18,7 +18,7 @@ Bodo can be installed using `Conda <https://docs.conda.io>`_ easily::
     conda install bodo -c bodo.ai -c conda-forge
 
 This command installs Bodo Community Edition by default, which is free and
-works on up to 4 cores. Please `contact us <https://bodo.ai/contact/>`_ for trial licenses
+works on up to 8 cores. Please `contact us <https://bodo.ai/contact/>`_ for trial licenses
 You can also `request a 30 day free trial <https://bodo.ai/try-bodo>`_ on up to 128 cores. If you need a trial license for even more cores, please `contact us <https://bodo.ai/contact/>`_.
 See :ref:`install` for more details of setting up Bodo.
 
@@ -67,7 +67,7 @@ and creates two new columns:
 
     import pandas as pd
     import time
-    
+
     def data_transform():
         t0 = time.time()
         df = pd.read_parquet("pd_example.pq")
@@ -83,7 +83,7 @@ and creates two new columns:
 Save this code in ``data_transform.py`` and run in command line::
 
     $ python data_transform.py
-    Total time: 175.92
+    Total time: 166.18
 
 Standard Python is quite slow for these data transforms since:
 
@@ -106,7 +106,7 @@ except that it includes the ``bodo.jit`` decorator:
     import pandas as pd
     import time
     import bodo
-    
+
     @bodo.jit
     def data_transform():
         t0 = time.time()
@@ -123,18 +123,18 @@ except that it includes the ``bodo.jit`` decorator:
 Save this code in ``bodo_data_transform.py`` and run on a single core from command line::
 
     $ python bodo_data_transform.py
-    Total time: 1.86
+    Total time: .78
 
 Even though the code is still running on a single core, it is 94x faster
 because Bodo compiles the function into a native binary, eliminating
 the interpreter overheads in ``apply``.
 
-Now let's run the code on 4 cores using ``mpiexec`` in command line::
+Now let's run the code on 8 cores using ``mpiexec`` in command line::
 
-    $ mpiexec -n 4 python bodo_data_transform.py
-    Total time: 0.79
+    $ mpiexec -n 8 python bodo_data_transform.py
+    Total time: 0.38
 
-This brings an additional 2.3x speedup because of using 4 CPU cores.
+This brings an additional ~2x speedup because of using 8 CPU cores.
 The same program can be scaled to larger datasets and as many cores as necessary
 in compute clusters and cloud environments (e.g. ``mpiexec -n 10000 python bodo_data_transform.py``).
 
@@ -173,8 +173,8 @@ Let's move the timers outside and call the function twice:
 Save this code in ``data_transform2.py`` and run in command line::
 
     $ python data_transform2.py
-    Total time first call: 8.25
-    Total time second call: 1.77
+    Total time first call: 4.72
+    Total time second call: 1.92
 
 
 The first call is slower due to compilation of the function, but the
@@ -205,9 +205,9 @@ Compilation time can be avoided across program runs by using the ``cache=True`` 
 Save this code in ``data_transform_cache.py`` and run in command line twice::
 
     $ python data_transform_cache.py
-    Total time: 8.34
+    Total time: 4.70
     $ python data_transform_cache.py
-    Total time: 2.56
+    Total time: 1.96
 
 
 In this case, Bodo saves the compiled version of the function to a file
@@ -320,14 +320,6 @@ Therefore, the non-JIT parts of the Python program are replicated across cores
 whereas Bodo JIT functions are parallelized.
 
 
-Bodo's MPI parallelism model is fundamentally more efficient than the driver-executor distributed systems model
-of other big data systems such as Spark and Dask.
-In the driver-executor model, the program runs on a single core but the library
-calls are split into tasks and sent to executors on other cores.
-Bodo users transitioning from other systems should keep in mind that
-Bodo does not have a "driver", and all code is running in parallel on every CPU core.
-
-
 
 Parallel Computation
 ~~~~~~~~~~~~~~~~~~~~
@@ -351,7 +343,7 @@ this example demonstrates:
 
 Save this code as ``data_groupby.py`` and run from command line::
 
-    $ mpiexec -n 4 python data_groupby.py
+    $ mpiexec -n 8 python data_groupby.py
 
 This program uses ``groupby`` which requires rows with the same key to be
 aggregated together.
@@ -387,7 +379,7 @@ Save this code as ``df_unsupported.py`` and run from command line::
     $ python df_unsupported.py
     # bodo.utils.typing.BodoError: Dataframe.transpose not supported yet
 
-As the error indicates, Bodo doesn't  currently support the ``transpose`` call in JIT functions. 
+As the error indicates, Bodo doesn't  currently support the ``transpose`` call in JIT functions.
 In these cases, an alternative API should be used or this portion of the code should be done in regular Python.
 See :ref:`pandas` for the complete list of supported Pandas operations.
 
@@ -499,7 +491,7 @@ since tuples can hold values of different types:
     if __name__ == "__main__":
         create_list()
 
-See `Numba documentation <http://numba.pydata.org/numba-doc/latest/reference/pysupported.html>`_ for more details.
+See our `Unsupported Python Programs <https://docs.bodo.ai/latest/source/programming_with_bodo/not_supported.html>`_ section for more details.
 
 
 Using Bodo in Jupyter Notebooks
@@ -514,12 +506,13 @@ Start a JupyterLab server from terminal::
     jupyter lab
 
 Start a new notebook and run the following code in a cell to start a
-local 4 core `IPyParallel <https://ipyparallel.readthedocs.io>`_ cluster:
+local 8 core `IPyParallel <https://ipyparallel.readthedocs.io>`_ cluster:
 
 .. code:: ipython3
 
     import ipyparallel as ipp
-    c = ipp.Cluster(profile="mpi", engine_launcher_class='MPI', n=4)
+    import psutil
+    c = ipp.Cluster(profile="mpi", engine_launcher_class='MPI', n=min(psutil.cpu_count(logical=False), 8))
     c.start_cluster_sync()
     rc = c.connect_client_sync()
     rc.wait_for_engines(n=c.n)
@@ -535,7 +528,7 @@ Add the ``%%px`` magic to top of a notebook cell to run Bodo code on the cluster
     import pandas as pd
     import time
     import bodo
-    
+
     @bodo.jit
     def data_transform():
         t0 = time.time()
