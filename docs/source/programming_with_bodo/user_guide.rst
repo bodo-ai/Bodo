@@ -1752,11 +1752,11 @@ currently does not support, so it’s important to understand the
 limitations of Bodo. There are 4 main limitations:
 
 1. Not supported Pandas API (see
-   `here <http://docs.bodo.ai/latest/source/pandas.html#pandas>`__)
+   :ref:`here<pandas>`)
 2. Not supported NumPy API (see
-   `here <http://docs.bodo.ai/latest/source/numpy.html#numpy>`__)
+   :ref:`here<numpy>`)
 3. Not supported Python features or datatypes (see
-   `here <http://docs.bodo.ai/latest/source/not_supported.html#unsupported-python-constructs>`__)
+   :ref:`here<heterogeneousdtype>`)
 4. Not supported Python programs due to type instability
 
 Solutions:
@@ -1768,7 +1768,7 @@ Solutions:
 3. Refactor the code to partially use regular Python, explained in
    “Integration with non-Bodo APIs” section.
 
-For example, the code below uses heterogenous list values inside ``a``
+For example, the code below uses heterogeneous list values inside ``a``
 which cannot be typed:
 
 .. code:: ipython3
