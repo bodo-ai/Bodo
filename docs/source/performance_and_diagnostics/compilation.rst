@@ -16,7 +16,7 @@ In other words:
 
 This reduces the risk of hitting unsupported features and reduces compilation time.
 To do so, simply factor out the code that needs to be compiled by Bodo and pass data into
-`Bodo compiled functions <user_guide.html#jit-just-in-time-compilation-workflow>`__.
+`Bodo compiled functions <jit>`__.
 This recommendation is similar to Numba's `What to compile <https://numba.pydata.org/numba-doc/dev/user/troubleshoot.html#what-to-compile>`_.
 
 
