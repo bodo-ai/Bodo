@@ -9,6 +9,8 @@ additional Bodo features and discuss more advanced topics.
 Bodo Basics
 -----------
 
+.. _jit:
+
 JIT (Just-in-time) Compilation Workflow
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
