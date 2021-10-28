@@ -493,6 +493,7 @@ since tuples can hold values of different types:
 
 See our `Unsupported Python Programs <https://docs.bodo.ai/latest/source/programming_with_bodo/not_supported.html>`_ section for more details.
 
+.. _jupyter:
 
 Using Bodo in Jupyter Notebooks
 -------------------------------

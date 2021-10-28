@@ -25,7 +25,7 @@ Bodo has several advantages over other big data analytics systems
 This documentation covers the basics of using Bodo and provides a reference
 of supported Python features and APIs.
 In a nutshell, Bodo provides a JIT compilation workflow
-using the `@bodo.jit decorator <user_guide.html#jit-just-in-time-compilation-workflow>`__.
+using the :ref:`@bodo.jit decorator <jit>`.
 It replaces the decorated Python functions
 with an optimized and parallelized binary version automatically.
 For example, the program below can perform data transformation on large datasets::
