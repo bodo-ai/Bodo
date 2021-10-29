@@ -1,0 +1,6 @@
+test-build
+==========
+
+.. toctree::
+
+    test

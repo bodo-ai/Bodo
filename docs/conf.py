@@ -44,6 +44,7 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.githubpages",
     "sphinx_rtd_theme",
+    "sphinx_rtd_dark_mode"
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -91,6 +92,8 @@ pygments_style = "friendly"
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True
 
+# user starts in dark mode
+default_dark_mode = True
 
 # -- Options for HTML output ----------------------------------------------
 
