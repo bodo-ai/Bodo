@@ -82,6 +82,7 @@ from bodo.libs.bool_arr_ext import (
 )
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import StringArrayType, string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
@@ -2120,6 +2121,19 @@ class SeriesPass:
                     assign.target,
                     self,
                     extra_globals={"_dtypes": dtypes, "_names": names},
+                )
+            elif isinstance(typ, MapArrayType):
+                struct_typ = StructArrayType(
+                    (typ.key_arr_type, typ.value_arr_type), ("key", "value")
+                )
+                return compile_func_single_block(
+                    eval(
+                        "lambda n, t, s=None: bodo.libs.map_arr_ext.pre_alloc_map_array(n, s, _struct_type)"
+                    ),
+                    rhs.args,
+                    assign.target,
+                    self,
+                    extra_globals={"_struct_type": struct_typ},
                 )
             elif isinstance(typ, TupleArrayType):
                 dtypes = typ.data

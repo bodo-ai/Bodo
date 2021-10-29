@@ -216,6 +216,8 @@ no_side_effect_call_tuples = {
     (bodo.libs.str_arr_ext.pre_alloc_string_array,),
     ("pre_alloc_binary_array", "binary_arr_ext", "libs", bodo),
     (bodo.libs.binary_arr_ext.pre_alloc_binary_array,),
+    ("pre_alloc_map_array", "map_arr_ext", "libs", bodo),
+    (bodo.libs.map_arr_ext.pre_alloc_map_array,),
     ("prange", bodo),
     (bodo.prange,),
     ("objmode", bodo),
