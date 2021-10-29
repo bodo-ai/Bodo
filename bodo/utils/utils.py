@@ -164,6 +164,7 @@ def is_alloc_callname(func_name, mod_name):
             func_name == "pre_alloc_struct_array"
             and mod_name == "bodo.libs.struct_arr_ext"
         )
+        or (func_name == "pre_alloc_map_array" and mod_name == "bodo.libs.map_arr_ext")
         or (
             func_name == "pre_alloc_tuple_array"
             and mod_name == "bodo.libs.tuple_arr_ext"
@@ -748,6 +749,14 @@ def overload_alloc_type(n, t, s=None):
         names = typ.names
         return lambda n, t, s=None: bodo.libs.struct_arr_ext.pre_alloc_struct_array(
             n, s, dtypes, names
+        )  # pragma: no cover
+
+    if isinstance(typ, bodo.libs.map_arr_ext.MapArrayType):
+        struct_typ = bodo.libs.struct_arr_ext.StructArrayType(
+            (typ.key_arr_type, typ.value_arr_type), ("key", "value")
+        )
+        return lambda n, t, s=None: bodo.libs.map_arr_ext.pre_alloc_map_array(
+            n, s, struct_typ
         )  # pragma: no cover
 
     if isinstance(typ, bodo.libs.tuple_arr_ext.TupleArrayType):

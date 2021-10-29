@@ -3,6 +3,7 @@
 """
 
 import numpy as np
+import pandas as pd
 import pytest
 
 import bodo
@@ -92,3 +93,42 @@ def test_nbytes(memory_leak_check):
     if bodo.get_size() == 1:
         py_out += 2
     check_func(impl, (map_value,), py_output=py_out, only_1DVar=True)
+
+
+def test_map_apply_simple(memory_leak_check):
+    """
+    Test a simple Series.apply on a map array.
+    """
+
+    def impl(df):
+        return df["A"].apply(lambda x: x)
+
+    df = pd.DataFrame(
+        {"A": [{1: 2, 4: 10, 15: 71, 33: 36, 141: 21, 4214: 2, -1: 0, 0: 0, 5: 2}] * 10}
+    )
+    check_func(impl, (df,))
+
+
+def test_map_apply(memory_leak_check):
+    """
+    Test creating a MapArray from Series.apply.
+    This is very similar to what is needed in a customer
+    use case.
+    """
+
+    def impl(df, keys):
+        return df["master_column"].apply(
+            lambda row: {x: y for x, y in zip(keys, row.split(","))}
+        )
+
+    df1 = pd.DataFrame(
+        {"master_column": [",".join([str(i) for i in np.arange(10)])] * 15}
+    )
+    keys1 = [str(i + 1) for i in np.arange(10)]
+    check_func(impl, (df1, keys1))
+
+    df2 = pd.DataFrame(
+        {"master_column": [",".join([str(i) for i in np.arange(6000)])] * 15}
+    )
+    keys2 = [str(i + 1) for i in np.arange(6000)]
+    check_func(impl, (df2, keys2))

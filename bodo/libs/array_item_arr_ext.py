@@ -668,7 +668,6 @@ def init_array_item_array(
 @intrinsic
 def get_offsets(typingctx, arr_typ=None):
     assert isinstance(arr_typ, ArrayItemArrayType)
-    # TODO: alias analysis extension functions for get_offsets, etc.?
 
     def codegen(context, builder, sig, args):
         (arr,) = args
@@ -723,6 +722,28 @@ def get_null_bitmap(typingctx, arr_typ=None):
         return impl_ret_borrowed(context, builder, sig.return_type, payload.null_bitmap)
 
     return types.Array(types.uint8, 1, "C")(arr_typ), codegen
+
+
+def alias_ext_single_array(lhs_name, args, alias_map, arg_aliases):
+    """
+    Aliasing function for offsets, data, and null bitmap.
+    """
+    assert len(args) == 1
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+
+
+numba.core.ir_utils.alias_func_extensions[
+    ("get_offsets", "bodo.libs.array_item_arr_ext")
+] = alias_ext_single_array
+
+
+numba.core.ir_utils.alias_func_extensions[
+    ("get_data", "bodo.libs.array_item_arr_ext")
+] = alias_ext_single_array
+
+numba.core.ir_utils.alias_func_extensions[
+    ("get_null_bitmap", "bodo.libs.array_item_arr_ext")
+] = alias_ext_single_array
 
 
 @intrinsic
