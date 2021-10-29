@@ -93,7 +93,7 @@ pygments_style = "friendly"
 todo_include_todos = True
 
 # user starts in dark mode
-default_dark_mode = True
+default_dark_mode = False
 
 # -- Options for HTML output ----------------------------------------------
 
