@@ -1719,3 +1719,24 @@ def type_col_to_index(col_names):
             return bodo.NumericIndexType(types.int64)
     else:
         return bodo.hiframes.pd_index_ext.HeterogeneousIndexType(col_names)
+
+
+def index_typ_from_dtype_name(elem_dtype, name):
+    """
+    Given a dtype and a name (which is either None or a string),
+    returns a matching index type.
+    """
+    index_class = type(get_index_type_from_dtype(elem_dtype))
+    if name is None:
+        name_typ = None
+    else:
+        name_typ = types.StringLiteral(name)
+    if index_class == bodo.hiframes.pd_index_ext.NumericIndexType:
+        # Numeric requires the size
+        index_typ = index_class(elem_dtype, name_typ)
+    elif index_class == bodo.hiframes.pd_index_ext.CategoricalIndexType:
+        # Categorical requires the categorical array
+        index_typ = index_class(bodo.CategoricalArrayType(elem_dtype), name_typ)
+    else:
+        index_typ = index_class(name_typ)
+    return index_typ

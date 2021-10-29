@@ -1649,9 +1649,12 @@ class UntypedPass:
             index_arg = "bodo.utils.conversion.convert_to_index({}, '{}')".format(
                 data_args[index_ind], index_col
             )
-            index_typ = type(
-                bodo.utils.typing.get_index_type_from_dtype(out_types[index_ind].dtype)
-            )(types.StringLiteral(index_col))
+            index_elem_dtype = out_types[index_ind].dtype
+            index_name = index_col
+            index_typ = bodo.utils.typing.index_typ_from_dtype_name(
+                index_elem_dtype, index_name
+            )
+
             columns.remove(index_col)
             data_args.remove(data_args[index_ind])
             out_data_types.pop(index_ind)
