@@ -962,6 +962,11 @@ class TypingTransforms:
                     assign, rhs, func_mod, func_name, label
                 )
 
+        # handle BodoSQLTablePathType
+        if fdef == ("TablePath", "bodosql"):
+            # Force table path arguments to be literals if passed to the function.
+            return self._run_call_bodosql_table_path(assign, rhs, label)
+
         # throw proper error when calling a non-JIT function
         if isinstance(
             self.typemap.get(rhs.func.name, None), bodo.utils.typing.FunctionLiteral
@@ -977,6 +982,14 @@ class TypingTransforms:
             )
 
         return [assign]
+
+    def _run_call_bodosql_table_path(self, assign, rhs, label):
+        nodes = []
+        func_args = [(0, "file_path"), (1, "file_type")]
+        nodes += self._replace_arg_with_literal(
+            "bodosql.TablePath", rhs, func_args, label
+        )
+        return nodes + [assign]
 
     def _run_binop(self, assign, rhs):
         arg1_typ = self.typemap.get(rhs.lhs.name, None)

@@ -977,6 +977,22 @@ class ParforTestPipeline(bodo.compiler.BodoCompiler):
         return [pipeline]
 
 
+class TypeInferenceTestPipeline(bodo.compiler.BodoCompiler):
+    """
+    pipeline used in bodosql tests with an additional PreserveIR pass
+    after BodoTypeInference. This is used to monitor the code being generated.
+    """
+
+    def define_pipelines(self):
+        [pipeline] = self._create_bodo_pipeline(
+            distributed=True, inline_calls_pass=False
+        )
+        pipeline._finalized = False
+        pipeline.add_pass_after(PreserveIR, bodo.compiler.BodoTypeInference)
+        pipeline.finalize()
+        return [pipeline]
+
+
 class DistTestPipeline(bodo.compiler.BodoCompiler):
     """
     pipeline with an additional PreserveIR pass
