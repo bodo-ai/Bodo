@@ -850,6 +850,26 @@ def test_enumerate_unituple(memory_leak_check):
     check_func(test_impl, (t,))
 
 
+def test_dict_list(memory_leak_check):
+    """make sure there is no unnecessary error when using lists inside dicts
+    (Apple issue on email)
+    """
+
+    @bodo.jit
+    def has_key(d, k):
+        return k in d
+
+    @bodo.jit
+    def bang(d):
+        if has_key(d, "numbers"):
+            print("{}".format(d["numbers"]))
+        for i in list(d["numbers"]):
+            print(i)
+        return 0
+
+    bang({"numbers": list(range(0, 10))})
+
+
 # TODO: Add memory_leak_check after memory leak is solved.
 def test_literal_list_cast():
     """test when literal list needs to be cast to regular list"""

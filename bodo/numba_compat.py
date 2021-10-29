@@ -3948,6 +3948,87 @@ numba.core.caching._IPythonCacheLocator.from_function = (
 #########   End Jupyter Notebook Caching Changes #########
 
 
+######### changes for removing unnecessary list limitations in Numba ######
+
+
+def DictType__init__(self, keyty, valty, initial_value=None):
+    from numba.types import (
+        DictType,
+        InitialValue,
+        NoneType,
+        Optional,
+        Tuple,
+        TypeRef,
+        unliteral,
+    )
+
+    assert not isinstance(keyty, TypeRef)
+    assert not isinstance(valty, TypeRef)
+    keyty = unliteral(keyty)
+    valty = unliteral(valty)
+    if isinstance(keyty, (Optional, NoneType)):
+        fmt = "Dict.key_type cannot be of type {}"
+        raise TypingError(fmt.format(keyty))
+    if isinstance(valty, (Optional, NoneType)):
+        fmt = "Dict.value_type cannot be of type {}"
+        raise TypingError(fmt.format(valty))
+    # Bodo change: avoid unnecessary list/set restriction
+    # _sentry_forbidden_types(keyty, valty)
+    self.key_type = keyty
+    self.value_type = valty
+    self.keyvalue_type = Tuple([keyty, valty])
+    name = "{}[{},{}]<iv={}>".format(
+        self.__class__.__name__, keyty, valty, initial_value
+    )
+    super(DictType, self).__init__(name)
+    InitialValue.__init__(self, initial_value)
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.types.containers.DictType.__init__)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "475acd71224bd51526750343246e064ff071320c0d10c17b8b8ac81d5070d094"
+    ):  # pragma: no cover
+        warnings.warn("DictType.__init__ has changed")
+
+
+numba.core.types.containers.DictType.__init__ = DictType__init__
+
+
+def _legalize_arg_types(self, args):
+    for i, a in enumerate(args, start=1):
+        # Bodo change: avoid unnecessary list restriction
+        # if isinstance(a, types.List):
+        #     msg = (
+        #         'Does not support list type inputs into '
+        #         'with-context for arg {}'
+        #     )
+        #     raise errors.TypingError(msg.format(i))
+        if isinstance(a, types.Dispatcher):
+            msg = (
+                "Does not support function type inputs into " "with-context for arg {}"
+            )
+            raise errors.TypingError(msg.format(i))
+
+
+if _check_numba_change:
+    lines = inspect.getsource(
+        numba.core.dispatcher.ObjModeLiftedWith._legalize_arg_types
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "4793f44ebc7da8843e8f298e08cd8a5428b4b84b89fd9d5c650273fdb8fee5ee"
+    ):  # pragma: no cover
+        warnings.warn("ObjModeLiftedWith._legalize_arg_types has changed")
+
+
+numba.core.dispatcher.ObjModeLiftedWith._legalize_arg_types = _legalize_arg_types
+
+
+######### End changes for removing unnecessary list limitations in Numba ######
+
+
 #########   Changes for Omitted  #########
 
 
