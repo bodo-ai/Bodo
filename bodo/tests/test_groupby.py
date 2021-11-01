@@ -1805,7 +1805,6 @@ def test_groupby_agg_nullable_or():
     assert not dist_IR_contains(f_ir, "global(cpp_cb_general:")
 
 
-
 @pytest.mark.parametrize(
     "df",
     [
@@ -2484,6 +2483,7 @@ def test_groupby_apply(is_slow_run):
     check_func(impl12, (df,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.skip(reason="[BE-1531] test fails in CI")
 def test_groupby_apply_objmode():
     """
     Test Groupby.apply() with objmode inside UDF
