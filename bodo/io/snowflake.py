@@ -37,6 +37,8 @@ def get_connection_params(conn_str):
         # query contains warehouse_name and role_name
         for key, val in parse_qsl(u.query):
             params[key] = val
+    # pass Bodo identifier to Snowflake
+    params["application"] = "bodo"
     return params
 
 
