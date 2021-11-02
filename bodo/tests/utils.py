@@ -1529,6 +1529,7 @@ def check_caching(
     reorder_columns=False,
     py_output=None,
     is_out_dist=True,
+    args_already_distributed=False,
 ):
     """Test caching by compiling a BodoSQL function with
     cache=True, then running it again loading from cache.
@@ -1545,7 +1546,9 @@ def check_caching(
         py_output = impl(*args)
 
     # compile impl in the correct dist
-    if input_dist == InputDist.OneD or input_dist == InputDist.OneDVar:
+    if not args_already_distributed and (
+        input_dist == InputDist.OneD or input_dist == InputDist.OneDVar
+    ):
         args = tuple(
             _get_dist_arg(
                 a,

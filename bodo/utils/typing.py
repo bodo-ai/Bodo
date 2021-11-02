@@ -405,13 +405,27 @@ def get_overload_const(val):
     # LiteralList needs special handling since it may store literal values instead of
     # actual constants, see test_groupby_dead_col_multifunc
     if isinstance(val, types.LiteralList):
-        return [get_overload_const(v) for v in val.literal_value]
+        out_list = []
+        for v in val.literal_value:
+            const_val = get_overload_const(v)
+            if const_val == NOT_CONSTANT:
+                return NOT_CONSTANT
+            else:
+                out_list.append(const_val)
+        return out_list
     if isinstance(val, types.Literal):
         return val.literal_value
     if isinstance(val, types.Dispatcher):
         return val
     if isinstance(val, types.BaseTuple):
-        return tuple(get_overload_const(v) for v in val.types)
+        out_list = []
+        for v in val.types:
+            const_val = get_overload_const(v)
+            if const_val == NOT_CONSTANT:
+                return NOT_CONSTANT
+            else:
+                out_list.append(const_val)
+        return tuple(out_list)
     if is_initial_value_list_type(val):
         return val.initial_value
     if is_literal_type(val):

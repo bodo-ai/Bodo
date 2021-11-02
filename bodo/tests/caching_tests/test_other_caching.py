@@ -1,8 +1,14 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import pandas as pd
+import pytest
 
-from bodo.tests.utils import check_caching
-from caching_tests_common import fn_distribution, is_cached
+from bodo.tests.test_metadata import (  # noqa
+    bytes_gen_dist_df,
+    int_gen_dist_df,
+    str_gen_dist_df,
+    struct_gen_dist_df,
+)
+from bodo.tests.utils import InputDist, check_caching
 
 
 def test_groupby_agg_caching(fn_distribution, is_cached):
@@ -70,3 +76,33 @@ def test_format_cache(fn_distribution, is_cached, memory_leak_check):
         return "{}".format(3)
 
     check_caching(impl, (), is_cached, fn_distribution, is_out_dist=False)
+
+
+@pytest.mark.parametrize(
+    "gen_type_annotated_df_func",
+    [
+        pytest.param(int_gen_dist_df, id="int"),
+        pytest.param(str_gen_dist_df, id="str"),
+        pytest.param(bytes_gen_dist_df, id="bytes"),
+        pytest.param(struct_gen_dist_df, id="struct"),
+    ],
+)
+def test_metadata_cache(gen_type_annotated_df_func, is_cached, memory_leak_check):
+    """Checks that, in a situation where we need type inference to determine the type of the input dataframe, we still get
+    caching when running on other dataframes of the same type.
+
+    gen_type_annotated_df_func: function that returns a dataframe that requires type annotation to infer the dtype
+    """
+
+    def impl(df):
+        return df
+
+    df_with_type_annotation = gen_type_annotated_df_func()
+
+    check_caching(
+        impl,
+        (df_with_type_annotation,),
+        is_cached,
+        InputDist.OneD,
+        args_already_distributed=True,
+    )
