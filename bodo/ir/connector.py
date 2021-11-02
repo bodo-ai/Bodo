@@ -173,7 +173,15 @@ def build_connector_definitions(node, definitions=None):
         definitions = defaultdict(list)
 
     for col_var in node.out_vars:
-        definitions[col_var.name].append(node)
+        defs = definitions[col_var.name]
+        # In certain compiler passes, like typing_pass and series_pass,
+        # we remove definitions for assignments. However, we don't do this
+        # for Bodo Custom IR nodes, which makes certain function (like
+        # get_definitions) fail if the definition is added multiple times.
+        # As a result, we don't add the definition if it already present.
+        # TODO: Remove the IR nodes whenever we remove definitions for assignments.
+        if node not in defs:
+            defs.append(node)
 
     return definitions
 
