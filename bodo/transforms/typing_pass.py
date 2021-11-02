@@ -17,6 +17,7 @@ from numba.core.compiler_machinery import register_pass
 from numba.core.extending import register_jitable
 from numba.core.ir_utils import (
     GuardException,
+    build_definitions,
     compute_cfg_from_blocks,
     dprint_func_ir,
     find_callname,
@@ -573,7 +574,15 @@ class TypingTransforms:
             and guard(find_callname, self.func_ir, value_def)
             == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext")
         ):
-            working_body = guard(self._try_filter_pushdown, assign, value_def, index_def, self._working_body, self.func_ir)
+            working_body = guard(
+                self._try_filter_pushdown,
+                assign,
+                value_def,
+                index_def,
+                self._working_body,
+                self.func_ir,
+                {rhs.value.name: value_def} # Basic filter pushdown case only has 1 dataframe to track.
+            )
             # If this function returns a list we have updated the working body.
             # This is done to enable updating a single block that is not yet being processed
             # in the working body.
@@ -583,12 +592,15 @@ class TypingTransforms:
         nodes.append(assign)
         return nodes
 
-    def _try_filter_pushdown(self, assign, value_def, index_def, working_body, func_ir):
+    def _try_filter_pushdown(self, assign, value_def, index_def, working_body, func_ir, used_dfs):
         """detect filter pushdown and add filters to ParquetReader or SQLReader IR nodes if possible.
 
         working_body is in the inprogress list of statements that should be updated with any filter reordering.
         A new working_body is returned if this is successful. func_ir is FunctionIR object containing the blocks
         with all relevant code.
+
+        used_dfs is a dictionary of intermediate dataframes -> initialization that should be tracked
+        to ensure they aren't reused
 
         Throws GuardException if not possible.
         """
@@ -607,15 +619,11 @@ class TypingTransforms:
             all(get_definition(func_ir, v) == read_node for v in data_def.items)
         )
         if isinstance(read_node, bodo.ir.parquet_ext.ParquetReader):
+            # TODO: Remove this to enable predicate pushdown without partitions
             require(read_node.partition_names)
-            partition_names = read_node.partition_names
         else:
             # Filter pushdown is only supported for snowflake right now.
             require(read_node.db_type == "snowflake")
-            # We don't know the partition columns so let any column be used
-            # in the partition. All columns should also reduce the amount of data
-            # loaded from the network as well.
-            partition_names = read_node.df_colnames
 
         # make sure all filters have the right form
         lhs_def = get_definition(func_ir, index_def.lhs)
@@ -623,7 +631,6 @@ class TypingTransforms:
         df_var = assign.value.value
         filters = self._get_partition_filters(
             index_def,
-            partition_names,
             df_var,
             lhs_def,
             rhs_def,
@@ -631,8 +638,8 @@ class TypingTransforms:
             # SQL generates different operators than pyarrow
             isinstance(read_node, bodo.ir.sql_ext.SqlReader),
         )
-        self._check_non_filter_df_use(df_var.name, assign, func_ir)
-        new_working_body = self._reorder_filter_nodes(read_node, index_def, df_var, filters, working_body, func_ir)
+        self._check_non_filter_df_use(set(used_dfs.keys()), assign, func_ir)
+        new_working_body = self._reorder_filter_nodes(read_node, index_def, used_dfs, filters, working_body, func_ir)
         old_filters = read_node.filters
         # If there are existing filters then we need to merge them together because this is
         # an implicit AND. We merge by distributed the AND over ORs
@@ -656,8 +663,8 @@ class TypingTransforms:
         # be in the working body yet.
         return new_working_body
 
-    def _check_non_filter_df_use(self, df_varname, assign, func_ir):
-        """make sure the original dataframe variable is not used after filtering in the
+    def _check_non_filter_df_use(self, df_names, assign, func_ir):
+        """make sure the chain of used dataframe variables are not used after filtering in the
         program. e.g. df2 = df[...]; A = df.A
         Assumes that Numba renames variables if the same df name is used later. e.g.:
             df2 = df[...]
@@ -672,11 +679,14 @@ class TypingTransforms:
                 # ignore code before the filtering node in the same basic block
                 if stmt is assign:
                     break
-                require(all(v.name != df_varname for v in stmt.list_vars()))
+                require(all(v.name not in df_names for v in stmt.list_vars()))
 
-    def _reorder_filter_nodes(self, read_node, index_def, df_var, filters, working_body, func_ir):
+    def _reorder_filter_nodes(self, read_node, index_def, used_dfs, filters, working_body, func_ir):
         """reorder nodes that are used for Parquet/SQL partition filtering to be before the
         Reader node (to be accessible when the Reader is run).
+
+        df_names is a set of variables that need to be tracked to perform the filter pushdown.
+
         Throws GuardException if not possible.
         """
         # e.g. [[("a", "0", ir.Var("val"))]] -> {"val"}
@@ -698,6 +708,9 @@ class TypingTransforms:
         # n = len(df)
         # df = df[df["A"] == 2]
         related_vars = set()
+
+        # Get the set of intermediate df names
+        df_names = set(used_dfs.keys())
         for node in filter_nodes:
             related_vars.update({v.name for v in node.list_vars()})
         for stmt in reversed(working_body):
@@ -705,13 +718,15 @@ class TypingTransforms:
             # ignore dataframe filter expression nodes
             if is_assign(stmt) and stmt.value in filter_nodes:
                 continue
-            # handle df = $1
+            # handle a known initialization
+            # i.e. df = $1
             if (
                 is_assign(stmt)
-                and stmt.target.name == df_var.name
-                and isinstance(stmt.value, ir.Var)
+                and stmt.target.name in df_names
+                and (isinstance(stmt.value, ir.Var) or stmt.value is used_dfs[stmt.target.name])
             ):
                 continue
+
             # avoid nodes before the reader
             if stmt is read_node:
                 break
@@ -719,9 +734,11 @@ class TypingTransforms:
 
             # make sure df is not used before filtering
             if not stmt_vars & related_vars:
-                require(df_var.name not in stmt_vars)
+                # df_names is a non-empty set, so if the intersection
+                # is empty then a df_name is in stmt_vars
+                require(not (df_names & stmt_vars))
             else:
-                related_vars |= stmt_vars - {df_var.name}
+                related_vars |= stmt_vars - df_names
 
             if stmt_vars & filter_vars:
                 filter_vars |= stmt_vars
@@ -769,7 +786,7 @@ class TypingTransforms:
         return {index_def}
 
     def _get_partition_filters(
-        self, index_def, partition_names, df_var, lhs_def, rhs_def, func_ir, is_sql
+        self, index_def, df_var, lhs_def, rhs_def, func_ir, is_sql
     ):
         """get filters for predicate pushdown if possible.
         Returns filters in pyarrow DNF format (e.g. [[("a", "==", 1)][("a", "==", 2)]]):
@@ -782,15 +799,17 @@ class TypingTransforms:
         # Or case: call recursively on arguments and concatenate
         # e.g. A or B
         if index_def.fn == operator.or_:
+            require(is_expr(lhs_def, "binop"))
             l_def = get_definition(func_ir, lhs_def.lhs)
             r_def = get_definition(func_ir, lhs_def.rhs)
             left_or = self._get_partition_filters(
-                lhs_def, partition_names, df_var, l_def, r_def, func_ir, is_sql
+                lhs_def, df_var, l_def, r_def, func_ir, is_sql
             )
+            require(is_expr(rhs_def, "binop"))
             l_def = get_definition(func_ir, rhs_def.lhs)
             r_def = get_definition(func_ir, rhs_def.rhs)
             right_or = self._get_partition_filters(
-                rhs_def, partition_names, df_var, l_def, r_def, func_ir, is_sql
+                rhs_def, df_var, l_def, r_def, func_ir, is_sql
             )
             return left_or + right_or
 
@@ -799,14 +818,14 @@ class TypingTransforms:
 
             # rhs is Or
             # e.g. "A And (B Or C)" -> "(A And B) Or (A And C)"
-            if is_expr(lhs_def, "binop") and rhs_def.fn == operator.or_:
+            if is_expr(rhs_def, "binop") and rhs_def.fn == operator.or_:
                 # lhs And rhs.lhs (A And B)
                 new_lhs = ir.Expr.binop(
                     operator.and_, index_def.lhs, rhs_def.lhs, index_def.loc
                 )
                 new_lhs_rdef = get_definition(func_ir, rhs_def.lhs)
                 left_or = self._get_partition_filters(
-                    new_lhs, partition_names, df_var, lhs_def, new_lhs_rdef, func_ir, is_sql
+                    new_lhs, df_var, lhs_def, new_lhs_rdef, func_ir, is_sql
                 )
                 # lhs And rhs.rhs (A And C)
                 new_rhs = ir.Expr.binop(
@@ -814,7 +833,7 @@ class TypingTransforms:
                 )
                 new_rhs_rdef = get_definition(func_ir, rhs_def.rhs)
                 right_or = self._get_partition_filters(
-                    new_rhs, partition_names, df_var, lhs_def, new_rhs_rdef, func_ir, is_sql
+                    new_rhs, df_var, lhs_def, new_rhs_rdef, func_ir, is_sql
                 )
                 return left_or + right_or
 
@@ -827,7 +846,7 @@ class TypingTransforms:
                 )
                 new_lhs_ldef = get_definition(func_ir, lhs_def.lhs)
                 left_or = self._get_partition_filters(
-                    new_lhs, partition_names, df_var, new_lhs_ldef, rhs_def, func_ir, is_sql
+                    new_lhs, df_var, new_lhs_ldef, rhs_def, func_ir, is_sql
                 )
                 # lhs.rhs And rhs (C And A)
                 new_rhs = ir.Expr.binop(
@@ -835,20 +854,22 @@ class TypingTransforms:
                 )
                 new_rhs_ldef = get_definition(func_ir, lhs_def.rhs)
                 right_or = self._get_partition_filters(
-                    new_rhs, partition_names, df_var, new_rhs_ldef, rhs_def, func_ir, is_sql
+                    new_rhs, df_var, new_rhs_ldef, rhs_def, func_ir, is_sql
                 )
                 return left_or + right_or
 
-            # both lhs and rhs are And/literal expressions
+            # both lhs and rhs are And/literal expressions.
+            require(is_expr(lhs_def, "binop"))
             l_def = get_definition(func_ir, lhs_def.lhs)
             r_def = get_definition(func_ir, lhs_def.rhs)
             left_or = self._get_partition_filters(
-                lhs_def, partition_names, df_var, l_def, r_def, func_ir, is_sql
+                lhs_def, df_var, l_def, r_def, func_ir, is_sql
             )
+            require(is_expr(rhs_def, "binop"))
             l_def = get_definition(func_ir, rhs_def.lhs)
             r_def = get_definition(func_ir, rhs_def.rhs)
             right_or = self._get_partition_filters(
-                rhs_def, partition_names, df_var, l_def, r_def, func_ir, is_sql
+                rhs_def, df_var, l_def, r_def, func_ir, is_sql
             )
             return [left_or[0] + right_or[0]]
 
@@ -1950,7 +1971,7 @@ class TypingTransforms:
         # BodoSQL generates df.columns setattr, which needs another transform to work
         # (See BodoSQL #189)
         self.needs_transform = True
-        return compile_func_single_block(
+        block_body = compile_func_single_block(
             impl,
             [sql_context_var] + values,
             assign.target,
@@ -1960,6 +1981,153 @@ class TypingTransforms:
             flags=self.flags,
             replace_globals=False,
         )
+        # Attempt to apply filter pushdown if there is parquet load
+        if any([isinstance(stmt, bodo.ir.parquet_ext.ParquetReader) for stmt in block_body]):
+            block_body = self._apply_bodosql_filter_pushdown(block_body)
+        return block_body
+
+    def _apply_bodosql_filter_pushdown(self, block_body):
+        """
+            Function that tries to apply filter pushdown to a single "block" produced
+            by BodoSQL. The block_body is a list of ir.Stmt.
+
+            Currently we only attempt to apply filter pushdown(s) to files read
+            from parquet within the BodoSQL block.
+
+            Returns a new list of statements, updated with the filter pushdown(s).
+        """
+        # We generate a dummy scope + loc because BodoSQL doesn't contain useful
+        # loc information anyways (since its a func_text).
+        loc = ir.Loc("", 0)
+        scope = ir.Scope(None, loc)
+        # Wrap the body in a dummy Block + FunctionIR for Numba APIs
+        block = ir.Block(scope, loc)
+        block.body = block_body
+        blocks = {0: block}
+        definitions = build_definitions(blocks)
+        func_ir = ir.FunctionIR(
+            {0: block},
+            False,
+            -1,
+            loc,
+            definitions,
+            0,
+            ()
+        )
+        working_body = []
+        for inst in block.body:
+            # Try and determine if we could have a filter pushdown. This only
+            # occurs when we have a getitem with a filter.
+            if isinstance(inst, ir.Assign) and isinstance(inst.value, ir.Expr) and inst.value.op in ("getitem", "static_getitem"):
+                updated_working_body = guard(self._try_bodosql_filter_pushdown, inst, func_ir, working_body)
+                # If we have an updated working body swap the working body list
+                if updated_working_body:
+                    working_body = updated_working_body
+            working_body.append(inst)
+        return working_body
+
+    def _try_bodosql_filter_pushdown(self, inst, func_ir, working_body):
+        """
+            Tries to convert the given static_getitem expression into
+            a filter pushdown. If this is not possible throws a guard exception.
+
+            Pandas code generated from BodoSQL will contain an astype to perform
+            filter pushdown and 1 or more df.loc
+
+            For example
+
+            df = pd.read_parquet("filename")
+            df = pd.DataFrame(
+                {
+                    "a": df["a"],
+                    "b": df["b"].astype("category")
+                    "c": df["c"],
+                }
+            )
+            df1 = df.loc[:, ["b", "c"]]
+            df2 = df1[df["b"] == 'a']
+
+            Return a new working body if the pushdown was successful.
+        """
+
+        rhs = inst.value
+        index_def = get_definition(func_ir, rhs.index)
+        if is_expr(index_def, "binop"):
+            value_def = get_definition(func_ir, rhs.value)
+
+            # Intermediate DataFrames that need to be checked.
+            used_dfs = {rhs.value.name: value_def}
+
+
+            # If we have any df.loc calls that load all rows, they will appear
+            # before the init_dataframe. We can find all rows with a
+            # static getitem with a slice of all none for the rows.
+            #
+            # i.e.
+            # df1 = df.loc[:, ["b", "c"]]
+            #
+            empty_slice = slice(None, None, None)
+            # TODO: Refactor df.loc support into a general function and apply to Pandas as well.
+            while is_expr(value_def, "static_getitem") and isinstance(value_def.index, tuple) and len(value_def.index) > 0 and value_def.index[0] == empty_slice:
+                used_name = value_def.value.name
+                # Now we confirm we found a df.loc and traverse back to the original dataframe.
+                value_def = get_definition(func_ir, value_def.value)
+                # Add this to the intermediate DataFrames
+                used_dfs[used_name] = value_def
+                # If we didn't find a df.loc exit because the code structure is unexpected.
+                require(is_expr(value_def, "getattr") and value_def.attr == "loc")
+                used_name = value_def.value.name
+                # Move the value to the df in df.loc
+                value_def = get_definition(func_ir, value_def.value)
+                # Add this to the intermediate DataFrames
+                used_dfs[used_name] = value_def
+            # If we load from parquet with paritions, BodoSQL will generate a pd.DataFrame call that performs
+            # an astype with the categorical columns
+            # For example:
+            #
+            # df = pd.read_parquet("filename")
+            # df = pd.DataFrame(
+            #     {
+            #         "a": df["a"],
+            #         "b": df["b"].astype("category")
+            #         "c": df["c"],
+            #     }
+            # )
+            # In this situation, the DataFrame is ALWAYS immediately clobbered.
+            # This means we ignore uses of this variable (to avoid tracking each
+            # column) and we rely on the source being a ParquetReader
+            # to ensure it is safe to perform filter pushdown.
+            #
+            # TODO: Enable the normal path without astype in case we just perform predicate
+            # pushdown without partition pushdown.
+            if is_call(value_def) and guard(find_callname, func_ir, value_def) == ("DataFrame", "pandas"):
+                require(len(value_def.args) > 0)
+                # Obtain the dictionary argument to pd.DataFrame
+                df_dict = value_def.args[0]
+                dict_def = get_definition(func_ir, df_dict)
+                require(is_expr(dict_def, "build_tuple"))
+
+                # Find the source DataFrame that should be created from the parquet node.
+                # All dataframes are at the end of this build_tuple, so we look for their
+                # source. These can either be a static getitem from the df or an astype.
+                #
+                # Again we don't check the use of these variables because of the assumed
+                # code structure.
+                source_col = get_definition(func_ir, dict_def.items[-1])
+                if is_call(source_col):
+                    # We have an astype.
+                    source_col = get_definition(func_ir, source_col.func)
+                    require(is_expr(source_col, "getattr") and source_col.attr == "astype")
+                    source_col = get_definition(func_ir, source_col.value)
+                # The source column is a static getitem to the relevant df
+                require(is_expr(source_col, "static_getitem"))
+                source_df = get_definition(func_ir, source_col.value)
+
+                # If the filter pushdown was successful we can update the working body
+                working_body = self._try_filter_pushdown(inst, source_df, index_def, working_body, func_ir, used_dfs)
+
+        return working_body
+
 
     def _call_arg_list_to_tuple(self, rhs, func_name, arg_no, arg_name, nodes):
         """Convert call argument to tuple if it is a constant list"""

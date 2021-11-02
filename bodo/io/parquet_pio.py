@@ -284,7 +284,7 @@ def pq_distributed_run(
     if array_dists is not None:
         parallel = [
             c
-            for c, v in zip(pq_node.col_names, pq_node.out_vars)
+            for c, v in zip(pq_node.df_colnames, pq_node.out_vars)
             if array_dists[v.name]
             in (
                 distributed_pass.Distribution.OneD,
@@ -293,7 +293,7 @@ def pq_distributed_run(
         ]
 
     pq_reader_py = _gen_pq_reader_py(
-        pq_node.col_names,
+        pq_node.df_colnames,
         pq_node.col_indices,
         pq_node.out_types,
         pq_node.storage_options,
