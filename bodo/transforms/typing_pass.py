@@ -573,20 +573,30 @@ class TypingTransforms:
             and guard(find_callname, self.func_ir, value_def)
             == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext")
         ):
-            guard(self._try_filter_pushdown, assign, value_def, index_def)
+            working_body = guard(self._try_filter_pushdown, assign, value_def, index_def, self._working_body, self.func_ir)
+            # If this function returns a list we have updated the working body.
+            # This is done to enable updating a single block that is not yet being processed
+            # in the working body.
+            if working_body is not None:
+                self._working_body = working_body
 
         nodes.append(assign)
         return nodes
 
-    def _try_filter_pushdown(self, assign, value_def, index_def):
+    def _try_filter_pushdown(self, assign, value_def, index_def, working_body, func_ir):
         """detect filter pushdown and add filters to ParquetReader or SQLReader IR nodes if possible.
+
+        working_body is in the inprogress list of statements that should be updated with any filter reordering.
+        A new working_body is returned if this is successful. func_ir is FunctionIR object containing the blocks
+        with all relevant code.
+
         Throws GuardException if not possible.
         """
         # avoid empty dataframe
         require(len(value_def.args) > 0)
-        data_def = get_definition(self.func_ir, value_def.args[0])
+        data_def = get_definition(func_ir, value_def.args[0])
         assert is_expr(data_def, "build_tuple"), "invalid data tuple in init_dataframe"
-        read_node = get_definition(self.func_ir, data_def.items[0])
+        read_node = get_definition(func_ir, data_def.items[0])
         require(
             isinstance(
                 read_node,
@@ -594,7 +604,7 @@ class TypingTransforms:
             )
         )
         require(
-            all(get_definition(self.func_ir, v) == read_node for v in data_def.items)
+            all(get_definition(func_ir, v) == read_node for v in data_def.items)
         )
         if isinstance(read_node, bodo.ir.parquet_ext.ParquetReader):
             require(read_node.partition_names)
@@ -608,8 +618,8 @@ class TypingTransforms:
             partition_names = read_node.df_colnames
 
         # make sure all filters have the right form
-        lhs_def = get_definition(self.func_ir, index_def.lhs)
-        rhs_def = get_definition(self.func_ir, index_def.rhs)
+        lhs_def = get_definition(func_ir, index_def.lhs)
+        rhs_def = get_definition(func_ir, index_def.rhs)
         df_var = assign.value.value
         filters = self._get_partition_filters(
             index_def,
@@ -617,11 +627,12 @@ class TypingTransforms:
             df_var,
             lhs_def,
             rhs_def,
+            func_ir,
             # SQL generates different operators than pyarrow
             isinstance(read_node, bodo.ir.sql_ext.SqlReader),
         )
-        self._check_non_filter_df_use(df_var.name, assign)
-        self._reorder_filter_nodes(read_node, index_def, df_var, filters)
+        self._check_non_filter_df_use(df_var.name, assign, func_ir)
+        new_working_body = self._reorder_filter_nodes(read_node, index_def, df_var, filters, working_body, func_ir)
         old_filters = read_node.filters
         # If there are existing filters then we need to merge them together because this is
         # an implicit AND. We merge by distributed the AND over ORs
@@ -641,8 +652,11 @@ class TypingTransforms:
         assign.value = assign.value.value
         # Mark the IR as changed
         self.changed = True
+        # Return the updates to the working body so we can modify blocks that may not
+        # be in the working body yet.
+        return new_working_body
 
-    def _check_non_filter_df_use(self, df_varname, assign):
+    def _check_non_filter_df_use(self, df_varname, assign, func_ir):
         """make sure the original dataframe variable is not used after filtering in the
         program. e.g. df2 = df[...]; A = df.A
         Assumes that Numba renames variables if the same df name is used later. e.g.:
@@ -653,14 +667,14 @@ class TypingTransforms:
             if flag:
                 df = ....
         """
-        for block in self.func_ir.blocks.values():
+        for block in func_ir.blocks.values():
             for stmt in reversed(block.body):
                 # ignore code before the filtering node in the same basic block
                 if stmt is assign:
                     break
                 require(all(v.name != df_varname for v in stmt.list_vars()))
 
-    def _reorder_filter_nodes(self, read_node, index_def, df_var, filters):
+    def _reorder_filter_nodes(self, read_node, index_def, df_var, filters, working_body, func_ir):
         """reorder nodes that are used for Parquet/SQL partition filtering to be before the
         Reader node (to be accessible when the Reader is run).
         Throws GuardException if not possible.
@@ -676,7 +690,7 @@ class TypingTransforms:
         i = 0  # will be set to ParquetReader node's reversed index
         # nodes used for filtering output dataframe use filter vars as well but should
         # be excluded since they have dependency to data arrays (e.g. df["A"] == 3)
-        filter_nodes = self._get_filter_nodes(index_def)
+        filter_nodes = self._get_filter_nodes(index_def, func_ir)
         # get all variables related to filtering nodes in some way, to make sure df is
         # not used in other ways before filtering
         # e.g.
@@ -686,7 +700,7 @@ class TypingTransforms:
         related_vars = set()
         for node in filter_nodes:
             related_vars.update({v.name for v in node.list_vars()})
-        for stmt in reversed(self._working_body):
+        for stmt in reversed(working_body):
             i += 1
             # ignore dataframe filter expression nodes
             if is_assign(stmt) and stmt.value in filter_nodes:
@@ -717,11 +731,11 @@ class TypingTransforms:
         require(not (filter_vars & non_filter_vars))
 
         # move IR nodes for filter expressions before the reader node
-        pq_ind = len(self._working_body) - i
-        new_body = self._working_body[:pq_ind]
+        pq_ind = len(working_body) - i
+        new_body = working_body[:pq_ind]
         non_filter_nodes = []
-        for i in range(pq_ind, len(self._working_body)):
-            stmt = self._working_body[i]
+        for i in range(pq_ind, len(working_body)):
+            stmt = working_body[i]
             # ignore dataframe filter expression node
             if is_assign(stmt) and stmt.value in filter_nodes:
                 non_filter_nodes.append(stmt)
@@ -734,9 +748,9 @@ class TypingTransforms:
                 non_filter_nodes.append(stmt)
 
         # update current basic block with new stmt order
-        self._working_body = new_body + non_filter_nodes
+        return new_body + non_filter_nodes
 
-    def _get_filter_nodes(self, index_def):
+    def _get_filter_nodes(self, index_def, func_ir):
         """find ir.Expr nodes used in filtering output dataframe directly so they can
         be excluded from filter dependency reordering
         """
@@ -746,16 +760,16 @@ class TypingTransforms:
             operator.and_,
         ):
             left_nodes = self._get_filter_nodes(
-                get_definition(self.func_ir, index_def.lhs)
+                get_definition(func_ir, index_def.lhs), func_ir
             )
             right_nodes = self._get_filter_nodes(
-                get_definition(self.func_ir, index_def.rhs)
+                get_definition(func_ir, index_def.rhs), func_ir
             )
             return {index_def} | left_nodes | right_nodes
         return {index_def}
 
     def _get_partition_filters(
-        self, index_def, partition_names, df_var, lhs_def, rhs_def, is_sql
+        self, index_def, partition_names, df_var, lhs_def, rhs_def, func_ir, is_sql
     ):
         """get filters for predicate pushdown if possible.
         Returns filters in pyarrow DNF format (e.g. [[("a", "==", 1)][("a", "==", 2)]]):
@@ -768,15 +782,15 @@ class TypingTransforms:
         # Or case: call recursively on arguments and concatenate
         # e.g. A or B
         if index_def.fn == operator.or_:
-            l_def = get_definition(self.func_ir, lhs_def.lhs)
-            r_def = get_definition(self.func_ir, lhs_def.rhs)
+            l_def = get_definition(func_ir, lhs_def.lhs)
+            r_def = get_definition(func_ir, lhs_def.rhs)
             left_or = self._get_partition_filters(
-                lhs_def, partition_names, df_var, l_def, r_def, is_sql
+                lhs_def, partition_names, df_var, l_def, r_def, func_ir, is_sql
             )
-            l_def = get_definition(self.func_ir, rhs_def.lhs)
-            r_def = get_definition(self.func_ir, rhs_def.rhs)
+            l_def = get_definition(func_ir, rhs_def.lhs)
+            r_def = get_definition(func_ir, rhs_def.rhs)
             right_or = self._get_partition_filters(
-                rhs_def, partition_names, df_var, l_def, r_def, is_sql
+                rhs_def, partition_names, df_var, l_def, r_def, func_ir, is_sql
             )
             return left_or + right_or
 
@@ -790,17 +804,17 @@ class TypingTransforms:
                 new_lhs = ir.Expr.binop(
                     operator.and_, index_def.lhs, rhs_def.lhs, index_def.loc
                 )
-                new_lhs_rdef = get_definition(self.func_ir, rhs_def.lhs)
+                new_lhs_rdef = get_definition(func_ir, rhs_def.lhs)
                 left_or = self._get_partition_filters(
-                    new_lhs, partition_names, df_var, lhs_def, new_lhs_rdef, is_sql
+                    new_lhs, partition_names, df_var, lhs_def, new_lhs_rdef, func_ir, is_sql
                 )
                 # lhs And rhs.rhs (A And C)
                 new_rhs = ir.Expr.binop(
                     operator.and_, index_def.lhs, rhs_def.rhs, index_def.loc
                 )
-                new_rhs_rdef = get_definition(self.func_ir, rhs_def.rhs)
+                new_rhs_rdef = get_definition(func_ir, rhs_def.rhs)
                 right_or = self._get_partition_filters(
-                    new_rhs, partition_names, df_var, lhs_def, new_rhs_rdef, is_sql
+                    new_rhs, partition_names, df_var, lhs_def, new_rhs_rdef, func_ir, is_sql
                 )
                 return left_or + right_or
 
@@ -811,30 +825,30 @@ class TypingTransforms:
                 new_lhs = ir.Expr.binop(
                     operator.and_, lhs_def.lhs, index_def.rhs, index_def.loc
                 )
-                new_lhs_ldef = get_definition(self.func_ir, lhs_def.lhs)
+                new_lhs_ldef = get_definition(func_ir, lhs_def.lhs)
                 left_or = self._get_partition_filters(
-                    new_lhs, partition_names, df_var, new_lhs_ldef, rhs_def, is_sql
+                    new_lhs, partition_names, df_var, new_lhs_ldef, rhs_def, func_ir, is_sql
                 )
                 # lhs.rhs And rhs (C And A)
                 new_rhs = ir.Expr.binop(
                     operator.and_, lhs_def.rhs, index_def.rhs, index_def.loc
                 )
-                new_rhs_ldef = get_definition(self.func_ir, lhs_def.rhs)
+                new_rhs_ldef = get_definition(func_ir, lhs_def.rhs)
                 right_or = self._get_partition_filters(
-                    new_rhs, partition_names, df_var, new_rhs_ldef, rhs_def, is_sql
+                    new_rhs, partition_names, df_var, new_rhs_ldef, rhs_def, func_ir, is_sql
                 )
                 return left_or + right_or
 
             # both lhs and rhs are And/literal expressions
-            l_def = get_definition(self.func_ir, lhs_def.lhs)
-            r_def = get_definition(self.func_ir, lhs_def.rhs)
+            l_def = get_definition(func_ir, lhs_def.lhs)
+            r_def = get_definition(func_ir, lhs_def.rhs)
             left_or = self._get_partition_filters(
-                lhs_def, partition_names, df_var, l_def, r_def, is_sql
+                lhs_def, partition_names, df_var, l_def, r_def, func_ir, is_sql
             )
-            l_def = get_definition(self.func_ir, rhs_def.lhs)
-            r_def = get_definition(self.func_ir, rhs_def.rhs)
+            l_def = get_definition(func_ir, rhs_def.lhs)
+            r_def = get_definition(func_ir, rhs_def.rhs)
             right_or = self._get_partition_filters(
-                rhs_def, partition_names, df_var, l_def, r_def, is_sql
+                rhs_def, partition_names, df_var, l_def, r_def, func_ir, is_sql
             )
             return [left_or[0] + right_or[0]]
 
@@ -863,8 +877,8 @@ class TypingTransforms:
         }
 
         require(index_def.fn in op_map)
-        left_colname = guard(self._get_col_name, index_def.lhs, df_var)
-        right_colname = guard(self._get_col_name, index_def.rhs, df_var)
+        left_colname = guard(self._get_col_name, index_def.lhs, df_var, func_ir)
+        right_colname = guard(self._get_col_name, index_def.rhs, df_var, func_ir)
 
         require(
             (left_colname and not right_colname) or (right_colname and not left_colname)
@@ -876,33 +890,33 @@ class TypingTransforms:
         # Pyarrow format, e.g.: [[("a", "==", 2)]]
         return [[cond]]
 
-    def _get_col_name(self, var, df_var):
+    def _get_col_name(self, var, df_var, func_ir):
         """get column name for dataframe column access like df["A"] if possible.
         Throws GuardException if not possible.
         """
-        var_def = get_definition(self.func_ir, var)
+        var_def = get_definition(func_ir, var)
         if is_expr(var_def, "getattr") and var_def.value.name == df_var.name:
             return var_def.attr
         if is_expr(var_def, "static_getitem") and var_def.value.name == df_var.name:
             return var_def.index
         # handle case with calls like df["A"].astype(int) > 2
         if is_call(var_def):
-            fdef = find_callname(self.func_ir, var_def)
+            fdef = find_callname(func_ir, var_def)
             # calling pd.to_datetime() on a string column is possible since pyarrow
             # matches the data types before filter comparison (in this case, calls
             # pd.Timestamp on partiton's string value)
             if fdef == ("to_datetime", "pandas"):
-                return self._get_col_name(var_def.args[0], df_var)
+                return self._get_col_name(var_def.args[0], df_var, func_ir)
             require(
                 isinstance(fdef, tuple)
                 and len(fdef) == 2
                 and isinstance(fdef[1], ir.Var)
             )
-            return self._get_col_name(fdef[1], df_var)
+            return self._get_col_name(fdef[1], df_var, func_ir)
 
         require(is_expr(var_def, "getitem"))
         require(var_def.value.name == df_var.name)
-        return get_const_value_inner(self.func_ir, var_def.index, arg_types=self.args)
+        return get_const_value_inner(func_ir, var_def.index, arg_types=self.args)
 
     def _run_setitem(self, inst, label):
         target_typ = self.typemap.get(inst.target.name, None)
