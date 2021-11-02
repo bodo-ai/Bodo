@@ -13,6 +13,7 @@ from bodo.tests.utils import (
     _check_for_io_reader_filters,
     check_func,
     get_start_end,
+    _check_connector_columns,
 )
 
 sql_user_pass_and_hostname = (
@@ -283,7 +284,7 @@ def test_sql_snowflake_single_column(memory_leak_check):
     check_func(impl, (query, conn), check_dtype=False)
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
     bodo_func(query, conn)
-    _check_connector_columns(bodo_func, ["l_suppkey"])
+    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
@@ -369,6 +370,7 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
         [
             "l_suppkey",
         ],
+        bodo.ir.sql_ext.SqlReader
     )
 
     str_val = "O"
@@ -376,14 +378,14 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_string)
     bodo_func(query, conn, str_val)
     _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"])
+    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
 
     date_val = datetime.date(1996, 4, 12)
     check_func(impl_date, (query, conn, date_val), check_dtype=False, reset_index=True)
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_date)
     bodo_func(query, conn, date_val)
     _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"])
+    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
 
     ts_val = pd.Timestamp(year=1997, month=4, day=12)
     check_func(
@@ -392,7 +394,7 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_timestamp)
     bodo_func(query, conn, ts_val)
     _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"])
+    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
 
     check_func(
         impl_mixed,
@@ -403,20 +405,4 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_mixed)
     bodo_func(query, conn, int_val, str_val, date_val, ts_val)
     _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"])
-
-
-def _check_connector_columns(bodo_func, col_names):
-    """make sure Connector node has only the given list of columns"""
-    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    sql_read_found = False
-    for stmt in fir.blocks[0].body:
-        # TODO: Refactor to support additional connector nodes
-        if isinstance(stmt, bodo.ir.sql_ext.SqlReader):
-            stored_col_names = stmt.df_colnames
-            assert sorted(stored_col_names) == sorted(
-                col_names
-            ), "Expected columns do not match stored columns"
-            sql_read_found = True
-
-    assert sql_read_found
+    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)

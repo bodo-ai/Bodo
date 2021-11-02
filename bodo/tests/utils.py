@@ -1631,3 +1631,18 @@ def _check_for_io_reader_filters(bodo_func, node_class):
         assert not (is_assign(stmt) and is_expr(stmt.value, "getitem"))
 
     assert read_found
+
+
+def _check_connector_columns(bodo_func, col_names, node_class):
+    """make sure Connector node has only the given list of columns"""
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    sql_read_found = False
+    for stmt in fir.blocks[0].body:
+        if isinstance(stmt, node_class):
+            stored_col_names = stmt.df_colnames
+            assert sorted(stored_col_names) == sorted(
+                col_names
+            ), "Expected columns do not match stored columns"
+            sql_read_found = True
+
+    assert sql_read_found

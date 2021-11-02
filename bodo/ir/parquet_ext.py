@@ -26,7 +26,7 @@ class ParquetReader(ir.Stmt):
         self.connector_typ = "parquet"
         self.file_name = file_name
         self.df_out = df_out  # used only for printing
-        self.col_names = col_names
+        self.df_colnames = col_names
         self.col_indices = col_indices
         self.out_types = out_types
         self.out_vars = out_vars
@@ -41,7 +41,7 @@ class ParquetReader(ir.Stmt):
         return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {})".format(
             self.df_out,
             self.file_name.name,
-            self.col_names,
+            self.df_colnames,
             self.col_indices,
             self.out_types,
             self.out_vars,
@@ -62,12 +62,12 @@ def remove_dead_pq(
 
     for i, col_var in enumerate(pq_node.out_vars):
         if col_var.name in lives:
-            new_col_names.append(pq_node.col_names[i])
+            new_col_names.append(pq_node.df_colnames[i])
             new_out_vars.append(pq_node.out_vars[i])
             new_out_types.append(pq_node.out_types[i])
             new_col_indices.append(pq_node.col_indices[i])
 
-    pq_node.col_names = new_col_names
+    pq_node.df_colnames = new_col_names
     pq_node.out_vars = new_out_vars
     pq_node.out_types = new_out_types
     pq_node.col_indices = new_col_indices

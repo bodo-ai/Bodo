@@ -97,6 +97,7 @@ no_side_effect_call_tuples = {
     (abs,),
     (len,),
     (bool,),
+    (str,),
     ("ceil", math),
     # Series
     ("init_series", "pd_series_ext", "hiframes", bodo),
