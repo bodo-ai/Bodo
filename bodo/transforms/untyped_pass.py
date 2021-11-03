@@ -1063,12 +1063,20 @@ class UntypedPass:
                         loc=_skiprows.loc,
                     )
 
-        if not isinstance(skiprows_val, int):
+        # This checks for constant list at compile time.
+        is_skiprows_list = _check_int_list(skiprows_val)
+        if not isinstance(skiprows_val, int) and not is_skiprows_list:
             raise BodoError(
-                "pd.read_csv() 'skiprows' must be integer.", loc=_skiprows.loc
+                "pd.read_csv() 'skiprows' must be an integer or list of integers.",
+                loc=_skiprows.loc,
             )
-        elif skiprows_val < 0:
-            # If skiprows is already a constant, check the size at compile time
+        # Sort list and remove duplicates
+        skiprows_val = sorted(set(skiprows_val)) if is_skiprows_list else skiprows_val
+        # Since list is sorted, test first value only in the list
+        if (isinstance(skiprows_val, int) and skiprows_val < 0) or (
+            is_skiprows_list and skiprows_val[0] < 0
+        ):
+            # If skiprows integer is already a constant, check the size at compile time
             raise BodoError(
                 "pd.read_csv() skiprows must be integer >= 0.", loc=_skiprows.loc
             )
@@ -1108,6 +1116,11 @@ class UntypedPass:
                 f"pd.read_csv() 'compression' must be one of {supported_compression_options}",
                 loc=rhs.loc,
             )
+
+        # Pandas default is True but Bodo is False
+        pd_low_memory = self._get_const_arg(
+            "pd.read_csv", rhs.args, kws, 48, "low_memory", False, use_default=True
+        )
 
         # List of all possible args and a support default value. This should match the header above.
         # If a default value is not supported, use None. We provide the default value to enable passing
@@ -1162,7 +1175,7 @@ class UntypedPass:
             ("warn_bad_lines", True),
             ("on_bad_lines", "error"),
             ("delim_whitespace", False),
-            ("low_memory", True),
+            ("low_memory", False),
             ("memory_map", False),
             ("float_precision", None),
             ("storage_options", None),
@@ -1183,6 +1196,7 @@ class UntypedPass:
                 "parse_dates",
                 "chunksize",
                 "compression",
+                "low_memory",
             )
         )
         # Iterate through the provided args. If an argument is in the supported_args,
@@ -1390,6 +1404,8 @@ class UntypedPass:
                 _nrows,
                 _skiprows,
                 chunksize,
+                is_skiprows_list,
+                pd_low_memory,
             )
         ]
 
@@ -2506,3 +2522,10 @@ def _check_type(val, typ):
     if isinstance(typ, list):
         return any(isinstance(val, t) for t in typ)
     return isinstance(val, typ)
+
+
+def _check_int_list(list_val):
+    """ check whether list_val is list/tuple and its elements are of type int"""
+    return isinstance(list_val, (list, tuple)) and all(
+        isinstance(val, int) for val in list_val
+    )

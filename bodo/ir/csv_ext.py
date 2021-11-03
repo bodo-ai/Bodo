@@ -41,6 +41,8 @@ class CsvReader(ir.Stmt):
         nrows,
         skiprows,
         chunksize,
+        is_skiprows_list,
+        low_memory,
     ):
         self.connector_typ = "csv"
         self.file_name = file_name
@@ -58,9 +60,12 @@ class CsvReader(ir.Stmt):
         # If this value is not None, we return an iterator instead of a DataFrame.
         # When this happens the out_vars are a list with a single CSVReaderType.
         self.chunksize = chunksize
+        # skiprows list
+        self.is_skiprows_list = is_skiprows_list
+        self.pd_low_memory = low_memory
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={}, self.chunksize={})".format(
+        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={}, self.chunksize={}, self.is_skiprows_list={}, self.pd_low_memory={})".format(
             self.df_out,
             self.file_name,
             self.df_colnames,
@@ -69,6 +74,8 @@ class CsvReader(ir.Stmt):
             self.nrows,
             self.skiprows,
             self.chunksize,
+            self.is_skiprows_list,
+            self.pd_low_memory,
         )
 
 
@@ -94,11 +101,26 @@ def check_node_typing(node, typemap):
                 f"pd.read_csv(): 'skiprows' callable not supported yet.",
                 node.file_name.loc,
             )
-        elif not isinstance(skiprows_typ, types.Integer):
+            # is_overload_constant_list
+        elif (
+            not isinstance(skiprows_typ, types.Integer)
+            and not (
+                isinstance(skiprows_typ, (types.List, types.Tuple))
+                and isinstance(skiprows_typ.dtype, types.Integer)
+            )
+            and not (
+                isinstance(
+                    skiprows_typ, (types.LiteralList, bodo.utils.typing.ListLiteral)
+                )
+            )
+        ):
             raise BodoError(
-                f"pd.read_csv(): 'skiprows' must be an integer. Found type {skiprows_typ}.",
+                f"pd.read_csv(): 'skiprows' must be an integer or list of integers. Found type {skiprows_typ}.",
                 loc=node.skiprows.loc,
             )
+        # Set flag for lists that are variables.
+        elif isinstance(skiprows_typ, (types.List, types.Tuple)):
+            node.is_skiprows_list = True
     # nrows must be an integer
     # If the value is an IR constant, then it is the default value so we don't need to check.
     if not isinstance(node.nrows, ir.Const):
@@ -121,12 +143,15 @@ csv_file_chunk_reader = types.ExternalFunction(
     bodo.ir.connector.stream_reader_type(
         types.voidptr,
         types.bool_,
-        types.int64,
+        types.voidptr,  # skiprows (array of int64_t)
         types.int64,
         types.bool_,
         types.voidptr,
         types.voidptr,
         types.int64,  # chunksize
+        types.bool_,  # is_skiprows_list
+        types.int64,  # skiprows_list_len
+        types.bool_,  # pd_low_memory
     ),
 )
 
@@ -170,6 +195,13 @@ def remove_dead_csv(
 def csv_distributed_run(
     csv_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
+    # skiprows as `ir.Const` indicates default value.
+    # If it's a list, it will never be `ir.Const`
+    skiprows_typ = (
+        types.int64
+        if isinstance(csv_node.skiprows, ir.Const)
+        else typemap[csv_node.skiprows.name]
+    )
     if csv_node.chunksize is not None:
         # Iterator Case
         if array_dists is None:
@@ -198,7 +230,12 @@ def csv_distributed_run(
 
         # Appends func text to initialize a file stream reader.
         init_func_text += _gen_csv_file_reader_init(
-            parallel, csv_node.header, csv_node.compression, csv_node.chunksize
+            parallel,
+            csv_node.header,
+            csv_node.compression,
+            csv_node.chunksize,
+            csv_node.is_skiprows_list,
+            csv_node.pd_low_memory,
         )
         init_func_text += "  return f_reader\n"
         exec(init_func_text, globals(), loc_vars)
@@ -208,6 +245,11 @@ def csv_distributed_run(
         # We keep track of the function for possible dynamic addresses
         jit_func = numba.njit(csv_reader_init)
         compiled_funcs.append(jit_func)
+        skiprows_typ = (
+            types.int64
+            if isinstance(csv_node.skiprows, ir.Const)
+            else typemap[csv_node.skiprows.name]
+        )
 
         # Compile the outer function into IR
         f_block = compile_to_numba_ir(
@@ -219,7 +261,8 @@ def csv_distributed_run(
             },
             typingctx=typingctx,
             targetctx=targetctx,
-            arg_typs=(string_type, types.int64, types.int64),
+            # file_name, nrows, skiprows
+            arg_typs=(string_type, types.int64, skiprows_typ),
             typemap=typemap,
             calltypes=calltypes,
         ).blocks.popitem()[1]
@@ -263,6 +306,8 @@ def csv_distributed_run(
         parallel,
         csv_node.header,
         csv_node.compression,
+        csv_node.is_skiprows_list,
+        csv_node.pd_low_memory,
     )
 
     f_block = compile_to_numba_ir(
@@ -270,11 +315,20 @@ def csv_distributed_run(
         {"_csv_reader_py": csv_reader_py},
         typingctx=typingctx,
         targetctx=targetctx,
-        arg_typs=(string_type, types.int64, types.int64),
+        # file_name, nrows, skiprows
+        arg_typs=(string_type, types.int64, skiprows_typ),
         typemap=typemap,
         calltypes=calltypes,
     ).blocks.popitem()[1]
-    replace_arg_nodes(f_block, [csv_node.file_name, csv_node.nrows, csv_node.skiprows])
+    replace_arg_nodes(
+        f_block,
+        [
+            csv_node.file_name,
+            csv_node.nrows,
+            csv_node.skiprows,
+            csv_node.is_skiprows_list,
+        ],
+    )
     nodes = f_block.body[:-3]
     for i in range(len(csv_node.out_vars)):
         nodes[-len(csv_node.out_vars) + i].target = csv_node.out_vars[i]
@@ -377,7 +431,7 @@ def check_nrows_skiprows_value(nrows, skiprows):
     # Corner case: if user did nrows=-1, this will pass. -1 to mean all rows.
     if nrows < -1:
         raise ValueError("pd.read_csv: nrows must be integer >= 0.")
-    if skiprows < 0:
+    if skiprows[0] < 0:
         raise ValueError("pd.read_csv: skiprows must be integer >= 0.")
 
 
@@ -408,7 +462,14 @@ def astype(df, typemap, parallel):
             raise TypeError(f"{common_err_msg}\nPlease refer to errors on other ranks.")
 
 
-def _gen_csv_file_reader_init(parallel, header, compression, chunksize):
+def _gen_csv_file_reader_init(
+    parallel,
+    header,
+    compression,
+    chunksize,
+    is_skiprows_list,
+    pd_low_memory,
+):
     """
     This function generates the f_reader used by pd.read_csv. This f_reader
     may be used for a single pd.read_csv call or a csv_reader used inside
@@ -426,17 +487,40 @@ def _gen_csv_file_reader_init(parallel, header, compression, chunksize):
 
     # Generate the body to create the file chunk reader. This is shared by the iterator and non iterator
     # implementations.
-    func_text = "  check_nrows_skiprows_value(nrows, skiprows)\n"
+    # If skiprows is a single value wrap it as a list
+    # and pass flag to identify whether skiprows is a list or a single element.
+    # This is needed because behavior of skiprows=4 is different from skiprows=[4]
+    # and C++ code implementation differs for both cases.
+    # The former means skip 4 rows from the beginning. Later means skip the 4th row.
+    if is_skiprows_list:
+        func_text = "  skiprows = sorted(set(skiprows))\n"
+        func_text += "  skiprows_list_len = len(skiprows)\n"
+
+    else:
+        func_text = "  skiprows = [skiprows]\n"
+        func_text += "  skiprows_list_len = 0\n"
+    func_text += "  check_nrows_skiprows_value(nrows, skiprows)\n"
     # check_java_installation is a check for hdfs that java is installed
     func_text += "  check_java_installation(fname)\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={parallel})\n"
     func_text += "  f_reader = bodo.ir.csv_ext.csv_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
-    func_text += "    {}, skiprows, nrows, {}, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), {})\n".format(
-        parallel, has_header, compression, chunksize
+    # change skiprows to array
+    # pass how many elements in the list as well or 0 if just an integer not a list
+    func_text += "    {}, bodo.utils.conversion.coerce_to_ndarray(skiprows, scalar_to_arr_len=1).ctypes, nrows, {}, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), {}, {}, skiprows_list_len, {})\n".format(
+        parallel,
+        has_header,
+        compression,
+        chunksize,
+        is_skiprows_list,
+        pd_low_memory,
     )
     # Check if there was an error in the C++ code. If so, raise it.
     func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
+    # TODO: unrelated to skiprows list PR
+    # This line is printed even if failure is because of another check
+    # Commenting it gives another compiler error.
+    # TypeError: csv_reader_py expected 1 argument, got 0
     func_text += "  if bodo.utils.utils.is_null_pointer(f_reader):\n"
     func_text += "      raise FileNotFoundError('File does not exist')\n"
     return func_text
@@ -572,6 +656,8 @@ def _gen_csv_reader_py(
     parallel,
     header,
     compression,
+    is_skiprows_list,
+    pd_low_memory,
 ):
     """
     Function that generates the body for a csv_node when chunksize
@@ -583,7 +669,14 @@ def _gen_csv_reader_py(
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
     func_text = "def csv_reader_py(fname, nrows, skiprows):\n"
     # If we reached this code path we don't have a chunksize, so set it to -1
-    func_text += _gen_csv_file_reader_init(parallel, header, compression, -1)
+    func_text += _gen_csv_file_reader_init(
+        parallel,
+        header,
+        compression,
+        -1,
+        is_skiprows_list,
+        pd_low_memory,
+    )
     func_text += _gen_read_csv_objmode(
         col_names,
         sanitized_cnames,

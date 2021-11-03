@@ -569,13 +569,79 @@ def test_csv_skiprows_type_nonconstant(memory_leak_check):
     skiprow_list = ["abcd"]
     with pytest.raises(
         BodoError,
-        match="pd.read_csv\\(\\): 'skiprows' must be an integer. Found type unicode_type.",
+        match="pd.read_csv\\(\\): 'skiprows' must be an integer or list of integers. Found type unicode_type.",
     ):
         bodo.jit(impl)(skiprow_list)
+
+
+# TODO: [BE-1532] checking values at runtime doesn't pass memory_leak_check
+@pytest.mark.slow
+def test_csv_skiprows_nonconstant_incorrect_values():
+    """
+    Test read_csv(): 'skiprows' with the negative numbers when its not a constant
+    throws a reasonable error.
+    """
+    fname = os.path.join("bodo", "tests", "data", "example.csv")
+
+    def impl(skiprow_list):
+        return pd.read_csv(
+            fname, skiprows=skiprow_list[0], names=["X", "Y", "Z", "MM", "AA"]
+        )
 
     skiprow_list = [-2]
     with pytest.raises(ValueError, match="integer >= 0"):
         bodo.jit(impl)(skiprow_list)
+
+    @bodo.jit
+    def f2():
+        return [1, -3, 0]
+
+    def impl2():
+        return pd.read_csv(fname, skiprows=f2(), names=["X", "Y", "Z", "MM", "AA"])
+
+    with pytest.raises(ValueError, match="integer >= 0"):
+        bodo.jit(impl2)()
+
+
+@pytest.mark.slow
+def test_csv_skiprows_list_type(memory_leak_check):
+    """
+    Test read_csv(): 'skiprows' with list has wrong value or type
+    """
+    fname = os.path.join("bodo", "tests", "data", "example.csv")
+
+    def impl1():
+        return pd.read_csv(fname, skiprows=[3, 2, 5, -1, -10])
+
+    def impl2():
+        return pd.read_csv(fname, skiprows=["wrong", "type"])
+
+    with pytest.raises(BodoError, match="integer >= 0"):
+        bodo.jit(impl1)()
+    with pytest.raises(BodoError, match="must be an integer"):
+        bodo.jit(impl2)()
+
+
+@pytest.mark.slow
+def test_csv_skiprows_list_type_nonconstant(memory_leak_check):
+    """
+    Test read_csv(): 'skiprows' list with the wrong type when its not a constant
+    throws a reasonable error.
+    """
+    fname = os.path.join("bodo", "tests", "data", "example.csv")
+
+    @bodo.jit
+    def f():
+        return ["abcd", "efg"]
+
+    def impl():
+        return pd.read_csv(fname, skiprows=f(), names=["X", "Y", "Z", "MM", "AA"])
+
+    with pytest.raises(
+        BodoError,
+        match="pd.read_csv\\(\\): 'skiprows' must be an integer or list of integers. Found type list\\(unicode_type\\)",
+    ):
+        bodo.jit(impl)()
 
 
 @pytest.mark.slow

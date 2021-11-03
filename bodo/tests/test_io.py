@@ -3229,6 +3229,178 @@ def test_csv_chunksize_nrows_skiprows(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_csv_skiprows_list_low_memory(datapath, memory_leak_check):
+    """
+    Test pd.read_csv skiprows as list for low_memory path
+    """
+    fname = datapath("example.csv")
+
+    # skiprows list
+    # (include 1st row and case where rank's start_pos is inside a skipped row)
+    def impl1(fname):
+        return pd.read_csv(fname, low_memory=True, skiprows=[1, 5, 7, 12])
+
+    check_func(impl1, (fname,))
+
+    # skiprows > available rows
+    def impl2(fname):
+        return pd.read_csv(fname, low_memory=True, skiprows=[17, 20])
+
+    check_func(impl2, (fname,))
+
+    # skiprows list unordered and duplicated
+    def impl3(fname):
+        return pd.read_csv(fname, low_memory=True, skiprows=[13, 4, 12, 4, 13])
+
+    check_func(impl3, (fname,))
+
+    # nrows + skiprows list (list has values in and out of nrows range)
+    def impl4(fname):
+        return pd.read_csv(fname, low_memory=True, nrows=10, skiprows=[4, 7, 12])
+
+    check_func(impl4, (fname,))
+
+    # skiprows list with 0
+    def impl5(fname):
+        return pd.read_csv(fname, low_memory=True, skiprows=[0, 2, 3, 4, 5, 6])
+
+    check_func(impl5, (fname,))
+
+    # contiguous list
+    def impl6(fname):
+        return pd.read_csv(fname, low_memory=True, skiprows=[6, 7, 8])
+
+    check_func(impl6, (fname,))
+
+    # header=None
+    # Note: Bodo's index is object while pandas is int64
+    # check_dtype=False does not work index values are '0' vs. 0
+    py_output = pd.read_csv(
+        fname, names=["0", "1", "2", "3", "4"], skiprows=[0, 2, 3, 7, 5, 9]
+    )
+
+    def impl7(fname):
+        ans = pd.read_csv(fname, header=None, skiprows=[0, 2, 3, 7, 5, 9])
+        return ans
+
+    check_func(impl7, (fname,), py_output=py_output)
+
+
+@pytest.mark.slow
+def test_csv_skiprows_list(datapath, memory_leak_check):
+    """
+    Test pd.read_csv skiprows as list default case (i.e. low_memory=False)
+    """
+    fname = datapath("example.csv")
+
+    # skiprows list
+    # (include 1st row and case where rank's start_pos is inside a skipped row)
+    def impl1(fname):
+        return pd.read_csv(fname, low_memory=True, skiprows=[1, 5, 7, 12])
+
+    check_func(impl1, (fname,))
+
+    # skiprows > available rows
+    def impl2(fname):
+        return pd.read_csv(fname, skiprows=[17, 20])
+
+    check_func(impl2, (fname,))
+
+    # nrows + skiprows list (list has values in and out of nrows range)
+    def impl3(fname):
+        return pd.read_csv(fname, nrows=10, skiprows=[4, 7, 12])
+
+    check_func(impl3, (fname,))
+
+    # skiprows list with 0
+    def impl4(fname):
+        return pd.read_csv(fname, skiprows=[0, 2, 3, 4, 5, 6])
+
+    check_func(impl4, (fname,))
+
+    # header=None
+    # Note: Bodo's index is object while pandas is int64
+    # check_dtype=False does not work index values are '0' vs. 0
+    py_output = pd.read_csv(
+        fname, names=["0", "1", "2", "3", "4"], skiprows=[0, 2, 3, 7, 5, 9]
+    )
+
+    def impl5(fname):
+        ans = pd.read_csv(fname, header=None, skiprows=[0, 2, 3, 7, 5, 9])
+        return ans
+
+    check_func(impl5, (fname,), py_output=py_output)
+
+
+@pytest.mark.slow
+def test_csv_skiprows_list_chunksize(datapath, memory_leak_check):
+    """
+    Test pd.read_csv skiprows as list with chunksize
+    """
+    fname = datapath("example.csv")
+    # list + chunksize (each rank gets a chunk)
+    # (include case where rank's chunk start_pos and end_pos is inside a skipped row)
+    def impl1(fname):
+        total = 0.0
+        for val in pd.read_csv(fname, chunksize=5, skiprows=[4, 5, 7, 13]):
+            result = val.iloc[:, 0].max()
+            total += result
+        return total
+
+    check_func(impl1, (fname,))
+
+    # list + chunksize (one chunk)
+    def impl2(fname):
+        total = 0.0
+        for val in pd.read_csv(fname, chunksize=15, skiprows=[9, 4, 2, 10]):
+            result = val.iloc[:, 0].max()
+            total += result
+        return total
+
+    check_func(impl2, (fname,))
+
+    # list + chunksize (only rank 0 gets the chunk)
+    def impl3(fname):
+        total = 0.0
+        for val in pd.read_csv(fname, chunksize=1, skiprows=[4, 7]):
+            result = val.iloc[:, 0].max()
+            total += result
+        return total
+
+    check_func(impl3, (fname,))
+
+    # list + nrows + chunksize (each rank gets a chunk)
+    def impl4(fname):
+        total = 0.0
+        for val in pd.read_csv(fname, chunksize=3, nrows=12, skiprows=[2, 5, 8, 14]):
+            result = val.iloc[:, 0].max()
+            total += result
+        return total
+
+    check_func(impl4, (fname,))
+
+    # list + nrows + chunksize (one chunk)
+    def impl5(fname):
+        total = 0.0
+        for val in pd.read_csv(fname, chunksize=15, nrows=12, skiprows=[1, 4, 7, 13]):
+            result = val.iloc[:, 0].max()
+            total += result
+        return total
+
+    check_func(impl5, (fname,))
+
+    # list + nrows + chunksize (only rank 0 gets the chunk)
+    def impl6(fname):
+        total = 0.0
+        for val in pd.read_csv(fname, chunksize=1, nrows=6, skiprows=[14, 4, 9, 13]):
+            result = val.iloc[:, 0].max()
+            total += result
+        return total
+
+    check_func(impl6, (fname,))
+
+
+@pytest.mark.slow
 def test_csv_np_gt_rows(datapath, memory_leak_check):
     """Test when number of rows < number of ranks (np) with
     read_csv(). "small_data.csv" has one row.
