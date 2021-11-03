@@ -551,7 +551,9 @@ def overload_series_loc_setitem(I, idx, val):
 @overload(operator.getitem)
 def overload_series_getitem(S, idx):
     # XXX: Series getitem performs both label-based and location-based indexing
-    if isinstance(S, SeriesType):
+    # If we have a HeterogeneousIndexType with a constant tuple, then we want
+    # to use a different overload (see overload_const_index_series_getitem)
+    if isinstance(S, SeriesType) and not(isinstance(S.index, HeterogeneousIndexType) and is_overload_constant_tuple(S.index.data)):
         # Integer index is location unless if Index is integer
         if isinstance(idx, types.Integer):
             # integer Index not supported yet
