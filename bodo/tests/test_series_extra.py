@@ -606,3 +606,18 @@ def test_series_apply_multi_freevar(memory_leak_check):
 
     S = pd.Series(np.arange(100))
     check_func(impl, (S, 2, 5))
+
+
+def test_series_categorical_astype_str(memory_leak_check):
+    """
+    Tests support for Series.astype(str, _bodo_nan_to_str=False)
+    Needed for BodoSQL.
+    """
+
+    def impl(S):
+        return S.astype(str, _bodo_nan_to_str=False)
+
+    S = pd.Series(pd.Categorical([1, 2, 4, None, 5] * 5))
+    py_output = S.astype(str)
+    py_output[py_output == "nan"] = None
+    check_func(impl, (S,), py_output=py_output)
