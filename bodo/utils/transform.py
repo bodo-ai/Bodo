@@ -5,6 +5,7 @@ Helper functions for transformations.
 import itertools
 import math
 from collections import namedtuple
+import types as pytypes
 
 import numba
 import numpy as np
@@ -238,6 +239,11 @@ def remove_hiframes(rhs, lives, call_list):
         bodo,
     ]:  # pragma: no cover
         # all conversion functions are side effect-free
+        return True
+
+    # Check the name of the BodoSQL module to avoid importing bodosql.
+    if isinstance(call_list[-1], pytypes.ModuleType) and call_list[-1].__name__ == "bodosql":  # pragma: no cover
+        # all bodosql functions are side effect-free
         return True
 
     # TODO: handle copy() of the relevant types properly
