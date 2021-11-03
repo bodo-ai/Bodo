@@ -384,7 +384,7 @@ def get_code_for_value(cat_dtype, val):
 
 
 @overload_method(CategoricalArrayType, "astype", inline="always", no_unliteral=True)
-def overload_cat_arr_astype(A, dtype, copy=True):
+def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=True):
     # If dtype is a string, force it to be a literal
     if dtype == types.unicode_type:
         raise_bodo_error(
@@ -392,15 +392,39 @@ def overload_cat_arr_astype(A, dtype, copy=True):
         )
 
     nb_dtype = bodo.utils.typing.parse_dtype(dtype, "CategoricalArray.astype")
-    # only supports converting back to original data currently
-    if nb_dtype != A.dtype.elem_type:  # pragma: no cover
+    # only supports converting back to original data and string
+    if (
+        nb_dtype != A.dtype.elem_type and nb_dtype != types.unicode_type
+    ):  # pragma: no cover
         raise BodoError(
             f"Converting categorical array {A} to dtype {dtype} not supported yet"
         )
 
+    if nb_dtype == types.unicode_type:
+
+        def impl(A, dtype, copy=True, _bodo_nan_to_str=True):  # pragma: no cover
+            codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A)
+            categories = A.dtype.categories
+            n = len(codes)
+            out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
+            for i in numba.parfors.parfor.internal_prange(n):
+                s = codes[i]
+                if s == -1:
+                    if _bodo_nan_to_str:
+                        bodo.libs.str_arr_ext.str_arr_setitem_NA_str(out_arr, i)
+                    else:
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    continue
+                out_arr[i] = str(
+                    bodo.utils.conversion.unbox_if_timestamp(categories[s])
+                )
+            return out_arr
+
+        return impl
+
     arr_type = dtype_to_array_type(nb_dtype)
 
-    def impl(A, dtype, copy=True):  # pragma: no cover
+    def impl(A, dtype, copy=True, _bodo_nan_to_str=True):  # pragma: no cover
         codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A)
         categories = A.dtype.categories
         n = len(codes)
