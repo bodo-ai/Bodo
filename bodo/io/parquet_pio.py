@@ -247,7 +247,6 @@ def pq_distributed_run(
     """lower ParquetReader into regular Numba nodes. Generates code for Parquet
     data read.
     """
-
     n_cols = len(pq_node.out_vars)
     extra_args = ""
     filter_str = "None"
