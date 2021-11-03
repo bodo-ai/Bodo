@@ -80,7 +80,7 @@ jobs:
 
       ## Commit the changes after obfuscation
       git -c user.name='Bot Herman' -c user.email='bot_herman@bodo.ai' add .
-      git -c user.name='Bot Herman' -c user.email='bot_herman@bodo.ai' commit -a --amend --no-edit
+      git -c user.name='Bot Herman' -c user.email='bot_herman@bodo.ai' commit --no-verify -a --amend --no-edit
 
       if [[ ! -z $IS_RELEASE ]]; then
         ## Tag new commit with the old tag, if it's a release
