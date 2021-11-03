@@ -166,6 +166,10 @@ def get_hiframes_dtypes(df):
         hasattr(df, "_bodo_meta")
         and df._bodo_meta is not None
         and "type_metadata" in df._bodo_meta
+        and df._bodo_meta["type_metadata"] is not None
+        # If the metadata hasn't updated but columns are added the information
+        # is out of date and cannot be used.
+        and len(df._bodo_meta["type_metadata"]) == len(df.columns)
     ):
         typing_metadata = df._bodo_meta["type_metadata"]
     else:
@@ -270,7 +274,6 @@ _one_to_one_enum_to_type_map = {
     SeriesDtypeEnum.Float64.value: types.float64,
     SeriesDtypeEnum.NP_Datetime64ns.value: types.NPDatetime("ns"),
     SeriesDtypeEnum.NP_Timedelta64ns.value: types.NPTimedelta("ns"),
-    SeriesDtypeEnum.Bool.value: types.bool_,
     SeriesDtypeEnum.Int16.value: types.int16,
     SeriesDtypeEnum.UInt16.value: types.uint16,
     SeriesDtypeEnum.Int128.value: types.Integer("int128", 128),
@@ -399,7 +402,7 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
             field_typs.append(cur_field_typ)
 
         return remainder, StructType(tuple(field_typs), field_names)
-    elif typ_enum_list[0] == SeriesDtypeEnum.Literal:
+    elif typ_enum_list[0] == SeriesDtypeEnum.Literal.value:
         # If we encounter LITERAL, we expect the next value to be a literal value.
         # This is generally used to pass things like struct names, which are a part of the type.
         if len(typ_enum_list) == 1:
@@ -409,7 +412,7 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
         lit_val = typ_enum_list[1]
         remainder = typ_enum_list[2:]
         return remainder, lit_val
-    elif typ_enum_list[0] == SeriesDtypeEnum.CategoricalType:
+    elif typ_enum_list[0] == SeriesDtypeEnum.CategoricalType.value:
         # For CategoricalType the expected ordering is the same order as the constructor:
         # [CategoricalType.value, categories, elem_type, ordered, data, int_type]
         remainder, categories = _dtype_from_type_enum_list_recursor(typ_enum_list[1:])
@@ -423,52 +426,52 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
 
     # For the index types, the arguments are stored in the same order
     # that they are passed to their constructor
-    elif typ_enum_list[0] == SeriesDtypeEnum.DatetimeIndexType:
+    elif typ_enum_list[0] == SeriesDtypeEnum.DatetimeIndexType.value:
         # Constructor for DatetimeIndexType:
         # def __init__(self, name_typ=None)
         remainder, name_type = _dtype_from_type_enum_list_recursor(typ_enum_list[1:])
         return remainder, DatetimeIndexType(name_type)
-    elif typ_enum_list[0] == SeriesDtypeEnum.NumericIndexType:
+    elif typ_enum_list[0] == SeriesDtypeEnum.NumericIndexType.value:
         # Constructor for NumericIndexType
         # def __init__(self, dtype, name_typ=None, data=None)
         remainder, dtype = _dtype_from_type_enum_list_recursor(typ_enum_list[1:])
         remainder, name_type = _dtype_from_type_enum_list_recursor(remainder)
         remainder, data = _dtype_from_type_enum_list_recursor(remainder)
         return remainder, NumericIndexType(dtype, name_type, data)
-    elif typ_enum_list[0] == SeriesDtypeEnum.PeriodIndexType:
+    elif typ_enum_list[0] == SeriesDtypeEnum.PeriodIndexType.value:
         # Constructor for PeriodIndexType
         # def __init__(self, freq, name_typ=None)
         remainder, freq = _dtype_from_type_enum_list_recursor(typ_enum_list[1:])
         remainder, name_type = _dtype_from_type_enum_list_recursor(remainder)
         return remainder, PeriodIndexType(freq, name_type)
-    elif typ_enum_list[0] == SeriesDtypeEnum.IntervalIndexType:
+    elif typ_enum_list[0] == SeriesDtypeEnum.IntervalIndexType.value:
         # Constructor for IntervalIndexType
         # def __init__(self, data, name_typ=None)
         remainder, data = _dtype_from_type_enum_list_recursor(typ_enum_list[1:])
         remainder, name_type = _dtype_from_type_enum_list_recursor(remainder)
         return remainder, IntervalIndexType(data, name_type)
-    elif typ_enum_list[0] == SeriesDtypeEnum.CategoricalIndexType:
+    elif typ_enum_list[0] == SeriesDtypeEnum.CategoricalIndexType.value:
         # Constructor for CategoricalIndexType
         # def __init__(self, data, name_typ=None)
         remainder, data = _dtype_from_type_enum_list_recursor(typ_enum_list[1:])
         remainder, name_type = _dtype_from_type_enum_list_recursor(remainder)
         return remainder, CategoricalIndexType(data, name_type)
-    elif typ_enum_list[0] == SeriesDtypeEnum.RangeIndexType:
+    elif typ_enum_list[0] == SeriesDtypeEnum.RangeIndexType.value:
         # Constructor for RangeIndexType:
         # def __init__(self, name_typ)
         remainder, name_type = _dtype_from_type_enum_list_recursor(typ_enum_list[1:])
         return remainder, RangeIndexType(name_type)
-    elif typ_enum_list[0] == SeriesDtypeEnum.StringIndexType:
+    elif typ_enum_list[0] == SeriesDtypeEnum.StringIndexType.value:
         # Constructor for StringIndexType:
         # def __init__(self, name_typ=None)
         remainder, name_type = _dtype_from_type_enum_list_recursor(typ_enum_list[1:])
         return remainder, StringIndexType(name_type)
-    elif typ_enum_list[0] == SeriesDtypeEnum.BinaryIndexType:
+    elif typ_enum_list[0] == SeriesDtypeEnum.BinaryIndexType.value:
         # Constructor for BinaryIndexType:
         # def __init__(self, name_typ=None)
         remainder, name_type = _dtype_from_type_enum_list_recursor(typ_enum_list[1:])
         return remainder, BinaryIndexType(name_type)
-    elif typ_enum_list[0] == SeriesDtypeEnum.TimedeltaIndexType:
+    elif typ_enum_list[0] == SeriesDtypeEnum.TimedeltaIndexType.value:
         # Constructor for TimedeltaIndexType:
         # def __init__(self, name_typ=None)
         remainder, name_type = _dtype_from_type_enum_list_recursor(typ_enum_list[1:])
@@ -498,7 +501,7 @@ def _dtype_to_type_enum_list(typ):
 
     # IntDtype is constidered a literal type, so we manually ommit it
     if get_overload_const(typ) != NOT_CONSTANT and not isinstance(typ, IntDtype):
-        return [SeriesDtypeEnum.Literal, get_overload_const(typ)]
+        return [SeriesDtypeEnum.Literal.value, get_overload_const(typ)]
     # integer arrays need special handling, as integerArray's dtype is not a nullable integer
     elif isinstance(typ, IntegerArrayType):
         return [SeriesDtypeEnum.IntegerArray.value] + _dtype_to_type_enum_list(
@@ -528,7 +531,7 @@ def _dtype_to_type_enum_list(typ):
         data_enum_list = _dtype_to_type_enum_list(typ.data)
         int_type_enum_list = _dtype_to_type_enum_list(typ.int_type)
         return (
-            [SeriesDtypeEnum.CategoricalType]
+            [SeriesDtypeEnum.CategoricalType.value]
             + categories_enum_list
             + elem_type_enum_list
             + ordered_enum_list
@@ -540,14 +543,14 @@ def _dtype_to_type_enum_list(typ):
     elif isinstance(typ, DatetimeIndexType):
         # Constructor for DatetimeIndexType:
         # def __init__(self, name_typ=None)
-        return [SeriesDtypeEnum.DatetimeIndexType] + _dtype_to_type_enum_list(
+        return [SeriesDtypeEnum.DatetimeIndexType.value] + _dtype_to_type_enum_list(
             typ.name_typ
         )
     elif isinstance(typ, NumericIndexType):
         # Constructor for NumericIndexType
         # def __init__(self, dtype, name_typ=None, data=None)
         return (
-            [SeriesDtypeEnum.NumericIndexType]
+            [SeriesDtypeEnum.NumericIndexType.value]
             + _dtype_to_type_enum_list(typ.dtype)
             + _dtype_to_type_enum_list(typ.name_typ)
             + _dtype_to_type_enum_list(typ.data)
@@ -556,7 +559,7 @@ def _dtype_to_type_enum_list(typ):
         # Constructor for PeriodIndexType
         # def __init__(self, freq, name_typ=None)
         return (
-            [SeriesDtypeEnum.PeriodIndexType]
+            [SeriesDtypeEnum.PeriodIndexType.value]
             + _dtype_to_type_enum_list(typ.freq)
             + _dtype_to_type_enum_list(typ.name_typ)
         )
@@ -564,7 +567,7 @@ def _dtype_to_type_enum_list(typ):
         # Constructor for IntervalIndexType
         # def __init__(self, data, name_typ=None)
         return (
-            [SeriesDtypeEnum.IntervalIndexType]
+            [SeriesDtypeEnum.IntervalIndexType.value]
             + _dtype_to_type_enum_list(typ.data)
             + _dtype_to_type_enum_list(typ.name_typ)
         )
@@ -572,30 +575,32 @@ def _dtype_to_type_enum_list(typ):
         # Constructor for CategoricalIndexType
         # def __init__(self, data, name_typ=None)
         return (
-            [SeriesDtypeEnum.CategoricalIndexType]
+            [SeriesDtypeEnum.CategoricalIndexType.value]
             + _dtype_to_type_enum_list(typ.data)
             + _dtype_to_type_enum_list(typ.name_typ)
         )
     elif isinstance(typ, RangeIndexType):
         # Constructor for RangeIndexType:
         # def __init__(self, name_typ)
-        return [SeriesDtypeEnum.RangeIndexType] + _dtype_to_type_enum_list(typ.name_typ)
+        return [SeriesDtypeEnum.RangeIndexType.value] + _dtype_to_type_enum_list(
+            typ.name_typ
+        )
     elif isinstance(typ, StringIndexType):
         # Constructor for StringIndexType:
         # def __init__(self, name_typ=None)
-        return [SeriesDtypeEnum.StringIndexType] + _dtype_to_type_enum_list(
+        return [SeriesDtypeEnum.StringIndexType.value] + _dtype_to_type_enum_list(
             typ.name_typ
         )
     elif isinstance(typ, BinaryIndexType):
         # Constructor for BinaryIndexType:
         # def __init__(self, name_typ=None)
-        return [SeriesDtypeEnum.BinaryIndexType] + _dtype_to_type_enum_list(
+        return [SeriesDtypeEnum.BinaryIndexType.value] + _dtype_to_type_enum_list(
             typ.name_typ
         )
     elif isinstance(typ, TimedeltaIndexType):
         # Constructor for TimedeltaIndexType:
         # def __init__(self, name_typ=None)
-        return [SeriesDtypeEnum.TimedeltaIndexType] + _dtype_to_type_enum_list(
+        return [SeriesDtypeEnum.TimedeltaIndexType.value] + _dtype_to_type_enum_list(
             typ.name_typ
         )
     else:
