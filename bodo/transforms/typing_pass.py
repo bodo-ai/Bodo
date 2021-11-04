@@ -581,7 +581,8 @@ class TypingTransforms:
                 index_def,
                 self._working_body,
                 self.func_ir,
-                {rhs.value.name: value_def} # Basic filter pushdown case only has 1 dataframe to track.
+                {rhs.value.name: value_def}, # Basic filter pushdown case only has 1 dataframe to track.
+                False,
             )
             # If this function returns a list we have updated the working body.
             # This is done to enable updating a single block that is not yet being processed
@@ -592,7 +593,7 @@ class TypingTransforms:
         nodes.append(assign)
         return nodes
 
-    def _try_filter_pushdown(self, assign, value_def, index_def, working_body, func_ir, used_dfs):
+    def _try_filter_pushdown(self, assign, value_def, index_def, working_body, func_ir, used_dfs, from_bodosql):
         """detect filter pushdown and add filters to ParquetReader or SQLReader IR nodes if possible.
 
         working_body is in the inprogress list of statements that should be updated with any filter reordering.
@@ -618,10 +619,7 @@ class TypingTransforms:
         require(
             all(get_definition(func_ir, v) == read_node for v in data_def.items)
         )
-        if isinstance(read_node, bodo.ir.parquet_ext.ParquetReader):
-            # TODO: Remove this to enable predicate pushdown without partitions
-            require(read_node.partition_names)
-        else:
+        if isinstance(read_node, bodo.ir.sql_ext.SqlReader):
             # Filter pushdown is only supported for snowflake right now.
             require(read_node.db_type == "snowflake")
 
@@ -636,7 +634,8 @@ class TypingTransforms:
             rhs_def,
             func_ir,
             # SQL generates different operators than pyarrow
-            isinstance(read_node, bodo.ir.sql_ext.SqlReader),
+            read_node,
+            from_bodosql,
         )
         self._check_non_filter_df_use(set(used_dfs.keys()), assign, func_ir)
         new_working_body = self._reorder_filter_nodes(read_node, index_def, used_dfs, filters, working_body, func_ir)
@@ -690,7 +689,13 @@ class TypingTransforms:
         Throws GuardException if not possible.
         """
         # e.g. [[("a", "0", ir.Var("val"))]] -> {"val"}
-        filter_vars = {v[2].name for predicate_list in filters for v in predicate_list}
+        filter_vars = set()
+        for predicate_list in filters:
+            for v in predicate_list:
+                # If v[2] is a variable add it to the filter_vars. If its
+                # a compile time constant (i.e. NULL) then don't add it.
+                if isinstance(v[2], ir.Var):
+                    filter_vars.add(v[2].name)
         # data array variables should not be used in filter expressions directly
         non_filter_vars = {v.name for v in read_node.list_vars()}
 
@@ -786,7 +791,7 @@ class TypingTransforms:
         return {index_def}
 
     def _get_partition_filters(
-        self, index_def, df_var, lhs_def, rhs_def, func_ir, is_sql
+        self, index_def, df_var, lhs_def, rhs_def, func_ir, read_node, from_bodosql
     ):
         """get filters for predicate pushdown if possible.
         Returns filters in pyarrow DNF format (e.g. [[("a", "==", 1)][("a", "==", 2)]]):
@@ -799,18 +804,38 @@ class TypingTransforms:
         # Or case: call recursively on arguments and concatenate
         # e.g. A or B
         if index_def.fn == operator.or_:
-            require(is_expr(lhs_def, "binop"))
-            l_def = get_definition(func_ir, lhs_def.lhs)
-            r_def = get_definition(func_ir, lhs_def.rhs)
-            left_or = self._get_partition_filters(
-                lhs_def, df_var, l_def, r_def, func_ir, is_sql
-            )
-            require(is_expr(rhs_def, "binop"))
-            l_def = get_definition(func_ir, rhs_def.lhs)
-            r_def = get_definition(func_ir, rhs_def.rhs)
-            right_or = self._get_partition_filters(
-                rhs_def, df_var, l_def, r_def, func_ir, is_sql
-            )
+            if is_expr(lhs_def, "binop"):
+                l_def = get_definition(func_ir, lhs_def.lhs)
+                r_def = get_definition(func_ir, lhs_def.rhs)
+                left_or = self._get_partition_filters(
+                    lhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
+                )
+            else:
+                require(is_expr(lhs_def, "call"))
+                call_list = find_callname(func_ir, lhs_def)
+                require(len(call_list) == 2 and call_list[0] in ("notna", "isna", "notnull", "isnull") and isinstance(call_list[1], ir.Var))
+                colname = self._get_col_name(call_list[1], df_var, func_ir)
+                if call_list[0] in ("notna", "notnull"):
+                    op = "is not"
+                else:
+                    op = "is"
+                left_or = [[(colname, op, "NULL")]]
+            if is_expr(rhs_def, "binop"):
+                l_def = get_definition(func_ir, rhs_def.lhs)
+                r_def = get_definition(func_ir, rhs_def.rhs)
+                right_or = self._get_partition_filters(
+                    rhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
+                )
+            else:
+                require(is_expr(rhs_def, "call"))
+                call_list = find_callname(func_ir, rhs_def)
+                require(len(call_list) == 2 and call_list[0] in ("notna", "isna", "notnull", "isnull") and isinstance(call_list[1], ir.Var))
+                colname = self._get_col_name(call_list[1], df_var, func_ir)
+                if call_list[0] in ("notna", "notnull"):
+                    op = "is not"
+                else:
+                    op = "is"
+                right_or = [[(colname, op, "NULL")]]
             return left_or + right_or
 
         # And case: distribute Or over And to normalize if needed
@@ -825,7 +850,7 @@ class TypingTransforms:
                 )
                 new_lhs_rdef = get_definition(func_ir, rhs_def.lhs)
                 left_or = self._get_partition_filters(
-                    new_lhs, df_var, lhs_def, new_lhs_rdef, func_ir, is_sql
+                    new_lhs, df_var, lhs_def, new_lhs_rdef, func_ir, read_node, from_bodosql
                 )
                 # lhs And rhs.rhs (A And C)
                 new_rhs = ir.Expr.binop(
@@ -833,7 +858,7 @@ class TypingTransforms:
                 )
                 new_rhs_rdef = get_definition(func_ir, rhs_def.rhs)
                 right_or = self._get_partition_filters(
-                    new_rhs, df_var, lhs_def, new_rhs_rdef, func_ir, is_sql
+                    new_rhs, df_var, lhs_def, new_rhs_rdef, func_ir, read_node, from_bodosql
                 )
                 return left_or + right_or
 
@@ -846,7 +871,7 @@ class TypingTransforms:
                 )
                 new_lhs_ldef = get_definition(func_ir, lhs_def.lhs)
                 left_or = self._get_partition_filters(
-                    new_lhs, df_var, new_lhs_ldef, rhs_def, func_ir, is_sql
+                    new_lhs, df_var, new_lhs_ldef, rhs_def, func_ir, read_node, from_bodosql
                 )
                 # lhs.rhs And rhs (C And A)
                 new_rhs = ir.Expr.binop(
@@ -854,27 +879,48 @@ class TypingTransforms:
                 )
                 new_rhs_ldef = get_definition(func_ir, lhs_def.rhs)
                 right_or = self._get_partition_filters(
-                    new_rhs, df_var, new_rhs_ldef, rhs_def, func_ir, is_sql
+                    new_rhs, df_var, new_rhs_ldef, rhs_def, func_ir, read_node, from_bodosql
                 )
                 return left_or + right_or
 
             # both lhs and rhs are And/literal expressions.
-            require(is_expr(lhs_def, "binop"))
-            l_def = get_definition(func_ir, lhs_def.lhs)
-            r_def = get_definition(func_ir, lhs_def.rhs)
-            left_or = self._get_partition_filters(
-                lhs_def, df_var, l_def, r_def, func_ir, is_sql
-            )
-            require(is_expr(rhs_def, "binop"))
-            l_def = get_definition(func_ir, rhs_def.lhs)
-            r_def = get_definition(func_ir, rhs_def.rhs)
-            right_or = self._get_partition_filters(
-                rhs_def, df_var, l_def, r_def, func_ir, is_sql
-            )
+            if is_expr(lhs_def, "binop"):
+                l_def = get_definition(func_ir, lhs_def.lhs)
+                r_def = get_definition(func_ir, lhs_def.rhs)
+                left_or = self._get_partition_filters(
+                    lhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
+                )
+            else:
+                require(is_expr(lhs_def, "call"))
+                call_list = find_callname(func_ir, lhs_def)
+                require(len(call_list) == 2 and call_list[0] in ("notna", "isna", "notnull", "isnull") and isinstance(call_list[1], ir.Var))
+                colname = self._get_col_name(call_list[1], df_var, func_ir)
+                if call_list[0] in ("notna", "notnull"):
+                    op = "is not"
+                else:
+                    op = "is"
+                left_or = [[(colname, op, "NULL")]]
+            if is_expr(rhs_def, "binop"):
+                l_def = get_definition(func_ir, rhs_def.lhs)
+                r_def = get_definition(func_ir, rhs_def.rhs)
+                right_or = self._get_partition_filters(
+                    rhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
+                )
+            else:
+                require(is_expr(rhs_def, "call"))
+                call_list = find_callname(func_ir, rhs_def)
+                require(len(call_list) == 2 and call_list[0] in ("notna", "isna", "notnull", "isnull") and isinstance(call_list[1], ir.Var))
+                colname = self._get_col_name(call_list[1], df_var, func_ir)
+                if call_list[0] in ("notna", "notnull"):
+                    op = "is not"
+                else:
+                    op = "is"
+                right_or = [[(colname, op, "NULL")]]
             return [left_or[0] + right_or[0]]
 
         # literal case
         # TODO(ehsan): support 'in' and 'not in'
+        is_sql = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
         op_map = {
             operator.eq: "=" if is_sql else "==",
             operator.ne: "<>" if is_sql else "!=",
@@ -908,6 +954,18 @@ class TypingTransforms:
             cond = (right_colname, right_colname_op_map[index_def.fn], index_def.lhs)
         else:
             cond = (left_colname, op_map[index_def.fn], index_def.rhs)
+
+        # If this is parquet we need to verify this is a filter we can process.
+        # TODO(Nick): Support for BodoSQL, which we can't yet because we don't
+        # have typemap information (requires refactoring filter pushdown in BodoSQL).
+        if not is_sql and not from_bodosql:
+            lhs_arr_typ = read_node.original_out_types[read_node.original_df_colnames.index(cond[0])]
+            lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
+            require(cond[2].name in self.typemap)
+            rhs_scalar_typ = self.typemap[cond[2].name]
+            # Only apply filter pushdown if its safe to use inside arrow
+            require(bodo.utils.typing.is_common_scalar_dtype([lhs_scalar_typ, rhs_scalar_typ]) or bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ))
+
         # Pyarrow format, e.g.: [[("a", "==", 2)]]
         return [[cond]]
 
@@ -927,6 +985,10 @@ class TypingTransforms:
             # matches the data types before filter comparison (in this case, calls
             # pd.Timestamp on partiton's string value)
             if fdef == ("to_datetime", "pandas"):
+                # We don't want to perform filter pushdown if there is a format argument
+                # i.e. pd.to_datetime(col, format="%Y-%d-%m")
+                # https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html
+                require((len(var_def.args) == 1) and not var_def.kws)
                 return self._get_col_name(var_def.args[0], df_var, func_ir)
             require(
                 isinstance(fdef, tuple)
@@ -2124,7 +2186,7 @@ class TypingTransforms:
                 source_df = get_definition(func_ir, source_col.value)
 
                 # If the filter pushdown was successful we can update the working body
-                working_body = self._try_filter_pushdown(inst, source_df, index_def, working_body, func_ir, used_dfs)
+                working_body = self._try_filter_pushdown(inst, source_df, index_def, working_body, func_ir, used_dfs, True)
 
         return working_body
 

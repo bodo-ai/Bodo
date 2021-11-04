@@ -127,7 +127,10 @@ def sql_distributed_run(
         or_conds = []
         for and_list in sql_node.filters:
             and_conds = [
-                " ".join(["(", p[0], p[1], "{" + filter_map[p[2].name] + "}", ")"])
+                # If p[2] is a constant that isn't in the IR (i.e. NULL)
+                # just load the value directly, otherwise load the variable
+                # at runtime.
+                " ".join(["(", p[0], p[1], ("{" + filter_map[p[2].name] + "}") if isinstance(p[2], ir.Var) else p[2], ")"])
                 for p in and_list
             ]
             or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")

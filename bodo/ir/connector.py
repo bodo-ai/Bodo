@@ -5,7 +5,7 @@ Common IR extension functions for connectors such as CSV, Parquet and JSON reade
 from collections import defaultdict
 
 import numba
-from numba.core import types
+from numba.core import types, ir
 from numba.core.ir_utils import replace_vars_inner, visit_vars_inner
 from numba.extending import box, models, register_model
 
@@ -48,6 +48,7 @@ def connector_distributed_analysis(node, array_dists):
     """
     # Import inside function to avoid circular import
     from bodo.ir.sql_ext import SqlReader
+    from bodo.ir.parquet_ext import ParquetReader
 
     # If we have a SQL node with an inferred limit, we may have a
     # 1D-Var distribution
@@ -129,9 +130,12 @@ def connector_usedefs(node, use_set=None, def_set=None):
             use_set.add(node.skiprows.name)
 
     if node.connector_typ in ("parquet", "sql") and node.filters:
-        use_set.update(
-            {v[2].name for predicate_list in node.filters for v in predicate_list}
-        )
+        for predicate_list in node.filters:
+            for v in predicate_list:
+                # If v[2] is a variable add it to the use set. If its
+                # a compile time constant (i.e. NULL) then don't add it.
+                if isinstance(v[2], ir.Var):
+                    use_set.add(v[2].name)
 
     return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
@@ -200,9 +204,10 @@ def generate_filter_map(filters):
         # remove duplicates. Cannot use ir.Var objects in set directly.
         var_set = set()
         for var in pred_vars:
-            if var.name not in var_set:
-                filter_vars.append(var)
-            var_set.add(var.name)
+            if isinstance(var, ir.Var):
+                if var.name not in var_set:
+                    filter_vars.append(var)
+                var_set.add(var.name)
         return {v.name: f"f{i}" for i, v in enumerate(filter_vars)}, filter_vars
     else:
         return {}, []
