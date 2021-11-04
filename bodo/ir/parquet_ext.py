@@ -29,6 +29,19 @@ class ParquetReader(ir.Stmt):
         self.df_colnames = col_names
         self.col_indices = col_indices
         self.out_types = out_types
+        # Original out types + columns are maintained even if columns are pruned.
+        # This is maintained in case we need type info for filter pushdown and
+        # the column has been eliminated.
+        # For example, if our Pandas code was:
+        # def ex(filename):
+        #     df = pd.read_parquet(filename)
+        #     df = df[df.A > 1]
+        #     return df[["B", "C"]]
+        # Then DCE should remove all columns from df_colnames/out_types except B and C,
+        # but we still need to the type of column A to determine if we need to generate
+        # a cast inside the arrow filters.
+        self.original_out_types = out_types
+        self.original_df_colnames = col_names
         self.out_vars = out_vars
         self.loc = loc
         self.partition_names = partition_names
@@ -38,12 +51,14 @@ class ParquetReader(ir.Stmt):
 
     def __repr__(self):  # pragma: no cover
         # TODO
-        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {})".format(
+        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {}, {}, {})".format(
             self.df_out,
             self.file_name.name,
             self.df_colnames,
             self.col_indices,
             self.out_types,
+            self.original_out_types,
+            self.original_df_colnames,
             self.out_vars,
             self.partition_names,
             self.filters,

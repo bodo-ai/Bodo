@@ -23,7 +23,9 @@ from numba.extending import (
     register_model,
     unbox,
 )
+import pyarrow
 from pyarrow import null
+import pyarrow.dataset as ds
 
 import bodo
 import bodo.ir.parquet_ext
@@ -234,6 +236,40 @@ class ParquetHandler:
 
         return col_names, data_arrs, index_col, nodes
 
+def determine_filter_cast(pq_node, typemap, filter_val):
+    """
+        Function that generates text for casts that need to be included
+        in the filter when not automatically handled by Arrow.For example
+        timestamp and string. This funciton returns two string, one of which
+        should always be empty. If the left string is not empty, we need to
+        cast the lhs and if the right string is not empty, we need to cast
+        the rhs.
+
+        We opt to cast in the direction that keep maximum information, for
+        example date -> timestamp rather than timestamp -> date.
+
+        Right now we assume filter_val[0] is a column name and filter_val[2]
+        is a scalar Var that is found in the typemap.
+    """
+    lhs_arr_typ = pq_node.original_out_types[pq_node.original_df_colnames.index(filter_val[0])]
+    lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
+    rhs_scalar_typ = typemap[filter_val[2].name]
+     # Here we assume is_common_scalar_dtype conversions are common
+    # enough that Arrow will support them, since these are conversions
+    # like int -> float. TODO: Test
+    if not bodo.utils.typing.is_common_scalar_dtype([lhs_scalar_typ, rhs_scalar_typ]):
+        # If a cast is not implicit it must be in our white list.
+        if not bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
+            raise BodoError(f"Unsupport Arrow cast from {lhs_scalar_typ} to {rhs_scalar_typ} in filter pushdown. Please try a comparison that avoids casting the column.")
+        # We always cast string -> other types
+        # Only supported types should be string and timestamp
+        if lhs_scalar_typ == types.unicode_type:
+            return ".cast(pyarrow.timestamp('ns'), safe=False)", ""
+        elif lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type):
+            return "", ".cast(pyarrow.timestamp('ns'), safe=False)"
+
+    return "", ""
+
 
 def pq_distributed_run(
     pq_node,
@@ -249,21 +285,78 @@ def pq_distributed_run(
     """
     n_cols = len(pq_node.out_vars)
     extra_args = ""
-    filter_str = "None"
+    dnf_filter_str = "None"
+    expr_filter_str= "None"
+
     filter_map, filter_vars = bodo.ir.connector.generate_filter_map(pq_node.filters)
-    extra_args = ", ".join(filter_map.values())
     if filter_map:
-        filter_str = "[{}]".format(
-            ", ".join(
-                "[{}]".format(
-                    ", ".join(
-                        f"('{v[0]}', '{v[1]}', {filter_map[v[2].name]})"
-                        for v in predicate
-                    )
-                )
-                for predicate in pq_node.filters
-            )
-        )
+        # Create two formats for parquet. One using the old DNF format
+        # which contains just the partition columns (partition pushdown)
+        # and one using the more verbose expression format and all expressions
+        # (predicate pushdown).
+        # https://arrow.apache.org/docs/python/dataset.html#filtering-data
+        #
+        # partition pushdown requires the expressions to just contain Hive partitions
+        # (no predicates). If all expressions are AND together we keep just the
+        # parititon columns. If there is an OR with any non-partitions we cannot
+        # do partition pushdown.
+        #
+        # TODO: Maintain safe common expresions, for example if A is a partition column
+        # and B and C are not:
+        #
+        # (A == 2 & B == 3) | (A == 2 & C == 4) -> A == 2
+        #
+        dnf_or_conds = []
+        expr_or_conds = []
+        dnf_unmodified = True
+        for predicate in pq_node.filters:
+            dnf_and_conds = []
+            expr_and_conds = []
+            for v in predicate:
+                # First update expr since these include all expressions.
+                # If v[2] is a var we pass the variable at runtime,
+                # otherwise we pass a constant (i.e. NULL) which
+                # requires special handling
+                if isinstance(v[2], ir.Var):
+                    # expr conds don't do some of the casts that DNF expressions do (for example String and Timestamp).
+                    # For known cases where we need to cast we generate the cast. For simpler code we return two strings,
+                    # column_cast and scalar_cast. At least one will be an empty string and the other may be a cast
+                    # expression.
+                    column_cast, scalar_cast = determine_filter_cast(pq_node, typemap, v)
+                    expr_and_conds.append(f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_map[v[2].name]}){scalar_cast})")
+                else:
+                    # Currently the only constant expressions we support are IS [NOT] NULL
+                    assert v[2] == "NULL", "unsupport constant used in filter pushdown"
+                    if v[1] == "is not":
+                        prefix = "~"
+                    else:
+                        prefix = ""
+                    expr_and_conds.append(f"({prefix}ds.field('{v[0]}').is_null(nan_is_null=True))")
+                # Now handle the dnf section. We can only append a value if its not a constant
+                # expression and is a partition column
+                if v[0] in pq_node.partition_names and isinstance(v[2], ir.Var):
+                    dnf_and_conds.append(f"('{v[0]}', '{v[1]}', {filter_map[v[2].name]})")
+                else:
+                    # Mark this expression being truncated. If there is an OR we won't be able to use
+                    # this expression.
+                    dnf_unmodified = False
+
+            # Group and according to the expected format
+            dnf_and_str = ", ".join(dnf_and_conds)
+            expr_and_str = " & ".join(expr_and_conds)
+            # If all the filters are truncated we may have an empty string.
+            if dnf_and_str:
+                dnf_or_conds.append(f"[{dnf_and_str}]")
+            expr_or_conds.append(f"({expr_and_str})")
+
+        dnf_or_str = ", ".join(dnf_or_conds)
+        expr_or_str = " | ".join(expr_or_conds)
+        # We can only use the filters if they exist, and are either unmodified
+        # or just a single AND.
+        if dnf_or_str and (dnf_unmodified or len(pq_node.filters) == 1):
+            dnf_filter_str = f"[{dnf_or_str}]"
+        expr_filter_str = f"({expr_or_str})"
+
         extra_args = ", ".join(filter_map.values())
 
     # get column variables
@@ -297,7 +390,8 @@ def pq_distributed_run(
         pq_node.out_types,
         pq_node.storage_options,
         pq_node.partition_names,
-        filter_str,
+        dnf_filter_str,
+        expr_filter_str,
         extra_args,
         typingctx,
         targetctx,
@@ -333,21 +427,23 @@ distributed_pass.distributed_run_extensions[
 ] = pq_distributed_run
 
 
-def get_filters_pyobject(filters, vars):  # pragma: no cover
+def get_filters_pyobject(dnf_filter_str, expr_filter_str, vars):  # pragma: no cover
     pass
 
 
 @overload(get_filters_pyobject, no_unliteral=True)
-def overload_get_filters_pyobject(filter_str, var_tup):
+def overload_get_filters_pyobject(dnf_filter_str, expr_filter_str, var_tup):
     """generate a pyobject for filter expression to pass to C++"""
-    filter_str_val = get_overload_const_str(filter_str)
+    dnf_filter_str_val = get_overload_const_str(dnf_filter_str)
+    expr_filter_str_val = get_overload_const_str(expr_filter_str)
     var_unpack = ", ".join(f"f{i}" for i in range(len(var_tup)))
-    func_text = "def impl(filter_str, var_tup):\n"
+    func_text = "def impl(dnf_filter_str, expr_filter_str, var_tup):\n"
     if len(var_tup):
         func_text += f"  {var_unpack}, = var_tup\n"
-    func_text += "  with numba.objmode(filters_py='parquet_predicate_type'):\n"
-    func_text += f"    filters_py = {filter_str_val}\n"
-    func_text += "  return filters_py\n"
+    func_text += "  with numba.objmode(dnf_filters_py='parquet_predicate_type', expr_filters_py='parquet_predicate_type'):\n"
+    func_text += f"    dnf_filters_py = {dnf_filter_str_val}\n"
+    func_text += f"    expr_filters_py = {expr_filter_str_val}\n"
+    func_text += "  return (dnf_filters_py, expr_filters_py)\n"
     loc_vars = {}
     exec(func_text, globals(), loc_vars)
     return loc_vars["impl"]
@@ -378,7 +474,8 @@ def _gen_pq_reader_py(
     out_types,
     storage_options,
     partition_names,
-    filter_str,
+    dnf_filter_str,
+    expr_filter_str,
     extra_args,
     typingctx,
     targetctx,
@@ -396,7 +493,7 @@ def _gen_pq_reader_py(
     func_text += "    ev.add_attribute('fname', fname)\n"
     func_text += f"    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={is_parallel})\n"
     func_text += (
-        f'    filters = get_filters_pyobject("{filter_str}", ({extra_args}{comma}))\n'
+        f'    dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({extra_args}{comma}))\n'
     )
 
     # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
@@ -471,9 +568,9 @@ def _gen_pq_reader_py(
     # single-element numpy array to return number of global rows from C++
     func_text += f"    total_rows_np = np.array([0], dtype=np.int64)\n"
     if len(selected_partition_cols) > 0:
-        func_text += f"    out_table = pq_read(unicode_to_utf8(fname), {is_parallel}, unicode_to_utf8(bucket_region), filters, storage_options_py, {tot_rows_to_read}, np.array({selected_cols}, dtype=np.int32).ctypes, {len(selected_cols)}, np.array({nullable_cols}, dtype=np.int32).ctypes, np.array({selected_partition_cols}, dtype=np.int32).ctypes, np.array({partition_col_cat_dtypes}, dtype=np.int32).ctypes, {len(selected_partition_cols)}, total_rows_np.ctypes)\n"
+        func_text += f"    out_table = pq_read(unicode_to_utf8(fname), {is_parallel}, unicode_to_utf8(bucket_region), dnf_filters, expr_filters, storage_options_py, {tot_rows_to_read}, np.array({selected_cols}, dtype=np.int32).ctypes, {len(selected_cols)}, np.array({nullable_cols}, dtype=np.int32).ctypes, np.array({selected_partition_cols}, dtype=np.int32).ctypes, np.array({partition_col_cat_dtypes}, dtype=np.int32).ctypes, {len(selected_partition_cols)}, total_rows_np.ctypes)\n"
     else:
-        func_text += f"    out_table = pq_read(unicode_to_utf8(fname), {is_parallel}, unicode_to_utf8(bucket_region), filters, storage_options_py, {tot_rows_to_read}, np.array({selected_cols}, dtype=np.int32).ctypes, {len(selected_cols)}, np.array({nullable_cols}, dtype=np.int32).ctypes, 0, 0, 0, total_rows_np.ctypes)\n"
+        func_text += f"    out_table = pq_read(unicode_to_utf8(fname), {is_parallel}, unicode_to_utf8(bucket_region), dnf_filters, expr_filters, storage_options_py, {tot_rows_to_read}, np.array({selected_cols}, dtype=np.int32).ctypes, {len(selected_cols)}, np.array({nullable_cols}, dtype=np.int32).ctypes, 0, 0, 0, total_rows_np.ctypes)\n"
     func_text += "    check_and_propagate_cpp_exception()\n"
 
     for i, col_in_idx in enumerate(selected_cols):
@@ -623,7 +720,8 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, categor
 def get_parquet_dataset(
     fpath,
     get_row_counts=True,
-    filters=None,
+    dnf_filters=None,
+    expr_filters=None,
     storage_options=None,
     read_categories=False,
     is_parallel=False,  # only used with get_row_counts=True
@@ -736,7 +834,7 @@ def get_parquet_dataset(
             dataset = pq.ParquetDataset(
                 fpath,
                 filesystem=getfs(),
-                filters=filters,
+                filters=dnf_filters,  # ParquetDataset does not support Expression filters
                 use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
                 validate_schema=False,  # we do validation below if needed
                 metadata_nthreads=nthreads,
@@ -794,8 +892,23 @@ def get_parquet_dataset(
         for p in dataset.pieces[start:end]:
             file_metadata = p.get_metadata()
             if get_row_counts:
-                piece_nrows_chunk.append(file_metadata.num_rows)
-                total_rows_chunk += file_metadata.num_rows
+                if expr_filters is not None:
+                    # Use dataset scanner API to get exact row counts when
+                    # filter is applied. Arrow will try to calculate this by
+                    # by reading only the file's metadata, and if it needs to
+                    # access data it will read as less as possible (only the
+                    # required columns and only subset of row groups if possible)
+                    # use_threads=False because this step is already parallelized
+                    # across ranks
+                    row_count = (
+                        ds.dataset(p.path, partitioning=ds.partitioning(flavor="hive"))
+                        .scanner(filter=expr_filters, use_threads=False)
+                        .count_rows()
+                    )
+                else:
+                    row_count = file_metadata.num_rows
+                piece_nrows_chunk.append(row_count)
+                total_rows_chunk += row_count
                 total_row_groups_chunk += file_metadata.num_row_groups
             if validate_schema:
                 file_schema = file_metadata.schema.to_arrow_schema()
@@ -871,6 +984,21 @@ For best performance the number of row groups should be greater than the number 
     if get_row_counts:
         ev.finalize()
     return dataset
+
+
+def get_scanner_batches(fpath, expr_filters, selected_fields):
+    """return list of RecordBatches of file 'fpath' that contain the rows
+       that match expr_filters. Only project the fields in selected_fields"""
+    # We only support hive partitioning right now and will need to change this
+    # if we also support directory partitioning
+    dataset = ds.dataset(fpath, partitioning=ds.partitioning(flavor="hive"))
+    col_names = dataset.schema.names
+    selected_names = [col_names[field_num] for field_num in selected_fields]
+    # use_threads=False because this step is already parallelized
+    # across ranks
+    return dataset.scanner(
+        columns=selected_names, filter=expr_filters, use_threads=False
+    ).to_batches()
 
 
 def _add_categories_to_pq_dataset(pq_dataset):
@@ -1055,7 +1183,8 @@ _pq_read = types.ExternalFunction(
         types.voidptr,
         types.boolean,
         types.voidptr,
-        parquet_predicate_type,
+        parquet_predicate_type,  # dnf filters
+        parquet_predicate_type,  # expr filters
         storage_options_dict_type,
         types.int64,
         types.voidptr,

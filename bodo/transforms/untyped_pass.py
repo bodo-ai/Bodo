@@ -425,6 +425,10 @@ class UntypedPass:
             # matches the data types before filter comparison (in this case, calls
             # pd.Timestamp on partiton's string value)
             if fdef == ("to_datetime", "pandas"):
+                # We don't want to perform filter pushdown if there is a format argument
+                # i.e. pd.to_datetime(col, format="%Y-%d-%m")
+                # https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html
+                require((len(var_def.args) == 1) and not var_def.kws)
                 return self._get_col_name(var_def.args[0], df_var)
             require(
                 isinstance(fdef, tuple)
@@ -1742,13 +1746,12 @@ class UntypedPass:
                 index_col_name = None
             else:
                 index_col_name = "'{}'".format(index_col["name"])
+            # In case there is filtering we take a min between the stop and the filtered length.
+            # This won't match Pandas, which instead should have a Numeric Index if there is any filtering.
+            # TODO: Match Pandas
+            min_str = f"min({index_col['stop']}, (len(data0) * {index_col['step']}) + {index_col['start']})"
             index_arg = (
-                "bodo.hiframes.pd_index_ext.init_range_index({}, {}, {}, {})".format(
-                    index_col["start"],
-                    index_col["stop"],
-                    index_col["step"],
-                    index_col_name,
-                )
+                f"bodo.hiframes.pd_index_ext.init_range_index({index_col['start']}, {min_str}, {index_col['step']}, {index_col_name})"
             )
         else:
             # if the index_col is __index_level_0_, it means it has no name.

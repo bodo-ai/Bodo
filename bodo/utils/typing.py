@@ -1754,3 +1754,20 @@ def index_typ_from_dtype_name(elem_dtype, name):
     else:
         index_typ = index_class(name_typ)
     return index_typ
+
+
+def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
+    """
+    Determine if two scalar types which return False from
+    'is_common_scalar_dtype' can be safely cast in an arrow
+    filter expression. This is a white list of casts that
+    are manually supported.
+    """
+    # TODO: Support more types
+    if lhs_scalar_typ == types.unicode_type:
+        # Cast is supported between string and timestamp
+        return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
+    elif lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type):
+        # Cast is supported between timestamp and string
+        return rhs_scalar_typ == types.unicode_type
+    return False

@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import unittest
 from decimal import Decimal
+import datetime
 
 import h5py
 import numba
@@ -1456,6 +1457,87 @@ def test_read_partitions_datetime():
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
+
+def test_read_partitions_to_datetime_format():
+    """test that we don't incorrectly perform filter pushdown when to_datetime includes
+    a format string."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            table = pa.table(
+                {
+                    "a": range(10),
+                    "b": np.random.randn(10),
+                    "c": [1, 2, 3, 4, 5] * 2,
+                    "part": [
+                        "2017-01-02",
+                        "2018-01-02",
+                        "2019-01-02",
+                        "2017-01-02",
+                        "2021-01-02",
+                    ]
+                    * 2,
+                }
+            )
+            pq.write_to_dataset(table, "pq_data", partition_cols=["part"])
+        bodo.barrier()
+
+        def impl1(path, s_d, e_d):
+            df = pd.read_parquet(path, columns=["c", "part", "a"])
+            return df[
+                (pd.to_datetime(df["part"], format="%Y-%d-%m") >= pd.to_datetime(s_d))
+                & (pd.to_datetime(df["part"], format="%Y-%d-%m") <= pd.to_datetime(e_d))
+            ]
+
+        check_func(impl1, ("pq_data", "2018-01-31", "2018-02-28"), reset_index=True)
+        # make sure the ParquetReader node doesn't have filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+        bodo_func("pq_data", "2018-01-02", "2019-10-02")
+        try:
+            _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+            # If we reach failed we have incorrectly performed filter pushdown
+            passed = 0
+        except AssertionError:
+            passed = 1
+        n_pes = bodo.get_size()
+        n_passed = bodo.tests.utils.reduce_sum(passed)
+        assert n_passed == n_pes, "Filter pushdown detected on at least 1 rank"
+        bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree("pq_data", ignore_errors=True)
+
+
+def test_read_predicates_pushdown_pandas_metadata():
+    """test that predicate pushdown executes when there is Pandas range metadata."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            df = pd.DataFrame({"A": [0,1,2] * 10})
+            df.to_parquet("pq_data")
+        bodo.barrier()
+
+        def impl(path):
+            df = pd.read_parquet("pq_data")
+            df = df[(df["A"] != 2)]
+            return df
+
+        # TODO: Fix index
+        check_func(impl, ("pq_data", ), reset_index=True)
+        # make sure the ParquetReader node has filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+        bodo_func("pq_data",)
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+        bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove("pq_data")
+
+
 
 
 def test_read_partitions_large():
