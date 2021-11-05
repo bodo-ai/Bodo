@@ -1571,6 +1571,39 @@ def test_read_predicates_isnull():
             os.remove("pq_data")
 
 
+def test_read_predicates_and_or():
+    """test that predicate pushdown with and/or in the expression."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            df = pd.DataFrame(
+                {
+                    "A": [0,1,2,3] * 10,
+                    "B": [1, 2, 3, 4, 5] * 8,
+                }
+            )
+            df.to_parquet("pq_data")
+        bodo.barrier()
+
+        def impl(path):
+            df = pd.read_parquet("pq_data")
+            df = df[(((df["A"] == 2) | (df["B"] == 1)) & (df["B"] != 4)) & (((df["A"] == 3) | (df["B"] == 5)) & (df["B"] != 2))]
+            return df
+
+        # TODO: Fix index
+        check_func(impl, ("pq_data", ), reset_index=True)
+        # make sure the ParquetReader node has filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+        bodo_func("pq_data",)
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+        bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove("pq_data")
+
+
 
 def test_read_partitions_large():
     """

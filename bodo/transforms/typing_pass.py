@@ -916,7 +916,17 @@ class TypingTransforms:
                 else:
                     op = "is"
                 right_or = [[(colname, op, "NULL")]]
-            return [left_or[0] + right_or[0]]
+
+            # If either expression is an AND, we may still have ORs inside
+            # the AND. As a result, distributed ANDs across all ORs.
+            # For example
+            # ((A | B) & C) & D -> (AC | BC) & D (via the recursion)
+            # Now we need to produce (AC | BC) & D -> (ACD | BCD)
+            filters = []
+            for left_or_cond in left_or:
+                for right_or_cond in right_or:
+                    filters.append(left_or_cond + right_or_cond)
+            return filters
 
         # literal case
         # TODO(ehsan): support 'in' and 'not in'
