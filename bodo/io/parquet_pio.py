@@ -239,11 +239,15 @@ class ParquetHandler:
 def determine_filter_cast(pq_node, typemap, filter_val):
     """
         Function that generates text for casts that need to be included
-        in the filter when not automatically handled by Arrow.For example
-        timestamp and string. This funciton returns two string, one of which
-        should always be empty. If the left string is not empty, we need to
-        cast the lhs and if the right string is not empty, we need to cast
-        the rhs.
+        in the filter when not automatically handled by Arrow. For example
+        timestamp and string. This function returns two strings. In most cases
+        one of the strings will be empty and the other contain the argument that
+        should be cast. However, if we have a partition column, we always cast the
+        partition column either to its original type or the new type.
+
+        This is because of an issue in arrow where if a partion has a mix of integer
+        and string names it won't look at the global types when Bodo processes per
+        file (see test_read_partitions_string_int for an example).
 
         We opt to cast in the direction that keep maximum information, for
         example date -> timestamp rather than timestamp -> date.
@@ -251,8 +255,25 @@ def determine_filter_cast(pq_node, typemap, filter_val):
         Right now we assume filter_val[0] is a column name and filter_val[2]
         is a scalar Var that is found in the typemap.
     """
-    lhs_arr_typ = pq_node.original_out_types[pq_node.original_df_colnames.index(filter_val[0])]
+    colname = filter_val[0]
+    lhs_arr_typ = pq_node.original_out_types[pq_node.original_df_colnames.index(colname)]
     lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
+    if colname in pq_node.partition_names:
+        # Always cast partitions to protect again multiple types
+        # see test_read_partitions_string_int.
+
+        if lhs_scalar_typ == types.unicode_type:
+            col_cast = ".cast(pyarrow.string(), safe=False)"
+        elif isinstance(lhs_scalar_typ, types.Integer):
+            # all arrow types integer type names are the same as numba
+            # type names.
+            col_cast = f".cast(pyarrow.{lhs_scalar_typ.name}(), safe=False)"
+        else:
+            # Currently arrow support int and string partitions, so we only capture those casts
+            # https://github.com/apache/arrow/blob/230afef57f0ccc2135ced23093bac4298d5ba9e4/python/pyarrow/parquet.py#L989
+            col_cast = ""
+    else:
+        col_cast = ""
     rhs_scalar_typ = typemap[filter_val[2].name]
      # Here we assume is_common_scalar_dtype conversions are common
     # enough that Arrow will support them, since these are conversions
@@ -266,9 +287,9 @@ def determine_filter_cast(pq_node, typemap, filter_val):
         if lhs_scalar_typ == types.unicode_type:
             return ".cast(pyarrow.timestamp('ns'), safe=False)", ""
         elif lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type):
-            return "", ".cast(pyarrow.timestamp('ns'), safe=False)"
+            return col_cast, ".cast(pyarrow.timestamp('ns'), safe=False)"
 
-    return "", ""
+    return col_cast, ""
 
 
 def pq_distributed_run(
@@ -320,8 +341,7 @@ def pq_distributed_run(
                 if isinstance(v[2], ir.Var):
                     # expr conds don't do some of the casts that DNF expressions do (for example String and Timestamp).
                     # For known cases where we need to cast we generate the cast. For simpler code we return two strings,
-                    # column_cast and scalar_cast. At least one will be an empty string and the other may be a cast
-                    # expression.
+                    # column_cast and scalar_cast.
                     column_cast, scalar_cast = determine_filter_cast(pq_node, typemap, v)
                     expr_and_conds.append(f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_map[v[2].name]}){scalar_cast})")
                 else:

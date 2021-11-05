@@ -1331,6 +1331,42 @@ def test_read_partitions_two_level():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
+def test_read_partitions_string_int():
+    """test reading from a file where the partition column could have
+    a mix of strings and ints
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            table = pa.table(
+                {
+                    "a": range(10),
+                    "b": np.random.randn(10),
+                    "c": ["abc", "2", "adf", "4", "5"] * 2,
+                    "part": ["a"] * 5 + ["b"] * 5,
+                }
+            )
+            pq.write_to_dataset(table, "pq_data", partition_cols=["c"])
+        bodo.barrier()
+
+        def impl1(path):
+            df = pd.read_parquet(path)
+            return df[(df["c"] == "abc") | (df["c"] == "4")]
+
+        # TODO(ehsan): match Index
+        check_func(impl1, ("pq_data",), reset_index=True)
+        # make sure the ParquetReader node has filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+        bodo_func("pq_data")
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+        bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree("pq_data", ignore_errors=True)
+
+
 # TODO: Add memory leak check. Seems to have some leak.
 def test_read_partitions_implicit_and_simple():
     """test reading and filtering partitioned parquet data with multiple levels
