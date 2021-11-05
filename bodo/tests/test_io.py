@@ -1233,8 +1233,13 @@ def test_read_partitions():
             n += df.A.sum()
             return n
 
+        # make sure filtering works when there are no matching files
+        def impl6(path):
+            df = pd.read_parquet(path)
+            return df[df["part"] == "z"]
+
         # TODO(ehsan): make sure filtering happens if df name is reused in control flow
-        # def impl6(path, val):
+        # def impl7(path, val):
         #     df = pd.read_parquet(path)
         #     n = len(df[df["part"] == val])
         #     if val == "b":
@@ -1253,6 +1258,7 @@ def test_read_partitions():
         check_func(impl3, ("pq_data", "a"))
         check_func(impl4, ("pq_data", "a"))
         check_func(impl5, ("pq_data", "a"))
+        check_func(impl6, ("pq_data",))
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl5)
         bodo_func("pq_data", "a")
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
@@ -1558,12 +1564,19 @@ def test_read_predicates_pushdown_pandas_metadata():
         bodo.barrier()
 
         def impl(path):
-            df = pd.read_parquet("pq_data")
+            df = pd.read_parquet(path)
             df = df[(df["A"] != 2)]
+            return df
+
+        # test for predicate pushdown removing all rows
+        def impl2(path):
+            df = pd.read_parquet(path)
+            df = df[(df["A"] == 100)]
             return df
 
         # TODO: Fix index
         check_func(impl, ("pq_data", ), reset_index=True)
+        check_func(impl2, ("pq_data", ), reset_index=True)
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
         bodo_func("pq_data",)

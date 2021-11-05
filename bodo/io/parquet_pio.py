@@ -854,7 +854,7 @@ def get_parquet_dataset(
             dataset = pq.ParquetDataset(
                 fpath,
                 filesystem=getfs(),
-                filters=dnf_filters,  # ParquetDataset does not support Expression filters
+                filters=None,
                 use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
                 validate_schema=False,  # we do validation below if needed
                 metadata_nthreads=nthreads,
@@ -864,6 +864,12 @@ def get_parquet_dataset(
             if get_row_counts:
                 ev_pq_ds.finalize()
             dataset_schema = bodo.io.pa_parquet.get_dataset_schema(dataset)
+            if dnf_filters:
+                # Apply filters after getting the schema, because they might
+                # remove all the pieces from the dataset which would make
+                # get_dataset_schema() fail.
+                # Use DNF, ParquetDataset does not support Expression filters
+                dataset._filter(dnf_filters)
             # We don't want to send the filesystem because of the issues
             # mentioned above, so we set it to None. Note that this doesn't
             # seem to be enough to prevent sending it
