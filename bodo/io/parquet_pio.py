@@ -318,21 +318,25 @@ def pq_distributed_run(
         # https://arrow.apache.org/docs/python/dataset.html#filtering-data
         #
         # partition pushdown requires the expressions to just contain Hive partitions
-        # (no predicates). If all expressions are AND together we keep just the
-        # parititon columns. If there is an OR with any non-partitions we cannot
-        # do partition pushdown.
+        # If any expressions are not hive partitions then the DNF filters is an AND of
+        # filters expressions that are seen in ALL OR conditions
         #
-        # TODO: Maintain safe common expresions, for example if A is a partition column
-        # and B and C are not:
+        # For example if A, C are paritions and B is not
         #
-        # (A == 2 & B == 3) | (A == 2 & C == 4) -> A == 2
+        # Then (A & B) | (A & C) -> A (for the partition expressions)
         #
         dnf_or_conds = []
         expr_or_conds = []
-        dnf_unmodified = True
+        dnf_modified = False
+        # If one of the filters isn't a partition column, then
+        # we can only select the partition columns that are shared
+        # across all possible or statements. Initialize this set to
+        # None so we don't intersect with an empty set in the first OR.
+        shared_expr_set = None
         for predicate in pq_node.filters:
             dnf_and_conds = []
             expr_and_conds = []
+            and_expr_set = set()
             for v in predicate:
                 # First update expr since these include all expressions.
                 # If v[2] is a var we pass the variable at runtime,
@@ -355,11 +359,17 @@ def pq_distributed_run(
                 # Now handle the dnf section. We can only append a value if its not a constant
                 # expression and is a partition column
                 if v[0] in pq_node.partition_names and isinstance(v[2], ir.Var):
-                    dnf_and_conds.append(f"('{v[0]}', '{v[1]}', {filter_map[v[2].name]})")
+                    dnf_str = f"('{v[0]}', '{v[1]}', {filter_map[v[2].name]})"
+                    dnf_and_conds.append(dnf_str)
+                    and_expr_set.add(dnf_str)
                 else:
-                    # Mark this expression being truncated. If there is an OR we won't be able to use
-                    # this expression.
-                    dnf_unmodified = False
+                    # Mark this expression as modified.
+                    dnf_modified = True
+
+            if shared_expr_set is None:
+                shared_expr_set = and_expr_set
+            else:
+                shared_expr_set.intersection_update(and_expr_set)
 
             # Group and according to the expected format
             dnf_and_str = ", ".join(dnf_and_conds)
@@ -371,9 +381,15 @@ def pq_distributed_run(
 
         dnf_or_str = ", ".join(dnf_or_conds)
         expr_or_str = " | ".join(expr_or_conds)
-        # We can only use the filters if they exist, and are either unmodified
-        # or just a single AND.
-        if dnf_or_str and (dnf_unmodified or len(pq_node.filters) == 1):
+        if dnf_modified:
+            # If DNF filters are modified we produce an AND of the
+            # common partition expressions.
+            if shared_expr_set:
+                # Sort the set to get consistent code on all ranks
+                filters = sorted(shared_expr_set)
+                dnf_filter_str = f"[[{', '.join(filters)}]]"
+        elif dnf_or_str:
+            # If the expression is not modified (and exist) we use the whole expression
             dnf_filter_str = f"[{dnf_or_str}]"
         expr_filter_str = f"({expr_or_str})"
 
