@@ -843,8 +843,8 @@ def get_parquet_dataset(
             fs.append(None)
         return fs[0]
 
-    validate_schema = bodo.parquet_validate_schema
-    if get_row_counts or validate_schema:
+    validate_schema = False
+    if get_row_counts:
         # Getting row counts and schema validation is going to be
         # distributed across ranks, so every rank will need a filesystem
         # object to query the metadata of their assigned pieces.
@@ -856,6 +856,7 @@ def get_parquet_dataset(
         # is that for some reason unpickling seems like it can cause
         # incorrect credential handling state in Arrow or AWS client.
         _ = getfs(parallel=True)
+        validate_schema = bodo.parquet_validate_schema
 
     if bodo.get_rank() == 0:
         nthreads = 1  # number of threads to use on rank 0 to collect metadata
