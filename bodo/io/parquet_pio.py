@@ -331,7 +331,7 @@ def pq_distributed_run(
                         prefix = "~"
                     else:
                         prefix = ""
-                    expr_and_conds.append(f"({prefix}ds.field('{v[0]}').is_null(nan_is_null=True))")
+                    expr_and_conds.append(f"({prefix}ds.field('{v[0]}').is_null())")
                 # Now handle the dnf section. We can only append a value if its not a constant
                 # expression and is a partition column
                 if v[0] in pq_node.partition_names and isinstance(v[2], ir.Var):
