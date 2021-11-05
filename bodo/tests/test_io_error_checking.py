@@ -378,9 +378,11 @@ def test_csv_chunksize_type(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_csv_nrows_type(memory_leak_check):
+def test_csv_nrows_type():
     """
     Test read_csv(): 'nrows' wrong value or type
+
+    TODO: re-add memory_leak_check, see BE-1545
     """
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
@@ -416,7 +418,9 @@ def test_csv_skiprows_type(memory_leak_check):
 
     with pytest.raises(BodoError, match="integer >= 0"):
         bodo.jit(impl1)()
-    with pytest.raises(BodoError, match="must be integer"):
+    with pytest.raises(
+        BodoError, match="'skiprows' must be an integer or list of integers."
+    ):
         bodo.jit(impl2)()
     with pytest.raises(BodoError, match="callable not supported yet"):
         bodo.jit(impl3)()
