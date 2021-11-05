@@ -1126,6 +1126,8 @@ def convert_non_pandas_columns(df):
         return df
 
     df_copy = df.copy()
+    # Manually invalidate the cached typing information.
+    df_copy._bodo_meta = None
     list_col = df.columns.to_list()
     n_rows = df_copy[list_col[0]].size
     # Determine which columns have list of strings in them
