@@ -16,7 +16,9 @@ list_dir = ["", "dl", "ir", "io", "utils", "hiframes", "libs"]
 
 file_dir = os.path.dirname(os.path.realpath(__file__))
 
-if "pre-commit" in os.listdir(os.path.join(file_dir, "../.git/hooks")):
+if os.path.exists(
+    os.path.join(file_dir, "../.git/hooks")
+) and "pre-commit" in os.listdir(os.path.join(file_dir, "../.git/hooks")):
     raise Exception(
         "Error! Pre-commit hooks are installed. This can cause issues when building locally, due to obfuscation removing the directives that disable pre-commits for specific sections of code.\nTo fix, please run `pre-commit uninstall` from within the Bodo repository."
     )
