@@ -494,11 +494,9 @@ def _gen_csv_file_reader_init(
     # The former means skip 4 rows from the beginning. Later means skip the 4th row.
     if is_skiprows_list:
         func_text = "  skiprows = sorted(set(skiprows))\n"
-        func_text += "  skiprows_list_len = len(skiprows)\n"
-
     else:
         func_text = "  skiprows = [skiprows]\n"
-        func_text += "  skiprows_list_len = 0\n"
+    func_text += "  skiprows_list_len = len(skiprows)\n"
     func_text += "  check_nrows_skiprows_value(nrows, skiprows)\n"
     # check_java_installation is a check for hdfs that java is installed
     func_text += "  check_java_installation(fname)\n"
