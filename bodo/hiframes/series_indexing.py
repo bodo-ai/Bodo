@@ -40,6 +40,7 @@ from bodo.utils.typing import (
     is_immutable_array,
     is_list_like_index_type,
     is_literal_type,
+    is_overload_constant_str,
     is_overload_constant_tuple,
     is_scalar_type,
     raise_bodo_error,
@@ -553,7 +554,10 @@ def overload_series_getitem(S, idx):
     # XXX: Series getitem performs both label-based and location-based indexing
     # If we have a HeterogeneousIndexType with a constant tuple, then we want
     # to use a different overload (see overload_const_index_series_getitem)
-    if isinstance(S, SeriesType) and not(isinstance(S.index, HeterogeneousIndexType) and is_overload_constant_tuple(S.index.data)):
+    if isinstance(S, SeriesType) and not (
+        isinstance(S.index, HeterogeneousIndexType)
+        and is_overload_constant_tuple(S.index.data)
+    ):
         # Integer index is location unless if Index is integer
         if isinstance(idx, types.Integer):
             # integer Index not supported yet
@@ -615,6 +619,32 @@ def overload_series_getitem(S, idx):
                 return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
 
             return impl_slice
+
+        # pragma is needed, as otherwise, sonar yells at me, because we don't check the immediately
+        # following error in a non-slow test.
+        if idx == bodo.string_type or is_overload_constant_str(idx):  # pragma: no cover
+            # TODO: throw an error if not distributed, BE-1535/BE-1536
+            if isinstance(S.index, bodo.hiframes.pd_index_ext.StringIndexType):
+
+                def impl_str_getitem(S, idx):  # pragma: no cover
+                    series_idx = bodo.hiframes.pd_series_ext.get_series_index(S)
+                    # get_loc currently returns a optional index, or throws an error if there's duplicates
+                    # this will need to be changed if get_loc supports duplicate labels BE-1562
+                    real_idx = series_idx.get_loc(idx)
+
+                    if real_idx is None:
+                        raise IndexError
+                    else:
+                        val = bodo.hiframes.pd_series_ext.get_series_data(S)[
+                            bodo.utils.indexing.unoptional(real_idx)
+                        ]
+                    return val
+
+                return impl_str_getitem
+            else:
+                raise BodoError(
+                    f"Cannot get Series value using a string, unless the index type is also string"
+                )
 
         # TODO: handle idx as SeriesType on array
         raise BodoError(f"getting Series value using {idx} not supported yet")

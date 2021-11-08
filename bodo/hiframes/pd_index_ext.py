@@ -56,8 +56,8 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_none,
     is_overload_true,
-    raise_bodo_error,
     parse_dtype,
+    raise_bodo_error,
 )
 
 _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
@@ -579,7 +579,9 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
 
     # Add a special error message for object dtypes
     if isinstance(elem_type, types.misc.PyObject):
-        raise BodoError("pd.Index() object 'dtype' is not specific enough for typing. Please provide a more exact type (e.g. str).")
+        raise BodoError(
+            "pd.Index() object 'dtype' is not specific enough for typing. Please provide a more exact type (e.g. str)."
+        )
 
     # Range index:
     if isinstance(data, RangeIndexType):
@@ -2761,6 +2763,7 @@ def _init_engine(I):  # pragma: no cover
         for i in range(len(arr)):
             val = arr[i]
             if val in I._dict:
+                # See BE-1562
                 raise ValueError("Index.get_loc(): non-unique Index not supported yet")
             I._dict[val] = i
 
