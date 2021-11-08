@@ -2848,3 +2848,48 @@ def test_series_and_or_int(arg1, arg2, memory_leak_check):
     check_func(impl_and, (arg2, arg1), py_output=pyOutputAnd)
     check_func(impl_or, (arg1, arg2), py_output=pyOutputOr)
     check_func(impl_or, (arg2, arg1), py_output=pyOutputOr)
+
+
+def test_series_getitem_string_index(memory_leak_check):
+    """Tests that we can do a getitem on a Series with a string index"""
+    S = pd.Series([1, 2, 3, 4, 5, 6], index=["A", "B", "C", "D", "E", "F"])
+
+    def test_impl(S):
+        return S["A"]
+
+    # needed so sonar doesn't complain
+    def test_impl2(S, idx):
+        return S[idx]
+
+    # TODO: support in distributed case
+    check_func(test_impl, (S,), only_seq=True)
+    check_func(test_impl2, (S, "A"), only_seq=True)
+
+    # TODO: re add if/when idx.get_loc supports non-unique index
+    # S2 = pd.Series([1, 2, 3] * 3, index=["A", "B", "C"] * 3)
+    # check_func(test_impl, (S2,), only_seq=True)
+
+
+def test_series_getitem_str_grpby_apply():
+    """Tests that getitem works inside of groupby apply"""
+
+    # example taken from H20 benchmark Q09
+    data = {
+        "id1": ["id016", "id039", "id047", "id043", "id054"],
+        "id2": ["id016", "id045", "id023", "id057", "id040"],
+        "v1": [5, 5, 2, 1, 2],
+        "v2": [11, 4, 14, 15, 9],
+    }
+    df = pd.DataFrame(data)
+
+    def test_impl(df):
+        return df.groupby(
+            ["id1", "id2"], as_index=False, sort=False, observed=True, dropna=False
+        ).apply(lambda x: x.corr()["v1"]["v2"] ** 2)
+
+    # in Bodo, when doing groupby apply, we set the output column to empty string
+    # if we have a string index. In Pandas, it's normally None
+    py_out = test_impl(df)
+    py_out.columns = ["id1", "id2", ""]
+
+    check_func(test_impl, (df,), py_output=py_out, sort_output=True, reset_index=True)
