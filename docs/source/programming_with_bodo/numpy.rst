@@ -15,7 +15,7 @@ and parallelize.
     * Comparison operators: ``==`` ``!=`` ``<`` ``<=`` ``>`` ``>=``
     * data-parallel math operations:
 
-      * :func:`numpy.add` 
+      * :func:`numpy.add`
       * :func:`numpy.subtract`
       * :func:`numpy.multiply`
       * :func:`numpy.divide`
@@ -48,10 +48,10 @@ and parallelize.
       * :func:`numpy.gcd`
       * :func:`numpy.lcm`
       * :func:`numpy.conjugate`
-      
 
-    * Trigonometric functions: 
-    
+
+    * Trigonometric functions:
+
       * :func:`numpy.sin`
       * :func:`numpy.cos`
       * :func:`numpy.tan`
@@ -69,10 +69,10 @@ and parallelize.
       * :func:`numpy.deg2rad`
       * :func:`numpy.rad2deg`
       * :func:`numpy.degrees`
-      * :func:`numpy.radians`     
+      * :func:`numpy.radians`
 
-    * Bit manipulation functions: 
-    
+    * Bit manipulation functions:
+
       * :func:`numpy.bitwise_and`
       * :func:`numpy.bitwise_or`
       * :func:`numpy.bitwise_xor`
@@ -138,10 +138,11 @@ and parallelize.
     * :func:`numpy.append`
     * :func:`numpy.unique` the output is assumed to be "small" relative to input and is replicated. Use Series.drop_duplicates() if the output should remain distributed.
     * :func:`numpy.where` (1 and 3 arguments)
+    * :func:`numpy.select` The default value for numeric/boolean types is 0/False. For all other types, the default is pd.NA. If any of the values in choicelist are nullable, or the default is pd.NA or None, the output will be a nullable pandas array instead of a numpy array.
     * :func:`numpy.union1d`
     * :func:`numpy.intersect1d` (no distributed support yet)
     * :func:`numpy.setdiff1d` (no distributed support yet)
-    * :func:`numpy.hstack` (concatenates elements on each rank without maintaining order) 
+    * :func:`numpy.hstack` (concatenates elements on each rank without maintaining order)
 
 
 #. Numpy mathematical and statistics functions:

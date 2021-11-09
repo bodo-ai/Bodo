@@ -390,3 +390,23 @@ def test_astype_non_constant_string(memory_leak_check):
         match="Series.astype\\(\\): 'dtype' when passed as string must be a constant value",
     ):
         bodo.jit(impl)(S, type_str)
+
+def test_np_select_series_cond(memory_leak_check):
+    """tests np select returns the correct error when passed a bool series for cond"""
+    np.random.seed(42)
+
+    # For now, can only handle cond == bool ndarry.
+    S = pd.Series([1,2,3])
+    cond = pd.Series(np.random.randint(2, size=len(S)).astype(bool))
+
+    @bodo.jit
+    def impl(S, cond):
+        choicelist = [S]
+        condlist = [cond]
+        return np.select(condlist, choicelist)
+
+    err_msg_cat = (
+        r".*np.select\(\): 'condlist' argument must be list or tuple of boolean ndarrays. If passing a Series, please convert with pd.Series.to_numpy\(\).*"
+    )
+    with pytest.raises(BodoError, match=err_msg_cat):
+        impl(S, cond)
