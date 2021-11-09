@@ -3,8 +3,23 @@
 File I/O
 ===============
 
+Efficient parallel data processing requires data I/O to be parallelized
+effectively as well. Bodo provides parallel file I/O for many different
+formats such as `Parquet <http://parquet.apache.org>`__, CSV, JSON,
+Numpy binaries, `HDF5 <http://www.h5py.org>`__ and SQL databases. This
+diagram demonstrates how chunks of data are partitioned among parallel
+execution engines by Bodo.
+
+
+.. figure:: ../img/file-read.jpg
+   :align: center
+   :alt: Bodo reads file chunks in parallel
+
+   Bodo reads file chunks in parallel
+
+
 Bodo automatically parallelizes I/O of different nodes in a distributed setting
-without any code changes.
+without any additional API layers.
 
 Supported formats
 -----------------
@@ -19,8 +34,9 @@ Also see :ref:`Supported Pandas Operations <pandas>` for supported arguments.
 Parquet
 ~~~~~~~
 
-For Parquet, the syntax is the same as Pandas:
-``pd.read_parquet(path)``, where path can be a parquet file or a directory with multiple parquet files
+Parquet is a commonly used file format in analytics due to its efficient
+columnar storage. Bodo supports the standard pandas API for reading
+Parquet: ``pd.read_parquet(path)``, where path can be a parquet file or a directory with multiple parquet files
 (all are part of the same dataframe)::
 
     @bodo.jit
@@ -87,7 +103,9 @@ but only loads the first few rows that are necessary for ``df.head()``.
 CSV
 ~~~
 
-For CSV, the syntax is also the same as Pandas::
+
+CSV is a common text format for data exchange. Bodo supports much of the
+standard pandas API to read CSV files::
 
     @bodo.jit
     def write_csv(df):
@@ -340,7 +358,9 @@ but writing to S3 & HDFS is done sequentially (due to file system limitations).
 HDF5
 ~~~~
 
-For HDF5, the syntax is the same as the `h5py <http://www.h5py.org/>`_ package.
+HDF5 is a common format in scientific computing, especially for
+multi-dimensional numerical data. HDF5 can be very efficient at scale,
+since it has native parallel I/O support. For HDF5, the syntax is the same as the `h5py <http://www.h5py.org/>`_ package.
 For example::
 
     @bodo.jit
@@ -352,8 +372,8 @@ For example::
 
 .. _non-constant-filepaths:
 
-Non Constant filepaths
----------------------
+Filepaths determined at runtime
+---------------------------------
 
 When reading from a file, Bodo needs to know the types of the resulting dataframe.
 If the file name is a constant string or function argument, Bodo can look at
