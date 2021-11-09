@@ -35,10 +35,17 @@ def test_metadata_typemaps():
     [
         1,
         b"jakhsgdfusdlj",
-        {"A": 1, "B": 2, "C": 1},
+        # Not currently supported for the non-literal case
+        # TODO: support for non literal case, BE-1566
+        # {"A": 1, "B": 2, "C": 1},
+        # {"A": "A1", "B": "B1", "C": "C1"},
+        # ["A", "B", "C"],
+        # [1,2,3,4,5],
+        # ("A", "B", 1, 2),
+        # ("hi", 1, 12, "hello"),
+        # pd.Timestamp("2021-10-01"),
         -13,
         "hello world",
-        pd.Timestamp("2021-10-01"),
         np.arange(10),
         pd.array([1, 8, 4, 10, 3] * 2, dtype="Int32"),
         pd.array([True, False, True, pd.NA, False]),
@@ -79,7 +86,7 @@ def test_metadata_typemaps():
         datetime.date(2020, 11, 17),
     ],
 )
-def test_dtype_converter(typ_val):
+def test_dtype_converter_non_literal_values(typ_val):
     """
     tests _dtype_to_type_enum_list and _dtype_from_type_enum_list works for some non series types.
 
@@ -89,11 +96,11 @@ def test_dtype_converter(typ_val):
     those index types here.
 
     The handled non-series types are as follows:
-        All the index types (as of Oct 2021)
-        All the array types (as of Oct 2021)
+        All the index types (as of November 2021)
+        All the array types (as of November 2021)
         Scalar integers, strings, and bytes (needed for some named index conversions)
         Scalar None (needed for some types can be initialized with none values)
-        Scalar boolean, datetime/timedelta types (no specific reason, but it was trivial to support them)
+        Scalar boolean, datetime date (no specific reason, but it was trivial to support them)
     """
     from numba.core import types
 
@@ -102,13 +109,70 @@ def test_dtype_converter(typ_val):
         _dtype_to_type_enum_list,
     )
 
-    typ_from_converter = _dtype_from_type_enum_list(
-        _dtype_to_type_enum_list(types.unliteral(bodo.typeof(typ_val)))
+    converted_enum_list = _dtype_to_type_enum_list(
+        types.unliteral(bodo.typeof(typ_val))
     )
+    if converted_enum_list is None:
+        raise Exception(f"Could not convert value {typ_val}")
+
+    typ_from_converter = _dtype_from_type_enum_list(converted_enum_list)
 
     assert typ_from_converter == types.unliteral(
         bodo.typeof(typ_val)
     ) or typ_from_converter == bodo.typeof(typ_val)
+
+
+@pytest.mark.parametrize(
+    "typ_val",
+    [
+        1,
+        -13,
+        12.21321,
+        b"jakhsgdfusdlj",
+        "hello world",
+        {"A": 1, "B": 2, "C": 1},
+        {"A": "A1", "B": "B1", "C": "C1"},
+        ["A", "B", "C"],
+        [1, 2, 3, 4, 5],
+        ("A", "B", 1, 2),
+        ("hi", 1, 12, "hello"),
+        None,
+    ],
+)
+def test_dtype_converter_literal_values(typ_val):
+    """
+    tests _dtype_to_type_enum_list when returning literal/constant values
+
+        For certain constant values, we can simply return the constant python object instead of
+        Fully serializing it. As of Nov 2021, we do this for the following constants:
+            - dict
+            - int
+            - float
+            - str
+            - bytes
+            - list
+            - tuples
+            - None
+
+        These are tested seperatley, as we've previously had some segfaulting errors when handling boxing
+        certain constants.
+    """
+
+    from bodo.hiframes.boxing import (
+        SeriesDtypeEnum,
+        _dtype_from_type_enum_list,
+        _dtype_to_type_enum_list,
+    )
+
+    converted_enum_list = _dtype_to_type_enum_list(typ_val)
+
+    assert (
+        not (converted_enum_list is None)
+        and converted_enum_list[0] == SeriesDtypeEnum.Literal.value
+        and converted_enum_list[1] == typ_val
+    )
+    typ_from_converter = _dtype_from_type_enum_list(converted_enum_list)
+    assert typ_from_converter == typ_val
 
 
 def check_series_typing_metadata(orig_series, output_series):
