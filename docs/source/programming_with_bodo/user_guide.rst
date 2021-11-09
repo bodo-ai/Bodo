@@ -658,7 +658,7 @@ example code below demonstrates calling plot with a sample of the data:
 
 
 
-.. image:: ../bodo_tutorial_files/bodo_tutorial_84_1.png
+.. image:: ../bodo_tutorial_files/bodo_tutorial_83_1.png
    :align: center
 
 Collections of Distributed Data
