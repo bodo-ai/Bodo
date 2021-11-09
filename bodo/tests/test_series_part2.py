@@ -2116,8 +2116,8 @@ def test_series_np_where_num(memory_leak_check):
     check_func(test_impl2, (S, 12, cond))
 
 
-def test_series_where_true(series_val, memory_leak_check):
-    """Tests that all types can be used in Series.where(cond)
+def test_series_where_true_scalar(series_val, memory_leak_check):
+    """Tests that all types can be used in Series.where(cond, scalar)
     with all True values."""
 
     cond = np.array([True] * len(series_val))
@@ -2129,30 +2129,7 @@ def test_series_where_true(series_val, memory_leak_check):
     # TODO: [BE-110] support series.where for more Bodo array types
     series_err_msg = "Series.where.* Series data with type .* not yet supported"
 
-    # not supported for list(string) and array(item)
-    if isinstance(series_val.values[0], list):
-        with pytest.raises(BodoError, match=series_err_msg):
-            bodo.jit(test_impl)(series_val, cond, val)
-        return
-
-    # not supported for Decimal yet, TODO: support and test
-    if isinstance(series_val.values[0], Decimal):
-        with pytest.raises(BodoError, match=series_err_msg):
-            bodo.jit(test_impl)(series_val, cond, val)
-        return
-
-    # not supported for CategoricalArrayType yet, TODO: support and test
-    if isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
-        series_val.dtype.categories[0], (pd.Timestamp, pd.Timedelta)
-    ):
-        with pytest.raises(BodoError, match=series_err_msg):
-            bodo.jit(test_impl)(series_val, cond, val)
-        return
-
-    # not supported for datetime.date yet, TODO: support and test
-    if not isinstance(series_val.dtype, pd.CategoricalDtype) and isinstance(
-        series_val.values[0], datetime.date
-    ):
+    if not is_where_mask_supported_series(series_val):
         with pytest.raises(BodoError, match=series_err_msg):
             bodo.jit(test_impl)(series_val, cond, val)
         return
@@ -2160,6 +2137,130 @@ def test_series_where_true(series_val, memory_leak_check):
     # Bodo differs from Pandas because Bodo sets the type before
     # it knows that the other value (np.nan) will never be chosen
     check_func(test_impl, (series_val, cond, val), check_dtype=False)
+
+
+def test_series_where_np_array(series_val, memory_leak_check):
+    """Tests that all types can be used in Series.where(cond, ndarray)"""
+
+    np.random.seed(42)
+    cond = np.random.randint(2, size=len(series_val)).astype(bool)
+
+    fill_val = series_val.loc[series_val.first_valid_index()]
+    # wierd case where, we can have two values at the same index,
+    # seems to only occur for categorical.
+    if isinstance(fill_val, pd.Series):
+        fill_val = fill_val.iloc[0]
+
+    # Having a iterable fill_val causes issues
+    if isinstance(fill_val, list):
+        fill_val = None
+    val = series_val.to_numpy(na_value=fill_val)
+
+    def test_impl(S, cond, val):
+        return S.where(cond, val)
+
+    # TODO: [BE-110] support series.where for more Bodo array types
+    series_err_msg = "Series.where.* Series data with type .* not yet supported"
+
+    if series_val.dtype.name == "category":
+        val = val.astype(series_val.dtype.categories.dtype)
+
+    if not is_where_mask_supported_series(series_val):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+    check_func(test_impl, (series_val, cond, val), check_dtype=False)
+
+
+def test_series_where_series(series_val, memory_leak_check):
+    """Tests that all types can be used in Series.where(cond, Series)"""
+
+    np.random.seed(42)
+    cond = np.random.randint(2, size=len(series_val)).astype(bool)
+
+    def test_impl(S, cond, val):
+        return S.where(cond, val)
+
+    # TODO: [BE-110] support series.where for more Bodo array types
+    series_err_msg = "Series.where.* Series data with type .* not yet supported"
+    if not is_where_mask_supported_series(series_val):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, series_val)
+        return
+
+    # TODO: support series.where with two categorical inputs
+    if series_val.dtype.name == "category":
+        cat_err_msg = f"Series.where.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
+        with pytest.raises(BodoError, match=cat_err_msg):
+            bodo.jit(test_impl)(series_val, cond, series_val)
+        return
+
+    check_func(test_impl, (series_val, cond, series_val), check_dtype=False)
+
+
+
+
+def test_series_mask_np_array(series_val, memory_leak_check):
+    """Tests that all types can be used in Series.where(cond, ndarray)"""
+    np.random.seed(42)
+
+    cond = np.random.randint(2, size=len(series_val)).astype(bool)
+
+    fill_val = series_val.loc[series_val.first_valid_index()]
+    # wierd case where, we can have two values at the same index,
+    # seems to only occur for categorical.
+    if isinstance(fill_val, pd.Series):
+        fill_val = fill_val.iloc[0]
+
+    # Having a iterable fill_val causes issues
+    if isinstance(fill_val, list):
+        fill_val = None
+    val = series_val.to_numpy(na_value=fill_val)
+
+    def test_impl(S, cond, val):
+        return S.mask(cond, val)
+
+    # TODO: [BE-110] support series.mask for more Bodo array types
+    series_err_msg = "Series.mask.* Series data with type .* not yet supported"
+
+    if series_val.dtype.name == "category":
+        val = val.astype(series_val.dtype.categories.dtype)
+
+    if not is_where_mask_supported_series(series_val):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, val)
+        return
+
+
+    check_func(test_impl, (series_val, cond, val), check_dtype=False)
+
+
+def test_series_mask_series(series_val, memory_leak_check):
+    """Tests that all supported types can be used in Series.where(cond, Series)."""
+    np.random.seed(42)
+
+    cond = np.random.randint(2, size=len(series_val)).astype(bool)
+
+    def test_impl(S, cond, val):
+        return S.mask(cond, val)
+
+    # TODO: [BE-110] support series.where for more Bodo array types
+    series_err_msg = "Series.mask.* Series data with type .* not yet supported"
+    if not is_where_mask_supported_series(series_val):
+        with pytest.raises(BodoError, match=series_err_msg):
+            bodo.jit(test_impl)(series_val, cond, series_val)
+        return
+
+    # TODO: support series.where with two categorical inputs
+    if series_val.dtype.name == "category":
+        cat_err_msg = f"Series.mask.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
+        with pytest.raises(BodoError, match=cat_err_msg):
+            bodo.jit(test_impl)(series_val, cond, series_val)
+        return
+
+
+    check_func(test_impl, (series_val, cond, series_val), check_dtype=False)
 
 
 def test_series_where(memory_leak_check):
@@ -2354,7 +2455,7 @@ def test_series_mask(memory_leak_check):
 
 
 def test_series_mask_arr(memory_leak_check):
-    """Test for Series.where(cond, arr) where arr is either
+    """Test for Series.mask(cond, arr) where arr is either
     a series or array that shares a common dtype."""
 
     def test_impl(S, cond, val):
@@ -2370,7 +2471,7 @@ def test_series_mask_arr(memory_leak_check):
 
 
 def test_series_mask_binary(memory_leak_check):
-    """Test for Series.where(cond, arr) where arr is either
+    """Test for Series.mask(cond, arr) where arr is either
     a string series or array"""
 
     def test_impl(S, val):
@@ -2389,7 +2490,7 @@ def test_series_mask_binary(memory_leak_check):
 
 
 def test_series_mask_str(memory_leak_check):
-    """Test for Series.where(cond, arr) where arr is either
+    """Test for Series.mask(cond, arr) where arr is either
     a binary series or array"""
 
     def test_impl(S, val):
@@ -2927,3 +3028,276 @@ def test_series_nbytes(memory_leak_check):
 
     S = pd.Series([1, 2, 3, 4, 5, 6])
     check_func(impl, (S,))
+
+
+# helper function, that returns if a particular series can be used with np.where
+def is_where_mask_supported_series(S):
+    if isinstance(S.values[0], list):
+        return False
+    if isinstance(S.values[0], Decimal):
+        return False
+    if isinstance(S.dtype, pd.CategoricalDtype) and isinstance(
+        S.dtype.categories[0], (pd.Timestamp, pd.Timedelta)
+    ):
+        return False
+    if not isinstance(S.dtype, pd.CategoricalDtype) and isinstance(
+        S.values[0], datetime.date
+    ):
+        return False
+    return True
+
+
+def test_series_np_select(series_val, memory_leak_check):
+    """tests np select for nullable series"""
+    np.random.seed(42)
+
+    cond1 = np.random.randint(2, size=len(series_val)).astype(bool)
+    cond2 = np.random.randint(2, size=len(series_val)).astype(bool)
+
+    A1 = series_val
+    # Some trivial sorting, to insure we have different values at each index
+    # So we can catch correctness issues
+    A2 = series_val.sort_values(ignore_index=True)
+
+    def impl1(A1, A2, cond1, cond2):
+        choicelist = (A1, A2)
+        condlist = (cond1, cond2)
+        return np.select(condlist, choicelist)
+
+    def impl2(A1, A2, cond1, cond2):
+        choicelist = (A1, A2)
+        condlist = [cond1, cond2]
+        return np.select(condlist, choicelist)
+
+    def impl3(A1, A2, cond1, cond2):
+        choicelist = [A1, A2]
+        condlist = (cond1, cond2)
+        return np.select(condlist, choicelist)
+
+    def impl4(A1, A2, cond1, cond2):
+        choicelist = [A1, A2]
+        condlist = [cond1, cond2]
+        return np.select(condlist, choicelist)
+
+    err_msg = r".*np.select\(\): data with choicelist of type .* not yet supported.*"
+    if not is_where_mask_supported_series(series_val):
+        with pytest.raises(BodoError, match=err_msg):
+            bodo.jit(impl1)(A1, A2, cond1, cond2)
+        return
+
+    err_msg_cat = (
+        r".*np.select\(\): data with choicelist of type Categorical not yet supported.*"
+    )
+    if series_val.dtype.name == "category":
+        with pytest.raises(BodoError, match=err_msg_cat):
+            bodo.jit(impl1)(A1, A2, cond1, cond2)
+        return
+
+    # for numeric/bool, we default to 0/false. This is to keep the expected behavior of np select
+    # in situations that a user might resonably want/expect to have the default set to 0.
+    # for all other types, we default to NA, for type stability.
+    def na_impl(A1, A2, cond1, cond2):
+        choicelist = [A1, A2]
+        condlist = [cond1, cond2]
+        return np.select(condlist, choicelist, default=pd.NA)
+
+    from numba.core import types
+
+    infered_typ = bodo.hiframes.boxing._infer_series_dtype(series_val)
+    if not (infered_typ == bodo.bool_ or isinstance(infered_typ, types.Number)):
+        py_out = na_impl(A1, A2, cond1, cond2)
+        if infered_typ == bodo.datetime64ns:
+            # need to do a bit of conversion in this case, as numpy by default casts the dt64 to int
+            # when the np output is an object array
+            py_out = np.array(pd.Series(py_out).astype("datetime64[ns]"))
+        if infered_typ == bodo.timedelta64ns:
+            # need to do a bit of conversion in this case, numpy does a cast to int
+            # when the np output is an object array
+            py_out = np.array(pd.Series(py_out).astype("timedelta64[ns]"))
+    else:
+        py_out = None
+
+    for impl in [impl1, impl2, impl3, impl4]:
+        check_func(
+            impl,
+            (A1, A2, cond1, cond2),
+            check_dtype=False,
+            py_output=py_out,
+        )
+
+
+def test_series_np_select_non_unitype(series_val, memory_leak_check):
+    """tests np select when passed a non unitype choicelist"""
+    np.random.seed(42)
+
+    cond1 = np.random.randint(2, size=len(series_val)).astype(bool)
+    cond2 = np.random.randint(2, size=len(series_val)).astype(bool)
+    A1 = series_val
+    # Some trivial sorting, to insure we have different values at each index
+    # So we can catch correctness issues
+    sorted_series = series_val.sort_values(ignore_index=True)
+    fill_val = sorted_series.loc[sorted_series.first_valid_index()]
+    # na_value doesn't play nice with iterables, so just use the nullable array type
+    if isinstance(fill_val, list):
+        fill_val = None
+    A2 = sorted_series.to_numpy(na_value=fill_val)
+
+    def impl(A1, A2, cond1, cond2):
+        choicelist = (A1, A2)
+        condlist = (cond1, cond2)
+        return np.select(condlist, choicelist)
+
+    # Already checked error messages in test_series_np_select
+    if (
+        not is_where_mask_supported_series(series_val)
+        or series_val.dtype.name == "category"
+    ):
+        pytest.skip()
+
+    # for numeric/bool, we default to 0/false. This is to keep the expected behavior of np select
+    # in situations that a user might resonably want/expect to have the default set to 0.
+    # for all other types, we default to NA, for type stability.
+    def na_impl(A1, A2, cond1, cond2):
+        choicelist = (A1, A2)
+        condlist = (cond1, cond2)
+        return np.select(condlist, choicelist, default=pd.NA)
+
+    from numba.core import types
+
+    infered_typ = bodo.hiframes.boxing._infer_series_dtype(series_val)
+    if not (infered_typ == bodo.bool_ or isinstance(infered_typ, types.Number)):
+        py_out = na_impl(A1, A2, cond1, cond2)
+
+        if infered_typ == bodo.datetime64ns:
+            # need to do a bit of conversion in this case, as numpy by default casts the dt64 to int
+            py_out = np.array(pd.Series(py_out).astype("datetime64[ns]"))
+        if infered_typ == bodo.timedelta64ns:
+            # need to do a bit of conversion in this case, again, numpy does a wierd conversion
+            py_out = np.array(pd.Series(py_out).astype("timedelta64[ns]"))
+        if isinstance(infered_typ, bodo.PDCategoricalDtype):
+            if isinstance(
+                series_val.dtype.categories, (pd.TimedeltaIndex, pd.DatetimeIndex)
+            ):
+                py_out = pd.array(
+                    pd.Series(py_out)
+                    .astype(series_val.dtype.categories.dtype)
+                    .astype(series_val.dtype)
+                )
+            else:
+                py_out = pd.array(pd.Series(py_out).astype(series_val.dtype))
+    else:
+        py_out = None
+
+    check_func(
+        impl,
+        (A1, A2, cond1, cond2),
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+
+
+def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check):
+    """tests np select when passed a non unitype choicelist"""
+    np.random.seed(42)
+
+    cond1 = np.random.randint(2, size=len(series_val)).astype(bool)
+    cond2 = np.random.randint(2, size=len(series_val)).astype(bool)
+    A1 = series_val
+    # Some trivial sorting, to insure we have different values at each index
+    # So we can catch correctness issues
+    sorted_series = series_val.sort_values(ignore_index=True)
+    fill_val = sorted_series.loc[sorted_series.first_valid_index()]
+    # na_value doesn't play nice with iterables, so just use the nullable array type
+    if isinstance(fill_val, list):
+        fill_val = None
+    A2 = sorted_series.to_numpy(na_value=fill_val)
+
+    def impl(A1, A2, cond1, cond2):
+        choicelist = (A1, A2)
+        condlist = (cond1, cond2)
+        return np.select(condlist, choicelist, None)
+
+    # Already checked error messages in test_series_np_select
+    if (
+        not is_where_mask_supported_series(series_val)
+        or series_val.dtype.name == "category"
+    ):
+        pytest.skip()
+
+    # for numeric/bool, we default to 0/false. This is to keep the expected behavior of np select
+    # in situations that a user might resonably want/expect to have the default set to 0.
+    # for all other types, we default to NA, for type stability.
+    def na_impl(A1, A2, cond1, cond2):
+        choicelist = (A1, A2)
+        condlist = (cond1, cond2)
+        return np.select(condlist, choicelist, default=pd.NA)
+
+    from numba.core import types
+
+    if series_val.dtype.name.startswith("float"):
+        py_out = impl(A1, A2, cond1, cond2)
+        py_out[pd.isna(py_out)] = np.NAN
+        py_out = py_out.astype(float)
+    else:
+        py_out = None
+
+    check_func(
+        impl,
+        (A1, A2, cond1, cond2),
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+
+def test_series_np_select_non_unitype_set_default(series_val, memory_leak_check):
+    """tests np select when passed a non unitype choicelist"""
+    np.random.seed(42)
+
+    cond1 = np.random.randint(2, size=len(series_val)).astype(bool)
+    cond2 = np.random.randint(2, size=len(series_val)).astype(bool)
+    A1 = series_val
+    # Some trivial sorting, to insure we have different values at each index
+    # So we can catch correctness issues
+    sorted_series = series_val.sort_values(ignore_index=True)
+    orig_fill_val = sorted_series.loc[sorted_series.first_valid_index()]
+    # na_value doesn't play nice with iterables, so just use the nullable array type
+    if isinstance(orig_fill_val, list):
+        fill_val = None
+    else:
+        fill_val = orig_fill_val
+    A2 = sorted_series.to_numpy(na_value=fill_val)
+
+    def impl(A1, A2, cond1, cond2, default):
+        choicelist = (A1, A2)
+        condlist = (cond1, cond2)
+        return np.select(condlist, choicelist, default=default)
+
+    # Already checked error messages in test_series_np_select
+    if (
+        not is_where_mask_supported_series(series_val)
+        or series_val.dtype.name == "category"
+    ):
+        pytest.skip()
+
+
+    if isinstance(orig_fill_val, pd.Timestamp):
+        #setitem for array(datetime64[ns], 1d, C) with timestamp not supported
+        default_val = orig_fill_val.to_datetime64()
+    elif isinstance(orig_fill_val, pd.Timedelta):
+        #setitem for array(timedelta64[ns], 1d, C) with pd timedelta not supported
+        default_val = orig_fill_val.to_timedelta64()
+    else:
+        default_val = orig_fill_val
+
+
+    check_func(
+        impl,
+        (A1, A2, cond1, cond2, default_val),
+        check_dtype=False,
+    )
+
+
+
+
+

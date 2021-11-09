@@ -1918,6 +1918,61 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, args[0].name, array_dists)
             return
 
+        if func_name == "select":
+            cond_list = get_call_expr_arg("select", args, kws, 0, "condlist")
+            choice_list = get_call_expr_arg("select", args, kws, 1, "choicelist")
+
+            # if the condlist/choicelist are basetuples, the distributions
+            # will be lists. If they are lists/unituples, they will be scalar.
+            cond_list_typ = self.typemap[cond_list.name]
+            choice_list_typ = self.typemap[choice_list.name]
+            cond_list_basetuple = isinstance(cond_list_typ, types.BaseTuple)
+            choice_list_basetuple = isinstance(choice_list_typ, types.BaseTuple)
+
+            if cond_list.name not in array_dists:
+                # initialize to 1D if not found
+                if cond_list_basetuple:
+                    cond_list_dist = [Distribution.OneD] * len(cond_list_typ)
+                else:
+                    cond_list_dist = Distribution.OneD
+            else:
+                cond_list_dist = array_dists[cond_list.name]
+
+            if choice_list.name not in array_dists:
+                # initialize to 1D if not found
+                if choice_list_basetuple:
+                    choice_list_dist = [Distribution.OneD] * len(choice_list_typ)
+                else:
+                    choice_list_dist = Distribution.OneD
+            else:
+                choice_list_dist = array_dists[choice_list.name]
+
+            if not cond_list_basetuple:
+                cond_list_dist = [cond_list_dist]
+            if not choice_list_basetuple:
+                choice_list_dist = [choice_list_dist]
+
+            if lhs in array_dists:
+                lhs_dist = array_dists[lhs]
+            else:
+                lhs_dist = Distribution.OneD
+
+            min_dist = lhs_dist
+
+            for dist_val in cond_list_dist + choice_list_dist:
+                min_dist = self._min_dist(min_dist, dist_val)
+
+            array_dists[lhs] = min_dist
+            if cond_list_basetuple:
+                array_dists[cond_list.name] = [min_dist] * len(cond_list_dist)
+            else:
+                array_dists[cond_list.name] = min_dist
+            if choice_list_basetuple:
+                array_dists[choice_list.name] = [min_dist] * len(choice_list_dist)
+            else:
+                array_dists[choice_list.name] = min_dist
+            return
+
         if func_name == "ravel":
             self._meet_array_dists(lhs, args[0].name, array_dists)
             return

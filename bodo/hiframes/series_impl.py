@@ -32,6 +32,7 @@ from bodo.hiframes.pd_series_ext import (
     HeterogeneousSeriesType,
     SeriesType,
     if_series_to_array_type,
+    is_series_type,
 )
 from bodo.hiframes.pd_timestamp_ext import (
     PandasTimestampType,
@@ -56,6 +57,7 @@ from bodo.utils.typing import (
     check_unsupported_args,
     dtype_to_array_type,
     element_type,
+    get_common_scalar_dtype,
     get_literal_value,
     get_overload_const_bytes,
     get_overload_const_int,
@@ -63,6 +65,7 @@ from bodo.utils.typing import (
     is_common_scalar_dtype,
     is_iterable_type,
     is_literal_type,
+    is_nullable_type,
     is_overload_bool,
     is_overload_constant_bool,
     is_overload_constant_bytes,
@@ -76,6 +79,7 @@ from bodo.utils.typing import (
     is_overload_zero,
     is_scalar_type,
     raise_bodo_error,
+    to_nullable_type,
 )
 
 
@@ -3219,8 +3223,24 @@ def _validate_arguments_mask_where(
                 or (S.dtype in [bodo.string_type, bodo.bytes_type])
             )
         )
-        or (isinstance(other, StringArrayType) and S.dtype == bodo.string_type)
-        or (isinstance(other, BinaryArrayType) and S.dtype == bodo.bytes_type)
+        # support S.where(A) where A is a binary/string array.
+        # If S is Categorical, allow it if the element type matches
+        or (
+            isinstance(other, StringArrayType)
+            and (
+                S.dtype == bodo.string_type
+                or isinstance(S.data, bodo.CategoricalArrayType)
+                and S.dtype.elem_type == bodo.string_type
+            )
+        )
+        or (
+            isinstance(other, BinaryArrayType)
+            and (
+                S.dtype == bodo.bytes_type
+                or isinstance(S.data, bodo.CategoricalArrayType)
+                and S.dtype.elem_type == bodo.bytes_type
+            )
+        )
         or (
             (
                 # need this check here, in the case that someone passes in series.mask(_, bad_str/bin_arr_val),
@@ -3228,9 +3248,25 @@ def _validate_arguments_mask_where(
                 not isinstance(other, (StringArrayType, BinaryArrayType))
                 and (
                     isinstance(S.data.dtype, types.Integer)
-                    and isinstance(other.data.dtype, types.Integer)
+                    # Handle case that other is Series with underlying data = Nullable Int array
+                    and (
+                        (
+                            bodo.utils.utils.is_array_typ(other)
+                            and isinstance(other.dtype, types.Integer)
+                        )
+                        or (
+                            is_series_type(other)
+                            and isinstance(other.data.dtype, types.Integer)
+                        )
+                    )
                 )
-                or (S.data.dtype == other.data.dtype)
+                or (
+                    (
+                        bodo.utils.utils.is_array_typ(other)
+                        and S.data.dtype == other.dtype
+                    )
+                    or (is_series_type(other) and S.data.dtype == other.data.dtype)
+                )
             )
             and (
                 isinstance(S.data, BooleanArrayType)
@@ -3239,7 +3275,7 @@ def _validate_arguments_mask_where(
         )
     ):
         raise BodoError(
-            f"{func_name}() 'other' must be a scalar, series, 1-dim numpy array or StringArray with a matching type for Series."
+            f"{func_name}() 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
         )
 
     # Check that the types match
@@ -4127,6 +4163,231 @@ def overload_np_where(condition, x, y):
     )
     _impl = loc_vars["_impl"]
     return _impl
+
+
+def _verify_np_select_arg_typs(condlist, choicelist, default):
+
+    # Check condlist
+    if isinstance(condlist, (types.List, types.UniTuple)):
+        if not (
+            bodo.utils.utils.is_np_array_typ(condlist.dtype)
+            and condlist.dtype.dtype == types.bool_
+        ):  # pragma: no cover
+            raise BodoError(
+                "np.select(): 'condlist' argument must be list or tuple of boolean ndarrays. If passing a Series, please convert with pd.Series.to_numpy()."
+            )
+    else:  # pragma: no cover
+        # must be BaseTuple, which means one or more args were not ndarrays
+        raise BodoError(
+            "np.select(): 'condlist' argument must be list or tuple of boolean ndarrays. If passing a Series, please convert with pd.Series.to_numpy()."
+        )
+
+    # Check choicelist
+    if not isinstance(
+        choicelist, (types.List, types.UniTuple, types.BaseTuple)
+    ):  # pragma: no cover
+        raise BodoError("np.select(): 'choicelist' argument must be list or tuple type")
+
+    if isinstance(choicelist, (types.List, types.UniTuple)):
+        typ = choicelist.dtype
+        if not bodo.utils.utils.is_array_typ(typ, True):  # pragma: no cover
+            raise BodoError(
+                "np.select(): 'choicelist' argument must be list or tuple of series/arrays types"
+            )
+        # Use underlying array dtype of series
+        if is_series_type(typ):
+            dtyp = typ.data.dtype
+        else:
+            dtyp = typ.dtype
+        if isinstance(dtyp, bodo.PDCategoricalDtype):  # pragma: no cover
+            raise BodoError(
+                "np.select(): data with choicelist of type Categorical not yet supported"
+            )
+        choicelist_array_typ = typ
+    else:
+        # must be BaseTuple. check that all the underlying array dtypes can be coerced to a common dtype
+        typs = []
+        for typ in choicelist:
+            if not bodo.utils.utils.is_array_typ(typ, True):  # pragma: no cover
+                raise BodoError(
+                    "np.select(): 'choicelist' argument must be list or tuple of series/arrays types"
+                )
+            # Use underlying array dtype if series
+            if is_series_type(typ):
+                dtyp = typ.data.dtype
+            else:
+                dtyp = typ.dtype
+            # not handling categorical types
+            if isinstance(dtyp, bodo.PDCategoricalDtype):  # pragma: no cover
+                raise BodoError(
+                    "np.select(): data with choicelist of type Categorical not yet supported"
+                )
+            typs.append(dtyp)
+
+        if not is_common_scalar_dtype(typs):  # pragma: no cover
+            raise BodoError(
+                f"np.select(): 'choicelist' items must be arrays with a commmon data type. Found a tuple with the following data types {choicelist}."
+            )
+
+        # choicelist_array_typ is used to check for compatibility with the default value, and compatibility with
+        # np.where. As we know the underlying array type's are compatible, can pick element of choicelist here.
+        choicelist_array_typ = choicelist[0]
+
+    # convert to array type, if the first grabed value is a series
+    if is_series_type(choicelist_array_typ):
+        choicelist_array_typ = choicelist_array_typ.data
+
+    # Check default
+    if is_overload_constant_int(default) and get_overload_const_int(default) == 0:
+        # default value for argument 'default'. Will be casted to appropriate dtype
+        pass
+    else:
+        if not is_scalar_type(default):
+            raise BodoError("np.select(): 'default' argument must be scalar type")
+        # user specifified value for argument 'default'. Check appropriate dtype
+        if not (
+            is_common_scalar_dtype([default, choicelist_array_typ.dtype])
+            or default == types.none
+            or is_overload_constant_nan(default)
+        ):
+            raise BodoError(
+                f"np.select(): 'default' is not type compatible with the array types in choicelist. Choicelist type: {choicelist}, Default type: {default}"
+            )
+
+    # Largely copied from bodo's np.where typechecker, which np.select depends upon.
+    # Where/Mask is only supported for string/binary arrays, and numpy arrays
+    if not (
+        isinstance(choicelist_array_typ, types.Array)
+        or isinstance(choicelist_array_typ, BooleanArrayType)
+        or isinstance(choicelist_array_typ, IntegerArrayType)
+        or (
+            bodo.utils.utils.is_array_typ(choicelist_array_typ, False)
+            and (choicelist_array_typ.dtype in [bodo.string_type, bodo.bytes_type])
+        )
+    ):
+        raise BodoError(
+            f"np.select(): data with choicelist of type {choicelist_array_typ} not yet supported"
+        )
+
+
+@overload(np.select)
+def overload_np_select(condlist, choicelist, default=0):
+
+    _verify_np_select_arg_typs(condlist, choicelist, default)
+
+    # check if both condlist/choicelist are uni-type. If not, we will need to manually do loop unrolling
+    # when generating the functext. See BE-1523
+    cond_and_choice_list_uni_type = isinstance(
+        choicelist, (types.List, types.UniTuple)
+    ) and isinstance(condlist, (types.List, types.UniTuple))
+
+    if isinstance(choicelist, (types.List, types.UniTuple)):
+        alloc_typ = choicelist.dtype
+    else:
+        # check if any of the underlying arrays are nullable, and find common element type
+        contains_nullable = False
+        typs = []
+        for typ in choicelist:
+            if is_nullable_type(typ):
+                contains_nullable = True
+
+            # Use underlying array dtype if series
+            if is_series_type(typ):
+                dtyp = typ.data.dtype
+            else:
+                dtyp = typ.dtype
+            # not handling categorical types
+            if isinstance(dtyp, bodo.PDCategoricalDtype):  # pragma: no cover
+                raise BodoError(
+                    "np.select(): data with choicelist of type Categorical not yet supported"
+                )
+            typs.append(dtyp)
+
+        (unified_scalar_typ, found_unified_typ) = get_common_scalar_dtype(typs)
+        if not found_unified_typ:
+            raise BodoError("Internal error in overload_np_select")
+        unified_array_typ = dtype_to_array_type(unified_scalar_typ)
+
+        if contains_nullable:
+            unified_array_typ = to_nullable_type(unified_array_typ)
+        alloc_typ = unified_array_typ
+
+    # coerce to an array type, as the alloc type may be a series type
+    if isinstance(alloc_typ, SeriesType):
+        alloc_typ = alloc_typ.data
+
+    # for numeric/bool, we default to 0/false. This is to keep the expected behavior of np select
+    # in situations that a user might resonably want/expect to have the default set to 0.
+    # for all other types, we default to NA, for type stability.
+    # There is an edge case where users may manually pass in 0 in a situation where it isn't typesafe to do so,
+    # and we convert it to NA, which may be somewhat unintuitive, but is probably better then the alternative
+    if is_overload_constant_int(default) and get_overload_const_int(default) == 0:
+        default_kwd_is_default = True
+    else:
+        default_kwd_is_default = False
+    default_is_na = False
+    default_is_false = False
+    if default_kwd_is_default:
+        if isinstance(alloc_typ.dtype, types.Number):
+            pass
+        elif alloc_typ.dtype == types.bool_:
+            default_is_false = True
+        else:
+            default_is_na = True
+            alloc_typ = to_nullable_type(alloc_typ)
+    else:
+        if default == types.none or is_overload_constant_nan(default):
+            default_is_na = True
+            alloc_typ = to_nullable_type(alloc_typ)
+
+    func_text = "def np_select_impl(condlist, choicelist, default=0):\n"
+    func_text += "  if len(condlist) != len(choicelist):\n"
+    func_text += "    raise ValueError('list of cases must be same length as list of conditions')\n"
+    func_text += "  output_len = len(choicelist[0])\n"
+    # TODO: Is there a smarter way to init the default array value
+    func_text += "  out = bodo.utils.utils.alloc_type(output_len, alloc_typ, (-1,))\n"
+    func_text += "  for i in range(output_len):\n"
+
+    if default_is_na:
+        func_text += "    bodo.libs.array_kernels.setna(out, i)\n"
+    elif default_is_false:
+        func_text += "    out[i] = False\n"
+    else:
+        func_text += "    out[i] = default\n"
+    # taken from Numba's np.select impl. There might be a smarter way to paralelize
+    # this, but this works for now
+
+    if cond_and_choice_list_uni_type:
+        # in the case that both cond/choicelist are uni-tuples or lists, we can generate a loop in the code itself.
+        func_text += "  for i in range(len(condlist) - 1, -1, -1):\n"
+        func_text += "    cond = condlist[i]\n"
+        func_text += "    choice = choicelist[i]\n"
+        func_text += "    out = np.where(cond, choice, out)\n"
+    else:
+        # In the case that cond/choicelist is a basetuple, we must manually unroll the loop.
+        # choicelist/condlist can potentially contain both nullable and non-null types, which means choice/cond
+        # isn't typestable across loops.
+        # TODO: all these np.where's will be inlined, which will likely balloon code size, see BE-1523
+        for i in range(len(choicelist) - 1, -1, -1):
+            func_text += f"  cond = condlist[{i}]\n"
+            func_text += f"  choice = choicelist[{i}]\n"
+            func_text += f"  out = np.where(cond, choice, out)\n"
+    func_text += "  return out"
+
+    loc_vars = dict()
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "numba": numba,
+            "setna": bodo.libs.array_kernels.setna,
+            "np": np,
+            "alloc_typ": alloc_typ,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["np_select_impl"]
+    return impl
 
 
 @overload_method(SeriesType, "drop_duplicates", inline="always", no_unliteral=True)

@@ -1035,3 +1035,247 @@ def test_numpy_contains_inline(memory_leak_check):
     # contains operator isn't support on distributed Numpy
     # arrays yet.
     check_func(test_impl, (arr,), dist_test=False)
+
+
+def test_np_select(arr_tuple_val, memory_leak_check):
+    """tests np select for non null ndarrays and pandas arrays"""
+    np.random.seed(42)
+    if isinstance(arr_tuple_val[0][0], datetime.date):
+        pytest.skip("need support for np.where with datetime date types see BE-1494")
+
+    minsize = arr_tuple_val[0].size
+    if minsize > arr_tuple_val[1].size:
+        minsize = arr_tuple_val[1].size
+
+    cond1 = np.random.randint(2, size=minsize).astype(bool)
+    cond2 = np.random.randint(2, size=minsize).astype(bool)
+
+    # test all combinations of tuple/list
+
+    def impl_1(A1, A2, cond1, cond2):
+        choicelist = (A1, A2)
+        condlist = (cond1, cond2)
+        return np.select(condlist, choicelist)
+
+    def impl_2(A1, A2, cond1, cond2):
+        choicelist = (A1, A2)
+        condlist = [cond1, cond2]
+        return np.select(condlist, choicelist)
+
+    def impl_3(A1, A2, cond1, cond2):
+        choicelist = [A1, A2]
+        condlist = (cond1, cond2)
+        return np.select(condlist, choicelist)
+
+    def impl_4(A1, A2, cond1, cond2):
+        choicelist = [A1, A2]
+        condlist = [cond1, cond2]
+        return np.select(condlist, choicelist)
+
+    # for numeric/bool, we default to 0/false. This is to keep the expected behavior of np select
+    # in situations that a user might resonably want/expect to have the default set to 0.
+    # for all other types, we default to NA, for type stability.
+    def na_impl(A1, A2, cond1, cond2):
+        choicelist = [A1, A2]
+        condlist = [cond1, cond2]
+        return np.select(condlist, choicelist, default=np.NAN)
+
+    if not isinstance(
+        arr_tuple_val[0][0], (np.integer, np.bool_, np.float64, np.float32)
+    ):
+        py_out = na_impl(
+            arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2
+        )
+    else:
+        py_out = None
+
+    for impl in [impl_1, impl_2, impl_3, impl_4]:
+        check_func(
+            impl,
+            (arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2),
+            check_dtype=False,
+            py_output=py_out,
+        )
+
+
+def test_np_select_nullable(arr_tuple_val, memory_leak_check):
+    """tests np select for nullable pandas arrays"""
+    np.random.seed(42)
+    if isinstance(arr_tuple_val[0][0], datetime.date):
+        pytest.skip("need support for np.where with datetime date types see BE-1494")
+
+    minsize = arr_tuple_val[0].size
+    if minsize > arr_tuple_val[1].size:
+        minsize = arr_tuple_val[1].size
+
+    cond1 = np.random.randint(2, size=minsize).astype(bool)
+    cond2 = np.random.randint(2, size=minsize).astype(bool)
+
+    def impl1(A1, A2, cond1, cond2):
+        choicelist = (A1, A2)
+        condlist = (cond1, cond2)
+        return np.select(condlist, choicelist)
+
+    def impl2(A1, A2, cond1, cond2):
+        choicelist = (A1, A2)
+        condlist = [cond1, cond2]
+        return np.select(condlist, choicelist)
+
+    def impl3(A1, A2, cond1, cond2):
+        choicelist = [A1, A2]
+        condlist = (cond1, cond2)
+        return np.select(condlist, choicelist)
+
+    def impl4(A1, A2, cond1, cond2):
+        choicelist = [A1, A2]
+        condlist = [cond1, cond2]
+        return np.select(condlist, choicelist)
+
+    # for numeric/bool, we default to 0/false. This is to keep the expected behavior of np select
+    # in situations that a user might resonably want/expect to have the default set to 0.
+    # for all other types, we default to NA, for type stability.
+    def na_impl(A1, A2, cond1, cond2):
+        choicelist = [A1, A2]
+        condlist = [cond1, cond2]
+        return np.select(condlist, choicelist, default=np.NAN)
+
+    if not isinstance(
+        arr_tuple_val[0][0], (np.integer, np.bool_, np.float64, np.float32)
+    ):
+        py_out = na_impl(
+            arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2
+        )
+    else:
+        py_out = None
+
+    A1 = pd.array(arr_tuple_val[0][:minsize])
+    A2 = pd.array(arr_tuple_val[1][:minsize])
+    A1[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
+    A2[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
+
+    if isinstance(A1, pd.arrays.FloatingArray) or isinstance(
+        A2, pd.arrays.FloatingArray
+    ):
+        pytest.skip(
+            "Needs support for nullable floating point arrays in Bodo. See BE-41"
+        )
+    for impl in [impl1, impl2, impl3, impl4]:
+        check_func(impl, (A1, A2, cond1, cond2), check_dtype=False, py_output=py_out)
+
+
+def test_np_where_impl(arr_tuple_val, memory_leak_check):
+    """tests np where on non null numpy arrays"""
+    np.random.seed(42)
+    if isinstance(arr_tuple_val[0][0], datetime.date):
+        pytest.skip("need support for np.where with datetime date types see BE-1494")
+
+    minsize = arr_tuple_val[0].size
+    if minsize > arr_tuple_val[1].size:
+        minsize = arr_tuple_val[1].size
+
+    cond = np.random.randint(2, size=minsize).astype(bool)
+
+    def impl(A1, A2, cond):
+        return np.where(cond, A1, A2)
+
+    check_func(impl, (arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond))
+
+
+def test_np_where_impl_nullable(arr_tuple_val, memory_leak_check):
+    """tests np where on non nullable pandas arrays"""
+    np.random.seed(42)
+    if isinstance(arr_tuple_val[0][0], datetime.date):
+        pytest.skip("need support for np.where with datetime date types see BE-1494")
+
+    minsize = arr_tuple_val[0].size
+    if minsize > arr_tuple_val[1].size:
+        minsize = arr_tuple_val[1].size
+
+    cond = np.random.randint(2, size=minsize).astype(bool)
+
+    cond[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
+
+    def impl(A1, A2, cond):
+        return np.where(cond, A1, A2)
+
+    A1 = pd.array(arr_tuple_val[0][:minsize])
+    A2 = pd.array(arr_tuple_val[1][:minsize])
+    A1[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
+    A2[np.random.choice([True, False], size=minsize, p=[0.5, 0.5])] = np.NaN
+
+    if isinstance(A1, pd.arrays.FloatingArray) or isinstance(
+        A2, pd.arrays.FloatingArray
+    ):
+        pytest.skip(
+            "Needs support for nullable floating point arrays in Bodo. See BE-41"
+        )
+
+    check_func(impl, (A1, A2, cond))
+
+
+
+def test_np_select_none_default(arr_tuple_val, memory_leak_check):
+    """tests np select when passing "None" as a default value with numpy arrays"""
+    np.random.seed(42)
+    if isinstance(arr_tuple_val[0][0], datetime.date):
+        pytest.skip("need support for np.where with datetime date types see BE-1494")
+
+    minsize = arr_tuple_val[0].size
+    if minsize > arr_tuple_val[1].size:
+        minsize = arr_tuple_val[1].size
+
+    cond1 = np.random.randint(2, size=minsize).astype(bool)
+    cond2 = np.random.randint(2, size=minsize).astype(bool)
+
+    # test all combinations of tuple/list
+
+    def impl(A1, A2, cond1, cond2):
+        choicelist = [A1, A2]
+        condlist = [cond1, cond2]
+        return np.select(condlist, choicelist, default = None)
+
+    def py_impl(A1, A2, cond1, cond2):
+        choicelist = [A1, A2]
+        condlist = [cond1, cond2]
+        return np.select(condlist, choicelist, default = pd.NA)
+
+    py_out = py_impl(arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2) #.astype(arr_tuple_val[0].dtype)
+
+    if arr_tuple_val[0].dtype.name.startswith("float"):
+        py_out[pd.isna(py_out)] = np.NAN
+        py_out = py_out.astype(float)
+
+    check_func(
+        impl,
+        (arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2),
+        check_dtype=False,
+        py_output = py_out,
+    )
+
+
+def test_np_select_set_default(arr_tuple_val, memory_leak_check):
+    """tests np select when passing a default value with numpy arrays"""
+    np.random.seed(42)
+    if isinstance(arr_tuple_val[0][0], datetime.date):
+        pytest.skip("need support for np.where with datetime date types see BE-1494")
+
+    minsize = arr_tuple_val[0].size
+    if minsize > arr_tuple_val[1].size:
+        minsize = arr_tuple_val[1].size
+
+    cond1 = np.random.randint(2, size=minsize).astype(bool)
+    cond2 = np.random.randint(2, size=minsize).astype(bool)
+
+    # test all combinations of tuple/list
+
+    def impl(A1, A2, cond1, cond2, default):
+        choicelist = [A1, A2]
+        condlist = [cond1, cond2]
+        return np.select(condlist, choicelist, default)
+
+
+    check_func(
+        impl,
+        (arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2, arr_tuple_val[0][0]),
+        check_dtype=False,
+    )

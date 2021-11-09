@@ -1349,10 +1349,20 @@ def is_common_scalar_dtype(scalar_types):
     """Returns True if a list of scalar types share a common
     Numpy type or are equal.
     """
+    (_, found_common_typ) = get_common_scalar_dtype(scalar_types)
+    return found_common_typ
+
+
+def get_common_scalar_dtype(scalar_types):
+    """
+    Attempts to unify the list of passed in dtypes. Returns the tuple (common_type, True) on succsess,
+    and (None, False) on failure."""
     scalar_types = [types.unliteral(a) for a in scalar_types]
 
     if len(scalar_types) == 0:
-        return True
+        raise_bodo_error(
+            "Internal error, length of argument passed to get_common_scalar_dtype scalar_types is 0"
+        )
     try:
         common_dtype = np.find_common_type(
             [numba.np.numpy_support.as_dtype(t) for t in scalar_types], []
@@ -1360,7 +1370,8 @@ def is_common_scalar_dtype(scalar_types):
         # If we get an object dtype we do not have a common type.
         # Otherwise, the types can be used together
         if common_dtype != object:
-            return True
+            return (numba.np.numpy_support.from_dtype(common_dtype), True)
+
     # If we have a Bodo or Numba type that isn't implemented in
     # Numpy, we will get a NotImplementedError
     except NotImplementedError:
@@ -1371,21 +1382,24 @@ def is_common_scalar_dtype(scalar_types):
     if scalar_types[0] in (bodo.datetime64ns, bodo.pd_timestamp_type):
         for typ in scalar_types[1:]:
             if typ not in (bodo.datetime64ns, bodo.pd_timestamp_type):
-                return False
-        return True
+                return (None, False)
+        return (bodo.datetime64ns, True)
 
-    # Timdelta/td64 can be used interchangably
+    # Timedelta/td64 can be used interchangably
     # TODO: Should datetime.timedelta also be included?
     if scalar_types[0] in (bodo.timedelta64ns, bodo.pd_timedelta_type):
         for typ in scalar_types[1:]:
             if scalar_types[0] not in (bodo.timedelta64ns, bodo.pd_timedelta_type):
-                return False
-        return True
+                return (None, False)
+        return (bodo.timedelta64ns, True)
 
     # If we don't have a common type, then all types need to be equal.
     # See: https://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list-are-identical
     grouped_types = itertools.groupby(scalar_types)
-    return next(grouped_types, True) and not next(grouped_types, False)
+    if next(grouped_types, True) and not next(grouped_types, False):
+        return (scalar_types[0], True)
+
+    return (None, False)
 
 
 def find_common_np_dtype(arr_types):

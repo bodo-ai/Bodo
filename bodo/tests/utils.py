@@ -822,7 +822,10 @@ def _gather_output(bodo_output):
         comm = MPI.COMM_WORLD
         bodo_output_list = comm.gather(bodo_output)
         if bodo.get_rank() == 0:
-            bodo_output = pd.concat(bodo_output_list)
+            if isinstance(bodo_output_list[0], np.ndarray):
+                bodo_output = np.concatenate(bodo_output_list)
+            else:
+                bodo_output = pd.concat(bodo_output_list)
 
     return bodo_output
 
