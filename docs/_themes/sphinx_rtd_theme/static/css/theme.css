@@ -5287,7 +5287,7 @@ html {
 .wy-nav-content {
   padding: 1.618em 3.236em;
   height: 100%;
-  max-width: 800px;
+  max-width: auto;
   margin: auto;
 }
 .wy-body-mask {
@@ -5397,13 +5397,13 @@ footer span.commit code {
     overflow: hidden;
   }
 }
-@media screen and (min-width: 1100px) {
+@media screen and (min-width: 1400px) {
   .wy-nav-content-wrap {
     background: rgba(0, 0, 0, 0.05);
   }
   .wy-nav-content {
     margin: 0;
-    background: #fcfcfc;
+    margin-right: 400px;
   }
 }
 @media print {
