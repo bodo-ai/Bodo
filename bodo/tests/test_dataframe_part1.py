@@ -362,6 +362,63 @@ def test_assign(memory_leak_check, is_slow_run):
     check_func(test_impl5, (df_twocol,))
 
 
+def test_assign_lambda(memory_leak_check):
+    """tests that df.assign is supported with lambda functions"""
+    df = pd.DataFrame(
+        {"A": [1, 2, 3] * 2, "B": ["a", "b", "c", "d", "e", "f"], "Z": [3, 2, 1] * 2}
+    )
+
+    def test_impl(df):
+        return df.assign(C=lambda x: x["A"])
+
+    def test_impl2(df):
+        return df.assign(
+            Q=df["A"] > df["Z"],
+            B=lambda x: 2 * x["A"],
+            C=42,
+            D=lambda x: x["B"],
+            A=lambda x: x["B"],
+        )
+
+    # check that assign has no side effects on the original dataframe
+    def test_impl3(df):
+        df1 = df.assign(
+            A=lambda x: x["A"] > x["Z"],
+        )
+
+        df2 = df1.assign(
+            A=df["A"] < df1["Z"],
+        )
+        return (df, df1, df2)
+
+    # check everything
+    def test_impl4(df):
+        df1 = df.assign(
+            A1=10,
+            A2=df["A"] - 10,
+            A3=df["A"] - 20,
+            Q=df["A"] > df["Z"],
+            K1=lambda x: "__" + x["B"] + "__",
+            B=lambda x: 2 * x["A"],
+            K2=lambda x: x["B"] * 3,
+            C=42,
+            D=lambda x: x["B"] + 10,
+            L1=lambda x: x["A"],
+            A=df["A"] - 30,
+            L2=lambda x: x["A"],
+        )
+        df2 = df1.assign(
+            A=lambda x: x["A"] * 2,
+            Q2=df["A"] + df1["A"],
+        )
+        return (df, df2)
+
+    check_func(test_impl, (df,))
+    check_func(test_impl2, (df,))
+    check_func(test_impl3, (df,))
+    check_func(test_impl4, (df,))
+
+
 def test_df_insert(memory_leak_check, is_slow_run):
     """Test df.insert()"""
 
@@ -2571,3 +2628,43 @@ def test_and_null_numpy(memory_leak_check):
     df2 = pd.DataFrame({"A": [True, False] * 3})
 
     check_func(test_impl, (df1, df2))
+
+
+def test_series_getitem_str_grpby_apply_and_lambda_assign():
+    """
+    Tests both series getitem with str in a groupby apply, and using a lambda function in df.assign.
+    Example taken from H20 benchmark Q7.
+
+    """
+    data = [
+        ["id016", "id016", "id0000042202", 15, 24, 5971, 5, 11, 37.211254],
+        ["id016", "id016", "id0000042202", 15, 24, 5971, 5, 11, 37.211254],
+        ["id016", "id016", "id0000042202", 15, 24, 5971, 5, 11, 37.211254],
+        ["id016", "id016", "id0000042202", 15, 24, 5971, 5, 11, 37.211254],
+        ["id016", "id016", "id0000042202", 15, 24, 5971, 5, 11, 37.211254],
+    ]
+
+    col_list = ["id1", "id2", "id3", "id4", "id5", "id6", "v1", "v2", "v3"]
+    x = pd.DataFrame(data, columns=col_list)
+
+    x["id1"] = x["id1"].astype("category")  # remove after datatable#1691
+    x["id2"] = x["id2"].astype("category")
+    x["id3"] = x["id3"].astype("category")
+    x["id4"] = x["id4"].astype(
+        "Int32"
+    )  ## NA-aware types improved after h2oai/datatable#2761 resolved
+    x["id5"] = x["id5"].astype("Int32")
+    x["id6"] = x["id6"].astype("Int32")
+    x["v1"] = x["v1"].astype("Int32")
+    x["v2"] = x["v2"].astype("Int32")
+    x["v3"] = x["v3"].astype("float64")
+
+    def impl(df):
+        return (
+            df.groupby("id3", as_index=False, sort=False, observed=True, dropna=False)
+            .agg({"v1": "max", "v2": "min"})
+            .assign(range_v1_v2=lambda x: x["v1"] - x["v2"])[["id3", "range_v1_v2"]]
+        )
+
+    # Bodo returns a nullable type Int32, pandas returns an int64
+    check_func(impl, (x,), sort_output=True, reset_index=True, check_dtype=False)

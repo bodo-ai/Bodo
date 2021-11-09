@@ -2893,3 +2893,28 @@ def test_series_getitem_str_grpby_apply():
     py_out.columns = ["id1", "id2", ""]
 
     check_func(test_impl, (df,), py_output=py_out, sort_output=True, reset_index=True)
+
+
+def test_series_getitem_str_grpby_apply():
+    """Tests that getitem works inside of groupby apply"""
+
+    # example taken from H20 benchmark Q09
+    data = {
+        "id1": ["id016", "id039", "id047", "id043", "id054"],
+        "id2": ["id016", "id045", "id023", "id057", "id040"],
+        "v1": [5, 5, 2, 1, 2],
+        "v2": [11, 4, 14, 15, 9],
+    }
+    df = pd.DataFrame(data)
+
+    def test_impl(df):
+        return df.groupby(
+            ["id1", "id2"], as_index=False, sort=False, observed=True, dropna=False
+        ).apply(lambda x: x.corr()["v1"]["v2"] ** 2)
+
+    # in Bodo, when doing groupby apply, we set the output column to empty string
+    # if we have a string index. In Pandas, it's normally None
+    py_out = test_impl(df)
+    py_out.columns = ["id1", "id2", ""]
+
+    check_func(test_impl, (df,), py_output=py_out, sort_output=True, reset_index=True)

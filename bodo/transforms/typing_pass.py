@@ -581,7 +581,9 @@ class TypingTransforms:
                 index_def,
                 self._working_body,
                 self.func_ir,
-                {rhs.value.name: value_def}, # Basic filter pushdown case only has 1 dataframe to track.
+                {
+                    rhs.value.name: value_def
+                },  # Basic filter pushdown case only has 1 dataframe to track.
                 False,
             )
             # If this function returns a list we have updated the working body.
@@ -593,7 +595,16 @@ class TypingTransforms:
         nodes.append(assign)
         return nodes
 
-    def _try_filter_pushdown(self, assign, value_def, index_def, working_body, func_ir, used_dfs, from_bodosql):
+    def _try_filter_pushdown(
+        self,
+        assign,
+        value_def,
+        index_def,
+        working_body,
+        func_ir,
+        used_dfs,
+        from_bodosql,
+    ):
         """detect filter pushdown and add filters to ParquetReader or SQLReader IR nodes if possible.
 
         working_body is in the inprogress list of statements that should be updated with any filter reordering.
@@ -616,9 +627,7 @@ class TypingTransforms:
                 (bodo.ir.parquet_ext.ParquetReader, bodo.ir.sql_ext.SqlReader),
             )
         )
-        require(
-            all(get_definition(func_ir, v) == read_node for v in data_def.items)
-        )
+        require(all(get_definition(func_ir, v) == read_node for v in data_def.items))
         if isinstance(read_node, bodo.ir.sql_ext.SqlReader):
             # Filter pushdown is only supported for snowflake right now.
             require(read_node.db_type == "snowflake")
@@ -638,7 +647,9 @@ class TypingTransforms:
             from_bodosql,
         )
         self._check_non_filter_df_use(set(used_dfs.keys()), assign, func_ir)
-        new_working_body = self._reorder_filter_nodes(read_node, index_def, used_dfs, filters, working_body, func_ir)
+        new_working_body = self._reorder_filter_nodes(
+            read_node, index_def, used_dfs, filters, working_body, func_ir
+        )
         old_filters = read_node.filters
         # If there are existing filters then we need to merge them together because this is
         # an implicit AND. We merge by distributed the AND over ORs
@@ -680,7 +691,9 @@ class TypingTransforms:
                     break
                 require(all(v.name not in df_names for v in stmt.list_vars()))
 
-    def _reorder_filter_nodes(self, read_node, index_def, used_dfs, filters, working_body, func_ir):
+    def _reorder_filter_nodes(
+        self, read_node, index_def, used_dfs, filters, working_body, func_ir
+    ):
         """reorder nodes that are used for Parquet/SQL partition filtering to be before the
         Reader node (to be accessible when the Reader is run).
 
@@ -728,7 +741,10 @@ class TypingTransforms:
             if (
                 is_assign(stmt)
                 and stmt.target.name in df_names
-                and (isinstance(stmt.value, ir.Var) or stmt.value is used_dfs[stmt.target.name])
+                and (
+                    isinstance(stmt.value, ir.Var)
+                    or stmt.value is used_dfs[stmt.target.name]
+                )
             ):
                 continue
 
@@ -813,7 +829,11 @@ class TypingTransforms:
             else:
                 require(is_expr(lhs_def, "call"))
                 call_list = find_callname(func_ir, lhs_def)
-                require(len(call_list) == 2 and call_list[0] in ("notna", "isna", "notnull", "isnull") and isinstance(call_list[1], ir.Var))
+                require(
+                    len(call_list) == 2
+                    and call_list[0] in ("notna", "isna", "notnull", "isnull")
+                    and isinstance(call_list[1], ir.Var)
+                )
                 colname = self._get_col_name(call_list[1], df_var, func_ir)
                 if call_list[0] in ("notna", "notnull"):
                     op = "is not"
@@ -829,7 +849,11 @@ class TypingTransforms:
             else:
                 require(is_expr(rhs_def, "call"))
                 call_list = find_callname(func_ir, rhs_def)
-                require(len(call_list) == 2 and call_list[0] in ("notna", "isna", "notnull", "isnull") and isinstance(call_list[1], ir.Var))
+                require(
+                    len(call_list) == 2
+                    and call_list[0] in ("notna", "isna", "notnull", "isnull")
+                    and isinstance(call_list[1], ir.Var)
+                )
                 colname = self._get_col_name(call_list[1], df_var, func_ir)
                 if call_list[0] in ("notna", "notnull"):
                     op = "is not"
@@ -850,7 +874,13 @@ class TypingTransforms:
                 )
                 new_lhs_rdef = get_definition(func_ir, rhs_def.lhs)
                 left_or = self._get_partition_filters(
-                    new_lhs, df_var, lhs_def, new_lhs_rdef, func_ir, read_node, from_bodosql
+                    new_lhs,
+                    df_var,
+                    lhs_def,
+                    new_lhs_rdef,
+                    func_ir,
+                    read_node,
+                    from_bodosql,
                 )
                 # lhs And rhs.rhs (A And C)
                 new_rhs = ir.Expr.binop(
@@ -858,7 +888,13 @@ class TypingTransforms:
                 )
                 new_rhs_rdef = get_definition(func_ir, rhs_def.rhs)
                 right_or = self._get_partition_filters(
-                    new_rhs, df_var, lhs_def, new_rhs_rdef, func_ir, read_node, from_bodosql
+                    new_rhs,
+                    df_var,
+                    lhs_def,
+                    new_rhs_rdef,
+                    func_ir,
+                    read_node,
+                    from_bodosql,
                 )
                 return left_or + right_or
 
@@ -871,7 +907,13 @@ class TypingTransforms:
                 )
                 new_lhs_ldef = get_definition(func_ir, lhs_def.lhs)
                 left_or = self._get_partition_filters(
-                    new_lhs, df_var, new_lhs_ldef, rhs_def, func_ir, read_node, from_bodosql
+                    new_lhs,
+                    df_var,
+                    new_lhs_ldef,
+                    rhs_def,
+                    func_ir,
+                    read_node,
+                    from_bodosql,
                 )
                 # lhs.rhs And rhs (C And A)
                 new_rhs = ir.Expr.binop(
@@ -879,7 +921,13 @@ class TypingTransforms:
                 )
                 new_rhs_ldef = get_definition(func_ir, lhs_def.rhs)
                 right_or = self._get_partition_filters(
-                    new_rhs, df_var, new_rhs_ldef, rhs_def, func_ir, read_node, from_bodosql
+                    new_rhs,
+                    df_var,
+                    new_rhs_ldef,
+                    rhs_def,
+                    func_ir,
+                    read_node,
+                    from_bodosql,
                 )
                 return left_or + right_or
 
@@ -893,7 +941,11 @@ class TypingTransforms:
             else:
                 require(is_expr(lhs_def, "call"))
                 call_list = find_callname(func_ir, lhs_def)
-                require(len(call_list) == 2 and call_list[0] in ("notna", "isna", "notnull", "isnull") and isinstance(call_list[1], ir.Var))
+                require(
+                    len(call_list) == 2
+                    and call_list[0] in ("notna", "isna", "notnull", "isnull")
+                    and isinstance(call_list[1], ir.Var)
+                )
                 colname = self._get_col_name(call_list[1], df_var, func_ir)
                 if call_list[0] in ("notna", "notnull"):
                     op = "is not"
@@ -909,7 +961,11 @@ class TypingTransforms:
             else:
                 require(is_expr(rhs_def, "call"))
                 call_list = find_callname(func_ir, rhs_def)
-                require(len(call_list) == 2 and call_list[0] in ("notna", "isna", "notnull", "isnull") and isinstance(call_list[1], ir.Var))
+                require(
+                    len(call_list) == 2
+                    and call_list[0] in ("notna", "isna", "notnull", "isnull")
+                    and isinstance(call_list[1], ir.Var)
+                )
                 colname = self._get_col_name(call_list[1], df_var, func_ir)
                 if call_list[0] in ("notna", "notnull"):
                     op = "is not"
@@ -969,12 +1025,19 @@ class TypingTransforms:
         # TODO(Nick): Support for BodoSQL, which we can't yet because we don't
         # have typemap information (requires refactoring filter pushdown in BodoSQL).
         if not is_sql and not from_bodosql:
-            lhs_arr_typ = read_node.original_out_types[read_node.original_df_colnames.index(cond[0])]
+            lhs_arr_typ = read_node.original_out_types[
+                read_node.original_df_colnames.index(cond[0])
+            ]
             lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
             require(cond[2].name in self.typemap)
             rhs_scalar_typ = self.typemap[cond[2].name]
             # Only apply filter pushdown if its safe to use inside arrow
-            require(bodo.utils.typing.is_common_scalar_dtype([lhs_scalar_typ, rhs_scalar_typ]) or bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ))
+            require(
+                bodo.utils.typing.is_common_scalar_dtype(
+                    [lhs_scalar_typ, rhs_scalar_typ]
+                )
+                or bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ)
+            )
 
         # Pyarrow format, e.g.: [[("a", "==", 2)]]
         return [[cond]]
@@ -1545,40 +1608,245 @@ class TypingTransforms:
 
         return nodes + [assign]
 
-    def _handle_df_assign(self, lhs, rhs, df_var, assign):
-        """replace df.assign() with its implementation to avoid overload errors with
-        (**kwargs)
+    def _df_assign_non_lambda_helper(self, lhs, kws_key_val_list, df_var, assign):
         """
-        kws = dict(rhs.kws)
+        Helper functipn for df.assign. kws_key_val_list is a list of (colname, val), where all values are non lambda/JIT functions.
+        Generates returns the assign nodes equivalent to df_var.assign(colname_1 = val_1, colname_2 = val_2 ... etc) by
+        generating a single dataframe init.
+        """
+
+        kws_val_list = [val for (key, val) in kws_key_val_list]
+        kws_key_list = [key for (key, val) in kws_key_val_list]
+
         df_type = self.typemap.get(df_var.name, None)
         # cannot transform yet if dataframe type is not available yet
         if df_type is None:
             return [assign]
-        additional_columns = tuple(kws.keys())
+        additional_columns = tuple(kws_key_list)
         previous_columns = set(df_type.columns)
         # columns below are preserved
         preserved_columns = previous_columns - set(additional_columns)
         name_col_total = []
         data_col_total = []
-        for c in preserved_columns:
-            name_col_total.append(c)
-            data_col_total.append("df['{}'].values".format(c))
-        # The new columns as constructed by the operation
-        for i, c in enumerate(additional_columns):
-            name_col_total.append(c)
-            e_col = "bodo.utils.conversion.coerce_to_array(new_arg{}, scalar_to_arr_len=len(df))".format(
-                i
-            )
-            data_col_total.append(e_col)
+
+        # preserve original ordering of any columns that were already present
+        # in the original dataframe
+        for c in df_type.columns:
+            if c in preserved_columns:
+                name_col_total.append(c)
+                data_col_total.append("df['{}'].values".format(c))
+            elif c in additional_columns:
+                name_col_total.append(c)
+                e_col = "bodo.utils.conversion.coerce_to_array(new_arg{}, scalar_to_arr_len=len(df))".format(
+                    kws_key_list.index(c)
+                )
+                data_col_total.append(e_col)
+
+        # The new columns should be added in the order that they apear in kws_key_val_list
+        for i, c in enumerate(kws_key_list):
+            if c not in df_type.columns:
+                name_col_total.append(c)
+                e_col = "bodo.utils.conversion.coerce_to_array(new_arg{}, scalar_to_arr_len=len(df))".format(
+                    i
+                )
+                data_col_total.append(e_col)
+
         data_args = ", ".join(data_col_total)
         header = "def impl(df, {}):\n".format(
-            ", ".join("new_arg{}".format(i) for i in range(len(kws)))
+            ", ".join("new_arg{}".format(i) for i in range(len(kws_key_val_list)))
         )
         impl = bodo.hiframes.dataframe_impl._gen_init_df(
             header, tuple(name_col_total), data_args
         )
+
         self.changed = True
-        return compile_func_single_block(impl, [df_var] + list(kws.values()), lhs, self)
+        return compile_func_single_block(impl, [df_var] + kws_val_list, lhs, self)
+
+    def _handle_df_assign(self, lhs, rhs, df_var, assign):
+        """replace df.assign() with its implementation to avoid overload errors with
+        (**kwargs)
+        """
+        # In the common case where we have no lambda functions, we can reduce df.assign
+        # into a single init dataframe. However, the semantics with lambda/JIT function are a bit janky,
+
+        # let's say we have some df = ({"B": [1,2,3]})
+        # if you do df.assign(A = lambda x: x["B"], B = 3, C = lambda x: x["B"]),
+        # then A = [1,2,3], C = [3,3,3]
+        #
+        # worst case you could have somthing like
+        #   df.assign(A = ..., B = lambda x: x["A"] + ..., C = lambda x: x["B"] * ...)
+        # where each assignment depends on all of the previous assignments.
+        # for the sake of pragmatism, for all the arguments preceding the first lambda/JIT function,
+        # we handle through the faster dataframe init. For all the arguments following/including
+        # the first lambda/JIT function, we handle as a sequence of dataframe assigns.
+
+        df_type = self.typemap.get(df_var.name, None)
+        # cannot transform yet if dataframe type is not available yet
+        if df_type is None:
+            return [assign]
+        # cannot transform yet if argument type is not available yet
+        for (_, kw_val) in rhs.kws:
+            if self.typemap.get(kw_val.name, None) is None:
+                return [assign]
+
+        kws_list = list(rhs.kws)
+
+        # create the list of arguments for which we use the optimized codepath,
+        # keeping track of the index of the first encountered lambda/JIT function
+        first_lambda_idx = 0
+        non_lambda_fns = []
+        for i, val in enumerate(kws_list):
+            (_, kw_val) = val
+            if not isinstance(self.typemap.get(kw_val.name), types.Dispatcher):
+                non_lambda_fns.append(val)
+                first_lambda_idx = i + 1
+            else:
+                break
+
+        if len(non_lambda_fns) == len(kws_list):
+            # If we have no lambda/JIT functions, we're finished
+            return self._df_assign_non_lambda_helper(
+                lhs, non_lambda_fns, df_var, assign
+            )
+        else:
+            # else, create a temporary df_var to store the output,
+            # and update initial_nodes/cur_df_var as appropriate
+            copied_df_var = apply_fn_var = ir.Var(
+                assign.target.scope, mk_unique_var("copied_df"), rhs.loc
+            )
+            initial_nodes = self._df_assign_non_lambda_helper(
+                copied_df_var, non_lambda_fns, df_var, assign
+            )
+            cur_df_var = copied_df_var
+
+        # load the setitem global, which will be used for the rest of this function
+        setitem_fn_var = ir.Var(
+            assign.target.scope, mk_unique_var("setitem_fn_var"), rhs.loc
+        )
+        setitem_fn_var_assign = ir.Assign(
+            ir.Global(
+                "set_df_col", bodo.hiframes.dataframe_impl.set_df_col, loc=rhs.loc
+            ),
+            setitem_fn_var,
+            rhs.loc,
+        )
+
+        new_assign_list = initial_nodes + [setitem_fn_var_assign]
+
+        # For each of the arguments not already handled in the optimized codepath,
+        # Perform the sequence of setitems on the copied dataframe,
+        # updating cur_df_var each iteration.
+        for (kw_name, kw_val) in kws_list[first_lambda_idx:]:
+
+            if isinstance(self.typemap.get(kw_val.name), types.Dispatcher):
+                # handles lambda fns, and passed JIT functions
+                # put the setitem value is as the output of an apply on the current dataframe
+
+                # assign the apply functon to a variable
+                apply_fn_var = ir.Var(
+                    assign.target.scope, mk_unique_var("df_apply_fn"), rhs.loc
+                )
+                apply_fn_var_assign = ir.Assign(
+                    ir.Expr.getattr(cur_df_var, "apply", rhs.loc),
+                    apply_fn_var,
+                    rhs.loc,
+                )
+
+                # create the axis variable
+                axis_var = ir.Var(
+                    assign.target.scope, mk_unique_var("axis_var"), rhs.loc
+                )
+                axis_assign = ir.Assign(
+                    ir.Const(1, rhs.loc),
+                    axis_var,
+                    rhs.loc,
+                )
+
+                # call the apply function on the make function, with kwds = {"axis": 1}
+                apply_call_args = [kw_val]
+                apply_fn_call = ir.Expr.call(apply_fn_var, apply_call_args, (), rhs.loc)
+                apply_fn_call.kws = (("axis", axis_var),)
+
+                # assign the output of the val to a variable
+                apply_output_var = ir.Var(
+                    assign.target.scope, mk_unique_var("df_output_var"), rhs.loc
+                )
+                apply_output_assign = ir.Assign(
+                    apply_fn_call, apply_output_var, rhs.loc
+                )
+
+                setitem_val = apply_output_var
+
+                new_assign_list.extend(
+                    [
+                        axis_assign,
+                        apply_fn_var_assign,
+                        apply_output_assign,
+                    ]
+                )
+            else:
+                # handles non lambda/JIT fns
+                # In this case, we just do a the setitem value is just the passed in value
+                setitem_val = kw_val
+
+            # make the colname variable
+            colname_var = ir.Var(
+                assign.target.scope, mk_unique_var("col_name"), rhs.loc
+            )
+            colname_var_assign = ir.Assign(
+                ir.Const(kw_name, rhs.loc),
+                colname_var,
+                rhs.loc,
+            )
+
+            # set_df_col(df, cname, arr, inplace)
+            inplace_var = ir.Var(
+                assign.target.scope, mk_unique_var("col_name"), rhs.loc
+            )
+            inplace_var_assign = ir.Assign(
+                ir.Const(False, rhs.loc),
+                inplace_var,
+                rhs.loc,
+            )
+
+            setitem_args = [
+                cur_df_var,
+                colname_var,
+                setitem_val,
+                inplace_var,
+            ]
+            # assign the value to a new output_df_var
+            new_df_var = ir.Var(
+                assign.target.scope, mk_unique_var("output_df_var"), rhs.loc
+            )
+
+            setitem_call = ir.Expr.call(setitem_fn_var, setitem_args, (), rhs.loc)
+
+            setitem_output_assign = ir.Assign(setitem_call, new_df_var, rhs.loc)
+            cur_df_var = new_df_var
+
+            new_assign_list.extend(
+                [
+                    inplace_var_assign,
+                    colname_var_assign,
+                    setitem_output_assign,
+                ]
+            )
+
+        self.needs_transform = True
+        self.changed = True
+        # create a final assign to the output variable
+        # probably can do this without compiling this fn, see BE-1564
+
+        func_text = "def impl(df):\n"
+        func_text += "  return df"
+
+        loc_vars = {}
+        exec(func_text, dict(), loc_vars)
+        impl = loc_vars["impl"]
+
+        # Don't pass the typing ctx, as many of the newly created variables won't be typed yet.
+        return new_assign_list + compile_func_single_block(impl, [cur_df_var], lhs)
 
     def _handle_df_insert(self, lhs, rhs, df_var, assign, label):
         """replace df.insert() here since it changes dataframe type inplace"""
@@ -2054,19 +2322,21 @@ class TypingTransforms:
             replace_globals=False,
         )
         # Attempt to apply filter pushdown if there is parquet load
-        if any([isinstance(stmt, bodo.ir.parquet_ext.ParquetReader) for stmt in block_body]):
+        if any(
+            [isinstance(stmt, bodo.ir.parquet_ext.ParquetReader) for stmt in block_body]
+        ):
             block_body = self._apply_bodosql_filter_pushdown(block_body)
         return block_body
 
     def _apply_bodosql_filter_pushdown(self, block_body):
         """
-            Function that tries to apply filter pushdown to a single "block" produced
-            by BodoSQL. The block_body is a list of ir.Stmt.
+        Function that tries to apply filter pushdown to a single "block" produced
+        by BodoSQL. The block_body is a list of ir.Stmt.
 
-            Currently we only attempt to apply filter pushdown(s) to files read
-            from parquet within the BodoSQL block.
+        Currently we only attempt to apply filter pushdown(s) to files read
+        from parquet within the BodoSQL block.
 
-            Returns a new list of statements, updated with the filter pushdown(s).
+        Returns a new list of statements, updated with the filter pushdown(s).
         """
         # We generate a dummy scope + loc because BodoSQL doesn't contain useful
         # loc information anyways (since its a func_text).
@@ -2077,21 +2347,19 @@ class TypingTransforms:
         block.body = block_body
         blocks = {0: block}
         definitions = build_definitions(blocks)
-        func_ir = ir.FunctionIR(
-            {0: block},
-            False,
-            -1,
-            loc,
-            definitions,
-            0,
-            ()
-        )
+        func_ir = ir.FunctionIR({0: block}, False, -1, loc, definitions, 0, ())
         working_body = []
         for inst in block.body:
             # Try and determine if we could have a filter pushdown. This only
             # occurs when we have a getitem with a filter.
-            if isinstance(inst, ir.Assign) and isinstance(inst.value, ir.Expr) and inst.value.op in ("getitem", "static_getitem"):
-                updated_working_body = guard(self._try_bodosql_filter_pushdown, inst, func_ir, working_body)
+            if (
+                isinstance(inst, ir.Assign)
+                and isinstance(inst.value, ir.Expr)
+                and inst.value.op in ("getitem", "static_getitem")
+            ):
+                updated_working_body = guard(
+                    self._try_bodosql_filter_pushdown, inst, func_ir, working_body
+                )
                 # If we have an updated working body swap the working body list
                 if updated_working_body:
                     working_body = updated_working_body
@@ -2100,26 +2368,26 @@ class TypingTransforms:
 
     def _try_bodosql_filter_pushdown(self, inst, func_ir, working_body):
         """
-            Tries to convert the given static_getitem expression into
-            a filter pushdown. If this is not possible throws a guard exception.
+        Tries to convert the given static_getitem expression into
+        a filter pushdown. If this is not possible throws a guard exception.
 
-            Pandas code generated from BodoSQL will contain an astype to perform
-            filter pushdown and 1 or more df.loc
+        Pandas code generated from BodoSQL will contain an astype to perform
+        filter pushdown and 1 or more df.loc
 
-            For example
+        For example
 
-            df = pd.read_parquet("filename")
-            df = pd.DataFrame(
-                {
-                    "a": df["a"],
-                    "b": df["b"].astype("category")
-                    "c": df["c"],
-                }
-            )
-            df1 = df.loc[:, ["b", "c"]]
-            df2 = df1[df["b"] == 'a']
+        df = pd.read_parquet("filename")
+        df = pd.DataFrame(
+            {
+                "a": df["a"],
+                "b": df["b"].astype("category")
+                "c": df["c"],
+            }
+        )
+        df1 = df.loc[:, ["b", "c"]]
+        df2 = df1[df["b"] == 'a']
 
-            Return a new working body if the pushdown was successful.
+        Return a new working body if the pushdown was successful.
         """
 
         rhs = inst.value
@@ -2130,7 +2398,6 @@ class TypingTransforms:
             # Intermediate DataFrames that need to be checked.
             used_dfs = {rhs.value.name: value_def}
 
-
             # If we have any df.loc calls that load all rows, they will appear
             # before the init_dataframe. We can find all rows with a
             # static getitem with a slice of all none for the rows.
@@ -2140,7 +2407,12 @@ class TypingTransforms:
             #
             empty_slice = slice(None, None, None)
             # TODO: Refactor df.loc support into a general function and apply to Pandas as well.
-            while is_expr(value_def, "static_getitem") and isinstance(value_def.index, tuple) and len(value_def.index) > 0 and value_def.index[0] == empty_slice:
+            while (
+                is_expr(value_def, "static_getitem")
+                and isinstance(value_def.index, tuple)
+                and len(value_def.index) > 0
+                and value_def.index[0] == empty_slice
+            ):
                 used_name = value_def.value.name
                 # Now we confirm we found a df.loc and traverse back to the original dataframe.
                 value_def = get_definition(func_ir, value_def.value)
@@ -2172,7 +2444,10 @@ class TypingTransforms:
             #
             # TODO: Enable the normal path without astype in case we just perform predicate
             # pushdown without partition pushdown.
-            if is_call(value_def) and guard(find_callname, func_ir, value_def) == ("DataFrame", "pandas"):
+            if is_call(value_def) and guard(find_callname, func_ir, value_def) == (
+                "DataFrame",
+                "pandas",
+            ):
                 require(len(value_def.args) > 0)
                 # Obtain the dictionary argument to pd.DataFrame
                 df_dict = value_def.args[0]
@@ -2189,17 +2464,20 @@ class TypingTransforms:
                 if is_call(source_col):
                     # We have an astype.
                     source_col = get_definition(func_ir, source_col.func)
-                    require(is_expr(source_col, "getattr") and source_col.attr == "astype")
+                    require(
+                        is_expr(source_col, "getattr") and source_col.attr == "astype"
+                    )
                     source_col = get_definition(func_ir, source_col.value)
                 # The source column is a static getitem to the relevant df
                 require(is_expr(source_col, "static_getitem"))
                 source_df = get_definition(func_ir, source_col.value)
 
                 # If the filter pushdown was successful we can update the working body
-                working_body = self._try_filter_pushdown(inst, source_df, index_def, working_body, func_ir, used_dfs, True)
+                working_body = self._try_filter_pushdown(
+                    inst, source_df, index_def, working_body, func_ir, used_dfs, True
+                )
 
         return working_body
-
 
     def _call_arg_list_to_tuple(self, rhs, func_name, arg_no, arg_name, nodes):
         """Convert call argument to tuple if it is a constant list"""
