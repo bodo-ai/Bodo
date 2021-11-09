@@ -700,7 +700,7 @@ Combining / joining / merging:
 
 * :meth:`pandas.DataFrame.append` appending a dataframe or list of dataframes
   supported. `ignore_index` is supported.
-* :meth:`pandas.DataFrame.assign` function arguments not supported yet.
+* :meth:`pandas.DataFrame.assign`
 * :meth:`pandas.DataFrame.join` only dataframes. The output dataframe is not sorted by default for better parallel performance (Pandas may preserve key order depending on `how`).
   One can use explicit sort if needed.
 * :meth:`pandas.DataFrame.merge` only dataframes. `how`, `on`, `left_on`,
