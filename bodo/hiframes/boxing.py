@@ -4,7 +4,6 @@ Boxing and unboxing support for DataFrame, Series, etc.
 """
 import datetime
 import decimal
-import pickle
 import warnings
 from enum import Enum
 
@@ -14,6 +13,7 @@ import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
+from numba.core.ir_utils import GuardException, guard
 from numba.core.typing import signature
 from numba.extending import NativeValue, box, intrinsic, typeof_impl, unbox
 from numba.np import numpy_support
@@ -56,13 +56,24 @@ from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import (
-    NOT_CONSTANT,
     BodoError,
     BodoWarning,
     dtype_to_array_type,
-    get_overload_const,
+    get_overload_const_bool,
+    get_overload_const_bytes,
+    get_overload_const_float,
     get_overload_const_int,
+    get_overload_const_list,
+    get_overload_const_str,
+    get_overload_constant_dict,
+    is_overload_constant_bool,
+    is_overload_constant_bytes,
+    is_overload_constant_dict,
+    is_overload_constant_float,
     is_overload_constant_int,
+    is_overload_constant_list,
+    is_overload_constant_str,
+    is_overload_none,
     raise_bodo_error,
     to_nullable_type,
 )
@@ -476,12 +487,15 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
         # def __init__(self, name_typ=None)
         remainder, name_type = _dtype_from_type_enum_list_recursor(typ_enum_list[1:])
         return remainder, TimedeltaIndexType(name_type)
-    # in _dtype_to_type_enum_list, if a type isn't manually handled we, pickle it.
-    # for example, if we add a support for a new index type and fail to update
-    # _dtype_to_type_enum_list, it will be converted to a pickled bytestring.
-    # If this occurs, then we unpickle the value here.
-    elif isinstance(typ_enum_list[0], bytes):
-        return typ_enum_list[1:], pickle.loads(typ_enum_list[0])
+
+    # Previously, in _dtype_to_type_enum_list, if a type wasn't manually handled we
+    # pickled it.
+    # for example, if we added support for a new index type and fail to update
+    # _dtype_to_type_enum_list, it would be converted to a pickled bytestring.
+    # Currently, this does not occur. _dtype_to_type_enum_list will return None
+    # If it encounters a type that is not explicitley handled.
+    # elif isinstance(typ_enum_list[0], bytes):
+    #     return typ_enum_list[1:], pickle.loads(typ_enum_list[0])
 
     else:
         raise_bodo_error(
@@ -490,6 +504,10 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
 
 
 def _dtype_to_type_enum_list(typ):
+    return guard(_dtype_to_type_enum_list_recursor, typ)
+
+
+def _dtype_to_type_enum_list_recursor(typ):
     """
     Recursively converts the dtype into a stack of nested enums/literal values.
     This dtype list will be appeneded to series/datframe metadata, so that we can infer the
@@ -499,16 +517,38 @@ def _dtype_to_type_enum_list(typ):
     _dtype_from_type_enum_list_recursor.
     """
 
-    # IntDtype is constidered a literal type, so we manually ommit it
-    if get_overload_const(typ) != NOT_CONSTANT and not isinstance(typ, IntDtype):
-        return [SeriesDtypeEnum.Literal.value, get_overload_const(typ)]
+    # handle common cases first
+    if typ.__hash__ and typ in _one_to_one_type_to_enum_map:
+        return [_one_to_one_type_to_enum_map[typ]]
+    # manually handle the constant types
+    # that we've verified to work ctx.get_constant_generic
+    # in test_metadata/test_dtype_converter_literal_values
+    elif is_overload_constant_dict(typ):
+        return [SeriesDtypeEnum.Literal.value, get_overload_constant_dict(typ)]
+    elif is_overload_constant_int(typ):
+        return [SeriesDtypeEnum.Literal.value, get_overload_const_int(typ)]
+    # is_overload_constant_list also handles constant tuples
+    elif is_overload_constant_list(typ):
+        return [SeriesDtypeEnum.Literal.value, get_overload_const_list(typ)]
+    elif is_overload_constant_str(typ):
+        return [SeriesDtypeEnum.Literal.value, get_overload_const_str(typ)]
+    elif is_overload_constant_bool(typ):
+        return [SeriesDtypeEnum.Literal.value, get_overload_const_bool(typ)]
+    elif is_overload_constant_bytes(typ):
+        return [SeriesDtypeEnum.Literal.value, get_overload_const_bytes(typ)]
+    elif is_overload_constant_float(typ):
+        return [SeriesDtypeEnum.Literal.value, get_overload_const_float(typ)]
+    elif is_overload_none(typ):
+        return [SeriesDtypeEnum.Literal.value, None]
     # integer arrays need special handling, as integerArray's dtype is not a nullable integer
     elif isinstance(typ, IntegerArrayType):
-        return [SeriesDtypeEnum.IntegerArray.value] + _dtype_to_type_enum_list(
+        return [SeriesDtypeEnum.IntegerArray.value] + _dtype_to_type_enum_list_recursor(
             typ.dtype
         )
     elif bodo.utils.utils.is_array_typ(typ, False):
-        return [SeriesDtypeEnum.ARRAY.value] + _dtype_to_type_enum_list(typ.dtype)
+        return [SeriesDtypeEnum.ARRAY.value] + _dtype_to_type_enum_list_recursor(
+            typ.dtype
+        )
     # TODO: add Categorical, String
     elif isinstance(typ, StructType):
         # for struct include the type ID and number of fields
@@ -516,20 +556,18 @@ def _dtype_to_type_enum_list(typ):
         for name in typ.names:
             types_list.append(name)
         for field_typ in typ.data:
-            types_list += _dtype_to_type_enum_list(field_typ)
+            types_list += _dtype_to_type_enum_list_recursor(field_typ)
         return types_list
     elif isinstance(typ, bodo.libs.decimal_arr_ext.Decimal128Type):
         return [SeriesDtypeEnum.Decimal.value, typ.precision, typ.scale]
-    elif typ.__hash__ and typ in _one_to_one_type_to_enum_map:
-        return [_one_to_one_type_to_enum_map[typ]]
     elif isinstance(typ, PDCategoricalDtype):
         # For CategoricalType the expected ordering is the same order as the constructor:
         # def __init__(self, categories, elem_type, ordered, data=None, int_type=None)
-        categories_enum_list = _dtype_to_type_enum_list(typ.categories)
-        elem_type_enum_list = _dtype_to_type_enum_list(typ.elem_type)
-        ordered_enum_list = _dtype_to_type_enum_list(typ.ordered)
-        data_enum_list = _dtype_to_type_enum_list(typ.data)
-        int_type_enum_list = _dtype_to_type_enum_list(typ.int_type)
+        categories_enum_list = _dtype_to_type_enum_list_recursor(typ.categories)
+        elem_type_enum_list = _dtype_to_type_enum_list_recursor(typ.elem_type)
+        ordered_enum_list = _dtype_to_type_enum_list_recursor(typ.ordered)
+        data_enum_list = _dtype_to_type_enum_list_recursor(typ.data)
+        int_type_enum_list = _dtype_to_type_enum_list_recursor(typ.int_type)
         return (
             [SeriesDtypeEnum.CategoricalType.value]
             + categories_enum_list
@@ -543,74 +581,75 @@ def _dtype_to_type_enum_list(typ):
     elif isinstance(typ, DatetimeIndexType):
         # Constructor for DatetimeIndexType:
         # def __init__(self, name_typ=None)
-        return [SeriesDtypeEnum.DatetimeIndexType.value] + _dtype_to_type_enum_list(
-            typ.name_typ
-        )
+        return [
+            SeriesDtypeEnum.DatetimeIndexType.value
+        ] + _dtype_to_type_enum_list_recursor(typ.name_typ)
     elif isinstance(typ, NumericIndexType):
         # Constructor for NumericIndexType
         # def __init__(self, dtype, name_typ=None, data=None)
         return (
             [SeriesDtypeEnum.NumericIndexType.value]
-            + _dtype_to_type_enum_list(typ.dtype)
-            + _dtype_to_type_enum_list(typ.name_typ)
-            + _dtype_to_type_enum_list(typ.data)
+            + _dtype_to_type_enum_list_recursor(typ.dtype)
+            + _dtype_to_type_enum_list_recursor(typ.name_typ)
+            + _dtype_to_type_enum_list_recursor(typ.data)
         )
     elif isinstance(typ, PeriodIndexType):
         # Constructor for PeriodIndexType
         # def __init__(self, freq, name_typ=None)
         return (
             [SeriesDtypeEnum.PeriodIndexType.value]
-            + _dtype_to_type_enum_list(typ.freq)
-            + _dtype_to_type_enum_list(typ.name_typ)
+            + _dtype_to_type_enum_list_recursor(typ.freq)
+            + _dtype_to_type_enum_list_recursor(typ.name_typ)
         )
     elif isinstance(typ, IntervalIndexType):
         # Constructor for IntervalIndexType
         # def __init__(self, data, name_typ=None)
         return (
             [SeriesDtypeEnum.IntervalIndexType.value]
-            + _dtype_to_type_enum_list(typ.data)
-            + _dtype_to_type_enum_list(typ.name_typ)
+            + _dtype_to_type_enum_list_recursor(typ.data)
+            + _dtype_to_type_enum_list_recursor(typ.name_typ)
         )
     elif isinstance(typ, CategoricalIndexType):
         # Constructor for CategoricalIndexType
         # def __init__(self, data, name_typ=None)
         return (
             [SeriesDtypeEnum.CategoricalIndexType.value]
-            + _dtype_to_type_enum_list(typ.data)
-            + _dtype_to_type_enum_list(typ.name_typ)
+            + _dtype_to_type_enum_list_recursor(typ.data)
+            + _dtype_to_type_enum_list_recursor(typ.name_typ)
         )
     elif isinstance(typ, RangeIndexType):
         # Constructor for RangeIndexType:
         # def __init__(self, name_typ)
-        return [SeriesDtypeEnum.RangeIndexType.value] + _dtype_to_type_enum_list(
-            typ.name_typ
-        )
+        return [
+            SeriesDtypeEnum.RangeIndexType.value
+        ] + _dtype_to_type_enum_list_recursor(typ.name_typ)
     elif isinstance(typ, StringIndexType):
         # Constructor for StringIndexType:
         # def __init__(self, name_typ=None)
-        return [SeriesDtypeEnum.StringIndexType.value] + _dtype_to_type_enum_list(
-            typ.name_typ
-        )
+        return [
+            SeriesDtypeEnum.StringIndexType.value
+        ] + _dtype_to_type_enum_list_recursor(typ.name_typ)
     elif isinstance(typ, BinaryIndexType):
         # Constructor for BinaryIndexType:
         # def __init__(self, name_typ=None)
-        return [SeriesDtypeEnum.BinaryIndexType.value] + _dtype_to_type_enum_list(
-            typ.name_typ
-        )
+        return [
+            SeriesDtypeEnum.BinaryIndexType.value
+        ] + _dtype_to_type_enum_list_recursor(typ.name_typ)
     elif isinstance(typ, TimedeltaIndexType):
         # Constructor for TimedeltaIndexType:
         # def __init__(self, name_typ=None)
-        return [SeriesDtypeEnum.TimedeltaIndexType.value] + _dtype_to_type_enum_list(
-            typ.name_typ
-        )
+        return [
+            SeriesDtypeEnum.TimedeltaIndexType.value
+        ] + _dtype_to_type_enum_list_recursor(typ.name_typ)
     else:
-        # If a type isn't hasn't been manually handled we, pickle it.
+        # Previously,
+        # If a type wasn't manually handled we, pickled it.
         # for example, if we add a support for a new index type and fail to update
-        # this function, it will be converted to a pickled bytestring.
-        warnings.warn(
-            f"Unable to find metadata type support for type {typ}, using pickle as a backup"
-        )
-        return [pickle.dumps(typ)]
+        # this function, it would be converted to a pickled bytestring.
+        # return [pickle.dumps(typ)]
+        # as of now, we raise a guard exception, which is caught be the wrapping
+        # _dtype_to_type_enum_list, and return None.
+        raise GuardException("Unable to convert type")
 
 
 def _infer_series_dtype(S, array_metadata=None):
@@ -932,30 +971,39 @@ def _set_bodo_meta_dataframe(c, obj, typ):
     for dtype in typ.data:
         numba_typ_list = []
         typ_list = _dtype_to_type_enum_list(dtype)
-        for typ_enum_val in typ_list:
-            if isinstance(typ_enum_val, int) and not isinstance(typ_enum_val, bool):
-                cur_val_obj = pyapi.long_from_longlong(
-                    lir.Constant(lir.IntType(64), typ_enum_val)
-                )
-            else:
-                # occasionally, we may need to output non enum types
-                # either due to pickling unsuported types, or because
-                # we have literals that are part of the type
-                # (for example, field names for struct types)
-                typ_enum_typ = numba.typeof(typ_enum_val)
+        if typ_list != None:
+            for typ_enum_val in typ_list:
+                if isinstance(typ_enum_val, int) and not isinstance(typ_enum_val, bool):
+                    cur_val_obj = pyapi.long_from_longlong(
+                        lir.Constant(lir.IntType(64), typ_enum_val)
+                    )
+                else:
+                    # occasionally, we may need to output non enum types
+                    # as we have encountered literals that are part of the
+                    # type (for example, field names for struct types)
+                    typ_enum_typ = numba.typeof(typ_enum_val)
 
-                enum_llvm_const = context.get_constant_generic(
-                    builder, typ_enum_typ, typ_enum_val
-                )
-                cur_val_obj = pyapi.from_native_value(
-                    typ_enum_typ, enum_llvm_const, c.env_manager
-                )
-            numba_typ_list.append(cur_val_obj)
+                    enum_llvm_const = context.get_constant_generic(
+                        builder, typ_enum_typ, typ_enum_val
+                    )
+                    cur_val_obj = pyapi.from_native_value(
+                        typ_enum_typ, enum_llvm_const, c.env_manager
+                    )
+                numba_typ_list.append(cur_val_obj)
 
-        array_type_metadata_obj = pyapi.list_pack(numba_typ_list)
-        for val in numba_typ_list:
-            pyapi.decref(val)
-        col_typs.append(array_type_metadata_obj)
+            array_type_metadata_obj = pyapi.list_pack(numba_typ_list)
+            for val in numba_typ_list:
+                pyapi.decref(val)
+            col_typs.append(array_type_metadata_obj)
+        else:
+            numba_none_typ = numba.typeof(None)
+            none_llvm_const = context.get_constant_generic(
+                builder, numba_none_typ, None
+            )
+            none_val_obj = pyapi.from_native_value(
+                numba_none_typ, none_llvm_const, c.env_manager
+            )
+            array_type_metadata_obj = none_val_obj
 
     meta_dict_obj = pyapi.dict_new(2)
 
@@ -1021,33 +1069,33 @@ def _set_bodo_meta_series(obj, c, typ):
     if dtype != None:
         numba_typ_list = []
         typ_list = _dtype_to_type_enum_list(dtype)
-        for typ_enum_val in typ_list:
-            if isinstance(typ_enum_val, int) and not isinstance(typ_enum_val, bool):
-                cur_val_obj = pyapi.long_from_longlong(
-                    lir.Constant(lir.IntType(64), typ_enum_val)
-                )
-            else:
-                # occasionally, we may need to output non enum types
-                # either due to pickling unsuported types, or because
-                # we have literals that are part of the type
-                # (for example, field names for struct types)
-                typ_enum_typ = numba.typeof(typ_enum_val)
+        if typ_list != None:
+            for typ_enum_val in typ_list:
+                if isinstance(typ_enum_val, int) and not isinstance(typ_enum_val, bool):
+                    cur_val_obj = pyapi.long_from_longlong(
+                        lir.Constant(lir.IntType(64), typ_enum_val)
+                    )
+                else:
+                    # occasionally, we may need to output non enum types
+                    # as we have encountered literals that are part of the
+                    # type (for example, field names for struct types)
+                    typ_enum_typ = numba.typeof(typ_enum_val)
 
-                enum_llvm_const = context.get_constant_generic(
-                    builder, typ_enum_typ, typ_enum_val
-                )
-                cur_val_obj = pyapi.from_native_value(
-                    typ_enum_typ, enum_llvm_const, c.env_manager
-                )
+                    enum_llvm_const = context.get_constant_generic(
+                        builder, typ_enum_typ, typ_enum_val
+                    )
+                    cur_val_obj = pyapi.from_native_value(
+                        typ_enum_typ, enum_llvm_const, c.env_manager
+                    )
 
-            numba_typ_list.append(cur_val_obj)
+                numba_typ_list.append(cur_val_obj)
 
-        type_metadata_obj = pyapi.list_pack(numba_typ_list)
-        pyapi.dict_setitem_string(meta_dict_obj, "type_metadata", type_metadata_obj)
-        pyapi.decref(type_metadata_obj)
+            type_metadata_obj = pyapi.list_pack(numba_typ_list)
+            for val in numba_typ_list:
+                pyapi.decref(val)
 
-        for val in numba_typ_list:
-            pyapi.decref(val)
+            pyapi.dict_setitem_string(meta_dict_obj, "type_metadata", type_metadata_obj)
+            pyapi.decref(type_metadata_obj)
 
     pyapi.dict_setitem_string(meta_dict_obj, "dist", dist_val_obj)
     pyapi.object_setattr_string(obj, "_bodo_meta", meta_dict_obj)

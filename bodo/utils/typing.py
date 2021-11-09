@@ -313,6 +313,7 @@ def is_overload_constant_dict(val):
             and val.types
             and val.types[0] == types.StringLiteral(CONST_DICT_SENTINEL)
         )
+        or isinstance(val, dict)
     )
 
 
@@ -545,6 +546,8 @@ def get_overload_constant_dict(val):
         }
     if isinstance(val, DictLiteral):
         return val.literal_value
+    if isinstance(val, dict):
+        return val
     assert is_initial_value_dict_type(val) or (
         isinstance(val, types.BaseTuple)
         and val.types
