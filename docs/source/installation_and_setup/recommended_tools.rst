@@ -7,6 +7,10 @@ Recommended MPI Settings
 
 `Intel-MPI library <https://software.intel.com/content/www/us/en/develop/tools/oneapi/components/mpi-library.html#gs.cfkkrf>`_ is the preferred distribution for message passing interface (MPI) specification.
 
+Note that Bodo automatically installs ``mpich``. Hence, after installing Intel-MPI, remove `mpich` using this command::
+
+    conda remove -y --force mpich mpi
+
 Intel-MPI provides different tuning collective algorithms.
 
 Based on our internal benchmarking, we recommend setting these environment variables as follows::
