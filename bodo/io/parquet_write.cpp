@@ -330,125 +330,134 @@ void pq_write(const char *_path_name, const table_info *table,
               bool is_parallel, bool write_rangeindex_to_metadata,
               const int ri_start, const int ri_stop, const int ri_step,
               const char *idx_name, const char *bucket_region) {
+    // Write actual values of start, stop, step to the metadata which is a
+    // string that contains %d
+    int check;
+    std::vector<char> new_metadata;
+    if (write_rangeindex_to_metadata) {
+        new_metadata.resize((strlen(metadata) + strlen(idx_name) + 50));
+        check = sprintf(new_metadata.data(), metadata, idx_name, ri_start,
+                        ri_stop, ri_step);
+    } else {
+        new_metadata.resize((strlen(metadata) + 1 + (strlen(idx_name) * 4)));
+        check = sprintf(new_metadata.data(), metadata, idx_name, idx_name,
+                        idx_name, idx_name);
+    }
+    if (size_t(check + 1) > new_metadata.size())
+        throw std::runtime_error(
+            "Fatal error: number of written char for metadata is greater "
+            "than new_metadata size");
+
+    int myrank, num_ranks;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+    std::string orig_path(_path_name);  // original path passed to this function
+    std::string path_name;              // original path passed to this function
+                                        // (excluding prefix)
+    std::string dirname;  // path and directory name to store the parquet
+                          // files (only if is_parallel=true)
+    std::string fname;    // name of parquet file to write (excludes path)
+    std::shared_ptr<::arrow::io::OutputStream> out_stream;
+    Bodo_Fs::FsEnum fs_option;
+
+    extract_fs_dir_path(_path_name, is_parallel, ".parquet", myrank, num_ranks,
+                        &fs_option, &dirname, &fname, &orig_path, &path_name);
+
+    open_outstream(fs_option, is_parallel, myrank, "parquet", dirname, fname,
+                   orig_path, path_name, &out_stream, bucket_region);
+
+    // copy column names to a std::vector<string>
+    std::vector<std::string> col_names;
+    char *cur_str = col_names_arr->data1;
+    offset_t *offsets = (offset_t *)col_names_arr->data2;
+    for (int64_t i = 0; i < col_names_arr->length; i++) {
+        size_t len = offsets[i + 1] - offsets[i];
+        col_names.emplace_back(cur_str, len);
+        cur_str += len;
+    }
+
+    auto pool = ::arrow::default_memory_pool();
+
+    // convert Bodo table to Arrow: construct Arrow Schema and ChunkedArray
+    // columns
+    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
+    std::vector<std::shared_ptr<arrow::ChunkedArray>> columns(
+        table->columns.size());
+    for (size_t i = 0; i < table->columns.size(); i++) {
+        auto col = table->columns[i];
+        bodo_array_to_arrow(pool, col, col_names[i], schema_vector,
+                            &columns[i]);
+    }
+
+    if (write_index) {
+        // if there is an index, construct ChunkedArray index column and add
+        // metadata to the schema
+        std::shared_ptr<arrow::ChunkedArray> chunked_arr;
+        if (strcmp(idx_name, "null") != 0)
+            bodo_array_to_arrow(pool, index, idx_name, schema_vector,
+                                &chunked_arr);
+        else
+            bodo_array_to_arrow(pool, index, "__index_level_0__", schema_vector,
+                                &chunked_arr);
+        columns.push_back(chunked_arr);
+    }
+
+    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata;
+    if (new_metadata.size() > 0 && new_metadata[0] != 0)
+        schema_metadata =
+            ::arrow::key_value_metadata({{"pandas", new_metadata.data()}});
+
+    // make Arrow Schema object
+    std::shared_ptr<arrow::Schema> schema =
+        std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
+
+    // make Arrow table from Schema and ChunkedArray columns
+    int64_t row_group_size = table->nrows();
+    std::shared_ptr<arrow::Table> arrow_table =
+        arrow::Table::Make(schema, columns, row_group_size);
+
+    // set compression option
+    ::arrow::Compression::type codec_type;
+    if (strcmp(compression, "snappy") == 0) {
+        codec_type = ::arrow::Compression::SNAPPY;
+    } else if (strcmp(compression, "brotli") == 0) {
+        codec_type = ::arrow::Compression::BROTLI;
+    } else if (strcmp(compression, "gzip") == 0) {
+        codec_type = ::arrow::Compression::GZIP;
+    } else {
+        codec_type = ::arrow::Compression::UNCOMPRESSED;
+    }
+    parquet::WriterProperties::Builder prop_builder;
+    prop_builder.compression(codec_type);
+    std::shared_ptr<parquet::WriterProperties> writer_properties =
+        prop_builder.build();
+
+    // open file and write table
+    arrow::Status status = parquet::arrow::WriteTable(
+        *arrow_table, pool, out_stream, row_group_size, writer_properties,
+        // store_schema() = true is needed to write the schema metadata to
+        // file
+        // .coerce_timestamps(::arrow::TimeUnit::MICRO)->allow_truncated_timestamps()
+        // not needed when moving to parquet 2.0
+        ::parquet::ArrowWriterProperties::Builder()
+            .coerce_timestamps(::arrow::TimeUnit::MICRO)
+            ->allow_truncated_timestamps()
+            ->store_schema()
+            ->build());
+    CHECK_ARROW(status, "parquet::arrow::WriteTable");
+}
+
+void pq_write_py_entry(const char *_path_name, const table_info *table,
+                       const array_info *col_names_arr, const array_info *index,
+                       bool write_index, const char *metadata,
+                       const char *compression, bool is_parallel,
+                       bool write_rangeindex_to_metadata, const int ri_start,
+                       const int ri_stop, const int ri_step,
+                       const char *idx_name, const char *bucket_region) {
     try {
-        // Write actual values of start, stop, step to the metadata which is a
-        // string that contains %d
-        int check;
-        std::vector<char> new_metadata;
-        if (write_rangeindex_to_metadata) {
-            new_metadata.resize((strlen(metadata) + strlen(idx_name) + 50));
-            check = sprintf(new_metadata.data(), metadata, idx_name, ri_start,
-                            ri_stop, ri_step);
-        } else {
-            new_metadata.resize(
-                (strlen(metadata) + 1 + (strlen(idx_name) * 4)));
-            check = sprintf(new_metadata.data(), metadata, idx_name, idx_name,
-                            idx_name, idx_name);
-        }
-        if (size_t(check + 1) > new_metadata.size())
-            throw std::runtime_error(
-                "Fatal error: number of written char for metadata is greater "
-                "than new_metadata size");
-
-        int myrank, num_ranks;
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-        MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-        std::string orig_path(
-            _path_name);        // original path passed to this function
-        std::string path_name;  // original path passed to this function
-                                // (excluding prefix)
-        std::string dirname;    // path and directory name to store the parquet
-                                // files (only if is_parallel=true)
-        std::string fname;      // name of parquet file to write (excludes path)
-        std::shared_ptr<::arrow::io::OutputStream> out_stream;
-        Bodo_Fs::FsEnum fs_option;
-
-        extract_fs_dir_path(_path_name, is_parallel, ".parquet", myrank,
-                            num_ranks, &fs_option, &dirname, &fname, &orig_path,
-                            &path_name);
-
-        open_outstream(fs_option, is_parallel, myrank, "parquet", dirname,
-                       fname, orig_path, path_name, &out_stream, bucket_region);
-
-        // copy column names to a std::vector<string>
-        std::vector<std::string> col_names;
-        char *cur_str = col_names_arr->data1;
-        offset_t *offsets = (offset_t *)col_names_arr->data2;
-        for (int64_t i = 0; i < col_names_arr->length; i++) {
-            size_t len = offsets[i + 1] - offsets[i];
-            col_names.emplace_back(cur_str, len);
-            cur_str += len;
-        }
-
-        auto pool = ::arrow::default_memory_pool();
-
-        // convert Bodo table to Arrow: construct Arrow Schema and ChunkedArray
-        // columns
-        std::vector<std::shared_ptr<arrow::Field>> schema_vector;
-        std::vector<std::shared_ptr<arrow::ChunkedArray>> columns(
-            table->columns.size());
-        for (size_t i = 0; i < table->columns.size(); i++) {
-            auto col = table->columns[i];
-            bodo_array_to_arrow(pool, col, col_names[i], schema_vector,
-                                &columns[i]);
-        }
-
-        if (write_index) {
-            // if there is an index, construct ChunkedArray index column and add
-            // metadata to the schema
-            std::shared_ptr<arrow::ChunkedArray> chunked_arr;
-            if (strcmp(idx_name, "null") != 0)
-                bodo_array_to_arrow(pool, index, idx_name, schema_vector,
-                                    &chunked_arr);
-            else
-                bodo_array_to_arrow(pool, index, "__index_level_0__",
-                                    schema_vector, &chunked_arr);
-            columns.push_back(chunked_arr);
-        }
-
-        std::shared_ptr<arrow::KeyValueMetadata> schema_metadata;
-        if (new_metadata.size() > 0 && new_metadata[0] != 0)
-            schema_metadata =
-                ::arrow::key_value_metadata({{"pandas", new_metadata.data()}});
-
-        // make Arrow Schema object
-        std::shared_ptr<arrow::Schema> schema =
-            std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
-
-        // make Arrow table from Schema and ChunkedArray columns
-        int64_t row_group_size = table->nrows();
-        std::shared_ptr<arrow::Table> arrow_table =
-            arrow::Table::Make(schema, columns, row_group_size);
-
-        // set compression option
-        ::arrow::Compression::type codec_type;
-        if (strcmp(compression, "snappy") == 0) {
-            codec_type = ::arrow::Compression::SNAPPY;
-        } else if (strcmp(compression, "brotli") == 0) {
-            codec_type = ::arrow::Compression::BROTLI;
-        } else if (strcmp(compression, "gzip") == 0) {
-            codec_type = ::arrow::Compression::GZIP;
-        } else {
-            codec_type = ::arrow::Compression::UNCOMPRESSED;
-        }
-        parquet::WriterProperties::Builder prop_builder;
-        prop_builder.compression(codec_type);
-        std::shared_ptr<parquet::WriterProperties> writer_properties =
-            prop_builder.build();
-
-        // open file and write table
-        arrow::Status status = parquet::arrow::WriteTable(
-            *arrow_table, pool, out_stream, row_group_size, writer_properties,
-            // store_schema() = true is needed to write the schema metadata to
-            // file
-            // .coerce_timestamps(::arrow::TimeUnit::MICRO)->allow_truncated_timestamps()
-            // not needed when moving to parquet 2.0
-            ::parquet::ArrowWriterProperties::Builder()
-                .coerce_timestamps(::arrow::TimeUnit::MICRO)
-                ->allow_truncated_timestamps()
-                ->store_schema()
-                ->build());
-        CHECK_ARROW(status, "parquet::arrow::WriteTable");
+        pq_write(_path_name, table, col_names_arr, index, write_index, metadata,
+                 compression, is_parallel, write_rangeindex_to_metadata,
+                 ri_start, ri_stop, ri_step, idx_name, bucket_region);
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -487,95 +496,104 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
     // - convert values to strings for other dtypes like datetime, decimal, etc
     // (see array_info::val_to_str)
 
-    if (!is_parallel)
-        throw std::runtime_error(
-            "to_parquet partitioned not implemented in sequential mode");
+    try {
+        if (!is_parallel)
+            throw std::runtime_error(
+                "to_parquet partitioned not implemented in sequential mode");
 
-    // new_table will have partition columns at the beginning and the rest after
-    // (to use multi_col_key for hashing which assumes that keys are at the
-    // beginning), and we will then drop the partition columns from it for
-    // writing
-    table_info *new_table = new table_info();
-    std::vector<bool> is_part_col(table->ncols(), false);
-    std::vector<array_info *> partition_cols;
-    std::vector<std::string> part_col_names;
-    offset_t *offsets = (offset_t *)col_names_arr->data2;
-    for (int i = 0; i < num_partition_cols; i++) {
-        int j = partition_cols_idx[i];
-        is_part_col[j] = true;
-        partition_cols.push_back(table->columns[j]);
-        new_table->columns.push_back(table->columns[j]);
-        char *cur_str = col_names_arr->data1 + offsets[j];
-        size_t len = offsets[j + 1] - offsets[j];
-        part_col_names.emplace_back(cur_str, len);
-    }
-    for (int64_t i = 0; i < table->ncols(); i++) {
-        if (!is_part_col[i]) new_table->columns.push_back(table->columns[i]);
-    }
+        // new_table will have partition columns at the beginning and the rest
+        // after (to use multi_col_key for hashing which assumes that keys are
+        // at the beginning), and we will then drop the partition columns from
+        // it for writing
+        table_info *new_table = new table_info();
+        std::vector<bool> is_part_col(table->ncols(), false);
+        std::vector<array_info *> partition_cols;
+        std::vector<std::string> part_col_names;
+        offset_t *offsets = (offset_t *)col_names_arr->data2;
+        for (int i = 0; i < num_partition_cols; i++) {
+            int j = partition_cols_idx[i];
+            is_part_col[j] = true;
+            partition_cols.push_back(table->columns[j]);
+            new_table->columns.push_back(table->columns[j]);
+            char *cur_str = col_names_arr->data1 + offsets[j];
+            size_t len = offsets[j + 1] - offsets[j];
+            part_col_names.emplace_back(cur_str, len);
+        }
+        for (int64_t i = 0; i < table->ncols(); i++) {
+            if (!is_part_col[i])
+                new_table->columns.push_back(table->columns[i]);
+        }
 
-    const uint32_t seed = SEED_HASH_PARTITION;
-    uint32_t *hashes = hash_keys(partition_cols, seed, is_parallel);
-    UNORD_MAP_CONTAINER<multi_col_key, partition_write_info, multi_col_key_hash>
-        key_to_partition;
+        const uint32_t seed = SEED_HASH_PARTITION;
+        uint32_t *hashes = hash_keys(partition_cols, seed, is_parallel);
+        UNORD_MAP_CONTAINER<multi_col_key, partition_write_info,
+                            multi_col_key_hash>
+            key_to_partition;
 
-    // TODO nullable partition cols?
+        // TODO nullable partition cols?
 
-    std::string fname =
-        gen_pieces_file_name(dist_get_rank(), dist_get_size(), ".parquet");
+        std::string fname =
+            gen_pieces_file_name(dist_get_rank(), dist_get_size(), ".parquet");
 
-    new_table->num_keys = num_partition_cols;
-    for (int64_t i = 0; i < new_table->nrows(); i++) {
-        multi_col_key key(hashes[i], new_table, i);
-        partition_write_info &p = key_to_partition[key];
-        if (p.rows.size() == 0) {
-            // generate output file name
-            p.fpath = std::string(_path_name) + "/";
-            int64_t cat_col_idx = 0;
-            for (int j = 0; j < num_partition_cols; j++) {
-                auto part_col = partition_cols[j];
-                // convert partition col value to string
-                std::string value_str;
-                if (part_col->arr_type == bodo_array_type::CATEGORICAL) {
-                    int64_t code = part_col->get_code_as_int64(i);
-                    // TODO can code be -1 (NA) for partition columns?
-                    value_str =
-                        categories_table->columns[cat_col_idx++]->val_to_str(
-                            code);
-                } else {
-                    value_str = part_col->val_to_str(i);
+        new_table->num_keys = num_partition_cols;
+        for (int64_t i = 0; i < new_table->nrows(); i++) {
+            multi_col_key key(hashes[i], new_table, i);
+            partition_write_info &p = key_to_partition[key];
+            if (p.rows.size() == 0) {
+                // generate output file name
+                p.fpath = std::string(_path_name);
+                if (p.fpath.back() != '/') p.fpath += "/";
+                int64_t cat_col_idx = 0;
+                for (int j = 0; j < num_partition_cols; j++) {
+                    auto part_col = partition_cols[j];
+                    // convert partition col value to string
+                    std::string value_str;
+                    if (part_col->arr_type == bodo_array_type::CATEGORICAL) {
+                        int64_t code = part_col->get_code_as_int64(i);
+                        // TODO can code be -1 (NA) for partition columns?
+                        value_str = categories_table->columns[cat_col_idx++]
+                                        ->val_to_str(code);
+                    } else {
+                        value_str = part_col->val_to_str(i);
+                    }
+                    p.fpath += part_col_names[j] + "=" + value_str + "/";
                 }
-                p.fpath += part_col_names[j] + "=" + value_str + "/";
+                p.fpath += fname;
             }
-            p.fpath += fname;
+            p.rows.push_back(i);
         }
-        p.rows.push_back(i);
-    }
-    delete[] hashes;
+        delete[] hashes;
 
-    // drop partition columns from new_table (they are not written to parquet)
-    new_table->columns.erase(new_table->columns.begin(),
-                             new_table->columns.begin() + num_partition_cols);
+        // drop partition columns from new_table (they are not written to
+        // parquet)
+        new_table->columns.erase(
+            new_table->columns.begin(),
+            new_table->columns.begin() + num_partition_cols);
 
-    for (auto it = key_to_partition.begin(); it != key_to_partition.end();
-         it++) {
-        const partition_write_info &p = it->second;
-        // RetrieveTable steals the reference but we still need them
-        for (auto a : new_table->columns) incref_array(a);
-        table_info *part_table =
-            RetrieveTable(new_table, p.rows, new_table->ncols());
-        // NOTE: we pass is_parallel=False because we already took care of
-        // is_parallel here
-        Bodo_Fs::FsEnum fs_type = filesystem_type(p.fpath.c_str());
-        if (fs_type == Bodo_Fs::FsEnum::posix) {
-            // s3 and hdfs create parent directories automatically when
-            // writing partitioned columns
-            std::filesystem::path path = p.fpath;
-            std::filesystem::create_directories(path.parent_path());
+        for (auto it = key_to_partition.begin(); it != key_to_partition.end();
+             it++) {
+            const partition_write_info &p = it->second;
+            // RetrieveTable steals the reference but we still need them
+            for (auto a : new_table->columns) incref_array(a);
+            table_info *part_table =
+                RetrieveTable(new_table, p.rows, new_table->ncols());
+            // NOTE: we pass is_parallel=False because we already took care of
+            // is_parallel here
+            Bodo_Fs::FsEnum fs_type = filesystem_type(p.fpath.c_str());
+            if (fs_type == Bodo_Fs::FsEnum::posix) {
+                // s3 and hdfs create parent directories automatically when
+                // writing partitioned columns
+                std::filesystem::path path = p.fpath;
+                std::filesystem::create_directories(path.parent_path());
+            }
+            pq_write(p.fpath.c_str(), part_table, col_names_arr_no_partitions,
+                     nullptr, /*TODO*/ false, /*TODO*/ "", compression, false,
+                     false, -1, -1, -1, /*TODO*/ "", bucket_region);
+            delete_table_decref_arrays(part_table);
         }
-        pq_write(p.fpath.c_str(), part_table, col_names_arr_no_partitions,
-                 nullptr, /*TODO*/ false, /*TODO*/ "", compression, false,
-                 false, -1, -1, -1, /*TODO*/ "", bucket_region);
-        delete_table_decref_arrays(part_table);
+        delete new_table;
+
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
     }
-    delete new_table;
 }
