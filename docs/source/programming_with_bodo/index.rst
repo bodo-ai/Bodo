@@ -16,3 +16,4 @@ Programming with Bodo
    not_supported
    advanced
    BodoSQL
+   BodoSQLerrors

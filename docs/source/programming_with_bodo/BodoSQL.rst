@@ -110,6 +110,8 @@ Bodo SQL ignores casing of keywords, and column and table names, except for the 
 Therefore, ``select a from table1`` is treated the same as ``SELECT A FROM Table1``, except for the names of
 the final output columns (``a`` vs ``A``).
 
+.. _select_clause:
+
 * `SELECT`
 
     The ``SELECT`` statement is used to select data in the form of columns. The data returned from Bodo SQL is stored in a dataframe. Example usage::
@@ -518,7 +520,7 @@ the final output columns (``a`` vs ``A``).
 
         - ``||`` (string concatination)
 
-
+.. _bodosql_fns_start:
 
 * Numeric Functions
 
@@ -738,6 +740,8 @@ the final output columns (``a`` vs ``A``).
 
             Converts a timestamp value to a String value given a scalar
             format string.
+
+.. _date_formating_charecters:
 
             Recognized formatting character:
                 - ``%i`` Minutes, zero padded (00 to 59)
@@ -1108,6 +1112,7 @@ the final output columns (``a`` vs ``A``).
         two arguments. If Arguments do noth have the same type, Bodo SQL will attempt to cast them to a
         common datatype, which is currently undefined behavior.
 
+.. _window_fns:
 
 * Window Functions
 
@@ -1386,6 +1391,7 @@ there a couple notable places where Bodo SQL may not match other SQL systems:
     - Is (NOT) False and Is (NOT) True return NULL when used on a null expression
     - AND will return NULL if any of the inputs is NULL
 
+.. _bodosql_named_params:
 
 BodoSQL Caching & Parameterized Queries
 ---------------------------------------
