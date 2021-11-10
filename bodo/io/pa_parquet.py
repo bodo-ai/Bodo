@@ -1,6 +1,7 @@
 import asyncio
 import os
 import threading
+from collections import defaultdict
 from concurrent import futures
 
 import pyarrow.parquet as pq
@@ -157,9 +158,27 @@ class ParquetManifest:
         # Bodo change (run _visit_level with asyncio)
         # Do traversal in a separate thread in case the main thread already
         # has an event loop running (e.g. Jupyter with tornado)
+        # Bodo change: we introduce a dict that maps
+        # partition_name -> set of values in this partition
+        self.partition_vals = defaultdict(set)
         thread = VisitLevelThread(self)
         thread.start()
         thread.join()
+        # --- Bodo change ---
+        for part_name in self.partition_vals.keys():
+            self.partition_vals[part_name] = sorted(self.partition_vals[part_name])
+
+        # sort the keys (partition values) in each partition set
+        for part_set in self.partitions.levels:
+            part_set.keys = sorted(part_set.keys)
+        # set the index of partition values in each file according to sorted order
+        for p in self.pieces:
+            if p.partition_keys is not None:
+                p.partition_keys = [
+                    (name, self.partition_vals[name].index(val))
+                    for name, val in p.partition_keys
+                ]
+        # --- End Bodo change ---
 
         # Due to concurrency, pieces will potentially by out of order if the
         # dataset is partitioned so we sort them to yield stable results
@@ -234,7 +253,12 @@ class ParquetManifest:
             name, key = pq._parse_hive_partition(tail)
 
             index = self.partitions.get_index(level, name, key)
-            dir_part_keys = part_keys + [(name, index)]
+            # Bodo change: due to async concurrency, directories could be visited in
+            # any order. Instead of storing an index, we store the key (partition value)
+            # because we need to know all the keys and sort them before we can
+            # give an index that's consistent across runs
+            self.partition_vals[name].add(key)
+            dir_part_keys = part_keys + [(name, key)]
             # Bodo change: always spawn _visit_level as a coroutine, remove
             # condition that decides whether to run in separate thread
             aws.append(self._visit_level(level + 1, path, dir_part_keys))

@@ -1303,6 +1303,51 @@ def test_read_partitions2():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
+def test_read_partitions_cat_ordering():
+    """test reading and filtering multi-level partitioned parquet data with many
+    directories, to make sure order of partition values in categorical dtype
+    of partition columns is consistent (same at compile time and runtime)
+    and matches pandas"""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            table = pa.table(
+                {
+                    "a": range(20),
+                    "b": [1, 2, 3, 4] * 5,
+                    "c": [1, 2, 3, 4, 5] * 4,
+                    "part": ["a"] * 10 + ["b"] * 10,
+                }
+            )
+            pq.write_to_dataset(table, "pq_data", partition_cols=["b", "c", "part"])
+        bodo.barrier()
+
+        def impl1(path):
+            df = pd.read_parquet(path)
+            return df
+
+        def impl2(path):
+            df = pd.read_parquet(path)
+            return df[(df["c"] != 3) | (df["part"] == "a")]
+            return df
+
+        check_func(impl1, ("pq_data",))
+        # TODO(ehsan): match Index
+        check_func(impl2, ("pq_data",), reset_index=True)
+        # make sure the ParquetReader node has filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl2)
+        bodo_func(
+            "pq_data",
+        )
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+        bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree("pq_data", ignore_errors=True)
+
+
 def test_read_partitions_two_level():
     """test reading and filtering partitioned parquet data for two levels partitions"""
     import pyarrow as pa
@@ -1420,8 +1465,8 @@ def test_read_partitions_implicit_and_simple():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-@pytest.mark.skip("TODO: Enable when BE-1500 is resolved")
-def test_read_partitions_implicit_and_detailed(memory_leak_check):
+# TODO: Add memory leak check. Seems to have some leak.
+def test_read_partitions_implicit_and_detailed():
     """test reading and filtering partitioned parquet data with multiple levels
     of partitions and a complex implicit and"""
     import pyarrow as pa
@@ -1499,6 +1544,7 @@ def test_read_partitions_datetime():
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
+
 
 def test_read_partitions_to_datetime_format():
     """test that we don't incorrectly perform filter pushdown when to_datetime includes
