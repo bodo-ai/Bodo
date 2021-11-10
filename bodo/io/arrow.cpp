@@ -15,12 +15,13 @@ table_info* pq_read(char* path, bool parallel, char* bucket_region,
                     int32_t num_partition_cols, int64_t* total_rows_out);
 
 // --------- functions defined in parquet_write.cpp ---------
-void pq_write(const char *filename, const table_info *table,
-              const array_info *col_names, const array_info *index,
-              bool write_index, const char *metadata, const char *compression,
-              bool parallel, bool write_rangeindex_to_metadata, const int start,
-              const int stop, const int step, const char *name,
-              const char *bucket_region);
+void pq_write_py_entry(const char* filename, const table_info* table,
+                       const array_info* col_names, const array_info* index,
+                       bool write_index, const char* metadata,
+                       const char* compression, bool parallel,
+                       bool write_rangeindex_to_metadata, const int start,
+                       const int stop, const int step, const char* name,
+                       const char* bucket_region);
 
 void pq_write_partitioned(const char *_path_name, table_info *table,
                           const array_info *col_names_arr,
@@ -46,7 +47,7 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     PyObject_SetAttrString(m, "pq_read",
                            PyLong_FromVoidPtr((void *)(&pq_read)));
     PyObject_SetAttrString(m, "pq_write",
-                           PyLong_FromVoidPtr((void *)(&pq_write)));
+                           PyLong_FromVoidPtr((void *)(&pq_write_py_entry)));
     PyObject_SetAttrString(m, "pq_write_partitioned",
                            PyLong_FromVoidPtr((void *)(&pq_write_partitioned)));
     PyObject_SetAttrString(m, "snowflake_read",
