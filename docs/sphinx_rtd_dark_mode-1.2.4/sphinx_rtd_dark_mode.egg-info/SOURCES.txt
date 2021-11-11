@@ -1,0 +1,14 @@
+README.md
+setup.py
+sphinx_rtd_dark_mode/__init__.py
+sphinx_rtd_dark_mode/dark_mode_loader.py
+sphinx_rtd_dark_mode.egg-info/PKG-INFO
+sphinx_rtd_dark_mode.egg-info/SOURCES.txt
+sphinx_rtd_dark_mode.egg-info/dependency_links.txt
+sphinx_rtd_dark_mode.egg-info/requires.txt
+sphinx_rtd_dark_mode.egg-info/top_level.txt
+sphinx_rtd_dark_mode/static/dark_mode_css/dark.css
+sphinx_rtd_dark_mode/static/dark_mode_css/general.css
+sphinx_rtd_dark_mode/static/dark_mode_js/default_dark.js
+sphinx_rtd_dark_mode/static/dark_mode_js/default_light.js
+sphinx_rtd_dark_mode/static/dark_mode_js/theme_switcher.js

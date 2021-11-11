@@ -3259,7 +3259,7 @@ a .wy-menu-vertical li button.toctree-expand {
 .rst-content .wy-alert.wy-alert-danger .admonition-title,
 .wy-alert.wy-alert-danger .rst-content .admonition-title,
 .wy-alert.wy-alert-danger .wy-alert-title {
-  background: #f29f97;
+  background: #fe3d3d;
 }
 .rst-content .admonition-todo,
 .rst-content .attention,
@@ -6124,7 +6124,7 @@ html.writer-html5 .rst-content table.docutils th > p {
 }
 .rst-content code.literal,
 .rst-content tt.literal {
-  color: #e74c3c;
+  color: #007020;
   white-space: normal;
 }
 .rst-content code.xref,
