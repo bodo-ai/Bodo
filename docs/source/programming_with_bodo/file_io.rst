@@ -104,8 +104,8 @@ CSV
 ~~~
 
 
-CSV is a common text format for data exchange. Bodo supports much of the
-standard pandas API to read CSV files::
+CSV is a common text format for data exchange. Bodo supports most of the
+standard Pandas API to read CSV files::
 
     @bodo.jit
     def write_csv(df):
@@ -117,6 +117,16 @@ standard pandas API to read CSV files::
         return df
 
 Unlike ``read_csv`` in regular Pandas, Bodo can read a directory that contains multiple partitioned CSV files as well.
+
+All files in the folder must have same number and datatype of columns. They can have different number of rows.
+
+Usage::
+
+    @bodo.jit
+    def read_csv_folder():
+        df = pd.read_csv("/path/to/folder/foldername")
+        doSomething(df)
+
 
 
 Use ``sep="\n"`` to read text files line by line into a single-column dataframe
