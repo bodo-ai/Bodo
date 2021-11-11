@@ -626,41 +626,6 @@ results back to jit function.
     [stdout:3] 6.555500504321469
 
 
-Visualization
-~~~~~~~~~~~~~
-
-Bodo supports using a variety of Matplotlib APIs directly in JIT
-functions. These functions work by automatically gathering all of the
-data onto one machine and then plotting the data. If there is not enough
-memory on your machine, a sample of the data can be selected. The
-example code below demonstrates calling plot with a sample of the data:
-
-.. code:: ipython3
-
-    import matplotlib.pyplot as plt
-    
-    %matplotlib inline
-    
-    @bodo.jit
-    def dist_plot(n):
-        X = np.arange(n)
-        Y = np.exp(-X/3.0)
-        plt.plot(X[::10], Y[::10]) # gather every 10th element
-        plt.show()
-    
-    dist_plot(100)
-
-
-
-.. parsed-literal::
-
-    [output:0]
-
-
-
-.. image:: ../bodo_tutorial_files/bodo_tutorial_83_1.png
-   :align: center
-
 Collections of Distributed Data
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

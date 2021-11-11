@@ -45,14 +45,41 @@ Currently, Bodo automatically supports the following plotting APIs.
   * :meth:`matplotlib.axes.Axes.imshow`
 
 
-These, APIs have the following restrictions:
+These APIs have the following restrictions:
 
   * The data being plotted must be Numpy arrays and not Pandas data structures.
   * Use of lists is not currently supported. If you need to plot multiple arrays
     use a tuple or a 2D Numpy array.
 
-**Warning**: These APIs gather the entire data onto a single process. If you have a large dataset that does not fit into a single machine's memory,
-consider sampling your data before plotting.
+These functions work by automatically gathering all of the
+data onto one machine and then plotting the data. If there is not enough
+memory on your machine, a sample of the data can be selected. The
+example code below demonstrates calling plot with a sample of the data:
+
+.. code:: ipython3
+
+    import matplotlib.pyplot as plt
+
+    %matplotlib inline
+
+    @bodo.jit
+    def dist_plot(n):
+        X = np.arange(n)
+        Y = np.exp(-X/3.0)
+        plt.plot(X[::10], Y[::10]) # gather every 10th element
+        plt.show()
+
+    dist_plot(100)
+
+
+
+.. parsed-literal::
+
+    [output:0]
+
+
+.. image:: ../bodo_tutorial_files/bodo_tutorial_83_1.png
+   :align: center
 
 Formatting APIs
 ~~~~~~~~~~~~~~~
