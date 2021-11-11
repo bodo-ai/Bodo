@@ -1,0 +1,1 @@
+sphinx_rtd_dark_mode
