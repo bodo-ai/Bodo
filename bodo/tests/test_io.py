@@ -7,7 +7,6 @@ import shutil
 import subprocess
 import unittest
 from decimal import Decimal
-import datetime
 
 import h5py
 import numba
@@ -168,8 +167,7 @@ def test_read_parquet_from_deltalake(memory_leak_check):
     ],
 )
 @pytest.mark.parametrize("index_name", [None, "HELLO"])
-# TODO: Add memory_leak_check when bugs are resolved.
-def test_pq_write_metadata(df, index_name):
+def test_pq_write_metadata(df, index_name, memory_leak_check):
     import pyarrow.parquet as pq
 
     def impl_index_false(df, path):
@@ -331,8 +329,7 @@ def test_pq_schema(datapath):
     pd.testing.assert_frame_equal(bodo_func(fname), impl(fname), check_dtype=False)
 
 
-# TODO: Add memory_leak_check when bugs are resolved.
-def test_pq_list_str(datapath):
+def test_pq_list_str(datapath, memory_leak_check):
     def test_impl(fname):
         return pd.read_parquet(fname)
 
@@ -863,8 +860,7 @@ def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
         shutil.rmtree(bodo_pq_path, ignore_errors=True)
 
 
-# TODO: Add memory_leak_check when bugs are resolved.
-def test_read_write_parquet():
+def test_read_write_parquet(memory_leak_check):
     def write(df, filename):
         df.to_parquet(filename)
 
@@ -1097,7 +1093,7 @@ def test_read_write_parquet():
         bodo.jit(error_check3)(df)
 
 
-def test_partition_cols():
+def test_partition_cols(memory_leak_check):
 
     TEST_DIR = "test_part_tmp"
 
@@ -1600,12 +1596,10 @@ def test_read_partitions_to_datetime_format():
 
 def test_read_predicates_pushdown_pandas_metadata():
     """test that predicate pushdown executes when there is Pandas range metadata."""
-    import pyarrow as pa
-    import pyarrow.parquet as pq
 
     try:
         if bodo.get_rank() == 0:
-            df = pd.DataFrame({"A": [0,1,2] * 10})
+            df = pd.DataFrame({"A": [0, 1, 2] * 10})
             df.to_parquet("pq_data")
         bodo.barrier()
 
@@ -1621,11 +1615,13 @@ def test_read_predicates_pushdown_pandas_metadata():
             return df
 
         # TODO: Fix index
-        check_func(impl, ("pq_data", ), reset_index=True)
-        check_func(impl2, ("pq_data", ), reset_index=True)
+        check_func(impl, ("pq_data",), reset_index=True)
+        check_func(impl2, ("pq_data",), reset_index=True)
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-        bodo_func("pq_data",)
+        bodo_func(
+            "pq_data",
+        )
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
@@ -1635,14 +1631,12 @@ def test_read_predicates_pushdown_pandas_metadata():
 
 def test_read_predicates_isnull():
     """test that predicate pushdown with isnull in the binops."""
-    import pyarrow as pa
-    import pyarrow.parquet as pq
 
     try:
         if bodo.get_rank() == 0:
             df = pd.DataFrame(
                 {
-                    "A": pd.Series([0,1,2, None] * 10, dtype="Int64"),
+                    "A": pd.Series([0, 1, 2, None] * 10, dtype="Int64"),
                     "B": [1, 2] * 20,
                 }
             )
@@ -1655,10 +1649,12 @@ def test_read_predicates_isnull():
             return df
 
         # TODO: Fix index
-        check_func(impl, ("pq_data", ), reset_index=True)
+        check_func(impl, ("pq_data",), reset_index=True)
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-        bodo_func("pq_data",)
+        bodo_func(
+            "pq_data",
+        )
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
@@ -1668,14 +1664,12 @@ def test_read_predicates_isnull():
 
 def test_read_predicates_and_or():
     """test that predicate pushdown with and/or in the expression."""
-    import pyarrow as pa
-    import pyarrow.parquet as pq
 
     try:
         if bodo.get_rank() == 0:
             df = pd.DataFrame(
                 {
-                    "A": [0,1,2,3] * 10,
+                    "A": [0, 1, 2, 3] * 10,
                     "B": [1, 2, 3, 4, 5] * 8,
                 }
             )
@@ -1684,20 +1678,24 @@ def test_read_predicates_and_or():
 
         def impl(path):
             df = pd.read_parquet("pq_data")
-            df = df[(((df["A"] == 2) | (df["B"] == 1)) & (df["B"] != 4)) & (((df["A"] == 3) | (df["B"] == 5)) & (df["B"] != 2))]
+            df = df[
+                (((df["A"] == 2) | (df["B"] == 1)) & (df["B"] != 4))
+                & (((df["A"] == 3) | (df["B"] == 5)) & (df["B"] != 2))
+            ]
             return df
 
         # TODO: Fix index
-        check_func(impl, ("pq_data", ), reset_index=True)
+        check_func(impl, ("pq_data",), reset_index=True)
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-        bodo_func("pq_data",)
+        bodo_func(
+            "pq_data",
+        )
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
         bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
             os.remove("pq_data")
-
 
 
 def test_read_partitions_large():
@@ -1797,8 +1795,7 @@ def _check_for_pq_read_head_only(bodo_func, has_read=True):
     assert not has_read or fir.meta_head_only_info[0] is not None
 
 
-# TODO: Add memory_leak_check when bugs are resolved.
-def test_write_parquet_empty_chunks():
+def test_write_parquet_empty_chunks(memory_leak_check):
     """Here we check that our to_parquet output in distributed mode
     (directory of parquet files) can be read by pandas even when some
     processes have empty chunks"""
@@ -1819,8 +1816,7 @@ def test_write_parquet_empty_chunks():
             shutil.rmtree(write_filename)
 
 
-# TODO: Add memory_leak_check when bugs are resolved.
-def test_write_parquet_decimal(datapath):
+def test_write_parquet_decimal(datapath, memory_leak_check):
     """Here we check that we can write the data read from decimal1.pq directory
     (has columns that use a precision and scale different from our default).
     See test_write_parquet above for main parquet write decimal test"""
@@ -1842,8 +1838,7 @@ def test_write_parquet_decimal(datapath):
             shutil.rmtree(write_filename)
 
 
-# TODO: Add memory_leak_check when bugs are resolved.
-def test_write_parquet_params():
+def test_write_parquet_params(memory_leak_check):
     def write1(df, filename):
         df.to_parquet(compression="snappy", fname=filename)
 
