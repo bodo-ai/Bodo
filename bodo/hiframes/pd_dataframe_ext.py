@@ -46,7 +46,12 @@ from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
 from bodo.io import json_cpp
-from bodo.libs.array import arr_info_list_to_table, array_to_info
+from bodo.libs.array import (
+    arr_info_list_to_table,
+    array_to_info,
+    delete_info_decref_array,
+    delete_table_decref_arrays,
+)
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array
@@ -2203,6 +2208,12 @@ def to_parquet_overload(
         func_text += "                            unicode_to_utf8(compression),\n"
         func_text += "                            _is_parallel,\n"
         func_text += "                            unicode_to_utf8(bucket_region))\n"
+        func_text += "    delete_table_decref_arrays(table)\n"
+        func_text += "    delete_info_decref_array(index_col)\n"
+        func_text += "    delete_info_decref_array(col_names_no_partitions)\n"
+        func_text += "    delete_info_decref_array(col_names)\n"
+        if categories_args:
+            func_text += "    delete_table_decref_arrays(cat_table)\n"
     elif write_rangeindex_to_metadata:
         func_text += "    parquet_write_table_cpp(unicode_to_utf8(fname),\n"
         func_text += "                            table, col_names, index_col,\n"
@@ -2213,6 +2224,9 @@ def to_parquet_overload(
         func_text += "                            df.index.stop, df.index.step,\n"
         func_text += "                            unicode_to_utf8(name_ptr),\n"
         func_text += "                            unicode_to_utf8(bucket_region))\n"
+        func_text += "    delete_table_decref_arrays(table)\n"
+        func_text += "    delete_info_decref_array(index_col)\n"
+        func_text += "    delete_info_decref_array(col_names)\n"
     else:
         func_text += "    parquet_write_table_cpp(unicode_to_utf8(fname),\n"
         func_text += "                            table, col_names, index_col,\n"
@@ -2222,6 +2236,9 @@ def to_parquet_overload(
         func_text += "                            _is_parallel, 0, 0, 0, 0,\n"
         func_text += "                            unicode_to_utf8(name_ptr),\n"
         func_text += "                            unicode_to_utf8(bucket_region))\n"
+        func_text += "    delete_table_decref_arrays(table)\n"
+        func_text += "    delete_info_decref_array(index_col)\n"
+        func_text += "    delete_info_decref_array(col_names)\n"
 
     loc_vars = {}
     exec(
@@ -2236,6 +2253,8 @@ def to_parquet_overload(
             "parquet_write_table_cpp": parquet_write_table_cpp,
             "parquet_write_table_partitioned_cpp": parquet_write_table_partitioned_cpp,
             "index_to_array": index_to_array,
+            "delete_info_decref_array": delete_info_decref_array,
+            "delete_table_decref_arrays": delete_table_decref_arrays,
         },
         loc_vars,
     )
