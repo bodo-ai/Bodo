@@ -787,6 +787,7 @@ def get_parquet_dataset(
 
     import pyarrow as pa
     import pyarrow.parquet as pq
+    import time
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
@@ -866,6 +867,10 @@ def get_parquet_dataset(
         try:
             if get_row_counts:
                 ev_pq_ds = tracing.Event("pq.ParquetDataset", is_parallel=False)
+                if tracing.is_tracing():
+                    # only do the work of converting dnf_filters to string
+                    # if tracing is enabled
+                    ev_pq_ds.add_attribute("dnf_filter", str(dnf_filters))
             pa_default_io_thread_count = pa.io_thread_count()
             pa.set_io_thread_count(nthreads)
             dataset = pq.ParquetDataset(
@@ -878,15 +883,26 @@ def get_parquet_dataset(
             )
             # restore pyarrow default IO thread count
             pa.set_io_thread_count(pa_default_io_thread_count)
-            if get_row_counts:
-                ev_pq_ds.finalize()
             dataset_schema = bodo.io.pa_parquet.get_dataset_schema(dataset)
             if dnf_filters:
                 # Apply filters after getting the schema, because they might
                 # remove all the pieces from the dataset which would make
                 # get_dataset_schema() fail.
                 # Use DNF, ParquetDataset does not support Expression filters
+                if get_row_counts:
+                    ev_pq_ds.add_attribute(
+                        "num_pieces_before_filter", len(dataset.pieces)
+                    )
+                t0 = time.time()
                 dataset._filter(dnf_filters)
+                if get_row_counts:
+                    ev_pq_ds.add_attribute("dnf_filter_time", time.time() - t0)
+                    ev_pq_ds.add_attribute(
+                        "num_pieces_after_filter", len(dataset.pieces)
+                    )
+            if get_row_counts:
+                ev_pq_ds.finalize()
+
             # We don't want to send the filesystem because of the issues
             # mentioned above, so we set it to None. Note that this doesn't
             # seem to be enough to prevent sending it
@@ -922,17 +938,27 @@ def get_parquet_dataset(
         # getting row counts and validating schema requires reading
         # the file metadata from the parquet files and is very expensive
         # for datasets consisting of many files, so we do this in parallel
-        if get_row_counts:
+        if get_row_counts and tracing.is_tracing():
             ev_row_counts = tracing.Event("get_row_counts")
+            ev_row_counts.add_attribute("g_num_pieces", len(dataset.pieces))
+            ev_row_counts.add_attribute("g_expr_filters", str(expr_filters))
+        ds_scan_time = 0.0
         num_pieces = len(dataset.pieces)
         start = get_start(num_pieces, bodo.get_size(), bodo.get_rank())
         end = get_end(num_pieces, bodo.get_size(), bodo.get_rank())
         total_rows_chunk = 0
         total_row_groups_chunk = 0
-        piece_nrows_chunk = []
         valid = True  # True if schema of all parquet files match
         dataset._metadata.fs = getfs()
-        for p in dataset.pieces[start:end]:
+        if expr_filters is not None:
+            import random
+            random.seed(37)
+            pieces = random.sample(dataset.pieces, k=len(dataset.pieces))
+        else:
+            pieces = dataset.pieces
+        for p in pieces:
+            p._bodo_num_rows = 0
+        for p in pieces[start:end]:
             file_metadata = p.get_metadata()
             if get_row_counts:
                 if expr_filters is not None:
@@ -943,14 +969,16 @@ def get_parquet_dataset(
                     # required columns and only subset of row groups if possible)
                     # use_threads=False because this step is already parallelized
                     # across ranks
+                    t0 = time.time()
                     row_count = (
                         ds.dataset(p.path, partitioning=ds.partitioning(flavor="hive"))
                         .scanner(filter=expr_filters, use_threads=False)
                         .count_rows()
                     )
+                    ds_scan_time += time.time() - t0
                 else:
                     row_count = file_metadata.num_rows
-                piece_nrows_chunk.append(row_count)
+                p._bodo_num_rows = row_count
                 total_rows_chunk += row_count
                 total_row_groups_chunk += file_metadata.num_row_groups
             if validate_schema:
@@ -973,6 +1001,11 @@ def get_parquet_dataset(
         if get_row_counts:
             dataset._bodo_total_rows = comm.allreduce(total_rows_chunk, op=MPI.SUM)
             total_num_row_groups = comm.allreduce(total_row_groups_chunk, op=MPI.SUM)
+            pieces_rows = np.array([p._bodo_num_rows for p in dataset.pieces])
+            # communicate row counts to everyone
+            pieces_rows = comm.allreduce(pieces_rows, op=MPI.SUM)
+            for p, nrows in zip(dataset.pieces, pieces_rows):
+                p._bodo_num_rows = nrows
             if (
                 is_parallel
                 and bodo.get_rank() == 0
@@ -985,13 +1018,25 @@ For best performance the number of row groups should be greater than the number 
 """
                     )
                 )
-            rows_by_ranks = comm.allgather(piece_nrows_chunk)
-            for i, num_rows in enumerate(
-                [n for sublist in rows_by_ranks for n in sublist]
-            ):
-                dataset.pieces[i]._bodo_num_rows = num_rows
-            ev_row_counts.add_attribute("total_num_row_groups", total_num_row_groups)
-            ev_row_counts.finalize()
+            if tracing.is_tracing():
+                ev_row_counts.add_attribute(
+                    "g_total_num_row_groups", total_num_row_groups
+                )
+                if expr_filters is not None:
+                    ev_row_counts.add_attribute("total_scan_time", ds_scan_time)
+                # get 5-number summary for rowcounts:
+                # (min, max, 25, 50 -median-, 75 percentiles)
+                data = np.array([p._bodo_num_rows for p in dataset.pieces])
+                quartiles = np.percentile(data, [25, 50, 75])
+                ev_row_counts.add_attribute("g_row_counts_min", data.min())
+                ev_row_counts.add_attribute("g_row_counts_Q1", quartiles[0])
+                ev_row_counts.add_attribute("g_row_counts_median", quartiles[1])
+                ev_row_counts.add_attribute("g_row_counts_Q3", quartiles[2])
+                ev_row_counts.add_attribute("g_row_counts_max", data.max())
+                ev_row_counts.add_attribute("g_row_counts_mean", data.mean())
+                ev_row_counts.add_attribute("g_row_counts_std", data.std())
+                ev_row_counts.add_attribute("g_row_counts_sum", data.sum())
+                ev_row_counts.finalize()
 
     # When we pass in a path instead of a filename or list of files to
     # pq.ParquetDataset, the path of the pieces of the resulting dataset
