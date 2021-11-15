@@ -594,7 +594,7 @@ Indexing, iteration:
   or a list or a set)
 * :meth:`pandas.DataFrame.itertuples`
   Read support for all indexers except reading a single row using an
-  interger, slicing across columns, or using a `callable` object.
+  integer, slicing across columns, or using a `callable` object.
   Label-based indexing is not supported yet.
 * :meth:`pandas.DataFrame.query` (`expr` can be a constant string or an argument
   to the jit function)
