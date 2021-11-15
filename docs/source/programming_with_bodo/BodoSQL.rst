@@ -83,7 +83,7 @@ outputs::
 Using Python/Pandas code instead of SQL can simplify existing data science applications
 and improve code maintenance.
 
-**Note**: ``convert_to_pandas`` can only be executed outside Bodo JIT functions.
+.. note:: ``convert_to_pandas`` can only be executed outside Bodo JIT functions.
 
 
 Aliasing
@@ -188,7 +188,7 @@ the final output columns (``a`` vs ``A``).
 * [NOT] `IN`
 
     The ``IN`` determines if a value can be chosen a list of options.
-    Currently we support lists of literals or columns with matching types.
+    Currently we support lists of literals or columns with matching types::
 
         SELECT <COLUMN_NAMES>
         FROM <TABLE_NAME>
@@ -224,7 +224,7 @@ the final output columns (``a`` vs ``A``).
 
         - VARCHAR → VARCHAR
 
-        - VARCHAR → TINYINT/SMALLINT/INTERGER/BIGINT
+        - VARCHAR → TINYINT/SMALLINT/INTEGER/BIGINT
 
         - VARCHAR → FLOAT/DOUBLE
 
@@ -238,21 +238,21 @@ the final output columns (``a`` vs ``A``).
 
             - Truncates to date but is still Timestamp type. This may change in the future.
 
-        - TINYINT/SMALLINT/INTERGER/BIGINT → VARCHAR
+        - TINYINT/SMALLINT/INTEGER/BIGINT → VARCHAR
 
-        - TINYINT/SMALLINT/INTERGER/BIGINT → TINYINT/SMALLINT/INTERGER/BIGINT
+        - TINYINT/SMALLINT/INTEGER/BIGINT → TINYINT/SMALLINT/INTEGER/BIGINT
 
-        - TINYINT/SMALLINT/INTERGER/BIGINT → FLOAT/DOUBLE
+        - TINYINT/SMALLINT/INTEGER/BIGINT → FLOAT/DOUBLE
 
-        - TINYINT/SMALLINT/INTERGER/BIGINT → DECIMAL
+        - TINYINT/SMALLINT/INTEGER/BIGINT → DECIMAL
 
             - Equivalent to DOUBLE. This may change in the future
 
-        - TINYINT/SMALLINT/INTERGER/BIGINT → TIMESTAMP
+        - TINYINT/SMALLINT/INTEGER/BIGINT → TIMESTAMP
 
         - FLOAT/DOUBLE → VARCHAR
 
-        - FLOAT/DOUBLE → TINYINT/SMALLINT/INTERGER/BIGINT
+        - FLOAT/DOUBLE → TINYINT/SMALLINT/INTEGER/BIGINT
 
         - FLOAT/DOUBLE → FLOAT/DOUBLE
 
@@ -262,7 +262,7 @@ the final output columns (``a`` vs ``A``).
 
         - TIMESTAMP → VARCHAR
 
-        - TIMESTAMP → TINYINT/SMALLINT/INTERGER/BIGINT
+        - TIMESTAMP → TINYINT/SMALLINT/INTEGER/BIGINT
 
         - TIMESTAMP → TIMESTAMP
 
@@ -270,7 +270,7 @@ the final output columns (``a`` vs ``A``).
 
             - Truncates to date but is still Timestamp type. This may change in the future.
 
-    *Note*: CAST correctness can often not be determined at compile time. Users are responsible
+    .. note:: CAST correctness can often not be determined at compile time. Users are responsible
         for ensuring that conversion is possible (e.g. ``CAST(str_col as INTEGER)``).
 
 
@@ -741,7 +741,7 @@ the final output columns (``a`` vs ``A``).
             Converts a timestamp value to a String value given a scalar
             format string.
 
-.. _date_formating_charecters:
+.. _date_formating_characters:
 
             Recognized formatting character:
                 - ``%i`` Minutes, zero padded (00 to 59)
@@ -1013,13 +1013,13 @@ the final output columns (``a`` vs ``A``).
 
         - ORD(str)
 
-            Returns the integer value of the unicode representation of the first charecter of the input string.
+            Returns the integer value of the unicode representation of the first character of the input string.
             returns 0 when passed the empty string
 
         - CHAR(int)
 
-            Returns the charecter of the corresponding unicode value.
-            Currently only supported for ASCII charecters (0 to 127, inclusive)
+            Returns the character of the corresponding unicode value.
+            Currently only supported for ASCII characters (0 to 127, inclusive)
 
         - SPACE(int)
 
@@ -1376,7 +1376,7 @@ String Literal
 
 Where char is a character literal in a Python string.
 
-NULL SEMANTICS
+NULL Semantics
 --------------
 
 Bodo SQL converts SQL queries to Pandas code that executes inside Bodo.
