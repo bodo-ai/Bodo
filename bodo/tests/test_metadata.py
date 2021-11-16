@@ -1,5 +1,6 @@
 import datetime
 
+import numba
 import numpy as np
 import pandas as pd
 import pytest
@@ -13,6 +14,26 @@ from bodo.hiframes.boxing import (
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.series_common import series_val  # noqa
 from bodo.tests.utils import reduce_sum
+
+
+@pytest.fixture(
+    params=[
+        pd.Int64Index([10, 12]),
+        pd.Float64Index([10.1, 12.1]),
+        pd.UInt64Index([10, 12]),
+        pd.Index(["A", "B"] * 4),
+        pd.RangeIndex(10),
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+        pd.timedelta_range(start="1D", end="3D", name="A"),
+        pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
+        pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
+        pytest.param(pd.Index([b"hkjl", bytes(2), b""] * 3), id="binary_case"),
+        pd.Index([True, False, True, False]),
+    ]
+)
+def metadata_supported_index_types(request):
+    """fixture of the index types supported by the metadata"""
+    return request.param
 
 
 @pytest.mark.slow
@@ -52,25 +73,18 @@ def test_metadata_typemaps():
         np.array(
             [b"32234", b"342432", b"g43b2", b"4t242t", b" weew"] * 2, dtype=object
         ),
+        # index types
         pd.Int64Index([10, 12]),
         pd.Float64Index([10.1, 12.1]),
         pd.UInt64Index([10, 12]),
         pd.Index(["A", "B"] * 4),
-        pytest.param(
-            pd.RangeIndex(10),
-            marks=pytest.mark.skip("Works, but the output is slightly different"),
-        ),
-        pytest.param(
-            pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
-            marks=pytest.mark.skip("Works, but the output is slightly different"),
-        ),
-        pytest.param(
-            pd.timedelta_range(start="1D", end="3D", name="A"),
-            marks=pytest.mark.skip("Works, but the output is slightly different"),
-        ),
+        pd.RangeIndex(10),
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+        pd.timedelta_range(start="1D", end="3D", name="A"),
         pd.CategoricalIndex(["A", "B", "A", "C", "B"]),
         pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
         pytest.param(pd.Index([b"hkjl", bytes(2), b""] * 3), id="binary_case"),
+        pd.Index([True, False, True, False]),
         np.array(
             [
                 [datetime.date(2018, 1, 24), datetime.date(1983, 1, 3)],
@@ -96,7 +110,7 @@ def test_dtype_converter_non_literal_values(typ_val):
     those index types here.
 
     The handled non-series types are as follows:
-        All the index types (as of November 2021)
+        All the index types excluding IntervalIndex (needs additional support, see BE-711) (as of November 2021)
         All the array types (as of November 2021)
         Scalar integers, strings, and bytes (needed for some named index conversions)
         Scalar None (needed for some types can be initialized with none values)
@@ -136,6 +150,8 @@ def test_dtype_converter_non_literal_values(typ_val):
         [1, 2, 3, 4, 5],
         ("A", "B", 1, 2),
         ("hi", 1, 12, "hello"),
+        True,
+        False,
         None,
     ],
 )
@@ -147,11 +163,15 @@ def test_dtype_converter_literal_values(typ_val):
         Fully serializing it. As of Nov 2021, we do this for the following constants:
             - dict
             - int
-            - float
             - str
             - bytes
             - list
             - tuples
+            - None
+        We also support returing the numba literal types for the folowing types:
+            - int
+            - str
+            - bool
             - None
 
         These are tested seperatley, as we've previously had some segfaulting errors when handling boxing
@@ -164,8 +184,8 @@ def test_dtype_converter_literal_values(typ_val):
         _dtype_to_type_enum_list,
     )
 
+    # test python value
     converted_enum_list = _dtype_to_type_enum_list(typ_val)
-
     assert (
         not (converted_enum_list is None)
         and converted_enum_list[0] == SeriesDtypeEnum.Literal.value
@@ -173,6 +193,18 @@ def test_dtype_converter_literal_values(typ_val):
     )
     typ_from_converter = _dtype_from_type_enum_list(converted_enum_list)
     assert typ_from_converter == typ_val
+
+    # Test literal type's for the types which numba supports
+    if not (typ_val is None or isinstance(typ_val, (float, bytes, dict, tuple, list))):
+        literal_typ = numba.types.literal(typ_val)
+        converted_enum_list = _dtype_to_type_enum_list(literal_typ)
+        assert (
+            not (converted_enum_list is None)
+            and converted_enum_list[0] == SeriesDtypeEnum.LiteralType.value
+            and converted_enum_list[1] == typ_val
+        )
+        typ_from_converter = _dtype_from_type_enum_list(converted_enum_list)
+        assert typ_from_converter == literal_typ
 
 
 def check_series_typing_metadata(orig_series, output_series):
@@ -184,8 +216,10 @@ def check_series_typing_metadata(orig_series, output_series):
     return (
         hasattr(output_series, "_bodo_meta")
         and "type_metadata" in output_series._bodo_meta
-        and _dtype_from_type_enum_list(output_series._bodo_meta["type_metadata"])
+        and _dtype_from_type_enum_list(output_series._bodo_meta["type_metadata"][1])
         == _infer_series_dtype(orig_series)
+        and _dtype_from_type_enum_list(output_series._bodo_meta["type_metadata"][0])
+        == bodo.typeof(orig_series).index
     )
 
 
@@ -197,12 +231,22 @@ def check_dataframe_typing_metadata(orig_df, output_df):
     if not (
         hasattr(output_df, "_bodo_meta")
         and "type_metadata" in output_df._bodo_meta
-        and len(output_df._bodo_meta["type_metadata"]) == len(orig_df.columns)
+        and len(output_df._bodo_meta["type_metadata"][1]) == len(orig_df.columns)
     ):
         return False
 
+    # check IDX type is the same
+    orig_idx_typ = bodo.typeof(orig_df).index
+    metadata_idx_typ = _dtype_from_type_enum_list(
+        output_df._bodo_meta["type_metadata"][0]
+    )
+
+    if metadata_idx_typ != orig_idx_typ:
+        return False
+
+    # check columns are the same
     for i in range(len(orig_df.columns)):
-        cur_type_enum_list = output_df._bodo_meta["type_metadata"][i]
+        cur_type_enum_list = output_df._bodo_meta["type_metadata"][1][i]
         cur_series = orig_df.iloc[:, i]
         if not (
             _dtype_from_type_enum_list(cur_type_enum_list)
@@ -224,12 +268,54 @@ def test_series_typing_metadata(series_val, memory_leak_check):
     assert check_series_typing_metadata(series_val, retval)
 
 
+def test_series_index_metadata(metadata_supported_index_types, memory_leak_check):
+    """tests that the typing metadata for the series index is properly set when returning a Series from Bodo"""
+    df_value = pd.Series(1, index=metadata_supported_index_types)
+    if isinstance(
+        metadata_supported_index_types, (pd.CategoricalIndex, pd.PeriodIndex)
+    ):
+        # We don't support the Iloc code for Categorical/PeriodIndex
+        @bodo.jit
+        def impl(S):
+            return S
+
+    else:
+
+        @bodo.jit
+        def impl(S):
+            return S.iloc[:0]
+
+    retval = impl(df_value)
+    assert check_series_typing_metadata(df_value, retval)
+
+
 def test_dataframe_typing_metadata(df_value, memory_leak_check):
     """tests that the typing metadata is properly set when returning a DataFrame from Bodo"""
 
     @bodo.jit
     def impl(df):
         return df.iloc[:0, :]
+
+    retval = impl(df_value)
+    assert check_dataframe_typing_metadata(df_value, retval)
+
+
+def test_dataframe_index_metadata(metadata_supported_index_types, memory_leak_check):
+    """tests that the typing metadata for the dataframe index is properly set when returning a DataFrame from Bodo"""
+    df_value = pd.DataFrame({"A": 1}, index=metadata_supported_index_types)
+    if isinstance(
+        metadata_supported_index_types, (pd.CategoricalIndex, pd.PeriodIndex)
+    ):
+        # We don't support the Iloc code for Categorical/PeriodIndex
+        @bodo.jit
+        def impl(df):
+            return df
+
+    else:
+
+        @bodo.jit
+        def impl(df):
+            return df.iloc[:0, :]
 
     retval = impl(df_value)
     assert check_dataframe_typing_metadata(df_value, retval)
@@ -376,7 +462,7 @@ def test_df_return_metadata(gen_func, use_func):
     # sanity check that the supplied use_func would throw an error, if the input was stripped of typing information && the dtype was object:
     if out["A"].dtype == object:
         is_str = (
-            _dtype_from_type_enum_list(out._bodo_meta["type_metadata"][0])
+            _dtype_from_type_enum_list(out._bodo_meta["type_metadata"][1][0])
             == bodo.string_array_type
         )
 
@@ -489,7 +575,7 @@ def test_series_return_metadata(gen_func, use_func):
     # sanity check that the supplied use_func would throw an error, if the input was stripped of typing information && the dtype was object:
     if out.dtype == object:
         is_str = (
-            _dtype_from_type_enum_list(out._bodo_meta["type_metadata"])
+            _dtype_from_type_enum_list(out._bodo_meta["type_metadata"][1])
             == bodo.string_type
         )
 
@@ -511,3 +597,88 @@ def test_series_return_metadata(gen_func, use_func):
             )
             n_passed = reduce_sum(passed)
             assert n_passed == bodo.get_size(), fail_msg
+
+
+def test_index_type_return(metadata_supported_index_types):
+    """
+    Tests that the index typing information is properly preserved when returning a dataframe
+    to pandas.
+    """
+    idx = metadata_supported_index_types[:1]
+    is_obj_index = pd.api.types.is_object_dtype(idx)
+    is_str_idx = isinstance(idx[0], str)
+    is_binary_idx = isinstance(idx[0], bytes)
+    is_bool_idx = isinstance(idx[0], bool)
+
+    if isinstance(metadata_supported_index_types, pd.CategoricalIndex):
+        pytest.skip("scatterv seems to be unsupported with CategoricalIndex")
+
+    @bodo.jit(distributed=["out"])
+    def gen_func_df(idx):
+        scattered_idx = bodo.scatterv(idx)
+        out = pd.DataFrame(data={"A": 1}, index=scattered_idx)
+        return out
+
+    @bodo.jit(distributed=["out"])
+    def gen_func_series(idx):
+        scattered_idx = bodo.scatterv(idx)
+        out = pd.Series(data=1, index=scattered_idx)
+        return out
+
+    df_out = gen_func_df(idx)
+    series_out = gen_func_series(idx)
+
+    # sanity check to insure that the generator functions actually produce a distributed output,
+    # with only data on rank0
+
+    passed = 1
+    if bodo.get_rank() != 0 and (len(df_out) != 0 or len(series_out) != 0):
+        passed = 0
+    if bodo.get_rank() == 0 and (len(df_out) != 1 or len(series_out) != 1):
+        passed = 0
+
+    n_passed = reduce_sum(passed)
+    fail_msg = f"gen_func failed to return a series/dataframe with only data on rank0\nSeries on rank {bodo.get_rank()}:\n{str(series_out)}\nDatframe on rank {bodo.get_rank()}:\n{str(df_out)}"
+    assert n_passed == bodo.get_size(), fail_msg
+
+    @bodo.jit(distributed=["val"])
+    def reset_idx(val):
+        out = bodo.allgatherv(val.reset_index())
+        return out
+
+    reset_idx(df_out)
+    reset_idx(series_out)
+
+    # Sanity check that we would have thrown an error without the typing metadata
+    # in the cases that we couldn't infer the dtype
+    # Currently, bodo.allgatherv seems to unify string and binary types
+    # Also, it seems to hang instead of throwning an error for bool idx without metadata, so I'm skipping for right now
+    if (
+        is_obj_index
+        and not (is_str_idx or is_binary_idx or is_bool_idx)
+        and bodo.get_size() > 1
+    ):
+        passed = 1
+        df_out._bodo_meta = None
+        series_out._bodo_meta = None
+        ret_df = "NONE"
+        try:
+            ret_df = reset_idx(df_out)
+            passed = 0
+        except:
+            pass
+
+        n_passed = reduce_sum(passed)
+        fail_msg = f"reseting the index failed to throw an error for dataframe output without typing metadata. Returned df:\n{ret_df}"
+        assert n_passed == bodo.get_size(), fail_msg
+
+        ret_series = "NONE"
+        try:
+            ret_series = reset_idx(series_out)
+            passed = 0
+        except:
+            pass
+
+        n_passed = reduce_sum(passed)
+        fail_msg = f"reseting the index failed to throw an error for Series output without typing metadata.  Returned series:\n{ret_series}"
+        assert n_passed == bodo.get_size(), fail_msg
