@@ -49,6 +49,18 @@ def uncompress_dir(dir_name):
     bodo.barrier()
 
 
+def test_read_json_list(datapath, memory_leak_check):
+    """
+    test read_json reads a dataframe containing columns with list of strings
+    """
+    fname_file = datapath("json_list_str.json")
+
+    def test_impl(fname):
+        return pd.read_json(fname, orient="records", lines=True)
+
+    check_func(test_impl, (fname_file,))
+
+
 def test_json_read_df(datapath, memory_leak_check):
     """
     test read_json reads a dataframe containing multiple columns

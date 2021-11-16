@@ -15,9 +15,10 @@ from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     PDCategoricalDtype,
 )
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.str_arr_ext import StringArrayType, string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.utils.typing import BodoError
@@ -360,6 +361,7 @@ distributed_pass.distributed_run_extensions[CsvReader] = csv_distributed_run
 
 def _get_dtype_str(t):
     dtype = t.dtype
+
     if isinstance(dtype, PDCategoricalDtype):
         cat_arr = CategoricalArrayType(dtype)
         # HACK: add cat type to numba.core.types
@@ -393,6 +395,14 @@ def _get_dtype_str(t):
     if dtype == datetime_date_type:
         return "datetime_date_array_type"
 
+    if isinstance(t, ArrayItemArrayType) and isinstance(
+        dtype, (StringArrayType, ArrayItemArrayType)
+    ):
+        # HACK add list of string and nested list type to numba.core.types for objmode
+        typ_name = f"ArrayItemArrayType{str(ir_utils.next_label())}"
+        setattr(types, typ_name, t)
+        return typ_name
+
     return "{}[::1]".format(dtype)
 
 
@@ -414,6 +424,11 @@ def _get_pd_dtype_str(t):
 
     if t == boolean_array:
         return "np.bool_"
+
+    if isinstance(t, ArrayItemArrayType) and isinstance(
+        dtype, (StringArrayType, ArrayItemArrayType)
+    ):
+        return "object"
 
     return "np.{}".format(dtype)
 
