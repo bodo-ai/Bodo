@@ -1,0 +1,4 @@
+{"one":2.5,"two":["baz", "baz"],"three":true,"four":[["abc", "cde"]]}
+{"one":3.0,"two":["foo"],"three":true,"four":[["abc", "cde"], ["efg", "mn", "qwe"]]}
+{"one":4.0,"two":["bar", "foo", "bar"],"three":true,"four":[["abc", "c"], ["123", "456"]]}
+{"one":6.0,"two":[],"three":false,"four":[["abc", "cde"], [], ["foo", "asd"]]}
