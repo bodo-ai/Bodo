@@ -981,3 +981,21 @@ def test_to_parquet_engine(datapath):
     df = pd.DataFrame({"A": np.arange(10)})
     with pytest.raises(BodoError, match=msg):
         bodo.jit(lambda f: impl(df))(df)
+
+
+@pytest.mark.slow
+def test_to_pq_multiIdx_errcheck(memory_leak_check):
+    """ Test unsupported to_parquet with MultiIndexType"""
+    arrays = [
+        ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
+        ["one", "two", "one", "two", "one", "two", "one", "two"],
+    ]
+    tuples = list(zip(*arrays))
+    idx = pd.MultiIndex.from_tuples(tuples, names=["first", "second"])
+    df = pd.DataFrame(np.random.randn(8, 2), index=idx, columns=["A", "B"])
+
+    def impl(df):
+        df.to_parquet("multi_idx_parquet.pq")
+
+    with pytest.raises(BodoError, match="to_parquet: MultiIndex not supported yet"):
+        bodo.jit(impl)(df)
