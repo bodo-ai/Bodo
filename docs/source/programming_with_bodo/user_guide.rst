@@ -1,8 +1,7 @@
 User Guide
 ======================
 
-In this section, we will explain core Bodo concepts in detail, introduce
-useful Bodo features and discuss advanced parallelism topics.
+In this section, we will introduce useful Bodo features and discuss advanced parallelism topics.
 
 
 Data Distribution
@@ -154,7 +153,7 @@ a function parameter but don’t mark it as distributed:
 .. parsed-literal::
 
     [stderr:0] 
-    /Users/ehsan/dev/bodo/bodo/transforms/distributed_analysis.py:229: BodoWarning: No parallelism found for function 'mean_power_speed'. This could be due to unsupported usage. See distributed diagnostics for more information.
+    /Users/user/dev/bodo/bodo/transforms/distributed_analysis.py:229: BodoWarning: No parallelism found for function 'mean_power_speed'. This could be due to unsupported usage. See distributed diagnostics for more information.
       warnings.warn(
 
 
@@ -255,7 +254,7 @@ passed to regular Python:
 .. parsed-literal::
 
     [stderr:0] 
-    /Users/ehsan/dev/bodo/bodo/transforms/distributed_analysis.py:229: BodoWarning: No parallelism found for function 'mean_power_speed'. This could be due to unsupported usage. See distributed diagnostics for more information.
+    /Users/user/dev/bodo/bodo/transforms/distributed_analysis.py:229: BodoWarning: No parallelism found for function 'mean_power_speed'. This could be due to unsupported usage. See distributed diagnostics for more information.
       warnings.warn(
 
 
@@ -1314,7 +1313,7 @@ Python and pass as argument to Bodo:
 
 .. parsed-literal::
 
-    /Users/ehsan/dev/bodo/bodo/transforms/distributed_analysis.py:229: BodoWarning: No parallelism found for function 'f'. This could be due to unsupported usage. See distributed diagnostics for more information.
+    /Users/user/dev/bodo/bodo/transforms/distributed_analysis.py:229: BodoWarning: No parallelism found for function 'f'. This could be due to unsupported usage. See distributed diagnostics for more information.
       warnings.warn(
 
 
@@ -1663,7 +1662,7 @@ applications. For example:
 
 .. parsed-literal::
 
-    /Users/ehsan/dev/bodo/bodo/transforms/distributed_analysis.py:229: BodoWarning: No parallelism found for function 'f'. This could be due to unsupported usage. See distributed diagnostics for more information.
+    /Users/user/dev/bodo/bodo/transforms/distributed_analysis.py:229: BodoWarning: No parallelism found for function 'f'. This could be due to unsupported usage. See distributed diagnostics for more information.
       warnings.warn(
 
 
@@ -1675,7 +1674,6 @@ applications. For example:
     1    3
     2    5
     dtype: int64
-
 
 
 Class Support using ``@jitclass``
@@ -1743,7 +1741,6 @@ JIT code.
     # From regular Python
     myInstance = BodoClass(32, "my_name_python")
     myInstance.sum(), myInstance.sum_vals, myInstance.get_name()
-
 
 
 
