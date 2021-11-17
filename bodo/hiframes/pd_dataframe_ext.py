@@ -2025,6 +2025,8 @@ def gen_pandas_parquet_metadata(
 
     if write_non_range_index_to_metadata:
         # TODO multi-level
+        if isinstance(df.index, MultiIndexType):
+            raise BodoError("to_parquet: MultiIndex not supported yet")
         if "none" in df.index.name:
             _idxname = "__index_level_0__"
             _colidxname = None
