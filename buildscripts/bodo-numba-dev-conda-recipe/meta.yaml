@@ -52,6 +52,13 @@ requirements:
     - vs2015_runtime # [win]
     - vs2015_win-64 # [win]
 
+  # run constrained will not install these packages when building,
+  # but will restrict them if they are present in the conda env.
+  # currently matplotlib is an optional dependency, and we only
+  # support up to 3.4.3
+  run_constrained:
+    - matplotlib <= 3.4.3
+
 
 test:
   imports:
