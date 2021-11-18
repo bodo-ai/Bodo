@@ -43,6 +43,12 @@ stages:
       name: Windows
       vmImage: vs2017-win2016
       useNumbaDev: false
+  - template: buildscripts/azure/azure-build-binary-macos-m1.yml
+    parameters:
+      name: macOS_ARM
+      vmImage: macOS-latest
+      useNumbaDev: false
+      platformBuild: false
 
 - stage: Test_Bodo_Binary
   displayName: Test Bodo Binary

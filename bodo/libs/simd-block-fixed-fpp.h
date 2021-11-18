@@ -39,16 +39,11 @@
 using uint32_t = ::std::uint32_t;
 using uint64_t = ::std::uint64_t;
 
-#define BLOOM_SIZEOF_BUCKET 32 // in bytes
-
-static inline size_t bloom_size_bytes(size_t n_bits) {
-    size_t bucketCount = ::std::max(size_t(1), n_bits / 24);
-    return (bucketCount * BLOOM_SIZEOF_BUCKET);
-}
-
 inline bool bloom_filter_supported() {
 // TODO [BE-1372]: https://bodo.atlassian.net/browse/BE-1372
-#if defined (_MSC_VER) || defined (__APPLE__)
+#if defined(__aarch64__)
+  return true;
+#elif defined (_MSC_VER) || defined (__APPLE__)
   return false;
 #else
   return __builtin_cpu_supports("avx2");
@@ -73,6 +68,13 @@ static inline uint64_t rotl64(uint64_t n, unsigned int c) {
 
 #ifdef __AVX2__
 #include <x86intrin.h>
+
+#define BLOOM_SIZEOF_BUCKET 32 // in bytes
+
+static inline size_t bloom_size_bytes(size_t n_bits) {
+    size_t bucketCount = ::std::max(size_t(1), n_bits / 24);
+    return (bucketCount * BLOOM_SIZEOF_BUCKET);
+}
 
 template<typename HashFamily = ::hashing::SimpleMixSplit>
 class SimdBlockFilterFixed {
@@ -368,6 +370,13 @@ SimdBlockFilterFixed64<HashFamily>::Find(const uint64_t key) const noexcept {
 #elif defined(__aarch64__)
 #include <arm_neon.h>
 
+#define BLOOM_SIZEOF_BUCKET sizeof(uint16x8_t)
+
+static inline size_t bloom_size_bytes(size_t n_bits) {
+    size_t bucketCount = ::std::max(size_t(1), n_bits / 10);
+    return (bucketCount * BLOOM_SIZEOF_BUCKET);
+}
+
 template<typename HashFamily = ::hashing::SimpleMixSplit>
 class SimdBlockFilterFixed {
  private:
@@ -387,14 +396,20 @@ class SimdBlockFilterFixed {
   void Add(const uint64_t key) noexcept;
 
   // Add multiple items to the filter.
-  void AddAll(const std::vector<uint64_t>& data, const size_t start, const size_t end) {
-      return AddAll(data.data(),start,end);
-  }
+  //void AddAll(const std::vector<uint64_t>& data, const size_t start, const size_t end) {
+  //    return AddAll(data.data(),start,end);
+  //}
 
-  void AddAll(const uint64_t* data, const size_t start, const size_t end);
+  void AddAll(const uint32_t* data, const size_t start, const size_t end);
 
   bool Find(const uint64_t key) const noexcept;
   uint64_t SizeInBytes() const { return sizeof(Bucket) * bucketCount; }
+
+  void union_reduction() {
+      tracing::Event ev("bloom_union_reduction");
+      MPI_Allreduce(MPI_IN_PLACE, directory_, static_cast<int>(SizeInBytes() / sizeof(uint64_t)),
+                    MPI_UINT64_T, MPI_BOR, MPI_COMM_WORLD);
+  }
 
  private:
   // A helper function for Insert()/Find(). Turns a 32-bit hash into a 256-bit Bucket
@@ -443,6 +458,15 @@ SimdBlockFilterFixed<HashFamily>::Add(const uint64_t key) noexcept {
   const uint16x8_t mask = MakeMask(hash);
   uint16x8_t bucket = directory_[bucket_idx];
   directory_[bucket_idx] = vorrq_u16(mask, bucket);
+}
+
+template<typename HashFamily>
+void SimdBlockFilterFixed<HashFamily>::AddAll(
+    const uint32_t* keys, const size_t start, const size_t end) {
+    for(size_t i = start; i < end; i++) {
+        // TODO: more efficient implementation like the AVX version does?
+        Add(static_cast<uint64_t>(keys[i]));
+    }
 }
 
 template <typename HashFamily>
@@ -557,6 +581,10 @@ SimdBlockFilterFixed16<HashFamily>::Find(const uint64_t key) const noexcept {
 
 //#endif // #ifdef __SSE41__
 #else
+
+static inline size_t bloom_size_bytes(size_t n_bits) {
+    return 0;
+}
 
 template<typename HashFamily = ::hashing::SimpleMixSplit>
 class SimdBlockFilterFixed {
