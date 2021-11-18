@@ -20,7 +20,7 @@ Getting started on your machine
 
 Install IPyParallel, JupyterLab and Bodo in your conda environment::
 
-    conda install bodo ipyparallel=7 jupyterlab=3 -c bodo.ai -c conda-forge
+    conda install bodo ipyparallel=8 jupyterlab=3 -c bodo.ai -c conda-forge
 
 Start a JupyterLab server::
 
@@ -30,11 +30,11 @@ Start a new notebook and run the following code in a cell to start an IPyParalle
 
     import ipyparallel as ipp
     import psutil
-    c = ipp.Cluster(profile="mpi", engine_launcher_class='MPI', n=min(psutil.cpu_count(logical=False), 8))
+    c = ipp.Cluster(engines='mpi', n=min(psutil.cpu_count(logical=False), 8))
     c.start_cluster_sync()
     rc = c.connect_client_sync()
     rc.wait_for_engines(n=c.n)
-    view = rc[:]
+    view = rc.broadcast_view()
     view.activate()
     view.block = True
 
@@ -74,7 +74,7 @@ To start an IPyParallel cluster across multiple hosts, you need to do the follow
 
 - Install IPyParallel and Bodo on all hosts::
 
-    conda install bodo ipyparallel=7 -c bodo.ai -c conda-forge
+    conda install bodo ipyparallel=8 -c bodo.ai -c conda-forge
 
 - Install JupyterLab on one of the hosts. Let's call it the controller node::
 
@@ -100,73 +100,28 @@ To start an IPyParallel cluster across multiple hosts, you need to do the follow
   It is important to note that other MPI systems and launchers (such as QSUB/PBS)
   may use a different user interface for the allocation of computational nodes.
 
+- Create the default IPython profile on all nodes by executing::
+  
+    mpiexec -ppn 1 -machinefile <PATH_TO_MACHINEFILE> ipython profile create
+
+  from the controller node.
+
 Start a JupyterLab server on the controller node::
 
     jupyter lab
 
-Starting an IPyParallel cluster across multiple hosts requires a couple of additional steps. Start a new notebook and run the following code in a cell::
+Starting an IPyParallel cluster across multiple hosts requires setting a couple of additional configuration options. Start a new notebook and run the following code in a cell::
 
     import ipyparallel as ipp
-    c = ipp.Cluster(profile="mpi",
-                    engine_launcher_class='MPI',
-                    n=min(psutil.cpu_count(logical=False), 8),  # Number of engines, you can change this
+    c = ipp.Cluster(engines='mpi',
+                    n=8,  # Number of engines, you can change this
                     controller_ip='*',
                     controller_args=["--nodb"])
     c.engine_launcher_class.mpi_args = ["-machinefile", <PATH_TO_MACHINEFILE>]
-    c.start_controller_sync()
-
-This will start the IPyParallel controller on the controller node.
-Next, the connection info for this cluster needs to be copied to all the hosts. You can
-run the following code to do this::
-
-    # Get connection info
-    connection_info = await c.controller.get_connection_info()
-    engine_info = connection_info['engine']
-
-    import os
-    import sys
-    import json
-    from subprocess import run, STDOUT
-
-    def send_connection_info(connection_info, connection_file):
-        env = os.environ.copy()
-        env["CONNECTION_INFO"] = json.dumps(connection_info)
-        cmd =     [
-            'mpiexec',
-            '-ppn',
-            '1',
-            '-machinefile',
-            <PATH_TO_MACHINEFILE>,
-            'sh',
-            '-c',
-            f'echo $CONNECTION_INFO > "{connection_file}"'
-
-        ]
-        p = run(cmd, capture_output=True, text=True, input=None, env=env)
-        if p.returncode:
-            print(p.stderr, file=sys.stderr)
-            p.check_returncode()
-        return p
-
-    send_connection_info(
-        engine_info,
-        os.path.join(
-            c.profile_dir,
-            'security',
-            f'ipcontroller-{c.cluster_id}-engine.json',
-        ),
-    )
-
-.. note::
-
-    You can skip the step above if your IPython profile directory is on a shared file-system.
-
-You can now start your engines by running the following code::
-
-    c.start_engines_sync()
+    c.start_cluster_sync()
     rc = c.connect_client_sync()
     rc.wait_for_engines(n=c.n)
-    view = rc[:]
+    view = rc.broadcast_view()
     view.activate()
     view.block = True
 
