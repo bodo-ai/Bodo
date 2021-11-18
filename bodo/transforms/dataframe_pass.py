@@ -1896,10 +1896,10 @@ class DataFramePass:
         index_arr = self._get_dataframe_data(df_var, index, nodes)
         agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
         gb_info_in = {}
-        for in_col in values:
-            # TODO: multiple functions
-            assert not isinstance(agg_func, list)
-            gb_info_in[in_col] = [(agg_func, list(pivot_values))]
+        # TODO: multiple functions
+        assert not isinstance(agg_func, list)
+        # values is a string (single column name)
+        gb_info_in[values] = [(agg_func, list(pivot_values))]
         gb_info_out = {col: (values, agg_func) for col in pivot_values}
 
         out_key_vars = []
