@@ -1,0 +1,5 @@
+# This file is needed for cross compiling ARM M1.
+# specifically the line: setup_conda_rc ./ ./buildscripts/....
+# the behavior of setup_conda_rc is not well understood at this time, see BE-1568
+build_platform: {osx_arm64: osx_64}
+test_on_native_only: true

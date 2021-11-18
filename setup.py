@@ -6,12 +6,11 @@ import platform
 from setuptools import Extension, find_packages, setup
 from Cython.Build import cythonize
 
-# Note we don't import Numpy at the toplevel, since setup.py
-# should be able to run without Numpy for pip to discover the
-# build dependencies
+
 import numpy.distutils.misc_util as np_misc
 
 import versioneer
+
 
 # Inject required options for extensions compiled against the Numpy
 # C API (include dirs, library dirs etc.)
@@ -19,6 +18,8 @@ np_compile_args = np_misc.get_info("npymath")
 
 is_win = platform.system() == "Windows"
 is_mac = platform.system() == "Darwin"
+is_m1_mac = is_mac and platform.machine() == "arm64"
+
 development_mode = "develop" in sys.argv
 if development_mode:
     if "--no-ccache" not in sys.argv:
@@ -67,11 +68,13 @@ else:
     if is_win:
         PREFIX_DIR += "\Library"
 
-
 try:
     import pyarrow  # noqa
 except ImportError:
-    _has_pyarrow = False
+    # currently, due to cross compilation, the import fails.
+    # building the extension modules still works though.
+    # TODO: resolve issue with pyarrow import
+    _has_pyarrow = False or is_m1_mac
 else:
     _has_pyarrow = True
 
@@ -79,12 +82,14 @@ else:
 try:
     import h5py  # noqa
 except ImportError:
-    _has_h5py = False
+    # currently, due to cross compilation, the import fails.
+    # building the extension modules still works though.
+    # TODO: resolve issue with h5py import
+    _has_h5py = False or is_m1_mac
 else:
     # NOTE: conda-forge does not have MPI-enabled hdf5 for Windows yet
     # TODO: make sure the available hdf5 library is MPI-enabled automatically
     _has_h5py = not is_win
-
 
 ind = [PREFIX_DIR + "/include"]
 extra_hash_ind1 = ["bodo/libs/HashLibs/TSL/hopscotch-map"]
