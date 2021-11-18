@@ -3230,7 +3230,9 @@ a .wy-menu-vertical li button.toctree-expand {
 .rst-content .wy-alert-danger.tip,
 .rst-content .wy-alert-danger.warning,
 .wy-alert.wy-alert-danger {
-  background: #fdf3f2;
+  background: #fe3d3d;
+  border-radius: 12px;
+  border: 1px solid #fe3d3d;
 }
 .rst-content .danger .admonition-title,
 .rst-content .danger .wy-alert-title,
@@ -3259,7 +3261,7 @@ a .wy-menu-vertical li button.toctree-expand {
 .rst-content .wy-alert.wy-alert-danger .admonition-title,
 .wy-alert.wy-alert-danger .rst-content .admonition-title,
 .wy-alert.wy-alert-danger .wy-alert-title {
-  background: #fe3d3d;
+  /* background: #f29f97; */
 }
 .rst-content .admonition-todo,
 .rst-content .attention,
@@ -3277,6 +3279,21 @@ a .wy-menu-vertical li button.toctree-expand {
   background: #ffa630;
   border-radius: 12px;
   border: 1px solid #ffa630;
+}
+.rst-content .admonition-todo,
+.rst-content .attention,
+.rst-content .caution,
+.rst-content .warning,
+.rst-content .wy-alert-warning.admonition,
+.rst-content .wy-alert-warning.danger,
+.rst-content .wy-alert-warning.error,
+.rst-content .wy-alert-warning.hint,
+.rst-content .wy-alert-warning.important,
+.rst-content .wy-alert-warning.note,
+.rst-content .wy-alert-warning.seealso,
+.rst-content .wy-alert-warning.tip,
+.wy-alert.wy-alert-warning article ul li ul {
+  color: white;
 }
 .rst-content .admonition-todo .admonition-title,
 .rst-content .admonition-todo .wy-alert-title,
@@ -3457,6 +3474,21 @@ a .wy-menu-vertical li button.toctree-expand {
 .rst-content .wy-alert-neutral.warning a,
 .wy-alert.wy-alert-neutral a {
   color: #2980b9;
+}
+.rst-content .admonition-todo article ul li:before,
+.rst-content .admonition article ul li:before,
+.rst-content .attention article ul li:before,
+.rst-content .caution article ul li:before,
+.rst-content .danger article ul li:before,
+.rst-content .error article ul li:before,
+.rst-content .hint article ul li:before,
+.rst-content .important article ul li:before,
+.rst-content .note article ul li:before,
+.rst-content .seealso article ul li:before,
+.rst-content .tip article ul li:before,
+.rst-content .warning article ul li:before,
+.wy-alert article ul li:before {
+  color: #fff;
 }
 .rst-content .admonition-todo p:last-child,
 .rst-content .admonition p:last-child,
@@ -4687,6 +4719,12 @@ article ul {
 article ul li {
   list-style: disc;
   margin-left: 24px;
+}
+.rst-content .section ul li,
+.rst-content .toctree-wrapper ul li,
+.rst-content section ul li,
+.wy-plain-list-disc li,
+article ul li:before {
 }
 .rst-content .section ul li p:last-child,
 .rst-content .section ul li ul,
