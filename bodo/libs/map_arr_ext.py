@@ -600,13 +600,13 @@ def map_arr_setitem(arr, ind, val):
     if isinstance(ind, types.Integer):
 
         def map_arr_setitem_impl(arr, ind, val):  # pragma: no cover
-            keys = sorted(list(val.keys()))
+            keys = val.keys()
 
             # Setitem requires resizing the underlying arrays which has a lot of complexity.
             # To simplify this limited use case, we copy the data twice.
             # TODO: Replace the struct array allocation with modifying the underlying array_item_array directly
             struct_arr = bodo.libs.struct_arr_ext.pre_alloc_struct_array(
-                len(keys), (-1,), typ_tuple, ("key", "value")
+                len(val), (-1,), typ_tuple, ("key", "value")
             )
             for i, key in enumerate(keys):
                 # Struct arrays are organized as a tuple of arrays, 1 per field.
