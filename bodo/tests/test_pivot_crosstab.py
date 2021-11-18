@@ -186,15 +186,15 @@ def test_pivot_random_float_sum_max(memory_leak_check):
 
 def test_pivot_random_int_mean_var_std(memory_leak_check):
     def f1(df):
-        pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="mean")
+        pt = df.pivot_table(index="id", columns="foo", values="value", aggfunc="mean")
         return pt
 
     def f2(df):
-        pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="var")
+        pt = df.pivot_table(index="id", columns="foo", values="value", aggfunc="var")
         return pt
 
     def f3(df):
-        pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="std")
+        pt = df.pivot_table(index="id", columns="foo", values="value", aggfunc="std")
         return pt
 
     random.seed(5)
@@ -203,7 +203,7 @@ def test_pivot_random_int_mean_var_std(memory_leak_check):
     list_A = [str(random.randint(10, 10 + n_keyA)) for _ in range(n)]
     list_C = [random.choice(["small", "large"]) for _ in range(n)]
     list_D = [random.randint(1, 1000) for _ in range(n)]
-    df = pd.DataFrame({"A": list_A, "C": list_C, "D": list_D})
+    df = pd.DataFrame({"id": list_A, "foo": list_C, "value": list_D})
     pivot_values = {"pt": ["small", "large"]}
     add_args = {"pivots": pivot_values}
     check_func(
