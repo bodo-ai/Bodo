@@ -15,8 +15,10 @@ such as Numba on Ubuntu Linux::
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
-    conda create -n DEV python numpy scipy pandas='1.3.*' boost-cpp cmake h5py mpich mpi -c conda-forge
+    conda create -n DEV 'python<=3.9' 'numpy=1.20' scipy pandas='1.3.*' boost-cpp cmake h5py mpich mpi -c conda-forge
     source activate DEV
+    conda install setuptools -c conda-forge
+    conda install mpi4py pytest cython -c conda-forge
     # Linux: conda install 'gcc_linux-64>=9' 'gxx_linux-64>=9' -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 -c conda-forge
     # If you don't want to install Numba from source: conda install numba=0.54.1 -c conda-forge
@@ -31,8 +33,11 @@ such as Numba on Ubuntu Linux::
     python setup.py develop
     cd ..
     # END OF BUILD NUMBA FROM SOURCE
-    conda install mpi4py pytest cython -c conda-forge
     conda install -c conda-forge hdf5==1.10.6='*mpich*' pyarrow=5.0.0 pymysql sqlalchemy
+    # Highly recommended to speed up compilation times
+    conda install ccache -c conda-forge
+    # Highly recommended for enforcing style requirements (see dev_process.rst)
+    conda install pre-commit
     # Required for IO with S3
     conda install -c conda-forge fsspec
     # The following is required for s3 related development and tests
@@ -40,7 +45,7 @@ such as Numba on Ubuntu Linux::
     # The following is required for IO with gcs
     # conda install -c conda-forge gcsfs
     # The following is required for matplotlib Testing
-    # conda install -c conda-forge matplotlib
+    # conda install -c conda-forge 'matplotlib<=3.4.3'
     # for PySpark testing:
     # conda install -c conda-forge pyspark openjdk
     # Required for ML tests
@@ -102,7 +107,7 @@ On Windows
     # The following is required for IO with gcs
     # conda install -c conda-forge gcsfs
     # The following is required for matplotlib Testing
-    # conda install -c conda-forge matplotlib
+    # conda install -c conda-forge 'matplotlib<=3.4.3'
     # Required for ML tests
     # conda install -c conda-forge scikit-learn=0.24.2
     git clone https://github.com/Bodo-inc/Bodo.git
@@ -147,7 +152,7 @@ To run HDFS related unit tests, use the :ref:`docker image <docker-images>`.
 
 Other useful packages for development::
 
-    conda install pytest sphinx pylint jupyter xlrd xlsxwriter openpyxl mpi4py ipyparallel matplotlib pyspark jupyterlab aws-sdk-cpp
+    conda install pytest sphinx pylint jupyter xlrd xlsxwriter openpyxl ipyparallel pyspark jupyterlab aws-sdk-cpp
 
 
 Cleaning Bodo
