@@ -404,7 +404,7 @@ html[data-theme="dark"] .rst-content .wy-alert-danger.seealso,
 html[data-theme="dark"] .rst-content .wy-alert-danger.tip,
 html[data-theme="dark"] .rst-content .wy-alert-danger.warning,
 html[data-theme="dark"] .wy-alert.wy-alert-danger {
-  background-color: #82231a;
+  background-color: rgba(254, 62, 62, 0.2);
 }
 
 html[data-theme="dark"] .rst-content .danger .admonition-title,
@@ -458,7 +458,7 @@ html[data-theme="dark"]
   .rst-content
   .admonition-title,
 html[data-theme="dark"] .wy-alert.wy-alert-danger .wy-alert-title {
-  background-color: #b9372b;
+  /* background-color: #b9372b; */
 }
 
 html[data-theme="dark"] .wy-nav-top {
