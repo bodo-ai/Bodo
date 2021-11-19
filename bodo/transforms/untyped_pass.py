@@ -51,7 +51,6 @@ from bodo.io.parquet_pio import ParquetHandler
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArrayType
 import bodo.hiframes.pd_dataframe_ext
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.transforms.typing_pass import _create_const_var
 from bodo.utils.transform import (
     get_const_value,
     get_const_value_inner,
@@ -582,9 +581,16 @@ class UntypedPass:
 
         if isinstance(arg_def, ir.Expr) and arg_def.op == "build_map":
             msg = "DataFrame column names should be constant strings or ints"
-            tup_var, new_nodes = self._convert_const_key_dict(
-                arg_def, msg, lhs.scope, lhs.loc
+            (tup_vars, new_nodes,) = bodo.utils.transform._convert_const_key_dict(
+                self.args,
+                self.func_ir,
+                arg_def,
+                msg,
+                lhs.scope,
+                lhs.loc,
+                output_sentinel_tuple=True,
             )
+            tup_var = tup_vars[0]
             # replace data arg with dict tuple
             if "data" in kws:
                 kws["data"] = tup_var
@@ -625,38 +631,6 @@ class UntypedPass:
 
         return nodes
 
-    def _convert_const_key_dict(self, build_map, err_msg, scope, loc):
-        """converts a constant key dictionary build_map to a tuple with sentinel as a
-        workaround to extract key/values in overloads
-        """
-        # check keys to be string/int
-        try:
-            keys = tuple(
-                get_const_value_inner(
-                    self.func_ir,
-                    t[0],
-                    self.args,
-                )
-                for t in build_map.items
-            )
-        except GuardException:
-            raise BodoError(err_msg, loc)
-
-        if not all(isinstance(c, (str, int)) for c in keys):
-            raise BodoError(err_msg, loc)
-
-        # create tuple with sentinel
-        sentinel_var = ir.Var(scope, mk_unique_var("sentinel"), loc)
-        tup_var = ir.Var(scope, mk_unique_var("dict_tup"), loc)
-        new_nodes = [ir.Assign(ir.Const("__bodo_tup", loc), sentinel_var, loc)]
-        tup_items = (
-            [sentinel_var]
-            + [_create_const_var(k, "dict_key", scope, loc, new_nodes) for k in keys]
-            + [t[1] for t in build_map.items]
-        )
-        new_nodes.append(ir.Assign(ir.Expr.build_tuple(tup_items, loc), tup_var, loc))
-        return tup_var, new_nodes
-
     def _handle_bodosql_BodoSQLContext(
         self, assign, lhs, rhs, label
     ):  # pragma: no cover
@@ -673,9 +647,16 @@ class UntypedPass:
         if not is_expr(arg_def, "build_map"):
             raise BodoError(msg)
 
-        tup_var, new_nodes = self._convert_const_key_dict(
-            arg_def, msg, lhs.scope, lhs.loc
+        (tup_vars, new_nodes,) = bodo.utils.transform._convert_const_key_dict(
+            self.args,
+            self.func_ir,
+            arg_def,
+            msg,
+            lhs.scope,
+            lhs.loc,
+            output_sentinel_tuple=True,
         )
+        tup_var = tup_vars[0]
         set_call_expr_arg(tup_var, rhs.args, kws, 0, "tables")
         new_nodes.append(assign)
         return new_nodes
@@ -1750,9 +1731,7 @@ class UntypedPass:
             # This won't match Pandas, which instead should have a Numeric Index if there is any filtering.
             # TODO: Match Pandas
             min_str = f"min({index_col['stop']}, (len(data0) * {index_col['step']}) + {index_col['start']})"
-            index_arg = (
-                f"bodo.hiframes.pd_index_ext.init_range_index({index_col['start']}, {min_str}, {index_col['step']}, {index_col_name})"
-            )
+            index_arg = f"bodo.hiframes.pd_index_ext.init_range_index({index_col['start']}, {min_str}, {index_col['step']}, {index_col_name})"
         else:
             # if the index_col is __index_level_0_, it means it has no name.
             # Thus we do not write the name instead of writing '__index_level_0_' as the name

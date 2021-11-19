@@ -4,8 +4,8 @@ Helper functions for transformations.
 """
 import itertools
 import math
-from collections import namedtuple
 import types as pytypes
+from collections import namedtuple
 
 import numba
 import numpy as np
@@ -242,7 +242,10 @@ def remove_hiframes(rhs, lives, call_list):
         return True
 
     # Check the name of the BodoSQL module to avoid importing bodosql.
-    if isinstance(call_list[-1], pytypes.ModuleType) and call_list[-1].__name__ == "bodosql":  # pragma: no cover
+    if (
+        isinstance(call_list[-1], pytypes.ModuleType)
+        and call_list[-1].__name__ == "bodosql"
+    ):  # pragma: no cover
         # all bodosql functions are side effect-free
         return True
 
@@ -561,7 +564,6 @@ def get_const_value_inner(
                     dict_varname, updated_containers[dict_varname]
                 )
             )
-
         require(is_expr(var_def, "build_map"))
         vals = [v[0] for v in var_def.items]
         # HACK replace dict.keys getattr to avoid typing errors
@@ -970,9 +972,8 @@ def _get_const_series_info(block, f_ir, typemap):
     data_var = ret_def.args[0]
     data_def = get_definition(f_ir, data_var)
 
-    if is_call(data_def) and bodo.utils.utils.is_alloc_callname(
-        *find_callname(f_ir, data_def)
-    ):
+    func_name, mod_name = find_callname(f_ir, data_def)
+    if is_call(data_def) and bodo.utils.utils.is_alloc_callname(func_name, mod_name):
         # If we have an allocation, we want to find the source of n if possible.
         alloc_len = data_def.args[0]
         total_len = get_const_value_inner(f_ir, alloc_len, typemap=typemap)
@@ -1537,3 +1538,63 @@ def dict_to_const_keys_var_values_lists(
     if needs_transform:
         raise GuardException
     return keys, values
+
+
+def _get_const_keys_from_dict(args, func_ir, build_map, err_msg, loc):
+    # check keys to be string/int
+    try:
+        keys = tuple(
+            get_const_value_inner(
+                func_ir,
+                t[0],
+                args,
+            )
+            for t in build_map.items
+        )
+    except GuardException:
+        raise BodoError(err_msg, loc)
+
+    if not all(isinstance(c, (str, int)) for c in keys):
+        raise BodoError(err_msg, loc)
+
+    return keys
+
+
+def _convert_const_key_dict(
+    args, func_ir, build_map, err_msg, scope, loc, output_sentinel_tuple=False
+):
+    """converts a constant key dictionary build_map into either a tuple with sentinel, or two tuples
+    of keys/values as a workaround to extract key/values in overloads
+    """
+
+    keys = _get_const_keys_from_dict(args, func_ir, build_map, err_msg, loc)
+
+    new_nodes = []
+    key_const_variables = [
+        bodo.transforms.typing_pass._create_const_var(
+            k, "dict_key", scope, loc, new_nodes
+        )
+        for k in keys
+    ]
+    value_variables = [t[1] for t in build_map.items]
+
+    # create tuple with sentinel
+    if output_sentinel_tuple:
+        sentinel_var = ir.Var(scope, mk_unique_var("sentinel"), loc)
+        tup_var = ir.Var(scope, mk_unique_var("dict_tup"), loc)
+        new_nodes.append(ir.Assign(ir.Const("__bodo_tup", loc), sentinel_var, loc))
+        tup_items = [sentinel_var] + key_const_variables + value_variables
+        new_nodes.append(ir.Assign(ir.Expr.build_tuple(tup_items, loc), tup_var, loc))
+        return (tup_var,), new_nodes
+    else:
+        val_tup_var = ir.Var(scope, mk_unique_var("values_tup"), loc)
+        idx_tup_var = ir.Var(scope, mk_unique_var("idx_tup"), loc)
+
+        new_nodes.append(
+            ir.Assign(ir.Expr.build_tuple(value_variables, loc), val_tup_var, loc)
+        )
+        new_nodes.append(
+            ir.Assign(ir.Expr.build_tuple(key_const_variables, loc), idx_tup_var, loc)
+        )
+
+        return (val_tup_var, idx_tup_var), new_nodes

@@ -57,6 +57,7 @@ from bodo.utils.typing import (
     is_overload_constant_bool,
     is_overload_constant_int,
     is_overload_none,
+    raise_bodo_error,
 )
 from bodo.utils.utils import (
     find_build_tuple,
@@ -2001,6 +2002,8 @@ class TypingTransforms:
 
     def _run_call_pd_top_level(self, assign, rhs, func_name, label):
         """transform top-level pandas functions"""
+        if func_name == "Series":
+            return self._run_call_pd_series(assign, rhs, func_name, label)
         nodes = []
 
         # mapping of pandas functions to their arguments that require constant values
@@ -2040,6 +2043,45 @@ class TypingTransforms:
             self._call_arg_list_to_tuple(rhs, "concat", 0, "objs", nodes)
 
         return nodes + [assign]
+
+    def _run_call_pd_series(self, assign, rhs, func_name, label):
+        nodes = [assign]
+        kws = dict(rhs.kws)
+        lhs = assign.target
+        data_arg = get_call_expr_arg("pd.Series", rhs.args, kws, 0, "data", "")
+        idx_arg = get_call_expr_arg("pd.Series", rhs.args, kws, 1, "index", "")
+
+        data_arg_def = guard(get_definition, self.func_ir, data_arg)
+
+        if isinstance(data_arg_def, ir.Expr) and data_arg_def.op == "build_map":
+            if idx_arg != "" and self.typemap[idx_arg.name] != types.none:
+                raise_bodo_error(
+                    "pd.Series(): Cannot specify index argument when initializing with a dictionary"
+                )
+
+            msg = "When initializng a series with a dictionary, the keys should be constant strings or constant ints"
+
+            (tuples, new_nodes,) = bodo.utils.transform._convert_const_key_dict(
+                rhs.args, self.func_ir, data_arg_def, msg, lhs.scope, lhs.loc
+            )
+            val_tup_var = tuples[0]
+            idx_tup_var = tuples[1]
+            # replace data/idx arg with value.idx tuple
+            kws["data"] = val_tup_var
+            kws["index"] = idx_tup_var
+
+            # Move the rest of the args to kws
+            kws_argnames = ["dtype", "name", "copy", "fastpath"]
+            for i in range(2, len(rhs.args)):
+                kws[kws_argnames[i - 2]] = rhs.args[i]
+
+            rhs.kws = list(kws.items())
+            rhs.args = []
+
+            nodes = new_nodes + nodes
+            self.changed = True
+
+        return nodes
 
     def _run_make_function(self, assign, rhs):
         """convert ir.Expr.make_function into a JIT function if possible.
