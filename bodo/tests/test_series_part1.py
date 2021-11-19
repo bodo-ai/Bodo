@@ -2850,6 +2850,75 @@ def test_series_and_or_int(arg1, arg2, memory_leak_check):
     check_func(impl_or, (arg2, arg1), py_output=pyOutputOr)
 
 
+def test_series_init_dict_int():
+    """tests initializing a series with a constant str->int dict"""
+
+    def impl():
+        S = pd.Series({"r1": 1})
+        return S
+
+    def impl2():
+        S = pd.Series({"r1": 1, "r2": 2, "r3": 3})
+        return S
+
+    # output should not be distributed, if initialized with a constant dict
+    check_func(impl, (), is_out_distributed=False)
+    check_func(impl2, (), is_out_distributed=False)
+
+
+def test_series_init_dict_kwd():
+    """tests that we handle kwd argument correctly in the typing pass transform"""
+
+    def impl1():
+        S = pd.Series(
+            {"r1": 1, "r2": 2, "r3": 3}, None, np.int32, "my_series", False, False
+        )
+        return S
+
+    def impl2():
+        S = pd.Series({"r1": 1, "r2": 2, "r3": 3}, None, "Int32", name="my_series")
+        return S
+
+    def impl3():
+        S = pd.Series({"r1": 1, "r2": 2, "r3": 3}, None, name="my_series")
+        return S
+
+    check_func(impl1, (), is_out_distributed=False)
+    check_func(impl2, (), is_out_distributed=False)
+    check_func(impl3, (), is_out_distributed=False)
+
+
+def test_series_init_dict_grpby_lambda():
+    """
+    Tests intializing a series with a dict containing constant keys and values inside of
+    a groupby apply
+    """
+
+    df1 = pd.DataFrame({"A": [1, 2, 3] * 5, "B": [1, 2, 3, 4, 5] * 3})
+
+    def impl1(df):
+        return df.groupby(
+            "A", as_index=False, sort=False, observed=True, dropna=False
+        ).apply(lambda x: pd.Series({"r2": 10}))
+
+    df2 = pd.DataFrame(
+        {
+            "id2": ["id016", "id045", "id023", "id057", "id040"],
+            "id4": [15, 40, 68, 32, 9],
+            "v1": [5, 5, 2, 1, 2],
+            "v2": [11, 4, 14, 15, 9],
+        }
+    )
+
+    def impl2(df):
+        return df.groupby(
+            ["id2", "id4"], as_index=False, sort=False, observed=True, dropna=False
+        ).apply(lambda x: pd.Series({"r2": 10}))
+
+    check_func(impl1, (df1,), sort_output=True, reset_index=True)
+    check_func(impl2, (df2,), sort_output=True, reset_index=True)
+
+
 def test_series_getitem_string_index(memory_leak_check):
     """Tests that we can do a getitem on a Series with a string index"""
     S = pd.Series([1, 2, 3, 4, 5, 6], index=["A", "B", "C", "D", "E", "F"])
@@ -2895,26 +2964,58 @@ def test_series_getitem_str_grpby_apply():
     check_func(test_impl, (df,), py_output=py_out, sort_output=True, reset_index=True)
 
 
-def test_series_getitem_str_grpby_apply():
-    """Tests that getitem works inside of groupby apply"""
-
-    # example taken from H20 benchmark Q09
-    data = {
+def test_series_getitem_str_and_series_init_dict_grpby_apply():
+    """
+    Tests both str getitem on series, and intializing series with constant key and non constant value dicts
+    work within a groupby apply.
+    This example is taken from h20 benchmark Q7
+    """
+    d = {
         "id1": ["id016", "id039", "id047", "id043", "id054"],
         "id2": ["id016", "id045", "id023", "id057", "id040"],
+        "id3": [
+            "id0000042202",
+            "id0000029558",
+            "id0000071286",
+            "id0000015141",
+            "id0000011083",
+        ],
+        "id4": [15, 40, 68, 32, 9],
+        "id5": [24, 49, 20, 43, 25],
+        "id6": [5971, 39457, 74463, 63743, 16920],
         "v1": [5, 5, 2, 1, 2],
         "v2": [11, 4, 14, 15, 9],
+        "v3": [37.211254, 48.951141, 60.469241, 7.692145, 22.863525],
     }
-    df = pd.DataFrame(data)
+    df = pd.DataFrame(data=d)
 
     def test_impl(df):
-        return df.groupby(
-            ["id1", "id2"], as_index=False, sort=False, observed=True, dropna=False
-        ).apply(lambda x: x.corr()["v1"]["v2"] ** 2)
+        ans = (
+            df[["id2", "id4", "v1", "v2"]]
+            .groupby(
+                ["id2", "id4"], as_index=False, sort=False, observed=True, dropna=False
+            )
+            .apply(
+                lambda x: pd.Series(
+                    {"r2": x.corr()["v1"]["v2"] ** 2, "r2_2": x.corr()["v1"]["v2"]}
+                )
+            )
+        )
+        return ans
 
-    # in Bodo, when doing groupby apply, we set the output column to empty string
-    # if we have a string index. In Pandas, it's normally None
-    py_out = test_impl(df)
-    py_out.columns = ["id1", "id2", ""]
+    check_func(test_impl, (df,), sort_output=True, reset_index=True)
 
-    check_func(test_impl, (df,), py_output=py_out, sort_output=True, reset_index=True)
+
+def test_series_init_empty_dict():
+    """tests intialzing series with an empty dict works"""
+
+    def test_impl():
+        # this is needed so the dict has a type
+        d = {"a": 1}
+        d.pop("a")
+        pd.Series(d)
+
+    check_func(
+        test_impl,
+        (),
+    )

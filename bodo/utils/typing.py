@@ -1014,6 +1014,7 @@ def is_literal_type(t):
         or is_overload_constant_index(t)
         # Series with known values
         or is_overload_constant_series(t)
+        or is_overload_constant_dict(t)
     )
 
 
@@ -1095,6 +1096,8 @@ def get_literal_value(t):
         return get_overload_constant_index(t)
     if is_overload_constant_series(t):
         return get_overload_constant_series(t)
+    if is_overload_constant_dict(t):
+        return get_overload_constant_dict(t)
 
 
 def can_literalize_type(t, pyobject_to_literal=False):

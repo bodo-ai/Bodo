@@ -52,6 +52,7 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_int,
     is_overload_none,
+    raise_bodo_error,
 )
 
 _csv_output_is_dir = types.ExternalFunction(
@@ -907,6 +908,18 @@ def pd_series_overload(
     if no_data and no_index and no_dtype:
         raise BodoError(
             "pd.Series() requires at least 1 of data, index, and dtype to not be none"
+        )
+
+    if is_series_type(data) and not no_index:
+        raise BodoError(
+            "pd.Series() does not support index value when input data is a Series"
+        )
+
+    # In the case that we have a dictionary input type, we need to wait for a transformation in typing pass
+    # to convert it to a tuple type, so we can access the keys as constants
+    if isinstance(data, types.DictType):
+        raise_bodo_error(
+            "pd.Series(): When intializing series with a dictionary, it is required that the dict has constant keys"
         )
 
     # heterogeneous tuple input case

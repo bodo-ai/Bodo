@@ -391,12 +391,34 @@ def test_astype_non_constant_string(memory_leak_check):
     ):
         bodo.jit(impl)(S, type_str)
 
+
+@pytest.mark.slow
+def test_series_init_series_idx():
+    """
+    Checks that proper error is given when initializing a series with another Series value, and
+    specifiying the index values (previously, this caused segfault)
+    """
+
+    @bodo.jit
+    def impl():
+        S = pd.Series([1, 2, 3], index=["A", "B", "C"])
+        S2 = pd.Series(S, index=["A", "C"])
+        return S2
+
+    with pytest.raises(
+        BodoError,
+        match="pd.Series\\(\\) does not support index value when input data is a Series",
+    ):
+        impl()
+
+
+@pytest.mark.slow
 def test_np_select_series_cond(memory_leak_check):
     """tests np select returns the correct error when passed a bool series for cond"""
     np.random.seed(42)
 
     # For now, can only handle cond == bool ndarry.
-    S = pd.Series([1,2,3])
+    S = pd.Series([1, 2, 3])
     cond = pd.Series(np.random.randint(2, size=len(S)).astype(bool))
 
     @bodo.jit
@@ -405,8 +427,62 @@ def test_np_select_series_cond(memory_leak_check):
         condlist = [cond]
         return np.select(condlist, choicelist)
 
-    err_msg_cat = (
-        r".*np.select\(\): 'condlist' argument must be list or tuple of boolean ndarrays. If passing a Series, please convert with pd.Series.to_numpy\(\).*"
-    )
+    err_msg_cat = r".*np.select\(\): 'condlist' argument must be list or tuple of boolean ndarrays. If passing a Series, please convert with pd.Series.to_numpy\(\).*"
     with pytest.raises(BodoError, match=err_msg_cat):
         impl(S, cond)
+
+
+def test_series_init_dict_non_const_keys():
+    """
+    Tests the error message when initializing series with non constant keyed dicts.
+    """
+
+    @bodo.jit
+    def test_impl():
+        init_dict = dict()
+        for i in range(10):
+            init_dict[f"idx_{i}"] = 1
+        return pd.Series(init_dict)
+
+    with pytest.raises(
+        BodoError,
+        match="pd.Series\\(\\): When intializing series with a dictionary, it is required that the dict has constant keys",
+    ):
+        test_impl()
+
+
+def test_series_init_dict_idx_kw():
+    """
+    Checks that proper error is given when initializing a series with dict and also supplying
+    an index value.
+    """
+
+    @bodo.jit
+    def impl_err1():
+        S = pd.Series({"A": 2, "B": 3}, ["X", "Y"])
+        return S
+
+    @bodo.jit
+    def impl_err2():
+        S = pd.Series({"A": 2, "B": 3}, index=["X", "Y"])
+        return S
+
+    @bodo.jit
+    def impl_good1():
+        S = pd.Series({"A": 2, "B": 3}, None)
+        return S
+
+    @bodo.jit
+    def impl_good2():
+        S = pd.Series({"A": 2, "B": 3}, index=None)
+        return S
+
+    for cur_impl in [impl_err1, impl_err2]:
+        with pytest.raises(
+            BodoError,
+            match="pd.Series\\(\\): Cannot specify index argument when initializing with a dictionary",
+        ):
+            cur_impl()
+
+    impl_good1()
+    impl_good2()
