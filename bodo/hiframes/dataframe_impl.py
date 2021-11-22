@@ -1641,21 +1641,29 @@ def overload_dataframe_drop_duplicates(
     return _gen_init_df(func_text, df.columns, data_args, "index")
 
 
-def _gen_init_df(header, columns, data_args, index=None, extra_globals=None):
+def _gen_init_df(
+    header, columns, data_args, index=None, extra_globals=None, out_df_type=None
+):
+    """generate a function that initializes a dataframe.
+    'header' is the initial parts of the function text (defines data arrays etc.)
+    'output_df_type' resembles the output dataframe types, but only column names have to
+    be accurate.
+    """
     if index is None:
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
 
     if extra_globals is None:
         extra_globals = {}
 
-    col_var = gen_const_tup(columns)
-    data_args = "({}{})".format(data_args, "," if len(columns) == 1 else "")
+    if out_df_type is not None:
+        extra_globals["out_df_type"] = out_df_type
+        col_var = "out_df_type"
+    else:
+        col_var = gen_const_tup(columns)
 
-    func_text = (
-        "{}  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
-            header, data_args, index, col_var
-        )
-    )
+    data_args = "({}{})".format(data_args, "," if data_args else "")
+
+    func_text = f"{header}  return bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, {index}, {col_var})\n"
     loc_vars = {}
     _global = {"bodo": bodo, "np": np, "pd": pd, "numba": numba}
     _global.update(extra_globals)

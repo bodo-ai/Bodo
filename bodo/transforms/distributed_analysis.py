@@ -39,6 +39,7 @@ from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.table import TableType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.utils.transform import (
@@ -2624,7 +2625,7 @@ class DistributedAnalysis:
             return
 
         # indexing into arrays from this point only, check for array type
-        if not is_array_typ(in_typ):
+        if not (is_array_typ(in_typ) or isinstance(in_typ, TableType)):
             self._set_REP(
                 inst.list_vars(), array_dists, "getitem input not array", rhs.loc
             )

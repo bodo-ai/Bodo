@@ -2,6 +2,7 @@
 """Table data type for storing dataframe column arrays. Supports storing many columns
 (e.g. >10k) efficiently.
 """
+import operator
 from collections import defaultdict
 
 import numba
@@ -25,6 +26,12 @@ from numba.np.arrayobj import _getitem_array_single_int
 from numba.parfors.array_analysis import ArrayAnalysis
 
 from bodo.utils.cg_helpers import is_ll_eq
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_int,
+    is_list_like_index_type,
+    is_overload_constant_int,
+)
 from bodo.utils.typing import get_overload_const_int, is_overload_constant_int
 
 
@@ -235,6 +242,8 @@ def unbox_table(typ, val, c):
 @box(TableType)
 def box_table(typ, val, c, ensure_unboxed=None):
     """Boxes array blocks from native Table into a Python Table"""
+    from bodo.hiframes.boxing import get_df_obj_column_codegen
+
     table = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     table_arr_list_obj = c.pyapi.list_new(
         c.context.get_constant(types.int64, len(typ.arr_types))
@@ -291,36 +300,10 @@ def box_table(typ, val, c, ensure_unboxed=None):
                         arr_orelse,
                     ):
                         with arr_then:
-                            # generate df.iloc[:,i] for parent dataframe object
-                            none_obj = c.pyapi.borrow_none()
-                            slice_class_obj = c.pyapi.unserialize(
-                                c.pyapi.serialize_object(slice)
-                            )
-                            slice_obj = c.pyapi.call_function_objargs(
-                                slice_class_obj, [none_obj]
-                            )
-                            col_ind_obj = c.pyapi.long_from_longlong(arr_ind)
-                            slice_ind_tup_obj = c.pyapi.tuple_pack(
-                                [slice_obj, col_ind_obj]
-                            )
-
-                            df_iloc_obj = c.pyapi.object_getattr_string(
-                                table.parent, "iloc"
-                            )
-                            series_obj = c.pyapi.object_getitem(
-                                df_iloc_obj, slice_ind_tup_obj
-                            )
-                            arr_obj_orig = c.pyapi.object_getattr_string(
-                                series_obj, "values"
+                            arr_obj_orig = get_df_obj_column_codegen(
+                                c.context, c.builder, c.pyapi, table.parent, arr_ind, t
                             )
                             c.builder.store(arr_obj_orig, arr_obj)
-
-                            c.pyapi.decref(slice_class_obj)
-                            c.pyapi.decref(slice_obj)
-                            c.pyapi.decref(col_ind_obj)
-                            c.pyapi.decref(slice_ind_tup_obj)
-                            c.pyapi.decref(df_iloc_obj)
-                            c.pyapi.decref(series_obj)
                         with arr_orelse:
                             c.context.nrt.incref(c.builder, t, arr)
                             c.builder.store(
@@ -648,3 +631,221 @@ def lower_constant_table(context, builder, table_type, pyval):
         setattr(table, f"block_{blk}", out_arr_list.value)
 
     return table._getvalue()
+
+
+@intrinsic
+def init_table(typingctx, table_type=None):
+    """initialize a table object with same structure as input table without setting it's
+    array blocks (to be set later)
+    """
+    assert isinstance(table_type, TableType), "table type expected"
+
+    def codegen(context, builder, signature, args):
+        table = cgutils.create_struct_proxy(table_type)(context, builder)
+        for t, blk in table_type.type_to_blk.items():
+            null_list = context.get_constant_null(types.List(t))
+            setattr(table, f"block_{blk}", null_list)
+        return table._getvalue()
+
+    sig = table_type(table_type)
+    return sig, codegen
+
+
+@intrinsic
+def get_table_block(typingctx, table_type, blk_type=None):
+    """get array list for a type block of table"""
+    assert isinstance(table_type, TableType), "table type expected"
+    assert is_overload_constant_int(blk_type)
+    blk = get_overload_const_int(blk_type)
+    arr_type = None
+    for t, b in table_type.type_to_blk.items():
+        if b == blk:
+            arr_type = t
+            break
+    assert arr_type is not None, "invalid table type block"
+    out_list_type = types.List(arr_type)
+
+    def codegen(context, builder, signature, args):
+        table = cgutils.create_struct_proxy(table_type)(context, builder, args[0])
+        arr_list = getattr(table, f"block_{blk}")
+        return impl_ret_borrowed(context, builder, out_list_type, arr_list)
+
+    sig = out_list_type(table_type, blk_type)
+    return sig, codegen
+
+
+@intrinsic
+def ensure_column_unboxed(typingctx, table_type, arr_list_t, ind_t, arr_ind_t=None):
+    """make sure column of table is unboxed
+    Throw an error if column array is null and there is no parent to unbox from
+    """
+    assert isinstance(table_type, TableType), "table type expected"
+
+    def codegen(context, builder, signature, args):
+        from bodo.hiframes.boxing import get_df_obj_column_codegen
+
+        table_arg, list_arg, i_arg, arr_ind_arg = args
+        pyapi = context.get_python_api(builder)
+
+        table = cgutils.create_struct_proxy(table_type)(context, builder, table_arg)
+        has_parent = cgutils.is_not_null(builder, table.parent)
+
+        arr_list_inst = ListInstance(context, builder, arr_list_t, list_arg)
+        in_arr = arr_list_inst.getitem(i_arg)
+
+        arr_struct_ptr = cgutils.alloca_once_value(builder, in_arr)
+        null_struct_ptr = cgutils.alloca_once_value(
+            builder, context.get_constant_null(arr_list_t.dtype)
+        )
+        is_null = is_ll_eq(builder, arr_struct_ptr, null_struct_ptr)
+        with builder.if_then(is_null):
+            with builder.if_else(has_parent) as (then, orelse):
+                with then:
+                    arr_obj = get_df_obj_column_codegen(
+                        context,
+                        builder,
+                        pyapi,
+                        table.parent,
+                        arr_ind_arg,
+                        arr_list_t.dtype,
+                    )
+                    arr = pyapi.to_native_value(arr_list_t.dtype, arr_obj).value
+                    arr_list_inst.inititem(i_arg, arr, incref=False)
+                    pyapi.decref(arr_obj)
+                with orelse:
+                    context.call_conv.return_user_exc(
+                        builder, BodoError, ("unexpected null table column",)
+                    )
+
+    sig = types.none(table_type, arr_list_t, ind_t, arr_ind_t)
+    return sig, codegen
+
+
+@intrinsic
+def set_table_block(typingctx, table_type, arr_list_type, blk_type=None):
+    """set table block and return a new table object"""
+    assert isinstance(table_type, TableType), "table type expected"
+    assert isinstance(arr_list_type, types.List), "list type expected"
+    assert is_overload_constant_int(blk_type), "blk should be const int"
+    blk = get_overload_const_int(blk_type)
+
+    def codegen(context, builder, signature, args):
+        table_arg, arr_list_arg, _ = args
+        in_table = cgutils.create_struct_proxy(table_type)(context, builder, table_arg)
+        setattr(in_table, f"block_{blk}", arr_list_arg)
+        return impl_ret_borrowed(context, builder, table_type, in_table._getvalue())
+
+    sig = table_type(table_type, arr_list_type, blk_type)
+    return sig, codegen
+
+
+@intrinsic
+def set_table_len(typingctx, table_type, l_type=None):
+    """set table len and return a new table object"""
+    assert isinstance(table_type, TableType), "table type expected"
+
+    def codegen(context, builder, signature, args):
+        table_arg, l_arg = args
+        in_table = cgutils.create_struct_proxy(table_type)(context, builder, table_arg)
+        in_table.len = l_arg
+        return impl_ret_borrowed(context, builder, table_type, in_table._getvalue())
+
+    sig = table_type(table_type, l_type)
+    return sig, codegen
+
+
+@intrinsic
+def alloc_list_like(typingctx, list_type=None):
+    """
+    allocate a list with same type and size as input list but filled with null values
+    """
+    assert isinstance(list_type, types.List), "list type expected"
+
+    def codegen(context, builder, signature, args):
+        in_list = ListInstance(context, builder, list_type, args[0])
+        size = in_list.size
+        _, out_arr_list = ListInstance.allocate_ex(context, builder, list_type, size)
+        out_arr_list.size = size
+        return out_arr_list.value
+
+    sig = list_type(list_type)
+    return sig, codegen
+
+
+def _get_idx_length(idx):  # pragma: no cover
+    pass
+
+@overload(_get_idx_length)
+def overload_get_idx_length(idx, n):
+    """get length of boolean array or slice index
+    """
+    if is_list_like_index_type(idx) and idx.dtype == types.bool_:
+        return lambda idx, n: idx.sum()  # pragma: no cover
+
+    assert isinstance(idx, types.SliceType), "slice index expected"
+
+    def impl(idx, n):  # pragma: no cover
+        slice_idx = numba.cpython.unicode._normalize_slice(idx, n)
+        return numba.cpython.unicode._slice_span(slice_idx)
+
+    return impl
+
+def gen_table_filter(T, used_cols=None):
+    """Generate a function that filters table using input boolean array or slice.
+    If used_cols is passed, only used columns are written in output.
+    """
+    glbls = {
+        "init_table": init_table,
+        "get_table_block": get_table_block,
+        "ensure_column_unboxed": ensure_column_unboxed,
+        "set_table_block": set_table_block,
+        "set_table_len": set_table_len,
+        "alloc_list_like": alloc_list_like,
+        "_get_idx_length": _get_idx_length,
+    }
+    if used_cols is not None:
+        glbls["used_cols"] = np.array(used_cols)
+
+    func_text = "def impl(T, idx):\n"
+    func_text += f"  T2 = init_table(T)\n"
+    func_text += f"  l = 0\n"
+
+    # set table length using index value and return if no table column is used
+    if used_cols is not None and len(used_cols) == 0:
+        # avoiding _get_idx_length in the general case below since it has extra overhead
+        func_text += f"  l = _get_idx_length(idx, len(T))\n"
+        func_text += f"  T2 = set_table_len(T2, l)\n"
+        func_text += f"  return T2\n"
+        loc_vars = {}
+        exec(func_text, glbls, loc_vars)
+        return loc_vars["impl"]
+
+    if used_cols is not None:
+        func_text += f"  used_set = set(used_cols)\n"
+    for blk in T.type_to_blk.values():
+        glbls[f"arr_inds_{blk}"] = np.array(T.block_to_arr_ind[blk])
+        func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
+        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk})\n"
+        func_text += f"  for i in range(len(arr_list_{blk})):\n"
+        func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
+        if used_cols is not None:
+            func_text += f"    if arr_ind_{blk} not in used_set: continue\n"
+        func_text += f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
+        func_text += f"    out_arr_{blk} = arr_list_{blk}[i][idx]\n"
+        func_text += f"    l = len(out_arr_{blk})\n"
+        func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
+        func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
+    func_text += f"  T2 = set_table_len(T2, l)\n"
+    func_text += f"  return T2\n"
+
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl"]
+
+
+@overload(operator.getitem, no_unliteral=True)
+def table_getitem(T, idx):
+    if not isinstance(T, TableType):
+        return
+
+    return gen_table_filter(T)

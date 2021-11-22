@@ -252,7 +252,9 @@ class DataFrameGetItemTemplate(AbstractTemplate):
             # range to numeric
             index_type = self.replace_range_with_numeric_idx_if_needed(df, ind)
             columns = df.columns
-            ret = DataFrameType(data_type, index_type, columns)
+            ret = DataFrameType(
+                data_type, index_type, columns, is_table_format=df.is_table_format
+            )
             return ret(*args)
         # A = df[["C1", "C2"]]
         elif is_overload_constant_list(ind):
@@ -389,14 +391,15 @@ def df_getitem_overload(df, ind):
         if not isinstance(ind, types.SliceType):
             func_text += "  ind = bodo.utils.conversion.coerce_to_ndarray(ind)\n"
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[ind]"
-        new_data = ", ".join(
-            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[ind]".format(
-                df.columns.index(c)
+        if df.is_table_format:
+            new_data = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)[ind]"
+        else:
+            new_data = ", ".join(
+                f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)})[ind]"
+                for c in df.columns
             )
-            for c in df.columns
-        )
         return bodo.hiframes.dataframe_impl._gen_init_df(
-            func_text, df.columns, new_data, index
+            func_text, df.columns, new_data, index, out_df_type=df
         )
 
     # TODO: error-checking test
