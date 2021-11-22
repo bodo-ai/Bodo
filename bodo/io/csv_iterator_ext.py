@@ -9,7 +9,7 @@ import numba
 import numpy as np  # noqa
 import pandas as pd  # noqa
 from llvmlite import ir as lir
-from numba.core import cgutils, types
+from numba.core import cgutils, ir_utils, types
 from numba.core.imputils import RefType, impl_ret_borrowed, iternext_impl
 from numba.core.typing.templates import signature
 from numba.extending import intrinsic, lower_builtin, models, register_model
@@ -19,6 +19,7 @@ import bodo.ir.connector
 import bodo.ir.csv_ext
 from bodo import objmode  # noqa
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.table import Table, TableType  # noqa
 from bodo.io import csv_cpp
 from bodo.ir.csv_ext import _gen_read_csv_objmode, astype  # noqa
 from bodo.utils.transform import gen_const_tup
@@ -35,9 +36,19 @@ class CSVIteratorType(types.SimpleIteratorType):
     instead of a DataFrame.
     """
 
-    def __init__(self, df_type, out_colnames, out_types, usecols, sep, index_ind):
+    def __init__(
+        self,
+        df_type,
+        out_colnames,
+        out_types,
+        usecols,
+        sep,
+        index_ind,
+        index_arr_typ,
+        index_name,
+    ):
         assert isinstance(df_type, DataFrameType), "CSVIterator must return a DataFrame"
-        name = f"CSVIteratorType({df_type}, {out_colnames}, {out_types}, {usecols}, {sep}, {index_ind})"
+        name = f"CSVIteratorType({df_type}, {out_colnames}, {out_types}, {usecols}, {sep}, {index_ind}, {index_arr_typ}, {index_name})"
         super(types.SimpleIteratorType, self).__init__(name)
         self._yield_type = df_type
         # CSV info used to call pd.read_csv
@@ -45,9 +56,11 @@ class CSVIteratorType(types.SimpleIteratorType):
         self._out_types = out_types
         self._usecols = usecols
         self._sep = sep
-        # Which column should be the index. If -1 we generate a
+        # Which column should be the index. If None we generate a
         # RangeIndex
         self._index_ind = index_ind
+        self._index_arr_typ = index_arr_typ
+        self._index_name = index_name
 
 
 @register_model(CSVIteratorType)
@@ -177,17 +190,33 @@ def gen_read_csv_objmode(csv_iterator_type):
 
     func_text = "def read_csv_objmode(f_reader):\n"
     santized_cnames = [sanitize_varname(c) for c in csv_iterator_type._out_colnames]
+    call_id = ir_utils.next_label()
+    glbls = globals()
+    out_types = csv_iterator_type._out_types
+    glbls[f"table_type_{call_id}"] = TableType(tuple(out_types))
+    glbls[f"idx_array_typ"] = csv_iterator_type._index_arr_typ
+    # We don't yet support removing columns from the source in the chunksize case
+    type_usecol_offset = list(range(len(csv_iterator_type._usecols)))
     func_text += _gen_read_csv_objmode(
         csv_iterator_type._out_colnames,
         santized_cnames,
-        csv_iterator_type._out_types,
+        out_types,
         csv_iterator_type._usecols,
+        type_usecol_offset,
         csv_iterator_type._sep,
+        call_id,
+        glbls,
         parallel=False,
         check_parallel_runtime=True,
+        idx_col_index=csv_iterator_type._index_ind,
+        idx_col_typ=csv_iterator_type._index_arr_typ,
     )
     parallel_varname = bodo.ir.csv_ext._gen_parallel_flag_name(santized_cnames)
-    total_names = santized_cnames + [parallel_varname]
+    total_names = (
+        ["T"]
+        + (["idx_arr"] if csv_iterator_type._index_ind is not None else [])
+        + [parallel_varname]
+    )
     func_text += f"  return {', '.join(total_names)}"
     glbls = globals()
     # TODO: Provide specific globals after Numba's #3355 is resolved
@@ -202,10 +231,10 @@ def gen_read_csv_objmode(csv_iterator_type):
     wrapper_func_text = "def read_func(reader, local_start):\n"
     wrapper_func_text += f"  {', '.join(total_names)} = objmode_func(reader)\n"
     index_ind = csv_iterator_type._index_ind
-    if index_ind == -1:
+    if index_ind is None:
         # Manually create the parallel range index at runtime
         # since this won't run through distributed pass
-        wrapper_func_text += f"  local_len = len({santized_cnames[0]})\n"
+        wrapper_func_text += f"  local_len = len(T)\n"
         wrapper_func_text += "  total_size = local_len\n"
         wrapper_func_text += f"  if ({parallel_varname}):\n"
         wrapper_func_text += "    local_start = local_start + bodo.libs.distributed_api.dist_exscan(local_len, _op)\n"
@@ -213,16 +242,12 @@ def gen_read_csv_objmode(csv_iterator_type):
             "    total_size = bodo.libs.distributed_api.dist_reduce(local_len, _op)\n"
         )
         index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(local_start, local_start + local_len, 1, None)"
-        data_args = santized_cnames
     else:
-        index_arg = f"bodo.utils.conversion.convert_to_index({santized_cnames[index_ind]}, {csv_iterator_type._out_colnames[index_ind]}:!r)"
-        # Remove the index column
-        data_args = santized_cnames[:index_ind] + santized_cnames[index_ind + 1 :]
-
+        # Total is garbage if we have an index column but must be returned
+        wrapper_func_text += "  total_size = 0\n"
+        index_arg = f"bodo.utils.conversion.convert_to_index({total_names[1]}, {csv_iterator_type._index_name!r})"
     col_var = gen_const_tup(csv_iterator_type.yield_type.columns)
-    wrapper_func_text += "  return (bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {}), total_size)\n".format(
-        ", ".join(data_args), index_arg, col_var
-    )
+    wrapper_func_text += f"  return (bodo.hiframes.pd_dataframe_ext.init_dataframe(({total_names[0]},), {index_arg}, {col_var}), total_size)\n"
     exec(
         wrapper_func_text,
         {

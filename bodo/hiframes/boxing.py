@@ -15,6 +15,7 @@ from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.ir_utils import GuardException, guard
 from numba.core.typing import signature
+from numba.cpython.listobj import ListInstance
 from numba.extending import NativeValue, box, intrinsic, typeof_impl, unbox
 from numba.np import numpy_support
 from numba.typed.typeddict import Dict
@@ -54,6 +55,7 @@ from bodo.libs.str_arr_ext import string_array_type, string_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
 from bodo.libs.tuple_arr_ext import TupleArrayType
+from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
@@ -70,6 +72,7 @@ from bodo.utils.typing import (
 
 ll.add_symbol("array_size", hstr_ext.array_size)
 ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
+TABLE_FORMAT_THRESHOLD = 20
 
 
 def _set_bodo_meta_in_pandas():
@@ -121,7 +124,11 @@ def typeof_pd_dataframe(val, c):
         else Distribution.REP
     )
 
-    return DataFrameType(col_types, index_typ, col_names, dist)
+    # TODO: enable table format by default
+    use_table_format = len(col_types) >= TABLE_FORMAT_THRESHOLD
+    return DataFrameType(
+        col_types, index_typ, col_names, dist, is_table_format=use_table_format
+    )
 
 
 # register series types for import
@@ -161,14 +168,6 @@ def unbox_dataframe(typ, val, c):
     """unbox dataframe to an empty DataFrame struct
     columns will be extracted later if necessary.
     """
-    n_cols = len(typ.columns)
-
-    # set all columns as not unboxed
-    zero = c.context.get_constant(types.int8, 0)
-    unboxed_tup = c.context.make_tuple(
-        c.builder, types.UniTuple(types.int8, n_cols + 1), [zero] * (n_cols + 1)
-    )
-
     # unbox index
     # TODO: unbox index only if necessary
     ind_obj = c.pyapi.object_getattr_string(val, "index")
@@ -176,12 +175,37 @@ def unbox_dataframe(typ, val, c):
     c.pyapi.decref(ind_obj)
 
     # set data arrays as null due to lazy unboxing
-    # TODO: does this work for array types?
-    data_nulls = [c.context.get_constant_null(t) for t in typ.data]
-    data_tup = c.context.make_tuple(c.builder, types.Tuple(typ.data), data_nulls)
+    if typ.is_table_format:
+        table = cgutils.create_struct_proxy(typ.table_type)(c.context, c.builder)
+
+        # TODO(ehsan): do we need to incref/decref the parent object? JIT args will be
+        # available while JIT function is running.
+        # Numba's list object doesn't incref/decref its parent for example
+        table.parent = val
+
+        # create array list for each block (but don't unbox yet)
+        for t, blk in typ.table_type.type_to_blk.items():
+            n_arrs = c.context.get_constant(
+                types.int64, len(typ.table_type.block_to_arr_ind[blk])
+            )
+            # not using allocate() since its exception causes calling convention error
+            # NOTE: numba initializes the value data array to zero, which we use for
+            # null check in table boxing
+            _, out_arr_list = ListInstance.allocate_ex(
+                c.context, c.builder, types.List(t), n_arrs
+            )
+            out_arr_list.size = n_arrs
+            setattr(table, f"block_{blk}", out_arr_list.value)
+
+        data_tup = c.context.make_tuple(
+            c.builder, types.Tuple([typ.table_type]), [table._getvalue()]
+        )
+    else:
+        data_nulls = [c.context.get_constant_null(t) for t in typ.data]
+        data_tup = c.context.make_tuple(c.builder, types.Tuple(typ.data), data_nulls)
 
     dataframe_val = construct_dataframe(
-        c.context, c.builder, typ, data_tup, index_val, unboxed_tup, val
+        c.context, c.builder, typ, data_tup, index_val, val
     )
 
     return NativeValue(dataframe_val)
@@ -782,6 +806,8 @@ def box_dataframe(typ, val, c):
     return, printing, object mode, etc.
     Works by boxing individual data arrays.
     """
+    from bodo.hiframes.table import box_table
+
     context = c.context
     builder = c.builder
     pyapi = c.pyapi
@@ -790,13 +816,35 @@ def box_dataframe(typ, val, c):
         c.context, c.builder, typ, val
     )
     dataframe = cgutils.create_struct_proxy(typ)(context, builder, value=val)
+    n_cols = len(typ.columns)
 
     # see boxing of reflected list in Numba:
     # https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L561
     obj = dataframe.parent
     res = cgutils.alloca_once_value(c.builder, obj)
+
     # df unboxed from Python
     has_parent = cgutils.is_not_null(builder, obj)
+    # corner case (which should be avoided):
+    # df parent could come from the data table used for df initialization.
+    # The table may have changed (new columns added) using set_table_data() so parent
+    # object may not usable since number of columns don't match anymore
+    parent_ncols = cgutils.alloca_once_value(
+        c.builder, context.get_constant(types.int64, 0)
+    )
+    with builder.if_then(has_parent):
+        cols_obj = c.pyapi.object_getattr_string(obj, "columns")
+        n_obj = pyapi.call_method(cols_obj, "__len__", ())
+        builder.store(pyapi.long_as_longlong(n_obj), parent_ncols)
+        pyapi.decref(n_obj)
+        pyapi.decref(cols_obj)
+
+    use_parent_obj = builder.and_(
+        has_parent,
+        builder.icmp_unsigned(
+            "==", builder.load(parent_ncols), context.get_constant(types.int64, n_cols)
+        ),
+    )
 
     # get column names object
     # TODO: avoid generating large tuples and lower a constant Index if possible
@@ -806,7 +854,8 @@ def box_dataframe(typ, val, c):
     context.nrt.incref(builder, columns_typ, columns)
     columns_obj = pyapi.from_native_value(columns_typ, columns, c.env_manager)
 
-    with c.builder.if_else(has_parent) as (use_parent, otherwise):
+    # get initial dataframe object
+    with c.builder.if_else(use_parent_obj) as (use_parent, otherwise):
         with use_parent:
             pyapi.incref(obj)
             # set parent dataframe column names to numbers for robust setting of columns
@@ -838,28 +887,71 @@ def box_dataframe(typ, val, c):
             builder.store(df_obj, res)
 
     # get data arrays and box them
-    n_cols = len(typ.columns)
-    col_arrs = [builder.extract_value(dataframe_payload.data, i) for i in range(n_cols)]
-    arr_typs = typ.data
-    for i, arr, arr_typ in zip(range(n_cols), col_arrs, arr_typs):
-        # box array if df doesn't have a parent, or column was unboxed in function,
-        # since changes in arrays like strings don't reflect back to parent object
-        unboxed = builder.extract_value(dataframe_payload.unboxed, i)
-        is_unboxed = builder.icmp_unsigned("==", unboxed, lir.Constant(unboxed.type, 1))
-        box_array = builder.or_(
-            builder.not_(has_parent), builder.and_(has_parent, is_unboxed)
-        )
+    if typ.is_table_format:
+        table_type = typ.table_type
+        table = builder.extract_value(dataframe_payload.data, 0)
+        context.nrt.incref(builder, table_type, table)
+        # setting ensure_unboxed of box_table() to True if not using parent obj
+        table_obj = box_table(table_type, table, c, builder.not_(use_parent_obj))
+        arrs_obj = pyapi.object_getattr_string(table_obj, "arrays")
+        none_obj = c.pyapi.make_none()
 
-        with builder.if_then(box_array):
-            # df[i] = boxed_arr
-            c_ind_obj = pyapi.long_from_longlong(context.get_constant(types.int64, i))
+        n_arrs = context.get_constant(types.int64, n_cols)
+        with cgutils.for_range(builder, n_arrs) as loop:
+            # df[i] = arr
+            i = loop.index
+            # PyList_GetItem returns borrowed reference (no need to decref)
+            col_arr_obj = pyapi.list_getitem(arrs_obj, i)
+            # box array if df doesn't have a parent, or column was unboxed in function,
+            # since changes in arrays like strings don't reflect back to parent object.
+            # Table boxing assigns None for null arrays
+            is_unboxed = c.builder.icmp_unsigned("!=", col_arr_obj, none_obj)
+            box_array = builder.or_(
+                builder.not_(use_parent_obj), builder.and_(use_parent_obj, is_unboxed)
+            )
 
-            context.nrt.incref(builder, arr_typ, arr)
-            arr_obj = pyapi.from_native_value(arr_typ, arr, c.env_manager)
-            df_obj = builder.load(res)
-            pyapi.object_setitem(df_obj, c_ind_obj, arr_obj)
-            pyapi.decref(arr_obj)
-            pyapi.decref(c_ind_obj)
+            with builder.if_then(box_array):
+                c_ind_obj = pyapi.long_from_longlong(i)
+                df_obj = builder.load(res)
+                pyapi.object_setitem(df_obj, c_ind_obj, col_arr_obj)
+                pyapi.decref(c_ind_obj)
+
+        pyapi.decref(table_obj)
+        pyapi.decref(arrs_obj)
+        pyapi.decref(none_obj)
+
+    else:
+        col_arrs = [
+            builder.extract_value(dataframe_payload.data, i) for i in range(n_cols)
+        ]
+        arr_typs = typ.data
+        for i, arr, arr_typ in zip(range(n_cols), col_arrs, arr_typs):
+            # box array if df doesn't have a parent, or column was unboxed in function,
+            # since changes in arrays like strings don't reflect back to parent object
+            arr_struct_ptr = cgutils.alloca_once_value(builder, arr)
+            null_struct_ptr = cgutils.alloca_once_value(
+                builder, context.get_constant_null(arr_typ)
+            )
+
+            is_unboxed = builder.not_(
+                is_ll_eq(builder, arr_struct_ptr, null_struct_ptr)
+            )
+            box_array = builder.or_(
+                builder.not_(use_parent_obj), builder.and_(use_parent_obj, is_unboxed)
+            )
+
+            with builder.if_then(box_array):
+                # df[i] = boxed_arr
+                c_ind_obj = pyapi.long_from_longlong(
+                    context.get_constant(types.int64, i)
+                )
+
+                context.nrt.incref(builder, arr_typ, arr)
+                arr_obj = pyapi.from_native_value(arr_typ, arr, c.env_manager)
+                df_obj = builder.load(res)
+                pyapi.object_setitem(df_obj, c_ind_obj, arr_obj)
+                pyapi.decref(arr_obj)
+                pyapi.decref(c_ind_obj)
 
     df_obj = builder.load(res)
     # set df columns separately to support repeated names and fix potential multi-index
@@ -929,16 +1021,27 @@ def unbox_dataframe_column(typingctx, df, i=None):
         c.pyapi.decref(arr_obj)
         pyapi.gil_release(gil_state)  # release GIL
 
-        # assign array and set unboxed flag
+        # assign array
         dataframe_payload = bodo.hiframes.pd_dataframe_ext.get_dataframe_payload(
             c.context, c.builder, df_typ, args[0]
         )
-        dataframe_payload.data = builder.insert_value(
-            dataframe_payload.data, native_val.value, col_ind
-        )
-        dataframe_payload.unboxed = builder.insert_value(
-            dataframe_payload.unboxed, context.get_constant(types.int8, 1), col_ind
-        )
+        if df_typ.is_table_format:
+            table = cgutils.create_struct_proxy(df_typ.table_type)(
+                c.context, c.builder, builder.extract_value(dataframe_payload.data, 0)
+            )
+            blk = df_typ.table_type.type_to_blk[data_typ]
+            arr_list = getattr(table, f"block_{blk}")
+            arr_list_inst = ListInstance(
+                c.context, c.builder, types.List(data_typ), arr_list
+            )
+            offset = context.get_constant(
+                types.int64, df_typ.table_type.block_offsets[col_ind]
+            )
+            arr_list_inst.inititem(offset, native_val.value, incref=False)
+        else:
+            dataframe_payload.data = builder.insert_value(
+                dataframe_payload.data, native_val.value, col_ind
+            )
 
         # store payload
         payload_type = DataFramePayloadType(df_typ)

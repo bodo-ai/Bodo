@@ -25,6 +25,7 @@ from numba.core.registry import CPUDispatcher
 from numba.core.typed_passes import (
     DumpParforDiagnostics,
     InlineOverloads,
+    IRLegalization,
     NopythonTypeInference,
     ParforPass,
     PreParforPass,
@@ -45,6 +46,7 @@ import bodo.transforms
 import bodo.transforms.series_pass
 import bodo.transforms.untyped_pass
 from bodo.transforms.series_pass import SeriesPass
+from bodo.transforms.table_column_del_pass import TableColumnDelPass
 from bodo.transforms.typing_pass import BodoTypeInference
 from bodo.transforms.untyped_pass import UntypedPass
 from bodo.utils.utils import is_assign, is_call_assign, is_expr
@@ -190,13 +192,14 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
         # S.call to np.call transformation is invalid for
         # Series (e.g. S.var is not the same as np.var(S))
         add_pass_before(pm, BodoSeriesPass, PreParforPass)
-
         if distributed:
             pm.add_pass_after(BodoDistributedPass, ParforPass)
         else:
             pm.add_pass_after(LowerParforSeq, ParforPass)
             pm.add_pass_after(LowerBodoIRExtSeq, LowerParforSeq)
 
+        # Decref right before dels are inserted so the IR won't change anymore.
+        add_pass_before(pm, BodoTableColumnDelPass, IRLegalization)
         pm.add_pass_after(BodoDumpDistDiagnosticsPass, DumpParforDiagnostics)
         pm.finalize()
         return [pm]
@@ -795,6 +798,27 @@ class LowerBodoIRExtSeq(FunctionPass):
         return True
 
 
+@register_pass(mutates_CFG=False, analysis_only=True)
+class BodoTableColumnDelPass(AnalysisPass):
+    """Insert table column decref statements before distributed pass"""
+
+    _name = "bodo_table_column_del_pass"
+
+    def __init__(self):
+        FunctionPass.__init__(self)
+
+    def run_pass(self, state):
+
+        table_decref_pass = TableColumnDelPass(
+            state.func_ir,
+            state.typingctx,
+            state.targetctx,
+            state.type_annotation.typemap,
+            state.type_annotation.calltypes,
+        )
+        return table_decref_pass.run()
+
+
 def inline_calls(
     func_ir,
     _locals,
@@ -885,7 +909,7 @@ def udf_jit(signature_or_function=None, **options):
         signature_or_function,
         parallel=parallel,
         pipeline_class=bodo.compiler.BodoCompilerUDF,
-        **options
+        **options,
     )
 
 

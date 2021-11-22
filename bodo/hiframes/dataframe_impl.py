@@ -4091,7 +4091,9 @@ class SetDfColInfer(AbstractTemplate):
                 # set a new column
                 new_cols = target.columns + (ind,)
                 new_typs = target.data + (val,)
-            ret = DataFrameType(new_typs, index, new_cols)
+            ret = DataFrameType(
+                new_typs, index, new_cols, target.dist, target.is_table_format
+            )
 
         return ret(*args)
 

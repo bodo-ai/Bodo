@@ -157,6 +157,8 @@ no_side_effect_call_tuples = {
     # dataframe
     ("init_dataframe", "pd_dataframe_ext", "hiframes", bodo),
     ("get_dataframe_data", "pd_dataframe_ext", "hiframes", bodo),
+    ("get_dataframe_table", "pd_dataframe_ext", "hiframes", bodo),
+    ("get_table_data", "table", "hiframes", bodo),
     ("get_dataframe_index", "pd_dataframe_ext", "hiframes", bodo),
     ("init_rolling", "pd_rolling_ext", "hiframes", bodo),
     ("init_groupby", "pd_groupby_ext", "hiframes", bodo),
@@ -271,9 +273,11 @@ def remove_hiframes(rhs, lives, call_list):
     ):
         return True
 
-    # TODO: needed?
-    # if call_list == ['set_parent_dummy', 'pd_dataframe_ext', 'hiframes', bodo]:
-    #     return True
+    if (
+        call_list == ["set_table_data", "table", "hiframes", bodo]
+        and rhs.args[0].name not in lives
+    ):
+        return True
 
     # constructor calls of tuple subclasses like namedtuple don't have side-effect
     # e.g. Row(a, b) in UDFs

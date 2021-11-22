@@ -19,6 +19,7 @@ from numba.core.typing.templates import (
     infer_global,
     signature,
 )
+from numba.cpython.listobj import ListInstance
 from numba.extending import (
     infer_getattr,
     intrinsic,
@@ -45,6 +46,12 @@ from bodo.hiframes.pd_index_ext import (
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.hiframes.series_indexing import SeriesIlocType
+from bodo.hiframes.table import (
+    Table,
+    TableType,
+    get_table_data,
+    set_table_data_codegen,
+)
 from bodo.io import json_cpp
 from bodo.libs.array import (
     arr_info_list_to_table,
@@ -61,6 +68,7 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import str_arr_from_sequence, string_array_type
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.conversion import index_to_array
 from bodo.utils.transform import (
     gen_const_tup,
@@ -117,7 +125,9 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
 
     ndim = 2
 
-    def __init__(self, data=None, index=None, columns=None, dist=None):
+    def __init__(
+        self, data=None, index=None, columns=None, dist=None, is_table_format=False
+    ):
         # data is tuple of Array types (not Series) or tuples (for df.describe)
         # index is Index obj (not Array type)
         # columns is a tuple of column names (strings, ints, or tuples in case of
@@ -139,17 +149,23 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         # distributed analysis since distributed dataframes are the most common.
         dist = Distribution.OneD_Var if dist is None else dist
         self.dist = dist
+        # flag indicating data is stored in the new Table format (needed for data model)
+        self.is_table_format = is_table_format
+        # save TableType to avoid recreating it in other places like column unbox & dtor
+        self.table_type = TableType(data) if is_table_format else None
         super(DataFrameType, self).__init__(
-            name=f"dataframe({data}, {index}, {columns}, {dist})"
+            name=f"dataframe({data}, {index}, {columns}, {dist}, {is_table_format})"
         )
 
-    def copy(self, index=None, dist=None):
+    def copy(self, index=None, dist=None, is_table_format=None):
         # XXX is copy necessary?
         if index is None:
             index = self.index
         if dist is None:
             dist = self.dist
-        return DataFrameType(self.data, index, self.columns, dist)
+        if is_table_format is None:
+            is_table_format = self.is_table_format
+        return DataFrameType(self.data, index, self.columns, dist, is_table_format)
 
     @property
     def as_array(self):
@@ -159,7 +175,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     @property
     def key(self):
         # needed?
-        return self.data, self.index, self.columns, self.dist
+        return self.data, self.index, self.columns, self.dist, self.is_table_format
 
     def unify(self, typingctx, other):
         """unifies two possible dataframe types into a single type
@@ -190,7 +206,9 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             # That doesn't happen in df case since all arrays are 1D and C layout.
             # see: https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/types/npytypes.py#L436
             if new_index is not None and None not in data:  # pragma: no cover
-                return DataFrameType(data, new_index, self.columns, dist)
+                return DataFrameType(
+                    data, new_index, self.columns, dist, self.is_table_format
+                )
 
         # convert empty dataframe to any other dataframe to support important common
         # cases (see test_append_empty_df), even though it's not fully accurate.
@@ -247,14 +265,13 @@ class DataFramePayloadType(types.Type):
 @register_model(DataFramePayloadType)
 class DataFramePayloadModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        n_cols = len(fe_type.df_type.columns)
+        # NOTE: columns are lazily unboxed from Python so some array values may be null
+        data_typ = types.Tuple(fe_type.df_type.data)
+        if fe_type.df_type.is_table_format:
+            data_typ = types.Tuple([fe_type.df_type.table_type])
         members = [
-            ("data", types.Tuple(fe_type.df_type.data)),
+            ("data", data_typ),
             ("index", fe_type.df_type.index),
-            # for lazy unboxing of df coming from Python (usually argument)
-            # list of flags noting which columns and index are unboxed
-            # index flag is last
-            ("unboxed", types.UniTuple(types.int8, n_cols + 1)),
             ("parent", types.pyobject),
         ]
         super(DataFramePayloadModel, self).__init__(dmm, fe_type, members)
@@ -301,7 +318,8 @@ class DataFrameAttribute(AttributeTemplate):
 
         # Determine the return type
         # Return type is the same as the dataframe
-        ret = df
+        # TODO(ehsan): support table format output for df.head()
+        ret = df.copy(is_table_format=False)
         # Return the signature
         return ret(*folded_args).replace(pysig=pysig)
 
@@ -535,24 +553,21 @@ def namedtuple_getitem_overload(tup, idx):
 def decref_df_data(context, builder, payload, df_type):
     """call decref() on all data arrays and index of dataframe"""
     # decref all unboxed arrays
-    for i in range(len(df_type.data)):
-        unboxed = builder.extract_value(payload.unboxed, i)
-        is_unboxed = builder.icmp_unsigned("==", unboxed, lir.Constant(unboxed.type, 1))
+    if df_type.is_table_format:
+        # no need to check for null columns since decref ignores nulls:
+        # https://github.com/numba/numba/blob/e314821f48bfc1678c9662584eef166fb9d5469c/numba/core/runtime/nrtdynmod.py#L78
+        context.nrt.decref(
+            builder, df_type.table_type, builder.extract_value(payload.data, 0)
+        )
+        context.nrt.decref(builder, df_type.index, payload.index)
+        return
 
-        with builder.if_then(is_unboxed):
-            arr = builder.extract_value(payload.data, i)
-            context.nrt.decref(builder, df_type.data[i], arr)
+    for i in range(len(df_type.data)):
+        arr = builder.extract_value(payload.data, i)
+        context.nrt.decref(builder, df_type.data[i], arr)
 
     # decref index
-    # NOTE: currently, Index is always unboxed so no check of unboxed flag, TODO: fix
     context.nrt.decref(builder, df_type.index, payload.index)
-    # last unboxed flag is for index
-    # index_unboxed = builder.extract_value(payload.unboxed, len(df_type.data))
-    # is_index_unboxed = builder.icmp_unsigned(
-    #     "==", index_unboxed, lir.Constant(index_unboxed.type, 1)
-    # )
-    # with builder.if_then(is_index_unboxed):
-    #     context.nrt.decref(builder, df_type.index, payload.index)
 
 
 def define_df_dtor(context, builder, df_type, payload_type):
@@ -595,16 +610,13 @@ def define_df_dtor(context, builder, df_type, payload_type):
     return fn
 
 
-def construct_dataframe(
-    context, builder, df_type, data_tup, index_val, unboxed_tup, parent=None
-):
+def construct_dataframe(context, builder, df_type, data_tup, index_val, parent=None):
 
     # create payload struct and store values
     payload_type = DataFramePayloadType(df_type)
     dataframe_payload = cgutils.create_struct_proxy(payload_type)(context, builder)
     dataframe_payload.data = data_tup
     dataframe_payload.index = index_val
-    dataframe_payload.unboxed = unboxed_tup
 
     # create meminfo and store payload
     payload_ll_type = context.get_value_type(payload_type)
@@ -652,35 +664,54 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
     n_cols = len(data_tup_typ.types)
     if n_cols == 0:
         column_names = ()
+    # col_names_typ can be a TypeRef of the output dataframe type (new format to avoid
+    # passing a large tuple)
+    elif isinstance(col_names_typ, types.TypeRef):
+        column_names = col_names_typ.instance_type.columns
     else:
         # using 'get_const_tup_vals' since column names are generated using
         # 'gen_const_tup' which requires special handling for nested tuples
         column_names = get_const_tup_vals(col_names_typ)
 
+    # handle the new table format
+    if n_cols == 1 and isinstance(data_tup_typ.types[0], TableType):
+        n_cols = len(data_tup_typ.types[0].arr_types)
+
     assert (
         len(column_names) == n_cols
     ), "init_dataframe(): number of column names does not match number of columns"
+
+    # get data array types for new table format
+    is_table_format = False
+    data_arrs = data_tup_typ.types
+    if n_cols != 0 and isinstance(data_tup_typ.types[0], TableType):
+        data_arrs = data_tup_typ.types[0].arr_types
+        is_table_format = True
+
+    ret_typ = DataFrameType(
+        data_arrs, index_typ, column_names, is_table_format=is_table_format
+    )
 
     def codegen(context, builder, signature, args):
         df_type = signature.return_type
         data_tup = args[0]
         index_val = args[1]
-
-        # set unboxed flags to 1 so that dtor decrefs all arrays
-        one = context.get_constant(types.int8, 1)
-        unboxed_tup = context.make_tuple(
-            builder, types.UniTuple(types.int8, n_cols + 1), [one] * (n_cols + 1)
-        )
+        parent = None
+        # set df parent to parent of input table in case unboxing columns is necessary
+        if is_table_format:
+            table = cgutils.create_struct_proxy(ret_typ.table_type)(
+                context, builder, builder.extract_value(data_tup, 0)
+            )
+            parent = table.parent
 
         dataframe_val = construct_dataframe(
-            context, builder, df_type, data_tup, index_val, unboxed_tup
+            context, builder, df_type, data_tup, index_val, parent
         )
         # increase refcount of stored values
         context.nrt.incref(builder, data_tup_typ, data_tup)
         context.nrt.incref(builder, index_typ, index_val)
         return dataframe_val
 
-    ret_typ = DataFrameType(data_tup_typ.types, index_typ, column_names)
     sig = signature(ret_typ, data_tup_typ, index_typ, col_names_typ)
     return sig, codegen
 
@@ -696,6 +727,40 @@ def has_parent(typingctx, df=None):
     return signature(types.bool_, df), codegen
 
 
+@intrinsic
+def _column_needs_unboxing(typingctx, df_typ, i_typ=None):
+    assert isinstance(df_typ, DataFrameType) and is_overload_constant_int(i_typ)
+
+    def codegen(context, builder, sig, args):
+        dataframe_payload = get_dataframe_payload(context, builder, df_typ, args[0])
+        col_ind = get_overload_const_int(i_typ)
+        arr_typ = df_typ.data[col_ind]
+
+        if df_typ.is_table_format:
+            table = cgutils.create_struct_proxy(df_typ.table_type)(
+                context, builder, builder.extract_value(dataframe_payload.data, 0)
+            )
+            blk = df_typ.table_type.type_to_blk[arr_typ]
+            arr_list = getattr(table, f"block_{blk}")
+            arr_list_inst = ListInstance(
+                context, builder, types.List(arr_typ), arr_list
+            )
+            offset = context.get_constant(
+                types.int64, df_typ.table_type.block_offsets[col_ind]
+            )
+            arr = arr_list_inst.getitem(offset)
+        else:
+            arr = builder.extract_value(dataframe_payload.data, col_ind)
+
+        arr_struct_ptr = cgutils.alloca_once_value(builder, arr)
+        null_struct_ptr = cgutils.alloca_once_value(
+            builder, context.get_constant_null(arr_typ)
+        )
+        return is_ll_eq(builder, arr_struct_ptr, null_struct_ptr)
+
+    return signature(types.bool_, df_typ, i_typ), codegen
+
+
 def get_dataframe_payload(context, builder, df_type, value):
     meminfo = cgutils.create_struct_proxy(df_type)(context, builder, value).meminfo
     payload_type = DataFramePayloadType(df_type)
@@ -706,26 +771,11 @@ def get_dataframe_payload(context, builder, df_type, value):
 
 
 @intrinsic
-def _get_dataframe_unboxed(typingctx, df_typ=None):
-
-    n_cols = len(df_typ.columns)
-    ret_typ = types.UniTuple(types.int8, n_cols + 1)
-    sig = signature(ret_typ, df_typ)
-
-    def codegen(context, builder, signature, args):
-        dataframe_payload = get_dataframe_payload(
-            context, builder, signature.args[0], args[0]
-        )
-        return impl_ret_borrowed(
-            context, builder, signature.return_type, dataframe_payload.unboxed
-        )
-
-    return sig, codegen
-
-
-@intrinsic
 def _get_dataframe_data(typingctx, df_typ=None):
     ret_typ = types.Tuple(df_typ.data)
+    if df_typ.is_table_format:
+        ret_typ = types.Tuple([TableType(df_typ.data)])
+
     sig = signature(ret_typ, df_typ)
 
     def codegen(context, builder, signature, args):
@@ -771,12 +821,40 @@ class GetDataFrameDataInfer(AbstractTemplate):
 
 
 def get_dataframe_data_impl(df, i):
+    if df.is_table_format:
+
+        def _impl(df, i):  # pragma: no cover
+            if has_parent(df) and _column_needs_unboxing(df, i):
+                bodo.hiframes.boxing.unbox_dataframe_column(df, i)
+            return get_table_data(_get_dataframe_data(df)[0], i)
+
+        return _impl
+
     def _impl(df, i):  # pragma: no cover
-        if has_parent(df) and _get_dataframe_unboxed(df)[i] == 0:
+        if has_parent(df) and _column_needs_unboxing(df, i):
             bodo.hiframes.boxing.unbox_dataframe_column(df, i)
         return _get_dataframe_data(df)[i]
 
     return _impl
+
+
+@intrinsic
+def get_dataframe_table(typingctx, df_typ=None):
+    """return internal data table for dataframe with table format"""
+    assert df_typ.is_table_format, "get_dataframe_table() expects table format"
+
+    def codegen(context, builder, signature, args):
+        dataframe_payload = get_dataframe_payload(
+            context, builder, signature.args[0], args[0]
+        )
+        return impl_ret_borrowed(
+            context,
+            builder,
+            df_typ.table_type,
+            builder.extract_value(dataframe_payload.data, 0),
+        )
+
+    return df_typ.table_type(df_typ), codegen
 
 
 @lower_builtin(get_dataframe_data, DataFrameType, types.IntegerLiteral)
@@ -795,6 +873,9 @@ numba.core.ir_utils.alias_func_extensions[
 ] = alias_ext_dummy_func
 numba.core.ir_utils.alias_func_extensions[
     ("get_dataframe_index", "bodo.hiframes.pd_dataframe_ext")
+] = alias_ext_dummy_func
+numba.core.ir_utils.alias_func_extensions[
+    ("get_dataframe_table", "bodo.hiframes.pd_dataframe_ext")
 ] = alias_ext_dummy_func
 
 
@@ -895,6 +976,22 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_inde
 )
 
 
+def get_dataframe_table_equiv(self, scope, equiv_set, loc, args, kws):
+    """array analysis for get_dataframe_table(). output table has the same shape as
+    input df (rows and columns).
+    """
+    assert len(args) == 1 and not kws
+    var = args[0]
+
+    if equiv_set.has_shape(var):
+        return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(var), pre=[])
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_table = (
+    get_dataframe_table_equiv
+)
+
+
 @intrinsic
 def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
     """set column data of a dataframe inplace"""
@@ -911,22 +1008,29 @@ def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
         df_arg, _, arr_arg = args
         dataframe_payload = get_dataframe_payload(context, builder, df_typ, df_arg)
 
-        # decref existing data column if valid (unboxed)
-        unboxed = builder.extract_value(dataframe_payload.unboxed, col_ind)
-        is_unboxed = builder.icmp_unsigned("==", unboxed, lir.Constant(unboxed.type, 1))
-        with builder.if_then(is_unboxed):
+        if df_typ.is_table_format:
+            table = cgutils.create_struct_proxy(df_typ.table_type)(
+                context, builder, builder.extract_value(dataframe_payload.data, 0)
+            )
+            blk = df_typ.table_type.type_to_blk[arr_typ]
+            arr_list = getattr(table, f"block_{blk}")
+            arr_list_inst = ListInstance(
+                context, builder, types.List(arr_typ), arr_list
+            )
+            offset = context.get_constant(
+                types.int64, df_typ.table_type.block_offsets[col_ind]
+            )
+            arr_list_inst.setitem(offset, arr_arg, True)
+        else:
+            # decref existing data column
             arr = builder.extract_value(dataframe_payload.data, col_ind)
             context.nrt.decref(builder, df_typ.data[col_ind], arr)
 
-        # assign array and set unboxed flag
-        dataframe_payload.data = builder.insert_value(
-            dataframe_payload.data, arr_arg, col_ind
-        )
-        dataframe_payload.unboxed = builder.insert_value(
-            dataframe_payload.unboxed, context.get_constant(types.int8, 1), col_ind
-        )
-
-        context.nrt.incref(builder, arr_typ, arr_arg)
+            # assign array
+            dataframe_payload.data = builder.insert_value(
+                dataframe_payload.data, arr_arg, col_ind
+            )
+            context.nrt.incref(builder, arr_typ, arr_arg)
 
         # store payload
         dataframe = cgutils.create_struct_proxy(df_typ)(context, builder, value=df_arg)
@@ -961,7 +1065,6 @@ def set_df_index(typingctx, df_t, index_t=None):
             signature.return_type,
             in_df_payload.data,
             index_val,
-            in_df_payload.unboxed,
             in_df.parent,
         )
 
@@ -970,7 +1073,9 @@ def set_df_index(typingctx, df_t, index_t=None):
         context.nrt.incref(builder, types.Tuple(df_t.data), in_df_payload.data)
         return dataframe
 
-    ret_typ = DataFrameType(df_t.data, index_t, df_t.columns)
+    ret_typ = DataFrameType(
+        df_t.data, index_t, df_t.columns, df_t.dist, df_t.is_table_format
+    )
     sig = signature(ret_typ, df_t, index_t)
     return sig, codegen
 
@@ -1007,35 +1112,41 @@ def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
             context, builder, value=df_arg
         )
 
-        data_arrs = [
-            builder.extract_value(in_dataframe_payload.data, i)
-            if i != col_ind
-            else arr_arg
-            for i in range(n_cols)
-        ]
-        if is_new_col:
-            data_arrs.append(arr_arg)
+        if df_type.is_table_format:
+            in_table_type = df_type.table_type
+            in_table = builder.extract_value(in_dataframe_payload.data, 0)
+            out_table_type = TableType(data_typs)
+            out_table = set_table_data_codegen(
+                context,
+                builder,
+                in_table_type,
+                in_table,
+                out_table_type,
+                arr_type,
+                arr_arg,
+                col_ind,
+                is_new_col,
+            )
+            data_tup = context.make_tuple(
+                builder, types.Tuple([out_table_type]), [out_table]
+            )
+        else:
+            data_arrs = [
+                builder.extract_value(in_dataframe_payload.data, i)
+                if i != col_ind
+                else arr_arg
+                for i in range(n_cols)
+            ]
+            if is_new_col:
+                data_arrs.append(arr_arg)
 
-        zero = context.get_constant(types.int8, 0)
-        one = context.get_constant(types.int8, 1)
-        unboxed_vals = [
-            builder.extract_value(in_dataframe_payload.unboxed, i)
-            if i != col_ind
-            else one
-            for i in range(n_cols)
-        ]
+            for var, typ in zip(data_arrs, data_typs):
+                context.nrt.incref(builder, typ, var)
 
-        if is_new_col:
-            unboxed_vals.append(one)  # for new data array
-        unboxed_vals.append(zero)  # for index
+            data_tup = context.make_tuple(builder, types.Tuple(data_typs), data_arrs)
 
         index_val = in_dataframe_payload.index
-
-        data_tup = context.make_tuple(builder, types.Tuple(data_typs), data_arrs)
-
-        unboxed_tup = context.make_tuple(
-            builder, types.UniTuple(types.int8, new_n_cols + 1), unboxed_vals
-        )
+        context.nrt.incref(builder, index_typ, index_val)
 
         # TODO: refcount of parent?
         out_dataframe = construct_dataframe(
@@ -1044,14 +1155,8 @@ def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
             signature.return_type,
             data_tup,
             index_val,
-            unboxed_tup,
             in_dataframe.parent,
         )
-
-        # increase refcount of stored values
-        context.nrt.incref(builder, index_typ, index_val)
-        for var, typ in zip(data_arrs, data_typs):
-            context.nrt.incref(builder, typ, var)
 
         # update existing native dataframe inplace if possible (not a new column name
         # and data type matches existing column)
@@ -1069,11 +1174,15 @@ def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
             )
             builder.store(out_dataframe_payload._getvalue(), payload_ptr)
 
-            # incref data again since there will be too references updated
-            # TODO: incref only unboxed arrays to be safe?
+            # incref data again since there will be two references updated
             context.nrt.incref(builder, index_typ, index_val)
-            for var, typ in zip(data_arrs, data_typs):
-                context.nrt.incref(builder, typ, var)
+            if df_type.is_table_format:
+                context.nrt.incref(
+                    builder, out_table_type, builder.extract_value(data_tup, 0)
+                )
+            else:
+                for var, typ in zip(data_arrs, data_typs):
+                    context.nrt.incref(builder, typ, var)
 
         # set column of parent if not null, which is not fully known until runtime
         # see test_set_column_reflect_error
@@ -1111,7 +1220,9 @@ def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
 
         return out_dataframe
 
-    ret_typ = DataFrameType(data_typs, index_typ, column_names)
+    ret_typ = DataFrameType(
+        data_typs, index_typ, column_names, df_type.dist, df_type.is_table_format
+    )
     sig = signature(ret_typ, df_type, cname_type, arr_type)
     return sig, codegen
 
@@ -1122,22 +1233,25 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
     Index.
     """
     n_cols = len(pyval.columns)
-    data_tup = context.get_constant_generic(
-        builder,
-        types.Tuple(df_type.data),
-        tuple(pyval.iloc[:, i].values for i in range(n_cols)),
-    )
+    data_arrs = tuple(pyval.iloc[:, i].values for i in range(n_cols))
+
+    if df_type.is_table_format:
+        table = context.get_constant_generic(
+            builder, df_type.table_type, Table(data_arrs)
+        )
+        data_tup = context.make_tuple(
+            builder, types.Tuple([df_type.table_type]), [table]
+        )
+    else:
+        data_tup = context.get_constant_generic(
+            builder,
+            types.Tuple(df_type.data),
+            data_arrs,
+        )
+
     index_val = context.get_constant_generic(builder, df_type.index, pyval.index)
 
-    # set unboxed flags to 1 for all arrays
-    one = context.get_constant(types.int8, 1)
-    unboxed_tup = context.make_tuple(
-        builder, types.UniTuple(types.int8, n_cols + 1), [one] * (n_cols + 1)
-    )
-
-    dataframe_val = construct_dataframe(
-        context, builder, df_type, data_tup, index_val, unboxed_tup
-    )
+    dataframe_val = construct_dataframe(context, builder, df_type, data_tup, index_val)
 
     return dataframe_val
 
@@ -1150,43 +1264,68 @@ def cast_df_to_df(context, builder, fromty, toty, val):
     2) cast empty dataframe to another dataframe
     (common pattern, see test_append_empty_df)
     """
-    # RangeIndex to Int64Index case
-    if (
-        len(fromty.data) == len(toty.data)
-        and isinstance(fromty.index, RangeIndexType)
-        and isinstance(toty.index, NumericIndexType)
-    ):
-        dataframe_payload = get_dataframe_payload(context, builder, fromty, val)
-        new_index = context.cast(
-            builder, dataframe_payload.index, fromty.index, toty.index
-        )
-        new_data = dataframe_payload.data
-        context.nrt.incref(builder, types.BaseTuple.from_types(fromty.data), new_data)
-
-        df = construct_dataframe(
-            context,
-            builder,
-            toty,
-            new_data,
-            new_index,
-            dataframe_payload.unboxed,
-            dataframe_payload.parent,
-        )
-        # TODO: fix casting refcount in Numba since Numba increfs value after cast
-        return df
 
     # trivial cast if only 'dist' is different (no need to change value)
     if (
         fromty.data == toty.data
         and fromty.index == toty.index
         and fromty.columns == toty.columns
+        and fromty.is_table_format == toty.is_table_format
         and fromty.dist != toty.dist
     ):
         return val
 
-    # only empty dataframe case supported from this point
-    if not len(fromty.data) == 0:
+    # cast empty df with no columns to empty df with columns
+    if len(fromty.data) == 0 and len(toty.columns):
+        return _cast_empty_df(context, builder, toty)
+
+    # cases below assume data types are the same (only index and format changes)
+    if fromty.data != toty.data:
         raise BodoError(f"Invalid dataframe cast from {fromty} to {toty}")
+
+    in_dataframe_payload = get_dataframe_payload(context, builder, fromty, val)
+
+    # RangeIndex to Int64Index case
+    if isinstance(fromty.index, RangeIndexType) and isinstance(
+        toty.index, NumericIndexType
+    ):
+        new_index = context.cast(
+            builder, in_dataframe_payload.index, fromty.index, toty.index
+        )
+    else:
+        new_index = in_dataframe_payload.index
+        context.nrt.incref(builder, fromty.index, new_index)
+
+    # data format doesn't change
+    if fromty.is_table_format == toty.is_table_format:
+        new_data = in_dataframe_payload.data
+        if fromty.is_table_format:
+            context.nrt.incref(builder, types.Tuple([fromty.table_type]), new_data)
+        else:
+            context.nrt.incref(
+                builder, types.BaseTuple.from_types(fromty.data), new_data
+            )
+    # data format change
+    else:
+        if toty.is_table_format:
+            new_data = _cast_df_data_to_table_format(
+                context, builder, fromty, toty, in_dataframe_payload
+            )
+        else:
+            new_data = _cast_df_data_to_tuple_format(
+                context, builder, fromty, toty, in_dataframe_payload
+            )
+
+    return construct_dataframe(
+        context, builder, toty, new_data, new_index, in_dataframe_payload.parent
+    )
+
+
+def _cast_empty_df(context, builder, toty):
+    """cast empty dataframe with no columns to an empty dataframe with columns
+    see test_append_empty_df
+    """
+    # TODO(ehsan): can input df have non-empty index?
 
     # generate empty dataframe with target type using empty arrays for data columns and
     # index
@@ -1221,6 +1360,61 @@ def cast_df_to_df(context, builder, fromty, toty, val):
     df = context.compile_internal(builder, gen_func, toty(), [])
     # TODO: fix casting refcount in Numba since Numba increfs value after cast
     return df
+
+
+def _cast_df_data_to_table_format(context, builder, fromty, toty, in_dataframe_payload):
+    """cast df data from tuple data format to table data format"""
+    table_type = toty.table_type
+    table = cgutils.create_struct_proxy(table_type)(context, builder)
+    table.parent = in_dataframe_payload.parent
+
+    # create blocks in output
+    for t, blk in table_type.type_to_blk.items():
+        n_arrs = context.get_constant(
+            types.int64, len(table_type.block_to_arr_ind[blk])
+        )
+        _, out_arr_list = ListInstance.allocate_ex(
+            context, builder, types.List(t), n_arrs
+        )
+        out_arr_list.size = n_arrs
+        setattr(table, f"block_{blk}", out_arr_list.value)
+
+    # copy array values from input
+    for i, t in enumerate(fromty.data):
+        arr = builder.extract_value(in_dataframe_payload.data, i)
+        blk = table_type.type_to_blk[t]
+        arr_list = getattr(table, f"block_{blk}")
+        arr_list_inst = ListInstance(context, builder, types.List(t), arr_list)
+        offset = context.get_constant(types.int64, table_type.block_offsets[i])
+        arr_list_inst.setitem(offset, arr, True)
+
+    data_tup = context.make_tuple(
+        builder, types.Tuple([table_type]), [table._getvalue()]
+    )
+    return data_tup
+
+
+def _cast_df_data_to_tuple_format(context, builder, fromty, toty, in_dataframe_payload):
+    """cast df data from table data format to tuple data format"""
+    # TODO(ehsan): test
+    table_type = fromty.table_type
+    table = cgutils.create_struct_proxy(table_type)(
+        context, builder, builder.extract_value(in_dataframe_payload.data, 0)
+    )
+
+    # copy array values from input
+    data_arrs = []
+    for i, t in enumerate(toty.data):
+        blk = table_type.type_to_blk[t]
+        arr_list = getattr(table, f"block_{blk}")
+        arr_list_inst = ListInstance(context, builder, types.List(t), arr_list)
+        offset = context.get_constant(types.int64, table_type.block_offsets[i])
+        arr = arr_list_inst.getitem(offset)
+        context.nrt.incref(builder, t, arr)
+        data_arrs.append(arr)
+
+    data_tup = context.make_tuple(builder, types.Tuple(toty.data), data_arrs)
+    return data_tup
 
 
 @overload(pd.DataFrame, inline="always", no_unliteral=True)
@@ -1781,7 +1975,12 @@ def concat_overload(
             func_text += "  for i in range(len(objs)):\n"
             func_text += "    df = objs[i]\n"
             func_text += "    arrs_index.append(bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
-            index = "bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(arrs_index))\n"
+            # TODO: Update index name in all cases
+            if objs.dtype.index.name_typ == types.none:
+                name = None
+            else:
+                name = objs.dtype.index.name_typ.literal_value
+            index = f"bodo.utils.conversion.index_from_array(bodo.libs.array_kernels.concat(arrs_index), {name!r})\n"
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text,
             df_type.columns,
@@ -1831,7 +2030,8 @@ class SortDummyTyper(AbstractTemplate):
         index = df.index
         if isinstance(index, bodo.hiframes.pd_index_ext.RangeIndexType):
             index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
-        ret_typ = df.copy(index=index)
+        # TODO(ehsan): support table format
+        ret_typ = df.copy(index=index, is_table_format=False)
         return signature(ret_typ, *args)
 
 
@@ -1847,26 +2047,6 @@ def lower_sort_values_dummy(context, builder, sig, args):
 
     out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
     return out_obj._getvalue()
-
-
-# dummy function to change the df type to have set_parent=True
-# used in sort_values(inplace=True) hack
-def set_parent_dummy(df):  # pragma: no cover
-    return df
-
-
-@infer_global(set_parent_dummy)
-class ParentDummyTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        (df,) = args
-        ret = DataFrameType(df.data, df.index, df.columns)
-        return signature(ret, *args)
-
-
-@lower_builtin(set_parent_dummy, types.VarArg(types.Any))
-def lower_set_parent_dummy(context, builder, sig, args):
-    return impl_ret_borrowed(context, builder, sig.return_type, args[0])
 
 
 # TODO: jitoptions for overload_method and infer_global

@@ -1218,6 +1218,7 @@ class DistributedAnalysis:
         if fdef in (
             ("set_df_column_with_reflect", "bodo.hiframes.pd_dataframe_ext"),
             ("set_dataframe_data", "bodo.hiframes.pd_dataframe_ext"),
+            ("set_table_data", "bodo.hiframes.table"),
         ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             self._meet_array_dists(lhs, rhs.args[2].name, array_dists)
@@ -1644,11 +1645,16 @@ class DistributedAnalysis:
         if func_mod == "bodo.hiframes.pd_dataframe_ext" and func_name in (
             "get_dataframe_data",
             "get_dataframe_index",
+            "get_dataframe_table",
         ):
             # NOTE: constant sizes DataFrame is not distributed
             if any(is_tuple_like_type(t) for t in self.typemap[rhs.args[0].name].data):
                 self._analyze_call_set_REP(lhs, args, array_dists, fdef, rhs.loc)
                 return
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if fdef == ("get_table_data", "bodo.hiframes.table"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 

@@ -3,11 +3,14 @@
 """
 import llvmlite.binding as ll
 import numba
+import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.typing.templates import signature
+from numba.cpython.listobj import ListInstance
 from numba.extending import intrinsic, models, register_model
+from numba.np.arrayobj import _getitem_array_single_int
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
@@ -101,13 +104,13 @@ array_info_type = ArrayInfoType()
 register_model(ArrayInfoType)(models.OpaqueModel)
 
 
-class TableType(types.Type):
+class TableTypeCPP(types.Type):
     def __init__(self):
-        super(TableType, self).__init__(name="TableType()")
+        super(TableTypeCPP, self).__init__(name="TableTypeCPP()")
 
 
-table_type = TableType()
-register_model(TableType)(models.OpaqueModel)
+table_type = TableTypeCPP()
+register_model(TableTypeCPP)(models.OpaqueModel)
 
 
 @intrinsic
@@ -1418,6 +1421,112 @@ def info_from_table(typingctx, table_t, ind_t):
         return builder.call(fn_tp, args)
 
     return array_info_type(table_t, ind_t), codegen
+
+
+@intrinsic
+def cpp_table_to_py_table(typingctx, cpp_table_t, table_idx_arr_t, py_table_type_t):
+    """Extract columns of a C++ table and create a Python table.
+    table_index_arr specifies which columns to extract
+    """
+    assert cpp_table_t == table_type, "invalid cpp table type"
+    assert (
+        isinstance(table_idx_arr_t, types.Array)
+        and table_idx_arr_t.dtype == types.int64
+    ), "invalid table index array"
+    assert isinstance(py_table_type_t, types.TypeRef), "invalid py table ref"
+    py_table_type = py_table_type_t.instance_type
+
+    def codegen(context, builder, sig, args):
+        cpp_table, table_idx_arr, _ = args
+
+        # info_from_table() call info
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(), [lir.IntType(8).as_pointer(), lir.IntType(64)]
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="info_from_table"
+        )
+
+        # create python table
+        table = cgutils.create_struct_proxy(py_table_type)(context, builder)
+        table.parent = cgutils.get_null_value(table.parent.type)
+        cpp_table_idx_struct = context.make_array(table_idx_arr_t)(
+            context, builder, table_idx_arr
+        )
+        neg_one = context.get_constant(types.int64, -1)
+        zero = context.get_constant(types.int64, 0)
+        len_ptr = cgutils.alloca_once_value(builder, zero)
+
+        # generate code for each block
+        for t, blk in py_table_type.type_to_blk.items():
+            n_arrs = context.get_constant(
+                types.int64, len(py_table_type.block_to_arr_ind[blk])
+            )
+            # not using allocate() since its exception causes calling convention error
+            _, out_arr_list = ListInstance.allocate_ex(
+                context, builder, types.List(t), n_arrs
+            )
+            out_arr_list.size = n_arrs
+            # lower array of array indices for block to use within the loop
+            # using array since list doesn't have constant lowering
+            arr_inds = context.make_constant_array(
+                builder,
+                types.Array(types.int64, 1, "C"),
+                np.array(py_table_type.block_to_arr_ind[blk]),
+            )
+            arr_inds_struct = context.make_array(types.Array(types.int64, 1, "C"))(
+                context, builder, arr_inds
+            )
+            with cgutils.for_range(builder, n_arrs) as loop:
+                i = loop.index
+                # get array index in Python table
+                arr_ind = _getitem_array_single_int(
+                    context,
+                    builder,
+                    types.int64,
+                    types.Array(types.int64, 1, "C"),
+                    arr_inds_struct,
+                    i,
+                )
+                # get array info index in C++ table
+                cpp_table_ind = _getitem_array_single_int(
+                    context,
+                    builder,
+                    types.int64,
+                    table_idx_arr_t,
+                    cpp_table_idx_struct,
+                    arr_ind,
+                )
+                is_loaded = builder.icmp_unsigned("!=", cpp_table_ind, neg_one)
+                with builder.if_else(is_loaded) as (then, orelse):
+                    with then:
+                        # extract info and convert to array
+                        arr_info = builder.call(fn_tp, [cpp_table, cpp_table_ind])
+                        arr = context.compile_internal(
+                            builder,
+                            lambda info: info_to_array(info, t),
+                            t(array_info_type),
+                            [arr_info],
+                        )  # pragma: no cover
+                        out_arr_list.inititem(i, arr, incref=False)
+                        length = context.compile_internal(
+                            builder,
+                            lambda arr: len(arr),
+                            types.int64(t),
+                            [arr],
+                        )
+                        builder.store(length, len_ptr)
+                    with orelse:
+                        # Initialize the list value to null otherwise
+                        null_ptr = context.get_constant_null(t)
+                        out_arr_list.inititem(i, null_ptr, incref=False)
+
+            setattr(table, f"block_{blk}", out_arr_list.value)
+
+        table.len = builder.load(len_ptr)
+        return table._getvalue()
+
+    return py_table_type(cpp_table_t, table_idx_arr_t, py_table_type_t), codegen
 
 
 delete_info_decref_array = types.ExternalFunction(

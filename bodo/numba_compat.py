@@ -23,6 +23,7 @@ import numba
 import numba.core.inline_closurecall
 import numba.np.linalg
 from numba.core import analysis, cgutils, errors, ir, ir_utils, types
+from numba.core.compiler import Compiler
 from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
 from numba.core.ir_utils import (
     GuardException,
@@ -4444,3 +4445,182 @@ numba.parfors.parfor.simplify_parfor_body_CFG = simplify_parfor_body_CFG
 
 
 #########   End changes to improve parfor dead code elimination   #########
+
+
+#########  Start changes to Fix Numba objmode bug during caching  #########
+# see https://github.com/numba/numba/issues/7572
+
+
+def _lifted_compile(self, sig):
+    import numba.core.event as ev
+    from numba.core import compiler, sigutils
+    from numba.core.compiler_lock import global_compiler_lock
+    from numba.core.ir_utils import remove_dels
+
+    with ExitStack() as scope:
+        cres = None
+
+        def cb_compiler(dur):
+            if cres is not None:
+                self._callback_add_compiler_timer(dur, cres)
+
+        def cb_llvm(dur):
+            if cres is not None:
+                self._callback_add_llvm_timer(dur, cres)
+
+        scope.enter_context(ev.install_timer("numba:compiler_lock", cb_compiler))
+        scope.enter_context(ev.install_timer("numba:llvm_lock", cb_llvm))
+        scope.enter_context(global_compiler_lock)
+
+        # Use counter to track recursion compilation depth
+        with self._compiling_counter:
+            # XXX this is mostly duplicated from Dispatcher.
+            flags = self.flags
+            args, return_type = sigutils.normalize_signature(sig)
+
+            # Don't recompile if signature already exists
+            # (e.g. if another thread compiled it before we got the lock)
+            existing = self.overloads.get(tuple(args))
+            if existing is not None:
+                return existing.entry_point
+
+            self._pre_compile(args, return_type, flags)
+
+            # Clone IR to avoid (some of the) mutation in the rewrite pass
+            # Bodo change: avoid copy()
+            cloned_func_ir = self.func_ir  # .copy()
+
+            ev_details = dict(
+                dispatcher=self,
+                args=args,
+                return_type=return_type,
+            )
+            with ev.trigger_event("numba:compile", data=ev_details):
+                cres = compiler.compile_ir(
+                    typingctx=self.typingctx,
+                    targetctx=self.targetctx,
+                    func_ir=cloned_func_ir,
+                    args=args,
+                    return_type=return_type,
+                    flags=flags,
+                    locals=self.locals,
+                    lifted=(),
+                    lifted_from=self.lifted_from,
+                    is_lifted_loop=True,
+                )
+
+                # Check typing error if object mode is used
+                if cres.typing_error is not None and not flags.enable_pyobject:
+                    raise cres.typing_error
+                self.add_overload(cres)
+
+            # Bodo change: remove dels
+            remove_dels(self.func_ir.blocks)
+            return cres.entry_point
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.dispatcher.LiftedCode.compile)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "1351ebc5d8812dc8da167b30dad30eafb2ca9bf191b49aaed6241c21e03afff1"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.dispatcher.LiftedCode.compile has changed")
+
+
+numba.core.dispatcher.LiftedCode.compile = _lifted_compile
+
+
+def compile_ir(
+    typingctx,
+    targetctx,
+    func_ir,
+    args,
+    return_type,
+    flags,
+    locals,
+    lifted=(),
+    lifted_from=None,
+    is_lifted_loop=False,
+    library=None,
+    pipeline_class=Compiler,
+):
+    """
+    Compile a function with the given IR.
+
+    For internal use only.
+    """
+
+    # This is a special branch that should only run on IR from a lifted loop
+    if is_lifted_loop:
+        # This code is pessimistic and costly, but it is a not often trodden
+        # path and it will go away once IR is made immutable. The problem is
+        # that the rewrite passes can mutate the IR into a state that makes
+        # it possible for invalid tokens to be transmitted to lowering which
+        # then trickle through into LLVM IR and causes RuntimeErrors as LLVM
+        # cannot compile it. As a result the following approach is taken:
+        # 1. Create some new flags that copy the original ones but switch
+        #    off rewrites.
+        # 2. Compile with 1. to get a compile result
+        # 3. Try and compile another compile result but this time with the
+        #    original flags (and IR being rewritten).
+        # 4. If 3 was successful, use the result, else use 2.
+
+        # create flags with no rewrites
+        norw_flags = copy.deepcopy(flags)
+        norw_flags.no_rewrites = True
+
+        def compile_local(the_ir, the_flags):
+            pipeline = pipeline_class(
+                typingctx, targetctx, library, args, return_type, the_flags, locals
+            )
+            return pipeline.compile_ir(
+                func_ir=the_ir, lifted=lifted, lifted_from=lifted_from
+            )
+
+        # compile with rewrites off, IR shouldn't be mutated irreparably
+        # Bodo change: avoid func_ir.copy()
+        norw_cres = compile_local(func_ir, norw_flags)
+
+        # try and compile with rewrites on if no_rewrites was not set in the
+        # original flags, IR might get broken but we've got a CompileResult
+        # that's usable from above.
+        rw_cres = None
+        if not flags.no_rewrites:
+            # Suppress warnings in compilation retry
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", errors.NumbaWarning)
+                try:
+                    # Bodo change: avoid func_ir.copy()
+                    rw_cres = compile_local(func_ir, flags)
+                except Exception:
+                    pass
+        # if the rewrite variant of compilation worked, use it, else use
+        # the norewrites backup
+        if rw_cres is not None:
+            cres = rw_cres
+        else:
+            cres = norw_cres
+        return cres
+
+    else:
+        pipeline = pipeline_class(
+            typingctx, targetctx, library, args, return_type, flags, locals
+        )
+        return pipeline.compile_ir(
+            func_ir=func_ir, lifted=lifted, lifted_from=lifted_from
+        )
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.compiler.compile_ir)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "c48ce5493f4c43326e8cbdd46f3ea038b2b9045352d9d25894244798388e5e5b"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.compiler.compile_ir has changed")
+
+
+numba.core.compiler.compile_ir = compile_ir
+
+#########  End changes to Fix Numba objmode bug during caching  #########
