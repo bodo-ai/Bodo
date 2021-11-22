@@ -4,7 +4,7 @@ Programming with Bodo
 .. toctree::
    :glob:
 
-   jit
+   bodo_parallelism_basics
    user_guide
    file_io
    pandas
