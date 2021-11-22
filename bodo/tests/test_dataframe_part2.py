@@ -445,6 +445,53 @@ def test_df_filter(memory_leak_check):
     check_func(test_impl2, (df, cond))
 
 
+def test_df_filter_table_format(memory_leak_check):
+    """test filtering a dataframe with table format"""
+
+    def impl(df, cond):
+        df2 = df[cond]
+        return df2
+
+    # test column uses with control flow
+    def impl2(df, cond, flag, flag2):
+        if flag:
+            df2 = df[cond]
+            df2 = df2[["A", "C", "D"]]
+            df2["C"] = 11
+        else:
+            df2 = df[cond][["A", "C", "D"]]
+
+        return df2
+
+    # test column uses with control flow
+    def impl3(df, cond, flag):
+        df2 = df[cond]
+        if flag:
+            s = df2["A"].sum()
+        else:
+            s = df2["C"].sum()
+        return s
+
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3] * 4,
+            "B": ["abc", "bc", "cd"] * 4,
+            "C": [5, 6, 7] * 4,
+            "D": [1.1, 2.2, 3.3] * 4,
+        }
+    )
+    # add a bunch of columns to trigger table format
+    for i in range(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD):
+        df[f"F{i}"] = 11
+
+    cond = df.A > 1
+    check_func(impl, (df, cond))
+    # TODO(ehsan): make sure dead columns are eliminated in filter
+    check_func(impl2, (df, cond, True, True))
+    check_func(impl3, (df, cond, False))
+
+
 def test_create_series_input1(memory_leak_check):
     def test_impl(S):
         df = pd.DataFrame({"A": S})

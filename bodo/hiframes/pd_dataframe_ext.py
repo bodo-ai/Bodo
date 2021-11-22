@@ -666,6 +666,7 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
         column_names = ()
     # col_names_typ can be a TypeRef of the output dataframe type (new format to avoid
     # passing a large tuple)
+    # NOTE: only column names of output dataframe type are used and have to be accurate
     elif isinstance(col_names_typ, types.TypeRef):
         column_names = col_names_typ.instance_type.columns
     else:

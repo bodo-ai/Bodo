@@ -126,6 +126,27 @@ def test_table_len(file_type, memory_leak_check):
         _del_many_column_file(file_type)
 
 
+def test_table_filter_dead_columns(memory_leak_check):
+    """
+    Test table filter with no used column (just length)
+    """
+    try:
+        _create_many_column_file("parquet")
+
+        # no columns used (just length needed)
+        def impl(idx):
+            df = pd.read_parquet("many_columns.parquet")
+            df2 = df[idx]
+            return len(df2)
+
+        idx = np.arange(len(pd.read_parquet("many_columns.parquet"))) % 3 == 0
+        check_func(impl, (idx,), only_seq=True)
+        check_func(impl, (slice(10),), only_seq=True)
+    finally:
+        _del_many_column_file(file_type)
+
+
+
 def test_table_len_with_idx_col(memory_leak_check):
     """
     Check that an operation that just returns a length

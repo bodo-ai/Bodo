@@ -967,6 +967,40 @@ def box_dataframe(typ, val, c):
     return df_obj
 
 
+def get_df_obj_column_codegen(context, builder, pyapi, df_obj, col_ind, data_typ):
+    # generate df.iloc[:,i] for parent dataframe object
+    none_obj = pyapi.borrow_none()
+    slice_class_obj = pyapi.unserialize(pyapi.serialize_object(slice))
+    slice_obj = pyapi.call_function_objargs(slice_class_obj, [none_obj])
+    col_ind_obj = pyapi.long_from_longlong(col_ind)
+    slice_ind_tup_obj = pyapi.tuple_pack([slice_obj, col_ind_obj])
+
+    df_iloc_obj = pyapi.object_getattr_string(df_obj, "iloc")
+    series_obj = pyapi.object_getitem(df_iloc_obj, slice_ind_tup_obj)
+    arr_obj_orig = pyapi.object_getattr_string(series_obj, "values")
+
+    if isinstance(data_typ, types.Array):
+        # call np.ascontiguousarray() on array since it may not be contiguous
+        # the typing infrastructure assumes C-contiguous arrays
+        # see test_df_multi_get_level() for an example of non-contiguous input
+        np_mod_name = context.insert_const_string(builder.module, "numpy")
+        np_class_obj = pyapi.import_module_noblock(np_mod_name)
+        arr_obj = pyapi.call_method(np_class_obj, "ascontiguousarray", (arr_obj_orig,))
+        pyapi.decref(arr_obj_orig)
+        pyapi.decref(np_class_obj)
+    else:
+        arr_obj = arr_obj_orig
+
+    pyapi.decref(slice_class_obj)
+    pyapi.decref(slice_obj)
+    pyapi.decref(col_ind_obj)
+    pyapi.decref(slice_ind_tup_obj)
+    pyapi.decref(df_iloc_obj)
+    pyapi.decref(series_obj)
+
+    return arr_obj
+
+
 @intrinsic
 def unbox_dataframe_column(typingctx, df, i=None):
     assert isinstance(df, DataFrameType) and is_overload_constant_int(i)
@@ -974,7 +1008,6 @@ def unbox_dataframe_column(typingctx, df, i=None):
     def codegen(context, builder, sig, args):
         pyapi = context.get_python_api(builder)
         c = numba.core.pythonapi._UnboxContext(context, builder, pyapi)
-        gil_state = pyapi.gil_ensure()  # acquire GIL
 
         df_typ = sig.args[0]
         col_ind = get_overload_const_int(sig.args[1])
@@ -984,42 +1017,13 @@ def unbox_dataframe_column(typingctx, df, i=None):
         dataframe = cgutils.create_struct_proxy(sig.args[0])(
             context, builder, value=args[0]
         )
-        # generate df.iloc[:,i] for parent dataframe object
-        none_obj = c.pyapi.borrow_none()
-        slice_class_obj = c.pyapi.unserialize(c.pyapi.serialize_object(slice))
-        slice_obj = c.pyapi.call_function_objargs(slice_class_obj, [none_obj])
-        col_ind_obj = c.pyapi.long_from_longlong(args[1])
-        slice_ind_tup_obj = c.pyapi.tuple_pack([slice_obj, col_ind_obj])
-
-        df_iloc_obj = c.pyapi.object_getattr_string(dataframe.parent, "iloc")
-        series_obj = c.pyapi.object_getitem(df_iloc_obj, slice_ind_tup_obj)
-        arr_obj_orig = c.pyapi.object_getattr_string(series_obj, "values")
-
-        if isinstance(data_typ, types.Array):
-            # call np.ascontiguousarray() on array since it may not be contiguous
-            # the typing infrastructure assumes C-contiguous arrays
-            # see test_df_multi_get_level() for an example of non-contiguous input
-            np_mod_name = c.context.insert_const_string(c.builder.module, "numpy")
-            np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
-            arr_obj = c.pyapi.call_method(
-                np_class_obj, "ascontiguousarray", (arr_obj_orig,)
-            )
-            c.pyapi.decref(arr_obj_orig)
-            c.pyapi.decref(np_class_obj)
-        else:
-            arr_obj = arr_obj_orig
 
         # TODO: support column of tuples?
+        arr_obj = get_df_obj_column_codegen(
+            context, builder, pyapi, dataframe.parent, args[1], data_typ
+        )
         native_val = _unbox_series_data(data_typ.dtype, data_typ, arr_obj, c)
-
-        c.pyapi.decref(slice_class_obj)
-        c.pyapi.decref(slice_obj)
-        c.pyapi.decref(col_ind_obj)
-        c.pyapi.decref(slice_ind_tup_obj)
-        c.pyapi.decref(df_iloc_obj)
-        c.pyapi.decref(series_obj)
         c.pyapi.decref(arr_obj)
-        pyapi.gil_release(gil_state)  # release GIL
 
         # assign array
         dataframe_payload = bodo.hiframes.pd_dataframe_ext.get_dataframe_payload(

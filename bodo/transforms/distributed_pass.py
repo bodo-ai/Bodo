@@ -4066,7 +4066,7 @@ class DistributedPass:
             )
             for label, block in blocks.items():
                 removed |= remove_dead_columns(
-                    block, column_live_map[label], column_equiv_vars, typemap
+                    block, column_live_map[label], column_equiv_vars, typemap, self
                 )
         # We return if anything is removed, but this is currently unused.
         return removed

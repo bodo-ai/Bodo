@@ -10,8 +10,15 @@ import operator
 from collections import defaultdict
 
 import numba
-from numba.core import ir
+from numba.core import ir, types
 from numba.core.analysis import compute_cfg_from_blocks
+from numba.core.ir_utils import find_topo_order, guard
+
+import bodo
+from bodo.hiframes.table import TableType, del_column, gen_table_filter
+from bodo.utils.transform import compile_func_single_block
+from bodo.utils.typing import is_list_like_index_type
+from bodo.utils.utils import is_assign, is_expr
 from numba.core.ir_utils import guard
 
 from bodo.hiframes.table import TableType, del_column
@@ -437,9 +444,11 @@ def _compute_table_column_use(blocks, func_ir, typemap):
     table_col_use_map = (
         {}
     )  # { block offset -> dict(var_name -> tuple(set(used_column_numbers), use_all)}
-    for offset, ir_block in blocks.items():
+    # See table filter note below regarding reverse order
+    for offset in reversed(find_topo_order(blocks)):
+        ir_block = blocks[offset]
         table_col_use_map[offset] = use_map = defaultdict(lambda: (set(), False))
-        for stmt in ir_block.body:
+        for stmt in reversed(ir_block.body):
 
             # IR extensions that impact column uses.
             if type(stmt) in ir_extension_table_column_use:
@@ -455,6 +464,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
             # Check for assigns. This should include all basic usages
             # (get_dataframe_data + simple assign)
             if isinstance(stmt, ir.Assign):
+                rhs = stmt.value
                 lhs_name = stmt.target.name
                 # Handle simple assignments (i.e. df2 = df1)
                 # This should add update the equiv_vars
@@ -511,6 +521,32 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         # of any column, but no particular column. This needs to be skipped
                         # because it is inserted by
                         continue
+
+                # handle table filter like T2 = T1[ind]
+                elif (
+                    is_expr(rhs, "getitem")
+                    and isinstance(typemap[rhs.value.name], TableType)
+                    and 
+                    ((is_list_like_index_type(typemap[rhs.index.name]) and typemap[rhs.index.name].dtype == types.bool_) or isinstance(
+                        typemap[rhs.index.name], types.SliceType
+                    ))
+                ):
+                    # NOTE: column uses of input T1 are the same as output T2.
+                    # Here we simply traverse the IR in reversed order and update uses,
+                    # which works because table filter variables are internally
+                    # generated variables and have a single definition without control
+                    # flow. Otherwise, we'd need to update uses iteratively.
+                    rhs_table = rhs.value.name
+                    if use_map[lhs_name][1] or any(
+                        use_map[v][1] for v in equiv_vars[lhs_name]
+                    ):
+                        use_map[rhs_table] = (set(), True)
+                        continue
+                    rhs_use = use_map[lhs_name][0].copy()
+                    for v in equiv_vars[lhs_name]:
+                        rhs_use |= use_map[v][0]
+                    use_map[rhs_table] = (rhs_use, False)
+                    continue
 
             for var in stmt.list_vars():
                 # All unknown table uses should use all columns.
@@ -604,10 +640,12 @@ def _compute_table_column_live_map(cfg, blocks, typemap, column_uses):
     return live_map
 
 
-def remove_dead_columns(block, lives, equiv_vars, typemap):
+def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info):
     """remove dead table columns using liveness info."""
     # List of tables that are updated at the source in this block.
     removed = False
+    # add statements in reverse order
+    new_body = [block.terminator]
     for stmt in reversed(block.body[:-1]):
         # Find all sources that create a table. Currently this is
         # only written for read_csv support.
@@ -615,6 +653,42 @@ def remove_dead_columns(block, lives, equiv_vars, typemap):
             f = remove_dead_column_extensions[type(stmt)]
             removed |= f(stmt, lives, equiv_vars, typemap)
 
+        elif is_assign(stmt):
+            lhs_name = stmt.target.name
+            rhs = stmt.value
+            if (
+                is_expr(rhs, "getitem")
+                and isinstance(typemap[rhs.value.name], TableType)
+                and ((is_list_like_index_type(typemap[rhs.index.name]) and typemap[rhs.index.name].dtype == types.bool_) or isinstance(
+                        typemap[rhs.index.name], types.SliceType
+                    ))
+            ):
+                # Compute all columns that are live at this statement.
+                used_columns, use_all = get_live_column_nums_block(
+                    lives, equiv_vars, lhs_name
+                )
+                if use_all:
+                    new_body.append(stmt)
+                    continue
+                used_columns = bodo.ir.connector.trim_extra_used_columns(
+                    used_columns, len(typemap[rhs.value.name].arr_types)
+                )
+                filter_func = gen_table_filter(typemap[rhs.value.name], used_columns)
+                filter_func = numba.njit(filter_func, no_cpython_wrapper=True)
+                nodes = compile_func_single_block(
+                    eval("lambda T, ind: _filter_func(T, ind)"),
+                    (rhs.value, rhs.index),
+                    stmt.target,
+                    typing_info=typing_info,
+                    extra_globals={"_filter_func": filter_func},
+                )
+                new_body += reversed(nodes)
+                continue
+
+        new_body.append(stmt)
+
+    new_body.reverse()
+    block.body = new_body
     return removed
 
 
