@@ -69,7 +69,7 @@ from bodo.utils.utils import is_call_assign
 def test_series_constructor(data, index, name, memory_leak_check):
     # set Series index to avoid implicit alignment in Pandas case
     if isinstance(data, pd.Series) and index is not None:
-        data.index = index
+        index = None
 
     # bypass literal as data and index = None
     if isinstance(data, int) and index is None:
