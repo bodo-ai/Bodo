@@ -334,6 +334,30 @@ class DataFramePass:
         if fdef == ("set_df_col", "bodo.hiframes.dataframe_impl"):
             return self._run_call_set_df_column(assign, lhs, rhs)
 
+        if fdef == ("get_dataframe_table", "bodo.hiframes.pd_dataframe_ext"):
+            # If we loaded the table from a DataFrame we may be able to eliminate
+            # the original DataFrame.
+            df_var = rhs.args[0]
+            df_def = guard(get_definition, self.func_ir, df_var)
+            call_def = guard(find_callname, self.func_ir, df_def, self.typemap)
+            if not self._is_updated_df(df_var.name) and call_def == (
+                "init_dataframe",
+                "bodo.hiframes.pd_dataframe_ext",
+            ):
+                assert self.typemap[
+                    df_var.name
+                ].is_table_format, (
+                    "set_table_data called on a DataFrame without a table format"
+                )
+                # Extra the original table to enable eliminating the original DataFrame
+                tuple_var = df_def.args[0]
+                tuple_def = guard(get_definition, self.func_ir, tuple_var)
+                if is_expr(tuple_def, "build_tuple"):
+                    assert len(
+                        tuple_def.items
+                    ), "init_dataframe with Table called on a tuple with multiple data values"
+                    assign.value = tuple_def.items[0]
+
         if fdef == ("get_dataframe_data", "bodo.hiframes.pd_dataframe_ext"):
             df_var = rhs.args[0]
             ind = guard(find_const, self.func_ir, rhs.args[1])
@@ -345,6 +369,19 @@ class DataFramePass:
             ):
                 seq_info = guard(find_build_sequence, self.func_ir, var_def.args[0])
                 assert seq_info is not None
+                if self.typemap[df_var.name].is_table_format:
+                    # If we have a table format we replace the get_dataframe_data
+                    # with a get_table_data call so we can perform dead column
+                    # elimination.
+                    table_var = seq_info[0][0]
+                    return compile_func_single_block(
+                        eval(
+                            "lambda table, ind: bodo.hiframes.table.get_table_data(table, ind)"
+                        ),
+                        (table_var, rhs.args[1]),
+                        lhs,
+                        self,
+                    )
                 assign.value = seq_info[0][ind]
 
         if fdef == ("get_dataframe_index", "bodo.hiframes.pd_dataframe_ext"):
@@ -974,6 +1011,7 @@ class DataFramePass:
         # inplace = guard(find_const, self.func_ir, rhs.args[3])
         inplace = guard(get_definition, self.func_ir, rhs.args[3]).value
         df_typ = self.typemap[df_var.name]
+        out_df_type = self.typemap[assign.target.name]
         nodes = []
 
         # transform df['col2'] = df['col1'][arr] since we don't support index alignment
@@ -1007,7 +1045,9 @@ class DataFramePass:
         df_def = guard(get_definition, self.func_ir, df_var)
         # TODO: consider dataframe alias cases where definition is not directly ir.Arg
         # but dataframe has a parent object
-        if isinstance(df_def, ir.Arg):
+        if isinstance(df_def, ir.Arg) or guard(
+            find_callname, self.func_ir, df_def, self.typemap
+        ) == ("set_df_column_with_reflect", "bodo.hiframes.pd_dataframe_ext"):
             return replace_func(
                 self,
                 eval(
@@ -1047,42 +1087,64 @@ class DataFramePass:
 
         n_cols = len(df_typ.columns)
         df_index_var = self._get_dataframe_index(df_var, nodes)
-        in_arrs = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
-        data_args = ["data{}".format(i) for i in range(n_cols)]
-        out_columns = list(df_typ.columns)
 
-        # if column is being added
-        if cname not in df_typ.columns:
-            data_args.append("new_arr")
-            out_columns.append(cname)
-            in_arrs.append(new_arr)
-            new_arr_arg = "new_arr"
-        else:  # updating existing column
-            col_ind = df_typ.columns.index(cname)
-            in_arrs[col_ind] = new_arr
-            new_arr_arg = "data{}".format(col_ind)
+        col_ind = out_df_type.columns.index(cname)
 
-        data_args = ", ".join(data_args)
+        if df_typ.is_table_format:
+            # in this case, output dominates the input so we can reuse its internal data
+            # see _run_df_set_column()
+            nodes += compile_func_single_block(
+                eval(
+                    "lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)"
+                ),
+                [df_var],
+                None,
+                self,
+            )
+            in_table_var = nodes[-1].target
+            in_arrs = [in_table_var]
+            data_args = "T1"
+            new_arr_arg = "new_val"
+        else:
+            in_arrs = [
+                self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns
+            ]
+            data_args = ["data{}".format(i) for i in range(n_cols)]
+
+            # if column is being added
+            if cname not in df_typ.columns:
+                data_args.append("new_arr")
+                in_arrs.append(new_arr)
+                new_arr_arg = "new_arr"
+            else:  # updating existing column
+                in_arrs[col_ind] = new_arr
+                new_arr_arg = f"data{col_ind}"
+
+            data_args = ", ".join(data_args)
 
         # TODO: fix list, Series data
-        col_var = gen_const_tup(out_columns)
         df_index = "df_index"
         if n_cols == 0:
             df_index = "bodo.utils.conversion.extract_index_if_none(new_val, None)\n"
-        func_text = "def _init_df({}, df_index, df, new_val):\n".format(data_args)
+        func_text = f"def _init_df({data_args}, df_index, df, new_val):\n"
         # using len(df) instead of len(df_index) since len optimization works better for
         # dataframes
-        func_text += "  {} = bodo.utils.conversion.coerce_to_array({}, scalar_to_arr_len=len(df))\n".format(
-            new_arr_arg, new_arr_arg
-        )
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
-            data_args, df_index, col_var
-        )
+        func_text += f"  {new_arr_arg} = bodo.utils.conversion.coerce_to_array({new_arr_arg}, scalar_to_arr_len=len(df))\n"
+        if df_typ.is_table_format:
+            func_text += f"  T2 = bodo.hiframes.table.set_table_data(T1, {col_ind}, {new_arr_arg})\n"
+            func_text += f"  df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T2,), {df_index}, out_df_type)\n"
+            func_text += f"  return df\n"
+        else:
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), {df_index}, out_df_type)\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars["_init_df"]
         return replace_func(
-            self, _init_df, in_arrs + [df_index_var, df_var, new_arr], pre_nodes=nodes
+            self,
+            _init_df,
+            in_arrs + [df_index_var, df_var, new_arr],
+            pre_nodes=nodes,
+            extra_globals={"out_df_type": out_df_type},
         )
 
     def _run_call_len(self, lhs, df_var):
@@ -2094,6 +2156,24 @@ class DataFramePass:
         ):
             seq_info = guard(find_build_sequence, self.func_ir, var_def.args[0])
             assert seq_info is not None
+            if self.typemap[df_var.name].is_table_format:
+                # If we have a table format we replace the get_dataframe_data
+                # with a get_table_data call so we can perform dead column
+                # elimination.
+                table_var = seq_info[0][0]
+                loc = df_var.loc
+                ind_var = ir.Var(df_var.scope, mk_unique_var("col_ind"), loc)
+                self.typemap[ind_var.name] = types.IntegerLiteral(ind)
+                nodes.append(ir.Assign(ir.Const(ind, loc), ind_var, loc))
+                nodes += compile_func_single_block(
+                    eval(
+                        "lambda table, ind: bodo.hiframes.table.get_table_data(table, ind)"
+                    ),
+                    (table_var, ind_var),
+                    None,
+                    self,
+                )
+                return nodes[-1].target
             return seq_info[0][ind]
 
         loc = df_var.loc

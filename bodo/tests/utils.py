@@ -980,6 +980,39 @@ class ParforTestPipeline(bodo.compiler.BodoCompiler):
         return [pipeline]
 
 
+class ColumnDelTestPipeline(bodo.compiler.BodoCompiler):
+    """
+    pipeline used in test_column_del_pass with an additional PreserveIRTypeMap pass
+    after BodoTableColumnDelPass
+    """
+
+    def define_pipelines(self):
+        [pipeline] = self._create_bodo_pipeline(
+            distributed=True, inline_calls_pass=False
+        )
+        pipeline._finalized = False
+        pipeline.add_pass_after(PreserveIRTypeMap, bodo.compiler.BodoTableColumnDelPass)
+        pipeline.finalize()
+        return [pipeline]
+
+
+@register_pass(mutates_CFG=False, analysis_only=False)
+class PreserveIRTypeMap(PreserveIR):
+    """
+    Extension to PreserveIR that also saves the typemap.
+    """
+
+    _name = "preserve_ir_typemap"
+
+    def __init__(self):
+        PreserveIR.__init__(self)
+
+    def run_pass(self, state):
+        PreserveIR.run_pass(self, state)
+        state.metadata["preserved_typemap"] = state.typemap.copy()
+        return False
+
+
 class TypeInferenceTestPipeline(bodo.compiler.BodoCompiler):
     """
     pipeline used in bodosql tests with an additional PreserveIR pass

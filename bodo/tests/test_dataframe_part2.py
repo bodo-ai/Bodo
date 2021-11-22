@@ -248,6 +248,18 @@ def test_set_column_native_reflect(memory_leak_check):
     check_func(impl, (), only_seq=True)
 
 
+def test_set_multi_column_reflect(memory_leak_check):
+    """make sure setting multiple columns to df arg reflects back to Python properly"""
+
+    @bodo.jit(distributed=False)
+    def f(df):
+        df[["A", "B"]] = 0.0
+
+    df = pd.DataFrame({"A": [1, 2, 3]})
+    f(df)
+    assert "B" in df
+
+
 def test_set_column_detect_update1(memory_leak_check):
     """Make sure get_dataframe_data optimization can detect that a dataframe may be
     updated in another JIT function
@@ -355,6 +367,36 @@ def test_set_column_detect_update_err2(memory_leak_check):
         match="Changing dataframe column data type inplace is not supported in conditionals/loops",
     ):
         bodo.jit(impl)()
+
+
+def test_set_column_table_format(memory_leak_check):
+    """test setting a column of a dataframe with table format, including corner cases.
+    See set_df_column_with_reflect()
+    """
+
+    def impl(df, c, val):
+        df[c] = val
+        return df
+
+    df = pd.DataFrame(
+        {"A": [1, 2, 3], "B": [3, 4, 5], "C": [5, 6, 7], "D": [1.1, 2.2, 3.3]}
+    )
+    # add a bunch of columns to trigger table format
+    for i in range(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD):
+        df[f"F{i}"] = 11
+
+    # existing column, same type
+    check_func(impl, (df, "B", 12), only_seq=True)
+    # existing column, new type
+    check_func(impl, (df, "B", "abc"), only_seq=True)
+    # existing column, existing type, type change
+    check_func(impl, (df, "B", 1.3), only_seq=True)
+    # existing column, new type, previous type eliminated
+    check_func(impl, (df, "D", "abc"), only_seq=True)
+    # new column, existing type, same type as before
+    check_func(impl, (df, "E", 3), only_seq=True)
+    # new column, new type
+    check_func(impl, (df, "E", "abc"), only_seq=True)
 
 
 @pytest.mark.skip(

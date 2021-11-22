@@ -429,3 +429,41 @@ def gen_allocate_array(context, builder, arr_type, n_elems, c=None):
     else:
         out_arr = context.compile_internal(builder, impl, sig, args)
     return out_arr
+
+
+def is_ll_eq(builder, val1, val2):
+    """
+    Compare equality of two llvm values.
+    Generalizes icmp_unsigned("==", ...) to handle aggregate types (Struct/Array).
+    'val1' & 'val2' are pointer to llvm values.
+    """
+    t1 = val1.type.pointee
+    t2 = val2.type.pointee
+    assert t1 == t2, "invalid llvm value comparison"
+
+    # compare individual elements for aggregate types
+    if isinstance(t1, (lir.BaseStructType, lir.ArrayType)):
+        n_elems = len(t1.elements) if isinstance(t1, lir.BaseStructType) else t1.count
+        eq = lir.Constant(lir.IntType(1), 1)
+        for i in range(n_elems):
+            # NOTE: aggregate types need an extra 0 index for accessing elements in LLVM
+            # e.g. gep(A, 0, 4) gives the 4th element
+            ll_0 = lir.IntType(32)(0)
+            ll_i = lir.IntType(32)(i)
+            new_val1 = builder.gep(val1, [ll_0, ll_i], inbounds=True)
+            new_val2 = builder.gep(val2, [ll_0, ll_i], inbounds=True)
+            eq = builder.and_(eq, is_ll_eq(builder, new_val1, new_val2))
+        return eq
+
+    v1 = builder.load(val1)
+    v2 = builder.load(val2)
+
+    # some values may be float which we cast to int for basic equality check
+    # see test_describe_many_columns
+    if v1.type in (lir.FloatType(), lir.DoubleType()):
+        n_bits = 32 if v1.type == lir.FloatType() else 64
+        v1 = builder.bitcast(v1, lir.IntType(n_bits))
+        v2 = builder.bitcast(v2, lir.IntType(n_bits))
+
+    # integer or pointer values
+    return builder.icmp_unsigned("==", v1, v2)

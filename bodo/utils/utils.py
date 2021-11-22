@@ -359,6 +359,7 @@ def is_np_array_typ(var_typ):
 def is_distributable_typ(var_typ):
     return (
         is_array_typ(var_typ)
+        or isinstance(var_typ, bodo.hiframes.table.TableType)
         or isinstance(var_typ, bodo.hiframes.pd_dataframe_ext.DataFrameType)
         or (isinstance(var_typ, types.List) and is_distributable_typ(var_typ.dtype))
         or (

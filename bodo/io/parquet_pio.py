@@ -7,12 +7,15 @@ import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow  # noqa
+import pyarrow.dataset as ds
 from numba.core import ir, types
 from numba.core.ir_utils import (
     compile_to_numba_ir,
     get_definition,
     guard,
     mk_unique_var,
+    next_label,
     replace_arg_nodes,
 )
 from numba.extending import (
@@ -23,9 +26,7 @@ from numba.extending import (
     register_model,
     unbox,
 )
-import pyarrow
 from pyarrow import null
-import pyarrow.dataset as ds
 
 import bodo
 import bodo.ir.parquet_ext
@@ -38,8 +39,10 @@ from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     PDCategoricalDtype,
 )
+from bodo.hiframes.table import TableType
 from bodo.io.fs_io import get_hdfs_fs, get_s3_fs_from_path
 from bodo.libs.array import (
+    cpp_table_to_py_table,
     delete_table,
     info_from_table,
     info_to_array,
@@ -213,12 +216,30 @@ class ParquetHandler:
             index_col = index_col if index_col in col_names else None
             partition_names = []
 
+        index_colname = (
+            None if (isinstance(index_col, dict) or index_col is None) else index_col
+        )
+        # If we have an index column, remove it from the type to simplify the table.
+        index_column_index = None
+        index_column_type = types.none
+        if index_colname:
+            type_index = col_names.index(index_colname)
+            # NOTE: copying col_indices/col_types since they are stored in FilenameType
+            # schema and stored in cache so can't be mutated
+            col_indices = col_indices.copy()
+            col_types = col_types.copy()
+            index_column_index = col_indices.pop(type_index)
+            index_column_type = col_types.pop(type_index)
+
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
             if c in convert_types:
                 col_types[i] = convert_types[c]
 
-        data_arrs = [ir.Var(scope, mk_unique_var(c), loc) for c in col_names]
+        data_arrs = [
+            ir.Var(scope, mk_unique_var("pq_table"), loc),
+            ir.Var(scope, mk_unique_var("pq_index"), loc),
+        ]
 
         nodes = [
             bodo.ir.parquet_ext.ParquetReader(
@@ -231,32 +252,37 @@ class ParquetHandler:
                 loc,
                 partition_names,
                 storage_options,
+                index_column_index,
+                index_column_type,
             )
         ]
 
-        return col_names, data_arrs, index_col, nodes
+        return col_names, data_arrs, index_col, nodes, col_types, index_column_type
+
 
 def determine_filter_cast(pq_node, typemap, filter_val):
     """
-        Function that generates text for casts that need to be included
-        in the filter when not automatically handled by Arrow. For example
-        timestamp and string. This function returns two strings. In most cases
-        one of the strings will be empty and the other contain the argument that
-        should be cast. However, if we have a partition column, we always cast the
-        partition column either to its original type or the new type.
+    Function that generates text for casts that need to be included
+    in the filter when not automatically handled by Arrow. For example
+    timestamp and string. This function returns two strings. In most cases
+    one of the strings will be empty and the other contain the argument that
+    should be cast. However, if we have a partition column, we always cast the
+    partition column either to its original type or the new type.
 
-        This is because of an issue in arrow where if a partion has a mix of integer
-        and string names it won't look at the global types when Bodo processes per
-        file (see test_read_partitions_string_int for an example).
+    This is because of an issue in arrow where if a partion has a mix of integer
+    and string names it won't look at the global types when Bodo processes per
+    file (see test_read_partitions_string_int for an example).
 
-        We opt to cast in the direction that keep maximum information, for
-        example date -> timestamp rather than timestamp -> date.
+    We opt to cast in the direction that keep maximum information, for
+    example date -> timestamp rather than timestamp -> date.
 
-        Right now we assume filter_val[0] is a column name and filter_val[2]
-        is a scalar Var that is found in the typemap.
+    Right now we assume filter_val[0] is a column name and filter_val[2]
+    is a scalar Var that is found in the typemap.
     """
     colname = filter_val[0]
-    lhs_arr_typ = pq_node.original_out_types[pq_node.original_df_colnames.index(colname)]
+    lhs_arr_typ = pq_node.original_out_types[
+        pq_node.original_df_colnames.index(colname)
+    ]
     lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
     if colname in pq_node.partition_names:
         # Always cast partitions to protect again multiple types
@@ -275,13 +301,15 @@ def determine_filter_cast(pq_node, typemap, filter_val):
     else:
         col_cast = ""
     rhs_scalar_typ = typemap[filter_val[2].name]
-     # Here we assume is_common_scalar_dtype conversions are common
+    # Here we assume is_common_scalar_dtype conversions are common
     # enough that Arrow will support them, since these are conversions
     # like int -> float. TODO: Test
     if not bodo.utils.typing.is_common_scalar_dtype([lhs_scalar_typ, rhs_scalar_typ]):
         # If a cast is not implicit it must be in our white list.
         if not bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
-            raise BodoError(f"Unsupport Arrow cast from {lhs_scalar_typ} to {rhs_scalar_typ} in filter pushdown. Please try a comparison that avoids casting the column.")
+            raise BodoError(
+                f"Unsupport Arrow cast from {lhs_scalar_typ} to {rhs_scalar_typ} in filter pushdown. Please try a comparison that avoids casting the column."
+            )
         # We always cast string -> other types
         # Only supported types should be string and timestamp
         if lhs_scalar_typ == types.unicode_type:
@@ -307,7 +335,7 @@ def pq_distributed_run(
     n_cols = len(pq_node.out_vars)
     extra_args = ""
     dnf_filter_str = "None"
-    expr_filter_str= "None"
+    expr_filter_str = "None"
 
     filter_map, filter_vars = bodo.ir.connector.generate_filter_map(pq_node.filters)
     if filter_map:
@@ -346,8 +374,12 @@ def pq_distributed_run(
                     # expr conds don't do some of the casts that DNF expressions do (for example String and Timestamp).
                     # For known cases where we need to cast we generate the cast. For simpler code we return two strings,
                     # column_cast and scalar_cast.
-                    column_cast, scalar_cast = determine_filter_cast(pq_node, typemap, v)
-                    expr_and_conds.append(f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_map[v[2].name]}){scalar_cast})")
+                    column_cast, scalar_cast = determine_filter_cast(
+                        pq_node, typemap, v
+                    )
+                    expr_and_conds.append(
+                        f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_map[v[2].name]}){scalar_cast})"
+                    )
                 else:
                     # Currently the only constant expressions we support are IS [NOT] NULL
                     assert v[2] == "NULL", "unsupport constant used in filter pushdown"
@@ -407,32 +439,41 @@ def pq_distributed_run(
     exec(func_text, {}, loc_vars)
     pq_impl = loc_vars["pq_impl"]
 
-    # parallel columns
-    parallel = []
+    # parallel read flag
+    parallel = False
     if array_dists is not None:
-        parallel = [
-            c
-            for c, v in zip(pq_node.df_colnames, pq_node.out_vars)
-            if array_dists[v.name]
+        # table is parallel
+        table_varname = pq_node.out_vars[0].name
+        parallel = array_dists[table_varname] in (
+            distributed_pass.Distribution.OneD,
+            distributed_pass.Distribution.OneD_Var,
+        )
+        index_varname = pq_node.out_vars[1].name
+        # index array parallelism should match the table
+        assert (
+            typemap[index_varname] == types.none
+            or not parallel
+            or array_dists[index_varname]
             in (
                 distributed_pass.Distribution.OneD,
                 distributed_pass.Distribution.OneD_Var,
             )
-        ]
+        ), "pq data/index parallelization does not match"
 
     pq_reader_py = _gen_pq_reader_py(
         pq_node.df_colnames,
         pq_node.col_indices,
+        pq_node.type_usecol_offset,
         pq_node.out_types,
         pq_node.storage_options,
         pq_node.partition_names,
         dnf_filter_str,
         expr_filter_str,
         extra_args,
-        typingctx,
-        targetctx,
         parallel,
         meta_head_only_info,
+        pq_node.index_column_index,
+        pq_node.index_column_type,
     )
     arg_types = (string_type,) + tuple(typemap[v.name] for v in filter_vars)
     f_block = compile_to_numba_ir(
@@ -452,8 +493,10 @@ def pq_distributed_run(
     if meta_head_only_info:
         nodes[-1 - n_cols].target = meta_head_only_info[1]
 
-    for i in range(n_cols):
-        nodes[i - n_cols].target = pq_node.out_vars[i]
+    # assign output table
+    nodes[-2].target = pq_node.out_vars[0]
+    # assign output index array
+    nodes[-1].target = pq_node.out_vars[1]
 
     return nodes
 
@@ -507,30 +550,29 @@ def overload_get_storage_options_pyobject(storage_options):
 def _gen_pq_reader_py(
     col_names,
     col_indices,
+    type_usecol_offset,
     out_types,
     storage_options,
     partition_names,
     dnf_filter_str,
     expr_filter_str,
     extra_args,
-    typingctx,
-    targetctx,
-    parallel,
+    is_parallel,
     meta_head_only_info,
+    index_column_index,
+    index_column_type,
 ):
-    if len(parallel) > 0:
-        # in parallel read, we assume all columns are parallel
-        assert col_names == parallel
-    is_parallel = len(parallel) > 0
+
+    # a unique int used to create global variables with unique names
+    call_id = next_label()
+
     comma = "," if extra_args else ""
     func_text = f"def pq_reader_py(fname,{extra_args}):\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
     func_text += "    ev.add_attribute('fname', fname)\n"
     func_text += f"    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={is_parallel})\n"
-    func_text += (
-        f'    dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({extra_args}{comma}))\n'
-    )
+    func_text += f'    dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({extra_args}{comma}))\n'
 
     # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
     storage_options["bodo_dummy"] = "dummy"
@@ -544,24 +586,31 @@ def _gen_pq_reader_py(
     # NOTE: col_indices are the indices of columns in the parquet file (not in
     # the output of read_parquet)
 
+    # If we aren't loading any column the table is dead
+    is_dead_table = not type_usecol_offset
+
     sanitized_col_names = [sanitize_varname(c) for c in col_names]
     partition_names = [sanitize_varname(c) for c in partition_names]
-    local_types = {}
-    for col_in_idx, c_typ in zip(col_indices, out_types):
-        local_types[f"col_{col_in_idx}_type"] = c_typ
 
     # Get list of selected columns to pass to C++ (not including partition
     # columns, since they are not in the parquet files).
     # C++ doesn't need to know the order of output columns, and to simplify
     # the code we will pass the indices of columns in the parquet file sorted.
     # C++ code will add partition columns to the end of its output table.
-    selected_cols = sorted(
-        [
-            col_in_idx
-            for c_name, col_in_idx in zip(sanitized_col_names, col_indices)
-            if c_name not in partition_names
-        ]
-    )
+    # Here because columns may have been eliminated by 'pq_remove_dead_column',
+    # we only load the indices in type_usecol_offset.
+    selected_cols = []
+    parititon_indices = set()
+    for i in type_usecol_offset:
+        if sanitized_col_names[i] not in partition_names:
+            selected_cols.append(col_indices[i])
+        else:
+            # Track which partitions are valid to simplify filtering later
+            parititon_indices.add(col_indices[i])
+
+    if index_column_index is not None:
+        selected_cols.append(index_column_index)
+    selected_cols = sorted(selected_cols)
 
     # Tell C++ which columns in the parquet file are nullable, since there
     # are some types like integer which Arrow always considers to be nullable
@@ -573,8 +622,13 @@ def _gen_pq_reader_py(
             not isinstance(typ, types.Array)  # or is_dtype_nullable(typ.dtype)
         )
 
+    # we need to load the nullable check in the same order as select columns. To do
+    # this, we first need to determine the index of each selected column in the original
+    # type and check if that type is nullable.
     nullable_cols = [
         int(is_nullable(out_types[col_indices.index(col_in_idx)]))
+        if col_in_idx != index_column_index
+        else int(is_nullable(index_column_type))
         for col_in_idx in selected_cols
     ]
 
@@ -589,8 +643,14 @@ def _gen_pq_reader_py(
     for i, part_name in enumerate(partition_names):
         try:
             col_out_idx = sanitized_col_names.index(part_name)
+            # Only load part_name values that are selected
+            # This occurs if we can prune these columns.
+            if col_indices[col_out_idx] not in parititon_indices:
+                # this partition column has not been selected for read
+                continue
         except ValueError:
             # this partition column has not been selected for read
+            # This occurs when the user provides columns
             continue
         sel_partition_names.append(part_name)
         selected_partition_cols.append(i)
@@ -604,25 +664,63 @@ def _gen_pq_reader_py(
     # single-element numpy array to return number of global rows from C++
     func_text += f"    total_rows_np = np.array([0], dtype=np.int64)\n"
     if len(selected_partition_cols) > 0:
-        func_text += f"    out_table = pq_read(unicode_to_utf8(fname), {is_parallel}, unicode_to_utf8(bucket_region), dnf_filters, expr_filters, storage_options_py, {tot_rows_to_read}, np.array({selected_cols}, dtype=np.int32).ctypes, {len(selected_cols)}, np.array({nullable_cols}, dtype=np.int32).ctypes, np.array({selected_partition_cols}, dtype=np.int32).ctypes, np.array({partition_col_cat_dtypes}, dtype=np.int32).ctypes, {len(selected_partition_cols)}, total_rows_np.ctypes)\n"
+        func_text += f"    out_table = pq_read(unicode_to_utf8(fname), {is_parallel}, unicode_to_utf8(bucket_region), dnf_filters, expr_filters, storage_options_py, {tot_rows_to_read}, selected_cols_arr_{call_id}.ctypes, {len(selected_cols)}, nullable_cols_arr_{call_id}.ctypes, np.array({selected_partition_cols}, dtype=np.int32).ctypes, np.array({partition_col_cat_dtypes}, dtype=np.int32).ctypes, {len(selected_partition_cols)}, total_rows_np.ctypes)\n"
     else:
-        func_text += f"    out_table = pq_read(unicode_to_utf8(fname), {is_parallel}, unicode_to_utf8(bucket_region), dnf_filters, expr_filters, storage_options_py, {tot_rows_to_read}, np.array({selected_cols}, dtype=np.int32).ctypes, {len(selected_cols)}, np.array({nullable_cols}, dtype=np.int32).ctypes, 0, 0, 0, total_rows_np.ctypes)\n"
+        func_text += f"    out_table = pq_read(unicode_to_utf8(fname), {is_parallel}, unicode_to_utf8(bucket_region), dnf_filters, expr_filters, storage_options_py, {tot_rows_to_read}, selected_cols_arr_{call_id}.ctypes, {len(selected_cols)}, nullable_cols_arr_{call_id}.ctypes, 0, 0, 0, total_rows_np.ctypes)\n"
     func_text += "    check_and_propagate_cpp_exception()\n"
 
-    for i, col_in_idx in enumerate(selected_cols):
-        c_name = sanitized_col_names[col_indices.index(col_in_idx)]
-        func_text += f"    {c_name} = info_to_array(info_from_table(out_table, {i}), col_{col_in_idx}_type)\n"
+    # handle index column
+    index_arr = "None"
+    index_arr_type = index_column_type
+    py_table_type = TableType(tuple(out_types))
+    if is_dead_table:
+        py_table_type = types.none
 
-    for i, c_name in enumerate(sel_partition_names):
-        col_in_idx = col_indices[sanitized_col_names.index(c_name)]
-        func_text += f"    {c_name} = info_to_array(info_from_table(out_table, {i + len(selected_cols)}), col_{col_in_idx}_type)\n"
+    if index_column_index is not None:
+        index_arr_ind = selected_cols.index(index_column_index)
+        index_arr = f"info_to_array(info_from_table(out_table, {index_arr_ind}), index_arr_type)"
+    func_text += f"    index_arr = {index_arr}\n"
 
+    if is_dead_table:
+        # If a table is dead we can skip the array for the table
+        table_idx = None
+    else:
+        # index in cpp table for each column.
+        # If a column isn't loaded we set the value to -1
+        # and mark it as null in the conversion to Python
+        table_idx = []
+        j = 0
+        for i, col_num in enumerate(col_indices):
+            if j < len(type_usecol_offset) and i == type_usecol_offset[j]:
+                col_idx = col_indices[i]
+                if col_idx in parititon_indices:
+                    c_name = sanitized_col_names[i]
+                    table_idx.append(
+                        len(selected_cols) + sel_partition_names.index(c_name)
+                    )
+                else:
+                    table_idx.append(selected_cols.index(col_num))
+                j += 1
+            else:
+                table_idx.append(-1)
+        table_idx = np.array(table_idx, np.int64)
+
+    if is_dead_table:
+        func_text += "    T = None\n"
+    else:
+        func_text += f"    T = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id})\n"
     func_text += "    delete_table(out_table)\n"
     func_text += f"    total_rows = total_rows_np[0]\n"
     func_text += f"    ev.finalize()\n"
-    func_text += "    return (total_rows, {},)\n".format(", ".join(sanitized_col_names))
+    func_text += "    return (total_rows, T, index_arr)\n"
     loc_vars = {}
     glbs = {
+        f"py_table_type_{call_id}": py_table_type,
+        f"table_idx_{call_id}": table_idx,
+        f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),
+        f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
+        "index_arr_type": index_arr_type,
+        "cpp_table_to_py_table": cpp_table_to_py_table,
         "info_to_array": info_to_array,
         "info_from_table": info_from_table,
         "delete_table": delete_table,
@@ -635,7 +733,6 @@ def _gen_pq_reader_py(
         "pd": pd,
         "bodo": bodo,
     }
-    glbs.update(local_types)
 
     exec(func_text, glbs, loc_vars)
     pq_reader_py = loc_vars["pq_reader_py"]
@@ -785,9 +882,10 @@ def get_parquet_dataset(
     if get_row_counts:
         ev = tracing.Event("get_parquet_dataset")
 
+    import time
+
     import pyarrow as pa
     import pyarrow.parquet as pq
-    import time
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
@@ -952,6 +1050,7 @@ def get_parquet_dataset(
         dataset._metadata.fs = getfs()
         if expr_filters is not None:
             import random
+
             random.seed(37)
             pieces = random.sample(dataset.pieces, k=len(dataset.pieces))
         else:
@@ -1076,7 +1175,7 @@ For best performance the number of row groups should be greater than the number 
 
 def get_scanner_batches(fpath, expr_filters, selected_fields):
     """return list of RecordBatches of file 'fpath' that contain the rows
-       that match expr_filters. Only project the fields in selected_fields"""
+    that match expr_filters. Only project the fields in selected_fields"""
     # We only support hive partitioning right now and will need to change this
     # if we also support directory partitioning
     dataset = ds.dataset(fpath, partitioning=ds.partitioning(flavor="hive"))

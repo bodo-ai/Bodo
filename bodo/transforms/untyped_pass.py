@@ -64,6 +64,7 @@ from bodo.utils.transform import (
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
+    raise_bodo_error,
     to_nullable_type,
     FileInfo,
 )
@@ -1272,14 +1273,16 @@ class UntypedPass:
                     fname_const, sep, skiprows_val, header, compression
                 )
             dtypes = df_type.data
-            usecols = list(range(len(dtypes))) if usecols is None else usecols
-            # make sure usecols has column indices (not names)
-            usecols = [
-                _get_col_ind_from_name_or_ind(
-                    c, col_names if col_names else df_type.columns
-                )
-                for c in usecols
-            ]
+            if usecols is None:
+                usecols = list(range(len(dtypes)))
+            else:
+                # make sure usecols has column indices (not names)
+                usecols = [
+                    _get_col_ind_from_name_or_ind(
+                        c, col_names if col_names else df_type.columns
+                    )
+                    for c in usecols
+                ]
             # convert Pandas generated integer names if any
             cols = [str(df_type.columns[i]) for i in usecols]
             # overwrite column names like Pandas if explicitly provided
@@ -1287,10 +1290,12 @@ class UntypedPass:
                 cols[-len(col_names) :] = col_names
             col_names = cols
             dtype_map = {c: dtypes[usecols[i]] for i, c in enumerate(col_names)}
-
-        usecols = list(range(len(col_names))) if usecols is None else usecols
-        # make sure usecols has column indices (not names)
-        usecols = [_get_col_ind_from_name_or_ind(c, col_names) for c in usecols]
+        else:
+            if usecols is None:
+                usecols = list(range(len(col_names)))
+            else:
+                # make sure usecols has column indices (not names)
+                usecols = [_get_col_ind_from_name_or_ind(c, col_names) for c in usecols]
 
         # handle dtype arg if provided
         if dtype_var is not None:
@@ -1317,16 +1322,13 @@ class UntypedPass:
                     dtype_map_const, "pd.read_csv", rhs.loc
                 )
 
-        columns, data_arrs, out_types = self._get_read_file_col_info(
+        columns, _, out_types = self._get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
         )
 
         orig_columns = columns.copy()  # copy since modified below
 
-        n_cols = len(columns)
-        args = ["data{}".format(i) for i in range(n_cols)]
-        data_args = args.copy()
-        out_data_types = out_types.copy()
+        data_args = ["table_val", "idx_arr_val"]
 
         # one column is index
         if index_col is not None and not (
@@ -1335,32 +1337,45 @@ class UntypedPass:
             # convert column number to column name
             if isinstance(index_col, int):
                 index_col = columns[index_col]
+
             index_ind = columns.index(index_col)
-            index_arg = "bodo.utils.conversion.convert_to_index({}, '{}')".format(
-                data_args[index_ind], index_col
-            )
-            index_elem_dtype = out_types[index_ind].dtype
+
+            index_arr_typ = out_types.pop(index_ind)
+
+            index_elem_dtype = index_arr_typ.dtype
             index_name = index_col
             index_typ = bodo.utils.typing.index_typ_from_dtype_name(
                 index_elem_dtype, index_name
             )
 
             columns.remove(index_col)
-            data_args.remove(data_args[index_ind])
-            out_data_types.pop(index_ind)
+            orig_columns.remove(index_col)
+            if index_ind in usecols:
+                usecols.remove(index_ind)
+
+            index_arg = f'bodo.utils.conversion.convert_to_index({data_args[1]}, name = "{index_name}")'
+
         else:
             # generate RangeIndex as default index
-            assert len(data_args) > 0
-            index_ind = -1
+            index_ind = None
+            index_name = None
+            index_arr_typ = types.none
             index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
                 data_args[0]
             )
             index_typ = RangeIndexType(types.none)
 
+        # I'm not certain if this is possible, but I'll add a check just in case
+        if isinstance(index_typ, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
+            raise_bodo_error("Read_csv(): Index column cannot be a multindex")
+
+        df_type = DataFrameType(
+            tuple(out_types), index_typ, tuple(columns), is_table_format=True
+        )
+
         # If we have a chunksize we need to create an iterator, so we determine
         # the yield DataFrame type directly.
         if chunksize is not None:
-            df_type = DataFrameType(tuple(out_data_types), index_typ, tuple(columns))
             out_types = [
                 bodo.io.csv_iterator_ext.CSVIteratorType(
                     df_type,
@@ -1369,11 +1384,17 @@ class UntypedPass:
                     usecols,
                     sep,
                     index_ind,
+                    index_arr_typ,
+                    index_name,
                 )
             ]
             # Create a new temp var so this is always exactly one variable.
             data_arrs = [ir.Var(lhs.scope, mk_unique_var("csv_iterator"), lhs.loc)]
-
+        else:
+            data_arrs = [
+                ir.Var(lhs.scope, mk_unique_var("csv_table"), lhs.loc),
+                ir.Var(lhs.scope, mk_unique_var("index_col"), lhs.loc),
+            ]
         nodes = [
             csv_ext.CsvReader(
                 fname,
@@ -1391,23 +1412,29 @@ class UntypedPass:
                 chunksize,
                 is_skiprows_list,
                 pd_low_memory,
+                index_ind,
+                # CsvReader expects the type of the read column
+                # not the index type itself
+                bodo.utils.typing.get_index_data_arr_types(index_typ)[0],
             )
         ]
 
         # Below we assume that the columns are strings
-        col_var = gen_const_tup(columns)
         if chunksize is not None:
             # Generate an assign because init_csv_iterator will happen inside read_csv
             nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
         else:
-            func_text = "def _type_func({}):\n".format(", ".join(args))
-            func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
-                ", ".join(data_args), index_arg, col_var
-            )
+            func_text = f"def _type_func({data_args[0]}, {data_args[1]}):\n"
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((table_val,), {index_arg}, df_type)\n"
+
             loc_vars = {}
+
             exec(func_text, {}, loc_vars)
             _type_func = loc_vars["_type_func"]
-            nodes += compile_func_single_block(_type_func, data_arrs, lhs)
+
+            nodes += compile_func_single_block(
+                _type_func, data_arrs, lhs, extra_globals={"df_type": df_type}
+            )
         return nodes
 
     def _handle_pd_read_json(self, assign, lhs, rhs, label):
@@ -1702,26 +1729,27 @@ class UntypedPass:
         if not bodo.utils.utils.has_pyarrow():
             raise RuntimeError("pyarrow is required for Parquet support")
 
-        (columns, data_arrs, index_col, nodes,) = self.pq_handler.gen_parquet_read(
+        (
+            columns,
+            data_arrs,
+            index_col,
+            nodes,
+            col_types,
+            index_col_type,
+        ) = self.pq_handler.gen_parquet_read(
             fname, lhs, columns, storage_options=storage_options
         )
         n_cols = len(columns)
-        args = ", ".join("data{}".format(i) for i in range(n_cols))
-        data_args = ", ".join(
-            "data{}".format(i)
-            for i in range(n_cols)
-            if (
-                isinstance(index_col, dict)
-                or index_col is None
-                or i != columns.index(index_col)
-            )
-        )
 
+        index_colname = (
+            None if (isinstance(index_col, dict) or index_col is None) else index_col
+        )
         if index_col is None:
             assert n_cols > 0
             index_arg = (
-                "bodo.hiframes.pd_index_ext.init_range_index(0, len(data0), 1, None)"
+                "bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, None)"
             )
+            index_typ = RangeIndexType(types.none)
         elif isinstance(index_col, dict):
             if index_col["name"] is None:
                 index_col_name = None
@@ -1730,38 +1758,45 @@ class UntypedPass:
             # In case there is filtering we take a min between the stop and the filtered length.
             # This won't match Pandas, which instead should have a Numeric Index if there is any filtering.
             # TODO: Match Pandas
-            min_str = f"min({index_col['stop']}, (len(data0) * {index_col['step']}) + {index_col['start']})"
+            min_str = f"min({index_col['stop']}, (len(T) * {index_col['step']}) + {index_col['start']})"
             index_arg = f"bodo.hiframes.pd_index_ext.init_range_index({index_col['start']}, {min_str}, {index_col['step']}, {index_col_name})"
+            index_typ = RangeIndexType(
+                types.none
+                if index_col["name"] is None
+                else types.literal(index_col["name"])
+            )
         else:
             # if the index_col is __index_level_0_, it means it has no name.
             # Thus we do not write the name instead of writing '__index_level_0_' as the name
-            if "__index_level_" in index_col:
-                index_arg = (
-                    "bodo.utils.conversion.convert_to_index(data{}, None)".format(
-                        columns.index(index_col)
-                    )
-                )
-            else:
-                index_arg = (
-                    "bodo.utils.conversion.convert_to_index(data{}, '{}')".format(
-                        columns.index(index_col), index_col
-                    )
-                )
+            index_name = None if "__index_level_" in index_col else index_col
+            index_arg = (
+                f"bodo.utils.conversion.convert_to_index(index_arr, {index_name!r})"
+            )
+            index_typ = bodo.hiframes.pd_index_ext.array_type_to_index(
+                index_col_type,
+                types.none if index_name is None else types.literal(index_name),
+            )
 
         col_args = tuple(
-            c
-            for c in columns
-            if (isinstance(index_col, dict) or index_col is None or c != index_col)
+            c for c in columns if index_colname is None or c != index_colname
         )
-        col_var = gen_const_tup(col_args)
-        func_text = "def _init_df({}):\n".format(args)
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
-            data_args, index_arg, col_var
+        df_col_types = tuple(
+            t
+            for (c, t) in zip(columns, col_types)
+            if index_colname is None or c != index_colname
         )
+
+        out_df_type = DataFrameType(
+            df_col_types, index_typ, col_args, is_table_format=True
+        )
+        func_text = "def _init_df(T, index_arr):\n"
+        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((T,), {index_arg}, out_df_type)\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars["_init_df"]
-        nodes += compile_func_single_block(_init_df, data_arrs, lhs)
+        nodes += compile_func_single_block(
+            _init_df, data_arrs, lhs, extra_globals={"out_df_type": out_df_type}
+        )
         return nodes
 
     def _handle_pd_read_parquet(self, assign, lhs, rhs):

@@ -1,5 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 
+from collections import defaultdict
+
 import numba
 import numpy as np  # noqa
 import pandas as pd  # noqa
@@ -15,12 +17,18 @@ from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     PDCategoricalDtype,
 )
+from bodo.hiframes.table import Table, TableType  # noqa
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import StringArrayType, string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
+from bodo.transforms.table_column_del_pass import (
+    get_live_column_nums_block,
+    ir_extension_table_column_use,
+    remove_dead_column_extensions,
+)
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import check_java_installation  # noqa
 from bodo.utils.utils import sanitize_varname
@@ -44,6 +52,8 @@ class CsvReader(ir.Stmt):
         chunksize,
         is_skiprows_list,
         low_memory,
+        index_column_index=None,
+        index_column_typ=types.none,
     ):
         self.connector_typ = "csv"
         self.file_name = file_name
@@ -64,9 +74,16 @@ class CsvReader(ir.Stmt):
         # skiprows list
         self.is_skiprows_list = is_skiprows_list
         self.pd_low_memory = low_memory
+        self.index_column_index = index_column_index
+        self.index_column_typ = index_column_typ
+        # Columns within the output table type that are actually used.
+        # These will be updated during optimzations and do not contain
+        # the actual columns numbers that should be loaded. For more
+        # information see 'csv_remove_dead_column'.
+        self.type_usecol_offset = list(range(len(usecols)))
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={}, self.chunksize={}, self.is_skiprows_list={}, self.pd_low_memory={})".format(
+        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={}, chunksize={}, is_skiprows_list={}, pd_low_memory={}, index_column_index={}, index_colum_typ = {}, type_usecol_offsets={})".format(
             self.df_out,
             self.file_name,
             self.df_colnames,
@@ -77,6 +94,9 @@ class CsvReader(ir.Stmt):
             self.chunksize,
             self.is_skiprows_list,
             self.pd_low_memory,
+            self.index_column_index,
+            self.index_column_typ,
+            self.type_usecol_offset,
         )
 
 
@@ -160,35 +180,37 @@ csv_file_chunk_reader = types.ExternalFunction(
 def remove_dead_csv(
     csv_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
 ):
+    """
+    Function to determine to remove the returned variables
+    once they are dead. This only removes whole variables, not sub-components
+    like table columns.
+    """
     if csv_node.chunksize is not None:
-        # If we have a chunksize then we only have 1 variable
-        # that represents the reader for the iterator.
-        # We need different code because the df info shouldn't change.
-        reader = csv_node.out_vars[0]
-        if reader.name not in lives:
+        # Chunksize only has 1 var
+        iterator_var = csv_node.out_vars[0]
+        if iterator_var.name not in lives:
             return None
-        return csv_node
+    else:
+        # Otherwise we have two variables.
+        table_var = csv_node.out_vars[0]
+        idx_var = csv_node.out_vars[1]
 
-    # TODO
-    new_df_colnames = []
-    new_out_vars = []
-    new_out_types = []
-    new_usecols = []
-
-    for i, col_var in enumerate(csv_node.out_vars):
-        if col_var.name in lives:
-            new_df_colnames.append(csv_node.df_colnames[i])
-            new_out_vars.append(csv_node.out_vars[i])
-            new_out_types.append(csv_node.out_types[i])
-            new_usecols.append(csv_node.usecols[i])
-
-    csv_node.df_colnames = new_df_colnames
-    csv_node.out_vars = new_out_vars
-    csv_node.out_types = new_out_types
-    csv_node.usecols = new_usecols
-
-    if len(csv_node.out_vars) == 0:
-        return None
+        # If both variables are dead, remove the node
+        if table_var.name not in lives and idx_var.name not in lives:
+            return None
+        # If only the index variable is dead
+        # update the fields in the node relating to the index column,
+        # so that it doesn't get loaded from CSV
+        elif idx_var.name not in lives:
+            csv_node.index_column_index = None
+            csv_node.index_column_typ = types.none
+        # If the index variable is dead
+        # update the fields in the node relating to the index column,
+        # so that it doesn't get loaded from CSV
+        elif table_var.name not in lives:
+            csv_node.usecols = []
+            csv_node.out_types = []
+            csv_node.type_usecol_offset = []
 
     return csv_node
 
@@ -196,6 +218,13 @@ def remove_dead_csv(
 def csv_distributed_run(
     csv_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
+    """
+    Generate that actual code for this ReadCSV Node during distributed pass.
+    This produces different code depending on if the read_csv call contains
+    chunksize or not.
+    """
+    # parallel read flag
+    parallel = False
     # skiprows as `ir.Const` indicates default value.
     # If it's a list, it will never be `ir.Const`
     skiprows_typ = (
@@ -204,16 +233,15 @@ def csv_distributed_run(
         else typemap[csv_node.skiprows.name]
     )
     if csv_node.chunksize is not None:
-        # Iterator Case
-        if array_dists is None:
-            parallel = False
-        else:
-            # If we have a reader its the only out var
-            dist = array_dists[csv_node.out_vars[0].name]
-            parallel = (
-                dist == distributed_pass.Distribution.OneD
-                or dist == distributed_pass.Distribution.OneD_Var
+        if array_dists is not None:
+            # Parallel flag for iterator is based on the single var.
+            iterator_varname = csv_node.out_vars[0].name
+            parallel = array_dists[iterator_varname] in (
+                distributed_pass.Distribution.OneD,
+                distributed_pass.Distribution.OneD_Var,
             )
+
+        # Iterator Case
 
         # Create a wrapper function that will be compiled. This will return
         # an iterator.
@@ -267,6 +295,7 @@ def csv_distributed_run(
             typemap=typemap,
             calltypes=calltypes,
         ).blocks.popitem()[1]
+
         # Replace the arguments with the values from the csv node
         replace_arg_nodes(
             f_block, [csv_node.file_name, csv_node.nrows, csv_node.skiprows]
@@ -275,42 +304,74 @@ def csv_distributed_run(
         # the csv iterator var.
         nodes = f_block.body[:-3]
         nodes[-1].target = csv_node.out_vars[0]
+
         return nodes
 
     # Default Case
-    parallel = False
+    # Parallel is based on table + index var
     if array_dists is not None:
-        parallel = True
-        for v in csv_node.out_vars:
-            if (
-                array_dists[v.name] != distributed_pass.Distribution.OneD
-                and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
-            ):
-                parallel = False
+        # table is parallel
+        table_varname = csv_node.out_vars[0].name
+        parallel = array_dists[table_varname] in (
+            distributed_pass.Distribution.OneD,
+            distributed_pass.Distribution.OneD_Var,
+        )
+        index_varname = csv_node.out_vars[1].name
+        # index array parallelism should match the table
+        assert (
+            typemap[index_varname] == types.none
+            or not parallel
+            or array_dists[index_varname]
+            in (
+                distributed_pass.Distribution.OneD,
+                distributed_pass.Distribution.OneD_Var,
+            )
+        ), "pq data/index parallelization does not match"
 
-    n_cols = len(csv_node.out_vars)
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
     # get column variables
-    arg_names = ", ".join("arr" + str(i) for i in range(n_cols))
     func_text = "def csv_impl(fname, nrows, skiprows):\n"
-    func_text += f"    ({arg_names},) = _csv_reader_py(fname, nrows, skiprows)\n"
+    func_text += f"    (table_val, idx_col) = _csv_reader_py(fname, nrows, skiprows)\n"
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     csv_impl = loc_vars["csv_impl"]
 
+    # Use the type_usecol_offset information to determine the final columns
+    # to actualy load. For example, if we have the code.
+    #
+    # T = read_csv(table(0, 1, 2, 3), usecols=[1, 2])
+    # arr = T[1]
+    #
+    # Then after optimizations:
+    # usecols = [1, 2]
+    # type_usecol_offset = [1]
+    #
+    # This computes the columns to actually load based on the offsets:
+    # final_usecols = [2]
+    #
+    # See 'csv_remove_dead_column' for more information.
+    #
+
+    # usecols is empty in the case that the table is dead, but not the index.
+    # see 'remove_dead_csv' for more information.
+    final_usecols = csv_node.usecols
+    if final_usecols:
+        final_usecols = [csv_node.usecols[i] for i in csv_node.type_usecol_offset]
     csv_reader_py = _gen_csv_reader_py(
         csv_node.df_colnames,
         csv_node.out_types,
-        csv_node.usecols,
+        final_usecols,
+        csv_node.type_usecol_offset,
         csv_node.sep,
         parallel,
         csv_node.header,
         csv_node.compression,
         csv_node.is_skiprows_list,
         csv_node.pd_low_memory,
+        idx_col_index=csv_node.index_column_index,
+        idx_col_typ=csv_node.index_column_typ,
     )
-
     f_block = compile_to_numba_ir(
         csv_impl,
         {"_csv_reader_py": csv_reader_py},
@@ -331,10 +392,89 @@ def csv_distributed_run(
         ],
     )
     nodes = f_block.body[:-3]
-    for i in range(len(csv_node.out_vars)):
-        nodes[-len(csv_node.out_vars) + i].target = csv_node.out_vars[i]
 
+    # The nodes IR should look somthing like
+    # arr0.149 = $12unpack_sequence.5.147
+    # idx_col.150 = $12unpack_sequence.6.148
+    # and the args are passed in as [table_var, idx_var]
+    # Set the lhs of the final two assigns to the passed in variables.
+    nodes[-1].target = csv_node.out_vars[1]
+    nodes[-2].target = csv_node.out_vars[0]
+    if csv_node.index_column_index is None:
+        # If the index_col is dead, remove the node.
+        nodes.pop(-1)
+    elif not final_usecols:
+        # If the table is dead, remove the node
+        nodes.pop(-2)
     return nodes
+
+
+def csv_remove_dead_column(csv_node, column_live_map, equiv_vars, typemap):
+    """
+    Function that tracks which columns to prune from the CSV node.
+    This updates type_usecol_offset which stores which arrays in the
+    types will need to actually be loaded.
+
+    This is mapped to the actual file columns in 'csv_distributed_run'.
+    """
+    # All csv_nodes should have a two variables, the first being the table, and the second being the idxcol
+    assert len(csv_node.out_vars) == 2, "invalid CsvReader node"
+    table_var_name = csv_node.out_vars[0].name
+    # out_vars[0] is either a TableType (the normal case) or a reader
+    # (the chunksize case). In latter case we don't eliminate any columns
+    # at the source (consistent with the previous DataFrame type).
+    # if csv_node.usecols is empty, the table is dead. See remove_dead_csv
+    if isinstance(typemap[table_var_name], TableType) and csv_node.usecols:
+        # Compute all columns that are live at this statement.
+        used_columns, use_all = get_live_column_nums_block(
+            column_live_map, equiv_vars, table_var_name
+        )
+        used_columns = bodo.ir.connector.trim_extra_used_columns(
+            used_columns, len(csv_node.usecols)
+        )
+        if not use_all and not used_columns:
+            # If we see no specific column is need some operations need some
+            # column but no specific column. For example:
+            # T = read_csv(table(0, 1, 2, 3))
+            # n = len(T)
+            #
+            # Here we just load column 0. If no columns are actually needed, dead
+            # code elimination will remove the entire IR var in 'remove_dead_csv'.
+            #
+            used_columns = [0]
+        if not use_all and len(used_columns) != len(csv_node.type_usecol_offset):
+            # Update the type offset. If we have code like
+            #
+            # T = read_csv(table(0, 1, 2, 3), usecols=[1, 2])
+            #
+            # Then T is typed after applying use cols, so the type
+            # is Table(arr1, arr2). As a result once we apply optimizations,
+            # all the column indices will refer to the index within that
+            # type, not the original file.
+            #
+            # i.e. T[1] == arr2
+            #
+            # This means that used_columns will track the offsets within the type,
+            # not the actual column numbers in the file. We keep these offsets separate
+            # while finalizing DCE and we will update the file with the actual columns later
+            # in 'csv_distributed_run'.
+            #
+            # For more information see:
+            # https://bodo.atlassian.net/wiki/spaces/B/pages/921042953/Table+Structure+with+Dead+Columns#User-Provided-Column-Pruning-at-the-Source
+
+            csv_node.type_usecol_offset = used_columns
+            # Return that this table was updated
+            return True
+    return False
+
+
+def csv_table_column_use(csv_node, column_use_map, equiv_vars, typemap):
+    """
+    Function to handle any necessary processing for column uses
+    with a particular table. CsvReader defines a table and doesn't
+    use any other table, so this does nothing.
+    """
+    return
 
 
 numba.parfors.array_analysis.array_analysis_extensions[
@@ -357,6 +497,8 @@ ir_utils.build_defs_extensions[
     CsvReader
 ] = bodo.ir.connector.build_connector_definitions
 distributed_pass.distributed_run_extensions[CsvReader] = csv_distributed_run
+remove_dead_column_extensions[CsvReader] = csv_remove_dead_column
+ir_extension_table_column_use[CsvReader] = csv_table_column_use
 
 
 def _get_dtype_str(t):
@@ -544,9 +686,14 @@ def _gen_read_csv_objmode(
     sanitized_cnames,
     col_typs,
     usecols,
+    type_usecol_offset,
     sep,
+    call_id,
+    glbs,
     parallel,
     check_parallel_runtime,
+    idx_col_index,
+    idx_col_typ,
 ):
     """
     Generate a code body that calls into objmode to perform read_csv using
@@ -580,43 +727,91 @@ def _gen_read_csv_objmode(
     # (`str`) directly in `pd.read_csv` (there's no performance penalty, we checked),
     # and specify the rest of the dtypes in the `df.astype` call.
 
-    # dtypes to specify directly in the `pd.read_csv` call
-    pd_read_csv_dtype_text = ", ".join(
-        [
-            "{}:{}".format(idx, _get_pd_dtype_str(t))
-            for idx, t in zip(usecols, col_typs)
-            if _get_pd_dtype_str(t) == "str"
-        ]
-    )
-    # dtypes to specify in the `df.astype` call done right after the `pd.read_csv` call
-    df_astype_dtype_text = ", ".join(
-        [
-            "{}:{}".format(idx, _get_pd_dtype_str(t))
-            for idx, t in zip(usecols, col_typs)
-            if _get_pd_dtype_str(t) != "str"
-        ]
-    )
     date_inds = ", ".join(
-        str(i) for i, t in enumerate(col_typs) if t.dtype == types.NPDatetime("ns")
+        str(col_num)
+        for i, col_num in enumerate(usecols)
+        if col_typs[type_usecol_offset[i]].dtype == types.NPDatetime("ns")
     )
-    typ_strs = ", ".join(
-        [
-            "{}='{}'".format(s_cname, _get_dtype_str(t))
-            for s_cname, t in zip(sanitized_cnames, col_typs)
-        ]
-    )
-    parallel_varname = _gen_parallel_flag_name(sanitized_cnames)
+
+    # add idx col if needed
+    if idx_col_typ == types.NPDatetime("ns"):
+        assert not idx_col_index is None
+        date_inds += ", " + str(idx_col_index)
+
     # _gen_read_csv_objmode() may be called from iternext_impl when
     # used to generate a csv_iterator. That function doesn't have access
     # to the parallel flag in CSVNode so we retrieve it from the file reader.
-    if check_parallel_runtime:
-        typ_strs += f", {parallel_varname}='bool_'"
-    func_text = "  with objmode({}):\n".format(typ_strs)
+    parallel_varname = _gen_parallel_flag_name(sanitized_cnames)
+    par_var_typ_str = f"{parallel_varname}='bool_'" if check_parallel_runtime else ""
+
+    # array of column numbers that should be specified as str in pd.read_csv()
+    # using a global array (constant lowered) for faster compilation for many columns
+
+    str_col_nums_list = [
+        col_num
+        for i, col_num in enumerate(usecols)
+        if _get_pd_dtype_str(col_typs[type_usecol_offset[i]]) == "str"
+    ]
+
+    # add idx col if needed
+    if idx_col_index is not None and _get_pd_dtype_str(idx_col_typ) == "str":
+        str_col_nums_list.append(idx_col_index)
+
+    str_col_nums = np.array(str_col_nums_list)
+
+    glbs[f"str_col_nums_{call_id}"] = str_col_nums
+    # NOTE: assigning a new variable to make globals used inside objmode local to the
+    # function, which avoids objmode caching errors
+    func_text = f"  str_col_nums_{call_id}_2 = str_col_nums_{call_id}\n"
+
+    # array of used columns to load from pd.read_csv()
+    # using a global array (constant lowered) for faster compilation for many columns
+    use_cols_arr = np.array(
+        usecols + ([idx_col_index] if idx_col_index is not None else [])
+    )
+    glbs[f"usecols_arr_{call_id}"] = use_cols_arr
+    func_text += f"  usecols_arr_{call_id}_2 = usecols_arr_{call_id}\n"
+    # Array of offsets within the type used for creating the table.
+    usecol_type_offset_arr = np.array(type_usecol_offset)
+    if usecols:
+        glbs[f"type_usecols_offsets_arr_{call_id}"] = usecol_type_offset_arr
+        func_text += f"  type_usecols_offsets_arr_{call_id}_2 = type_usecols_offsets_arr_{call_id}\n"
+
+    # dtypes to specify in the `df.astype` call done right after the `pd.read_csv` call
+    # using global arrays (constant lowered) for each type to avoid
+    # generating a lot of code (faster compilation for many columns)
+    typ_map = defaultdict(list)
+    for i, col_num in enumerate(usecols):
+        t = col_typs[type_usecol_offset[i]]
+        if _get_pd_dtype_str(t) == "str":
+            continue
+        typ_map[_get_pd_dtype_str(t)].append(col_num)
+
+    # add idx col if needed
+    if idx_col_index is not None and _get_pd_dtype_str(idx_col_typ) != "str":
+        typ_map[_get_pd_dtype_str(idx_col_typ)].append(idx_col_index)
+
+    for i, t_list in enumerate(typ_map.values()):
+        glbs[f"t_arr_{i}_{call_id}"] = np.asarray(t_list)
+        func_text += f"  t_arr_{i}_{call_id}_2 = t_arr_{i}_{call_id}\n"
+
+    if idx_col_index != None:
+        # idx_array_typ is added to the globals at a higher level
+        func_text += f"  with objmode(T=table_type_{call_id}, idx_arr=idx_array_typ, {par_var_typ_str}):\n"
+    else:
+        func_text += f"  with objmode(T=table_type_{call_id}, {par_var_typ_str}):\n"
+    # create typemap for `df.astype` in runtime
+    func_text += f"    typemap = {{}}\n"
+    for i, t_str in enumerate(typ_map.keys()):
+        func_text += (
+            f"    typemap.update({{i:{t_str} for i in t_arr_{i}_{call_id}_2}})\n"
+        )
     func_text += "    if f_reader.get_chunk_size() == 0:\n"
-    cols = ", ".join(f"{sc}" for sc in usecols)
     # Pass str as default dtype. Non-str column types will be
     # assigned with `astype` below.
-    func_text += f"      df = pd.DataFrame(columns=[{cols}], dtype=str)\n"
+    func_text += (
+        f"      df = pd.DataFrame(columns=usecols_arr_{call_id}_2, dtype=str)\n"
+    )
     func_text += "    else:\n"
     # Add extra indent for the read_csv call
     func_text += "      df = pd.read_csv(f_reader,\n"
@@ -625,16 +820,13 @@ def _gen_read_csv_objmode(
     # to pandas. f_reader skips the header, so we have to tell pandas header=None.
     func_text += "        header=None,\n"
     func_text += "        parse_dates=[{}],\n".format(date_inds)
-    # Check explanation near the declaration of `pd_read_csv_dtype_text` for why we specify
+    # Check explanation near top of the function for why we specify
     # only some types here directly
-    func_text += "        dtype={{{}}},\n".format(pd_read_csv_dtype_text)
+    func_text += f"        dtype={{i:str for i in str_col_nums_{call_id}_2}},\n"
     # NOTE: using repr() for sep to support cases like "\n" properly
-    func_text += "        usecols={}, sep={!r}, low_memory=False)\n".format(
-        usecols, sep
+    func_text += (
+        f"        usecols=usecols_arr_{call_id}_2, sep={sep!r}, low_memory=False)\n"
     )
-    # Check explanation near the declaration of `df_astype_dtype_text` for why we specify
-    # some types here rather than directly in the `pd.read_csv` call.
-    func_text += "    typemap = {{{}}}\n".format(df_astype_dtype_text)
     # _gen_read_csv_objmode() may be called from iternext_impl which doesn't
     # have access to the parallel flag in the CSVNode so we retrieve it from
     # the file reader.
@@ -642,9 +834,26 @@ def _gen_read_csv_objmode(
         func_text += f"    {parallel_varname} = f_reader.is_parallel()\n"
     else:
         func_text += f"    {parallel_varname} = {parallel}\n"
+    # Check explanation near top of the function for why we specify
+    # some types here rather than directly in the `pd.read_csv` call.
     func_text += f"    astype(df, typemap, {parallel_varname})\n"
-    for col_idx, s_cname in zip(usecols, sanitized_cnames):
-        func_text += "    {} = df[{}].values\n".format(s_cname, col_idx)
+    # TODO: update and test with usecols
+    if idx_col_index != None:
+        idx_col_output_index = sorted(use_cols_arr).index(idx_col_index)
+        func_text += f"    idx_arr = df.iloc[:, {idx_col_output_index}].values\n"
+        func_text += (
+            f"    df.drop(columns=df.columns[{idx_col_output_index}], inplace=True)\n"
+        )
+    # if usecols is empty, the table is dead, see remove_dead_csv.
+    # In this case, we simply return None
+    if len(usecols) == 0:
+        func_text += f"    T = None\n"
+    else:
+        func_text += f"    arrs = []\n"
+        func_text += f"    for i in range(df.shape[1]):\n"
+        func_text += f"      arrs.append(df.iloc[:, i].values)\n"
+        # Bodo preserves all of the original types needed at typing in col_typs
+        func_text += f"    T = Table(arrs, type_usecols_offsets_arr_{call_id}_2, {len(col_names)})\n"
     return func_text
 
 
@@ -665,12 +874,15 @@ def _gen_csv_reader_py(
     col_names,
     col_typs,
     usecols,
+    type_usecol_offset,
     sep,
     parallel,
     header,
     compression,
     is_skiprows_list,
     pd_low_memory,
+    idx_col_index=None,
+    idx_col_typ=types.none,
 ):
     """
     Function that generates the body for a csv_node when chunksize
@@ -690,19 +902,39 @@ def _gen_csv_reader_py(
         is_skiprows_list,
         pd_low_memory,
     )
+    # a unique int used to create global variables with unique names
+    call_id = ir_utils.next_label()
+    glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
+    # {'objmode': objmode, 'csv_file_chunk_reader': csv_file_chunk_reader,
+    # 'pd': pd, 'np': np}
+    # objmode type variable used in _gen_read_csv_objmode
+    if idx_col_typ != types.none:
+        glbls[f"idx_array_typ"] = idx_col_typ
+
+    # in the case that usecols is empty, the table is dead.
+    # in this case, we simply return the
+    if len(usecols) == 0:
+        glbls[f"table_type_{call_id}"] = types.none
+    else:
+        glbls[f"table_type_{call_id}"] = TableType(tuple(col_typs))
     func_text += _gen_read_csv_objmode(
         col_names,
         sanitized_cnames,
         col_typs,
         usecols,
+        type_usecol_offset,
         sep,
+        call_id,
+        glbls,
         parallel=parallel,
         check_parallel_runtime=False,
+        idx_col_index=idx_col_index,
+        idx_col_typ=idx_col_typ,
     )
-    func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
-    glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
-    # {'objmode': objmode, 'csv_file_chunk_reader': csv_file_chunk_reader,
-    # 'pd': pd, 'np': np}
+    if idx_col_index != None:
+        func_text += "  return (T, idx_arr)\n"
+    else:
+        func_text += "  return (T, None)\n"
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     csv_reader_py = loc_vars["csv_reader_py"]
@@ -710,4 +942,5 @@ def _gen_csv_reader_py(
     # TODO: no_cpython_wrapper=True crashes for some reason
     jit_func = numba.njit(csv_reader_py)
     compiled_funcs.append(jit_func)
+
     return jit_func

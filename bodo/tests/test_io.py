@@ -801,21 +801,9 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
         df = pd.read_csv(fname_gzipped, names=["A", "B", "C", "D"], compression="gzip")
         return df.C
 
-    bodo_func = numba.njit(
-        pipeline_class=DeadcodeTestPipeline,
-        parallel=True,
-        returns_maybe_distributed=False,
-    )(impl)
-    pd.testing.assert_series_equal(bodo_func(), impl())
-    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    read_csv_found = False
-    # find CsvReader node and make sure it has only 1 column
-    for stmt in fir.blocks[0].body:
-        if isinstance(stmt, bodo.ir.csv_ext.CsvReader):
-            read_csv_found = True
-            assert len(stmt.df_colnames) == 1
-            break
-    assert read_csv_found
+    check_func(impl, (), only_seq=True)
+    # TODO: check for the number of columns actually loaded. CsvReader
+    # node no longer contains the loaded columns in df.colnames
 
     if bodo.get_rank() == 0:
         subprocess.run(["gzip", "-k", "-f", fname])
@@ -1299,6 +1287,42 @@ def test_read_partitions2():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
+def test_read_partitions_predicate_dead_column():
+    """test reading and filtering predicate + partition columns
+    doesn't load the columns if they are unused."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            table = pa.table(
+                {
+                    "a": range(10),
+                    "b": np.random.randn(10),
+                    "c": [1, 2, 3, 4, 5] * 2,
+                    "part": ["a"] * 5 + ["b"] * 5,
+                }
+            )
+            pq.write_to_dataset(table, "pq_data", partition_cols=["c"])
+        bodo.barrier()
+
+        def impl1(path):
+            df = pd.read_parquet(path)
+            return df[(df["a"] > 5) & (df["c"] == 2)].b
+
+        # TODO(ehsan): match Index
+        check_func(impl1, ("pq_data",), reset_index=True)
+        # make sure the ParquetReader node has filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+        bodo_func("pq_data")
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+        # TODO: Test that we only load column b.
+        bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree("pq_data", ignore_errors=True)
+
+
 def test_read_partitions_cat_ordering():
     """test reading and filtering multi-level partitioned parquet data with many
     directories, to make sure order of partition values in categorical dtype
@@ -1327,7 +1351,6 @@ def test_read_partitions_cat_ordering():
         def impl2(path):
             df = pd.read_parquet(path)
             return df[(df["c"] != 3) | (df["part"] == "a")]
-            return df
 
         check_func(impl1, ("pq_data",))
         # TODO(ehsan): match Index
@@ -3114,6 +3137,22 @@ def test_csv_chunksize_forloop(datapath, memory_leak_check):
     check_func(impl1, (fname,))
     check_func(impl2, (fname,))
     check_func(impl3, (fname,))
+
+
+@pytest.mark.slow
+def test_csv_chunksize_index_col(datapath, memory_leak_check):
+    """
+    Check the pd.read_csv iterator using chunksize and an index_col.
+    """
+    fname = datapath("example.csv")
+
+    def impl(fname):
+        total = 0.0
+        for val in pd.read_csv(fname, chunksize=3, index_col="four"):
+            total += val.index[-1]
+        return total
+
+    check_func(impl, (fname,))
 
 
 @pytest.mark.slow

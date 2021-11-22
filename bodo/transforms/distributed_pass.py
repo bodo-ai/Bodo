@@ -63,6 +63,7 @@ from bodo.hiframes.pd_index_ext import (
     TimedeltaIndexType,
 )
 from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.table import TableType
 from bodo.io import csv_cpp
 from bodo.io.h5_api import h5file_type, h5group_type
 from bodo.libs.distributed_api import Reduce_Type
@@ -77,6 +78,10 @@ from bodo.transforms.distributed_analysis import (
     Distribution,
     _get_array_accesses,
     get_reduce_op,
+)
+from bodo.transforms.table_column_del_pass import (
+    compute_column_liveness,
+    remove_dead_columns,
 )
 from bodo.utils.transform import (
     compile_func_single_block,
@@ -227,6 +232,10 @@ class DistributedPass:
             print("distributions: ", self._dist_analysis)
 
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
+
+        # Run column pruning transformation from tables. This updates table source
+        # nodes.
+        self._remove_dead_table_columns(self.func_ir, self.typemap)
 
         # transform
         self._gen_init_code(self.func_ir.blocks)
@@ -3893,7 +3902,9 @@ class DistributedPass:
         scope = None
 
         # make sure arrays are only used in arr.shape or arr[:11] cases
-        for block in self.func_ir.blocks.values():
+        # traverse in topo order to see get_table_data() def output before use
+        for label in find_topo_order(self.func_ir.blocks):
+            block = self.func_ir.blocks[label]
             for stmt in block.body:
                 # pq read node
                 if stmt is pq_node:
@@ -3924,6 +3935,12 @@ class DistributedPass:
                             read_size = slice_size
                         else:
                             require(slice_size == read_size)
+                        continue
+                    if is_call(rhs) and guard(find_callname, self.func_ir, rhs) == (
+                        "get_table_data",
+                        "bodo.hiframes.table",
+                    ):
+                        arr_varnames.add(stmt.target.name)
                         continue
 
                 # other nodes, array variables shouldn't be used
@@ -4027,6 +4044,32 @@ class DistributedPass:
             None,
             self,
         )
+
+    def _remove_dead_table_columns(self, func_ir, typemap):
+        """
+        Runs table liveness analysis and eliminates columns from TableType
+        creation functions. This must be run before custom IR extensions are
+        transformed. Thie function returns if any columns were pruned.
+        """
+        removed = False
+        # Only run remove_dead_columns if some table exists.
+        run_dead_elim = False
+        for typ in typemap.values():
+            if isinstance(typ, TableType):
+                run_dead_elim = True
+                break
+        if run_dead_elim:
+            blocks = func_ir.blocks
+            cfg = compute_cfg_from_blocks(blocks)
+            column_live_map, column_equiv_vars = compute_column_liveness(
+                cfg, blocks, func_ir, typemap, True
+            )
+            for label, block in blocks.items():
+                removed |= remove_dead_columns(
+                    block, column_live_map[label], column_equiv_vars, typemap
+                )
+        # We return if anything is removed, but this is currently unused.
+        return removed
 
     def _gen_finalize_event(self, ev_var):
         """generate event.finalize() call nodes"""

@@ -5,10 +5,11 @@ Common IR extension functions for connectors such as CSV, Parquet and JSON reade
 from collections import defaultdict
 
 import numba
-from numba.core import types, ir
+from numba.core import ir, types
 from numba.core.ir_utils import replace_vars_inner, visit_vars_inner
 from numba.extending import box, models, register_model
 
+from bodo.hiframes.table import TableType
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.utils import debug_prints
 
@@ -24,12 +25,19 @@ def connector_array_analysis(node, equiv_set, typemap, array_analysis):
     # so we skip this step.
     if node.connector_typ == "csv" and node.chunksize is not None:
         return [], []
+
     # create correlations for output arrays
     # arrays of output df have same size in first dimension
     # gen size variable for an output column
+    # for table types, out_vars consists of the table and the index value,
+    # which should also the same length in the first dimension
     all_shapes = []
+
     for col_var in node.out_vars:
         typ = typemap[col_var.name]
+        # parquet node's index variable may be None if there is no index array
+        if typ == types.none:
+            continue
         shape = array_analysis._gen_shape_call(equiv_set, col_var, typ.ndim, None, post)
         equiv_set.insert_equiv(col_var, shape)
         all_shapes.append(shape[0])
@@ -48,7 +56,6 @@ def connector_distributed_analysis(node, array_dists):
     """
     # Import inside function to avoid circular import
     from bodo.ir.sql_ext import SqlReader
-    from bodo.ir.parquet_ext import ParquetReader
 
     # If we have a SQL node with an inferred limit, we may have a
     # 1D-Var distribution
@@ -56,7 +63,9 @@ def connector_distributed_analysis(node, array_dists):
         out_dist = Distribution.OneD_Var
     else:
         out_dist = Distribution.OneD
-    # all output arrays should have the same distribution
+
+    # For non Table returns, all output arrays should have the same distribution
+    # For Table returns, both the table and the index should have the same distriution
     for v in node.out_vars:
         if v.name in array_dists:
             out_dist = Distribution(min(out_dist.value, array_dists[v.name].value))
@@ -76,6 +85,32 @@ def connector_typeinfer(node, typeinferer):
     these should only be checked after the typemap is finalized
     because they should not allow the inputs to unify at all.
     """
+
+    # new table format case
+    if node.connector_typ == "csv":
+        if node.chunksize is not None:
+            # Iterator is stored in out types
+            typeinferer.lock_type(
+                node.out_vars[0].name, node.out_types[0], loc=node.loc
+            )
+        else:
+            typeinferer.lock_type(
+                node.out_vars[0].name, TableType(tuple(node.out_types)), loc=node.loc
+            )
+            typeinferer.lock_type(
+                node.out_vars[1].name, node.index_column_typ, loc=node.loc
+            )
+        return
+
+    if node.connector_typ == "parquet":
+        typeinferer.lock_type(
+            node.out_vars[0].name, TableType(tuple(node.out_types)), loc=node.loc
+        )
+        typeinferer.lock_type(
+            node.out_vars[1].name, node.index_column_type, loc=node.loc
+        )
+        return
+
     for col_var, typ in zip(node.out_vars, node.out_types):
         typeinferer.lock_type(col_var.name, typ, loc=node.loc)
 
@@ -226,3 +261,22 @@ register_model(StreamReaderType)(models.OpaqueModel)
 def box_stream_reader(typ, val, c):
     c.pyapi.incref(val)
     return val
+
+
+def trim_extra_used_columns(used_columns, num_columns):
+    """
+    Trim a computed set of used columns to eliminate any columns
+    beyond the num_columns available at the source. This is necessary
+    because a set_table_data call could introduce new columns which
+    would be initially included to load (see test_table_extra_column)
+
+    used_columns is assumed to be a sorted list in increasing order.
+    """
+    end = len(used_columns)
+    for i in range(len(used_columns) - 1, -1, -1):
+        # Columns are sorted in reverse order, so iterate backwards
+        # until we find a column within the original table bounds
+        if used_columns[i] < num_columns:
+            break
+        end = i
+    return used_columns[:end]
