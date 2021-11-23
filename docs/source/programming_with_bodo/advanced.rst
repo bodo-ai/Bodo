@@ -156,6 +156,8 @@ There are multiple methods for integration with APIs that Bodo does not
 support natively: 1. Switch to python object mode inside jit functions
 2. Pass data in and out of jit functions
 
+.. _objmode:
+
 Object mode
 ^^^^^^^^^^^
 

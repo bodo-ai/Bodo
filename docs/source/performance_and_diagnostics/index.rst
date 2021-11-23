@@ -7,5 +7,6 @@ Performance and Diagnostics
    caching
    performance
    compilation
+   Bodoerrors
    troubleaws
    troubleazure
