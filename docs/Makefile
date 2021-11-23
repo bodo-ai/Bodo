@@ -25,11 +25,11 @@ source/user_guide.rst:
 		git clone https://github.com/Bodo-inc/Bodo-tutorial.git; \
 	fi
 	jupyter nbconvert --to rst Bodo-tutorial/bodo_tutorial.ipynb
-	python convert-tutorial.py Bodo-tutorial/bodo_tutorial.rst source/user_guide.rst
+# 	python convert-tutorial.py Bodo-tutorial/bodo_tutorial.rst source/user_guide.rst
 	rm Bodo-tutorial/bodo_tutorial.rst
 	cp -r Bodo-tutorial/bodo_tutorial_files Bodo-tutorial/img source
 
 clean:
 	rm -rf Bodo-tutorial source/bodo_tutorial_files source/img
-	rm -f source/user_guide.rst
+# 	rm -f source/user_guide.rst
 	@$(SPHINXBUILD) -M clean "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)

@@ -15,25 +15,36 @@ Section 1. If you are using a Databricks Runtime version that has conda (DBR-ML)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - Create a cluster with a DBR ML version.
+
 - On the *Libraries*\  tab of the cluster, use ``PyPI`` as the source to install the following libraries:
+
  | ``numpy==1.20.3`` 
  | ``bodo==2021.10.1``
  | ``ipyparallel==7.1.0``
  | ``deltalake==0.5.3``
+
 - Clone the *DB_integration_setup*\  repository (available `here <https://github.com/Bodo-inc/DB_integration_setup>`_) and upload the *setup_bodo_dbr_ml*\  folder and *run_bodo_workflow*\  notebook to the relevant folder in the Databricks workspace.
+
 - Enter the Bodo license in the last cell of *setup_nb_px*\  notebook (or enter the path to the Bodo license).
+
 .. image:: ../DB_integration_screenshots/bodo_license.png
         :align: center
         :alt: Bodo-License
+
 - Open the sample notebook *run_bodo_workflow*\  and enter the full path to *setup_nb_px*\  in the ``%run`` cell.
+
 .. image:: ../DB_integration_screenshots/setup_path.png
         :align: center
         :alt: Setup-Path
+
 - Enter the number of engines (physical cores) you’d like to use in the first cell.
+
 .. image:: ../DB_integration_screenshots/number_of_cores.png
         :align: center
         :alt: Core-Numbers
+
 - Check the output of ``bodo.get_size()`` to ensure that all the requested engines are running.
+
 - The Zeppelin notebook can now be used with ``%%px`` in the beginning of the cell to run the code on all available cores.
 
 
@@ -41,46 +52,67 @@ Section 2. If you are using a Standard Databricks Runtime version
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - Create a cluster with a Standard DBR version.
+
 - On the *Libraries*\  tab of the cluster, use ``PyPI`` as the source to install the following libraries:
- | ``numpy==1.20.3`` 
+
+ | ``numpy==1.20.3``
  | ``bodo==2021.10.1``
  | ``ipyparallel==7.1.0``
  | ``deltalake==0.5.3``
+
 - Clone the *DB_integration_setup*\  repository (available `here <https://github.com/Bodo-inc/DB_integration_setup>`_) and upload the *setup_bodo_std_dbr_std*\  folder and *run_bodo_workflow*\  notebook to the relevant folder in the Databricks workspace.
+
 - Enter the Bodo license in the last cell of *setup_nb_px*\  notebook (or enter the path to the Bodo license).
+
 .. image:: ../DB_integration_screenshots/bodo_license.png
         :align: center
         :alt: Bodo-License
+
 - Open the sample notebook *run_bodo_workflow*\  and enter the full path to *setup_nb_px*\  in the ``%run`` cell.
+
 .. image:: ../DB_integration_screenshots/setup_path.png
         :align: center
         :alt: Setup-Path
+
 - Enter the number of engines (physical cores) you’d like to use in the first cell.
+
 .. image:: ../DB_integration_screenshots/number_of_cores.png
         :align: center
         :alt: Core-Numbers
+
 - Check the output of ``bodo.get_size()`` to ensure that all the requested engines are running.
+
 - The Zeppelin notebook can now be used with ``%%px`` in the beginning of the cell to run the code on all available cores.
 
 Section 3. If you have the option of using a Docker image to spin up a cluster
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - Create a cluster with Docker Container Services enabled.
+
 - Use the relevant `Docker image url <https://hub.docker.com/repository/docker/bodoaidocker/ret-dbr-poc>`_ on Bodo’s Docker hub. (``bodo==2021.9`` available at bodoaidocker/ret-dbr-poc:v2021.9).
-- Clone the *DB_integration_setup*\  repository (available `here <https://github.com/Bodo-inc/DB_integration_setup>`_) and upload the *setup_bodo_dbr_docker*\  folder and *run_bodo_workflow*\  notebook to the relevant folder in the Databricks workspace. 
+
+- Clone the *DB_integration_setup*\  repository (available `here <https://github.com/Bodo-inc/DB_integration_setup>`_) and upload the *setup_bodo_dbr_docker*\  folder and *run_bodo_workflow*\  notebook to the relevant folder in the Databricks workspace.
+
 - Enter the Bodo license in the last cell of *setup_nb_px*\  notebook (or enter the path to the Bodo license).
+
 .. image:: ../DB_integration_screenshots/bodo_license.png
         :align: center
         :alt: Bodo-License
+
 - Open the sample notebook *run_bodo_workflow*\  and enter the full path to *setup_nb_px*\  notebook in the ``%run`` cell.
+
 .. image:: ../DB_integration_screenshots/setup_path.png
         :align: center
         :alt: Setup-Path
+
 - Enter the number of engines (physical cores) that you’d like to use in the first cell.
+
 .. image:: ../DB_integration_screenshots/number_of_cores.png
         :align: center
         :alt: Core-Numbers
+
 - Check the output of ``bodo.get_size()`` to ensure that all the engines that you requested are running.
+
 - The Zeppelin notebook can now be used with ``%%px`` in the beginning of the cell to run the code on all the cores available.
 
 
@@ -88,10 +120,15 @@ Notes
 ~~~~~~~
 
 - The Databricks Bodo setup has been tested on DBR 9.0, and on DBR 8.3 ML.
+
 - To install a new Python library, please use the *Libraries*\  tab - Notebook scoped installation with Bodo does not currently work.
+
 - Please specify specific versions of libraries that are installed on the cluster (for e.g., ``pip install bodo==2021.10.1``, and not simply ``pip install bodo``)
+
 - Bodo supports reading Delta datasets directly from the data lake (with ``pd.read_parquet``). Please use the mounted data lake path to read a dataset.
+
 - More details on using Databricks clusters with Docker images can be found `here <https://docs.databricks.com/clusters/custom-containers.html>`_.
+
 - Please reach out to a Bodo Solutions Engineer for any further details through `discourse <https://discourse.bodo.ai>`_ or `community Slack channel <https://bodocommunity.slack.com/ssb/redirect>`_.
 
 
