@@ -4015,6 +4015,99 @@ def impl(
     return impl
 
 
+def overload_dataframe_plot(
+    df,
+    x=None,
+    y=None,
+    kind="line",
+    figsize=None,
+    xlabel=None,
+    ylabel=None,
+    title=None,
+    legend=True,
+    fontsize=None,
+    xticks=None,
+    yticks=None,
+    ax=None,
+):
+    if bodo.compiler._matplotlib_installed:
+        import matplotlib.pyplot as plt
+    else:
+        raise BodoError("df.plot needs matplotllib which is not installed.")
+    # Pandas behavior
+    # This is based on testing. Nothing clear in the source code to indicate this.
+    # When x is None, x is range(len(y))
+    # When y is None, all number columns will be y (excluding x's column if x is not None)
+    func_text = (
+        "def impl(df, x=None, y=None, kind='line', figsize=None, xlabel=None, \n"
+    )
+    func_text += "    ylabel=None, title=None, legend=True, fontsize=None, \n"
+    func_text += "    xticks=None, yticks=None, ax=None):\n"
+    if is_overload_none(ax):
+        func_text += "   fig, ax = plt.subplots()\n"
+    else:
+        func_text += "   fig = ax.get_figure()\n"
+    if not is_overload_none(figsize):
+        func_text += "   fig.set_figwidth(figsize[0])\n"
+        func_text += "   fig.set_figheight(figsize[1])\n"
+    if is_overload_none(xlabel):
+        func_text += "   xlabel = x\n"
+    func_text += "   ax.set_xlabel(xlabel)\n"
+    if is_overload_none(ylabel):
+        func_text += "   ylabel = y\n"
+    else:
+        func_text += "   ax.set_ylabel(ylabel)\n"
+    if not is_overload_none(title):
+        func_text += "   ax.set_title(title)\n"
+    if not is_overload_none(fontsize):
+        func_text += "   ax.tick_params(labelsize=fontsize)\n"
+    kind = get_overload_const_str(kind)
+    if kind == "line":
+        if is_overload_none(x) and is_overload_none(y):
+            for i in range(len(df.columns)):
+                if isinstance(
+                    df.data[i], (types.Array, IntegerArrayType)
+                ) and isinstance(df.data[i].dtype, (types.Integer, types.Float)):
+                    func_text += f"   ax.plot(df.iloc[:, {i}], label=df.columns[{i}])\n"
+        elif is_overload_none(x):
+            func_text += "   ax.plot(df[y], label=y)\n"
+        elif is_overload_none(y):
+            x_val = get_overload_const_str(x)
+            x_idx = df.columns.index(x_val)
+            for i in range(len(df.columns)):
+                if isinstance(
+                    df.data[i], (types.Array, IntegerArrayType)
+                ) and isinstance(df.data[i].dtype, (types.Integer, types.Float)):
+                    if x_idx != i:
+                        func_text += f"   ax.plot(df[x], df.iloc[:, {i}], label=df.columns[{i}])\n"
+        else:
+            func_text += "   ax.plot(df[x], df[y], label=y)\n"
+    elif kind == "scatter":
+        legend = False
+        # s=20 to match dot size with pandas
+        func_text += "   ax.scatter(df[x], df[y], s=20)\n"
+        # ax.scatter ignores label=y
+        func_text += "   ax.set_ylabel(ylabel)\n"
+    if not is_overload_none(xticks):
+        func_text += "   ax.set_xticks(xticks)\n"
+    if not is_overload_none(yticks):
+        func_text += "   ax.set_yticks(yticks)\n"
+    if is_overload_true(legend):
+        func_text += "   ax.legend()\n"
+
+    func_text += "   return ax\n"
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "plt": plt}, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
+@lower_builtin("df.plot", DataFrameType, types.VarArg(types.Any))
+def dataframe_plot_low(context, builder, sig, args):
+    impl = overload_dataframe_plot(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
 def typeref_to_type(v):
     """convert TypeRef and NumberClass to a regular data type"""
     if isinstance(v, types.BaseTuple):

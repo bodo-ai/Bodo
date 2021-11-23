@@ -1047,3 +1047,174 @@ def test_df_iat_setitem_non_const_error(memory_leak_check):
 
     with pytest.raises(BodoError, match=message):
         f(df, 0)
+
+
+@pytest.mark.slow
+def test_df_plot_args(memory_leak_check):
+    """
+    Error checking for types/values of df.plot supported arguments
+    """
+
+    def impl1():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(x=1.2, y="B")
+
+    err_msg = "x must be a constant column name, constant integer, or None"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)()
+
+    err_msg = "x must be a constant column name, constant integer, or None"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)()
+
+    def impl2():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(y="m")
+
+    err_msg = "column not found"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl2)()
+
+    def impl3():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(x="A", y=12)
+
+    err_msg = "is out of bounds"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl3)()
+
+    def impl4():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(kind="pie")
+
+    err_msg = "pie plot is not supported"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl4)()
+
+    def impl5():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(figsize=10)
+
+    err_msg = "figsize must be a constant numeric tuple"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl5)()
+
+    def impl6():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(title=True)
+
+    err_msg = "title must be a constant string"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl6)()
+
+    def impl7():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(legend="X")
+
+    err_msg = "legend must be a boolean type"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl7)()
+
+    def impl8():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(legend="X")
+
+    err_msg = "legend must be a boolean type"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl8)()
+
+    def impl9():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(xticks=3)
+
+    err_msg = "xticks must be a constant tuple"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl9)()
+
+    def impl10():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(yticks=2)
+
+    err_msg = "yticks must be a constant tuple"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl10)()
+
+    def impl11():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(fontsize=3.4)
+
+    err_msg = "fontsize must be an integer"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl11)()
+
+    def impl12():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(xlabel=10)
+
+    err_msg = "xlabel must be a constant string"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl12)()
+
+    def impl13():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(ylabel=10)
+
+    err_msg = "ylabel must be a constant string"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl13)()
+
+    def impl14():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(kind="scatter")
+
+    err_msg = "requires an x and y column"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl14)()
+
+    def impl15():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(kind="scatter", y="B")
+
+    err_msg = "x column is missing."
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl15)()
+
+    def impl16():
+        x = np.arange(100)
+        y = np.arange(100)
+        df = pd.DataFrame({"A": x, "B": y})
+        df.plot(kind="scatter", x="A")
+
+    err_msg = "y column is missing."
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl16)()
