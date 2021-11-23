@@ -32,7 +32,6 @@ from bodo.utils.typing import (
     is_list_like_index_type,
     is_overload_constant_int,
 )
-from bodo.utils.typing import get_overload_const_int, is_overload_constant_int
 
 
 class Table:
@@ -775,10 +774,10 @@ def alloc_list_like(typingctx, list_type=None):
 def _get_idx_length(idx):  # pragma: no cover
     pass
 
+
 @overload(_get_idx_length)
 def overload_get_idx_length(idx, n):
-    """get length of boolean array or slice index
-    """
+    """get length of boolean array or slice index"""
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
         return lambda idx, n: idx.sum()  # pragma: no cover
 
@@ -790,10 +789,13 @@ def overload_get_idx_length(idx, n):
 
     return impl
 
+
 def gen_table_filter(T, used_cols=None):
     """Generate a function that filters table using input boolean array or slice.
     If used_cols is passed, only used columns are written in output.
     """
+    from bodo.utils.conversion import ensure_contig_if_np
+
     glbls = {
         "init_table": init_table,
         "get_table_block": get_table_block,
@@ -802,6 +804,7 @@ def gen_table_filter(T, used_cols=None):
         "set_table_len": set_table_len,
         "alloc_list_like": alloc_list_like,
         "_get_idx_length": _get_idx_length,
+        "ensure_contig_if_np": ensure_contig_if_np,
     }
     if used_cols is not None:
         glbls["used_cols"] = np.array(used_cols)
@@ -831,7 +834,9 @@ def gen_table_filter(T, used_cols=None):
         if used_cols is not None:
             func_text += f"    if arr_ind_{blk} not in used_set: continue\n"
         func_text += f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
-        func_text += f"    out_arr_{blk} = arr_list_{blk}[i][idx]\n"
+        func_text += (
+            f"    out_arr_{blk} = ensure_contig_if_np(arr_list_{blk}[i][idx])\n"
+        )
         func_text += f"    l = len(out_arr_{blk})\n"
         func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"

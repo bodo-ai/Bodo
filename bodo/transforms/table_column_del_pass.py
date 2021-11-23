@@ -19,10 +19,6 @@ from bodo.hiframes.table import TableType, del_column, gen_table_filter
 from bodo.utils.transform import compile_func_single_block
 from bodo.utils.typing import is_list_like_index_type
 from bodo.utils.utils import is_assign, is_expr
-from numba.core.ir_utils import guard
-
-from bodo.hiframes.table import TableType, del_column
-from bodo.utils.transform import compile_func_single_block
 
 
 class TableColumnDelPass:
@@ -526,10 +522,13 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                 elif (
                     is_expr(rhs, "getitem")
                     and isinstance(typemap[rhs.value.name], TableType)
-                    and 
-                    ((is_list_like_index_type(typemap[rhs.index.name]) and typemap[rhs.index.name].dtype == types.bool_) or isinstance(
-                        typemap[rhs.index.name], types.SliceType
-                    ))
+                    and (
+                        (
+                            is_list_like_index_type(typemap[rhs.index.name])
+                            and typemap[rhs.index.name].dtype == types.bool_
+                        )
+                        or isinstance(typemap[rhs.index.name], types.SliceType)
+                    )
                 ):
                     # NOTE: column uses of input T1 are the same as output T2.
                     # Here we simply traverse the IR in reversed order and update uses,
@@ -659,9 +658,13 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info):
             if (
                 is_expr(rhs, "getitem")
                 and isinstance(typemap[rhs.value.name], TableType)
-                and ((is_list_like_index_type(typemap[rhs.index.name]) and typemap[rhs.index.name].dtype == types.bool_) or isinstance(
-                        typemap[rhs.index.name], types.SliceType
-                    ))
+                and (
+                    (
+                        is_list_like_index_type(typemap[rhs.index.name])
+                        and typemap[rhs.index.name].dtype == types.bool_
+                    )
+                    or isinstance(typemap[rhs.index.name], types.SliceType)
+                )
             ):
                 # Compute all columns that are live at this statement.
                 used_columns, use_all = get_live_column_nums_block(

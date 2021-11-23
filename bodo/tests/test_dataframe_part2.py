@@ -472,7 +472,6 @@ def test_df_filter_table_format(memory_leak_check):
             s = df2["C"].sum()
         return s
 
-
     df = pd.DataFrame(
         {
             "A": [1, 2, 3] * 4,

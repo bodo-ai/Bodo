@@ -4,7 +4,12 @@ import pytest
 from mpi4py import MPI
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import (
+    _get_dist_arg,
+    _test_equal_guard,
+    check_func,
+    reduce_sum,
+)
 from bodo.utils.typing import BodoError
 
 
@@ -372,3 +377,33 @@ def test_categorical_astype(memory_leak_check):
     )
 
     check_func(impl, (df,))
+
+
+def test_df_gatherv_table_format(memory_leak_check):
+    """test gathering a distributed dataframe with table format"""
+
+    def impl(df):
+        return bodo.gatherv(df)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3] * 20,
+            "B": ["abc", "bc", "cd"] * 20,
+            "C": [5, 6, 7] * 20,
+            "D": [1.1, 2.2, 3.3] * 20,
+        }
+    )
+    # add a bunch of columns to trigger table format
+    for i in range(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD):
+        df[f"F{i}"] = 11
+
+    distributed_df = _get_dist_arg(df, copy=True, var_length=True)
+    bodo_df = bodo.jit(distributed=["df"])(impl)(distributed_df)
+    passed = 1
+    if bodo.get_rank() == 0:
+        passed = _test_equal_guard(
+            bodo_df,
+            df,
+        )
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size()

@@ -887,6 +887,41 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
         return impl_multi_index
 
+    if isinstance(data, bodo.hiframes.table.TableType):
+        glbls = {
+            "bodo": bodo,
+            "get_table_block": bodo.hiframes.table.get_table_block,
+            "ensure_column_unboxed": bodo.hiframes.table.ensure_column_unboxed,
+            "set_table_block": bodo.hiframes.table.set_table_block,
+            "set_table_len": bodo.hiframes.table.set_table_len,
+            "alloc_list_like": bodo.hiframes.table.alloc_list_like,
+            "init_table": bodo.hiframes.table.init_table,
+        }
+        func_text = f"def impl_table(data, allgather=False, warn_if_rep=True, root={MPI_ROOT}):\n"
+        func_text += "  T = data\n"
+        func_text += "  T2 = init_table(T)\n"
+        for blk in data.type_to_blk.values():
+            glbls[f"arr_inds_{blk}"] = np.array(data.block_to_arr_ind[blk])
+            func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
+            func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk})\n"
+            func_text += f"  for i in range(len(arr_list_{blk})):\n"
+            func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
+            func_text += (
+                f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
+            )
+            func_text += f"    out_arr_{blk} = bodo.gatherv(arr_list_{blk}[i], allgather, warn_if_rep, root)\n"
+            func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
+            func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
+        func_text += (
+            f"  length = T._len if bodo.get_rank() == root or allgather else 0\n"
+        )
+        func_text += f"  T2 = set_table_len(T2, length)\n"
+        func_text += f"  return T2\n"
+        loc_vars = {}
+        exec(func_text, glbls, loc_vars)
+        impl_table = loc_vars["impl_table"]
+        return impl_table
+
     if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         n_cols = len(data.columns)
         # empty dataframe case
@@ -903,13 +938,38 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
                 MPI_ROOT
             )
         )
-        for i in range(n_cols):
-            func_text += "  data_{} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {})\n".format(
-                i, i
+        if data.is_table_format:
+            # Import in the function to avoid a circular import
+            from bodo.transforms.distributed_analysis import Distribution
+
+            out_df_type = bodo.hiframes.pd_dataframe_ext.DataFrameType(
+                data.data,
+                data.index,
+                data.columns,
+                # Set distribution to REP because we are doing a gather.
+                # Note: The current infrastructure only uses the columns.
+                Distribution.REP,
+                True,
             )
-            func_text += "  g_data_{} = bodo.gatherv(data_{}, allgather, warn_if_rep, root)\n".format(
-                i, i
+            glbls = {
+                "bodo": bodo,
+                "df_type": out_df_type,
+            }
+            data_args = "T2"
+            col_var = "df_type"
+            func_text += (
+                "  T = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(data)\n"
             )
+            func_text += "  T2 = bodo.gatherv(T, allgather, warn_if_rep, root)\n"
+        else:
+            glbls = {"bodo": bodo}
+            for i in range(n_cols):
+                func_text += "  data_{} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {})\n".format(
+                    i, i
+                )
+                func_text += "  g_data_{} = bodo.gatherv(data_{}, allgather, warn_if_rep, root)\n".format(
+                    i, i
+                )
         func_text += (
             "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)\n"
         )
@@ -918,7 +978,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             data_args, col_var
         )
         loc_vars = {}
-        exec(func_text, {"bodo": bodo}, loc_vars)
+        exec(func_text, glbls, loc_vars)
         impl_df = loc_vars["impl_df"]
         return impl_df
 
