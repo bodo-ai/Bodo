@@ -729,6 +729,15 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`
 * :meth:`pandas.DataFrame.to_parquet`
 * :meth:`pandas.DataFrame.to_sql`
 
+Plotting
+
+* :meth:`pandas.DataFrame.plot`
+
+  * Supported arguments are ``x``, ``y``, ``kind``, ``figsize``, ``xlabel``, ``ylabel``, 
+    ``title``, ``legend``, ``fontsize``, ``xticks``, ``yticks``, and ``ax``.
+  * Supported ``kind`` values are ``line`` and ``scatter``.
+  * ``x`` and ``y`` must be a constant column name, constant integer, or None.
+
 Index objects
 ~~~~~~~~~~~~~
 

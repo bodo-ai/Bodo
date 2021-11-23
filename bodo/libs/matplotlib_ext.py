@@ -98,9 +98,11 @@ mpl_axes_kwargs_funcs = [
     "set_title",
     "legend",
     "grid",
+    "tick_params",
+    "get_figure",
 ]
 # figure methods
-mpl_figure_kwargs_funcs = ["suptitle", "tight_layout"]
+mpl_figure_kwargs_funcs = ["suptitle", "tight_layout", "set_figheight", "set_figwidth"]
 # plots that require gathering all the data onto rank 0
 mpl_gather_plots = [
     "plot",
@@ -529,6 +531,14 @@ class MatplotlibFigureKwargsAttribute(AttributeTemplate):
     def resolve_tight_layout(self, fig_typ, args, kws):
         return generate_matplotlib_signature(types.none, args, kws, obj_typ=fig_typ)
 
+    @bound_function("fig.set_figheight", no_unliteral=True)
+    def resolve_set_figheight(self, fig_typ, args, kws):
+        return generate_matplotlib_signature(types.none, args, kws, obj_typ=fig_typ)
+
+    @bound_function("fig.set_figwidth", no_unliteral=True)
+    def resolve_set_figwidth(self, fig_typ, args, kws):
+        return generate_matplotlib_signature(types.none, args, kws, obj_typ=fig_typ)
+
 
 # Define signatures for axes methods that contain kwargs
 @infer_getattr
@@ -648,6 +658,10 @@ class MatplotlibAxesKwargsAttribute(AttributeTemplate):
             types.mpl_axes_image_type, args, kws, obj_typ=ax_typ
         )
 
+    @bound_function("ax.tick_params", no_unliteral=True)
+    def resolve_tick_params(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(types.none, args, kws, obj_typ=ax_typ)
+
     @bound_function("ax.set_xlabel", no_unliteral=True)
     def resolve_set_xlabel(self, ax_typ, args, kws):
         return generate_matplotlib_signature(types.none, args, kws, obj_typ=ax_typ)
@@ -683,6 +697,12 @@ class MatplotlibAxesKwargsAttribute(AttributeTemplate):
     @bound_function("ax.legend", no_unliteral=True)
     def resolve_legend(self, ax_typ, args, kws):
         return generate_matplotlib_signature(types.none, args, kws, obj_typ=ax_typ)
+
+    @bound_function("ax.get_figure", no_unliteral=True)
+    def resolve_get_figure(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(
+            types.mpl_figure_type, args, kws, obj_typ=ax_typ
+        )
 
 
 @overload(plt.savefig, no_unliteral=True)

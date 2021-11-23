@@ -92,6 +92,7 @@ from bodo.utils.typing import (
     is_heterogeneous_tuple_type,
     is_iterable_type,
     is_literal_type,
+    is_overload_bool,
     is_overload_constant_bool,
     is_overload_constant_int,
     is_overload_constant_str,
@@ -508,6 +509,214 @@ class DataFrameAttribute(AttributeTemplate):
         pysig = numba.core.utils.pysignature(apply_stub)
         new_args = (func, axis, raw, result_type, f_args) + tuple(kws.values())
         return signature(ret_type, *new_args).replace(pysig=pysig)
+
+    @bound_function("df.plot", no_unliteral=True)
+    def resolve_plot(self, df, args, kws):
+        # Obtain a the pysig and folded args
+        func_name = "DataFrame.plot"
+        arg_names = (
+            "x",
+            "y",
+            "kind",
+            "figsize",
+            "ax",
+            "subplots",
+            "sharex",
+            "sharey",
+            "layout",
+            "use_index",
+            "title",
+            "grid",
+            "legend",
+            "style",
+            "logx",
+            "logy",
+            "loglog",
+            "xticks",
+            "yticks",
+            "xlim",
+            "ylim",
+            "rot",
+            "fontsize",
+            "colormap",
+            "table",
+            "yerr",
+            "xerr",
+            "secondary_y",
+            "sort_columns",
+            "xlabel",
+            "ylabel",
+            "position",
+            "stacked",
+            "mark_right",
+            "include_bool",
+            "backend",
+        )
+        arg_defaults = {
+            "x": None,
+            "y": None,
+            "kind": "line",
+            "figsize": None,
+            "ax": None,
+            "subplots": False,
+            "sharex": None,
+            "sharey": False,
+            "layout": None,
+            "use_index": True,
+            "title": None,
+            "grid": None,
+            "legend": True,
+            "style": None,
+            "logx": False,
+            "logy": False,
+            "loglog": False,
+            "xticks": None,
+            "yticks": None,
+            "xlim": None,
+            "ylim": None,
+            "rot": None,
+            "fontsize": None,
+            "colormap": None,
+            "table": False,
+            "yerr": None,
+            "xerr": None,
+            "secondary_y": False,
+            "sort_columns": False,
+            "xlabel": None,
+            "ylabel": None,
+            "position": 0.5,
+            "stacked": False,  # True in area plot
+            "mark_right": True,
+            "include_bool": False,
+            "backend": None,
+        }
+        unsupported_arg_names = (
+            "subplots",
+            "sharex",
+            "sharey",
+            "layout",
+            "use_index",
+            "grid",
+            "style",
+            "logx",
+            "logy",
+            "loglog",
+            "xlim",
+            "ylim",
+            "rot",
+            "colormap",
+            "table",
+            "yerr",
+            "xerr",
+            "sort_columns",
+            "secondary_y",
+            "colorbar",
+            "position",
+            "stacked",
+            "mark_right",
+            "include_bool",
+            "backend",
+        )
+
+        pysig, folded_args = bodo.utils.typing.fold_typing_args(
+            func_name, args, kws, arg_names, arg_defaults, unsupported_arg_names
+        )
+
+        kind = folded_args[2]  # default: "line"
+        if not is_overload_constant_str(kind):
+            raise BodoError(
+                f"{func_name}: kind must be a constant string and one of ('line', 'scatter')."
+            )
+
+        # Check typing on arguments
+        x = folded_args[0]  # None
+        # label or position, default None
+        if not is_overload_none(x) and not (
+            is_overload_int(x) or is_overload_constant_str(x)
+        ):
+            raise BodoError(
+                f"{func_name}: x must be a constant column name, constant integer, or None."
+            )
+        if is_overload_constant_str(x):
+            x_name = get_overload_const_str(x)
+            if x_name not in df.columns:
+                raise BodoError(f"{func_name}: {x_name} column not found.")
+        elif is_overload_int(x):
+            x_val = get_overload_const_int(x)
+            if x_val > len(df.columns):
+                raise BodoError(
+                    f"{func_name}: x: {x_val} is out of bounds for axis 0 with size {len(df.columns)}"
+                )
+            x = df.columns[x]
+        # label, position or list of label, positions, default None
+        y = folded_args[1]  # None
+        if not is_overload_none(y) and not (
+            is_overload_int(y) or is_overload_constant_str(y)
+        ):
+            raise BodoError(
+                "df.plot(): y must be a constant column name, constant integer, or None."
+            )
+        if is_overload_constant_str(y):
+            y_name = get_overload_const_str(y)
+            if y_name not in df.columns:
+                raise BodoError(f"{func_name}: {y_name} column not found.")
+        elif is_overload_int(y):
+            y_val = get_overload_const_int(y)
+            if y_val > len(df.columns):
+                raise BodoError(
+                    f"{func_name}: y: {y_val} is out of bounds for axis 0 with size {len(df.columns)}"
+                )
+            y = df.columns[y]
+
+        # A tuple (width, height) in inches
+        figsize = folded_args[3]
+        if not is_overload_none(figsize) and not is_tuple_like_type(figsize):
+            raise BodoError(
+                f"{func_name}: figsize must be a constant numeric tuple (width, height) or None."
+            )
+
+        title = folded_args[10]
+        if not is_overload_none(title) and not is_overload_constant_str(title):
+            raise BodoError(f"{func_name}: title must be a constant string or None.")
+
+        legend = folded_args[12]
+        if not is_overload_bool(legend):
+            raise BodoError(f"{func_name}: legend must be a boolean type.")
+
+        xticks = folded_args[17]
+        if not is_overload_none(xticks) and not is_tuple_like_type(xticks):
+            raise BodoError(f"{func_name}: xticks must be a constant tuple or None.")
+        yticks = folded_args[18]
+        if not is_overload_none(yticks) and not is_tuple_like_type(yticks):
+            raise BodoError(f"{func_name}: yticks must be a constant tuple or None.")
+        fontsize = folded_args[22]
+        if not is_overload_none(fontsize) and not is_overload_int(fontsize):
+            raise BodoError(f"{func_name}: fontsize must be an integer or None.")
+
+        xlabel = folded_args[29]
+        if not is_overload_none(xlabel) and not is_overload_constant_str(xlabel):
+            raise BodoError(f"{func_name}: xlabel must be a constant string or None.")
+        ylabel = folded_args[30]
+        if not is_overload_none(ylabel) and not is_overload_constant_str(ylabel):
+            raise BodoError(f"{func_name}: ylabel must be a constant string or None.")
+
+        # default: line
+        return_typ = types.List(types.mpl_line_2d_type)
+        kind = get_overload_const_str(kind)
+        if kind == "scatter":
+            if is_overload_none(x) and is_overload_none(y):
+                raise BodoError(f"{func_name}: {kind} requires an x and y column.")
+            elif is_overload_none(x):
+                raise BodoError(f"{func_name}: {kind} x column is missing.")
+            elif is_overload_none(y):
+                raise BodoError(f"{func_name}: {kind} y column is missing.")
+
+            return_typ = types.mpl_path_collection_type
+        elif kind != "line":
+            raise BodoError(f"{func_name}: {kind} plot is not supported.")
+
+        ## Return the signature
+        return signature(return_typ, *folded_args).replace(pysig=pysig)
 
     def generic_resolve(self, df, attr):
         # column selection
@@ -3121,7 +3330,6 @@ dataframe_unsupported = {
     "ge",
     "get",
     "all",
-    "plot",
     "backfill",
     "stack",
     "where",
