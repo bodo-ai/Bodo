@@ -1,12 +1,12 @@
 Bodo Parallelism Basics
--------------------------
+========================
 
 In this section, we will discuss Bodo's JIT compilation workflow and the parallelism model and APIs provided by Bodo.
 
 .. _jit:
 
 JIT (Just-in-time) Compilation Workflow
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+----------------------------------------
 
 Bodo provides a just-in-time (JIT) compilation workflow using the
 ``@bodo.jit`` decorator, which replaces a Python function with a
@@ -60,7 +60,7 @@ any Python code calling the function.
 
 
 Parallel Execution Model
-~~~~~~~~~~~~~~~~~~~~~~~~
+-------------------------
 
 As we saw in the “Getting Started” tutorial, Bodo transforms functions
 for parallel execution. However, the dispatcher does not launch
@@ -181,7 +181,7 @@ After this initialization, any code that we run in the notebook with
 
 
 Parallel APIs
-~~~~~~~~~~~~~
+--------------
 
 Bodo provides a limited number of parallel APIs to support advanced
 cases that may need them. The example below demonstrates getting the
