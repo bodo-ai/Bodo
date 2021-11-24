@@ -379,6 +379,19 @@ def test_categorical_astype(memory_leak_check):
     check_func(impl, (df,))
 
 
+def test_avoid_static_getitem_const(memory_leak_check):
+    """Test for avoiding Numba's static_getitem const idx inference bug in typing pass.
+    See https://github.com/numba/numba/issues/7592
+    """
+
+    def impl(df):
+        cols = [col for col in df.columns if "B" in col]
+        return df[cols]
+
+    df = pd.DataFrame({"ABC": [1, 2, 3]})
+    check_func(impl, (df,))
+
+
 def test_df_gatherv_table_format(memory_leak_check):
     """test gathering a distributed dataframe with table format"""
 

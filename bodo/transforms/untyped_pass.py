@@ -25,7 +25,6 @@ from numba.core.ir_utils import (
     find_callname,
     guard,
     get_definition,
-    require,
     build_definitions,
     compute_cfg_from_blocks,
 )
@@ -416,38 +415,6 @@ class UntypedPass:
                 return h5_nodes
 
         return [assign]
-
-    def _get_col_name(self, var, df_var):
-        """get column name for dataframe column access like df["A"] if possible.
-        Throws GuardException if not possible.
-        """
-        var_def = get_definition(self.func_ir, var)
-        if is_expr(var_def, "getattr") and var_def.value.name == df_var.name:
-            return var_def.attr
-        if is_expr(var_def, "static_getitem") and var_def.value.name == df_var.name:
-            return var_def.index
-        # handle case with calls like df["A"].astype(int) > 2
-        if is_call(var_def):
-            fdef = find_callname(self.func_ir, var_def)
-            # calling pd.to_datetime() on a string column is possible since pyarrow
-            # matches the data types before filter comparison (in this case, calls
-            # pd.Timestamp on partiton's string value)
-            if fdef == ("to_datetime", "pandas"):
-                # We don't want to perform filter pushdown if there is a format argument
-                # i.e. pd.to_datetime(col, format="%Y-%d-%m")
-                # https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html
-                require((len(var_def.args) == 1) and not var_def.kws)
-                return self._get_col_name(var_def.args[0], df_var)
-            require(
-                isinstance(fdef, tuple)
-                and len(fdef) == 2
-                and isinstance(fdef[1], ir.Var)
-            )
-            return self._get_col_name(fdef[1], df_var)
-
-        require(is_expr(var_def, "getitem"))
-        require(var_def.value.name == df_var.name)
-        return get_const_value_inner(self.func_ir, var_def.index, arg_types=self.args)
 
     def _run_call(self, assign, label):
         """handle calls and return new nodes if needed"""
