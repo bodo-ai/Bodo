@@ -984,6 +984,7 @@ The operations are documented on `pandas.DataFrame.groupby <https://pandas.pydat
 * :meth:`pandas.core.groupby.GroupBy.count`
 * :meth:`pandas.core.groupby.GroupBy.cumsum`
 * :meth:`pandas.core.groupby.GroupBy.first`
+* :meth:`pandas.core.groupby.GroupBy.head`
 * :meth:`pandas.core.groupby.GroupBy.last`
 * :meth:`pandas.core.groupby.GroupBy.max`
 * :meth:`pandas.core.groupby.GroupBy.mean`

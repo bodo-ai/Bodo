@@ -5593,3 +5593,98 @@ def test_groupby_na_key(df, memory_leak_check):
     check_func(
         impl_idxmin, (df,), sort_output=True, check_dtype=False, reset_index=True
     )
+
+
+def test_head(memory_leak_check):
+    """
+    Test Groupby.head
+    Supports all types since it doesn't care about type of column
+    """
+
+    def impl1(df):
+        A = df.groupby("A").head(2)
+        return A
+
+    def impl2(df):
+        A = df.groupby(["A", "B"]).head(2)
+        return A
+
+    def impl3(df):
+        A = df.groupby(["G", "I", "H"])[["C", "F", "G", "A"]].head(1)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 2, 1, 2, 2, 1, 1],
+            "B": pd.Series(
+                [
+                    Decimal("1.6"),
+                    np.nan,
+                    Decimal("1.6"),
+                    Decimal("44.2"),
+                    Decimal("1.6"),
+                    Decimal("4.3"),
+                    Decimal("0"),
+                ]
+            ),
+            "C": pd.date_range(start="2018-04-24", end="2018-04-29", periods=7),
+            "D": pd.Series(pd.timedelta_range(start="1 day", periods=7)),
+            "F": [
+                pd.Timestamp("20130101 09:00:00"),
+                pd.Timestamp("20130101 09:00:02"),
+                pd.Timestamp("20130101 09:00:03"),
+                pd.Timestamp("20130101 09:00:05"),
+                pd.Timestamp("20130101 09:00:06"),
+                pd.Timestamp("20130101 09:10:06"),
+                pd.Timestamp("20130101 19:10:06"),
+            ],
+            "G": ["ab", "ab", "ef", "ab", "mm", "ef", "mm"],
+            "H": pd.Series([1, 1, np.nan, 1, 2, np.nan, 2], dtype="Int64"),
+            "I": [True, True, False, True, True, False, False],
+            "J": pd.array([True, False, None, True, True, False, True]),
+            "K": [b"ab", b"cd", np.nan, b"ef", b"mm", b"", b"xxx"],
+        }
+    )
+    check_func(impl1, (df,))
+    check_func(impl2, (df,))
+    check_func(impl3, (df,))
+
+    df_empty = pd.DataFrame({"A": [], "B": []})
+    check_func(impl1, (df_empty,))
+
+
+# TODO: memory_leak
+@pytest.mark.slow
+def test_head_cat():
+    """
+    Test Groupby.head with categorical column.
+    This is in its own test since it does not pass memory_leak_check.
+    """
+
+    def impl1(df):
+        A = df.groupby("A").head(1)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 1, 2, 2],
+            "E": pd.Categorical([1, 2, 5, 5, 3], ordered=True),
+        }
+    )
+    check_func(impl1, (df,))
+
+
+@pytest.mark.slow
+def test_head_idx(datapath, memory_leak_check):
+    """
+    Test Groupby.head with index explicitly set.
+    """
+
+    filename = datapath("example.csv")
+
+    def impl1():
+        df = pd.read_csv(filename, index_col="two")
+        A = df.groupby("one").head(1)
+        return A
+
+    check_func(impl1, ())

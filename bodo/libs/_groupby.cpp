@@ -25,6 +25,7 @@ struct Bodo_FTypes {
     enum FTypeEnum {
         no_op = 0,  // To make sure ftypes[0] isn't accidently matched with any
                     // of the supported functions.
+        head,
         transform,
         size,
         shift,
@@ -1222,7 +1223,8 @@ template <bool CalledFromGroupInfo, typename Map>
 void do_map_dealloc(uint32_t*& hashes, Map& key_to_group, bool is_parallel) {
     tracing::Event ev_dealloc(CalledFromGroupInfo
                                   ? "get_group_info_dealloc"
-                                  : "get_groupby_labels_dealloc", is_parallel);
+                                  : "get_groupby_labels_dealloc",
+                              is_parallel);
     delete[] hashes;
     hashes = nullptr;  // updates hashes ptr at caller
 
@@ -1309,7 +1311,8 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
         table->columns.begin(), table->columns.begin() + table->num_keys);
     if (hashes == nullptr) {
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
-        nunique_hashes = get_nunique_hashes(hashes, table->nrows(), is_parallel);
+        nunique_hashes =
+            get_nunique_hashes(hashes, table->nrows(), is_parallel);
     }
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
     grp_infos.emplace_back();
@@ -1450,7 +1453,8 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
     uint32_t* hashes = hash_keys(key_cols, seed, is_parallel);
 
-    size_t nunique_hashes = get_nunique_hashes(hashes, table->nrows(), is_parallel);
+    size_t nunique_hashes =
+        get_nunique_hashes(hashes, table->nrows(), is_parallel);
     ev.add_attribute("nunique_hashes_est", nunique_hashes);
     const int64_t n_keys = table->num_keys;
 
@@ -1502,7 +1506,8 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
     // it would mean calculating all hashes in advance
     if (hashes == nullptr) {
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
-        nunique_hashes = get_nunique_hashes(hashes, table->nrows(), is_parallel);
+        nunique_hashes =
+            get_nunique_hashes(hashes, table->nrows(), is_parallel);
     }
     grp_infos.emplace_back();
     grouping_info& grp_info = grp_infos.back();
@@ -2003,6 +2008,29 @@ shift_computation(array_info* arr, ARRAY* out_arr,
     Bodo_PyErr_SetString(PyExc_RuntimeError,
                          "multiarray shift functionality is missing right now");
 }
+/**
+ * The head_computation function.
+ * Copy rows identified by row_list from input to output column
+ * @param arr column on which we do the computation
+ * @param out_arr output column data
+ * @param grp_info: grouping_info about groups and rows organization
+ * @param row_list: row indices to copy
+ */
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
+head_computation(array_info* arr, array_info* out_arr,
+                 const std::vector<int64_t>& row_list) {
+    array_info* updated_col = RetrieveArray_SingleColumn(arr, row_list);
+    *out_arr = std::move(*updated_col);
+    delete updated_col;
+}
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
+head_computation(array_info* arr, ARRAY* out_arr,
+                 const std::vector<int64_t>& row_list) {
+    throw std::runtime_error(
+        "gb.head() is not implemented for multiple_array.");
+}
 
 /**
  * The median_computation function. It uses the symbolic information to compute
@@ -2247,16 +2275,18 @@ struct KeyEqualNuniqueComputationString {
  *
  * @param arr The column on which we do the computation
  * @param out_arr[out] The column which contains nunique results
- * @param grp_info The array containing information on how the rows are organized
- * @param dropna The boolean dropna indicating whether we drop or not the NaN values
- * from the nunique computation.
- * @param is_parallel: true if data is distributed (used to indicate whether tracing 
- * should be parallel or not)
+ * @param grp_info The array containing information on how the rows are
+ * organized
+ * @param dropna The boolean dropna indicating whether we drop or not the NaN
+ * values from the nunique computation.
+ * @param is_parallel: true if data is distributed (used to indicate whether
+ * tracing should be parallel or not)
  */
 template <typename ARRAY>
 typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
 nunique_computation(array_info* arr, array_info* out_arr,
-                    grouping_info const& grp_info, bool const& dropna, bool const& is_parallel) {
+                    grouping_info const& grp_info, bool const& dropna,
+                    bool const& is_parallel) {
     tracing::Event ev("nunique_computation", is_parallel);
     size_t num_group = grp_info.group_to_first_row.size();
     if (num_group == 0) return;
@@ -2430,7 +2460,8 @@ nunique_computation(array_info* arr, array_info* out_arr,
 template <typename ARRAY>
 typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
 nunique_computation(array_info* arr, ARRAY* out_arr,
-                    grouping_info const& grp_info, bool const& skipna, bool const& is_parallel) {
+                    grouping_info const& grp_info, bool const& skipna,
+                    bool const& is_parallel) {
     Bodo_PyErr_SetString(PyExc_RuntimeError,
                          "while nunique makes sense for pivot_table/crosstab "
                          "the functionality is missing right now");
@@ -4905,7 +4936,8 @@ class NUniqueColSet : public BasicColSet<ARRAY> {
     NUniqueColSet(array_info* in_col, bool _dropna, table_info* nunique_table,
                   bool do_combine, bool _is_parallel)
         : BasicColSet<ARRAY>(in_col, Bodo_FTypes::nunique, do_combine),
-          dropna(_dropna), is_parallel(_is_parallel),
+          dropna(_dropna),
+          is_parallel(_is_parallel),
           my_nunique_table(nunique_table) {}
 
     virtual ~NUniqueColSet() {
@@ -4920,7 +4952,8 @@ class NUniqueColSet : public BasicColSet<ARRAY> {
             aggfunc_output_initialize(this->update_cols[0],
                                       Bodo_FTypes::sum);  // zero initialize
             nunique_computation<ARRAY>(this->in_col, this->update_cols[0],
-                                       grp_infos[my_nunique_table->id], dropna, is_parallel);
+                                       grp_infos[my_nunique_table->id], dropna,
+                                       is_parallel);
         } else {
             // use default grouping_info
             nunique_computation<ARRAY>(this->in_col, this->update_cols[0],
@@ -5128,12 +5161,14 @@ void copy_values(ARRAY* update_col, ARRAY* tmp_col,
  * @param periods option used for shift
  * @param transform_func option used for identifying transform function
  *        (currently groupby operation that are already supported)
+ * @param head_n: option used for head operation
  */
 template <typename ARRAY>
 BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
                                int ftype, bool do_combine, bool skipna,
                                int64_t periods, int64_t transform_func,
-                               int n_udf, bool is_parallel, int* udf_n_redvars = nullptr,
+                               int64_t head_n, int n_udf, bool is_parallel,
+                               int* udf_n_redvars = nullptr,
                                table_info* udf_table = nullptr,
                                int udf_table_idx = 0,
                                table_info* nunique_table = nullptr);
@@ -5144,9 +5179,9 @@ class TransformColSet : public BasicColSet<ARRAY> {
     TransformColSet(array_info* in_col, int ftype, int _func_num,
                     bool do_combine)
         : BasicColSet<ARRAY>(in_col, ftype, false), transform_func(_func_num) {
-        transform_op_col =
-            makeColSet<ARRAY>(in_col, nullptr, transform_func, do_combine,
-                              false, 0, transform_func, 0, true); //is_parallel = true
+        transform_op_col = makeColSet<ARRAY>(
+            in_col, nullptr, transform_func, do_combine, false, 0,
+            transform_func, -1, 0, true);  // is_parallel = true, head_n=-1
     }
     virtual ~TransformColSet() {
         if (transform_op_col != nullptr) delete transform_op_col;
@@ -5250,6 +5285,36 @@ class TransformColSet : public BasicColSet<ARRAY> {
     int64_t transform_func;
     BasicColSet<ARRAY>* transform_op_col = nullptr;
 };
+template <typename ARRAY>
+class HeadColSet : public BasicColSet<ARRAY> {
+   public:
+    HeadColSet(array_info* in_col, int ftype, int64_t _n)
+        : BasicColSet<ARRAY>(in_col, ftype, false), head_n(_n) {}
+    virtual ~HeadColSet() {}
+
+    virtual void alloc_update_columns(size_t update_col_len, size_t n_pivot,
+                                      bool is_crosstab,
+                                      std::vector<ARRAY*>& out_cols) {
+        // NOTE: output size of head is dependent on number of rows to
+        // get from each group. This is computed in GroupbyPipeline::update().
+        out_cols.push_back(alloc_array_groupby<ARRAY>(
+            update_col_len, 1, 1, this->in_col->arr_type, this->in_col->dtype,
+            0, this->in_col->num_categories, n_pivot));
+        this->update_cols.push_back(out_cols.back());
+    }
+
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
+        head_computation<ARRAY>(this->in_col, this->update_cols[0],
+                                head_row_list);
+    }
+    void set_head_row_list(std::vector<int64_t> row_list) {
+        head_row_list = row_list;
+    }
+
+   private:
+    std::vector<int64_t> head_row_list;
+    int64_t head_n;  // number of rows per group to return
+};
 /* When transmitting data with shuffle, we have only functionality for
    array_info.
    For array_info, nothing needs to be done.
@@ -5327,9 +5392,9 @@ template <typename ARRAY>
 BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
                                int ftype, bool do_combine, bool skipna,
                                int64_t periods, int64_t transform_func,
-                               int n_udf, bool is_parallel, int* udf_n_redvars,
-                               table_info* udf_table, int udf_table_idx,
-                               table_info* nunique_table) {
+                               int64_t head_n, int n_udf, bool is_parallel,
+                               int* udf_n_redvars, table_info* udf_table,
+                               int udf_table_idx, table_info* nunique_table) {
     switch (ftype) {
         case Bodo_FTypes::udf:
             return new UdfColSet<ARRAY>(in_col, do_combine, udf_table,
@@ -5361,6 +5426,8 @@ BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
         case Bodo_FTypes::transform:
             return new TransformColSet<ARRAY>(in_col, ftype, transform_func,
                                               do_combine);
+        case Bodo_FTypes::head:
+            return new HeadColSet<ARRAY>(in_col, ftype, head_n);
         default:
             return new BasicColSet<ARRAY>(in_col, ftype, do_combine);
     }
@@ -5376,8 +5443,8 @@ class GroupbyPipeline {
                     table_info* _udf_table, udf_table_op_fn update_cb,
                     udf_table_op_fn combine_cb, udf_eval_fn eval_cb,
                     udf_general_fn general_udfs_cb, bool skipna,
-                    int64_t periods, int64_t transform_func, bool _return_key,
-                    bool _return_index, bool _key_dropna)
+                    int64_t periods, int64_t transform_func, int64_t _head_n,
+                    bool _return_key, bool _return_index, bool _key_dropna)
         : in_table(_in_table),
           orig_in_table(_in_table),
           num_keys(_num_keys),
@@ -5389,7 +5456,8 @@ class GroupbyPipeline {
           return_index(_return_index),
           key_dropna(_key_dropna),
           udf_table(_udf_table),
-          udf_n_redvars(_udf_nredvars) {
+          udf_n_redvars(_udf_nredvars),
+          head_n(_head_n) {
         tracing::Event ev("GroupbyPipeline()", is_parallel);
         if (dispatch_table == nullptr)
             n_pivot = 1;
@@ -5414,6 +5482,11 @@ class GroupbyPipeline {
             if (ftype == Bodo_FTypes::gen_udf && is_parallel)
                 shuffle_before_update = true;
             if (ftype == Bodo_FTypes::udf) has_udf = true;
+            if (ftype == Bodo_FTypes::head) {
+                head_op = true;
+                if (is_parallel) shuffle_before_update = true;
+                break;
+            }
             if (ftype == Bodo_FTypes::nunique) {
                 nunique_op = true;
                 req_extended_group_info = true;
@@ -5445,6 +5518,12 @@ class GroupbyPipeline {
             ev.add_attribute("nunique_only", nunique_only);
         }
 
+        // if gb.head and data is distribute, last column is key-sort column.
+        int head_i = int(head_op && is_parallel);
+        // Add key-sorting-column for gb.head() to sort output at the end
+        // this is relevant only if data is distributed.
+        if (head_i) add_head_key_sort_column();
+
         // get hashes of keys
         hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION,
                                  is_parallel);
@@ -5457,11 +5536,14 @@ class GroupbyPipeline {
                 // nunique_hashes_global is currently only used for gb.nunique
                 // heuristic
                 std::tie(nunique_hashes, nunique_hashes_global) =
-                    get_nunique_hashes_global(hashes, in_table->nrows(), is_parallel);
+                    get_nunique_hashes_global(hashes, in_table->nrows(),
+                                              is_parallel);
             else
-                nunique_hashes = get_nunique_hashes(hashes, in_table->nrows(), is_parallel);
+                nunique_hashes =
+                    get_nunique_hashes(hashes, in_table->nrows(), is_parallel);
         } else if (!is_parallel) {
-            nunique_hashes = get_nunique_hashes(hashes, in_table->nrows(), is_parallel);
+            nunique_hashes =
+                get_nunique_hashes(hashes, in_table->nrows(), is_parallel);
         }
 
         if (is_parallel && (dispatch_table == nullptr) && !has_udf &&
@@ -5510,7 +5592,8 @@ class GroupbyPipeline {
             // shuffle_table_kernel steals the reference but we still
             // need it for the code after C++ groupby
             for (auto a : in_table->columns) incref_array(a);
-            in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr, is_parallel);
+            in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr,
+                                            is_parallel);
             if (!(cumulative_op || shift_op || transform_op)) {
                 delete[] hashes;
                 delete comm_info_ptr;
@@ -5531,14 +5614,17 @@ class GroupbyPipeline {
 
         array_info* index_col = nullptr;
         if (input_has_index)
-            index_col = in_table->columns[in_table->columns.size() - 1];
+            // if gb.head() exclude head_op column as well (if data is
+            // distributed).
+            index_col =
+                in_table->columns[in_table->columns.size() - 1 - head_i];
 
         // construct the column sets, one for each (input_column, func) pair.
         // ftypes is an array of function types received from generated code,
         // and has one ftype for each (input_column, func) pair
         int k = 0;
         n_udf = 0;
-        for (int64_t i = num_keys; i < in_table->ncols() - index_i;
+        for (int64_t i = num_keys; i < in_table->ncols() - index_i - head_i;
              i++, k++) {  // for each data column
             array_info* col = in_table->columns[i];
             int start = func_offsets[k];
@@ -5551,13 +5637,14 @@ class GroupbyPipeline {
                         nunique_tables[i]->columns[num_keys];
                     col_sets.push_back(makeColSet<ARRAY>(
                         nunique_col, index_col, ftypes[j], do_combine, skipna,
-                        periods, transform_func, n_udf, is_parallel, udf_n_redvars,
-                        udf_table, udf_table_idx, nunique_tables[i]));
+                        periods, transform_func, head_n, n_udf, is_parallel,
+                        udf_n_redvars, udf_table, udf_table_idx,
+                        nunique_tables[i]));
                 } else {
                     col_sets.push_back(makeColSet<ARRAY>(
                         col, index_col, ftypes[j], do_combine, skipna, periods,
-                        transform_func, n_udf, is_parallel, udf_n_redvars, udf_table,
-                        udf_table_idx));
+                        transform_func, head_n, n_udf, is_parallel,
+                        udf_n_redvars, udf_table, udf_table_idx));
                 }
                 if (ftypes[j] == Bodo_FTypes::udf ||
                     ftypes[j] == Bodo_FTypes::gen_udf) {
@@ -5578,8 +5665,25 @@ class GroupbyPipeline {
         if (col_sets.size() == 0 && ftypes[0] == Bodo_FTypes::size) {
             col_sets.push_back(makeColSet<ARRAY>(
                 in_table->columns[0], index_col, ftypes[0], do_combine, skipna,
-                periods, transform_func, n_udf, is_parallel, udf_n_redvars, udf_table,
-                udf_table_idx));
+                periods, transform_func, head_n, n_udf, is_parallel,
+                udf_n_redvars, udf_table, udf_table_idx));
+        }
+        // Add key-sort column and index to col_sets
+        // to apply head_computation on them as well.
+        if (head_op && return_index) {
+            // index-column
+            col_sets.push_back(makeColSet<ARRAY>(
+                index_col, index_col, Bodo_FTypes::head, do_combine, skipna,
+                periods, transform_func, head_n, n_udf, is_parallel,
+                udf_n_redvars, udf_table, udf_table_idx));
+            if (head_i) {
+                array_info* col =
+                    in_table->columns[in_table->columns.size() - 1];
+                col_sets.push_back(makeColSet<ARRAY>(
+                    col, index_col, Bodo_FTypes::head, do_combine, skipna,
+                    periods, transform_func, head_n, n_udf, is_parallel,
+                    udf_n_redvars, udf_table, udf_table_idx));
+            }
         }
 
         in_table->id = 0;
@@ -5591,6 +5695,39 @@ class GroupbyPipeline {
     ~GroupbyPipeline() {
         for (auto col_set : col_sets) delete col_set;
         if (hashes != nullptr) delete[] hashes;
+    }
+    /**
+     * @brief
+     * Create key-sort column used to sort table at the end.
+     * Set its values and add as the last column in in_table.
+     * Column values is in range(start, start+nrows).
+     * Each rank will compute its range by identifying
+     * start/end index of its set of rows.
+     * @return ** void
+     */
+    void add_head_key_sort_column() {
+        array_info* head_sort_col = alloc_array_groupby<array_info>(
+            in_table->nrows(), 1, 1, bodo_array_type::NUMPY,
+            Bodo_CTypes::UINT64, 0, 0, n_pivot);
+        int64_t num_ranks = dist_get_size();
+        int64_t my_rank = dist_get_rank();
+        // Gather the number of rows on every rank
+        int64_t num_rows = in_table->nrows();
+        std::vector<int64_t> num_rows_ranks(num_ranks);
+        MPI_Allgather(&num_rows, 1, MPI_INT64_T, num_rows_ranks.data(), 1,
+                      MPI_INT64_T, MPI_COMM_WORLD);
+
+        // Determine the start/end row number of each rank
+        int64_t rank_start_row, rank_end_row;
+        rank_end_row = std::accumulate(num_rows_ranks.begin(),
+                                       num_rows_ranks.begin() + my_rank + 1, 0);
+        rank_start_row = rank_end_row - num_rows;
+        // generate start/end range
+        for (int64_t i = 0; i < num_rows; i++) {
+            uint64_t& val = getv<array_info, uint64_t>(head_sort_col, i);
+            val = rank_start_row + i;
+        }
+        in_table->columns.push_back(head_sort_col);
     }
 
     /**
@@ -5608,10 +5745,49 @@ class GroupbyPipeline {
             combine();
         }
         eval();
+        // For gb.head() operation, if data is distributed,
+        // sort table based on head_sort_col column.
+        if (head_op && is_parallel) sort_gb_head_output();
         return getOutputTable();
+    }
+    /**
+     * @brief
+     * 1. Put head_sort_col at the beginning of the table.
+     * 2. Sort table based on this column.
+     * 3. Remove head_sort_col.
+     * @return ** void
+     */
+    void sort_gb_head_output() {
+        // Move sort column to the front.
+        std::vector<array_info*>::iterator pos = cur_table->columns.end() - 1;
+        std::rotate(cur_table->columns.begin(), pos, pos + 1);
+        // whether to put NaN first or last.
+        // Does not matter in this case (no NaN, values are range(nrows))
+        int64_t asc_pos = 1;
+        cur_table =
+            sort_values_table(cur_table, 1, &asc_pos, &asc_pos, is_parallel);
+        // Remove key-sort column
+        free_array_groupby(cur_table->columns[0]);
+        cur_table->columns.erase(cur_table->columns.begin());
     }
 
    private:
+    int64_t compute_head_row_list(grouping_info const& grp_info,
+                                  std::vector<int64_t>& head_row_list) {
+        // keep track of how many rows found per group so far.
+        std::vector<int64_t> nrows_per_grp(grp_info.num_groups);
+        int64_t count = 0;  // how many rows found so far
+        int64_t iRow = 0;   // index looping over all rows
+        for (size_t iRow = 0; iRow < in_table->nrows(); iRow++) {
+            int64_t igrp = grp_info.row_to_group[iRow];
+            if (igrp != -1 && nrows_per_grp[igrp] < head_n) {
+                nrows_per_grp[igrp]++;
+                head_row_list.push_back(iRow);
+                count++;
+            }
+        }
+        return count;
+    }
     /**
      * The update step groups rows in the input table based on keys, and
      * aggregates them based on the function to be applied to the columns.
@@ -5642,9 +5818,14 @@ class GroupbyPipeline {
         grp_info.mode = 1;
         num_groups = grp_info.num_groups;
         grp_info.n_pivot = n_pivot;
+        int64_t update_col_len = num_groups;
+        std::vector<int64_t> head_row_list;
+        if (head_op) {
+            update_col_len = compute_head_row_list(grp_infos[0], head_row_list);
+        }
 
         update_table = cur_table = new table_info();
-        if (cumulative_op || shift_op || transform_op)
+        if (cumulative_op || shift_op || transform_op || head_op)
             num_keys = 0;  // there are no key columns in output of cumulative
                            // operations
         else
@@ -5652,13 +5833,18 @@ class GroupbyPipeline {
 
         for (auto col_set : col_sets) {
             std::vector<ARRAY*> list_arr;
-            col_set->alloc_update_columns(num_groups, n_pivot, is_crosstab,
+            col_set->alloc_update_columns(update_col_len, n_pivot, is_crosstab,
                                           list_arr);
             for (auto& e_arr : list_arr)
                 push_back_arrays(update_table->columns, e_arr);
+            auto head_col = dynamic_cast<HeadColSet<ARRAY>*>(col_set);
+            if (head_col) head_col->set_head_row_list(head_row_list);
             col_set->update(grp_infos);
         }
-        if (return_index)
+        // gb.head() already added the index to the tables columns.
+        // This is need to do head_computation on it as well.
+        // since it will not be the same length as the in_table.
+        if (!head_op && return_index)
             update_table->columns.push_back(
                 copy_array(in_table->columns.back()));
         if (n_udf > 0) {
@@ -5758,10 +5944,20 @@ class GroupbyPipeline {
         if (return_key)
             out_table->columns.assign(cur_table->columns.begin(),
                                       cur_table->columns.begin() + num_keys);
-        for (BasicColSet<ARRAY>* col_set : col_sets)
-            output_list_arrays(out_table->columns, col_set->getOutputColumn());
-        if (return_index)
-            out_table->columns.push_back(cur_table->columns.back());
+        // gb.head() with distirbuted data sorted the table so col_sets no
+        // longer reflects final
+        // output columns.
+        if (head_op && is_parallel) {
+            for (int i = 0; i < cur_table->ncols(); i++)
+                output_list_arrays(out_table->columns, cur_table->columns[i]);
+        } else {
+            for (BasicColSet<ARRAY>* col_set : col_sets)
+                output_list_arrays(out_table->columns,
+                                   col_set->getOutputColumn());
+            // gb.head() already added index to out_table.
+            if (!head_op && return_index)
+                out_table->columns.push_back(cur_table->columns.back());
+        }
         if ((cumulative_op || shift_op || transform_op) && is_parallel) {
             table_info* revshuf_table = reverse_shuffle_table_kernel(
                 out_table, in_hashes, *comm_info_ptr);
@@ -6115,6 +6311,8 @@ class GroupbyPipeline {
     bool cumulative_op = false;
     bool shift_op = false;
     bool transform_op = false;
+    bool head_op = false;
+    int64_t head_n;
     bool req_extended_group_info = false;
     bool do_combine;
 
@@ -6629,7 +6827,8 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     }
     // We are below threshold. Now doing an allgather for determining the keys.
     bool all_gather = true;
-    table_info* full_table = gather_table(red_table, num_keys, all_gather, is_parallel);
+    table_info* full_table =
+        gather_table(red_table, num_keys, all_gather, is_parallel);
     delete_table(red_table);
     // Now building the map_container.
     uint32_t* hashes_full =
@@ -6758,9 +6957,10 @@ table_info* pivot_groupby_and_aggregate(
             udf_dummy_table, (udf_table_op_fn)update_cb,
             // TODO: general UDFs
             (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, 0, skipdropna, 0,
-            0, return_key,
+            0, -1, return_key,
             // dropna = True for pivot operation
-            return_index, true);  // transform_func = periods=0. Not used in
+            return_index, true);  // transform_func = periods = 0
+                                  // head_n = -1. Not used in
                                   // pivot operation.
 
         table_info* ret_table = groupby.run();
@@ -6774,9 +6974,9 @@ table_info* pivot_groupby_and_aggregate(
 table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
-    int64_t periods, int64_t transform_func, bool return_key, bool return_index,
-    bool key_dropna, void* update_cb, void* combine_cb, void* eval_cb,
-    void* general_udfs_cb, table_info* udf_dummy_table) {
+    int64_t periods, int64_t transform_func, int64_t head_n, bool return_key,
+    bool return_index, bool key_dropna, void* update_cb, void* combine_cb,
+    void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table) {
     try {
         tracing::Event ev("groupby_and_aggregate", is_parallel);
         int strategy =
@@ -6793,7 +6993,7 @@ table_info* groupby_and_aggregate(
                 udf_nredvars, udf_dummy_table, (udf_table_op_fn)update_cb,
                 (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
                 (udf_general_fn)general_udfs_cb, skipdropna, periods,
-                transform_func, return_key, return_index, key_dropna);
+                transform_func, head_n, return_key, return_index, key_dropna);
 
             table_info* ret_table = groupby.run();
 

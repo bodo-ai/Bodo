@@ -234,6 +234,7 @@ AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype"])
 # Bodo_FTypes::FTypeEnum in _groupby.cpp
 supported_agg_funcs = [
     "no_op",  # needed to ensure that 0 value isn't matched with any function
+    "head",
     "transform",
     "size",
     "shift",
@@ -334,6 +335,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_post_shuffle = 1
         skipdropna = True
         shift_periods_t = 1
+        head_n = -1
         if isinstance(rhs, ir.Expr):
             for erec in rhs.kws:
                 # Type checking should be handled at the overload/bound_func level.
@@ -367,8 +369,25 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                 shift_periods_t,
             )
             shift_periods_t = guard(find_const, func_ir, shift_periods_t)
+        # To handle head(2) and head(n=2)
+        if func_name == "head" and (len(rhs.args) > 0 or len(rhs.kws) > 0):
+            head_n = get_call_expr_arg(
+                "head",
+                rhs.args,
+                dict(rhs.kws),
+                0,
+                "n",
+                5,  # default value
+            )
+            head_n = guard(find_const, func_ir, head_n)
+            # Per Pandas docs: Does not work for negative values of n.
+            if head_n < 0:
+                raise BodoError(
+                    f"groupby.{func_name} does not work with negative values."
+                )
         func.skipdropna = skipdropna
         func.periods = shift_periods_t
+        func.head_n = head_n
         if func_name == "transform":
             kws = dict(rhs.kws)
             func_var = get_call_expr_arg(func_name, rhs.args, kws, 0, "func", "")
@@ -1704,7 +1723,9 @@ def gen_top_level_agg_func(
     # If we put the index as argument, then it is the last argument of the
     # function.
     func_text = "def agg_top({}{}{}, pivot_arr):\n".format(
-        key_args, in_args, ", index_arg" if agg_node.input_has_index else ""
+        key_args,
+        in_args,
+        ", index_arg" if agg_node.input_has_index else "",
     )
 
     # convert arrays to table
@@ -1773,6 +1794,7 @@ def gen_top_level_agg_func(
     udf_ncols = []
     skipdropna = False
     shift_periods = 1
+    head_n = -1
     num_cum_funcs = 0
     transform_func = 0
 
@@ -1796,6 +1818,9 @@ def gen_top_level_agg_func(
         if func.ftype in {"transform"}:
             transform_func = func.transform_func
             do_combine = False  # See median/nunique note ^
+        if func.ftype == "head":
+            head_n = func.head_n
+            do_combine = False  # This operation just retruns n rows. No combine needed.
         allfuncs.append(func)
         func_idx_to_in_col.append(f_idx)
         if func.ftype == "udf":
@@ -1983,13 +2008,14 @@ def gen_top_level_agg_func(
         func_text += "    delete_info_decref_array(pivot_info)\n"
         func_text += "    delete_info_decref_array(arr_info)\n"
     else:
-        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
+        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
             n_keys,
             agg_node.input_has_index,
             parallel,
             skipdropna,
             shift_periods,
             transform_func,
+            head_n,
             agg_node.return_key,
             agg_node.same_index,
             agg_node.dropna,

@@ -33,40 +33,54 @@ void groupby_init();
  *    final result from the value in the redvar columns and writes it to the
  *    output data columns. This step is only needed for certain functions
  *    like mean, var, std and agg. Redvar columns are deleted afterwards.
+ * NOTE: gb.head() is handled in a special case to preserve order in the output.
+ * 1. It shuffles data at the beginning and sorts the final output
+ *    (and no reverse shuffling).
+ * 2. It maintains the same index but unlike cumulative operations, out_table
+ *    could have different number of rows from in_table. So, we add index_col
+ *    as part of col_sets and perform head operation on it.
+ * 3. Per Pandas documentation, order of rows should be preserved. Hence, we
+ *    added an extra column that has 0..nrows values and use it to sort
+ * cur_table before generating the final out_table. (See GroupbyPipeline::run())
+ * 4. If data is replicated, we don't add sort-key column or sort table at the
+ * end.
  *
- * @param input table
- * @param number of key columns in the table
- * @param functions to apply (see Bodo_FTypes::FTypeEnum)
- * @param the functions to apply to input col i are in ftypes, in range
- *        func_offsets[i] to func_offsets[i+1]
+ * @param in_table: input table
+ * @param num_keys: number of key columns in the table
+ * @param input_has_index:
+ * @param ftypes: functions to apply (see Bodo_FTypes::FTypeEnum)
+ * @param func_offset: the functions to apply to input col i are in ftypes, in
+ * range func_offsets[i] to func_offsets[i+1]
  * @param udf_nredvars[i] is the number of redvar columns needed by udf i
- * @param true if needs to run in parallel (distributed data on multiple
- *        processes)
+ * @param is_parallel: true if needs to run in parallel (distributed data on
+ * multiple processes)
  * @param skipdropna: whether to drop NaN values or not from the computation
  *                    (dropna for nunique and skipna for median/cumsum/cumprod)
+ * @param periods: shift value to use with gb.shift operation.
  * @param transform_func: function number to use with transform operation.
+ * @param head_n: number of rows to return with gb.head operation.
  * @param return_key: whether to return the keys or not.
  * @param return_index: whether to return the index or not.
  * @param key_dropna: whether to  allow NA values in group keys or not.
- * @param external 'update' function (a function pointer).
+ * @param update_cb: external 'update' function (a function pointer).
  *        For ftype=udf, the update step happens in external JIT-compiled code,
  *        which must initialize redvar columns and apply the update function.
- * @param external 'combine' function (a function pointer).
+ * @param combine_cb: external 'combine' function (a function pointer).
  *        For ftype=udf, external code does the combine step (apply combine
  *        function to current table)
- * @param external 'eval' function (a function pointer).
+ * @param eval_cb: external 'eval' function (a function pointer).
  *        For ftype=udf, external code does the eval step.
- * @param external function (function pointer) for general UDFs. Does the UDF
- *        for all input columns with ftype=gen_udf
- * @param dummy table containing type info for output and redvars columns for
- *        udfs
+ * @param general_udfs_cb: external function (function pointer) for general
+ * UDFs. Does the UDF for all input columns with ftype=gen_udf
+ * @param udf_dummy_table: dummy table containing type info for output and
+ * redvars columns for udfs
  */
 table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
-    int64_t periods, int64_t transform_func, bool return_key, bool return_index,
-    bool key_dropna, void* update_cb, void* combine_cb, void* eval_cb,
-    void* general_udfs_cb, table_info* udf_dummy_table);
+    int64_t periods, int64_t transform_func, int64_t head_n, bool return_key,
+    bool return_index, bool key_dropna, void* update_cb, void* combine_cb,
+    void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table);
 
 table_info* pivot_groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, table_info* dispatch_table,
