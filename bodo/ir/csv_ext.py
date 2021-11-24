@@ -417,6 +417,9 @@ def csv_remove_dead_column(csv_node, column_live_map, equiv_vars, typemap):
 
     This is mapped to the actual file columns in 'csv_distributed_run'.
     """
+    if csv_node.chunksize is not None:
+        # We skip column pruning with chunksize.
+        return False
     # All csv_nodes should have a two variables, the first being the table, and the second being the idxcol
     assert len(csv_node.out_vars) == 2, "invalid CsvReader node"
     table_var_name = csv_node.out_vars[0].name
