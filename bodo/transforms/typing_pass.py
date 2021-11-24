@@ -35,6 +35,7 @@ import bodo
 from bodo.hiframes.dataframe_indexing import DataFrameILocType, DataFrameLocType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
+from bodo.hiframes.pd_rolling_ext import RollingType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.transform import (
     compile_func_single_block,
@@ -433,7 +434,7 @@ class TypingTransforms:
         # find constant index for df["A"], df[["A", "B"]] or df.groupby("A")["B"] cases
         # constant index can be string, int or non-bool list
         if (
-            isinstance(target_typ, (DataFrameType, DataFrameGroupByType))
+            isinstance(target_typ, (DataFrameType, DataFrameGroupByType, RollingType))
             and not is_literal_type(idx_typ)
             and (
                 idx_typ == bodo.string_type
@@ -443,23 +444,23 @@ class TypingTransforms:
                 )
             )
         ):
-            # static_getitem has the values embedded
-            if rhs.op == "static_getitem":
-                val = rhs.index
-            else:
-                # try to find index values
-                try:
-                    err_msg = "DataFrame[] requires constant column names"
-                    val = self._get_const_value(idx, label, rhs.loc, err_msg)
-                except (GuardException, BodoConstUpdatedError):
-                    # couldn't find values, just return to be handled later
-                    # save for potential loop unrolling
-                    nodes.append(assign)
-                    return nodes
+            # NOTE: avoid using rhs.index for "static_getitem" since it can be wrong
+            # see https://github.com/numba/numba/issues/7592
+            # try to find index values
+            try:
+                err_msg = "DataFrame[] requires constant column names"
+                val = self._get_const_value(idx, label, rhs.loc, err_msg)
+            except (GuardException, BodoConstUpdatedError):
+                # couldn't find values, just return to be handled later
+                # save for potential loop unrolling
+                nodes.append(assign)
+                return nodes
             # replace index variable with a new variable holding constant
             new_var = _create_const_var(val, idx.name, idx.scope, idx.loc, nodes)
             if rhs.op == "static_getitem":
                 rhs.index_var = new_var
+                # update value of static_getitem since it can be wrong
+                rhs.index = val
             else:
                 rhs.index = new_var
             # old index var is not used anymore
