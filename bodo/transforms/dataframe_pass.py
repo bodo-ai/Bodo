@@ -1347,7 +1347,17 @@ class DataFramePass:
                     return_key = False
                 elif func.ftype in {"idxmin", "idxmax"}:
                     input_has_index = True
-        if same_index and isinstance(grp_typ.df_type.index, RangeIndexType):
+                elif func.ftype == "head":
+                    input_has_index = True
+                    same_index = True
+                    return_key = False
+
+        # unlike cumulative operations gb.head() will always return the index in all cases including RangIndexType.
+        if (
+            same_index
+            and isinstance(grp_typ.df_type.index, RangeIndexType)
+            and func.ftype != "head"
+        ):
             same_index = False
             input_has_index = False
 
@@ -1395,7 +1405,13 @@ class DataFramePass:
                 if isinstance(c, tuple) and len(c) > 1 and c[1] == "":
                     if c[0] in grp_typ.keys:
                         continue
-                elif c in grp_typ.keys and not c in grp_typ.selection:
+                # gb.head() includes the keys as part of the ouptut columns if
+                # no columns are explicitly selected.
+                elif (
+                    c in grp_typ.keys
+                    and not c in grp_typ.selection
+                    and not func_name == "head"
+                ):
                     continue
                 # output column name can be a string or tuple of strings. the
                 # latter case occurs when doing this:
@@ -1511,7 +1527,8 @@ class DataFramePass:
                 if c[0] in grp_typ.keys:
                     is_key = True
                     c = c[0]
-            elif c in grp_typ.keys:
+            # head operation is performed on keys as well
+            elif c in grp_typ.keys and not func_name == "head":
                 is_key = True
             if is_key:
                 assert not grp_typ.as_index

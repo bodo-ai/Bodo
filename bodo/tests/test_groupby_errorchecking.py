@@ -1888,13 +1888,16 @@ def test_agg_unsupported_types(test_cumulatives_df, memory_leak_check):
 def test_cum_noncum_mix(memory_leak_check):
     """Tests that mixing cumulative and regular aggregations
     produces a reasonable error message."""
+
     def impl(df):
-        return df.groupby('A')['B'].agg(("sum", "cumsum"))
+        return df.groupby("A")["B"].agg(("sum", "cumsum"))
 
-    df = pd.DataFrame({"A":[1,2,3,4] * 4,"B":[2,3,4,5] * 4})
-    with pytest.raises(BodoError, match="Cannot mix cumulative operations with other aggregation functions"):
+    df = pd.DataFrame({"A": [1, 2, 3, 4] * 4, "B": [2, 3, 4, 5] * 4})
+    with pytest.raises(
+        BodoError,
+        match="Cannot mix cumulative operations with other aggregation functions",
+    ):
         bodo.jit(impl)(df)
-
 
 
 # ------------------------------ df.groupby().transform()------------------------------ #
@@ -1934,7 +1937,7 @@ def test_transform_args(memory_leak_check):
         bodo.jit(impl_engine_kwargs)(df)
 
 
-# TODO: @pytest.mark.slow
+@pytest.mark.slow
 def test_transform_unsupported_type(memory_leak_check):
     """ Test Groupby.transform('sum') with unsupported column type"""
 
@@ -1949,4 +1952,37 @@ def test_transform_unsupported_type(memory_leak_check):
         }
     )
     with pytest.raises(BodoError, match="column type of bool is not supported by"):
+        bodo.jit(impl)(df)
+
+
+# ------------------------------ df.groupby().head()------------------------------ #
+@pytest.mark.slow
+def test_head_negative_value(memory_leak_check):
+    """ Test Groupby.head() with -ve value"""
+
+    def impl(df):
+        A = df.groupby("A").head(-2)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": [16, 1, 1, 1, 16, 16, 1, 40],
+            "B": [True, False] * 4,
+        }
+    )
+    with pytest.raises(BodoError, match="does not work with negative values."):
+        bodo.jit(impl)(df)
+
+
+@pytest.mark.slow
+def test_groupby_agg_head(memory_leak_check):
+    """
+    Test Groupby.agg(): head cannot be mixed.
+    """
+
+    def impl(df):
+        return df.groupby(by=["A"]).agg({"E": "sum", "C": "head"})
+
+    df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
+    with pytest.raises(BodoError, match="head cannot be mixed"):
         bodo.jit(impl)(df)

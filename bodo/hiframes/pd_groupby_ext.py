@@ -288,7 +288,8 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
     # [BE-416] Support with list
     # [BE-433] Support with tuples
     if (
-        func_name in ("first", "last", "sum", "prod", "min", "max", "count", "nunique")
+        func_name
+        in ("first", "last", "sum", "prod", "min", "max", "count", "nunique", "head")
     ) and (isinstance(arr_type, (TupleArrayType, ArrayItemArrayType))):
         return (
             None,
@@ -309,6 +310,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
                 "sum",
                 "first",
                 "last",
+                "head",
             }:
                 return (
                     None,
@@ -328,6 +330,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
                 "max",
                 "first",
                 "last",
+                "head",
             }:
                 return (
                     None,
@@ -432,8 +435,21 @@ def get_agg_typ(
     out_data = []  # type of output columns (array type)
     out_columns = []  # name of output columns
     out_column_type = []  # ColumnType of output columns (see ColumnType Enum above)
+    if func_name == "head":
+        # dropna is always False
+        grp.dropna = False
+        # Per Pandas documentation as_index flag is ignored
+        # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.core.groupby.GroupBy.head.html
+        grp.as_index = True
     if not grp.as_index:
         get_keys_not_as_index(grp, out_columns, out_data, out_column_type)
+    elif func_name == "head":
+        # Regardless of number of keys, index is always NumericIndex
+        # unless it's explicitly assigned
+        if grp.df_type.index == index:
+            index = NumericIndexType(types.int64, types.none)
+        else:
+            index = grp.df_type.index
     else:
         if len(grp.keys) > 1:
             key_col_inds = tuple(
@@ -461,8 +477,14 @@ def get_agg_typ(
         out_columns.append("size")
         gb_info[(None, "size")] = "size"
     else:
+        # gb.head() w/o explicit select, has all columns in output (including keys)
+        columns = (
+            grp.selection
+            if func_name != "head" or grp.explicit_select
+            else grp.df_type.columns
+        )
         # get output type for each selected column
-        for c in grp.selection:
+        for c in columns:
             ind = grp.df_type.columns.index(c)
             data = grp.df_type.data[ind]  # type of input column
             e_column_type = ColumnType.NonNumericalColumn.value
@@ -562,6 +584,10 @@ def get_agg_typ(
                     # TODO: [BE-475] Throw an error if both args and kws are passed for same argument
                     dropna = args[0] if len(args) > 0 else kws.pop("dropna", 1)
                     check_args_kwargs(func_name, 1, args, kws)
+                elif func_name == "head":
+                    # pop arguments from kws or args
+                    if len(args) == 0:
+                        kws.pop("n", None)
 
                 out_dtype, err_msg = get_groupby_output_dtype(
                     data, func_name, grp.df_type.index
@@ -723,6 +749,10 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
             col_map = get_overload_constant_dict(func)
             in_col_names = tuple(col_map.keys())
             f_vals = tuple(col_map.values())
+        if "head" in f_vals:
+            raise BodoError(
+                "Groupby.agg()/aggregate(): head cannot be mixed with other groupby operations."
+            )
 
         # make sure selected columns exist in dataframe
         if any(c not in grp.selection and c not in grp.keys for c in in_col_names):
@@ -948,6 +978,7 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
                     f"column type of {data.dtype} is not supported by {args[0]} yet.\n"
                 )
         out_data.append(data)
+
     if len(out_data) == 0:
         raise BodoError("No columns in output.")
     out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
@@ -1246,6 +1277,19 @@ class DataframeGroupByAttribute(AttributeTemplate):
             args,
             kws,
             "transform",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+            err_msg=msg,
+        )[0]
+
+    @bound_function("groupby.head", no_unliteral=True)
+    def resolve_head(self, grp, args, kws):
+        msg = "Unsupported Gropupby head operation.\n"
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "head",
             self.context,
             numba.core.registry.cpu_target.target_context,
             err_msg=msg,
@@ -1803,7 +1847,6 @@ groupby_unsupported = {
     "ffill",
     "filter",
     "get_group",
-    "head",
     "ngroup",
     "nth",
     "ohlc",

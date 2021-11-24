@@ -2008,6 +2008,7 @@ def groupby_and_aggregate(
     skipdropna_t,
     shift_periods_t,
     transform_func,
+    head_n,
     return_keys,
     return_index,
     dropna,
@@ -2038,6 +2039,7 @@ def groupby_and_aggregate(
                 lir.IntType(1),
                 lir.IntType(64),  # shift_periods_t
                 lir.IntType(64),  # transform_func
+                lir.IntType(64),  # head_n
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),  # groupby key dropna
@@ -2069,6 +2071,7 @@ def groupby_and_aggregate(
             types.boolean,
             types.int64,  # shift_periods
             types.int64,  # transform_func
+            types.int64,  # head_n
             types.boolean,
             types.boolean,
             types.boolean,  # dropna
