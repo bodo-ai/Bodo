@@ -937,6 +937,18 @@ def test_datetime_date_today(memory_leak_check):
     assert bodo.jit(test_impl)() == test_impl()
 
 
+def test_datetime_date_relative_import_today(memory_leak_check):
+    """
+    Test datetime.date.today() classmethod from a relative import
+    """
+    from datetime import date
+
+    def test_impl():
+        return date.today()
+
+    assert bodo.jit(test_impl)() == test_impl()
+
+
 def test_datetime_date_replace(memory_leak_check):
     def impl(date):
         return date.replace(year=1991, month=2, day=20)
