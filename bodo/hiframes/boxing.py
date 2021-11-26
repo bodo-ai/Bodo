@@ -847,11 +847,17 @@ def box_dataframe(typ, val, c):
     )
 
     # get column names object
-    # TODO: avoid generating large tuples and lower a constant Index if possible
-    # (e.g. if homogeneous names)
-    columns_typ = numba.typeof(typ.columns)
-    columns = context.get_constant_generic(builder, columns_typ, typ.columns)
-    context.nrt.incref(builder, columns_typ, columns)
+    # avoid generating large tuples and lower a constant array if possible
+    # (int and string types currently, TODO: support other types)
+    if all(isinstance(c, int) for c in typ.columns):
+        columns_vals = np.array(typ.columns, "int64")
+    elif all(isinstance(c, str) for c in typ.columns):
+        columns_vals = pd.array(typ.columns, "string")
+    else:
+        columns_vals = typ.columns
+
+    columns_typ = numba.typeof(columns_vals)
+    columns = context.get_constant_generic(builder, columns_typ, columns_vals)
     columns_obj = pyapi.from_native_value(columns_typ, columns, c.env_manager)
 
     # get initial dataframe object
@@ -959,7 +965,9 @@ def box_dataframe(typ, val, c):
     pyapi.object_setattr_string(df_obj, "columns", columns_obj)
     pyapi.decref(columns_obj)
 
-    _set_bodo_meta_dataframe(c, df_obj, typ)
+    # TODO[BE-1538]: reduce overhead and enable for table format
+    if not typ.is_table_format or len(typ.columns) < TABLE_FORMAT_THRESHOLD:
+        _set_bodo_meta_dataframe(c, df_obj, typ)
 
     # decref() should be called on native value
     # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
