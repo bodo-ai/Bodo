@@ -91,7 +91,7 @@ class Table:
         return isinstance(other, Table) and other.arrays == self.arrays
 
     def __str__(self) -> str:
-        return str(self.arrs)
+        return str(self.arrays)
 
 
 class TableType(types.ArrayCompatible):
