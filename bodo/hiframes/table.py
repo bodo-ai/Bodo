@@ -7,6 +7,7 @@ from collections import defaultdict
 
 import numba
 import numpy as np
+import pandas as pd
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed, lower_constant
 from numba.cpython.listobj import ListInstance
@@ -92,6 +93,13 @@ class Table:
 
     def __str__(self) -> str:
         return str(self.arrays)
+
+    def to_pandas(self, index=None):
+        """convert table to a DataFrame (with column names just a range of numbers)"""
+        n_cols = len(self.arrays)
+        data = dict(zip(range(n_cols), self.arrays))
+        df = pd.DataFrame(data, index)
+        return df
 
 
 class TableType(types.ArrayCompatible):
