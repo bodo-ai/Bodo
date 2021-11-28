@@ -899,32 +899,42 @@ def box_dataframe(typ, val, c):
         context.nrt.incref(builder, table_type, table)
         # setting ensure_unboxed of box_table() to True if not using parent obj
         table_obj = box_table(table_type, table, c, builder.not_(use_parent_obj))
-        arrs_obj = pyapi.object_getattr_string(table_obj, "arrays")
-        none_obj = c.pyapi.make_none()
 
-        n_arrs = context.get_constant(types.int64, n_cols)
-        with cgutils.for_range(builder, n_arrs) as loop:
-            # df[i] = arr
-            i = loop.index
-            # PyList_GetItem returns borrowed reference (no need to decref)
-            col_arr_obj = pyapi.list_getitem(arrs_obj, i)
-            # box array if df doesn't have a parent, or column was unboxed in function,
-            # since changes in arrays like strings don't reflect back to parent object.
-            # Table boxing assigns None for null arrays
-            is_unboxed = c.builder.icmp_unsigned("!=", col_arr_obj, none_obj)
-            box_array = builder.or_(
-                builder.not_(use_parent_obj), builder.and_(use_parent_obj, is_unboxed)
-            )
+        with builder.if_else(use_parent_obj) as (then, orelse):
+            with then:
+                arrs_obj = pyapi.object_getattr_string(table_obj, "arrays")
+                none_obj = c.pyapi.make_none()
 
-            with builder.if_then(box_array):
-                c_ind_obj = pyapi.long_from_longlong(i)
+                n_arrs = context.get_constant(types.int64, n_cols)
+                with cgutils.for_range(builder, n_arrs) as loop:
+                    # df[i] = arr
+                    i = loop.index
+                    # PyList_GetItem returns borrowed reference (no need to decref)
+                    col_arr_obj = pyapi.list_getitem(arrs_obj, i)
+                    # box array if df doesn't have a parent, or column was unboxed in function,
+                    # since changes in arrays like strings don't reflect back to parent object.
+                    # Table boxing assigns None for null arrays
+                    is_unboxed = c.builder.icmp_unsigned("!=", col_arr_obj, none_obj)
+
+                    with builder.if_then(is_unboxed):
+                        c_ind_obj = pyapi.long_from_longlong(i)
+                        df_obj = builder.load(res)
+                        pyapi.object_setitem(df_obj, c_ind_obj, col_arr_obj)
+                        pyapi.decref(c_ind_obj)
+
+                pyapi.decref(arrs_obj)
+                pyapi.decref(none_obj)
+            with orelse:
+                # fast path for large number of columns
+                # df = table.to_pandas(index)
                 df_obj = builder.load(res)
-                pyapi.object_setitem(df_obj, c_ind_obj, col_arr_obj)
-                pyapi.decref(c_ind_obj)
+                index_obj = pyapi.object_getattr_string(df_obj, "index")
+                new_df_obj = c.pyapi.call_method(table_obj, "to_pandas", (index_obj,))
+                builder.store(new_df_obj, res)
+                pyapi.decref(df_obj)
+                pyapi.decref(index_obj)
 
         pyapi.decref(table_obj)
-        pyapi.decref(arrs_obj)
-        pyapi.decref(none_obj)
 
     else:
         col_arrs = [
