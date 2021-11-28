@@ -141,10 +141,16 @@ def test_table_filter_dead_columns(memory_leak_check):
 
         idx = np.arange(len(pd.read_parquet("many_columns.parquet"))) % 3 == 0
         check_func(impl, (idx,), only_seq=True)
-        check_func(impl, (slice(10),), only_seq=True)
+        # NOTE: this needs distributed=False since args/returns don't force
+        # sequential execution.
+        check_func(
+            impl,
+            (slice(10),),
+            only_seq=True,
+            additional_compiler_arguments={"distributed": False},
+        )
     finally:
         _del_many_column_file(file_type)
-
 
 
 def test_table_len_with_idx_col(memory_leak_check):

@@ -762,6 +762,22 @@ class LowerBodoIRExtSeq(FunctionPass):
 
     def run_pass(self, state):
         from bodo.transforms.distributed_pass import distributed_run_extensions
+        from bodo.transforms.table_column_del_pass import (
+            remove_dead_table_columns,
+        )
+
+        state.func_ir._definitions = build_definitions(state.func_ir.blocks)
+
+        # Run column pruning transformation from tables. This updates table source
+        # nodes.
+        typing_info = TypingInfo(
+            state.typingctx,
+            state.targetctx,
+            state.typemap,
+            state.calltypes,
+            state.func_ir.loc,
+        )
+        remove_dead_table_columns(state.func_ir, state.typemap, typing_info)
 
         for block in state.func_ir.blocks.values():
             new_body = []
