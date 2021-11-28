@@ -63,7 +63,6 @@ from bodo.hiframes.pd_index_ext import (
     TimedeltaIndexType,
 )
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.table import TableType
 from bodo.io import csv_cpp
 from bodo.io.h5_api import h5file_type, h5group_type
 from bodo.libs.distributed_api import Reduce_Type
@@ -79,10 +78,7 @@ from bodo.transforms.distributed_analysis import (
     _get_array_accesses,
     get_reduce_op,
 )
-from bodo.transforms.table_column_del_pass import (
-    compute_column_liveness,
-    remove_dead_columns,
-)
+from bodo.transforms.table_column_del_pass import remove_dead_table_columns
 from bodo.utils.transform import (
     compile_func_single_block,
     get_call_expr_arg,
@@ -235,7 +231,7 @@ class DistributedPass:
 
         # Run column pruning transformation from tables. This updates table source
         # nodes.
-        self._remove_dead_table_columns(self.func_ir, self.typemap)
+        remove_dead_table_columns(self.func_ir, self.typemap, self)
 
         # transform
         self._gen_init_code(self.func_ir.blocks)
@@ -4044,32 +4040,6 @@ class DistributedPass:
             None,
             self,
         )
-
-    def _remove_dead_table_columns(self, func_ir, typemap):
-        """
-        Runs table liveness analysis and eliminates columns from TableType
-        creation functions. This must be run before custom IR extensions are
-        transformed. Thie function returns if any columns were pruned.
-        """
-        removed = False
-        # Only run remove_dead_columns if some table exists.
-        run_dead_elim = False
-        for typ in typemap.values():
-            if isinstance(typ, TableType):
-                run_dead_elim = True
-                break
-        if run_dead_elim:
-            blocks = func_ir.blocks
-            cfg = compute_cfg_from_blocks(blocks)
-            column_live_map, column_equiv_vars = compute_column_liveness(
-                cfg, blocks, func_ir, typemap, True
-            )
-            for label, block in blocks.items():
-                removed |= remove_dead_columns(
-                    block, column_live_map[label], column_equiv_vars, typemap, self
-                )
-        # We return if anything is removed, but this is currently unused.
-        return removed
 
     def _gen_finalize_event(self, ev_var):
         """generate event.finalize() call nodes"""

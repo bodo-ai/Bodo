@@ -695,6 +695,33 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info):
     return removed
 
 
+def remove_dead_table_columns(func_ir, typemap, typing_info):
+    """
+    Runs table liveness analysis and eliminates columns from TableType
+    creation functions. This must be run before custom IR extensions are
+    transformed. Thie function returns if any columns were pruned.
+    """
+    removed = False
+    # Only run remove_dead_columns if some table exists.
+    run_dead_elim = False
+    for typ in typemap.values():
+        if isinstance(typ, TableType):
+            run_dead_elim = True
+            break
+    if run_dead_elim:
+        blocks = func_ir.blocks
+        cfg = compute_cfg_from_blocks(blocks)
+        column_live_map, column_equiv_vars = compute_column_liveness(
+            cfg, blocks, func_ir, typemap, True
+        )
+        for label, block in blocks.items():
+            removed |= remove_dead_columns(
+                block, column_live_map[label], column_equiv_vars, typemap, typing_info
+            )
+    # We return if anything is removed, but this is currently unused.
+    return removed
+
+
 def get_live_column_nums_block(block_lives, equiv_vars, table_name):
     """Given a finalized live map for a block, computes the actual
     column numbers that are used by the table. For efficiency this returns
