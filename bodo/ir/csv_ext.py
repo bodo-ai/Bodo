@@ -600,12 +600,20 @@ def astype(df, typemap, parallel):
     The parallel flag determines if errors need to be gathered on all ranks.
     This function is called from inside objmode."""
     message = ""
+    from collections import defaultdict
+
+    set_map = defaultdict(list)
     for col_name, col_type in typemap.items():
+        set_map[col_type].append(col_name)
+    original_columns = df.columns.to_list()
+    df_list = []
+    for col_type, columns in set_map.items():
         try:
-            df[col_name] = df[col_name].astype(col_type, copy=False)
+            df_list.append(df.loc[:, columns].astype(col_type, copy=False))
+            df = df.drop(columns, axis=1)
         except TypeError as e:
             message = (
-                f"Caught the TypeError '{e}' on column {col_name}."
+                f"Caught the TypeError '{e}' on columns {columns}."
                 " Consider setting the 'dtype' argument in 'read_csv' or investigate"
                 " if the data is corrupted."
             )
@@ -620,6 +628,8 @@ def astype(df, typemap, parallel):
             raise TypeError(f"{common_err_msg}\n{message}")
         else:
             raise TypeError(f"{common_err_msg}\nPlease refer to errors on other ranks.")
+    df = pd.concat(df_list + [df], axis=1)
+    return df.loc[:, original_columns]
 
 
 def _gen_csv_file_reader_init(
@@ -839,7 +849,7 @@ def _gen_read_csv_objmode(
         func_text += f"    {parallel_varname} = {parallel}\n"
     # Check explanation near top of the function for why we specify
     # some types here rather than directly in the `pd.read_csv` call.
-    func_text += f"    astype(df, typemap, {parallel_varname})\n"
+    func_text += f"    df = astype(df, typemap, {parallel_varname})\n"
     # TODO: update and test with usecols
     if idx_col_index != None:
         idx_col_output_index = sorted(use_cols_arr).index(idx_col_index)
