@@ -246,6 +246,31 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     def is_precise(self):
         return all(a.is_precise() for a in self.data) and self.index.is_precise()
 
+    def replace_col_type(self, col_name, new_type):
+        """
+        Return a new DataFrameType with the given column name's type replaced
+        with the new type. The column name must already exist.
+
+        This API is intended to work as a fail safe when bodo.typeof cannot
+        properly infer a type based on constant information. For example,
+        StructArrayType vs MapArrayType with string keys.
+        """
+        if col_name not in self.columns:
+            raise ValueError(
+                f"DataFrameType.replace_col_type replaced column must be found in the DataFrameType. '{col_name}' not found in DataFrameType with columns {self.columns}"
+            )
+        col_idx = self.columns.index(col_name)
+        new_data = tuple(
+            list(self.data[:col_idx]) + [new_type] + list(self.data[col_idx + 1 :])
+        )
+        return DataFrameType(
+            new_data,
+            self.index,
+            self.columns,
+            self.dist,
+            self.is_table_format,
+        )
+
 
 # payload type inside meminfo so that mutation are seen by all references
 class DataFramePayloadType(types.Type):
