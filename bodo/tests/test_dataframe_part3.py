@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from mpi4py import MPI
+from numba import types
 
 import bodo
 from bodo.tests.utils import (
@@ -420,3 +421,38 @@ def test_df_gatherv_table_format(memory_leak_check):
         )
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size()
+
+
+def test_update_df_type(memory_leak_check):
+    """
+    Test updating a DataFrame type works as expected and
+    can be used in objmode.
+    """
+
+    def py_func(n):
+        return pd.DataFrame(
+            {
+                "A": [1, 2, 4, 5, 9, 22],
+                "B": [{str(j): j % n for j in range(n)} for i in range(1, 7)],
+            }
+        )
+
+    dummy_df = pd.DataFrame(
+        {
+            "A": [1],
+            "B": [{"a": 1}],
+        }
+    )
+    infered_dtype = bodo.typeof(dummy_df)
+    new_dtype = infered_dtype.replace_col_type(
+        "B", bodo.MapArrayType(bodo.string_array_type, types.Array(types.int64, 1, "C"))
+    )
+
+    def bodo_func(n):
+        with bodo.objmode(df=new_dtype):
+            df = py_func(n)
+        return df
+
+    check_func(
+        bodo_func, (15,), py_output=py_func(15), only_seq=True, is_out_distributed=False
+    )

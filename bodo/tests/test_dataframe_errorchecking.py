@@ -1218,3 +1218,20 @@ def test_df_plot_args(memory_leak_check):
     err_msg = "y column is missing."
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl16)()
+
+
+def test_invalid_replace_col_data(memory_leak_check):
+    """Checks that DataFrameType.replace_col_type throws a reasonable error
+    if the column doesn't exist."""
+    dummy_df = pd.DataFrame(
+        {
+            "A": [1],
+            "B": ["a"],
+        }
+    )
+    infered_dtype = bodo.typeof(dummy_df)
+    with pytest.raises(
+        ValueError,
+        match="DataFrameType.replace_col_type replaced column must be found in the DataFrameType",
+    ):
+        new_dtype = infered_dtype.replace_col_type("C", bodo.string_array_type)
