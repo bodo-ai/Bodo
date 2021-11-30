@@ -63,11 +63,12 @@ jobs:
       flake8 bodo
     displayName: 'Flake8'
 
-
+# 'python<=3.9' is needed, so python 3.10 doesn't get installed by default, which causes issues with
+# conda-forge-ci-setup=3
   - script: |
       set -eo pipefail
       export PATH=$HOME/miniforge3/bin:${PATH}
-      conda create -y -n bodo_build conda-build anaconda-client conda-verify
+      conda create -y -n bodo_build conda-build anaconda-client conda-verify 'python<=3.9'
     displayName: 'Create Conda Env'
 
   # This seems to be needed to cross compile
