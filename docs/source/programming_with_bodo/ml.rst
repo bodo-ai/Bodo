@@ -21,6 +21,8 @@ Methods:
 
   * :any:`sklearn.linear_model.LogisticRegression.fit`
   * :any:`sklearn.linear_model.LogisticRegression.predict`
+  * :any:`sklearn.linear_model.LogisticRegression.predict_proba`
+  * :any:`sklearn.linear_model.LogisticRegression.predict_log_proba`
   * :any:`sklearn.linear_model.LogisticRegression.score`
 
 Attributes:
@@ -42,6 +44,8 @@ Methods:
 
   * :any:`sklearn.linear_model.SGDClassifier.fit`
   * :any:`sklearn.linear_model.SGDClassifier.predict`
+  * :any:`sklearn.linear_model.SGDClassifier.predict_proba`
+  * :any:`sklearn.linear_model.SGDClassifier.predict_log_proba`
   * :any:`sklearn.linear_model.SGDClassifier.score`
 
 :class:`sklearn.svm.LinearSVC`
@@ -156,6 +160,8 @@ Methods:
 
   * :any:`sklearn.ensemble.RandomForestClassifier.fit`
   * :any:`sklearn.ensemble.RandomForestClassifier.predict`
+  * :any:`sklearn.ensemble.RandomForestClassifier.predict_proba`
+  * :any:`sklearn.ensemble.RandomForestClassifier.predict_log_proba`
   * :any:`sklearn.ensemble.RandomForestClassifier.score`
 
 :class:`sklearn.ensemble.RandomForestRegressor`
@@ -280,6 +286,7 @@ Methods:
 
   * :any:`xgboost.XGBClassifier.fit`
   * :any:`xgboost.XGBClassifier.predict`
+  * :any:`xgboost.XGBClassifier.predict_proba`
 
 XGBRegressor
 *****************

@@ -26,71 +26,6 @@ from bodo.utils.typing import (
 )
 
 
-def parallel_predict(
-    m,
-    X,
-    output_margin=False,
-    ntree_limit=None,
-    validate_features=True,
-    base_margin=None,
-):  # pragma: no cover
-    """
-    Predict with numba objmode
-    """
-
-    def _model_predict_impl(
-        m,
-        X,
-        output_margin=False,
-        ntree_limit=None,
-        validate_features=True,
-        base_margin=None,
-    ):  # pragma: no cover
-        # TODO: return data could be of different type or shape (2D)
-        with numba.objmode(result="int64[:]"):
-            m.n_jobs = 1
-            result = (
-                m.predict(X, output_margin, ntree_limit, validate_features, base_margin)
-                .astype(np.float64)
-                .flatten()
-            )
-        return result
-
-    return _model_predict_impl
-
-
-def parallel_regression_predict(
-    m,
-    X,
-    output_margin=False,
-    ntree_limit=None,
-    validate_features=True,
-    base_margin=None,
-):  # pragma: no cover
-    """
-    Predict with numba objmode
-    """
-
-    def _model_predict_impl(
-        m,
-        X,
-        output_margin=False,
-        ntree_limit=None,
-        validate_features=True,
-        base_margin=None,
-    ):  # pragma: no cover
-        with numba.objmode(result="float64[:]"):
-            m.n_jobs = 1
-            result = (
-                m.predict(X, output_margin, ntree_limit, validate_features, base_margin)
-                .astype(np.float64)
-                .flatten()
-            )
-        return result
-
-    return _model_predict_impl
-
-
 # ------------------------XGBClassifier-----------------
 # Support xgboost.XGBClassifier object mode of Numba
 # -----------------------------------------------------------------------------
@@ -293,9 +228,54 @@ def overload_xgbclassifier_predict(
     base_margin=None,
 ):  # pragma: no cover
     """Overload XGBClassifier predict."""
-    return parallel_predict(
-        m, X, output_margin, ntree_limit, validate_features, base_margin
-    )
+    
+    def _model_predict_impl(
+        m,
+        X,
+        output_margin=False,
+        ntree_limit=None,
+        validate_features=True,
+        base_margin=None,
+    ):  # pragma: no cover
+        # TODO: return data could be of different type or shape (2D)
+        with numba.objmode(result="int64[:]"):
+            m.n_jobs = 1
+            result = (
+                m.predict(X, output_margin, ntree_limit, validate_features, base_margin)
+                .astype(np.int64)
+                .flatten()
+            )
+        return result
+    
+    return _model_predict_impl
+
+
+@overload_method(BodoXGBClassifierType, "predict_proba", no_unliteral=True)
+def overload_xgbclassifier_predict_proba(
+    m,
+    X,
+    ntree_limit=None,
+    validate_features=True,
+    base_margin=None,
+):  # pragma: no cover
+    """Overload XGBClassifier predict."""
+    
+    def _model_predict_proba_impl(
+        m,
+        X,
+        ntree_limit=None,
+        validate_features=True,
+        base_margin=None,
+    ):  # pragma: no cover
+        with numba.objmode(result="float64[:,:]"):
+            m.n_jobs = 1
+            result = (
+                m.predict_proba(X, ntree_limit, validate_features, base_margin)
+                .astype(np.float64)
+            )
+        return result
+    
+    return _model_predict_proba_impl
 
 
 # ------------------------XGBRegressor-----------------
@@ -498,6 +478,22 @@ def overload_xgbregressor_predict(
     base_margin=None,
 ):  # pragma: no cover
     """Overload XGBRegressor predict."""
-    return parallel_regression_predict(
-        m, X, output_margin, ntree_limit, validate_features, base_margin
-    )
+
+    def _model_predict_impl(
+        m,
+        X,
+        output_margin=False,
+        ntree_limit=None,
+        validate_features=True,
+        base_margin=None,
+    ):  # pragma: no cover
+        with numba.objmode(result="float64[:]"):
+            m.n_jobs = 1
+            result = (
+                m.predict(X, output_margin, ntree_limit, validate_features, base_margin)
+                .astype(np.float64)
+                .flatten()
+            )
+        return result
+    
+    return _model_predict_impl
