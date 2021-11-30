@@ -474,47 +474,80 @@ def test_drop_duplicate_nested_arrays(nested_arrays_value):
 #
 
 
-# def test_dd_subset():
-#    """
-#    Test merge(): sequentially merge on more than one integer key columns
-#    """
-#    def test_impl(df1):
-#        df2 = df1.drop_duplicates(subset=["A"])
-#        return df2
-#    bodo_func = bodo.jit(test_impl)
-#    df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4], "B": [1, 2, 2, 5, 5]})
-#    pd.testing.assert_frame_equal(
-#        bodo_func(df1).sort_values("A").reset_index(drop=True),
-#        test_impl(df1).sort_values("A").reset_index(drop=True),
-#    )
+def test_dd_subset(memory_leak_check):
+    """
+    Test drop_duplicates subset
+    """
+
+    def test_impl(df1):
+        df2 = df1.drop_duplicates(subset=["B"])
+        return df2
+
+    df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4], "B": [1, 2, 2, 5, 5]})
+    check_func(test_impl, (df1,), reset_index=True, sort_output=True)
 
 
-# def test_dd_subset_last():
-#    """
-#    Test merge(): sequentially merge on more than one integer key columns
-#    """
-#
-#    def test_impl(df1):
-#        df2 = df1.drop_duplicates(subset=["A"], keep="last")
-#        return df2
-#    bodo_func = bodo.jit(test_impl)
-#    df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4], "B": [1, 5, 9, 5, 5]})
-#    pd.testing.assert_frame_equal(
-#        bodo_func(df1).sort_values("A").reset_index(drop=True),
-#        test_impl(df1).sort_values("A").reset_index(drop=True),
-#    )
+def test_dd_subset_many_labels(memory_leak_check):
+    """
+    Test drop_duplicates subset with a list of multiple labels.
+    """
+
+    def test_impl(df1):
+        df2 = df1.drop_duplicates(subset=["A", "C"])
+        return df2
+
+    df1 = pd.DataFrame(
+        {"A": [3, 3, 3, 1, 4], "B": [1, 2, 2, 5, 5], "C": [1, 2, 3, 4, 4]}
+    )
+    check_func(test_impl, (df1,), reset_index=True, sort_output=True)
 
 
-# def test_dd_subset_false():
-#    """
-#    Test merge(): sequentially merge on more than one integer key columns
-#    """
-#    def test_impl(df1):
-#        df2 = df1.drop_duplicates(subset=["A"], keep=False)
-#        return df2
-#    bodo_func = bodo.jit(test_impl)
-#    df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4], "B": [1, 5, 9, 5, 5]})
-#    pd.testing.assert_frame_equal(
-#        bodo_func(df1).sort_values("A").reset_index(drop=True),
-#        test_impl(df1).sort_values("A").reset_index(drop=True),
-#    )
+def test_dd_subset_label(memory_leak_check):
+    """
+    Test drop_duplicates subset with a single label
+    """
+
+    def test_impl(df1):
+        df2 = df1.drop_duplicates(subset="B")
+        return df2
+
+    df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4], "B": [1, 2, 2, 5, 5]})
+    check_func(test_impl, (df1,), reset_index=True, sort_output=True)
+
+
+def test_dd_subset_int_label(memory_leak_check):
+    """
+    Test drop_duplicates subset with an int label
+    """
+
+    def test_impl(df1):
+        df2 = df1.drop_duplicates(subset=2)
+        return df2
+
+    df1 = pd.DataFrame({1: [3, 3, 3, 1, 4], 2: [1, 2, 2, 5, 5]})
+    check_func(test_impl, (df1,), reset_index=True, sort_output=True)
+
+
+@pytest.mark.skip("keep argument not supported")
+def test_dd_subset_last(memory_leak_check):
+   """
+   Test drop_duplicates subset with keep='last'
+   """
+
+   def test_impl(df1):
+       df2 = df1.drop_duplicates(subset=["A"], keep="last")
+       return df2
+   df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4], "B": [1, 5, 9, 5, 5]})
+   check_func(test_impl, (df1,), reset_index=True, sort_output=True)
+
+
+@pytest.mark.skip("keep argument not supported")
+def test_dd_subset_false(memory_leak_check):
+   """
+   Test drop_duplicates subset with keep=False
+   """
+   def test_impl(df1):
+       df2 = df1.drop_duplicates(subset=["A"], keep=False)
+       return df2
+   df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4], "B": [1, 5, 9, 5, 5]})
+   check_func(test_impl, (df1,), reset_index=True, sort_output=True)

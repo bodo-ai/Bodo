@@ -795,27 +795,32 @@ def overload_sample_table_operation(data, ind_arr, n, frac, replace, parallel=Fa
     return impl
 
 
-def drop_duplicates(data, ind_arr, parallel=False):  # pragma: no cover
+def drop_duplicates(data, ind_arr, ncols, parallel=False):  # pragma: no cover
     return data, ind_arr
 
 
 @overload(drop_duplicates, no_unliteral=True)
-def overload_drop_duplicates(data, ind_arr, parallel=False):
+def overload_drop_duplicates(data, ind_arr, ncols, parallel=False):
+    """
+    Kernel implementation for drop_duplicates. ncols is the number of
+    columns to check for possible duplicates, which are always at the front.
+    """
 
     # TODO: inline for optimization?
     # TODO: handle NAs better?
+    # Count is the total number of columns in the DataFrames
+    # ncols is the number of columns that are checked for duplicates
+    # ncols <= count. The duplicate checked columns are always at the front.
     count = len(data)
 
-    func_text = "def impl(data, ind_arr, parallel=False):\n"
+    func_text = "def impl(data, ind_arr, ncols, parallel=False):\n"
     func_text += "  info_list_total = [{}, array_to_info(ind_arr)]\n".format(
         ", ".join("array_to_info(data[{}])".format(x) for x in range(count))
     )
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
     # We keep the first entry in the drop_duplicates
     func_text += "  keep_i = 0\n"
-    func_text += "  out_table = drop_duplicates_table(table_total, parallel, {}, keep_i, -1, False)\n".format(
-        count
-    )
+    func_text += "  out_table = drop_duplicates_table(table_total, parallel, ncols, keep_i, False)\n"
     for i_col in range(count):
         func_text += "  out_arr_{} = info_to_array(info_from_table(out_table, {}), data[{}])\n".format(
             i_col, i_col, i_col
@@ -1485,9 +1490,7 @@ def unique_overload(A, dropna=False, parallel=False):
         input_table = arr_info_list_to_table([array_to_info(A)])
         n_key = 1
         keep_i = 0
-        out_table = drop_duplicates_table(
-            input_table, parallel, n_key, keep_i, -1, dropna
-        )
+        out_table = drop_duplicates_table(input_table, parallel, n_key, keep_i, dropna)
         out_arr = info_to_array(info_from_table(out_table, 0), A)
         delete_table(input_table)
         delete_table(out_table)

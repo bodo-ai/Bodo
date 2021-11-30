@@ -651,34 +651,26 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
  * @param in_table : the input table
  * @param is_parallel: the boolean specifying if the computation is parallel or
  * not.
- * @param num_keys: the number of keys used for the computation
+ * @param num_keys: number of columns to use identifying duplicates
  * @param keep: integer specifying the expected behavior.
  *        keep = 0 corresponds to the case of keep="first" keep first entry
  *        keep = 1 corresponds to the case of keep="last" keep last entry
  *        keep = 2 corresponds to the case of keep=False : remove all duplicates
- * @param total_cols: number of columns to use identifying duplicates
  * @param dropna: Should NA be included in the final table
  * @return the vector of pointers to be used.
  */
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
-                                  int64_t num_keys, int64_t keep,
-                                  int64_t total_cols, bool dropna) {
+                                  int64_t num_keys, int64_t keep, bool dropna) {
     try {
-#ifdef DEBUG_DD
-        std::cout << "drop_duplicates_table : is_parallel=" << is_parallel
-                  << "\n";
-#endif
         // serial case
         if (!is_parallel) {
-            if (total_cols != -1) num_keys = total_cols;
             return drop_duplicates_table_inner(in_table, num_keys, keep, 1,
                                                is_parallel, dropna);
         }
         // parallel case
         // pre reduction of duplicates
         table_info* red_table;
-        if (total_cols == -1) total_cols = num_keys;
-        red_table = drop_duplicates_table_inner(in_table, total_cols, keep, 2,
+        red_table = drop_duplicates_table_inner(in_table, num_keys, keep, 2,
                                                 is_parallel, dropna);
         // shuffling of values
         table_info* shuf_table =
@@ -689,13 +681,8 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
         // We don't drop NA values again because the first
         // drop_duplicates_table_inner should have already handled this
         table_info* ret_table = drop_duplicates_table_inner(
-            shuf_table, total_cols, keep, 1, is_parallel, false);
+            shuf_table, num_keys, keep, 1, is_parallel, false);
         delete_table(shuf_table);
-#ifdef DEBUG_DD
-        std::cout << "OUTPUT drop_duplicates_table. ret_table=\n";
-        DEBUG_PrintRefct(std::cout, ret_table->columns);
-        DEBUG_PrintSetOfColumn(std::cout, ret_table->columns);
-#endif
         // returning table
         return ret_table;
     } catch (const std::exception& e) {
