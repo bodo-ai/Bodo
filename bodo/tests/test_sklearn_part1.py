@@ -50,12 +50,24 @@ def test_simple_pandas_input(memory_leak_check):
         m = RandomForestClassifier(n_estimators=10, random_state=57)
         m.fit(X, y)
         return m.predict(T)
+    
+    def impl_predict_proba(X, y, T):
+        m = RandomForestClassifier(n_estimators=10, random_state=57)
+        m.fit(X, y)
+        return m.predict_proba(T)
+    
+    def impl_predict_log_proba(X, y, T):
+        m = RandomForestClassifier(n_estimators=10, random_state=57)
+        m.fit(X, y)
+        return m.predict_log_proba(T)
 
     train = pd.DataFrame({"A": range(20), "B": range(100, 120)})
     train_labels = pd.Series(range(20))
     predict_test = pd.DataFrame({"A": range(10), "B": range(100, 110)})
 
     check_func(impl, (train, train_labels, predict_test))
+    check_func(impl_predict_proba, (train, train_labels, predict_test))
+    check_func(impl_predict_log_proba, (train, train_labels, predict_test))
 
 
 def test_classification_toy(memory_leak_check):
@@ -89,6 +101,22 @@ def test_classification_toy(memory_leak_check):
         return clf.predict(T)
 
     check_func(impl2, (np.array(X), np.array(y), np.array(T)))
+
+    def impl_predict_proba(X, y, T):
+        clf = RandomForestClassifier(n_estimators=10, max_features=1, random_state=1)
+        clf.fit(X, y)
+        # assert 10 == len(clf)  # TODO support len of RandomForestClassifier
+        return clf.predict_proba(T)
+
+    check_func(impl_predict_proba, (np.array(X), np.array(y), np.array(T)))
+
+    def impl_predict_log_proba(X, y, T):
+        clf = RandomForestClassifier(n_estimators=10, max_features=1, random_state=1)
+        clf.fit(X, y)
+        # assert 10 == len(clf)  # TODO support len of RandomForestClassifier
+        return clf.predict_log_proba(T)
+
+    check_func(impl_predict_log_proba, (np.array(X), np.array(y), np.array(T)))
 
     # TODO sklearn test does more stuff that we don't support currently:
     # also test apply
@@ -885,6 +913,53 @@ def test_sgdc_lr():
     )(impl)(X_train, y_train, X_test, y_test)
     if bodo.get_rank() == 0:
         assert np.allclose(sklearn_predict_result, bodo_predict_result, atol=0.1)
+
+
+def test_sgdc_predict_proba_log_proba():
+
+    splitN = 500
+    n_samples = 1000
+    n_features = 50
+    X_train = None
+    y_train = None
+    X_test = None
+    # Create exact same dataset on all ranks
+    X, y = make_classification(
+        n_samples=n_samples,
+        n_features=n_features,
+        n_classes=3,
+        n_clusters_per_class=2,
+        n_informative=3,
+        random_state=10,
+    )
+    X_train = X[:splitN]
+    y_train = y[:splitN]
+    X_test = X[splitN:]
+    y_test = y[splitN:]
+    
+    # Create exact same model on all ranks using sklearn python implementation
+    # That way, we can test predict_proba and predict_log_proba implementation
+    # independent of the model.
+    # Bodo ignores n_jobs. This is set for scikit-learn (non-bodo) run. It should be set to number of cores avialable.
+    clf = SGDClassifier(
+        n_jobs=8,
+        loss="log",
+        max_iter=10,
+        early_stopping=False,
+        random_state=500,
+    )
+    clf.fit(X_train, y_train)
+
+    def impl_predict_proba(clf, X_test):
+        y_pred_proba = clf.predict_proba(X_test)
+        return y_pred_proba
+    
+    def impl_predict_log_proba(clf, X_test):
+        y_pred_log_proba = clf.predict_log_proba(X_test)
+        return y_pred_log_proba
+
+    check_func(impl_predict_proba, (clf, X_test))
+    check_func(impl_predict_log_proba, (clf, X_test))
 
 
 # ---------------------- SGDRegressor tests ----------------------

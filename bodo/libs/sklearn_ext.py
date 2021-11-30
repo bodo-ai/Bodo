@@ -330,6 +330,54 @@ def parallel_predict(m, X):
     return _model_predict_impl
 
 
+def parallel_predict_proba(m, X):
+    """
+    Implement the predict_proba operation in parallel.
+    Each rank has its own copy of the model and computes results for its
+    own set of data.
+    This strategy is the same for a lot of classifier estimators.
+    """
+    check_sklearn_version()
+
+    def _model_predict_proba_impl(m, X):  # pragma: no cover
+        with numba.objmode(result="float64[:,:]"):
+            # currently we do data-parallel prediction
+            m.n_jobs = 1
+            # len cannot be used with csr
+            if X.shape[0] == 0:
+                # TODO If X is replicated this should be an error (same as sklearn)
+                result = np.empty((0, 0), dtype=np.float64)
+            else:
+                result = m.predict_proba(X).astype(np.float64)
+        return result
+
+    return _model_predict_proba_impl
+
+
+def parallel_predict_log_proba(m, X):
+    """
+    Implement the predict_log_proba operation in parallel.
+    Each rank has its own copy of the model and computes results for its
+    own set of data.
+    This strategy is the same for a lot of classifier estimators.
+    """
+    check_sklearn_version()
+
+    def _model_predict_log_proba_impl(m, X):  # pragma: no cover
+        with numba.objmode(result="float64[:,:]"):
+            # currently we do data-parallel prediction
+            m.n_jobs = 1
+            # len cannot be used with csr
+            if X.shape[0] == 0:
+                # TODO If X is replicated this should be an error (same as sklearn)
+                result = np.empty((0, 0), dtype=np.float64)
+            else:
+                result = m.predict_log_proba(X).astype(np.float64)
+        return result
+
+    return _model_predict_log_proba_impl
+
+
 def parallel_score(
     m,
     X,
@@ -370,6 +418,20 @@ def overload_model_predict(m, X):
     check_sklearn_version()
     """Overload Random Forest Classifier predict. (Data parallelization)"""
     return parallel_predict(m, X)
+
+
+@overload_method(BodoRandomForestClassifierType, "predict_proba", no_unliteral=True)
+def overload_rf_predict_proba(m, X):
+    check_sklearn_version()
+    """Overload Random Forest Classifier predict_proba. (Data parallelization)"""
+    return parallel_predict_proba(m, X)
+
+
+@overload_method(BodoRandomForestClassifierType, "predict_log_proba", no_unliteral=True)
+def overload_rf_predict_log_proba(m, X):
+    check_sklearn_version()
+    """Overload Random Forest Classifier predict_log_proba. (Data parallelization)"""
+    return parallel_predict_log_proba(m, X)
 
 
 @overload_method(BodoRandomForestClassifierType, "score", no_unliteral=True)
@@ -1848,6 +1910,18 @@ def overload_sgdc_model_predict(m, X):
     return parallel_predict(m, X)
 
 
+@overload_method(BodoSGDClassifierType, "predict_proba", no_unliteral=True)
+def overload_sgdc_model_predict_proba(m, X):
+    """Overload SGDClassifier predict_proba. (Data parallelization)"""
+    return parallel_predict_proba(m, X)
+
+
+@overload_method(BodoSGDClassifierType, "predict_log_proba", no_unliteral=True)
+def overload_sgdc_model_predict_log_proba(m, X):
+    """Overload SGDClassifier predict_log_proba. (Data parallelization)"""
+    return parallel_predict_log_proba(m, X)
+
+
 @overload_method(BodoSGDClassifierType, "score", no_unliteral=True)
 def overload_sgdc_model_score(
     m,
@@ -2568,6 +2642,18 @@ def overload_logistic_regression_fit(
 def overload_logistic_regression_predict(m, X):
     """Overload Logistic Regression predict. (Data parallelization)"""
     return parallel_predict(m, X)
+
+
+@overload_method(BodoLogisticRegressionType, "predict_proba", no_unliteral=True)
+def overload_logistic_regression_predict_proba(m, X):
+    """Overload Logistic Regression predict_proba. (Data parallelization)"""
+    return parallel_predict_proba(m, X)
+
+
+@overload_method(BodoLogisticRegressionType, "predict_log_proba", no_unliteral=True)
+def overload_logistic_regression_predict_log_proba(m, X):
+    """Overload Logistic Regression predict_log_proba. (Data parallelization)"""
+    return parallel_predict_log_proba(m, X)
 
 
 @overload_method(BodoLogisticRegressionType, "score", no_unliteral=True)
