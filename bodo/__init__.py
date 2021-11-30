@@ -112,6 +112,7 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
     CategoricalArrayType,
 )
+from bodo.utils.typing import register_type
 
 
 import bodo.compiler  # isort:skip
