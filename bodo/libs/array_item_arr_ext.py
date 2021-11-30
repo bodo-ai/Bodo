@@ -798,6 +798,23 @@ def ensure_data_capacity(arr, old_size, new_size):  # pragma: no cover
         replace_data_arr(arr, new_data)
 
 
+@numba.njit(no_cpython_wrapper=True)
+def trim_excess_data(arr):  # pragma: no cover
+    """
+    make sure the internal data array doesn't have an extra data (to enable
+    operations expecting the exact length). This assumes the array is fully
+    allocated.
+    """
+    data = get_data(arr)
+    offsets = get_offsets(arr)
+    capacity = len(data)
+    size = offsets[-1]
+    if capacity != size:
+        # Shrink the array to the size
+        new_data = bodo.libs.array_kernels.resize_and_copy(data, size, size)
+        replace_data_arr(arr, new_data)
+
+
 @overload(len, no_unliteral=True)
 def overload_array_item_arr_len(A):
     if isinstance(A, ArrayItemArrayType):

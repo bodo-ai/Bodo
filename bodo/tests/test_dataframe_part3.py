@@ -423,6 +423,45 @@ def test_df_gatherv_table_format(memory_leak_check):
     assert n_passed == bodo.get_size()
 
 
+def test_map_array_concat(memory_leak_check):
+    """Tests for pd.concat on MapArrays with a sequential implementation."""
+
+    def impl(df, n):
+        df_list = []
+        for i in range(1, n + 1):
+            df_new = pd.DataFrame(
+                {
+                    "A": df.A,
+                    "B": df.A.apply(lambda val, i: {j: j % i for j in range(val)}, i=i),
+                }
+            )
+            df_list.append(df_new)
+        return pd.concat(df_list)
+
+    def impl_str(df, n):
+        df_list = []
+        for i in range(1, n + 1):
+            df_new = pd.DataFrame(
+                {
+                    "A": df.A,
+                    "B": df.A.apply(
+                        lambda val, i: {str(j): str(j % i) for j in range(val)}, i=i
+                    ),
+                }
+            )
+            df_list.append(df_new)
+        return pd.concat(df_list)
+
+    n = 10
+    df = pd.DataFrame({"A": np.arange(n)})
+
+    # Test correctness sequentially, where ordering matters.
+    # We cannot test parallel right now because we would need to sort
+    # the output.
+    check_func(impl, (df, n), is_out_distributed=False, only_seq=True)
+    check_func(impl_str, (df, n), is_out_distributed=False, only_seq=True)
+
+
 def test_update_df_type(memory_leak_check):
     """
     Test updating a DataFrame type works as expected and

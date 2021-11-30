@@ -980,6 +980,8 @@ def concat_overload(arr_list):
             data_arrs = []
             for A in arr_list:
                 n_lists = len(A)
+                # Ensure data doesn't have extra bytes
+                bodo.libs.array_item_arr_ext.trim_excess_data(A)
                 data_arrs.append(bodo.libs.array_item_arr_ext.get_data(A))
                 num_lists += n_lists
             out_offsets = np.empty(num_lists + 1, offset_type)
@@ -1010,6 +1012,53 @@ def concat_overload(arr_list):
             return out_arr
 
         return array_item_concat_impl
+
+    # Struct Array
+    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+        arr_list.dtype, bodo.StructArrayType
+    ):
+        struct_keys = arr_list.dtype.names
+        func_text = "def struct_array_concat_impl(arr_list):\n"
+        func_text += f"    n_all = 0\n"
+        for i in range(len(struct_keys)):
+            func_text += f"    concat_list{i} = []\n"
+        func_text += "    for A in arr_list:\n"
+        func_text += "        data_tuple = bodo.libs.struct_arr_ext.get_data(A)\n"
+        for i in range(len(struct_keys)):
+            func_text += f"        concat_list{i}.append(data_tuple[{i}])\n"
+        func_text += "        n_all += len(A)\n"
+        func_text += "    n_bytes = (n_all + 7) >> 3\n"
+        func_text += "    new_mask = np.empty(n_bytes, np.uint8)\n"
+        func_text += "    curr_bit = 0\n"
+        func_text += "    for A in arr_list:\n"
+        func_text += "        old_mask = bodo.libs.struct_arr_ext.get_null_bitmap(A)\n"
+        func_text += "        for j in range(len(A)):\n"
+        func_text += (
+            "            bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, j)\n"
+        )
+        func_text += "            bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)\n"
+        func_text += "            curr_bit += 1\n"
+        func_text += "    return bodo.libs.struct_arr_ext.init_struct_arr(\n"
+        data_val = ", ".join(
+            [
+                f"bodo.libs.array_kernels.concat(concat_list{i})"
+                for i in range(len(struct_keys))
+            ]
+        )
+        func_text += f"        ({data_val},),\n"
+        func_text += "        new_mask,\n"
+        func_text += f"        {struct_keys},\n"
+        func_text += "    )\n"
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                "np": np,
+            },
+            loc_vars,
+        )
+        return loc_vars["struct_array_concat_impl"]
 
     # datetime.date array
     if (
@@ -1259,6 +1308,20 @@ def concat_overload(arr_list):
         )
     ):
         return lambda arr_list: np.concatenate(astype_float_tup(arr_list))
+
+    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+        arr_list.dtype, bodo.MapArrayType
+    ):
+
+        def impl_map_arr_list(arr_list):  # pragma: no cover
+            array_item_list = []
+            for A in arr_list:
+                array_item_list.append(A._data)
+            output_arr_item_arr = bodo.libs.array_kernels.concat(array_item_list)
+            result = bodo.libs.map_arr_ext.init_map_arr(output_arr_item_arr)
+            return result
+
+        return impl_map_arr_list
 
     for typ in arr_list:
         if not isinstance(typ, types.Array):
