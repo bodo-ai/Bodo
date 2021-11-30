@@ -45,19 +45,17 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
  * @param in_table : the input table
  * @param is_parallel: the boolean specifying if the computation is parallel or
  * not.
- * @param num_keys: the number of keys used for the computation/shuffle
- * operation
+ * @param num_keys: number of columns to use identifying duplicates
  * @param keep: integer specifying the expected behavior.
  *        keep = 0 corresponds to the case of keep="first" keep first entry
  *        keep = 1 corresponds to the case of keep="last" keep last entry
  *        keep = 2 corresponds to the case of keep=False : remove all duplicates
- * @param total_cols: number of columns to use identifying duplicates
  * @param dropna: Should NA be included in the final table
  * @return the unicized table
  */
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
                                   int64_t num_keys, int64_t keep,
-                                  int64_t total_cols = -1, bool dropna = false);
+                                  bool dropna = false);
 
 table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
                                         int64_t keep, int step,

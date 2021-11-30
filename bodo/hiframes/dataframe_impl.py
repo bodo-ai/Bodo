@@ -1607,15 +1607,36 @@ def overload_dataframe_drop_duplicates(
     args_dict = {
         "keep": keep,
         "inplace": inplace,
-        "subset": subset,
         "ignore_index": ignore_index,
     }
     args_default_dict = {
         "keep": "first",
         "inplace": False,
-        "subset": None,
         "ignore_index": False,
     }
+    subset_columns = []
+    if is_overload_constant_list(subset):
+        # List is a single of column names
+        subset_columns = get_overload_const_list(subset)
+    elif is_overload_constant_str(subset):
+        # String is a single column name
+        subset_columns = [get_overload_const_str(subset)]
+    elif is_overload_constant_int(subset):
+        # Integer is a single column name
+        subset_columns = [get_overload_const_int(subset)]
+    elif not is_overload_none(subset):
+        raise_bodo_error(
+            "DataFrame.drop_duplicates(): subset must be a constant column name, constant list of column names or None"
+        )
+
+    subset_idx = []
+    for col_name in subset_columns:
+        if col_name not in df.columns:
+            raise BodoError(
+                "DataFrame.drop_duplicates(): All subset columns must be found in the DataFrame."
+                + f"Column {col_name} not found in DataFrame columns {df.columns}"
+            )
+        subset_idx.append(df.columns.index(col_name))
 
     check_unsupported_args("DataFrame.drop_duplicates", args_dict, args_default_dict)
 
@@ -1623,6 +1644,18 @@ def overload_dataframe_drop_duplicates(
     # may not match
 
     n_cols = len(df.columns)
+
+    subset_args = ["data_{}".format(i) for i in subset_idx]
+    non_subset_args = [
+        "data_{}".format(i) for i in range(n_cols) if i not in subset_idx
+    ]
+
+    if subset_args:
+        num_drop_cols = len(subset_args)
+    else:
+        num_drop_cols = n_cols
+
+    drop_duplicates_args = ", ".join(subset_args + non_subset_args)
 
     data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
 
@@ -1634,8 +1667,8 @@ def overload_dataframe_drop_duplicates(
             i
         )
     index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
-    func_text += "  ({0},), index_arr = bodo.libs.array_kernels.drop_duplicates(({0},), {1})\n".format(
-        data_args, index
+    func_text += "  ({0},), index_arr = bodo.libs.array_kernels.drop_duplicates(({0},), {1}, {2})\n".format(
+        drop_duplicates_args, index, num_drop_cols
     )
     func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
     return _gen_init_df(func_text, df.columns, data_args, "index")

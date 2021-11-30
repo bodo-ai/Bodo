@@ -4408,7 +4408,9 @@ def overload_series_drop_duplicates(S, subset=None, keep="first", inplace=False)
             bodo.hiframes.pd_series_ext.get_series_index(S)
         )
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        (data_0,), index_arr = bodo.libs.array_kernels.drop_duplicates((data_0,), index)
+        (data_0,), index_arr = bodo.libs.array_kernels.drop_duplicates(
+            (data_0,), index, 1
+        )
         index = bodo.utils.conversion.index_from_array(index_arr)
         return bodo.hiframes.pd_series_ext.init_series(data_0, index, name)
 

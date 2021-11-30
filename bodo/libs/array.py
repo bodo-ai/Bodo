@@ -1872,9 +1872,7 @@ def shuffle_renormalization_group(
 
 
 @intrinsic
-def drop_duplicates_table(
-    typingctx, table_t, parallel_t, nkey_t, keep_t, ncols, dropna
-):
+def drop_duplicates_table(typingctx, table_t, parallel_t, nkey_t, keep_t, dropna):
     """
     Interface to dropping duplicate entry in tables
     """
@@ -1886,7 +1884,6 @@ def drop_duplicates_table(
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
-                lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(64),
                 lir.IntType(1),
@@ -1902,9 +1899,7 @@ def drop_duplicates_table(
         return ret
 
     return (
-        table_type(
-            table_t, types.boolean, types.int64, types.int64, types.int64, types.boolean
-        ),
+        table_type(table_t, types.boolean, types.int64, types.int64, types.boolean),
         codegen,
     )
 
