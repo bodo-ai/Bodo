@@ -22,6 +22,7 @@ from numba.extending import (
     models,
     overload,
     overload_attribute,
+    overload_method,
     register_model,
     unbox,
 )
@@ -578,6 +579,11 @@ def overload_map_arr_ndim(A):
 @overload_attribute(MapArrayType, "nbytes")
 def overload_map_arr_nbytes(A):
     return lambda A: A._data.nbytes  # pragma: no cover
+
+
+@overload_method(MapArrayType, "copy")
+def overload_map_arr_copy(A):
+    return lambda A: init_map_arr(A._data.copy())  # pragma: no cover
 
 
 @overload(operator.setitem, no_unliteral=True)

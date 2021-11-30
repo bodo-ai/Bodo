@@ -2061,7 +2061,6 @@ def concat_overload(
         "ignore_index=False, keys=None, levels=None, names=None, "
         "verify_integrity=False, sort=None, copy=True):\n"
     )
-
     # concat of columns into a dataframe
     if axis == 1:
         if not isinstance(objs, types.BaseTuple):
