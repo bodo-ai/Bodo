@@ -443,7 +443,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
     # See table filter note below regarding reverse order
     for offset in reversed(find_topo_order(blocks)):
         ir_block = blocks[offset]
-        table_col_use_map[offset] = use_map = defaultdict(lambda: (set(), False))
+        table_col_use_map[offset] = block_use_map = defaultdict(lambda: (set(), False))
         for stmt in reversed(ir_block.body):
 
             # IR extensions that impact column uses.
@@ -451,7 +451,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                 f = ir_extension_table_column_use[type(stmt)]
                 # We assume that f checks types if necessary
                 # and performs any required actions.
-                f(stmt, use_map, equiv_vars, typemap)
+                f(stmt, block_use_map, equiv_vars, typemap)
                 continue
 
             # If we have an assign we don't want to mark that variable as used.
@@ -487,7 +487,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                             typemap[table_var_name], TableType
                         ), "Internal Error: Invalid get_table_data call"
                         col_num = typemap[rhs.args[1].name].literal_value
-                        col_num_set = use_map[table_var_name][0]
+                        col_num_set = block_use_map[table_var_name][0]
                         col_num_set.add(col_num)
                         continue
                     elif fdef == ("set_table_data", "bodo.hiframes.table"):
@@ -535,16 +535,29 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                     # which works because table filter variables are internally
                     # generated variables and have a single definition without control
                     # flow. Otherwise, we'd need to update uses iteratively.
+
+                    # NOTE: We must search the entire table_col_use_map at this point
+                    # because we haven't updated column usage/use_all from successor
+                    # blocks yet.
+
                     rhs_table = rhs.value.name
-                    if use_map[lhs_name][1] or any(
-                        use_map[v][1] for v in equiv_vars[lhs_name]
-                    ):
-                        use_map[rhs_table] = (set(), True)
+                    rhs_use, rhs_use_all = block_use_map[rhs_table]
+                    if rhs_use_all:
+                        # If we are already using all columns, continue.
                         continue
-                    rhs_use = use_map[lhs_name][0].copy()
-                    for v in equiv_vars[lhs_name]:
-                        rhs_use |= use_map[v][0]
-                    use_map[rhs_table] = (rhs_use, False)
+                    rhs_use = rhs_use.copy()
+                    update_with_columns = True
+                    for other_block_use_map in table_col_use_map.values():
+                        used_cols, use_all = get_live_column_nums_block(
+                            other_block_use_map, equiv_vars, lhs_name
+                        )
+                        if use_all:
+                            update_with_columns = False
+                            block_use_map[rhs_table] = (set(), True)
+                            break
+                        rhs_use.update(used_cols)
+                    if update_with_columns:
+                        block_use_map[rhs_table] = (rhs_use, False)
                     continue
 
             for var in stmt.list_vars():
@@ -552,7 +565,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                 if var.name != lhs_name and isinstance(typemap[var.name], TableType):
                     # If a statement is used in any ordinary way (i.e returned)
                     # then we mark all columns as used. We use a boolean as a shortcut.
-                    use_map[var.name] = (use_map[var.name][0], True)
+                    block_use_map[var.name] = (block_use_map[var.name][0], True)
 
     # combine all aliases transitively
     old_equiv_vars = copy.deepcopy(equiv_vars)

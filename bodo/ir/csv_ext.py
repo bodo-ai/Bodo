@@ -471,7 +471,7 @@ def csv_remove_dead_column(csv_node, column_live_map, equiv_vars, typemap):
     return False
 
 
-def csv_table_column_use(csv_node, column_use_map, equiv_vars, typemap):
+def csv_table_column_use(csv_node, block_use_map, equiv_vars, typemap):
     """
     Function to handle any necessary processing for column uses
     with a particular table. CsvReader defines a table and doesn't

@@ -171,7 +171,7 @@ def pq_remove_dead_column(pq_node, column_live_map, equiv_vars, typemap):
     return False
 
 
-def pq_table_column_use(pq_node, column_use_map, equiv_vars, typemap):
+def pq_table_column_use(pq_node, block_use_map, equiv_vars, typemap):
     """
     Function to handle any necessary processing for column uses
     with a particular table. ParquetReader defines a table and doesn't
