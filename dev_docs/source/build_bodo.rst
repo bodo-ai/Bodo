@@ -37,7 +37,7 @@ such as Numba on Ubuntu Linux::
     # Highly recommended to speed up compilation times
     conda install ccache -c conda-forge
     # Highly recommended for enforcing style requirements (see dev_process.rst)
-    conda install pre-commit
+    conda install pre-commit -c conda-forge
     # Required for IO with S3
     conda install -c conda-forge fsspec
     # The following is required for s3 related development and tests
