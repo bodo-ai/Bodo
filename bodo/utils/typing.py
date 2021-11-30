@@ -1791,3 +1791,24 @@ def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
         # Cast is supported between timestamp and string
         return rhs_scalar_typ == types.unicode_type
     return False
+
+
+def register_type(type_name, type_value):
+    """register a data type to be used in objmode blocks"""
+    # check input
+    if not isinstance(type_name, str):
+        raise BodoError(
+            f"register_type(): type name should be a string, not {type(type_name)}"
+        )
+
+    if not isinstance(type_value, types.Type):
+        raise BodoError(
+            f"register_type(): type value should be a valid data type, not {type(type_value)}"
+        )
+
+    if hasattr(types, type_name):
+        raise BodoError(f"register_type(): type name '{type_name}' already exists")
+
+    # add the data type to the "types" module used by Numba for type resolution
+    # TODO(ehsan): develop a better solution since this is a bit hacky
+    setattr(types, type_name, type_value)
