@@ -88,6 +88,37 @@ def get_s3_fs(region=None, storage_options=None):
     return fs
 
 
+def get_s3_subtree_fs(bucket_name, region=None, storage_options=None):
+    """
+    Initialize S3 SubTreeFileSystem with credentials.
+    When reading metadata or data from a dataset consisting of multiple
+    files, we need to use a SubTreeFileSystem so that Arrow can speed
+    up IO using multiple threads (file read ahead).
+    In normal circumstances Arrow would create this automatically
+    from a S3 URL, but to pass custom endpoint and use anonymous
+    option we need to do this manually.
+    """
+    from pyarrow._s3fs import S3FileSystem
+    from pyarrow._fs import SubTreeFileSystem
+
+    custom_endpoint = os.environ.get("AWS_S3_ENDPOINT", None)
+    if not region:
+        region = os.environ.get("AWS_DEFAULT_REGION", None)
+
+    anon = False
+    proxy_options = get_proxy_uri_from_env_vars()
+    if storage_options:
+        anon = storage_options.get("anon", False)
+
+    fs = S3FileSystem(
+        region=region,
+        endpoint_override=custom_endpoint,
+        anonymous=anon,
+        proxy_options=proxy_options,
+    )
+    return SubTreeFileSystem(bucket_name, fs)
+
+
 def get_s3_fs_from_path(path, parallel=False, storage_options=None):
     """
     Get a pyarrow.fs.S3FileSystem object from an S3

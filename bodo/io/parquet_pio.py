@@ -40,7 +40,7 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
 )
 from bodo.hiframes.table import TableType
-from bodo.io.fs_io import get_hdfs_fs, get_s3_fs_from_path
+from bodo.io.fs_io import get_hdfs_fs, get_s3_fs_from_path, get_s3_subtree_fs
 from bodo.libs.array import (
     cpp_table_to_py_table,
     delete_table,
@@ -1057,40 +1057,106 @@ def get_parquet_dataset(
             pieces = dataset.pieces
         for p in pieces:
             p._bodo_num_rows = 0
-        for p in pieces[start:end]:
-            file_metadata = p.get_metadata()
-            if get_row_counts:
-                if expr_filters is not None:
-                    # Use dataset scanner API to get exact row counts when
-                    # filter is applied. Arrow will try to calculate this by
-                    # by reading only the file's metadata, and if it needs to
-                    # access data it will read as less as possible (only the
-                    # required columns and only subset of row groups if possible)
-                    # use_threads=False because this step is already parallelized
-                    # across ranks
-                    t0 = time.time()
-                    row_count = (
-                        ds.dataset(p.path, partitioning=ds.partitioning(flavor="hive"))
-                        .scanner(filter=expr_filters, use_threads=False)
-                        .count_rows()
-                    )
-                    ds_scan_time += time.time() - t0
-                else:
-                    row_count = file_metadata.num_rows
-                p._bodo_num_rows = row_count
-                total_rows_chunk += row_count
-                total_row_groups_chunk += file_metadata.num_row_groups
-            if validate_schema:
-                file_schema = file_metadata.schema.to_arrow_schema()
-                if dataset_schema != file_schema:  # pragma: no cover
-                    # this is the same error message that pyarrow shows
-                    print(
-                        "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
-                            p, file_schema, dataset_schema
+
+        parsed_url = urlparse(fpath)
+        protocol = parsed_url.scheme
+        if protocol in {"gcs", "hdfs", "abfs", "abfss"}:
+            for p in pieces[start:end]:
+                file_metadata = p.get_metadata()
+                if get_row_counts:
+                    if expr_filters is not None:
+                        # XXX This won't work with gcs, hdfs, abfs, if only because
+                        # parquet_reader doesn't call get_scanner_batches().
+                        # Use dataset scanner API to get exact row counts when
+                        # filter is applied. Arrow will try to calculate this by
+                        # by reading only the file's metadata, and if it needs to
+                        # access data it will read as less as possible (only the
+                        # required columns and only subset of row groups if possible)
+                        pa.set_io_thread_count(2)
+                        pa.set_cpu_count(2)
+                        t0 = time.time()
+                        row_count = (
+                            ds.dataset(
+                                p.path, partitioning=ds.partitioning(flavor="hive")
+                            )
+                            .scanner(
+                                filter=expr_filters, use_threads=True, use_async=True
+                            )
+                            .count_rows()
                         )
-                    )
-                    valid = False
-                    break
+                        ds_scan_time += time.time() - t0
+                    else:
+                        row_count = file_metadata.num_rows
+                    p._bodo_num_rows = row_count
+                    total_rows_chunk += row_count
+                    total_row_groups_chunk += file_metadata.num_row_groups
+                if validate_schema:
+                    file_schema = file_metadata.schema.to_arrow_schema()
+                    if dataset_schema != file_schema:  # pragma: no cover
+                        # this is the same error message that pyarrow shows
+                        print(
+                            "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
+                                p, file_schema, dataset_schema
+                            )
+                        )
+                        valid = False
+                        break
+        else:
+            # TODO use this new path for every filesystem
+            fpaths = [p.path for p in pieces[start:end]]
+            if protocol == "s3":
+                # We can call the Arrow dataset API passing a list of s3 file paths in two ways:
+                # - Passing a s3 URL, removing the base path s3://my-bucket from the file paths, and calling ds.dataset
+                #   like this: ds.dataset(fpaths, filesystem="s3://my-bucket/", ...)
+                # - Passing a SubTreeFileSystem, with s3://my-bucket prefix removed from file paths.
+                #   We use this option to be able to pass proxy_options and anonymous options to Arrow.
+                #   The endpoint_override option could be passed via the s3 URL as a query option if we wanted
+                bucket_name = parsed_url.netloc
+                prefix = "s3://" + bucket_name + "/"
+                fpaths = [
+                    f[len(prefix) :] for f in fpaths
+                ]  # remove prefix from file paths
+                filesystem = get_s3_subtree_fs(bucket_name, region=getfs().region, storage_options=storage_options)
+            else:
+                filesystem = None
+            # Presumably the work is partitioned more or less equally among ranks,
+            # and we are mostly (or just) reading metadata, so we assign two IO
+            # threads to every rank
+            pa.set_io_thread_count(4)
+            pa.set_cpu_count(4)
+            # Use dataset scanner API to get exact row counts when
+            # filter is applied. Arrow will try to calculate this by
+            # by reading only the file's metadata, and if it needs to
+            # access data it will read as less as possible (only the
+            # required columns and only subset of row groups if possible)
+            dataset_ = ds.dataset(
+                fpaths,
+                filesystem=filesystem,
+                partitioning=ds.partitioning(flavor="hive"),
+            )
+            for piece, frag in zip(pieces[start:end], dataset_.get_fragments()):
+                t0 = time.time()
+                row_count = frag.scanner(
+                    schema=dataset_.schema,
+                    filter=expr_filters,
+                    use_threads=True,
+                    use_async=True,
+                ).count_rows()
+                ds_scan_time += time.time() - t0
+                piece._bodo_num_rows = row_count
+                total_rows_chunk += row_count
+                total_row_groups_chunk += frag.num_row_groups
+                if validate_schema:
+                    file_schema = frag.metadata.schema.to_arrow_schema()
+                    if dataset_schema != file_schema:  # pragma: no cover
+                        # this is the same error message that pyarrow shows
+                        print(
+                            "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
+                                piece, file_schema, dataset_schema
+                            )
+                        )
+                        valid = False
+                        break
 
         if validate_schema:
             valid = comm.allreduce(valid, op=MPI.LAND)
@@ -1173,19 +1239,51 @@ For best performance the number of row groups should be greater than the number 
     return dataset
 
 
-def get_scanner_batches(fpath, expr_filters, selected_fields):
-    """return list of RecordBatches of file 'fpath' that contain the rows
-    that match expr_filters. Only project the fields in selected_fields"""
+def get_scanner_batches(
+    fpaths, expr_filters, selected_fields, avg_num_pieces, is_parallel, storage_options, region
+):
+    """return RecordBatchReader for dataset of 'fpaths' that contain the rows
+    that match expr_filters (or all rows if expr_filters is None). Only project the
+    fields in selected_fields"""
+    import pyarrow as pa
+
+    cpu_count = os.cpu_count()
+    if cpu_count is None or cpu_count == 0:
+        cpu_count = 2
+    default_threads = min(4, cpu_count)
+    max_threads = min(16, cpu_count)
+    if (
+        is_parallel
+        and len(fpaths) > max_threads
+        and len(fpaths) / avg_num_pieces >= 2.0
+    ):
+        # assign more threads to ranks that have to read
+        # many more files than others
+        pa.set_io_thread_count(max_threads)
+        pa.set_cpu_count(max_threads)
+    else:
+        pa.set_io_thread_count(default_threads)
+        pa.set_cpu_count(default_threads)
+    if fpaths[0].startswith("s3://"):
+        # see comment in get_parquet_dataset about calling ds.dataset with s3
+        bucket_name = urlparse(fpaths[0]).netloc
+        prefix = "s3://" + bucket_name + "/"
+        fpaths = [f[len(prefix) :] for f in fpaths]  # remove prefix from file paths
+        filesystem = get_s3_subtree_fs(bucket_name, region=region, storage_options=storage_options)
+    else:
+        filesystem = None
     # We only support hive partitioning right now and will need to change this
     # if we also support directory partitioning
-    dataset = ds.dataset(fpath, partitioning=ds.partitioning(flavor="hive"))
+    dataset = ds.dataset(
+        fpaths, filesystem=filesystem, partitioning=ds.partitioning(flavor="hive")
+    )
     col_names = dataset.schema.names
     selected_names = [col_names[field_num] for field_num in selected_fields]
-    # use_threads=False because this step is already parallelized
-    # across ranks
+    # TODO: use threads and async only for s3?
+    # XXX impact of async=True seems minimal, even for s3
     return dataset.scanner(
-        columns=selected_names, filter=expr_filters, use_threads=False
-    ).to_batches()
+        columns=selected_names, filter=expr_filters, use_threads=True, use_async=True
+    ).to_reader()
 
 
 def _add_categories_to_pq_dataset(pq_dataset):
