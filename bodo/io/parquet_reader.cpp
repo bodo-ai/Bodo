@@ -137,8 +137,21 @@ class ParquetReader : public ArrowDataframeReader {
         // initialize reader
         init();
 
-        // allocate output partition columns. These are categorical columns where
-        // we only fill out the codes in C++ (see fill_partition_column comments)
+        if (parallel) {
+            // Get the average number of pieces per rank. This is used to
+            // increase the number of threads of the Arrow batch reader
+            // for ranks that have to read many more files than others.
+            int num_ranks;
+            MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+            uint64_t num_pieces = static_cast<uint64_t>(get_num_pieces());
+            MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T, MPI_SUM,
+                          MPI_COMM_WORLD);
+            avg_num_pieces = num_pieces / static_cast<double>(num_ranks);
+        }
+
+        // allocate output partition columns. These are categorical columns
+        // where we only fill out the codes in C++ (see fill_partition_column
+        // comments)
         for (auto i = 0; i < num_partition_cols; i++) {
             part_cols.push_back(alloc_array(
                 count, -1, -1, bodo_array_type::NUMPY,
@@ -151,6 +164,7 @@ class ParquetReader : public ArrowDataframeReader {
     virtual ~ParquetReader() {
         Py_DECREF(expr_filters);
         Py_DECREF(selected_fields_py);
+        Py_DECREF(storage_options);
     }
 
     /// a piece is a single parquet file in the context of parquet
@@ -160,11 +174,12 @@ class ParquetReader : public ArrowDataframeReader {
     std::vector<array_info*>& get_partition_cols() { return part_cols; }
 
    protected:
-    virtual void add_piece(PyObject* piece) {
+    virtual void add_piece(PyObject* piece, int64_t num_rows) {
         // p = piece.path
         PyObject* p = PyObject_GetAttrString(piece, "path");
         const char* c_path = PyUnicode_AsUTF8(p);
         file_paths.emplace_back(c_path);
+        pieces_nrows.push_back(num_rows);
         // for this parquet file: store partition value of each partition column
         get_partition_info(piece);
         Py_DECREF(p);
@@ -181,7 +196,6 @@ class ParquetReader : public ArrowDataframeReader {
             dnf_filters, expr_filters, storage_options, Py_False,
             PyBool_FromLong(parallel));
         Py_DECREF(dnf_filters);
-        Py_DECREF(storage_options);
         Py_DECREF(pq_mod);
         if (PyErr_Occurred()) throw std::runtime_error("python");
 
@@ -216,28 +230,45 @@ class ParquetReader : public ArrowDataframeReader {
         return schema_;
     }
 
-    virtual void append_piece_builder(size_t piece_idx, TableBuilder& builder) {
-        int64_t rows_read_from_piece = 0;
-        const std::string fpath = prefix + file_paths[piece_idx];
-        if (expr_filters != nullptr && expr_filters != Py_None) {
-            // Use a different path for predicate pushdown.
-            // If expr_filters==None this path is slower than the original one
-            // below (seems to be about 15% slower)
-            // TODO: see if it can be optimized
-            // Also the memory usage pattern is likely different (see next comment)
-            int64_t rows_to_skip = 0;
-            if (piece_idx == 0) rows_to_skip = start_row_first_piece;
+    virtual void read_all(TableBuilder& builder) {
+        if (get_num_pieces() == 0) return;
+
+        std::string f_name = prefix + file_paths[0];
+        size_t colon = f_name.find_first_of(':');
+        std::string protocol = f_name.substr(0, colon);
+        // TODO use new path for every filesystem
+        // Filter pushdown is only supported in new path
+        bool old_path = f_name.find("hdfs://") == 0 ||
+                        f_name.find("abfs://") == 0 ||
+                        f_name.find("abfss://") == 0 || protocol == "gcs" ||
+                        pyfs.count(protocol);
+        if (!old_path) {
+            size_t cur_piece = 0;
+            int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
+
+            PyObject* fnames_list_py = PyList_New(file_paths.size());
+            size_t i = 0;
+            for (auto p : file_paths) {
+                const std::string fpath = prefix + p;
+                PyList_SetItem(fnames_list_py, i++,
+                               PyUnicode_FromString(fpath.c_str()));
+            }
+
+            int64_t rows_to_skip = start_row_first_piece;
             PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
-            // XXX The get_batches method of scanner loads data into memory. The
-            // question is whether it loads all of its batches into memory
-            // before returning (I think it does)
             // This only loads record batches that match the filter
             PyObject* batches_it = PyObject_CallMethod(
-                pq_mod, "get_scanner_batches", "sOO", fpath.c_str(),
-                expr_filters, selected_fields_py);
+                pq_mod, "get_scanner_batches", "OOOdiOs", fnames_list_py,
+                expr_filters, selected_fields_py, avg_num_pieces,
+                int(parallel), storage_options, bucket_region.c_str());
             Py_DECREF(pq_mod);
+            // TODO free expr_filters, selected_fields_py and storage_options here
+            // once the read paths are merged
+            Py_DECREF(fnames_list_py);
             PyObject* batch_py = NULL;
-            while ((batch_py = PyIter_Next(batches_it))) {
+            //while ((batch_py = PyIter_Next(batches_it))) {  // XXX Fails with batch reader returned by scanner
+            while ((batch_py = PyObject_CallMethod(batches_it,
+                                                   "read_next_batch", NULL))) {
                 auto batch = arrow::py::unwrap_batch(batch_py).ValueOrDie();
                 int64_t batch_offset =
                     std::min(rows_to_skip, batch->num_rows());
@@ -249,69 +280,104 @@ class ParquetReader : public ArrowDataframeReader {
                         schema, batch->Slice(batch_offset, length)->columns());
                     builder.append(table);
                     rows_left -= length;
-                    rows_read_from_piece += length;
+
+                    if (part_cols.size() > 0) {  // handle partition columns
+                        while (length > 0) {
+                            int64_t rows_read_from_piece =
+                                std::min(rows_left_cur_piece, length);
+                            rows_left_cur_piece -= rows_read_from_piece;
+                            length -= rows_read_from_piece;
+                            // fill partition cols
+                            for (auto i = 0; i < part_cols.size(); i++) {
+                                int64_t part_val =
+                                    part_vals[cur_piece][selected_part_cols[i]];
+                                fill_partition_column(
+                                    part_val, part_cols[i]->data1,
+                                    part_cols_offset[i], rows_read_from_piece,
+                                    part_cols[i]->dtype);
+                                part_cols_offset[i] += rows_read_from_piece;
+                            }
+                            if (rows_left_cur_piece == 0 &&
+                                cur_piece < get_num_pieces() - 1) {
+                                rows_left_cur_piece = pieces_nrows[++cur_piece];
+                            }
+                        }
+                    }
                 }
                 rows_to_skip -= batch_offset;
                 Py_DECREF(batch_py);
             }
+            if (batch_py == NULL && PyErr_Occurred() &&
+                PyErr_ExceptionMatches(PyExc_StopIteration))
+                // StopIteration is raised at the end of iteration.
+                // An iterator would clear this automatically, but we are
+                // not using an interator, so we have to clear it manually
+                PyErr_Clear();
             Py_DECREF(batches_it);
         } else {
-            // open file corresponding to this piece
-            std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
-            pq_init_reader(fpath.c_str(), &arrow_reader, bucket_region.c_str(),
-                           s3fs_anon);
+            for (size_t piece_idx = 0; piece_idx < get_num_pieces();
+                 piece_idx++) {
+                int64_t rows_read_from_piece = 0;
+                std::string fpath = prefix + file_paths[piece_idx];
+                std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
+                pq_init_reader(fpath.c_str(), &arrow_reader,
+                               bucket_region.c_str(), s3fs_anon);
 
-            // get number of row groups in this file
-            auto pq_metadata = arrow_reader->parquet_reader()->metadata();
-            int64_t n_row_groups = pq_metadata->num_row_groups();
+                // get number of row groups in this file
+                auto pq_metadata = arrow_reader->parquet_reader()->metadata();
+                int64_t n_row_groups = pq_metadata->num_row_groups();
 
-            // skip row groups if necessary based on start_row_first_piece
-            int64_t rg_index = 0;  // current row group index
-            int64_t rg_rows_to_skip = 0;
-            if (piece_idx == 0 && start_row_first_piece > 0) {
-                int64_t skipped_rows =
-                    0;  // total number of rows I have skipped of this piece
-                while (skipped_rows < start_row_first_piece) {
-                    auto rg_metadata = pq_metadata->RowGroup(rg_index);
-                    rg_rows_to_skip =
-                        std::min(start_row_first_piece - skipped_rows,
-                                 rg_metadata->num_rows());
-                    skipped_rows += rg_rows_to_skip;
-                    if (rg_rows_to_skip == rg_metadata->num_rows()) {
-                        rg_index++;
-                        rg_rows_to_skip = 0;
+                // skip row groups if necessary based on start_row_first_piece
+                int64_t rg_index = 0;  // current row group index
+                int64_t rg_rows_to_skip = 0;
+                if (piece_idx == 0 && start_row_first_piece > 0) {
+                    int64_t skipped_rows =
+                        0;  // total number of rows I have skipped of this piece
+                    while (skipped_rows < start_row_first_piece) {
+                        auto rg_metadata = pq_metadata->RowGroup(rg_index);
+                        rg_rows_to_skip =
+                            std::min(start_row_first_piece - skipped_rows,
+                                     rg_metadata->num_rows());
+                        skipped_rows += rg_rows_to_skip;
+                        if (rg_rows_to_skip == rg_metadata->num_rows()) {
+                            rg_index++;
+                            rg_rows_to_skip = 0;
+                        }
                     }
+                    if (rg_index >= n_row_groups)
+                        throw std::runtime_error("parquet read error");
                 }
-                if (rg_index >= n_row_groups)
-                    throw std::runtime_error("parquet read error");
-            }
 
-            // read data
-            while (rg_index < n_row_groups && rows_left > 0) {
-                std::shared_ptr<::arrow::Table> table;
-                // read row group into Arrow table. We can't pass Arrow field
-                // selection to ReadRowGroup, have to pass column selection
-                arrow::Status status = arrow_reader->ReadRowGroup(
-                    rg_index, selected_columns, &table);
-                auto rg_metadata = pq_metadata->RowGroup(rg_index);
-                int64_t length = std::min(
-                    rows_left, rg_metadata->num_rows() - rg_rows_to_skip);
-                // pass zero-copy slice to TableBuilder to append to read data
-                builder.append(table->Slice(rg_rows_to_skip, length));
-                rows_left -= length;
-                rows_read_from_piece += length;
-                // all of the next row groups start at 0
-                rg_rows_to_skip = 0;
-                rg_index++;
+                // read data
+                while (rg_index < n_row_groups && rows_left > 0) {
+                    std::shared_ptr<::arrow::Table> table;
+                    // read row group into Arrow table. We can't pass Arrow
+                    // field selection to ReadRowGroup, have to pass column
+                    // selection
+                    arrow::Status status = arrow_reader->ReadRowGroup(
+                        rg_index, selected_columns, &table);
+                    auto rg_metadata = pq_metadata->RowGroup(rg_index);
+                    int64_t length = std::min(
+                        rows_left, rg_metadata->num_rows() - rg_rows_to_skip);
+                    // pass zero-copy slice to TableBuilder to append to read
+                    // data
+                    builder.append(table->Slice(rg_rows_to_skip, length));
+                    rows_left -= length;
+                    rows_read_from_piece += length;
+                    // all of the next row groups start at 0
+                    rg_rows_to_skip = 0;
+                    rg_index++;
+                }
+                // fill partition cols
+                for (auto i = 0; i < part_cols.size(); i++) {
+                    int64_t part_val =
+                        part_vals[piece_idx][selected_part_cols[i]];
+                    fill_partition_column(
+                        part_val, part_cols[i]->data1, part_cols_offset[i],
+                        rows_read_from_piece, part_cols[i]->dtype);
+                    part_cols_offset[i] += rows_read_from_piece;
+                }
             }
-        }
-        // fill partition cols
-        for (auto i = 0; i < part_cols.size(); i++) {
-            int64_t part_val = part_vals[piece_idx][selected_part_cols[i]];
-            fill_partition_column(part_val, part_cols[i]->data1,
-                                  part_cols_offset[i], rows_read_from_piece,
-                                  part_cols[i]->dtype);
-            part_cols_offset[i] += rows_read_from_piece;
         }
     }
 
@@ -321,6 +387,9 @@ class ParquetReader : public ArrowDataframeReader {
     PyObject* expr_filters = nullptr;
     PyObject* storage_options;
     PyObject* selected_fields_py;
+
+    std::vector<int64_t> pieces_nrows;
+    double avg_num_pieces = 0;
 
     // Parquet files that this process has to read
     std::vector<std::string> file_paths;

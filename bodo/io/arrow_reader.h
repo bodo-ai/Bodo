@@ -127,9 +127,7 @@ class ArrowDataframeReader {
                 "ArrowDataframeReader::read(): not initialized");
         TableBuilder builder(schema, selected_fields, count, is_nullable);
         rows_left = count;
-        for (size_t i = 0; i < get_num_pieces(); i++) {
-            append_piece_builder(i, builder);
-        }
+        read_all(builder);
         if (rows_left != 0)
             throw std::runtime_error(
                 "ArrowDataframeReader::read(): did not read all rows");
@@ -157,8 +155,12 @@ class ArrowDataframeReader {
     /// initialize reader
     void init();
 
-    /// Register a piece for this process to read
-    virtual void add_piece(PyObject* piece) = 0;
+    /**
+     * Register a piece for this process to read
+     * @param piece : piece to register
+     * @param num_rows : number of rows from this piece to read
+     */
+    virtual void add_piece(PyObject* piece, int64_t num_rows) = 0;
 
     /// Return Python object representing Arrow dataset
     virtual PyObject* get_dataset() = 0;
@@ -166,9 +168,8 @@ class ArrowDataframeReader {
     /// Get schema of data that we are reading (arrow-cpp format)
     virtual std::shared_ptr<arrow::Schema> get_schema(PyObject* dataset) = 0;
 
-    /// Provide data of piece `piece_idx` to table builder for appending
-    virtual void append_piece_builder(size_t piece_idx,
-                                      TableBuilder& builder) = 0;
+    /// Read all pieces (data read from pieces is appended to builder)
+    virtual void read_all(TableBuilder& builder) = 0;
 
    private:
     // XXX needed to call into Python?

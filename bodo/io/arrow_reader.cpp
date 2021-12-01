@@ -661,7 +661,7 @@ void ArrowDataframeReader::init() {
                     throw std::runtime_error("_bodo_num_rows attribute not in piece");
                 int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
                 Py_DECREF(num_rows_piece_py);
-                if (num_rows_piece > 0) add_piece(piece);
+                if (num_rows_piece > 0) add_piece(piece, num_rows_piece);
                 Py_DECREF(piece);
                 count_rows += num_rows_piece;
                 // finish when number of rows of my pieces covers my chunk
@@ -698,12 +698,10 @@ void ArrowDataframeReader::init() {
 
         // get those pieces that correspond to my chunk
         if (this->count > 0) {
-            int64_t count_rows =
-                0;  // total number of rows of all the pieces we iterate through
-            int64_t num_rows_my_pieces =
-                0;  // number of rows in my pieces (excluding any rows in the
-                    // first piece that will be skipped if the process starts
-                    // reading in the middle of the piece)
+            // total number of rows of all the pieces we iterate through
+            int64_t count_rows = 0;
+            // track total rows that this rank will read from pieces we iterate through
+            int64_t rows_added = 0;
             while ((piece = PyIter_Next(iterator))) {
                 PyObject* num_rows_piece_py =
                     PyObject_GetAttrString(piece, "_bodo_num_rows");
@@ -713,26 +711,28 @@ void ArrowDataframeReader::init() {
                 Py_DECREF(num_rows_piece_py);
 
                 // we skip all initial pieces whose total row count is less than
-                // start_row_global (first row of my chunk). after that, we get
+                // start_row_global (first row of my chunk). After that, we get
                 // all subsequent pieces until the number of rows is greater or
                 // equal to number of rows in my chunk
                 if ((num_rows_piece > 0) &&
                     (start_row_global < count_rows + num_rows_piece)) {
+                    int64_t rows_added_from_piece;
                     if (get_num_pieces() == 0) {
+                        // this is the first piece
                         this->start_row_first_piece =
                             start_row_global - count_rows;
-                        num_rows_my_pieces +=
-                            num_rows_piece - this->start_row_first_piece;
+                        rows_added_from_piece = std::min(num_rows_piece - this->start_row_first_piece, this->count);
                     } else {
-                        num_rows_my_pieces += num_rows_piece;
+                        rows_added_from_piece = std::min(num_rows_piece, this->count - rows_added);
                     }
-                    this->add_piece(piece);
+                    rows_added += rows_added_from_piece;
+                    this->add_piece(piece, rows_added_from_piece);
                 }
                 Py_DECREF(piece);
 
                 count_rows += num_rows_piece;
                 // finish when number of rows of my pieces covers my chunk
-                if (num_rows_my_pieces >= this->count) break;
+                if (rows_added == this->count) break;
             }
         }
     }
