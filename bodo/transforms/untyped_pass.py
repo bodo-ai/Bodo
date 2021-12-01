@@ -658,7 +658,7 @@ class UntypedPass:
         # the connection string has to be constant
         con_const = get_const_value(con_var, self.func_ir, msg, arg_types=self.args)
         index_col = self._get_const_arg(
-            "read_sql", rhs.args, kws, 2, "index_col", default=-1
+            "read_sql", rhs.args, kws, 2, "index_col", rhs.loc, default=-1
         )
         # coerce_float = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 3, "coerce_float", default=True
@@ -668,7 +668,7 @@ class UntypedPass:
         #     "read_sql", rhs.args, kws, 5, "parse_dates", default=-1
         # )
         columns = self._get_const_arg(
-            "read_sql", rhs.args, kws, 6, "columns", default=""
+            "read_sql", rhs.args, kws, 6, "columns", rhs.loc, default=""
         )
         # chunksize = get_call_expr_arg("read_sql", rhs.args, kws, 7, "chunksize", -1)
 
@@ -774,7 +774,8 @@ class UntypedPass:
             kws,
             1,
             "sheet_name",
-            0,
+            rhs.loc,
+            default=0,
             typ="str or int",
         )
         header = self._get_const_arg(
@@ -783,14 +784,26 @@ class UntypedPass:
             kws,
             2,
             "header",
-            0,
+            rhs.loc,
+            default=0,
             typ="int",
         )
-        col_names = self._get_const_arg("read_excel", rhs.args, kws, 3, "names", 0)
+        col_names = self._get_const_arg(
+            "read_excel", rhs.args, kws, 3, "names", rhs.loc, default=0
+        )
         # index_col = self._get_const_arg("read_excel", rhs.args, kws, 4, "index_col", -1)
-        comment = self._get_const_arg("read_excel", rhs.args, kws, 20, "comment", "")
+        comment = self._get_const_arg(
+            "read_excel", rhs.args, kws, 20, "comment", rhs.loc, default=""
+        )
         date_cols = self._get_const_arg(
-            "pd.read_excel", rhs.args, kws, 17, "parse_dates", [], typ="int or str"
+            "pd.read_excel",
+            rhs.args,
+            kws,
+            17,
+            "parse_dates",
+            rhs.loc,
+            default=[],
+            typ="int or str",
         )
         dtype_var = get_call_expr_arg("read_excel", rhs.args, kws, 7, "dtype", "")
         skiprows = self._get_const_arg(
@@ -799,7 +812,8 @@ class UntypedPass:
             kws,
             12,
             "skiprows",
-            0,
+            rhs.loc,
+            default=0,
             typ="int",
         )
 
@@ -910,10 +924,24 @@ class UntypedPass:
         # Users can only provide either sep or delim. Use a dummy default value to track
         # this behavior.
         sep_val = self._get_const_arg(
-            "pd.read_csv", rhs.args, kws, 1, "sep", None, use_default=True
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            1,
+            "sep",
+            rhs.loc,
+            default=None,
+            use_default=True,
         )
         delim_val = self._get_const_arg(
-            "pd.read_csv", rhs.args, kws, 2, "delimiter", None, use_default=True
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            2,
+            "delimiter",
+            rhs.loc,
+            default=None,
+            use_default=True,
         )
         sep_arg_name = "sep"
         if sep_val is None and delim_val is None:
@@ -945,7 +973,9 @@ class UntypedPass:
                 loc=rhs.loc,
             )
 
-        header = self._get_const_arg("pd.read_csv", rhs.args, kws, 3, "header", "infer")
+        header = self._get_const_arg(
+            "pd.read_csv", rhs.args, kws, 3, "header", rhs.loc, default="infer"
+        )
         # Per Pandas documentation (header: int, list of int, default ‘infer’)
         if header not in ("infer", 0, None):
             raise BodoError(
@@ -953,7 +983,9 @@ class UntypedPass:
                 loc=rhs.loc,
             )
 
-        col_names = self._get_const_arg("pd.read_csv", rhs.args, kws, 4, "names", 0)
+        col_names = self._get_const_arg(
+            "pd.read_csv", rhs.args, kws, 4, "names", rhs.loc, default=0
+        )
         # Per Pandas documentation (names: array-like). Since columns don't need string types,
         # we only check that this is a list or tuple (since constant arrays aren't supported).
         if col_names != 0 and not isinstance(col_names, (list, tuple)):
@@ -963,7 +995,14 @@ class UntypedPass:
             )
 
         index_col = self._get_const_arg(
-            "pd.read_csv", rhs.args, kws, 5, "index_col", None, use_default=True
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            5,
+            "index_col",
+            rhs.loc,
+            default=None,
+            use_default=True,
         )
         # Per Pandas documentation (index_col: int, str, sequence of int / str, or False, default None).
         # We don't support sequences yet
@@ -979,7 +1018,14 @@ class UntypedPass:
             )
 
         usecols = self._get_const_arg(
-            "pd.read_csv()", rhs.args, kws, 6, "usecols", None, use_default=True
+            "pd.read_csv()",
+            rhs.args,
+            kws,
+            6,
+            "usecols",
+            rhs.loc,
+            default=None,
+            use_default=True,
         )
         # Per Pandas documentation (usecols: list-like or callable).
         # We don't support callables yet.
@@ -1047,7 +1093,14 @@ class UntypedPass:
         )
 
         date_cols = self._get_const_arg(
-            "pd.read_csv", rhs.args, kws, 24, "parse_dates", False, typ="int or str"
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            24,
+            "parse_dates",
+            rhs.loc,
+            default=False,
+            typ="int or str",
         )
         # Per Pandas documentation (parse_dates: bool or list of int or names or list of lists or dict, default false)
         # Check for False if the user provides the default value
@@ -1060,7 +1113,15 @@ class UntypedPass:
             )
 
         chunksize = self._get_const_arg(
-            "pandas.read_csv", rhs.args, kws, 31, "chunksize", None, use_default=True
+            "pandas.read_csv",
+            rhs.args,
+            kws,
+            31,
+            "chunksize",
+            rhs.loc,
+            default=None,
+            use_default=True,
+            typ="int",
         )
         if chunksize is not None and (not isinstance(chunksize, int) or chunksize < 1):
             raise BodoError(
@@ -1068,7 +1129,7 @@ class UntypedPass:
             )
 
         compression = self._get_const_arg(
-            "pd.read_csv", rhs.args, kws, 32, "compression", "infer"
+            "pd.read_csv", rhs.args, kws, 32, "compression", rhs.loc, default="infer"
         )
         # Per Pandas documentation (compression: {'infer', 'gzip', 'bz2', 'zip', 'xz', None}, default ‘infer’)
         supported_compression_options = ["infer", "gzip", "bz2", "zip", "xz", None]
@@ -1080,7 +1141,14 @@ class UntypedPass:
 
         # Pandas default is True but Bodo is False
         pd_low_memory = self._get_const_arg(
-            "pd.read_csv", rhs.args, kws, 48, "low_memory", False, use_default=True
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            48,
+            "low_memory",
+            rhs.loc,
+            default=False,
+            use_default=True,
         )
 
         # List of all possible args and a support default value. This should match the header above.
@@ -1170,7 +1238,14 @@ class UntypedPass:
                     # Catch the exceptions because don't want the constant value exception
                     # Instead we want to indicate the argument isn't supported.
                     provided_val = self._get_const_arg(
-                        "pd.read_csv", rhs.args, kws, i, name, default, use_default=True
+                        "pd.read_csv",
+                        rhs.args,
+                        kws,
+                        i,
+                        name,
+                        rhs.loc,
+                        default=default,
+                        use_default=True,
                     )
                     if provided_val != default:
                         unsupported_args.append(name)
@@ -1425,22 +1500,33 @@ class UntypedPass:
         # convert_dates required for date cols
         kws = dict(rhs.kws)
         fname = get_call_expr_arg("read_json", rhs.args, kws, 0, "path_or_buf")
-        orient = self._get_const_arg("read_json", rhs.args, kws, 1, "orient", "records")
+        orient = self._get_const_arg(
+            "read_json", rhs.args, kws, 1, "orient", rhs.loc, default="records"
+        )
         frame_or_series = get_call_expr_arg(
             "read_json", rhs.args, kws, 3, "typ", "frame"
         )
         dtype_var = get_call_expr_arg("read_json", rhs.args, kws, 10, "dtype", "")
         # default value is True
         convert_dates = self._get_const_arg(
-            "read_json", rhs.args, kws, 5, "convert_dates", True, typ="int or str"
+            "read_json",
+            rhs.args,
+            kws,
+            5,
+            "convert_dates",
+            rhs.loc,
+            default=True,
+            typ="int or str",
         )
         date_cols = [] if convert_dates is True else convert_dates
         precise_float = self._get_const_arg(
-            "read_json", rhs.args, kws, 8, "precise_float", False
+            "read_json", rhs.args, kws, 8, "precise_float", rhs.loc, default=False
         )
-        lines = self._get_const_arg("read_json", rhs.args, kws, 11, "lines", True)
+        lines = self._get_const_arg(
+            "read_json", rhs.args, kws, 11, "lines", rhs.loc, default=True
+        )
         compression = self._get_const_arg(
-            "read_json", rhs.args, kws, 13, "compression", "infer"
+            "read_json", rhs.args, kws, 13, "compression", rhs.loc, default="infer"
         )
 
         # check unsupported arguments
@@ -1779,9 +1865,11 @@ class UntypedPass:
         kws = dict(rhs.kws)
         fname = get_call_expr_arg("read_parquet", rhs.args, kws, 0, "path")
         engine = get_call_expr_arg("read_parquet", rhs.args, kws, 1, "engine", "auto")
-        columns = self._get_const_arg("read_parquet", rhs.args, kws, 2, "columns", -1)
+        columns = self._get_const_arg(
+            "read_parquet", rhs.args, kws, 2, "columns", rhs.loc, default=-1
+        )
         storage_options = self._get_const_arg(
-            "read_parquet", rhs.args, kws, 10e4, "storage_options", {}
+            "read_parquet", rhs.args, kws, 10e4, "storage_options", rhs.loc, default={}
         )
 
         # check unsupported arguments
@@ -1851,12 +1939,24 @@ class UntypedPass:
         )
         sep_err_msg = err_msg = f"{np_fromfile}(): sep argument is not supported"
         _sep = self._get_const_arg(
-            np_fromfile, rhs.args, kws, 3, "sep", default="", err_msg=sep_err_msg
+            np_fromfile,
+            rhs.args,
+            kws,
+            3,
+            "sep",
+            rhs.loc,
+            default="",
+            err_msg=sep_err_msg,
         )
         if _sep != "":
             raise bodo.utils.typing.BodoError(sep_err_msg)
         _offset = get_call_expr_arg(
-            np_fromfile, rhs.args, kws, 4, "offset", default=ir.Const(0, lhs.loc)
+            np_fromfile,
+            rhs.args,
+            kws,
+            4,
+            "offset",
+            default=ir.Const(0, lhs.loc),
         )
 
         func_text = (
@@ -1895,6 +1995,8 @@ class UntypedPass:
         kws,
         arg_no,
         arg_name,
+        loc,
+        *,
         default=None,
         err_msg=None,
         typ=None,
@@ -1917,13 +2019,13 @@ class UntypedPass:
         except GuardException:
             # raise error if argument specified but not constant
             if arg_var != "":
-                raise BodoError(err_msg)
+                raise BodoError(err_msg, loc=loc)
 
         if arg is CONST_NOT_FOUND:
             # Provide use_default to allow letting None be the default value
             if use_default or default is not None:
                 return default
-            raise BodoError(err_msg)
+            raise BodoError(err_msg, loc=loc)
         return arg
 
     def _handle_metadata(self):
