@@ -492,7 +492,7 @@ def set_table_data_codegen(
             n = out_arr_list.size
             new_size = builder.add(n, one)
             out_arr_list.resize(new_size)
-            out_arr_list.setitem(n, arr_arg, incref=True)
+            out_arr_list.inititem(n, arr_arg, incref=True)
         # case 4: not new column, replace existing value
         elif arr_type == in_table_type.arr_types[col_ind]:
             # input/output offsets should be the same if not new column
