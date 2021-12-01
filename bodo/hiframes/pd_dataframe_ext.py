@@ -324,6 +324,8 @@ make_attribute_wrapper(DataFrameType, "meminfo", "_meminfo")
 @infer_getattr
 class DataFrameAttribute(AttributeTemplate):
     key = DataFrameType
+    # Set of attribute names stored for caching.
+    _attr_set = None
 
     @bound_function("df.head")
     def resolve_head(self, df, args, kws):
@@ -746,6 +748,8 @@ class DataFrameAttribute(AttributeTemplate):
     def generic_resolve(self, df, attr):
         # column selection
         if attr in df.columns:
+            if self._is_existing_attr(attr):
+                return
             ind = df.columns.index(attr)
             arr_typ = df.data[ind]
             return SeriesType(
@@ -768,6 +772,31 @@ class DataFrameAttribute(AttributeTemplate):
                 new_data.append(df.data[i])
             if level_found:
                 return DataFrameType(tuple(new_data), df.index, tuple(new_names))
+
+    def _is_existing_attr(self, col_name):
+        """
+        Helper function that checks if a col_name is also
+        an existing attribute found in a later overload
+        template.
+
+        All other templates aren't checked
+        """
+        if self._attr_set is None:
+            s = set()
+            templates = list(self.context._get_attribute_templates(self.key))
+            # If we reached generic_resolve of our current template, we never
+            # need to check any template before or at our current position
+            idx = templates.index(self)
+            for i in range(idx, len(templates)):
+                # All overloads are stored as _OverloadAttributeTemplate which store the name
+                # in _attr.
+                if isinstance(
+                    templates[i], numba.core.typing.templates._OverloadAttributeTemplate
+                ):
+                    s.add(templates[i]._attr)
+            self._attr_set = s
+
+        return col_name in self._attr_set
 
 
 # don't convert literal types to non-literal and rerun the typing template
