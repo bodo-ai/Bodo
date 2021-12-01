@@ -552,13 +552,9 @@ def test_df_drop_duplicates_errors(memory_leak_check):
 
     def impl2():
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
-        return df.drop_duplicates(subset=["A"])
-
-    def impl3():
-        df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         df.drop_duplicates(inplace=True)
 
-    def impl4():
+    def impl3():
         df = pd.DataFrame({"A": np.random.randn(10), "B": np.arange(10)})
         return df.drop_duplicates(ignore_index=True)
 
@@ -571,8 +567,6 @@ def test_df_drop_duplicates_errors(memory_leak_check):
         bodo.jit(impl2)()
     with pytest.raises(BodoError, match=unsupported_arg_err_msg):
         bodo.jit(impl3)()
-    with pytest.raises(BodoError, match=unsupported_arg_err_msg):
-        bodo.jit(impl4)()
 
 
 @pytest.mark.slow

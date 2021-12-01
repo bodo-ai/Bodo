@@ -42,6 +42,9 @@ def _del_many_column_file(filetype):
     """
     Helper function to remove the CSV file with 99 columns.
     """
+    # Include a barrier so rank 0 doesn't delete the file
+    # before all columns have finished using it.
+    bodo.barrier()
     if bodo.get_rank() == 0:
         if filetype == "csv":
             os.remove("many_columns.csv")
