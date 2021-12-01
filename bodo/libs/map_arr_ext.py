@@ -499,6 +499,18 @@ def _box_map_array_generic(
     return out_arr
 
 
+def init_map_arr_codegen(context, builder, sig, args):
+    """
+    Codegen function for Map Arrays. This used by init_map_arr
+    and instrinsics that cannot directly call init_map_arr
+    """
+    (data_arr,) = args
+    map_array = context.make_helper(builder, sig.return_type)
+    map_array.data = data_arr
+    context.nrt.incref(builder, sig.args[0], data_arr)
+    return map_array._getvalue()
+
+
 @intrinsic
 def init_map_arr(typingctx, data_typ=None):
     """create a new map array from input data list(struct) array data"""
@@ -506,15 +518,7 @@ def init_map_arr(typingctx, data_typ=None):
         data_typ.dtype, StructArrayType
     )
     map_arr_type = MapArrayType(data_typ.dtype.data[0], data_typ.dtype.data[1])
-
-    def codegen(context, builder, sig, args):
-        (data_arr,) = args
-        map_array = context.make_helper(builder, map_arr_type)
-        map_array.data = data_arr
-        context.nrt.incref(builder, data_typ, data_arr)
-        return map_array._getvalue()
-
-    return map_arr_type(data_typ), codegen
+    return map_arr_type(data_typ), init_map_arr_codegen
 
 
 def alias_ext_init_map_arr(lhs_name, args, alias_map, arg_aliases):

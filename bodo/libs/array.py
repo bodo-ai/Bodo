@@ -31,6 +31,11 @@ from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
+from bodo.libs.map_arr_ext import (
+    MapArrayType,
+    _get_map_arr_data_type,
+    init_map_arr_codegen,
+)
 from bodo.libs.str_arr_ext import (
     _get_str_binary_arr_payload,
     char_arr_type,
@@ -151,12 +156,18 @@ def array_to_info(typingctx, arr_type_t=None):
                 ],
             )
 
-        if isinstance(arr_type, (ArrayItemArrayType, StructArrayType)):
+        if isinstance(arr_type, (MapArrayType, ArrayItemArrayType, StructArrayType)):
+            # Note: The C++ code doesn't contain any special handling for MapArrayType.
+            # We just use the underlying ArrayItemArray without telling C++ the array is actually
+            # a MapArray.
 
             def get_types(arr_typ):
                 """Get list of all types (in Bodo_CTypes enum format) in the
                 nested structure rooted at arr_typ"""
-                if isinstance(arr_typ, ArrayItemArrayType):
+                if isinstance(arr_typ, MapArrayType):
+                    # A Map array is an array item array of two struct arrays
+                    return get_types(_get_map_arr_data_type(arr_typ))
+                elif isinstance(arr_typ, ArrayItemArrayType):
                     return [CTypeEnum.LIST.value] + get_types(arr_typ.dtype)
                 # TODO: add Categorical, String
                 elif isinstance(arr_typ, (StructType, StructArrayType)):
@@ -184,7 +195,12 @@ def array_to_info(typingctx, arr_type_t=None):
                 length = context.compile_internal(
                     builder, lambda a: len(a), types.intp(arr_typ), [arr]
                 )
-                if isinstance(arr_typ, ArrayItemArrayType):
+                if isinstance(arr_typ, MapArrayType):
+                    arr_struct = context.make_helper(builder, arr_typ, value=arr)
+                    lengths = get_lengths(
+                        _get_map_arr_data_type(arr_typ), arr_struct.data
+                    )
+                elif isinstance(arr_typ, ArrayItemArrayType):
                     payload = _get_array_item_arr_payload(
                         context, builder, arr_typ, arr
                     )
@@ -230,7 +246,12 @@ def array_to_info(typingctx, arr_type_t=None):
 
             def get_buffers(arr_typ, arr):
                 """ Get array of buffers (offsets, nulls, data) of all arrays in nested structure """
-                if isinstance(arr_typ, ArrayItemArrayType):
+                if isinstance(arr_typ, MapArrayType):
+                    arr_struct = context.make_helper(builder, arr_typ, value=arr)
+                    buffers = get_buffers(
+                        _get_map_arr_data_type(arr_typ), arr_struct.data
+                    )
+                elif isinstance(arr_typ, ArrayItemArrayType):
                     payload = _get_array_item_arr_payload(
                         context, builder, arr_typ, arr
                     )
@@ -343,6 +364,8 @@ def array_to_info(typingctx, arr_type_t=None):
                         l_field_names += get_field_names(e_arr)
                 elif isinstance(arr_typ, ArrayItemArrayType):
                     l_field_names += get_field_names(arr_typ.dtype)
+                elif isinstance(arr_typ, MapArrayType):
+                    l_field_names += get_field_names(_get_map_arr_data_type(arr_typ))
                 return l_field_names
 
             # get list of all types in the nested datastructure (to pass to C++)
@@ -373,7 +396,15 @@ def array_to_info(typingctx, arr_type_t=None):
             )
             field_names_ptr = cgutils.alloca_once_value(builder, field_names)
 
-            nested_array = context.make_helper(builder, arr_type, in_arr)
+            if isinstance(arr_type, MapArrayType):
+                # Extract the underlying data for a MapArray
+                nested_arr_typ = _get_map_arr_data_type(arr_type)
+                map_arr_struct = context.make_helper(builder, arr_type, value=in_arr)
+                in_arr_val = map_arr_struct.data
+            else:
+                nested_arr_typ = arr_type
+                in_arr_val = in_arr
+            nested_array = context.make_helper(builder, nested_arr_typ, in_arr_val)
 
             # pass all the data to C++ so that an array_info using nested Arrow
             # Array is constructed
@@ -912,7 +943,7 @@ def nested_to_array(
             builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
         )  # pragma: no cover
         string_array.data = array_item_array._getvalue()
-        return string_array._getvalue(), lengths_pos + 1, infos_pos + 2
+        return string_array._getvalue(), lengths_pos + 1, infos_pos + 1
 
     # Numpy
     elif isinstance(arr_typ, types.Array):
@@ -993,7 +1024,13 @@ def info_to_array(typingctx, info_type, array_type):
                 arr_type, context, builder, in_info
             )
 
-        if isinstance(arr_type, (ArrayItemArrayType, StructArrayType, TupleArrayType)):
+        if isinstance(
+            arr_type,
+            (MapArrayType, ArrayItemArrayType, StructArrayType, TupleArrayType),
+        ):
+            # Note: The C++ code doesn't contain any special handling for MapArrayType.
+            # We just use the underlying ArrayItemArray without telling C++ the array is actually
+            # a MapArray.
 
             def get_num_arrays(arr_typ):
                 """ get total number of arrays in nested array """
@@ -1030,6 +1067,10 @@ def info_to_array(typingctx, info_type, array_type):
                 cpp_arr_type = StructArrayType(
                     arr_type.data, ("dummy",) * len(arr_type.data)
                 )
+            elif isinstance(arr_type, MapArrayType):
+                # MapArrayType just sends its internal ArrayItemArray to C++,
+                # we generate all code for the ArrayItemArray
+                cpp_arr_type = _get_map_arr_data_type(arr_type)
             else:
                 cpp_arr_type = arr_type
 
@@ -1088,6 +1129,11 @@ def info_to_array(typingctx, info_type, array_type):
                 tuple_array.data = arr
                 context.nrt.incref(builder, cpp_arr_type, arr)
                 arr = tuple_array._getvalue()
+            elif isinstance(arr_type, MapArrayType):
+                # nested_to_array returns the ArrayItemArray, so we package it
+                # back inside a MapArray
+                sig = signature(arr_type, cpp_arr_type)
+                arr = init_map_arr_codegen(context, builder, sig, (arr,))
             return arr
 
         # StringArray
