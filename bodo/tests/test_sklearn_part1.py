@@ -12,6 +12,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import SGDClassifier, SGDRegressor
 from sklearn.metrics import (
     accuracy_score,
+    confusion_matrix,
     f1_score,
     mean_absolute_error,
     mean_squared_error,
@@ -276,6 +277,27 @@ def gen_random(n, true_chance, return_arrays=True):
         return [y_true, y_pred]
 
 
+def gen_random_strings(n, true_chance, return_pd_series=False, return_pd_array=False):
+    """
+    Only one of return_pd_series and return_pd_array should be set to true.
+    If both are set, a pd.Series is returned. If neither are set,
+    a simple list is returned.
+    """
+    [y_true, y_pred] = gen_random(n, true_chance, return_arrays=False)
+    cats = list(set(y_true).union(set(y_pred)))
+    choices = {cat: str(chr(ord("a") + i)) for i, cat in enumerate(cats)}
+    y_true = [choices[y] for y in y_true]
+    y_pred = [choices[y] for y in y_pred]
+    if return_pd_series:
+        y_true = pd.Series(y_true)
+        y_pred = pd.Series(y_pred)
+    elif return_pd_array:
+        y_true = pd.array(y_true)
+        y_pred = pd.array(y_pred)
+
+    return y_true, y_pred, list(choices.values())
+
+
 def gen_random_k_dims(n, k):
     """
     Generate a random array of shape (n, k).
@@ -296,18 +318,54 @@ def gen_random_k_dims(n, k):
     return [y_true, y_pred, sample_weight]
 
 
-def gen_random_with_sample_weight(n, true_chance, return_arrays=True):
-    """
-    Wrapper around the gen_random function. This one also has a third
-    array/list for sample_weight, each element of which is in (0,1).
-    Returns np arrays if return_arrays==True, else python lists.
-    """
-    [y_true, y_pred] = gen_random(n, true_chance, return_arrays)
+def gen_random_sample_weights(n, return_arrays=True, integral_sample_weights=False):
     np.random.seed(5)
     sample_weight = np.random.random_sample(size=n)
+    if integral_sample_weights:
+        sample_weight = (sample_weight * 10).astype(np.int64)
     if not return_arrays:
         sample_weight = list(sample_weight)
+    return sample_weight
+
+
+def gen_random_with_sample_weight(
+    n, true_chance, return_arrays=True, integral_sample_weights=False
+):
+    """
+    Wrapper around the gen_random function. This one also has a third
+    array/list for sample_weight, each element of which is in (0,1)
+    when integral_sample_weights=False or integers in [0, 10) when
+    integral_sample_weights=True.
+    Returns np arrays if return_arrays=True, else python lists.
+    """
+    [y_true, y_pred] = gen_random(n, true_chance, return_arrays)
+    sample_weight = gen_random_sample_weights(n, return_arrays, integral_sample_weights)
     return [y_true, y_pred, sample_weight]
+
+
+def gen_random_strings_with_sample_weight(
+    n,
+    true_chance,
+    return_pd_series=False,
+    return_pd_array=False,
+    integral_sample_weights=False,
+):
+    """
+    Wrapper around the gen_random_strings function. This one also has a fourth
+    array/list for sample_weight, each element of which is in (0,1)
+    when integral_sample_weights=False or integers in [0, 10) when
+    integral_sample_weights=True.
+    Returns pd arrays if return_arrays==True, else python lists.
+    """
+    [y_true, y_pred, choices] = gen_random_strings(
+        n, true_chance, return_pd_series, return_pd_array
+    )
+    sample_weight = gen_random_sample_weights(
+        n,
+        return_arrays=return_pd_series | return_pd_array,
+        integral_sample_weights=integral_sample_weights,
+    )
+    return [y_true, y_pred, sample_weight, choices]
 
 
 @pytest.mark.parametrize(
@@ -389,6 +447,168 @@ def test_accuracy_score(data, normalize):
     check_func(
         test_accuracy_score_4,
         tuple(data),
+        is_out_distributed=False,
+    )
+
+
+# TODO: Add memory_leak when bug is solved (curently fails on data0 and data1)
+@pytest.mark.parametrize(
+    "data",
+    [
+        gen_random_with_sample_weight(10, 0.5, return_arrays=True),
+        gen_random_with_sample_weight(50, 0.7, return_arrays=True),
+        gen_random_with_sample_weight(76, 0.3, return_arrays=False),
+        gen_random_with_sample_weight(11, 0.43, return_arrays=False),
+        gen_random_with_sample_weight(
+            10, 0.5, return_arrays=True, integral_sample_weights=True
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "labels",
+    # The range of outputs of gen_random_with_sample_weight is [-3, 3]
+    [
+        None,
+        np.arange(-3, 3),
+        np.arange(-5, 7),
+        np.arange(-2, 2),
+    ],
+)
+@pytest.mark.parametrize(
+    "normalize",
+    [
+        "true",
+        "pred",
+        "all",
+        None,
+    ],
+)
+def test_confusion_matrix(data, labels, normalize):
+    """
+    Tests for the sklearn.metrics.confusion_matrix implementation in Bodo
+    with integer labels.
+    """
+
+    if labels is not None:
+        labels = list(labels)  # To force it to be seen as replicated
+
+    def test_confusion_matrix_0(y_true, y_pred):
+        return confusion_matrix(y_true, y_pred)
+
+    def test_confusion_matrix_1(y_true, y_pred):
+        return confusion_matrix(y_true, y_pred, normalize=normalize)
+
+    def test_confusion_matrix_2(y_true, y_pred, sample_weight_):
+        return confusion_matrix(y_true, y_pred, sample_weight=sample_weight_)
+
+    def test_confusion_matrix_3(y_true, y_pred, labels_):
+        return confusion_matrix(y_true, y_pred, labels=labels_)
+
+    def test_confusion_matrix_4(y_true, y_pred, sample_weight_, labels_):
+        return confusion_matrix(
+            y_true,
+            y_pred,
+            normalize=normalize,
+            sample_weight=sample_weight_,
+            labels=labels_,
+        )
+
+    def test_confusion_matrix_5(y_true, y_pred, labels_):
+        return confusion_matrix(y_true, y_pred, normalize=normalize, labels=labels_)
+
+    check_func(test_confusion_matrix_0, tuple(data[0:2]), is_out_distributed=False)
+    check_func(test_confusion_matrix_1, tuple(data[0:2]), is_out_distributed=False)
+    check_func(test_confusion_matrix_2, tuple(data), is_out_distributed=False)
+    check_func(
+        test_confusion_matrix_3,
+        (data[0], data[1], labels),
+        is_out_distributed=False,
+    )
+    check_func(
+        test_confusion_matrix_4,
+        (*data, labels),
+        is_out_distributed=False,
+    )
+    check_func(
+        test_confusion_matrix_5,
+        (data[0], data[1], labels),
+        is_out_distributed=False,
+    )
+
+
+# TODO: Add memory_leak
+@pytest.mark.parametrize(
+    "data",
+    [
+        gen_random_strings_with_sample_weight(10, 0.5),
+        gen_random_strings_with_sample_weight(50, 0.7, return_pd_series=True),
+        gen_random_strings_with_sample_weight(76, 0.3, return_pd_array=True),
+        gen_random_strings_with_sample_weight(
+            10, 0.5, return_pd_series=True, integral_sample_weights=True
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "normalize",
+    [
+        "true",
+        "pred",
+        "all",
+        None,
+    ],
+)
+def test_confusion_matrix_string_labels(data, normalize):
+    """
+    Tests for the sklearn.metrics.confusion_matrix implementation in Bodo
+    with string labels
+    """
+
+    [y_true, y_pred, sample_weight, labels] = data
+
+    def test_confusion_matrix_0(y_true, y_pred):
+        return confusion_matrix(y_true, y_pred)
+
+    def test_confusion_matrix_1(y_true, y_pred):
+        return confusion_matrix(y_true, y_pred, normalize=normalize)
+
+    def test_confusion_matrix_2(y_true, y_pred, sample_weight_):
+        return confusion_matrix(y_true, y_pred, sample_weight=sample_weight_)
+
+    def test_confusion_matrix_3(y_true, y_pred, labels_):
+        return confusion_matrix(y_true, y_pred, labels=labels_)
+
+    def test_confusion_matrix_4(y_true, y_pred, sample_weight_, labels_):
+        return confusion_matrix(
+            y_true,
+            y_pred,
+            normalize=normalize,
+            sample_weight=sample_weight_,
+            labels=labels_,
+        )
+
+    def test_confusion_matrix_5(y_true, y_pred, labels_):
+        return confusion_matrix(y_true, y_pred, normalize=normalize, labels=labels_)
+
+    check_func(test_confusion_matrix_0, (y_true, y_pred), is_out_distributed=False)
+    check_func(test_confusion_matrix_1, (y_true, y_pred), is_out_distributed=False)
+    check_func(
+        test_confusion_matrix_2,
+        (y_true, y_pred, sample_weight),
+        is_out_distributed=False,
+    )
+    check_func(
+        test_confusion_matrix_3,
+        (y_true, y_pred, labels),
+        is_out_distributed=False,
+    )
+    check_func(
+        test_confusion_matrix_4,
+        (y_true, y_pred, sample_weight, labels),
+        is_out_distributed=False,
+    )
+    check_func(
+        test_confusion_matrix_5,
+        (y_true, y_pred, labels),
         is_out_distributed=False,
     )
 

@@ -1533,6 +1533,168 @@ def overload_r2_score(
             return _r2_score_impl
 
 
+def confusion_matrix_dist_helper(
+    y_true, y_pred, labels=None, sample_weight=None, normalize=None
+):
+    """
+    Distributed confusion matrix computation.
+    The basic idea is to compute the confusion matrix locally, and then
+    do an element-wise summation across all ranks (which is what
+    AllReduce(SUM) does). We don't normalize during local confusion
+    matrix computation, instead we normalize after aggregating
+    the raw confusion matrices for correctness.
+    The rest is to handle edge cases, etc.
+    """
+
+    # Shamelessly copied from https://github.com/scikit-learn/scikit-learn/blob/2beed55847ee70d363bdbfe14ee4401438fba057/sklearn/metrics/_classification.py#L322-#L324
+    if normalize not in ["true", "pred", "all", None]:  # pragma: no cover
+        raise ValueError("normalize must be one of {'true', 'pred', " "'all', None}")
+
+    comm = MPI.COMM_WORLD
+
+    try:
+        # Get local confusion_matrix with normalize=None
+        local_cm_or_e = sklearn.metrics.confusion_matrix(
+            y_true, y_pred, labels=labels, sample_weight=sample_weight, normalize=None
+        )
+    except ValueError as e:  # pragma: no cover
+        local_cm_or_e = e
+
+    # Handle the case where some but not all ranks raise this ValueError
+    # https://github.com/scikit-learn/scikit-learn/blob/2beed55847ee70d363bdbfe14ee4401438fba057/sklearn/metrics/_classification.py#L312
+    # This can only occur when the labels are explicitly provided by the user. For instance, say the
+    # user provides the labels: [0, 1, 2]. Since the data is distributed, it could be the case
+    # that on some rank y_true is say [5, 6, 7], i.e. none of the provided labels are in y_true on
+    # this rank. If this happens for all ranks, we need to raise an error, same as sklearn.
+    # If it happens on some ranks, but not all, that means the inputs are still valid, we just need to
+    # capture the exception and on those ranks that it was raised, the local confusion matrix
+    # will be all 0s (and therefore we can do AllReduce(SUM) on it and get the correct result globally).
+    error_on_this_rank = (
+        isinstance(local_cm_or_e, ValueError)
+        and "At least one label specified must be in y_true" in local_cm_or_e.args[0]
+    )
+    error_on_all_ranks = comm.allreduce(error_on_this_rank, op=MPI.LAND)
+    if error_on_all_ranks:  # pragma: no cover
+        # If it's an error on all ranks, then reraise it
+        raise local_cm_or_e
+    elif error_on_this_rank:  # pragma: no cover
+        # Determine the dtype based on sample_weight.
+        # Choose the accumulator dtype to always have high precision
+        dtype = np.int64
+        if sample_weight is not None and sample_weight.dtype.kind not in {
+            "i",
+            "u",
+            "b",
+        }:
+            dtype = np.float64
+        # If on this rank, but not all ranks, set it to an all zero array
+        local_cm = np.zeros((labels.size, labels.size), dtype=dtype)
+    else:
+        local_cm = local_cm_or_e
+
+    # Create buffer for global confusion_matrix
+    global_cm = np.zeros_like(local_cm)
+    # Do element-wise sum across all ranks to get the global confusion_matrix
+    comm.Allreduce(local_cm, global_cm)
+
+    # Handle the normalize parameter on the global_cm
+    # Shamelessly copied from https://github.com/scikit-learn/scikit-learn/blob/2beed55847ee70d363bdbfe14ee4401438fba057/sklearn/metrics/_classification.py#L349-#L356
+    with np.errstate(all="ignore"):
+        if normalize == "true":
+            global_cm = global_cm / global_cm.sum(axis=1, keepdims=True)
+        elif normalize == "pred":
+            global_cm = global_cm / global_cm.sum(axis=0, keepdims=True)
+        elif normalize == "all":
+            global_cm = global_cm / global_cm.sum()
+        global_cm = np.nan_to_num(global_cm)
+
+    return global_cm
+
+
+@overload(sklearn.metrics.confusion_matrix, no_unliteral=True)
+def overload_confusion_matrix(
+    y_true,
+    y_pred,
+    labels=None,
+    sample_weight=None,
+    normalize=None,
+    _is_data_distributed=False,
+):
+    """
+    Provide implementations for the confusion_matrix computation.
+    If data is not distributed, we simply call sklearn on each rank.
+    Else we compute in a distributed way.
+    Provide separate impl for case where sample_weight is provided
+    vs not provided for type unificaiton purposes
+    """
+
+    check_sklearn_version()
+
+    func_text = "def _confusion_matrix_impl(\n"
+    func_text += "    y_true, y_pred, labels=None,\n"
+    func_text += "    sample_weight=None, normalize=None,\n"
+    func_text += "    _is_data_distributed=False,\n"
+    func_text += "):\n"
+
+    # user could pass lists and numba throws error if passing lists
+    # to object mode, so we convert to arrays
+    func_text += "    y_true = bodo.utils.conversion.coerce_to_array(y_true)\n"
+    func_text += "    y_pred = bodo.utils.conversion.coerce_to_array(y_pred)\n"
+
+    cm_dtype = ("int64[:,:]", "np.int64")
+    if not is_overload_none(normalize):
+        cm_dtype = ("float64[:,:]", "np.float64")
+    if not is_overload_none(sample_weight):
+        func_text += (
+            "    sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)\n"
+        )
+        # Choose the accumulator dtype to always have high precision
+        # Copied from https://github.com/scikit-learn/scikit-learn/blob/2beed55847ee70d363bdbfe14ee4401438fba057/sklearn/metrics/_classification.py#L339-#L343
+        # (with slight modification)
+        # This works for both numpy arrays and pd.Series. Lists are not distributable
+        # so we can't support them anyway.
+        if numba.np.numpy_support.as_dtype(sample_weight.dtype).kind not in {
+            "i",
+            "u",
+            "b",
+        }:
+            cm_dtype = ("float64[:,:]", "np.float64")
+
+    if not is_overload_none(labels):
+        func_text += "    labels = bodo.utils.conversion.coerce_to_array(labels)\n"
+    else:
+        if is_overload_true(_is_data_distributed):
+            # TODO (Check while benchmarking) Maybe do unique on y_true and y_pred individually first?
+            func_text += (
+                "    labels = bodo.libs.array_kernels.concat([y_true, y_pred])\n"
+            )
+            func_text += (
+                "    labels = bodo.libs.array_kernels.unique(labels, parallel=True)\n"
+            )
+            func_text += "    labels = bodo.allgatherv(labels, False)\n"
+            func_text += "    labels = bodo.libs.array_kernels.sort(labels, ascending=True, inplace=False)\n"
+
+    func_text += f"    with numba.objmode(cm='{cm_dtype[0]}'):\n"
+    if is_overload_false(_is_data_distributed):
+        func_text += "      cm = sklearn.metrics.confusion_matrix(\n"
+    else:
+        func_text += "      cm = confusion_matrix_dist_helper(\n"
+    func_text += "        y_true, y_pred, labels=labels,\n"
+    func_text += "        sample_weight=sample_weight, normalize=normalize,\n"
+    # The datatype of local_cm should already be dtype, but forcing it anyway
+    func_text += f"      ).astype({cm_dtype[1]})\n"
+    func_text += "    return cm\n"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        globals(),
+        loc_vars,
+    )
+    _confusion_matrix_impl = loc_vars["_confusion_matrix_impl"]
+    return _confusion_matrix_impl
+
+
 # -------------------------------------SGDRegressor----------------------------------------
 # Support sklearn.linear_model.SGDRegressorusing object mode of Numba
 # Linear regression: sklearn.linear_model.SGDRegressor(loss="squared_loss", penalty=None)
