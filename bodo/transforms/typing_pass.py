@@ -49,14 +49,17 @@ from bodo.utils.typing import (
     BodoConstUpdatedError,
     BodoError,
     BodoWarning,
+    FilenameType,
     get_literal_value,
     get_overload_const_bool,
     get_overload_const_int,
+    get_overload_const_str,
     is_const_func_type,
     is_list_like_index_type,
     is_literal_type,
     is_overload_constant_bool,
     is_overload_constant_int,
+    is_overload_constant_str,
     is_overload_none,
     raise_bodo_error,
 )
@@ -633,6 +636,27 @@ class TypingTransforms:
         if isinstance(read_node, bodo.ir.sql_ext.SqlReader):
             # Filter pushdown is only supported for snowflake right now.
             require(read_node.db_type == "snowflake")
+        elif isinstance(read_node, bodo.ir.parquet_ext.ParquetReader):
+            filename_var = read_node.file_name.name
+            # If the filename_var isn't in the typemap we are likely
+            # coming from BodoSQL. As a result, we disable this check
+            # to ensure filter pushdown works in the common case.
+            # TODO: Enable check for BodoSQL
+            if filename_var in self.typemap:
+                filename_typ = self.typemap[filename_var]
+                fname = ""
+                if is_overload_constant_str(filename_typ):
+                    fname = get_overload_const_str(filename_typ)
+                elif isinstance(filename_typ, FilenameType) and isinstance(
+                    filename_typ.fname, str
+                ):
+                    # This path is currently untested.
+                    # TODO: Test
+                    fname = filename_typ.fname
+                if fname:
+                    require(
+                        not bodo.io.parquet_pio.is_filter_pushdown_disabled_fpath(fname)
+                    )
 
         # make sure all filters have the right form
         lhs_def = get_definition(func_ir, index_def.lhs)

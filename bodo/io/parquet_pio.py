@@ -850,6 +850,27 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, categor
     return arr_typ
 
 
+def is_filter_pushdown_disabled_fpath(fpath):
+    """
+    Given a fpath, which is a string that is the
+    start of a file name or whole filename
+    passed by a user (not modified by Bodo yet),
+    determine if the file system should have filter
+    pushdown disabled.
+
+    This is used in typing pass but kept in this function
+    to be close to the existing filesystem support.
+    """
+    # Currently gcsfs and hdfs aren't supported
+    return (
+        fpath.startswith("gs://")
+        or fpath.startswith("gcs://")
+        or fpath.startswith("hdfs://")
+        or fpath.startswith("abfs://")
+        or fpath.startswith("abfss://")
+    )
+
+
 def get_parquet_dataset(
     fpath,
     get_row_counts=True,
