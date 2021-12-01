@@ -1640,6 +1640,26 @@ def overload_dataframe_drop_duplicates(
 
     check_unsupported_args("DataFrame.drop_duplicates", args_dict, args_default_dict)
 
+    # dict_cols are columns with dictionaries that don't have drop_duplicates
+    # implemented because dictionaries may not have the same order. We can
+    # still run drop_duplicates on structs because those are always ordered.
+    # Note: Pandas doesn't support drop_duplicates with dictionaries.
+    dict_cols = []
+    if subset_idx:
+        for col_idx in subset_idx:
+            if isinstance(df.data[col_idx], bodo.MapArrayType):
+                dict_cols.append(df.columns[col_idx])
+    else:
+        for i, col_name in enumerate(df.columns):
+            if isinstance(df.data[i], bodo.MapArrayType):
+                dict_cols.append(col_name)
+    if dict_cols:
+        raise BodoError(
+            f"DataFrame.drop_duplicates(): Columns {dict_cols} "
+            + f"have dictionary types which cannot be used to drop duplicates. "
+            + "Please consider using the 'subset' argument to skip these columns."
+        )
+
     # XXX: can't reuse duplicated() here since it shuffles data and chunks
     # may not match
 

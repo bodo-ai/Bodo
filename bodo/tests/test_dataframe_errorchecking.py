@@ -1,3 +1,4 @@
+import re
 import string
 from decimal import Decimal
 
@@ -1235,3 +1236,46 @@ def test_invalid_replace_col_data(memory_leak_check):
         match="DataFrameType.replace_col_type replaced column must be found in the DataFrameType",
     ):
         new_dtype = infered_dtype.replace_col_type("C", bodo.string_array_type)
+
+
+def test_dd_map_array_drop_subset(memory_leak_check):
+    """
+    Test drop_duplicates throws an appropriate error
+    when a MapArray column is part of the subset.
+    """
+
+    def test_impl(df1):
+        df1["B"] = df1["A"].apply(lambda val: {str(j): val for j in range(val)})
+        df2 = df1.drop_duplicates(subset="B")
+        return df2
+
+    df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4]})
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "Columns ['B'] have dictionary types which cannot be used to drop duplicates. Please consider using the 'subset' argument to skip these columns."
+        ),
+    ):
+        bodo.jit(test_impl)(df1)
+
+
+def test_dd_map_array_drop_all(memory_leak_check):
+    """
+    Test drop_duplicates throws an appropriate error
+    when a MapArray column is part of the columns dropped
+    without a subset.
+    """
+
+    def test_impl(df1):
+        df1["B"] = df1["A"].apply(lambda val: {str(j): val for j in range(val)})
+        df2 = df1.drop_duplicates()
+        return df2
+
+    df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4]})
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "Columns ['B'] have dictionary types which cannot be used to drop duplicates. Please consider using the 'subset' argument to skip these columns."
+        ),
+    ):
+        bodo.jit(test_impl)(df1)

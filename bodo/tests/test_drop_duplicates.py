@@ -528,26 +528,75 @@ def test_dd_subset_int_label(memory_leak_check):
     check_func(test_impl, (df1,), reset_index=True, sort_output=True)
 
 
+# TODO: Add memory_leak_check. There appears to be a leak for struct arrays.
+def test_dd_map_array_non_drop():
+    """
+    Test drop_duplicates works with a MapArray column
+    that isn't part of the subset.
+    """
+
+    def test_impl(df1):
+        df1["B"] = df1["A"].apply(lambda val: {str(j): val for j in range(val)})
+        df2 = df1.drop_duplicates(subset="A")
+        return df2
+
+    df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4]})
+    # We can only run the sequential test because Pandas can't sort a dict column
+    check_func(test_impl, (df1,), reset_index=True, dist_test=False)
+
+
+# TODO: Add memory_leak_check. There appears to be a leak for struct arrays.
+def test_dd_struct_array_non_drop():
+    """
+    Test drop_duplicates works with a StructArray column
+    that isn't part of the subset.
+    """
+
+    def test_impl(df1):
+        df2 = df1.drop_duplicates(subset="A")
+        return df2
+
+    df1 = pd.DataFrame(
+        {
+            "A": [3, 3, 3, 1, 4],
+            "B": np.array(
+                [
+                    {"A": 1.0, "B": True},
+                    {"A": 3.0, "B": False},
+                    {"A": 5.0, "B": True},
+                    {"A": 10.0, "B": True},
+                    {"A": 30.0, "B": False},
+                ]
+            ),
+        }
+    )
+    # We can only run the sequential test because Pandas can't sort a dict column
+    check_func(test_impl, (df1,), reset_index=True, dist_test=False)
+
+
 @pytest.mark.skip("keep argument not supported")
 def test_dd_subset_last(memory_leak_check):
-   """
-   Test drop_duplicates subset with keep='last'
-   """
+    """
+    Test drop_duplicates subset with keep='last'
+    """
 
-   def test_impl(df1):
-       df2 = df1.drop_duplicates(subset=["A"], keep="last")
-       return df2
-   df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4], "B": [1, 5, 9, 5, 5]})
-   check_func(test_impl, (df1,), reset_index=True, sort_output=True)
+    def test_impl(df1):
+        df2 = df1.drop_duplicates(subset=["A"], keep="last")
+        return df2
+
+    df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4], "B": [1, 5, 9, 5, 5]})
+    check_func(test_impl, (df1,), reset_index=True, sort_output=True)
 
 
 @pytest.mark.skip("keep argument not supported")
 def test_dd_subset_false(memory_leak_check):
-   """
-   Test drop_duplicates subset with keep=False
-   """
-   def test_impl(df1):
-       df2 = df1.drop_duplicates(subset=["A"], keep=False)
-       return df2
-   df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4], "B": [1, 5, 9, 5, 5]})
-   check_func(test_impl, (df1,), reset_index=True, sort_output=True)
+    """
+    Test drop_duplicates subset with keep=False
+    """
+
+    def test_impl(df1):
+        df2 = df1.drop_duplicates(subset=["A"], keep=False)
+        return df2
+
+    df1 = pd.DataFrame({"A": [3, 3, 3, 1, 4], "B": [1, 5, 9, 5, 5]})
+    check_func(test_impl, (df1,), reset_index=True, sort_output=True)
