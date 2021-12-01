@@ -3,6 +3,7 @@
 Unittests for DataFrames
 """
 import datetime
+import os
 import random
 import sys
 from decimal import Decimal
@@ -397,6 +398,37 @@ def test_set_column_table_format(memory_leak_check):
     check_func(impl, (df, "E", 3), only_seq=True)
     # new column, new type
     check_func(impl, (df, "E", "abc"), only_seq=True)
+
+
+def test_set_table_data_replace(memory_leak_check):
+    """Test for adding an array to a table block after a previous array was removed
+    from it (BE-1635).
+    """
+
+    def impl():
+        df = pd.read_parquet("demand.pq")
+        df["tier"] = 3
+        df["grouping"] = "abc"
+        return df
+
+    try:
+        if bodo.get_rank() == 0:
+            df = pd.DataFrame(
+                {
+                    "consumer": ["ABC"] * 10,
+                    "locked_price": [3] * 10,
+                    "tier": ["ACD"] * 10,
+                }
+            )
+            df.to_parquet("demand.pq")
+        bodo.barrier()
+
+        check_func(impl, (), only_seq=True)
+        bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove("demand.pq")
+        bodo.barrier()
 
 
 @pytest.mark.skip(
