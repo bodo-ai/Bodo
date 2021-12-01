@@ -952,6 +952,21 @@ class DistributedAnalysis:
                 self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
                     lhs, func_name, rhs, kws, array_dists
                 )
+            
+            if func_name == "confusion_matrix":
+                # output is always replicated, and the output is an array
+                self._set_REP(
+                    lhs, array_dists, f"output of {func_name} is REP", rhs.loc
+                )
+                self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
+                    lhs, func_name, rhs, kws, array_dists
+                )
+                # labels is an optional kw arg, so check if it is provided.
+                # if it is provided, then set it to REP
+                if "labels" in kws:
+                    labels_arg_name = kws["labels"].name
+                    self._set_REP(labels_arg_name, array_dists, f"labels when provided are assumed to be REP", rhs.loc)
+                
 
             return
 

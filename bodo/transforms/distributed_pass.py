@@ -754,6 +754,93 @@ class DistributedPass:
                 )
 
         if (
+            func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
+            and func_name == "confusion_matrix"
+        ):
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                rhs = assign.value
+                kws = dict(rhs.kws)
+                nodes = []
+
+                # TODO Add error checking for argument data types
+
+                y_true = get_call_expr_arg(
+                    "sklearn.metrics.confusion_matrix", rhs.args, kws, 0, "y_true"
+                )
+                y_pred = get_call_expr_arg(
+                    "sklearn.metrics.confusion_matrix", rhs.args, kws, 1, "y_pred"
+                )
+
+                # labels argument
+                labels_var = ir.Var(
+                    assign.target.scope,
+                    mk_unique_var("confusion_matrix_labels"),
+                    rhs.loc,
+                )
+                nodes.append(ir.Assign(ir.Const(None, rhs.loc), labels_var, rhs.loc))
+                self.typemap[labels_var.name] = types.none
+                # labels cannot be specified positionally
+                labels = get_call_expr_arg(
+                    "confusion_matrix",
+                    rhs.args,
+                    kws,
+                    1e6,
+                    "labels",
+                    labels_var,
+                )
+
+                # sample_weight argument
+                sample_weight_var = ir.Var(
+                    assign.target.scope,
+                    mk_unique_var("confusion_matrix_sample_weight"),
+                    rhs.loc,
+                )
+                nodes.append(
+                    ir.Assign(ir.Const(None, rhs.loc), sample_weight_var, rhs.loc)
+                )
+                self.typemap[sample_weight_var.name] = types.none
+                # sample_weight cannot be specified positionally
+                sample_weight = get_call_expr_arg(
+                    "confusion_matrix",
+                    rhs.args,
+                    kws,
+                    1e6,
+                    "sample_weight",
+                    sample_weight_var,
+                )
+
+                ## normalize argument
+                normalize_var = ir.Var(
+                    assign.target.scope,
+                    mk_unique_var("confusion_matrix_normalize"),
+                    rhs.loc,
+                )
+                nodes.append(ir.Assign(ir.Const(None, rhs.loc), normalize_var, rhs.loc))
+                self.typemap[normalize_var.name] = types.none
+                # normalize cannot be specified positionally
+                normalize = get_call_expr_arg(
+                    "confusion_matrix", rhs.args, kws, 1e6, "normalize", normalize_var
+                )
+
+                f = eval(
+                    "lambda y_true, y_pred, labels, sample_weight, normalize: sklearn.metrics.confusion_matrix("
+                    "    y_true,"
+                    "    y_pred,"
+                    "    labels=labels,"
+                    "    sample_weight=sample_weight,"
+                    "    normalize=normalize,"
+                    "    _is_data_distributed=True,"
+                    ")"
+                )
+                return nodes + compile_func_single_block(
+                    f,
+                    [y_true, y_pred, labels, sample_weight, normalize],
+                    assign.target,
+                    self,
+                    extra_globals={"sklearn": sklearn},
+                )
+
+        if (
             func_mod in ("sklearn.metrics._regression", "sklearn.metrics")
             and func_name == "mean_squared_error"
         ):
