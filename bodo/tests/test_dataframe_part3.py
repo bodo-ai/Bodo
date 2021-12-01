@@ -495,3 +495,13 @@ def test_update_df_type(memory_leak_check):
     check_func(
         bodo_func, (15,), py_output=py_func(15), only_seq=True, is_out_distributed=False
     )
+
+
+def test_index_col_assign(memory_leak_check):
+    def test_impl(df):
+        new_df = pd.DataFrame({"A": np.arange(len(df))})
+        new_df["id"] = new_df.reset_index().index + 1
+        return new_df
+
+    df = pd.DataFrame({"A": [1, 2, 1, 4, 512, 1, 4]})
+    check_func(test_impl, (df,))
