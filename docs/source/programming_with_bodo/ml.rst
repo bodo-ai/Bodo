@@ -289,6 +289,10 @@ Methods:
   * :any:`xgboost.XGBClassifier.predict`
   * :any:`xgboost.XGBClassifier.predict_proba`
 
+Attributes:
+
+* :attr:`xgboost.XGBClassifier.feature_importances_`
+
 XGBRegressor
 *****************
 
@@ -300,3 +304,7 @@ Methods:
 
   * :any:`xgboost.XGBRegressor.fit`
   * :any:`xgboost.XGBRegressor.predict`
+
+Attributes:
+
+* :attr:`xgboost.XGBRegressor.feature_importances_`

@@ -3,28 +3,19 @@
 
 import numba
 import numpy as np
-import pandas as pd
 import xgboost
-from mpi4py import MPI
 from numba.core import types
 from numba.extending import (
     NativeValue,
     box,
     models,
     overload,
+    overload_attribute,
     overload_method,
     register_model,
     typeof_impl,
     unbox,
 )
-from xgboost import XGBClassifier, XGBRegressor
-
-import bodo
-from bodo.utils.typing import (
-    BodoError,
-    is_overload_false,
-)
-
 
 # ------------------------XGBClassifier-----------------
 # Support xgboost.XGBClassifier object mode of Numba
@@ -228,7 +219,7 @@ def overload_xgbclassifier_predict(
     base_margin=None,
 ):  # pragma: no cover
     """Overload XGBClassifier predict."""
-    
+
     def _model_predict_impl(
         m,
         X,
@@ -246,7 +237,7 @@ def overload_xgbclassifier_predict(
                 .flatten()
             )
         return result
-    
+
     return _model_predict_impl
 
 
@@ -259,7 +250,7 @@ def overload_xgbclassifier_predict_proba(
     base_margin=None,
 ):  # pragma: no cover
     """Overload XGBClassifier predict."""
-    
+
     def _model_predict_proba_impl(
         m,
         X,
@@ -269,12 +260,11 @@ def overload_xgbclassifier_predict_proba(
     ):  # pragma: no cover
         with numba.objmode(result="float64[:,:]"):
             m.n_jobs = 1
-            result = (
-                m.predict_proba(X, ntree_limit, validate_features, base_margin)
-                .astype(np.float64)
-            )
+            result = m.predict_proba(
+                X, ntree_limit, validate_features, base_margin
+            ).astype(np.float64)
         return result
-    
+
     return _model_predict_proba_impl
 
 
@@ -495,5 +485,18 @@ def overload_xgbregressor_predict(
                 .flatten()
             )
         return result
-    
+
     return _model_predict_impl
+
+
+@overload_attribute(BodoXGBClassifierType, "feature_importances_")
+@overload_attribute(BodoXGBRegressorType, "feature_importances_")
+def get_xgb_feature_importances(m):
+    """ Overload feature_importances_ attribute to be accessible inside bodo.jit """
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="float32[:]"):
+            result = m.feature_importances_
+        return result
+
+    return impl
