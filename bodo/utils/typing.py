@@ -5,6 +5,7 @@ Helper functions to enable typing.
 import itertools
 import operator
 import types as pytypes
+import warnings
 from inspect import getfullargspec
 
 import numba
@@ -1812,3 +1813,131 @@ def register_type(type_name, type_value):
     # add the data type to the "types" module used by Numba for type resolution
     # TODO(ehsan): develop a better solution since this is a bit hacky
     setattr(types, type_name, type_value)
+
+
+def check_objmode_output_type(ret_tup, ret_type):
+    """check output values of objmode blocks to make sure they match the user-specified
+    return type.
+    `ret_tup` is a tuple of Python values being returned from objmode
+    `ret_type` is the corresponding Numba tuple type
+    """
+    return tuple(_check_objmode_type(v, t) for v, t in zip(ret_tup, ret_type.types))
+
+
+def _is_equiv_array_type(A, B):
+    """return True if A and B are equivalent array types and can be converted without
+    errors.
+    """
+    from bodo.libs.map_arr_ext import MapArrayType
+    from bodo.libs.struct_arr_ext import StructArrayType
+
+    # bodo.typeof() assigns StructArrayType to array of dictionary input if possible but
+    # the data may actually be MapArrayType. This converts StructArrayType to
+    # MapArrayType if possible and necessary.
+    # StructArrayType can be converted to MapArrayType if all data arrays have the same
+    # type.
+    return (
+        isinstance(A, StructArrayType)
+        and isinstance(B, MapArrayType)
+        and set(A.data) == {B.value_arr_type}
+        and B.key_arr_type.dtype == bodo.string_type
+    ) or (
+        # Numpy array types that can be converted safely
+        # see https://github.com/numba/numba/blob/306060a2e1eec194fa46b13c99a01651d944d657/numba/core/types/npytypes.py#L483
+        isinstance(A, types.Array)
+        and isinstance(B, types.Array)
+        and A.ndim == B.ndim
+        and A.dtype == B.dtype
+        and B.layout in ("A", A.layout)
+        and (A.mutable or not B.mutable)
+        and (A.aligned or not B.aligned)
+    )
+
+
+def _fix_objmode_df_type(val, val_typ, typ):
+    """fix output df of objmode to match user-specified type if possible"""
+    from bodo.hiframes.pd_index_ext import RangeIndexType
+
+    # distribution is just a hint and value can be cast trivially
+    if val_typ.dist != typ.dist:
+        val_typ = val_typ.copy(dist=typ.dist)
+
+    # many users typically don't care about specifying the Index which defaults to
+    # RangeIndex. We drop the Index and raise a warning to handle the common case.
+    if isinstance(typ.index, RangeIndexType) and not isinstance(
+        val_typ.index, RangeIndexType
+    ):
+        warnings.warn(
+            BodoWarning(
+                f"Dropping Index of objmode output dataframe since RangeIndexType specified in type annotation ({val_typ.index} to {typ.index})"
+            )
+        )
+        val.reset_index(drop=True, inplace=True)
+        val_typ = val_typ.copy(index=typ.index)
+
+    # the user may not specify Index name type since it's usually not important
+    if val_typ.index.name_typ != types.none and typ.index.name_typ == types.none:
+        warnings.warn(
+            BodoWarning(
+                f"Dropping name field in Index of objmode output dataframe since none specified in type annotation ({val_typ.index} to {typ.index})"
+            )
+        )
+        val_typ = val_typ.copy(index=typ.index)
+        val.index.name = None
+
+    # handle equivalent columns array types
+    for i, (A, B) in enumerate(zip(val_typ.data, typ.data)):
+        if _is_equiv_array_type(A, B):
+            val_typ = val_typ.replace_col_type(val_typ.columns[i], B)
+
+    # the user may not specify table format
+    # NOTE: this will be unnecessary when table format is the default
+    if val_typ.is_table_format and not typ.is_table_format:
+        val_typ = val_typ.copy(is_table_format=False)
+
+    # reorder df columns if possible to match the user-specified type
+    if val_typ != typ:
+        # sort column orders based on column names to see if the types can match
+        val_cols = pd.Index(val_typ.columns)
+        typ_cols = pd.Index(typ.columns)
+        val_argsort = val_cols.argsort()
+        typ_argsort = typ_cols.argsort()
+        val_typ_sorted = val_typ.copy(
+            data=tuple(np.array(val_typ.data)[val_argsort]),
+            columns=tuple(val_cols[val_argsort]),
+        )
+        typ_sorted = typ.copy(
+            data=tuple(np.array(typ.data)[typ_argsort]),
+            columns=tuple(typ_cols[typ_argsort]),
+        )
+        if val_typ_sorted == typ_sorted:
+            val_typ = typ
+            val = val.reindex(columns=typ.columns)
+
+    return val, val_typ
+
+
+def _check_objmode_type(val, typ):
+    """make sure the type of Python value `val` matches Numba type `typ`."""
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
+
+    val_typ = bodo.typeof(val)
+
+    # handle dataframe type differences if possible
+    if isinstance(typ, DataFrameType) and isinstance(val_typ, DataFrameType):
+        val, val_typ = _fix_objmode_df_type(val, val_typ, typ)
+
+    # some array types may be equivalent
+    if _is_equiv_array_type(val_typ, typ):
+        val_typ = typ
+
+    # list/set reflection is irrelevant in objmode
+    if isinstance(val_typ, (types.List, types.Set)):
+        val_typ = val_typ.copy(reflected=False)
+
+    if val_typ != typ:
+        raise BodoError(
+            f"Invalid objmode data type specified.\nUser specified:\t{typ}\nValue type:\t{val_typ}"
+        )
+
+    return val

@@ -1376,7 +1376,9 @@ def pd_timedelta_index_overload(
 class RangeIndexType(types.IterableType, types.ArrayCompatible):
     """type class for pd.RangeIndex() objects."""
 
-    def __init__(self, name_typ):
+    def __init__(self, name_typ=None):
+        if name_typ is None:
+            name_typ = types.none
         self.name_typ = name_typ
         super(RangeIndexType, self).__init__(name="RangeIndexType({})".format(name_typ))
 
