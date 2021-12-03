@@ -3,6 +3,7 @@
 Utility functions for conversion of data such as list to array.
 Need to be inlined for better optimization.
 """
+
 import numba
 import numpy as np
 import pandas as pd
@@ -732,6 +733,7 @@ def overload_fix_arr_dtype(
         def impl_cat_dtype(
             data, new_dtype, copy=None, nan_to_str=True, from_series=False
         ):  # pragma: no cover
+
             n = len(data)
             numba.parfors.parfor.init_prange()
             label_dict = (
@@ -739,8 +741,10 @@ def overload_fix_arr_dtype(
                     new_dtype.categories.values
                 )
             )
+
             A = bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, new_dtype)
             codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A)
+
             for i in numba.parfors.parfor.internal_prange(n):
                 if bodo.libs.array_kernels.isna(data, i):
                     bodo.libs.array_kernels.setna(A, i)
@@ -762,17 +766,40 @@ def overload_fix_arr_dtype(
         def impl_category(
             data, new_dtype, copy=None, nan_to_str=True, from_series=False
         ):  # pragma: no cover
-            # find categories in data
-            cats = bodo.libs.array_kernels.unique(data)
-            # make sure categories are replicated since dtype is replicated
-            cats = bodo.allgatherv(cats, False)
-            # sort categories to match Pandas
+
+            # find categories in data, droping na
+            cats = bodo.libs.array_kernels.unique(data, dropna=True)
+            # sort categories to match Pandas behavior
             # TODO(ehsan): refactor to avoid long compilation time (too much inlining)
-            cats = pd.Series(cats).dropna().sort_values().values
+            cats = pd.Series(cats).sort_values().values
+            # make sure categories are replicated since dtype is replicated
+            # allgatherv should preserve sort ordering
+            cats = bodo.allgatherv(cats, False)
+
             cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(
                 bodo.utils.conversion.index_from_array(cats, None), False, None
             )
-            return bodo.utils.conversion.fix_arr_dtype(data, cat_dtype, copy)
+
+            n = len(data)
+            numba.parfors.parfor.init_prange()
+
+            vals = cats
+            label_dict = dict()
+            for i in range(len(vals)):
+                val = vals[i]
+                label_dict[val] = i
+
+            A = bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, cat_dtype)
+            codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A)
+
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(data, i):
+                    bodo.libs.array_kernels.setna(A, i)
+                    continue
+                val = data[i]
+                codes[i] = label_dict[val]
+
+            return A
 
         return impl_category
 
