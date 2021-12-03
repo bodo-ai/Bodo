@@ -212,6 +212,48 @@ class UntypedPass:
                 # HACK make globals available for typing in series.map()
                 rhs.globals = self.func_ir.func_id.func.__globals__
 
+        # add output type checking/handling to objmode output variables
+        if isinstance(rhs, ir.Const) and isinstance(
+            rhs.value, numba.core.dispatcher.ObjModeLiftedWith
+        ):
+            # generate check_objmode_output_type() call on the return variables
+            for block in rhs.value.func_ir.blocks.values():
+                last_node = block.terminator
+                if isinstance(last_node, ir.Return):
+                    new_var = ir.Var(
+                        block.scope, mk_unique_var("objmode_return"), last_node.loc
+                    )
+                    # unique variable name for type to avoid conflicts in global env
+                    type_name = f"objmode_type{ir_utils.next_label()}"
+                    block.body = (
+                        block.body[:-1]
+                        + compile_func_single_block(
+                            eval(
+                                f"lambda A: bodo.utils.typing.check_objmode_output_type(A, {type_name})"
+                            ),
+                            [last_node.value],
+                            new_var,
+                        )
+                        + [last_node]
+                    )
+                    last_node.value = new_var
+
+            # Numba looks up globals from the function's module so we need to inject
+            # the output data types to be available when calling
+            # check_objmode_output_type()
+            # https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L84
+            # https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L139
+            modname = rhs.value.func_ir.func_id.func.__module__
+            if modname:
+                import importlib
+
+                fmod = importlib.import_module(modname)
+                fmod.__dict__[type_name] = rhs.value.output_types
+            else:
+                rhs.value.func_ir.func_id.func.__globals__[
+                    type_name
+                ] = rhs.value.output_types
+
         # handle copies lhs = f
         if isinstance(rhs, ir.Var) and rhs.name in self.arrow_tables:
             self.arrow_tables[lhs] = self.arrow_tables[rhs.name]

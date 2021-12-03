@@ -62,6 +62,8 @@ from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import NativeValue, lower_builtin, typeof_impl
 from numba.parfors.parfor import get_expr_args
 
+from bodo.utils.typing import BodoError
+
 # flag for checking whether the functions we are replacing have changed in a later Numba
 # release. Needs to be checked for every new Numba release so we update our changes.
 _check_numba_change = False
@@ -2815,8 +2817,23 @@ def _legalize_args(self, func_ir, args, kwargs, loc, func_globals, func_closures
             func_ir._definitions.pop(val_var.name)
             if isinstance(v_const, str):
                 v_const = sigutils._parse_signature_string(v_const)
+            if isinstance(v_const, types.abstract._TypeMetaclass):
+                # TODO(ehsan): add link to objmode docs when ready
+                raise BodoError(
+                    (
+                        f"objmode type annotations require full data types, not just data type "
+                        f"classes. For example, 'bodo.DataFrameType((bodo.float64[::1],), "
+                        f"bodo.RangeIndexType(), ('A',))' is a valid data type but 'bodo.DataFrameType' is not.\n"
+                        f"Variable {k} is annotated as type class {v_const}."
+                    )
+                )
             assert isinstance(v_const, types.Type)
+            # list/set reflection is irrelevant in objmode
+            if isinstance(v_const, (types.List, types.Set)):
+                v_const = v_const.copy(reflected=False)
             typeanns[k] = v_const
+        except BodoError:
+            raise
         except:
             # recreate error messages similar to Numba
             msg = (

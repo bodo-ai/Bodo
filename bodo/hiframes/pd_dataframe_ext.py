@@ -158,15 +158,20 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             name=f"dataframe({data}, {index}, {columns}, {dist}, {is_table_format})"
         )
 
-    def copy(self, index=None, dist=None, is_table_format=None):
-        # XXX is copy necessary?
+    def copy(
+        self, data=None, index=None, columns=None, dist=None, is_table_format=None
+    ):
+        if data is None:
+            data = self.data
+        if columns is None:
+            columns = self.columns
         if index is None:
             index = self.index
         if dist is None:
             dist = self.dist
         if is_table_format is None:
             is_table_format = self.is_table_format
-        return DataFrameType(self.data, index, self.columns, dist, is_table_format)
+        return DataFrameType(data, index, columns, dist, is_table_format)
 
     @property
     def as_array(self):
