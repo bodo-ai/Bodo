@@ -106,7 +106,13 @@ def test_df_index_name_fix():
             df = df2.groupby("A").sum()
         return df
 
-    check_func(impl, (), reset_index=True, only_seq=True)
+    check_func(
+        impl,
+        (),
+        additional_compiler_arguments={"distributed": False},
+        reset_index=True,
+        only_seq=True,
+    )
 
 
 def test_reflected_list():
@@ -168,3 +174,36 @@ def test_df_column_order():
         return df
 
     check_func(impl, (), reorder_columns=True, only_seq=True)
+
+
+def test_scalar_cast():
+    """make sure objmode works if only minor scalar type cast is needed"""
+
+    # int to int
+    def impl1():
+        with bodo.objmode(a="uint32"):
+            a = 4
+        return a
+
+    # float to float
+    def impl2():
+        with bodo.objmode(a="float32"):
+            a = 4.1
+        return a
+
+    # float to int
+    def impl3():
+        with bodo.objmode(a="int32"):
+            a = 4.0000001
+        return a
+
+    # int to float
+    def impl4():
+        with bodo.objmode(a="float64"):
+            a = 4
+        return a
+
+    check_func(impl1, (), only_seq=True)
+    check_func(impl2, (), only_seq=True)
+    check_func(impl3, (), only_seq=True)
+    check_func(impl4, (), only_seq=True)
