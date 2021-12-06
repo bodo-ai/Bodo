@@ -1935,6 +1935,12 @@ def _check_objmode_type(val, typ):
     if isinstance(val_typ, (types.List, types.Set)):
         val_typ = val_typ.copy(reflected=False)
 
+    # Numba casts number types liberally
+    if isinstance(val_typ, (types.Integer, types.Float)) and isinstance(
+        typ, (types.Integer, types.Float)
+    ):
+        return val
+
     if val_typ != typ:
         raise BodoError(
             f"Invalid objmode data type specified.\nUser specified:\t{typ}\nValue type:\t{val_typ}"
