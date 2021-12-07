@@ -5441,7 +5441,7 @@ footer span.commit code {
   }
   .wy-nav-content {
     margin: 0;
-    margin-right: 400px;
+    width: 1025px;
   }
 }
 @media print {
