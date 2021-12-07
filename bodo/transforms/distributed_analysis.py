@@ -1519,6 +1519,10 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("ffill_bfill_arr", "bodo.libs.array_kernels"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"):
             return
 

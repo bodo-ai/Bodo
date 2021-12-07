@@ -2427,9 +2427,18 @@ def fillna_series_impl(
 def overload_series_fillna(
     S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None
 ):
-    unsupported_args = dict(method=method, limit=limit, downcast=downcast)
-    arg_defaults = dict(method=None, limit=None, downcast=None)
+    unsupported_args = dict(limit=limit, downcast=downcast)
+    arg_defaults = dict(limit=None, downcast=None)
     check_unsupported_args("Series.series_fillna", unsupported_args, arg_defaults)
+
+    is_value_provided = not is_overload_none(value)
+    is_method_provided = not is_overload_none(method)
+
+    if is_value_provided and is_method_provided:
+        raise BodoError("Series.fillna(): Cannot specify both 'value' and 'method'.")
+
+    if not is_value_provided and not is_method_provided:
+        raise BodoError("Series.fillna(): Must specify one of 'value' and 'method'.")
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):
         raise BodoError("Series.min(): axis argument not supported")
@@ -2439,12 +2448,30 @@ def overload_series_fillna(
     # TODO(ehsan): revisit when supported in Pandas
     elif is_var_size_item_array_type(S.data) and not S.dtype == bodo.string_type:
         raise BodoError(
-            f"Series.fillna() with inplace=True not supported for {S.dtype} values yet"
+            f"Series.fillna() with inplace=True not supported for {S.dtype} values yet."
         )
 
+    if is_method_provided:
+        if is_overload_true(inplace):
+            raise BodoError(
+                "Series.fillna() with inplace=True not supported with 'method' argument yet."
+            )
+        err_msg = "Series.fillna(): 'method' argument if provided must be a constant string and one of ('backfill', 'bfill', 'pad' 'ffill')."
+        if not is_overload_constant_str(method):
+            raise_bodo_error(err_msg)
+        elif get_overload_const_str(method) not in (
+            "backfill",
+            "bfill",
+            "pad",
+            "ffill",
+        ):
+            raise BodoError(err_msg)
+
     series_type = element_type(S.data)
-    value_type = element_type(types.unliteral(value))
-    if not can_replace(series_type, value_type):
+    value_type = None
+    if is_value_provided:
+        value_type = element_type(types.unliteral(value))
+    if value_type and not can_replace(series_type, value_type):
         raise BodoError(
             f"Series.fillna(): Cannot use value type {value_type}"
             f" with series type {series_type}"
@@ -2520,6 +2547,39 @@ def overload_series_fillna(
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return fillna_series_impl
+
+        if is_method_provided:
+
+            valid_obj_types = (
+                types.unicode_type,
+                types.bool_,
+                bodo.datetime64ns,
+                bodo.timedelta64ns,
+            )
+            if (
+                not isinstance(series_type, (types.Integer, types.Float))
+                and series_type not in valid_obj_types
+            ):
+                raise BodoError(
+                    f"Series.fillna(): series of type {series_type} are not supported with 'method' argument."
+                )
+
+            def fillna_method_impl(
+                S,
+                value=None,
+                method=None,
+                axis=None,
+                inplace=False,
+                limit=None,
+                downcast=None,
+            ):
+                in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)
+                name = bodo.hiframes.pd_series_ext.get_series_name(S)
+                out_arr = bodo.libs.array_kernels.ffill_bfill_arr(in_arr, method)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+            return fillna_method_impl
 
         def fillna_impl(
             S,

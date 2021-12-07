@@ -1429,6 +1429,60 @@ def test_series_fillna(S, value, memory_leak_check):
     check_func(test_impl, (S, value))
 
 
+@pytest.fixture(
+    params=[
+        pd.Series(
+            [None, None, "a", "b", None, None, "c", "d", None] * 3,
+            [3, 4, 2, 1, 6, 5, 7, 8, 9] * 3,
+        ),
+        pd.Series([2, 3, -4, 5, 1] * 3, dtype=np.int16),
+        pd.Series([2, 3, 4, 5, 1] * 3, dtype=np.uint32),
+        pd.Series([True, False, True, False, False] * 3),
+        pd.Series([None, True, None, False, True, False, None] * 3, dtype="boolean"),
+        pd.Series([None, None, 2, -1, None, -3, 4, 5] * 3, dtype=pd.Int64Dtype()),
+        pd.Series(
+            [None, 1, 2, None, 3, None] * 3,
+            [3, 4, 2, 1, 5, 6] * 3,
+            dtype=pd.Int8Dtype(),
+        ),
+        pd.Series([np.nan, 1.0, 2, np.nan, np.nan, 3.0, 4] * 3, dtype=np.float32),
+        pd.Series([np.nan, 1.0, -2, np.nan, np.nan, 3.0, 4] * 3, dtype=np.float64),
+        pd.Series(
+            [np.nan, np.nan, 1e16, 3e17, np.nan, 1e18, 500, np.nan] * 3,
+            dtype="datetime64[ns]",
+        ),
+        pd.Series(
+            [np.nan, 3e17, 5e17, np.nan, np.nan, 1e18, 500, np.nan] * 3,
+            dtype="timedelta64[ns]",
+        ),
+        pd.Series([None] * 10 + ["a"], dtype="string"),
+        pd.Series([1] + [None] * 10, dtype="Int16"),
+        pd.Series([np.nan] * 5 + [1.1] + [np.nan] * 5, dtype="float32"),
+        pytest.param(pd.Series([np.nan] * 35, dtype="boolean"), marks=pytest.mark.slow),
+    ],
+)
+def fillna_series(request):
+    return request.param
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        "bfill",
+        pytest.param("backfill", marks=pytest.mark.slow),
+        "ffill",
+        pytest.param("pad", marks=pytest.mark.slow),
+    ],
+)
+def test_series_fillna_method(fillna_series, method, memory_leak_check):
+    def test_impl(S, method):
+        return S.fillna(method=method)
+
+    # Set check_dtype=False because Bodo's unboxing type does not match
+    # dtype="string"
+    check_func(test_impl, (fillna_series, method), check_dtype=False)
+
+
 @pytest.mark.parametrize(
     "S,value",
     [
@@ -2199,8 +2253,6 @@ def test_series_where_series(series_val, memory_leak_check):
     check_func(test_impl, (series_val, cond, series_val), check_dtype=False)
 
 
-
-
 def test_series_mask_np_array(series_val, memory_leak_check):
     """Tests that all types can be used in Series.where(cond, ndarray)"""
     np.random.seed(42)
@@ -2232,7 +2284,6 @@ def test_series_mask_np_array(series_val, memory_leak_check):
             bodo.jit(test_impl)(series_val, cond, val)
         return
 
-
     check_func(test_impl, (series_val, cond, val), check_dtype=False)
 
 
@@ -2258,7 +2309,6 @@ def test_series_mask_series(series_val, memory_leak_check):
         with pytest.raises(BodoError, match=cat_err_msg):
             bodo.jit(test_impl)(series_val, cond, series_val)
         return
-
 
     check_func(test_impl, (series_val, cond, series_val), check_dtype=False)
 
@@ -3196,7 +3246,6 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
     )
 
 
-
 def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check):
     """tests np select when passed a non unitype choicelist"""
     np.random.seed(42)
@@ -3232,8 +3281,6 @@ def test_series_np_select_non_unitype_none_default(series_val, memory_leak_check
         choicelist = (A1, A2)
         condlist = (cond1, cond2)
         return np.select(condlist, choicelist, default=pd.NA)
-
-    from numba.core import types
 
     if series_val.dtype.name.startswith("float"):
         py_out = impl(A1, A2, cond1, cond2)
@@ -3280,24 +3327,17 @@ def test_series_np_select_non_unitype_set_default(series_val, memory_leak_check)
     ):
         pytest.skip()
 
-
     if isinstance(orig_fill_val, pd.Timestamp):
-        #setitem for array(datetime64[ns], 1d, C) with timestamp not supported
+        # setitem for array(datetime64[ns], 1d, C) with timestamp not supported
         default_val = orig_fill_val.to_datetime64()
     elif isinstance(orig_fill_val, pd.Timedelta):
-        #setitem for array(timedelta64[ns], 1d, C) with pd timedelta not supported
+        # setitem for array(timedelta64[ns], 1d, C) with pd timedelta not supported
         default_val = orig_fill_val.to_timedelta64()
     else:
         default_val = orig_fill_val
-
 
     check_func(
         impl,
         (A1, A2, cond1, cond2, default_val),
         check_dtype=False,
     )
-
-
-
-
-

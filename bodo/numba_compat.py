@@ -2014,10 +2014,19 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
     reduce_nodes = None
     defs = {}
 
-    def lookup(var, varonly=True):
+    def lookup(var, already_seen, varonly=True):
         val = defs.get(var.name, None)
         if isinstance(val, ir.Var):
-            return lookup(val)
+            # Bodo Change: Track variables that are already
+            # seen to avoid infinite recursion.
+            # For example:
+            #       $x = $y
+            #       $y = $x
+            # can lead to infinite recursion
+            if val.name in already_seen:
+                return var
+            already_seen.add(val.name)
+            return lookup(val, already_seen, varonly)
         else:
             return var if (varonly or val is None) else val
 
@@ -2028,9 +2037,9 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
         rhs = stmt.value
         defs[lhs.name] = rhs
         if isinstance(rhs, ir.Var) and rhs.name in defs:
-            rhs = lookup(rhs)
+            rhs = lookup(rhs, set())
         if isinstance(rhs, ir.Expr):
-            in_vars = set(lookup(v, True).name for v in rhs.list_vars())
+            in_vars = set(lookup(v, set(), True).name for v in rhs.list_vars())
             if name in in_vars:
                 # Bodo change: avoid raising error for concat reduction case
                 # opened issue to handle Bodo cases and raise proper errors: #1414
@@ -2052,7 +2061,7 @@ def get_reduce_nodes(reduction_node, nodes, func_ir):
                 # if not supported_reduction(rhs, func_ir):
                 #     raise ValueError(("Use of reduction variable " + unversioned_name +
                 #                       " in an unsupported reduction function."))
-                args = [(x.name, lookup(x, True)) for x in get_expr_args(rhs)]
+                args = [(x.name, lookup(x, set(), True)) for x in get_expr_args(rhs)]
                 non_red_args = [x for (x, y) in args if y.name != name]
                 # Bodo change: avoid raising error for concat reduction case
                 # assert len(non_red_args) == 1

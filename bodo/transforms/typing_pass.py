@@ -2007,6 +2007,7 @@ class TypingTransforms:
             "astype": [
                 (0, "dtype"),
             ],
+            "fillna": [(1, "method")],
         }
 
         if func_name in series_call_const_args:
