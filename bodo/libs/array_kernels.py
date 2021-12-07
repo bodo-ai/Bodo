@@ -58,6 +58,7 @@ from bodo.utils.shuffle import getitem_arr_tup_single
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
+    element_type,
     find_common_np_dtype,
     get_overload_const_list,
     get_overload_const_str,
@@ -1905,6 +1906,166 @@ def nonzero_overload(A, parallel=False):
         return (np.array(result, np.int64),)
 
     return impl
+
+
+def ffill_bfill_arr(
+    arr,
+):  # pragma: no cover
+    return arr
+
+
+@overload(ffill_bfill_arr, no_unliteral=True)
+def ffill_bfill_overload(A, method, parallel=False):
+    """
+    Returns copy of A with NA values filled based on specified method, which is one of ('ffill', 'pad', 'backfill', 'bfill').
+
+    Forward processing A involves processing A's entries from index 0 to n - 1.
+    If method is 'ffill' or 'pad',  forward fills NA arguments, i.e. propagates last valid value.
+    Otherwise, it backward fills NA arguments, i.e. uses the next valid observation to fill gap.
+    """
+    _dtype = element_type(A)
+
+    # This function assumes _dtype error checking is done by calling function.
+    if _dtype == types.unicode_type:
+        null_value = '""'
+    elif _dtype == types.bool_:
+        null_value = "False"
+    elif _dtype == bodo.datetime64ns:
+        null_value = "bodo.utils.conversion.unbox_if_timestamp(pd.to_datetime(0))"
+    elif _dtype == bodo.timedelta64ns:
+        null_value = "bodo.utils.conversion.unbox_if_timestamp(pd.to_timedelta(0))"
+    else:
+        null_value = "0"
+
+    idx = "i"
+    should_reverse = False
+    method_lit = get_overload_const_str(method)
+    if method_lit in ("ffill", "pad"):
+        range_param = "n"
+        send_right = True
+    elif method_lit in ("backfill", "bfill"):
+        range_param = "n-1, -1, -1"
+        send_right = False
+        if _dtype == types.unicode_type:
+            idx = "(n - 1) - i"
+            should_reverse = True
+
+    func_text = "def impl(A, method, parallel=False):\n"
+    func_text += "  has_last_value = False\n"
+    func_text += f"  last_value = {null_value}\n"
+    func_text += "  if parallel:\n"
+    func_text += "    rank = bodo.libs.distributed_api.get_rank()\n"
+    func_text += "    n_pes = bodo.libs.distributed_api.get_size()\n"
+    func_text += f"    has_last_value, last_value = null_border_icomm(A, rank, n_pes, {null_value}, {send_right})\n"
+    func_text += "  n = len(A)\n"
+    func_text += "  out_arr = bodo.utils.utils.alloc_type(n, A, (-1,))\n"
+    func_text += f"  for i in range({range_param}):\n"
+    func_text += "    if (bodo.libs.array_kernels.isna(A, i) and not has_last_value):\n"
+    func_text += f"      bodo.libs.array_kernels.setna(out_arr, {idx})\n"
+    func_text += "      continue\n"
+    func_text += "    s = A[i]\n"
+    func_text += "    if bodo.libs.array_kernels.isna(A, i):\n"
+    func_text += "      s = last_value\n"
+    func_text += f"    out_arr[{idx}] = s\n"
+    func_text += "    last_value = s\n"
+    func_text += "    has_last_value = True\n"
+    if should_reverse:
+        func_text += "  return out_arr[::-1]\n"
+    else:
+        func_text += "  return out_arr\n"
+    local_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "numba": numba,
+            "pd": pd,
+            "null_border_icomm": null_border_icomm,
+        },
+        local_vars,
+    )
+    impl = local_vars["impl"]
+    return impl
+
+
+@register_jitable(cache=True)
+def null_border_icomm(
+    in_arr, rank, n_pes, null_value, send_right=True
+):  # pragma: no cover
+    """
+    On each rank, send the 'closest' non-null value to the send_rank and receive the 'closest' value from the recv_rank.
+
+    If send_right=True then rank n sends to rank n + 1 and receives from n - 1.
+    If send_right=False then rank n sends to rank n - 1 and receives from n + 1.
+
+    If there are no-null values in our chunk, then we send what was received from recv_rank.
+    Each send must occur in an ordered fashion.
+    """
+    if send_right:
+        # rank sending data first, receiving no data
+        first_rank = 0
+        # rank receiving data last, sending no data
+        last_rank = n_pes - 1
+        send_rank = np.int32(rank + 1)
+        recv_rank = np.int32(rank - 1)
+        range_start = len(in_arr) - 1
+        range_stop = -1
+        range_step = -1
+    else:
+        first_rank = n_pes - 1
+        last_rank = 0
+        send_rank = np.int32(rank - 1)
+        recv_rank = np.int32(rank + 1)
+        range_start = 0
+        range_stop = len(in_arr)
+        range_step = 1
+
+    comm_tag = np.int32(bodo.hiframes.rolling.comm_border_tag)
+
+    recv_buff_is_valid = np.empty(1, dtype=np.bool_)
+    recv_buff_value = bodo.utils.utils.alloc_type(1, in_arr, (-1,))
+
+    send_buff_is_valid = np.empty(1, dtype=np.bool_)
+    send_buff_value = bodo.utils.utils.alloc_type(1, in_arr, (-1,))
+
+    is_valid = False
+    send_value = null_value
+    for i in range(range_start, range_stop, range_step):
+        if not isna(in_arr, i):
+            is_valid = True
+            send_value = in_arr[i]
+            break
+
+    if rank != first_rank:
+        l_recv_req1 = bodo.libs.distributed_api.irecv(
+            recv_buff_is_valid, 1, recv_rank, comm_tag, True
+        )
+        bodo.libs.distributed_api.wait(l_recv_req1, True)
+        l_recv_req2 = bodo.libs.distributed_api.irecv(
+            recv_buff_value, 1, recv_rank, comm_tag, True
+        )
+        bodo.libs.distributed_api.wait(l_recv_req2, True)
+        prev_is_valid = recv_buff_is_valid[0]
+        prev_value = recv_buff_value[0]
+    else:
+        prev_is_valid = False
+        prev_value = null_value
+
+    if is_valid:
+        send_buff_is_valid[0] = is_valid
+        send_buff_value[0] = send_value
+    else:
+        send_buff_is_valid[0] = prev_is_valid
+        send_buff_value[0] = prev_value
+
+    if rank != last_rank:
+        r_send_req1 = bodo.libs.distributed_api.isend(
+            send_buff_is_valid, 1, send_rank, comm_tag, True
+        )
+        r_send_req2 = bodo.libs.distributed_api.isend(
+            send_buff_value, 1, send_rank, comm_tag, True
+        )
+    return prev_is_valid, prev_value
 
 
 @overload(np.sort, inline="always", no_unliteral=True)
