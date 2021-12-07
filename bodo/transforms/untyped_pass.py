@@ -33,7 +33,7 @@ from numba.core.ir_utils import (
 import bodo
 import bodo.io
 from bodo.io import h5
-from bodo.utils.utils import is_call, is_expr
+from bodo.utils.utils import is_assign, is_call, is_expr
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
@@ -211,48 +211,6 @@ class UntypedPass:
             if rhs.op == "make_function":
                 # HACK make globals available for typing in series.map()
                 rhs.globals = self.func_ir.func_id.func.__globals__
-
-        # add output type checking/handling to objmode output variables
-        if isinstance(rhs, ir.Const) and isinstance(
-            rhs.value, numba.core.dispatcher.ObjModeLiftedWith
-        ):
-            # generate check_objmode_output_type() call on the return variables
-            for block in rhs.value.func_ir.blocks.values():
-                last_node = block.terminator
-                if isinstance(last_node, ir.Return):
-                    new_var = ir.Var(
-                        block.scope, mk_unique_var("objmode_return"), last_node.loc
-                    )
-                    # unique variable name for type to avoid conflicts in global env
-                    type_name = f"objmode_type{ir_utils.next_label()}"
-                    block.body = (
-                        block.body[:-1]
-                        + compile_func_single_block(
-                            eval(
-                                f"lambda A: bodo.utils.typing.check_objmode_output_type(A, {type_name})"
-                            ),
-                            [last_node.value],
-                            new_var,
-                        )
-                        + [last_node]
-                    )
-                    last_node.value = new_var
-
-            # Numba looks up globals from the function's module so we need to inject
-            # the output data types to be available when calling
-            # check_objmode_output_type()
-            # https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L84
-            # https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L139
-            modname = rhs.value.func_ir.func_id.func.__module__
-            if modname:
-                import importlib
-
-                fmod = importlib.import_module(modname)
-                fmod.__dict__[type_name] = rhs.value.output_types
-            else:
-                rhs.value.func_ir.func_id.func.__globals__[
-                    type_name
-                ] = rhs.value.output_types
 
         # handle copies lhs = f
         if isinstance(rhs, ir.Var) and rhs.name in self.arrow_tables:
@@ -463,6 +421,13 @@ class UntypedPass:
         lhs = assign.target
         rhs = assign.value
 
+        # add output type checking/handling to objmode output variables
+        func_var_def = guard(get_definition, self.func_ir, rhs.func)
+        if isinstance(func_var_def, ir.Const) and isinstance(
+            func_var_def.value, numba.core.dispatcher.ObjModeLiftedWith
+        ):
+            return self._handle_objmode(assign, func_var_def.value)
+
         func_name = ""
         func_mod = ""
         fdef = guard(find_callname, self.func_ir, rhs)
@@ -564,6 +529,75 @@ class UntypedPass:
             rhs.args.append(true_var)
             return [ir.Assign(ir.Const(True, lhs.loc), true_var, lhs.loc), assign]
         return [assign]
+
+    def _handle_objmode(self, assign, objmode_val):
+        """
+        Add output type checking/handling to objmode output variables.
+        Generates check_objmode_output_type() on output variable inside the objmode
+        function.
+        """
+        loc = assign.loc
+        scope = assign.target.scope
+
+        # to pass the data type to check_objmode_output_type(), create a variable
+        # outside objmode and pass as argument to the objmode call.
+        # This allows caching since the type value will be serialized in the binary.
+
+        # unique variable name for type to avoid potential conflicts
+        type_name = f"objmode_type{ir_utils.next_label()}"
+
+        # add a new ir.Arg assignment in first block
+        first_blk = find_topo_order(objmode_val.func_ir.blocks)[0]
+        first_body = objmode_val.func_ir.blocks[first_blk].body
+        type_var_in = ir.Var(
+            objmode_val.func_ir.blocks[first_blk].scope, type_name, loc
+        )
+        n_args = objmode_val.func_ir.arg_count
+        # assuming the first nodes are ir.Arg
+        for i in range(n_args):
+            assert is_assign(first_body[i]) and isinstance(
+                first_body[i].value, ir.Arg
+            ), "invalid objmode format"
+
+        first_body.insert(
+            n_args, ir.Assign(ir.Arg(type_name, n_args, loc), type_var_in, loc)
+        )
+
+        # generate check_objmode_output_type() call on the return variables
+        for block in objmode_val.func_ir.blocks.values():
+            last_node = block.terminator
+            if isinstance(last_node, ir.Return):
+                new_var = ir.Var(
+                    block.scope, mk_unique_var("objmode_return"), last_node.loc
+                )
+                block.body = (
+                    block.body[:-1]
+                    + compile_func_single_block(
+                        eval(
+                            f"lambda A, t: bodo.utils.typing.check_objmode_output_type(A, t)"
+                        ),
+                        [last_node.value, type_var_in],
+                        new_var,
+                    )
+                    + [last_node]
+                )
+                last_node.value = new_var
+
+        # add new argument to objmode function IR
+        new_arg_count = objmode_val.func_ir.arg_count + 1
+        new_arg_names = objmode_val.func_ir.arg_names + (type_name,)
+        objmode_val.func_ir = objmode_val.func_ir.derive(
+            objmode_val.func_ir.blocks, new_arg_count, new_arg_names
+        )
+
+        # create type variable outside objmode and pass to the call
+        type_var = ir.Var(scope, type_name, loc)
+        glb_assign = ir.Assign(
+            ir.Global(type_name, objmode_val.output_types, loc), type_var, loc
+        )
+        assign.value.args = list(assign.value.args) + [type_var]
+
+        return [glb_assign, assign]
 
     def _handle_np_where(self, assign, lhs, rhs):
         """replace np.where() calls with Bodo's version since Numba's typer assumes

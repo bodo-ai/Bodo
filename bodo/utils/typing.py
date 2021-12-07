@@ -18,6 +18,7 @@ from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import AbstractTemplate, signature
 from numba.extending import (
     NativeValue,
+    box,
     infer,
     intrinsic,
     lower_builtin,
@@ -1813,6 +1814,12 @@ def register_type(type_name, type_value):
     # add the data type to the "types" module used by Numba for type resolution
     # TODO(ehsan): develop a better solution since this is a bit hacky
     setattr(types, type_name, type_value)
+
+
+# boxing TypeRef is necessary for passing type to objmode calls
+@box(types.TypeRef)
+def box_typeref(typ, val, c):
+    return c.pyapi.unserialize(c.pyapi.serialize_object(typ.instance_type))
 
 
 def check_objmode_output_type(ret_tup, ret_type):
