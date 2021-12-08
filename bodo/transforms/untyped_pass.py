@@ -1227,6 +1227,23 @@ class UntypedPass:
             use_default=True,
         )
 
+        # Bodo specific arguments. To avoid constantly needing to update Pandas we
+        # make these kwargs only.
+
+        # _bodo_upcast_to_float64 updates types if inference may not be fully accurate.
+        # This upcasts all integer/float values to float64. This runs before
+        # dtype dictionary and won't impact those columns.
+        _bodo_upcast_to_float64 = self._get_const_arg(
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            -1,
+            "_bodo_upcast_to_float64",
+            rhs.loc,
+            default=False,
+            use_default=True,
+        )
+
         # List of all possible args and a support default value. This should match the header above.
         # If a default value is not supported, use None. We provide the default value to enable passing
         # an argument so long as it matches the default value. For example, if someone provides engine=None
@@ -1284,6 +1301,8 @@ class UntypedPass:
             ("memory_map", False),
             ("float_precision", None),
             ("storage_options", None),
+            # TODO: Specify this is kwonly in error checks
+            ("_bodo_upcast_to_float64", False),
         )
         # Arguments that are supported
         supported_args = set(
@@ -1302,6 +1321,7 @@ class UntypedPass:
                 "chunksize",
                 "compression",
                 "low_memory",
+                "_bodo_upcast_to_float64",
             )
         )
         # Iterate through the provided args. If an argument is in the supported_args,
@@ -1422,6 +1442,14 @@ class UntypedPass:
             else:
                 # make sure usecols has column indices (not names)
                 usecols = [_get_col_ind_from_name_or_ind(c, col_names) for c in usecols]
+
+        if _bodo_upcast_to_float64:
+            dtype_map_cpy = dtype_map.copy()
+            for c, t in dtype_map_cpy.items():
+                if isinstance(t, (types.Array, IntegerArrayType)) and isinstance(
+                    t.dtype, (types.Integer, types.Float)
+                ):
+                    dtype_map[c] = types.Array(types.float64, 1, "C")
 
         # handle dtype arg if provided
         if dtype_var is not None:

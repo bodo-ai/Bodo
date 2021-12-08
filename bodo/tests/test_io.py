@@ -492,6 +492,29 @@ def test_csv_infer_type_error(datapath):
             bodo.jit(lambda: pd.read_csv(filepath), distributed=False)()
 
 
+def test_bodo_upcast(datapath):
+    """
+    Tests the _bodo_upcast_to_float64 custom argument to read csv. This ensures that a file
+    which would otherwise cause typing issues will upcast to a shared type when possible
+    """
+    # Create strings of ints and floats
+    ints = ["0"] * 1000
+    floats = ["1.1"] * 1000
+    df = pd.DataFrame({"A": ints + floats})
+    filepath = datapath("test_mixed_int_float.csv", check_exists=False)
+    with ensure_clean(filepath):
+        if bodo.get_rank() == 0:
+            df.to_csv(filepath, index=False)
+        bodo.barrier()
+        message = r"pd.read_csv\(\): Bodo could not infer dtypes correctly."
+        with pytest.raises(TypeError, match=message):
+            bodo.jit(lambda: pd.read_csv(filepath), all_returns_distributed=True)()
+        bodo.jit(
+            lambda: pd.read_csv(filepath, _bodo_upcast_to_float64=True),
+            distributed=False,
+        )()
+
+
 def test_to_csv_none_arg0(memory_leak_check):
     """checks that passing None as the filepath argument is properly supported"""
 
