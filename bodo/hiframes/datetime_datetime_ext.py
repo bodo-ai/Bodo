@@ -265,6 +265,17 @@ def now_impl():  # pragma: no cover
 
 
 @register_jitable
+def today_impl():  # pragma: no cover
+    """Internal call to support datetime.datetime.today().
+    Untyped pass replaces datetime.datetime.today() with this call since class methods are
+    not supported in Numba's typing
+    """
+    with numba.objmode(d="datetime_datetime_type"):
+        d = datetime.datetime.today()
+    return d
+
+
+@register_jitable
 def strptime_impl(date_string, dtformat):  # pragma: no cover
     """Internal call to support datetime.datetime.strptime().
     Untyped pass replaces datetime.datetime.strptime() with this call since class methods are

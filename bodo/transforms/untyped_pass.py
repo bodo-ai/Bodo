@@ -263,25 +263,44 @@ class UntypedPass:
             self.func_ir._definitions[lhs].append(rhs)
             return []
 
-        # replace datetime.date.today with an internal function since class methods
+        # replace datetime.date.today and datetime.datetime.today with an internal function since class methods
         # are not supported in Numba's typing
         if rhs.attr == "today":
-            if is_expr(val_def, "getattr") and val_def.attr == "date":
-                # Handle global import via getattr
-                mod_def = guard(get_definition, self.func_ir, val_def.value)
-                is_datetime_today = (
-                    isinstance(mod_def, (ir.Global, ir.FreeVar))
-                    and mod_def.value == datetime
-                )
+            is_datetime_date_today = False
+            is_datetime_datetime_today = False
+            if is_expr(val_def, "getattr"):
+                if val_def.attr == "date":
+                    # Handle global import via getattr
+                    mod_def = guard(get_definition, self.func_ir, val_def.value)
+                    is_datetime_date_today = (
+                        isinstance(mod_def, (ir.Global, ir.FreeVar))
+                        and mod_def.value == datetime
+                    )
+                elif val_def.attr == "datetime":
+                    mod_def = guard(get_definition, self.func_ir, val_def.value)
+                    is_datetime_datetime_today = (
+                        isinstance(mod_def, (ir.Global, ir.FreeVar))
+                        and mod_def.value == datetime
+                    )
             else:
                 # Handle relative imports by checking if the value matches importing from Python
-                is_datetime_today = (
+                is_datetime_date_today = (
                     isinstance(val_def, (ir.Global, ir.FreeVar))
                     and val_def.value == datetime.date
                 )
-            if is_datetime_today:
+                is_datetime_datetime_today = (
+                    isinstance(val_def, (ir.Global, ir.FreeVar))
+                    and val_def.value == datetime.datetime
+                )
+            if is_datetime_date_today:
                 return compile_func_single_block(
                     eval("lambda: bodo.hiframes.datetime_date_ext.today_impl"),
+                    (),
+                    assign.target,
+                )
+            elif is_datetime_datetime_today:
+                return compile_func_single_block(
+                    eval("lambda: bodo.hiframes.datetime_datetime_ext.today_impl"),
                     (),
                     assign.target,
                 )
