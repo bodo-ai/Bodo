@@ -629,7 +629,8 @@ def astype(df, typemap, parallel):
         else:
             raise TypeError(f"{common_err_msg}\nPlease refer to errors on other ranks.")
     df = pd.concat(df_list + [df], axis=1)
-    return df.loc[:, original_columns]
+    result = df.loc[:, original_columns]
+    return result
 
 
 def _gen_csv_file_reader_init(
