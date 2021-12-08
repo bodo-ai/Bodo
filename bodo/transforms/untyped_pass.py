@@ -1435,14 +1435,25 @@ class UntypedPass:
             )
             if isinstance(dtype_map_const, dict):
                 self._fix_dict_typing(dtype_var)
-                dtype_map.update(
-                    {
-                        col_names[
-                            _get_col_ind_from_name_or_ind(c, col_names)
-                        ]: _dtype_val_to_arr_type(t, "pd.read_csv", rhs.loc)
-                        for c, t in dtype_map_const.items()
-                    }
-                )
+                dtype_update_map = {}
+                colname_set = set(col_names)
+                missing_columns = []
+                for c, t in dtype_map_const.items():
+                    # Check int to avoid cases where the key is the column index.
+                    # i.e. {0: str}. See _get_col_ind_from_name_or_ind.
+                    if c not in colname_set and not isinstance(c, int):
+                        missing_columns.append(c)
+                    else:
+                        dtype_update_map[
+                            col_names[_get_col_ind_from_name_or_ind(c, col_names)]
+                        ] = _dtype_val_to_arr_type(t, "pd.read_csv", rhs.loc)
+                dtype_map.update(dtype_update_map)
+                if missing_columns:
+                    warnings.warn(
+                        BodoWarning(
+                            f"pd.read_csv(): Columns {missing_columns} included in dtype dictionary but not found in output DataFrame. These entries have been ignored."
+                        )
+                    )
             else:
                 dtype_map = _dtype_val_to_arr_type(
                     dtype_map_const, "pd.read_csv", rhs.loc

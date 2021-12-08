@@ -784,6 +784,21 @@ def test_to_csv_decimal_kwd_arg(memory_leak_check):
     check_CSV_write(impl, df, read_impl=read_impl)
 
 
+def test_read_csv_bad_dtype_column(datapath, memory_leak_check):
+    """Checks calling read_csv() with columns in the dtype that
+    aren't in the DataFrame. This raises a warning so the code
+    should still execute."""
+
+    fname = datapath("csv_data_infer1.csv")
+
+    def test_impl(fname):
+        dtype = {"B": "float64", "I_AM_A_MISSING_COLUMN": pd.Int32Dtype()}
+        return pd.read_csv(fname, dtype=dtype)
+
+    # Set check_dtype=False for nullable differences
+    check_func(test_impl, (fname,), check_dtype=False)
+
+
 def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
     """read_csv() handling code uses the first column for creating RangeIndex of the
     output dataframe. In cases where the first column array is dead, it should be
