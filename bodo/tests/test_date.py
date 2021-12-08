@@ -1369,6 +1369,20 @@ def test_datetime_datetime_now(memory_leak_check):
     assert (p - b) < datetime.timedelta(seconds=5)
 
 
+def test_datetime_datetime_today(memory_leak_check):
+    """
+    Test datetime.datetime.today() classmethod
+    """
+
+    def test_today():
+        return datetime.datetime.today()
+
+    b = bodo.jit(test_today)()
+    p = test_today()
+
+    assert (p - b) < datetime.timedelta(minutes=1)
+
+
 def test_timestamp_now(memory_leak_check):
     """
     Test pd.Timestamp classmethod 'now'
