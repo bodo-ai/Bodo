@@ -804,6 +804,9 @@ def cat_arr_nbytes_overload(A):
 
 @register_jitable
 def get_label_dict_from_categories(vals):  # pragma: no cover
+    """Generates the dictionairy mapping categorical values to their integer code value, from a
+    collection of collection of categorical values that may contain dupliicates.
+    """
     labels = dict()
 
     curr_ind = 0
@@ -813,6 +816,19 @@ def get_label_dict_from_categories(vals):  # pragma: no cover
             continue
         labels[val] = curr_ind
         curr_ind += 1
+
+    return labels
+
+
+@register_jitable
+def get_label_dict_from_categories_no_duplicates(vals):  # pragma: no cover
+    """Generates the dictionairy mapping categorical values to their integer code value, from a
+    collection of collection of categorical values containing no dupliicates.
+    """
+    labels = dict()
+    for i in range(len(vals)):
+        val = vals[i]
+        labels[val] = i
 
     return labels
 

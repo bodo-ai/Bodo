@@ -783,11 +783,9 @@ def overload_fix_arr_dtype(
             n = len(data)
             numba.parfors.parfor.init_prange()
 
-            vals = cats
-            label_dict = dict()
-            for i in range(len(vals)):
-                val = vals[i]
-                label_dict[val] = i
+            label_dict = bodo.hiframes.pd_categorical_ext.get_label_dict_from_categories_no_duplicates(
+                cats
+            )
 
             A = bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, cat_dtype)
             codes = bodo.hiframes.pd_categorical_ext.get_categorical_arr_codes(A)
