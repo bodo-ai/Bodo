@@ -1184,7 +1184,8 @@ def get_call_expr_arg(
     If argument is not specified, an error is raised unless if a default is specified.
     """
     arg = None
-    if len(args) > arg_no:
+    # If an argument is kwonly, arg_no < 0
+    if len(args) > arg_no and arg_no >= 0:
         arg = args[arg_no]
         if arg_name in kws:
             err_msg = f"{f_name}() got multiple values for argument '{arg_name}'"
