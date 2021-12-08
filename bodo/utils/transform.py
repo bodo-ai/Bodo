@@ -226,6 +226,14 @@ no_side_effect_call_tuples = {
     (bodo.prange,),
     ("objmode", bodo),
     (bodo.objmode,),
+    # Helper functions, inlined in astype
+    ("get_label_dict_from_categories", "pd_categorial_ext", "hiframes", bodo),
+    (
+        "get_label_dict_from_categories_no_duplicates",
+        "pd_categorial_ext",
+        "hiframes",
+        bodo,
+    ),
 }
 
 
