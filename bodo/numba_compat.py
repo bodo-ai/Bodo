@@ -4650,3 +4650,185 @@ if _check_numba_change:
 numba.core.compiler.compile_ir = compile_ir
 
 #########  End changes to Fix Numba objmode bug during caching  #########
+
+
+#########  Start changes to keep references to large const global arrays  #########
+# To get const value for a large global array, Numba just uses the address of data
+# pointer instead of embedding the whole array. However, the array needs to be alive
+# during execution time (segfaults otherwise).
+# We keep a reference to the array in the overload metadata to keep it
+# alive. To reproduce the issue, use read_csv() with large number of columns (>50k).
+
+
+def make_constant_array(self, builder, typ, ary):
+    """
+    Create an array structure reifying the given constant array.
+    A low-level contiguous array constant is created in the LLVM IR.
+    """
+    from llvmlite.llvmpy.core import Constant, Type
+
+    datatype = self.get_data_type(typ.dtype)
+    # Bodo change: change size limit to 10MB
+    # don't freeze ary of non-contig or bigger than 10MB
+    size_limit = 10 ** 7
+
+    if self.allow_dynamic_globals and (
+        typ.layout not in "FC" or ary.nbytes > size_limit
+    ):
+        # get pointer from the ary
+        dataptr = ary.ctypes.data
+        data = self.add_dynamic_addr(builder, dataptr, info=str(type(dataptr)))
+        rt_addr = self.add_dynamic_addr(builder, id(ary), info=str(type(ary)))
+        # Bodo change: save constant array in target context to be added to function
+        # overload metadata later
+        self.global_arrays.append(ary)
+    else:
+        # Handle data: reify the flattened array in "C" or "F" order as a
+        # global array of bytes.
+        flat = ary.flatten(order=typ.layout)
+        # Note: we use `bytearray(flat.data)` instead of `bytearray(flat)` to
+        #       workaround issue #1850 which is due to numpy issue #3147
+        consts = Constant.array(Type.int(8), bytearray(flat.data))
+        data = cgutils.global_constant(builder, ".const.array.data", consts)
+        # Ensure correct data alignment (issue #1933)
+        data.align = self.get_abi_alignment(datatype)
+        # No reference to parent ndarray
+        rt_addr = None
+
+    # Handle shape
+    llintp = self.get_value_type(types.intp)
+    shapevals = [self.get_constant(types.intp, s) for s in ary.shape]
+    cshape = Constant.array(llintp, shapevals)
+
+    # Handle strides
+    stridevals = [self.get_constant(types.intp, s) for s in ary.strides]
+    cstrides = Constant.array(llintp, stridevals)
+
+    # Create array structure
+    cary = self.make_array(typ)(self, builder)
+
+    intp_itemsize = self.get_constant(types.intp, ary.dtype.itemsize)
+    self.populate_array(
+        cary,
+        data=builder.bitcast(data, cary.data.type),
+        shape=cshape,
+        strides=cstrides,
+        itemsize=intp_itemsize,
+        parent=rt_addr,
+        meminfo=None,
+    )
+
+    return cary._getvalue()
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.base.BaseContext.make_constant_array)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "5721b5360b51f782f79bd794f7bf4d48657911ecdc05c30db22fd55f15dad821"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.base.BaseContext.make_constant_array has changed")
+
+
+numba.core.base.BaseContext.make_constant_array = make_constant_array
+
+
+def NativeLowering_run_pass(self, state):
+    from llvmlite import binding as llvm
+    from numba.core import funcdesc, lowering
+    from numba.core.typed_passes import fallback_context
+
+    if state.library is None:
+        codegen = state.targetctx.codegen()
+        state.library = codegen.create_library(state.func_id.func_qualname)
+        # Enable object caching upfront, so that the library can
+        # be later serialized.
+        state.library.enable_object_caching()
+
+    library = state.library
+    targetctx = state.targetctx
+    interp = state.func_ir  # why is it called this?!
+    typemap = state.typemap
+    restype = state.return_type
+    calltypes = state.calltypes
+    flags = state.flags
+    metadata = state.metadata
+    pre_stats = llvm.passmanagers.dump_refprune_stats()
+
+    msg = "Function %s failed at nopython " "mode lowering" % (state.func_id.func_name,)
+    with fallback_context(state, msg):
+        # Lowering
+        fndesc = funcdesc.PythonFunctionDescriptor.from_specialized_function(
+            interp,
+            typemap,
+            restype,
+            calltypes,
+            mangler=targetctx.mangler,
+            inline=flags.forceinline,
+            noalias=flags.noalias,
+        )
+
+        # Bodo change: save constant global arrays to be used below
+        targetctx.global_arrays = []
+        with targetctx.push_code_library(library):
+            lower = lowering.Lower(
+                targetctx, library, fndesc, interp, metadata=metadata
+            )
+            lower.lower()
+            if not flags.no_cpython_wrapper:
+                lower.create_cpython_wrapper(flags.release_gil)
+
+            if not flags.no_cfunc_wrapper:
+                # skip cfunc wrapper generation if unsupported
+                # argument or return types are used
+                for t in state.args:
+                    if isinstance(t, (types.Omitted, types.Generator)):
+                        break
+                else:
+                    if isinstance(restype, (types.Optional, types.Generator)):
+                        pass
+                    else:
+                        lower.create_cfunc_wrapper()
+
+            env = lower.env
+            call_helper = lower.call_helper
+            del lower
+
+        from numba.core.compiler import _LowerResult  # TODO: move this
+
+        if flags.no_compile:
+            state["cr"] = _LowerResult(fndesc, call_helper, cfunc=None, env=env)
+        else:
+            # Prepare for execution
+            # Insert native function for use by other jitted-functions.
+            # We also register its library to allow for inlining.
+            cfunc = targetctx.get_executable(library, fndesc, env)
+            targetctx.insert_user_function(cfunc, fndesc, [library])
+            state["cr"] = _LowerResult(fndesc, call_helper, cfunc=cfunc, env=env)
+
+        # Bodo change: save constant global arrays in overload metadata so they are not
+        # garbage collected before execution
+        metadata["global_arrs"] = targetctx.global_arrays
+        targetctx.global_arrays = []
+        # capture pruning stats
+        post_stats = llvm.passmanagers.dump_refprune_stats()
+        metadata["prune_stats"] = post_stats - pre_stats
+
+        # Save the LLVM pass timings
+        metadata["llvm_pass_timings"] = library.recorded_timings
+    return True
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.typed_passes.NativeLowering.run_pass)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "83cf4bec8903d5289c16c5c8dde9ee7104287629db6e1b4dc4c9e8af22fc4e05"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.typed_passes.NativeLowering.run_pass has changed")
+
+
+numba.core.typed_passes.NativeLowering.run_pass = NativeLowering_run_pass
+
+
+#########  End changes to keep references to large const global arrays  #########
