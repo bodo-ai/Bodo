@@ -146,12 +146,40 @@ def get_udf_error_msg(context_str, error):
     return f"{context_str}: user-defined function not supported: {msg}\n{loc}"
 
 
-class FileInfo(object):
+class FileInfo:
     """This object is passed to ForceLiteralArg to convert argument
     to FilenameType instead of Literal"""
 
+    def __init__(self):
+        # if not None, it is a string that needs to be concatenated to input string in
+        # get_schema() to get full path for retrieving schema
+        self._concat_str = None
+        # whether _concat_str should be concatenated on the left
+        self._concat_left = None
+
     def get_schema(self, fname):
+        """get dataset schema from file name"""
+        full_path = self.get_full_filename(fname)
+        return self._get_schema(full_path)
+
+    def set_concat(self, concat_str, is_left):
+        """set input string concatenation parameters"""
+        self._concat_str = concat_str
+        self._concat_left = is_left
+
+    def _get_schema(self, fname):
+        # should be implemented in subclasses
         raise NotImplementedError
+
+    def get_full_filename(self, fname):
+        """get full path with concatenation if necessary"""
+        if self._concat_str is None:
+            return fname
+
+        if self._concat_left:
+            return self._concat_str + fname
+
+        return fname + self._concat_str
 
 
 class FilenameType(types.StringLiteral):

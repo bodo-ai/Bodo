@@ -2460,8 +2460,9 @@ class JSONFileInfo(FileInfo):
         self.precise_float = precise_float
         self.lines = lines
         self.compression = compression
+        super().__init__()
 
-    def get_schema(self, fname):
+    def _get_schema(self, fname):
         return _get_json_df_type_from_file(
             fname,
             self.orient,
@@ -2668,8 +2669,9 @@ class CSVFileInfo(FileInfo):
         self.skiprows = skiprows
         self.header = header
         self.compression = compression
+        super().__init__()
 
-    def get_schema(self, fname):
+    def _get_schema(self, fname):
         return _get_csv_df_type_from_file(
             fname, self.sep, self.skiprows, self.header, self.compression
         )
