@@ -499,14 +499,21 @@ class TypingTransforms:
                 nodes.append(assign)
                 return nodes
 
+            # NOTE: dataframe type may have changed in typing pass (e.g. due to df setitem)
+            # so we shouldn't use target_typ and should check for the actual df variable
+            df_var = self._get_loc_df_var(target)
+            df_type = self.typemap.get(df_var.name, None)
+            if df_type is None:
+                return nodes + [assign]
+
             # create output df
-            columns = target_typ.df_type.columns[col_slice]
+            columns = df_type.columns[col_slice]
             # get df arrays using const slice
             # data_outs = []
             # Generate the results by reusing the indexing helper functions
             if isinstance(idx_typ.types[0], types.Integer):
                 impl = bodo.hiframes.dataframe_indexing._gen_iloc_getitem_row_impl(
-                    target_typ.df_type, columns, "idx"
+                    df_type, columns, "idx"
                 )
             elif (
                 is_list_like_index_type(idx_typ.types[0])
@@ -515,7 +522,7 @@ class TypingTransforms:
             ):
                 impl = (
                     bodo.hiframes.dataframe_indexing._gen_iloc_getitem_bool_slice_impl(
-                        target_typ.df_type, columns, idx_typ.types[0], "idx", False
+                        df_type, columns, idx_typ.types[0], "idx", False
                     )
                 )
             else:
@@ -524,8 +531,9 @@ class TypingTransforms:
                 )  # pragma: no cover
 
             self.changed = True
+            # NOTE: not passing "self" since target type may change
             return nodes + compile_func_single_block(
-                impl, [target, tup_list[0]], assign.target, self
+                impl, [target, tup_list[0]], assign.target
             )
 
         # transform df.loc[:, df.columns != "B"] case here since slice info not
@@ -551,23 +559,29 @@ class TypingTransforms:
                 nodes.append(assign)
                 return nodes
 
+            # NOTE: dataframe type may have changed in typing pass (e.g. due to df setitem)
+            # so we shouldn't use target_typ and should check for the actual df variable
+            df_var = self._get_loc_df_var(target)
+            df_type = self.typemap.get(df_var.name, None)
+            if df_type is None:
+                return nodes + [assign]
+
             # avoid transform if selected columns not all in dataframe schema
             # may require schema change, see test_loc_col_select (impl4)
             if (
                 len(val) > 0
                 and not isinstance(val[0], (bool, np.bool_))
-                and not all(c in target_typ.df_type.columns for c in val)
+                and not all(c in df_type.columns for c in val)
             ):
                 nodes.append(assign)
                 return nodes
 
             impl = bodo.hiframes.dataframe_indexing.gen_df_loc_col_select_impl(
-                target_typ.df_type, val
+                df_type, val
             )
             self.changed = True
-            return nodes + compile_func_single_block(
-                impl, [target, idx], assign.target, self
-            )
+            # NOTE: not passing "self" since target type may change
+            return nodes + compile_func_single_block(impl, [target, idx], assign.target)
 
         # detect if filter pushdown is possible and transform
         # e.g. df = pd.read_parquet(...); df = df[df.A > 3]
@@ -1164,22 +1178,26 @@ class TypingTransforms:
         if col_inds is None:
             return nodes + [inst]
 
+        # NOTE: dataframe type may have changed in typing pass (e.g. due to df setitem)
+        # so we shouldn't use target_typ and should check for the actual df variable
+        df_var = self._get_loc_df_var(inst.target)
+        df_type = self.typemap.get(df_var.name, None)
+        if df_type is None:
+            return nodes + [inst]
+
         # get column names if bool list
         if len(col_inds) > 0 and isinstance(col_inds[0], (bool, np.bool_)):
-            col_inds = list(
-                pd.Series(target_typ.df_type.columns, dtype=object)[col_inds]
-            )
+            col_inds = list(pd.Series(df_type.columns, dtype=object)[col_inds])
 
         # if setting full columns
         if row_ind == slice(None):
-            df_var = self._get_loc_df_var(inst)
             nodes += self._gen_df_setitem_full_column(inst, df_var, col_inds, label)
             self.changed = True
             return nodes
 
         # avoid transform if selected columns not all in dataframe schema
         # may require schema change, see test_loc_setitem (impl6)
-        if not all(c in target_typ.df_type.columns for c in col_inds):
+        if not all(c in df_type.columns for c in col_inds):
             nodes.append(inst)
             return nodes
 
@@ -1187,14 +1205,14 @@ class TypingTransforms:
         func_text = "def impl(I, idx, value):\n"
         func_text += "  df = I._obj\n"
         for c in col_inds:
-            c_idx = target_typ.df_type.columns.index(c)
+            c_idx = df_type.columns.index(c)
             func_text += f"  bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {c_idx})[idx[0]] = value\n"
 
         loc_vars = {}
         exec(func_text, {"bodo": bodo}, loc_vars)
         impl = loc_vars["impl"]
         return nodes + compile_func_single_block(
-            impl, [inst.target, idx_var, inst.value], None, self
+            impl, [inst.target, idx_var, inst.value], None
         )
 
     def _run_setitem_df_iloc(self, inst, target_typ, idx_typ, idx_var, nodes, label):
@@ -1206,10 +1224,14 @@ class TypingTransforms:
         if col_inds is None:
             return nodes + [inst]
 
+        df_var = self._get_loc_df_var(inst.target)
+        df_type = self.typemap.get(df_var.name, None)
+        if df_type is None:
+            return nodes + [inst]
+
         # if setting full columns
         if row_ind == slice(None):
-            col_names = [target_typ.df_type.columns[c_ind] for c_ind in col_inds]
-            df_var = self._get_loc_df_var(inst)
+            col_names = [df_type.columns[c_ind] for c_ind in col_inds]
             nodes += self._gen_df_setitem_full_column(inst, df_var, col_names, label)
             self.changed = True
             return nodes
@@ -1224,7 +1246,7 @@ class TypingTransforms:
         exec(func_text, {"bodo": bodo}, loc_vars)
         impl = loc_vars["impl"]
         return nodes + compile_func_single_block(
-            impl, [inst.target, idx_var, inst.value], None, self
+            impl, [inst.target, idx_var, inst.value], None
         )
 
     def _get_loc_indices(self, idx_var, label, loc):
@@ -1262,11 +1284,11 @@ class TypingTransforms:
 
         return col_inds, row_ind
 
-    def _get_loc_df_var(self, inst):
+    def _get_loc_df_var(self, target):
         """get dataframe variable from df.loc/iloc nodes.
         just gets the definition of the node (assuming no unusual control flow).
         """
-        loc_def = guard(get_definition, self.func_ir, inst.target)
+        loc_def = guard(get_definition, self.func_ir, target)
         if not is_expr(loc_def, "getattr"):  # pragma: no cover
             raise BodoError("Invalid df.loc/iloc[] setitem")
         return loc_def.value
@@ -1686,7 +1708,7 @@ class TypingTransforms:
         )
 
         self.changed = True
-        return compile_func_single_block(impl, [df_var] + kws_val_list, lhs, self)
+        return compile_func_single_block(impl, [df_var] + kws_val_list, lhs)
 
     def _handle_df_assign(self, lhs, rhs, df_var, assign):
         """replace df.assign() with its implementation to avoid overload errors with
