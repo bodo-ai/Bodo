@@ -505,3 +505,31 @@ def test_index_col_assign(memory_leak_check):
 
     df = pd.DataFrame({"A": [1, 2, 1, 4, 512, 1, 4]})
     check_func(test_impl, (df,))
+
+
+def test_df_type_change_iloc_loc(memory_leak_check):
+    """make sure df.loc and df.iloc work correctly when df type changes"""
+
+    def impl1(df):
+        df["B"] = 3
+        df.iloc[:, 1] = 4
+        return df
+
+    def impl2(df):
+        df["B"] = 3
+        df.loc[:, [True, False]] = 4
+        return df
+
+    def impl3(df):
+        df["B"] = 3
+        return df.iloc[:, 1:]
+
+    def impl4(df):
+        df["B"] = 3
+        return df.loc[:, [True, False]]
+
+    df = pd.DataFrame({"A": [1, 2, 1, 4, 512, 1, 4]})
+    check_func(impl1, (df,), copy_input=True, only_seq=True)
+    check_func(impl2, (df,), copy_input=True, only_seq=True)
+    check_func(impl3, (df,), copy_input=True, only_seq=True)
+    check_func(impl4, (df,), copy_input=True, only_seq=True)
