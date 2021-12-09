@@ -126,8 +126,9 @@ class ParquetFileInfo(FileInfo):
     def __init__(self, columns, storage_options=None):
         self.columns = columns  # columns to select from parquet dataset
         self.storage_options = storage_options
+        super().__init__()
 
-    def get_schema(self, fname):
+    def _get_schema(self, fname):
         try:
             return parquet_file_schema(
                 fname,

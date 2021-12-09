@@ -4,6 +4,7 @@ Helper functions for transformations.
 """
 import itertools
 import math
+import operator
 import types as pytypes
 from collections import namedtuple
 
@@ -421,6 +422,7 @@ def get_const_value_inner(
     updated_containers=None,
     file_info=None,
     pyobject_to_literal=False,
+    literalize_args=True,
 ):
     """Check if a variable can be inferred as a constant and return the constant value.
     Otherwise, raise GuardException.
@@ -451,7 +453,11 @@ def get_const_value_inner(
         return val
 
     # argument dispatch, force literal only if argument can be literal
-    if isinstance(var_def, ir.Arg) and can_literalize_type(typ, pyobject_to_literal):
+    if (
+        literalize_args
+        and isinstance(var_def, ir.Arg)
+        and can_literalize_type(typ, pyobject_to_literal)
+    ):
         raise numba.core.errors.ForceLiteralArg(
             {var_def.index},
             loc=var.loc,
@@ -460,6 +466,56 @@ def get_const_value_inner(
 
     # binary op (s1 op s2)
     if is_expr(var_def, "binop"):
+        # Embed string concat op inside file_info to recompute file name during load
+        # from cache (to get new schema and compare to previous schema)
+        # see [BE-690]
+        if file_info and var_def.fn == operator.add:
+            # at least one side should be a constant value not coming from an argument
+            try:
+                arg1 = get_const_value_inner(
+                    func_ir,
+                    var_def.lhs,
+                    arg_types,
+                    typemap,
+                    updated_containers,
+                    literalize_args=False,
+                )
+                file_info.set_concat(arg1, True)
+                arg2 = get_const_value_inner(
+                    func_ir,
+                    var_def.rhs,
+                    arg_types,
+                    typemap,
+                    updated_containers,
+                    file_info,
+                )
+                return var_def.fn(arg1, arg2)
+            except (GuardException, BodoConstUpdatedError):
+                pass
+
+            try:
+                arg2 = get_const_value_inner(
+                    func_ir,
+                    var_def.rhs,
+                    arg_types,
+                    typemap,
+                    updated_containers,
+                    literalize_args=False,
+                )
+                file_info.set_concat(arg2, False)
+                arg1 = get_const_value_inner(
+                    func_ir,
+                    var_def.lhs,
+                    arg_types,
+                    typemap,
+                    updated_containers,
+                    file_info,
+                )
+                return var_def.fn(arg1, arg2)
+            except (GuardException, BodoConstUpdatedError):
+                pass
+            # TODO(ehsan): raise a warning if caching isn't possible here?
+
         arg1 = get_const_value_inner(
             func_ir, var_def.lhs, arg_types, typemap, updated_containers
         )
