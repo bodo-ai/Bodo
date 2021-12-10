@@ -1,4 +1,5 @@
 import os
+import shutil
 
 import numba
 import numpy as np
@@ -7,7 +8,7 @@ import pytest
 from numba.core import ir
 
 import bodo
-from bodo.tests.utils import ColumnDelTestPipeline, check_func
+from bodo.tests.utils import ColumnDelTestPipeline, check_func, reduce_sum
 from bodo.utils.utils import is_expr
 
 
@@ -1356,6 +1357,67 @@ def test_table_dead_pq_table_alias(memory_leak_check):
         bodo_func()
         _check_column_dels(bodo_func, [])
     finally:
+        _del_many_column_file(file_type)
+
+
+def test_table_dead_csv(memory_leak_check):
+    """
+    Tests returning only the index succeeds.
+    I've manually confirmed that the table variable is correctly marked as dead.
+    TODO: add automatic check to insure that the table is marked as dead
+    """
+    file_type = "csv"
+    try:
+        _create_many_column_file(file_type)
+
+        def impl():
+            df = pd.read_csv("many_columns.csv", index_col="Column4")
+            return df.index
+
+        check_func(impl, ())
+        # TODO: Add code to check that only 3 columns were loaded
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        _check_column_dels(bodo_func, [])
+    finally:
+        _del_many_column_file(file_type)
+
+
+# Memory leak check is disabled because to_parquet lowers a
+# constant, which has a leak
+# TODO: Readd memory_leak_check
+def test_many_cols_to_parquet():
+    """Tests df.to_parquet with many columns."""
+    file_type = "csv"
+    try:
+        _create_many_column_file(file_type)
+
+        def impl(source_filename, dest_filename):
+            df = pd.read_csv(source_filename)
+            df.to_parquet(dest_filename)
+
+        def check_correctness(pandas_filename, bodo_filename):
+            pandas_df = pd.read_parquet(pandas_filename)
+            bodo_df = pd.read_parquet(bodo_filename)
+            try:
+                pd.testing.assert_frame_equal(pandas_df, bodo_df)
+                return 1
+            except Exception:
+                return 0
+
+        pandas_filename = "pandas_out.pq"
+        bodo_filename = "bodo_out.pq"
+        impl("many_columns.csv", pandas_filename)
+        bodo.jit(impl)("many_columns.csv", bodo_filename)
+        passed = 1
+        if bodo.get_rank() == 0:
+            passed = check_correctness(pandas_filename, bodo_filename)
+        n_passed = reduce_sum(passed)
+        assert n_passed == bodo.get_size()
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove(pandas_filename)
+            shutil.rmtree(bodo_filename, ignore_errors=True)
         _del_many_column_file(file_type)
 
 

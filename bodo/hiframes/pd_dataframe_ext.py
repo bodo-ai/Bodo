@@ -58,6 +58,7 @@ from bodo.libs.array import (
     array_to_info,
     delete_info_decref_array,
     delete_table_decref_arrays,
+    py_table_to_cpp_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
@@ -2603,15 +2604,16 @@ def to_parquet_overload(
         for i in range(len(df.columns))
     )
 
-    col_names_text = ", ".join('"{}"'.format(col_name) for col_name in df.columns)
-
     func_text = "def df_to_parquet(df, fname, engine='auto', compression='snappy', index=None, partition_cols=None, _is_parallel=False):\n"
     # put arrays in table_info
-    func_text += "    info_list = [{}]\n".format(data_args)
-    func_text += "    table = arr_info_list_to_table(info_list)\n"
-    func_text += "    col_names = array_to_info(str_arr_from_sequence([{}]))\n".format(
-        col_names_text
-    )
+    if df.is_table_format:
+        func_text += (
+            "    table = py_table_to_cpp_table(get_dataframe_table(df), py_table_typ)\n"
+        )
+    else:
+        func_text += "    info_list = [{}]\n".format(data_args)
+        func_text += "    table = arr_info_list_to_table(info_list)\n"
+    func_text += "    col_names = array_to_info(col_names_arr)\n"
     if is_overload_true(index) or (is_overload_none(index) and write_non_rangeindex):
         func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
         write_index = True
@@ -2627,7 +2629,11 @@ def to_parquet_overload(
     func_text += "        name_ptr = 'null'\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel=_is_parallel)\n"
+    col_names_no_parts_arr = None
     if partition_cols:
+        col_names_no_parts_arr = pd.array(
+            [col_name for col_name in df.columns if col_name not in partition_cols]
+        )
         # We need the values of the categories for any partition columns that
         # are categorical arrays, because they are used to generate the
         # output directory name
@@ -2641,13 +2647,8 @@ def to_parquet_overload(
             func_text += "    cat_table = arr_info_list_to_table(cat_info_list)\n"
         else:
             func_text += "    cat_table = table\n"  # hack to avoid typing issue
-        col_names_no_partitions_text = ", ".join(
-            '"{}"'.format(col_name)
-            for col_name in df.columns
-            if col_name not in partition_cols
-        )
-        func_text += "    col_names_no_partitions = array_to_info(str_arr_from_sequence([{}]))\n".format(
-            col_names_no_partitions_text
+        func_text += (
+            "    col_names_no_partitions = array_to_info(col_names_no_parts_arr)\n"
         )
         func_text += f"    part_cols_idxs = np.array({part_col_idxs}, dtype=np.int32)\n"
         func_text += "    parquet_write_table_partitioned_cpp(unicode_to_utf8(fname),\n"
@@ -2705,6 +2706,11 @@ def to_parquet_overload(
             "index_to_array": index_to_array,
             "delete_info_decref_array": delete_info_decref_array,
             "delete_table_decref_arrays": delete_table_decref_arrays,
+            "col_names_arr": pd.array(df.columns),
+            "py_table_to_cpp_table": py_table_to_cpp_table,
+            "py_table_typ": df.table_type,
+            "get_dataframe_table": get_dataframe_table,
+            "col_names_no_parts_arr": col_names_no_parts_arr,
         },
         loc_vars,
     )

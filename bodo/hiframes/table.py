@@ -370,7 +370,7 @@ def get_table_data(typingctx, table_type, ind_typ=None):
     col_ind = get_overload_const_int(ind_typ)
     arr_type = table_type.arr_types[col_ind]
 
-    def codegen(context, builder, signature, args):
+    def codegen(context, builder, sig, args):
         table_arg, _ = args
         arr = get_table_data_codegen(context, builder, table_arg, col_ind, table_type)
         return impl_ret_borrowed(context, builder, arr_type, arr)
@@ -387,7 +387,7 @@ def del_column(typingctx, table_type, ind_typ=None):
     col_ind = get_overload_const_int(ind_typ)
     arr_type = table_type.arr_types[col_ind]
 
-    def codegen(context, builder, signature, args):
+    def codegen(context, builder, sig, args):
         table_arg, _ = args
         table = cgutils.create_struct_proxy(table_type)(context, builder, table_arg)
         # Extract the array from the table
@@ -567,7 +567,7 @@ def set_table_data(typingctx, table_type, ind_type, arr_type=None):
         out_arr_types[col_ind] = arr_type
     out_table_type = TableType(tuple(out_arr_types))
 
-    def codegen(context, builder, signature, args):
+    def codegen(context, builder, sig, args):
         table_arg, _, new_arr = args
         out_table = set_table_data_codegen(
             context,
@@ -647,7 +647,7 @@ def init_table(typingctx, table_type=None):
     """
     assert isinstance(table_type, TableType), "table type expected"
 
-    def codegen(context, builder, signature, args):
+    def codegen(context, builder, sig, args):
         table = cgutils.create_struct_proxy(table_type)(context, builder)
         for t, blk in table_type.type_to_blk.items():
             null_list = context.get_constant_null(types.List(t))
@@ -672,7 +672,7 @@ def get_table_block(typingctx, table_type, blk_type=None):
     assert arr_type is not None, "invalid table type block"
     out_list_type = types.List(arr_type)
 
-    def codegen(context, builder, signature, args):
+    def codegen(context, builder, sig, args):
         table = cgutils.create_struct_proxy(table_type)(context, builder, args[0])
         arr_list = getattr(table, f"block_{blk}")
         return impl_ret_borrowed(context, builder, out_list_type, arr_list)
@@ -687,45 +687,49 @@ def ensure_column_unboxed(typingctx, table_type, arr_list_t, ind_t, arr_ind_t=No
     Throw an error if column array is null and there is no parent to unbox from
     """
     assert isinstance(table_type, TableType), "table type expected"
-
-    def codegen(context, builder, signature, args):
-        from bodo.hiframes.boxing import get_df_obj_column_codegen
-
-        table_arg, list_arg, i_arg, arr_ind_arg = args
-        pyapi = context.get_python_api(builder)
-
-        table = cgutils.create_struct_proxy(table_type)(context, builder, table_arg)
-        has_parent = cgutils.is_not_null(builder, table.parent)
-
-        arr_list_inst = ListInstance(context, builder, arr_list_t, list_arg)
-        in_arr = arr_list_inst.getitem(i_arg)
-
-        arr_struct_ptr = cgutils.alloca_once_value(builder, in_arr)
-        null_struct_ptr = cgutils.alloca_once_value(
-            builder, context.get_constant_null(arr_list_t.dtype)
-        )
-        is_null = is_ll_eq(builder, arr_struct_ptr, null_struct_ptr)
-        with builder.if_then(is_null):
-            with builder.if_else(has_parent) as (then, orelse):
-                with then:
-                    arr_obj = get_df_obj_column_codegen(
-                        context,
-                        builder,
-                        pyapi,
-                        table.parent,
-                        arr_ind_arg,
-                        arr_list_t.dtype,
-                    )
-                    arr = pyapi.to_native_value(arr_list_t.dtype, arr_obj).value
-                    arr_list_inst.inititem(i_arg, arr, incref=False)
-                    pyapi.decref(arr_obj)
-                with orelse:
-                    context.call_conv.return_user_exc(
-                        builder, BodoError, ("unexpected null table column",)
-                    )
-
     sig = types.none(table_type, arr_list_t, ind_t, arr_ind_t)
-    return sig, codegen
+    return sig, ensure_column_unboxed_codegen
+
+
+def ensure_column_unboxed_codegen(context, builder, sig, args):
+    """
+    Codegen for ensure_column_unboxed. This isn't a closure so it can be
+    used by intrinsics.
+    """
+    from bodo.hiframes.boxing import get_df_obj_column_codegen
+
+    table_arg, list_arg, i_arg, arr_ind_arg = args
+    pyapi = context.get_python_api(builder)
+
+    table = cgutils.create_struct_proxy(sig.args[0])(context, builder, table_arg)
+    has_parent = cgutils.is_not_null(builder, table.parent)
+
+    arr_list_inst = ListInstance(context, builder, sig.args[1], list_arg)
+    in_arr = arr_list_inst.getitem(i_arg)
+
+    arr_struct_ptr = cgutils.alloca_once_value(builder, in_arr)
+    null_struct_ptr = cgutils.alloca_once_value(
+        builder, context.get_constant_null(sig.args[1].dtype)
+    )
+    is_null = is_ll_eq(builder, arr_struct_ptr, null_struct_ptr)
+    with builder.if_then(is_null):
+        with builder.if_else(has_parent) as (then, orelse):
+            with then:
+                arr_obj = get_df_obj_column_codegen(
+                    context,
+                    builder,
+                    pyapi,
+                    table.parent,
+                    arr_ind_arg,
+                    sig.args[1].dtype,
+                )
+                arr = pyapi.to_native_value(sig.args[1].dtype, arr_obj).value
+                arr_list_inst.inititem(i_arg, arr, incref=False)
+                pyapi.decref(arr_obj)
+            with orelse:
+                context.call_conv.return_user_exc(
+                    builder, BodoError, ("unexpected null table column",)
+                )
 
 
 @intrinsic
@@ -736,7 +740,7 @@ def set_table_block(typingctx, table_type, arr_list_type, blk_type=None):
     assert is_overload_constant_int(blk_type), "blk should be const int"
     blk = get_overload_const_int(blk_type)
 
-    def codegen(context, builder, signature, args):
+    def codegen(context, builder, sig, args):
         table_arg, arr_list_arg, _ = args
         in_table = cgutils.create_struct_proxy(table_type)(context, builder, table_arg)
         setattr(in_table, f"block_{blk}", arr_list_arg)
@@ -751,7 +755,7 @@ def set_table_len(typingctx, table_type, l_type=None):
     """set table len and return a new table object"""
     assert isinstance(table_type, TableType), "table type expected"
 
-    def codegen(context, builder, signature, args):
+    def codegen(context, builder, sig, args):
         table_arg, l_arg = args
         in_table = cgutils.create_struct_proxy(table_type)(context, builder, table_arg)
         in_table.len = l_arg
@@ -768,7 +772,7 @@ def alloc_list_like(typingctx, list_type=None):
     """
     assert isinstance(list_type, types.List), "list type expected"
 
-    def codegen(context, builder, signature, args):
+    def codegen(context, builder, sig, args):
         in_list = ListInstance(context, builder, list_type, args[0])
         size = in_list.size
         _, out_arr_list = ListInstance.allocate_ex(context, builder, list_type, size)
