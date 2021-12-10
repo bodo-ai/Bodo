@@ -121,582 +121,560 @@ register_model(TableTypeCPP)(models.OpaqueModel)
 @intrinsic
 def array_to_info(typingctx, arr_type_t=None):
     """convert array to array info wrapper to pass to C++"""
+    return array_info_type(arr_type_t), array_to_info_codegen
 
-    def codegen(context, builder, sig, args):
-        (in_arr,) = args
-        arr_type = arr_type_t
-        if isinstance(arr_type, TupleArrayType):
-            # TupleArray uses same model as StructArray so we just use a
-            # StructArrayType to generate LLVM
-            tuple_array = context.make_helper(builder, arr_type, in_arr)
-            in_arr = tuple_array.data
-            arr_type = StructArrayType(arr_type.data, ("dummy",) * len(arr_type.data))
-        # arr_info struct keeps a reference
+
+def array_to_info_codegen(context, builder, sig, args):
+    """
+    Codegen for array_to_info. This isn't a closure because
+    this function is called directly to call array_to_info
+    from an intrinsic.
+    """
+    (in_arr,) = args
+    arr_type = sig.args[0]
+    if isinstance(arr_type, TupleArrayType):
+        # TupleArray uses same model as StructArray so we just use a
+        # StructArrayType to generate LLVM
+        tuple_array = context.make_helper(builder, arr_type, in_arr)
+        in_arr = tuple_array.data
+        arr_type = StructArrayType(arr_type.data, ("dummy",) * len(arr_type.data))
+    # arr_info struct keeps a reference
+    context.nrt.incref(builder, arr_type, in_arr)
+
+    if isinstance(arr_type, ArrayItemArrayType) and arr_type.dtype == string_array_type:
+        # map ArrayItemArrayType(StringArrayType()) to array_info of type LIST_STRING
+        array_item_array = context.make_helper(builder, arr_type, in_arr)
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="list_string_array_to_info"
+        )
+        return builder.call(
+            fn_tp,
+            [
+                array_item_array.meminfo,
+            ],
+        )
+
+    if isinstance(arr_type, (MapArrayType, ArrayItemArrayType, StructArrayType)):
+        # Note: The C++ code doesn't contain any special handling for MapArrayType.
+        # We just use the underlying ArrayItemArray without telling C++ the array is actually
+        # a MapArray.
+
+        def get_types(arr_typ):
+            """Get list of all types (in Bodo_CTypes enum format) in the
+            nested structure rooted at arr_typ"""
+            if isinstance(arr_typ, MapArrayType):
+                # A Map array is an array item array of two struct arrays
+                return get_types(_get_map_arr_data_type(arr_typ))
+            elif isinstance(arr_typ, ArrayItemArrayType):
+                return [CTypeEnum.LIST.value] + get_types(arr_typ.dtype)
+            # TODO: add Categorical, String
+            elif isinstance(arr_typ, (StructType, StructArrayType)):
+                # for struct include the type ID and number of fields
+                types_list = [CTypeEnum.STRUCT.value, len(arr_typ.names)]
+                for field_typ in arr_typ.data:
+                    types_list += get_types(field_typ)
+                return types_list
+            elif (
+                isinstance(arr_typ, (types.Array, IntegerArrayType))
+                or arr_typ == boolean_array
+            ):
+                return get_types(arr_typ.dtype)
+            elif arr_typ == string_array_type:
+                return [CTypeEnum.STRING.value]
+            elif arr_typ == binary_array_type:
+                return [CTypeEnum.BINARY.value]
+            elif isinstance(arr_typ, DecimalArrayType):
+                return [CTypeEnum.Decimal.value, arr_typ.precision, arr_typ.scale]
+            else:
+                return [numba_to_c_type(arr_typ)]
+
+        def get_lengths(arr_typ, arr):
+            """ Get array of lengths of all arrays in nested structure """
+            length = context.compile_internal(
+                builder, lambda a: len(a), types.intp(arr_typ), [arr]
+            )
+            if isinstance(arr_typ, MapArrayType):
+                arr_struct = context.make_helper(builder, arr_typ, value=arr)
+                lengths = get_lengths(_get_map_arr_data_type(arr_typ), arr_struct.data)
+            elif isinstance(arr_typ, ArrayItemArrayType):
+                payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
+                lengths = get_lengths(arr_typ.dtype, payload.data)
+                lengths = cgutils.pack_array(
+                    builder,
+                    [payload.n_arrays]
+                    + [
+                        builder.extract_value(lengths, i)
+                        for i in range(lengths.type.count)
+                    ],
+                )
+            elif isinstance(arr_typ, StructArrayType):
+                payload = _get_struct_arr_payload(context, builder, arr_typ, arr)
+                lengths = []
+                for i, field_typ in enumerate(arr_typ.data):
+                    sub_lens = get_lengths(
+                        field_typ, builder.extract_value(payload.data, i)
+                    )
+                    lengths += [
+                        builder.extract_value(sub_lens, j)
+                        for j in range(sub_lens.type.count)
+                    ]
+                lengths = cgutils.pack_array(
+                    builder,
+                    # lengths array needs to have same number of items as types array.
+                    # for struct, second item is num fields, so we set -1 as dummy value
+                    [length, context.get_constant(types.int64, -1)] + lengths,
+                )
+            # TODO: add Struct, Categorical, String
+            elif isinstance(
+                arr_typ, (IntegerArrayType, DecimalArrayType, types.Array)
+            ) or arr_typ in (
+                boolean_array,
+                datetime_date_array_type,
+                string_array_type,
+                binary_array_type,
+            ):
+                lengths = cgutils.pack_array(builder, [length])
+            else:
+                raise RuntimeError("array_to_info: unsupported type for subarray")
+            return lengths
+
+        def get_buffers(arr_typ, arr):
+            """ Get array of buffers (offsets, nulls, data) of all arrays in nested structure """
+            if isinstance(arr_typ, MapArrayType):
+                arr_struct = context.make_helper(builder, arr_typ, value=arr)
+                buffers = get_buffers(_get_map_arr_data_type(arr_typ), arr_struct.data)
+            elif isinstance(arr_typ, ArrayItemArrayType):
+                payload = _get_array_item_arr_payload(context, builder, arr_typ, arr)
+                buffs_data = get_buffers(arr_typ.dtype, payload.data)
+                offsets_arr = context.make_array(types.Array(offset_type, 1, "C"))(
+                    context, builder, payload.offsets
+                )
+                offsets_ptr = builder.bitcast(
+                    offsets_arr.data, lir.IntType(8).as_pointer()
+                )
+                null_bitmap_arr = context.make_array(types.Array(types.uint8, 1, "C"))(
+                    context, builder, payload.null_bitmap
+                )
+                null_bitmap_ptr = builder.bitcast(
+                    null_bitmap_arr.data, lir.IntType(8).as_pointer()
+                )
+                buffers = cgutils.pack_array(
+                    builder,
+                    [offsets_ptr, null_bitmap_ptr]
+                    + [
+                        builder.extract_value(buffs_data, i)
+                        for i in range(buffs_data.type.count)
+                    ],
+                )
+            elif isinstance(arr_typ, StructArrayType):
+                payload = _get_struct_arr_payload(context, builder, arr_typ, arr)
+                buffs_data = []
+                for i, field_typ in enumerate(arr_typ.data):
+                    field_bufs = get_buffers(
+                        field_typ, builder.extract_value(payload.data, i)
+                    )
+                    buffs_data += [
+                        builder.extract_value(field_bufs, j)
+                        for j in range(field_bufs.type.count)
+                    ]
+                null_bitmap_arr = context.make_array(types.Array(types.uint8, 1, "C"))(
+                    context, builder, payload.null_bitmap
+                )
+                null_bitmap_ptr = builder.bitcast(
+                    null_bitmap_arr.data, lir.IntType(8).as_pointer()
+                )
+                buffers = cgutils.pack_array(
+                    builder,
+                    [null_bitmap_ptr] + buffs_data,
+                )
+            elif isinstance(
+                arr_typ, (IntegerArrayType, DecimalArrayType)
+            ) or arr_typ in (
+                boolean_array,
+                datetime_date_array_type,
+            ):
+                np_dtype = arr_typ.dtype
+                if isinstance(arr_typ, DecimalArrayType):
+                    np_dtype = int128_type
+                elif arr_typ == datetime_date_array_type:
+                    np_dtype = types.int64
+                arr = cgutils.create_struct_proxy(arr_typ)(context, builder, arr)
+                data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
+                    context, builder, arr.data
+                )
+                null_bitmap_arr = context.make_array(types.Array(types.uint8, 1, "C"))(
+                    context, builder, arr.null_bitmap
+                )
+                data_ptr = builder.bitcast(data_arr.data, lir.IntType(8).as_pointer())
+                null_bitmap_ptr = builder.bitcast(
+                    null_bitmap_arr.data, lir.IntType(8).as_pointer()
+                )
+                buffers = cgutils.pack_array(builder, [null_bitmap_ptr, data_ptr])
+            elif arr_typ in (string_array_type, binary_array_type):
+                payload = _get_str_binary_arr_payload(context, builder, arr, arr_typ)
+                offsets = context.make_helper(
+                    builder, offset_arr_type, payload.offsets
+                ).data
+                data = context.make_helper(builder, char_arr_type, payload.data).data
+                null_bitmap = context.make_helper(
+                    builder, null_bitmap_arr_type, payload.null_bitmap
+                ).data
+                buffers = cgutils.pack_array(
+                    builder,
+                    [
+                        builder.bitcast(offsets, lir.IntType(8).as_pointer()),
+                        builder.bitcast(null_bitmap, lir.IntType(8).as_pointer()),
+                        builder.bitcast(data, lir.IntType(8).as_pointer()),
+                    ],
+                )
+            elif isinstance(arr_typ, types.Array):
+                arr = context.make_array(arr_typ)(context, builder, arr)
+                data_ptr = builder.bitcast(arr.data, lir.IntType(8).as_pointer())
+                nullptr = lir.Constant(lir.IntType(8).as_pointer(), None)
+                # Numpy arrays don't have null_bitmap. pass nullptr to indicate
+                # no nulls
+                buffers = cgutils.pack_array(builder, [nullptr, data_ptr])
+            else:
+                raise RuntimeError(
+                    "array_to_info: unsupported type for subarray " + str(arr_typ)
+                )
+            return buffers
+
+        def get_field_names(arr_typ):
+            l_field_names = []
+            if isinstance(arr_typ, StructArrayType):
+                for e_name, e_arr in zip(arr_typ.dtype.names, arr_typ.data):
+                    l_field_names.append(e_name)
+                    l_field_names += get_field_names(e_arr)
+            elif isinstance(arr_typ, ArrayItemArrayType):
+                l_field_names += get_field_names(arr_typ.dtype)
+            elif isinstance(arr_typ, MapArrayType):
+                l_field_names += get_field_names(_get_map_arr_data_type(arr_typ))
+            return l_field_names
+
+        # get list of all types in the nested datastructure (to pass to C++)
+        types_list = get_types(arr_type)
+        types_array = cgutils.pack_array(
+            builder, [context.get_constant(types.int32, t) for t in types_list]
+        )
+        types_array_ptr = cgutils.alloca_once_value(builder, types_array)
+
+        # get lengths of all arrays in the nested datastructure (to pass to C++)
+        lengths = get_lengths(arr_type, in_arr)
+        lengths_ptr = cgutils.alloca_once_value(builder, lengths)
+
+        # get pointers to every individual buffer in the nested datastructure
+        # (to pass to C++): offsets, nulls, data
+        buffers = get_buffers(arr_type, in_arr)
+        buffers_ptr = cgutils.alloca_once_value(builder, buffers)
+
+        l_field_names = get_field_names(arr_type)
+        # Field names is used for struct arrays. For nested data structures that do not
+        # contain structs we may have an empty l_field_names which causes typing problems.
+        # Thus in that case we assign to some non-empty array that will not be used.
+        if len(l_field_names) == 0:
+            l_field_names = ["irrelevant"]
+        field_names = cgutils.pack_array(
+            builder,
+            [context.insert_const_string(builder.module, a) for a in l_field_names],
+        )
+        field_names_ptr = cgutils.alloca_once_value(builder, field_names)
+
+        if isinstance(arr_type, MapArrayType):
+            # Extract the underlying data for a MapArray
+            nested_arr_typ = _get_map_arr_data_type(arr_type)
+            map_arr_struct = context.make_helper(builder, arr_type, value=in_arr)
+            in_arr_val = map_arr_struct.data
+        else:
+            nested_arr_typ = arr_type
+            in_arr_val = in_arr
+        nested_array = context.make_helper(builder, nested_arr_typ, in_arr_val)
+
+        # pass all the data to C++ so that an array_info using nested Arrow
+        # Array is constructed
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(32).as_pointer(),
+                lir.IntType(8).as_pointer().as_pointer(),
+                lir.IntType(64).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(
+                    8
+                ).as_pointer(),  # Maybe it should be lit.IntType(8).as_pointer().as_pointer()
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="nested_array_to_info"
+        )
+        ret = builder.call(
+            fn_tp,
+            [
+                builder.bitcast(types_array_ptr, lir.IntType(32).as_pointer()),
+                builder.bitcast(buffers_ptr, lir.IntType(8).as_pointer().as_pointer()),
+                builder.bitcast(lengths_ptr, lir.IntType(64).as_pointer()),
+                builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
+                nested_array.meminfo,
+            ],
+        )
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        return ret
+
+    # StringArray
+    if arr_type in (string_array_type, binary_array_type):
+        string_array = context.make_helper(builder, arr_type, in_arr)
+        array_item_data_type = ArrayItemArrayType(char_arr_type)
+        array_item_array = context.make_helper(
+            builder, array_item_data_type, string_array.data
+        )
+        payload = _get_str_binary_arr_payload(context, builder, in_arr, arr_type)
+        offsets = context.make_helper(builder, offset_arr_type, payload.offsets).data
+        data = context.make_helper(builder, char_arr_type, payload.data).data
+        null_bitmap = context.make_helper(
+            builder, null_bitmap_arr_type, payload.null_bitmap
+        ).data
+        num_total_chars = builder.zext(
+            builder.load(builder.gep(offsets, [payload.n_arrays])),
+            lir.IntType(64),
+        )
+        is_bytes = context.get_constant(types.int32, int(arr_type == binary_array_type))
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(64),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(offset_type.bitwidth).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="string_array_to_info"
+        )
+        return builder.call(
+            fn_tp,
+            [
+                payload.n_arrays,
+                num_total_chars,
+                data,
+                offsets,
+                null_bitmap,
+                array_item_array.meminfo,
+                is_bytes,
+            ],
+        )
+
+    # get codes array from CategoricalArrayType to be handled similar to other Numpy
+    # arrays.
+    is_categorical = False
+    if isinstance(arr_type, CategoricalArrayType):
+        # undo the initial incref since the original array is not fully passed to
+        # C++ (e.g. dtype value is not passed)
+        context.nrt.decref(builder, arr_type, in_arr)
+        num_categories = context.compile_internal(
+            builder,
+            lambda a: len(a.dtype.categories),
+            types.intp(arr_type),
+            [in_arr],
+        )
+        in_arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr).codes
+        int_dtype = get_categories_int_type(arr_type.dtype)
+        arr_type = types.Array(int_dtype, 1, "C")
+        is_categorical = True
+        # incref the actual array passed to C++
         context.nrt.incref(builder, arr_type, in_arr)
 
-        if (
-            isinstance(arr_type, ArrayItemArrayType)
-            and arr_type.dtype == string_array_type
-        ):
-            # map ArrayItemArrayType(StringArrayType()) to array_info of type LIST_STRING
-            array_item_array = context.make_helper(builder, arr_type, in_arr)
-            fnty = lir.FunctionType(
-                lir.IntType(8).as_pointer(),
-                [
-                    lir.IntType(8).as_pointer(),
-                ],
-            )
-            fn_tp = cgutils.get_or_insert_function(
-                builder.module, fnty, name="list_string_array_to_info"
-            )
-            return builder.call(
-                fn_tp,
-                [
-                    array_item_array.meminfo,
-                ],
-            )
+    # Numpy
+    if isinstance(arr_type, types.Array):
+        arr = context.make_array(arr_type)(context, builder, in_arr)
+        assert arr_type.ndim == 1, "only 1D array shuffle supported"
+        length = builder.extract_value(arr.shape, 0)
+        dtype = arr_type.dtype
+        typ_enum = numba_to_c_type(dtype)
+        typ_arg = cgutils.alloca_once_value(
+            builder, lir.Constant(lir.IntType(32), typ_enum)
+        )
 
-        if isinstance(arr_type, (MapArrayType, ArrayItemArrayType, StructArrayType)):
-            # Note: The C++ code doesn't contain any special handling for MapArrayType.
-            # We just use the underlying ArrayItemArray without telling C++ the array is actually
-            # a MapArray.
-
-            def get_types(arr_typ):
-                """Get list of all types (in Bodo_CTypes enum format) in the
-                nested structure rooted at arr_typ"""
-                if isinstance(arr_typ, MapArrayType):
-                    # A Map array is an array item array of two struct arrays
-                    return get_types(_get_map_arr_data_type(arr_typ))
-                elif isinstance(arr_typ, ArrayItemArrayType):
-                    return [CTypeEnum.LIST.value] + get_types(arr_typ.dtype)
-                # TODO: add Categorical, String
-                elif isinstance(arr_typ, (StructType, StructArrayType)):
-                    # for struct include the type ID and number of fields
-                    types_list = [CTypeEnum.STRUCT.value, len(arr_typ.names)]
-                    for field_typ in arr_typ.data:
-                        types_list += get_types(field_typ)
-                    return types_list
-                elif (
-                    isinstance(arr_typ, (types.Array, IntegerArrayType))
-                    or arr_typ == boolean_array
-                ):
-                    return get_types(arr_typ.dtype)
-                elif arr_typ == string_array_type:
-                    return [CTypeEnum.STRING.value]
-                elif arr_typ == binary_array_type:
-                    return [CTypeEnum.BINARY.value]
-                elif isinstance(arr_typ, DecimalArrayType):
-                    return [CTypeEnum.Decimal.value, arr_typ.precision, arr_typ.scale]
-                else:
-                    return [numba_to_c_type(arr_typ)]
-
-            def get_lengths(arr_typ, arr):
-                """ Get array of lengths of all arrays in nested structure """
-                length = context.compile_internal(
-                    builder, lambda a: len(a), types.intp(arr_typ), [arr]
-                )
-                if isinstance(arr_typ, MapArrayType):
-                    arr_struct = context.make_helper(builder, arr_typ, value=arr)
-                    lengths = get_lengths(
-                        _get_map_arr_data_type(arr_typ), arr_struct.data
-                    )
-                elif isinstance(arr_typ, ArrayItemArrayType):
-                    payload = _get_array_item_arr_payload(
-                        context, builder, arr_typ, arr
-                    )
-                    lengths = get_lengths(arr_typ.dtype, payload.data)
-                    lengths = cgutils.pack_array(
-                        builder,
-                        [payload.n_arrays]
-                        + [
-                            builder.extract_value(lengths, i)
-                            for i in range(lengths.type.count)
-                        ],
-                    )
-                elif isinstance(arr_typ, StructArrayType):
-                    payload = _get_struct_arr_payload(context, builder, arr_typ, arr)
-                    lengths = []
-                    for i, field_typ in enumerate(arr_typ.data):
-                        sub_lens = get_lengths(
-                            field_typ, builder.extract_value(payload.data, i)
-                        )
-                        lengths += [
-                            builder.extract_value(sub_lens, j)
-                            for j in range(sub_lens.type.count)
-                        ]
-                    lengths = cgutils.pack_array(
-                        builder,
-                        # lengths array needs to have same number of items as types array.
-                        # for struct, second item is num fields, so we set -1 as dummy value
-                        [length, context.get_constant(types.int64, -1)] + lengths,
-                    )
-                # TODO: add Struct, Categorical, String
-                elif isinstance(
-                    arr_typ, (IntegerArrayType, DecimalArrayType, types.Array)
-                ) or arr_typ in (
-                    boolean_array,
-                    datetime_date_array_type,
-                    string_array_type,
-                    binary_array_type,
-                ):
-                    lengths = cgutils.pack_array(builder, [length])
-                else:
-                    raise RuntimeError("array_to_info: unsupported type for subarray")
-                return lengths
-
-            def get_buffers(arr_typ, arr):
-                """ Get array of buffers (offsets, nulls, data) of all arrays in nested structure """
-                if isinstance(arr_typ, MapArrayType):
-                    arr_struct = context.make_helper(builder, arr_typ, value=arr)
-                    buffers = get_buffers(
-                        _get_map_arr_data_type(arr_typ), arr_struct.data
-                    )
-                elif isinstance(arr_typ, ArrayItemArrayType):
-                    payload = _get_array_item_arr_payload(
-                        context, builder, arr_typ, arr
-                    )
-                    buffs_data = get_buffers(arr_typ.dtype, payload.data)
-                    offsets_arr = context.make_array(types.Array(offset_type, 1, "C"))(
-                        context, builder, payload.offsets
-                    )
-                    offsets_ptr = builder.bitcast(
-                        offsets_arr.data, lir.IntType(8).as_pointer()
-                    )
-                    null_bitmap_arr = context.make_array(
-                        types.Array(types.uint8, 1, "C")
-                    )(context, builder, payload.null_bitmap)
-                    null_bitmap_ptr = builder.bitcast(
-                        null_bitmap_arr.data, lir.IntType(8).as_pointer()
-                    )
-                    buffers = cgutils.pack_array(
-                        builder,
-                        [offsets_ptr, null_bitmap_ptr]
-                        + [
-                            builder.extract_value(buffs_data, i)
-                            for i in range(buffs_data.type.count)
-                        ],
-                    )
-                elif isinstance(arr_typ, StructArrayType):
-                    payload = _get_struct_arr_payload(context, builder, arr_typ, arr)
-                    buffs_data = []
-                    for i, field_typ in enumerate(arr_typ.data):
-                        field_bufs = get_buffers(
-                            field_typ, builder.extract_value(payload.data, i)
-                        )
-                        buffs_data += [
-                            builder.extract_value(field_bufs, j)
-                            for j in range(field_bufs.type.count)
-                        ]
-                    null_bitmap_arr = context.make_array(
-                        types.Array(types.uint8, 1, "C")
-                    )(context, builder, payload.null_bitmap)
-                    null_bitmap_ptr = builder.bitcast(
-                        null_bitmap_arr.data, lir.IntType(8).as_pointer()
-                    )
-                    buffers = cgutils.pack_array(
-                        builder,
-                        [null_bitmap_ptr] + buffs_data,
-                    )
-                elif isinstance(
-                    arr_typ, (IntegerArrayType, DecimalArrayType)
-                ) or arr_typ in (
-                    boolean_array,
-                    datetime_date_array_type,
-                ):
-                    np_dtype = arr_typ.dtype
-                    if isinstance(arr_typ, DecimalArrayType):
-                        np_dtype = int128_type
-                    elif arr_typ == datetime_date_array_type:
-                        np_dtype = types.int64
-                    arr = cgutils.create_struct_proxy(arr_typ)(context, builder, arr)
-                    data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
-                        context, builder, arr.data
-                    )
-                    null_bitmap_arr = context.make_array(
-                        types.Array(types.uint8, 1, "C")
-                    )(context, builder, arr.null_bitmap)
-                    data_ptr = builder.bitcast(
-                        data_arr.data, lir.IntType(8).as_pointer()
-                    )
-                    null_bitmap_ptr = builder.bitcast(
-                        null_bitmap_arr.data, lir.IntType(8).as_pointer()
-                    )
-                    buffers = cgutils.pack_array(builder, [null_bitmap_ptr, data_ptr])
-                elif arr_typ in (string_array_type, binary_array_type):
-                    payload = _get_str_binary_arr_payload(
-                        context, builder, arr, arr_typ
-                    )
-                    offsets = context.make_helper(
-                        builder, offset_arr_type, payload.offsets
-                    ).data
-                    data = context.make_helper(
-                        builder, char_arr_type, payload.data
-                    ).data
-                    null_bitmap = context.make_helper(
-                        builder, null_bitmap_arr_type, payload.null_bitmap
-                    ).data
-                    buffers = cgutils.pack_array(
-                        builder,
-                        [
-                            builder.bitcast(offsets, lir.IntType(8).as_pointer()),
-                            builder.bitcast(null_bitmap, lir.IntType(8).as_pointer()),
-                            builder.bitcast(data, lir.IntType(8).as_pointer()),
-                        ],
-                    )
-                elif isinstance(arr_typ, types.Array):
-                    arr = context.make_array(arr_typ)(context, builder, arr)
-                    data_ptr = builder.bitcast(arr.data, lir.IntType(8).as_pointer())
-                    nullptr = lir.Constant(lir.IntType(8).as_pointer(), None)
-                    # Numpy arrays don't have null_bitmap. pass nullptr to indicate
-                    # no nulls
-                    buffers = cgutils.pack_array(builder, [nullptr, data_ptr])
-                else:
-                    raise RuntimeError(
-                        "array_to_info: unsupported type for subarray " + str(arr_typ)
-                    )
-                return buffers
-
-            def get_field_names(arr_typ):
-                l_field_names = []
-                if isinstance(arr_typ, StructArrayType):
-                    for e_name, e_arr in zip(arr_typ.dtype.names, arr_typ.data):
-                        l_field_names.append(e_name)
-                        l_field_names += get_field_names(e_arr)
-                elif isinstance(arr_typ, ArrayItemArrayType):
-                    l_field_names += get_field_names(arr_typ.dtype)
-                elif isinstance(arr_typ, MapArrayType):
-                    l_field_names += get_field_names(_get_map_arr_data_type(arr_typ))
-                return l_field_names
-
-            # get list of all types in the nested datastructure (to pass to C++)
-            types_list = get_types(arr_type)
-            types_array = cgutils.pack_array(
-                builder, [context.get_constant(types.int32, t) for t in types_list]
-            )
-            types_array_ptr = cgutils.alloca_once_value(builder, types_array)
-
-            # get lengths of all arrays in the nested datastructure (to pass to C++)
-            lengths = get_lengths(arr_type, in_arr)
-            lengths_ptr = cgutils.alloca_once_value(builder, lengths)
-
-            # get pointers to every individual buffer in the nested datastructure
-            # (to pass to C++): offsets, nulls, data
-            buffers = get_buffers(arr_type, in_arr)
-            buffers_ptr = cgutils.alloca_once_value(builder, buffers)
-
-            l_field_names = get_field_names(arr_type)
-            # Field names is used for struct arrays. For nested data structures that do not
-            # contain structs we may have an empty l_field_names which causes typing problems.
-            # Thus in that case we assign to some non-empty array that will not be used.
-            if len(l_field_names) == 0:
-                l_field_names = ["irrelevant"]
-            field_names = cgutils.pack_array(
-                builder,
-                [context.insert_const_string(builder.module, a) for a in l_field_names],
-            )
-            field_names_ptr = cgutils.alloca_once_value(builder, field_names)
-
-            if isinstance(arr_type, MapArrayType):
-                # Extract the underlying data for a MapArray
-                nested_arr_typ = _get_map_arr_data_type(arr_type)
-                map_arr_struct = context.make_helper(builder, arr_type, value=in_arr)
-                in_arr_val = map_arr_struct.data
-            else:
-                nested_arr_typ = arr_type
-                in_arr_val = in_arr
-            nested_array = context.make_helper(builder, nested_arr_typ, in_arr_val)
-
-            # pass all the data to C++ so that an array_info using nested Arrow
-            # Array is constructed
-            fnty = lir.FunctionType(
-                lir.IntType(8).as_pointer(),
-                [
-                    lir.IntType(32).as_pointer(),
-                    lir.IntType(8).as_pointer().as_pointer(),
-                    lir.IntType(64).as_pointer(),
-                    lir.IntType(8).as_pointer(),
-                    lir.IntType(
-                        8
-                    ).as_pointer(),  # Maybe it should be lit.IntType(8).as_pointer().as_pointer()
-                ],
-            )
-            fn_tp = cgutils.get_or_insert_function(
-                builder.module, fnty, name="nested_array_to_info"
-            )
-            ret = builder.call(
-                fn_tp,
-                [
-                    builder.bitcast(types_array_ptr, lir.IntType(32).as_pointer()),
-                    builder.bitcast(
-                        buffers_ptr, lir.IntType(8).as_pointer().as_pointer()
-                    ),
-                    builder.bitcast(lengths_ptr, lir.IntType(64).as_pointer()),
-                    builder.bitcast(field_names_ptr, lir.IntType(8).as_pointer()),
-                    nested_array.meminfo,
-                ],
-            )
-            context.compile_internal(
-                builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-            )  # pragma: no cover
-            return ret
-
-        # StringArray
-        if arr_type in (string_array_type, binary_array_type):
-            string_array = context.make_helper(builder, arr_type, in_arr)
-            array_item_data_type = ArrayItemArrayType(char_arr_type)
-            array_item_array = context.make_helper(
-                builder, array_item_data_type, string_array.data
-            )
-            payload = _get_str_binary_arr_payload(context, builder, in_arr, arr_type)
-            offsets = context.make_helper(
-                builder, offset_arr_type, payload.offsets
-            ).data
-            data = context.make_helper(builder, char_arr_type, payload.data).data
-            null_bitmap = context.make_helper(
-                builder, null_bitmap_arr_type, payload.null_bitmap
-            ).data
-            num_total_chars = builder.zext(
-                builder.load(builder.gep(offsets, [payload.n_arrays])),
-                lir.IntType(64),
-            )
-            is_bytes = context.get_constant(
-                types.int32, int(arr_type == binary_array_type)
-            )
+        if is_categorical:
             fnty = lir.FunctionType(
                 lir.IntType(8).as_pointer(),
                 [
                     lir.IntType(64),
-                    lir.IntType(64),
-                    lir.IntType(8).as_pointer(),
-                    lir.IntType(offset_type.bitwidth).as_pointer(),
-                    lir.IntType(8).as_pointer(),
                     lir.IntType(8).as_pointer(),
                     lir.IntType(32),
-                ],
-            )
-            fn_tp = cgutils.get_or_insert_function(
-                builder.module, fnty, name="string_array_to_info"
-            )
-            return builder.call(
-                fn_tp,
-                [
-                    payload.n_arrays,
-                    num_total_chars,
-                    data,
-                    offsets,
-                    null_bitmap,
-                    array_item_array.meminfo,
-                    is_bytes,
-                ],
-            )
-
-        # get codes array from CategoricalArrayType to be handled similar to other Numpy
-        # arrays.
-        is_categorical = False
-        if isinstance(arr_type, CategoricalArrayType):
-            # undo the initial incref since the original array is not fully passed to
-            # C++ (e.g. dtype value is not passed)
-            context.nrt.decref(builder, arr_type, in_arr)
-            num_categories = context.compile_internal(
-                builder,
-                lambda a: len(a.dtype.categories),
-                types.intp(arr_type),
-                [in_arr],
-            )
-            in_arr = cgutils.create_struct_proxy(arr_type)(
-                context, builder, in_arr
-            ).codes
-            int_dtype = get_categories_int_type(arr_type.dtype)
-            arr_type = types.Array(int_dtype, 1, "C")
-            is_categorical = True
-            # incref the actual array passed to C++
-            context.nrt.incref(builder, arr_type, in_arr)
-
-        # Numpy
-        if isinstance(arr_type, types.Array):
-            arr = context.make_array(arr_type)(context, builder, in_arr)
-            assert arr_type.ndim == 1, "only 1D array shuffle supported"
-            length = builder.extract_value(arr.shape, 0)
-            dtype = arr_type.dtype
-            typ_enum = numba_to_c_type(dtype)
-            typ_arg = cgutils.alloca_once_value(
-                builder, lir.Constant(lir.IntType(32), typ_enum)
-            )
-
-            if is_categorical:
-                fnty = lir.FunctionType(
-                    lir.IntType(8).as_pointer(),
-                    [
-                        lir.IntType(64),
-                        lir.IntType(8).as_pointer(),
-                        lir.IntType(32),
-                        lir.IntType(64),
-                        lir.IntType(8).as_pointer(),
-                    ],
-                )
-                fn_tp = cgutils.get_or_insert_function(
-                    builder.module, fnty, name="categorical_array_to_info"
-                )
-                return builder.call(
-                    fn_tp,
-                    [
-                        length,
-                        builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
-                        builder.load(typ_arg),
-                        num_categories,
-                        arr.meminfo,
-                    ],
-                )
-            else:
-                fnty = lir.FunctionType(
-                    lir.IntType(8).as_pointer(),
-                    [
-                        lir.IntType(64),
-                        lir.IntType(8).as_pointer(),
-                        lir.IntType(32),
-                        lir.IntType(8).as_pointer(),
-                    ],
-                )
-                fn_tp = cgutils.get_or_insert_function(
-                    builder.module, fnty, name="numpy_array_to_info"
-                )
-                return builder.call(
-                    fn_tp,
-                    [
-                        length,
-                        builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
-                        builder.load(typ_arg),
-                        arr.meminfo,
-                    ],
-                )
-
-        # nullable integer/bool array
-        if isinstance(arr_type, (IntegerArrayType, DecimalArrayType)) or arr_type in (
-            boolean_array,
-            datetime_date_array_type,
-        ):
-            arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
-            dtype = arr_type.dtype
-            np_dtype = dtype
-            if isinstance(arr_type, DecimalArrayType):
-                np_dtype = int128_type
-            if arr_type == datetime_date_array_type:
-                np_dtype = types.int64
-            data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
-                context, builder, arr.data
-            )
-            length = builder.extract_value(data_arr.shape, 0)
-            bitmap_arr = context.make_array(types.Array(types.uint8, 1, "C"))(
-                context, builder, arr.null_bitmap
-            )
-
-            typ_enum = numba_to_c_type(dtype)
-            typ_arg = cgutils.alloca_once_value(
-                builder, lir.Constant(lir.IntType(32), typ_enum)
-            )
-
-            if isinstance(arr_type, DecimalArrayType):
-                fnty = lir.FunctionType(
-                    lir.IntType(8).as_pointer(),
-                    [
-                        lir.IntType(64),
-                        lir.IntType(8).as_pointer(),
-                        lir.IntType(32),
-                        lir.IntType(8).as_pointer(),
-                        lir.IntType(8).as_pointer(),
-                        lir.IntType(8).as_pointer(),
-                        lir.IntType(32),
-                        lir.IntType(32),
-                    ],
-                )
-                fn_tp = cgutils.get_or_insert_function(
-                    builder.module, fnty, name="decimal_array_to_info"
-                )
-                return builder.call(
-                    fn_tp,
-                    [
-                        length,
-                        builder.bitcast(data_arr.data, lir.IntType(8).as_pointer()),
-                        builder.load(typ_arg),
-                        builder.bitcast(bitmap_arr.data, lir.IntType(8).as_pointer()),
-                        data_arr.meminfo,
-                        bitmap_arr.meminfo,
-                        context.get_constant(types.int32, arr_type.precision),
-                        context.get_constant(types.int32, arr_type.scale),
-                    ],
-                )
-            else:
-                fnty = lir.FunctionType(
-                    lir.IntType(8).as_pointer(),
-                    [
-                        lir.IntType(64),
-                        lir.IntType(8).as_pointer(),
-                        lir.IntType(32),
-                        lir.IntType(8).as_pointer(),
-                        lir.IntType(8).as_pointer(),
-                        lir.IntType(8).as_pointer(),
-                    ],
-                )
-                fn_tp = cgutils.get_or_insert_function(
-                    builder.module, fnty, name="nullable_array_to_info"
-                )
-                return builder.call(
-                    fn_tp,
-                    [
-                        length,
-                        builder.bitcast(data_arr.data, lir.IntType(8).as_pointer()),
-                        builder.load(typ_arg),
-                        builder.bitcast(bitmap_arr.data, lir.IntType(8).as_pointer()),
-                        data_arr.meminfo,
-                        bitmap_arr.meminfo,
-                    ],
-                )
-
-        # interval array
-        if isinstance(arr_type, IntervalArrayType):
-            assert isinstance(
-                arr_type.arr_type, types.Array
-            ), "array_to_info(): only IntervalArrayType with Numpy arrays supported"
-            arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
-            left_arr = context.make_array(arr_type.arr_type)(context, builder, arr.left)
-            right_arr = context.make_array(arr_type.arr_type)(
-                context, builder, arr.right
-            )
-            length = builder.extract_value(left_arr.shape, 0)
-
-            typ_enum = numba_to_c_type(arr_type.arr_type.dtype)
-            typ_arg = cgutils.alloca_once_value(
-                builder, lir.Constant(lir.IntType(32), typ_enum)
-            )
-            fnty = lir.FunctionType(
-                lir.IntType(8).as_pointer(),
-                [
                     lir.IntType(64),
                     lir.IntType(8).as_pointer(),
-                    lir.IntType(8).as_pointer(),
-                    lir.IntType(32),
-                    lir.IntType(8).as_pointer(),
-                    lir.IntType(8).as_pointer(),
                 ],
             )
             fn_tp = cgutils.get_or_insert_function(
-                builder.module, fnty, name="interval_array_to_info"
+                builder.module, fnty, name="categorical_array_to_info"
             )
             return builder.call(
                 fn_tp,
                 [
                     length,
-                    builder.bitcast(left_arr.data, lir.IntType(8).as_pointer()),
-                    builder.bitcast(right_arr.data, lir.IntType(8).as_pointer()),
+                    builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
                     builder.load(typ_arg),
-                    left_arr.meminfo,
-                    right_arr.meminfo,
+                    num_categories,
+                    arr.meminfo,
+                ],
+            )
+        else:
+            fnty = lir.FunctionType(
+                lir.IntType(8).as_pointer(),
+                [
+                    lir.IntType(64),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(32),
+                    lir.IntType(8).as_pointer(),
+                ],
+            )
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="numpy_array_to_info"
+            )
+            return builder.call(
+                fn_tp,
+                [
+                    length,
+                    builder.bitcast(arr.data, lir.IntType(8).as_pointer()),
+                    builder.load(typ_arg),
+                    arr.meminfo,
                 ],
             )
 
-        raise BodoError(f"array_to_info(): array type {arr_type} is not supported")
+    # nullable integer/bool array
+    if isinstance(arr_type, (IntegerArrayType, DecimalArrayType)) or arr_type in (
+        boolean_array,
+        datetime_date_array_type,
+    ):
+        arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
+        dtype = arr_type.dtype
+        np_dtype = dtype
+        if isinstance(arr_type, DecimalArrayType):
+            np_dtype = int128_type
+        if arr_type == datetime_date_array_type:
+            np_dtype = types.int64
+        data_arr = context.make_array(types.Array(np_dtype, 1, "C"))(
+            context, builder, arr.data
+        )
+        length = builder.extract_value(data_arr.shape, 0)
+        bitmap_arr = context.make_array(types.Array(types.uint8, 1, "C"))(
+            context, builder, arr.null_bitmap
+        )
 
-    return array_info_type(arr_type_t), codegen
+        typ_enum = numba_to_c_type(dtype)
+        typ_arg = cgutils.alloca_once_value(
+            builder, lir.Constant(lir.IntType(32), typ_enum)
+        )
+
+        if isinstance(arr_type, DecimalArrayType):
+            fnty = lir.FunctionType(
+                lir.IntType(8).as_pointer(),
+                [
+                    lir.IntType(64),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(32),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(32),
+                    lir.IntType(32),
+                ],
+            )
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="decimal_array_to_info"
+            )
+            return builder.call(
+                fn_tp,
+                [
+                    length,
+                    builder.bitcast(data_arr.data, lir.IntType(8).as_pointer()),
+                    builder.load(typ_arg),
+                    builder.bitcast(bitmap_arr.data, lir.IntType(8).as_pointer()),
+                    data_arr.meminfo,
+                    bitmap_arr.meminfo,
+                    context.get_constant(types.int32, arr_type.precision),
+                    context.get_constant(types.int32, arr_type.scale),
+                ],
+            )
+        else:
+            fnty = lir.FunctionType(
+                lir.IntType(8).as_pointer(),
+                [
+                    lir.IntType(64),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(32),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                ],
+            )
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="nullable_array_to_info"
+            )
+            return builder.call(
+                fn_tp,
+                [
+                    length,
+                    builder.bitcast(data_arr.data, lir.IntType(8).as_pointer()),
+                    builder.load(typ_arg),
+                    builder.bitcast(bitmap_arr.data, lir.IntType(8).as_pointer()),
+                    data_arr.meminfo,
+                    bitmap_arr.meminfo,
+                ],
+            )
+
+    # interval array
+    if isinstance(arr_type, IntervalArrayType):
+        assert isinstance(
+            arr_type.arr_type, types.Array
+        ), "array_to_info(): only IntervalArrayType with Numpy arrays supported"
+        arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr)
+        left_arr = context.make_array(arr_type.arr_type)(context, builder, arr.left)
+        right_arr = context.make_array(arr_type.arr_type)(context, builder, arr.right)
+        length = builder.extract_value(left_arr.shape, 0)
+
+        typ_enum = numba_to_c_type(arr_type.arr_type.dtype)
+        typ_arg = cgutils.alloca_once_value(
+            builder, lir.Constant(lir.IntType(32), typ_enum)
+        )
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(32),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="interval_array_to_info"
+        )
+        return builder.call(
+            fn_tp,
+            [
+                length,
+                builder.bitcast(left_arr.data, lir.IntType(8).as_pointer()),
+                builder.bitcast(right_arr.data, lir.IntType(8).as_pointer()),
+                builder.load(typ_arg),
+                left_arr.meminfo,
+                right_arr.meminfo,
+            ],
+        )
+
+    raise BodoError(f"array_to_info(): array type {arr_type} is not supported")
 
 
 def _lower_info_to_array_numpy(arr_type, context, builder, in_info):
@@ -1433,22 +1411,24 @@ def test_alloc_string(typingctx, len_typ, n_chars_typ):
 @intrinsic
 def arr_info_list_to_table(typingctx, list_arr_info_typ=None):
     assert list_arr_info_typ == types.List(array_info_type)
+    return table_type(list_arr_info_typ), arr_info_list_to_table_codegen
 
-    def codegen(context, builder, sig, args):
-        (info_list,) = args
-        inst = numba.cpython.listobj.ListInstance(
-            context, builder, sig.args[0], info_list
-        )
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer().as_pointer(), lir.IntType(64)],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="arr_info_list_to_table"
-        )
-        return builder.call(fn_tp, [inst.data, inst.size])
 
-    return table_type(list_arr_info_typ), codegen
+def arr_info_list_to_table_codegen(context, builder, sig, args):
+    """
+    Codegen for arr_info_list_to_table. This isn't a closure so it can be
+    called from other intrinsics.
+    """
+    (info_list,) = args
+    inst = numba.cpython.listobj.ListInstance(context, builder, sig.args[0], info_list)
+    fnty = lir.FunctionType(
+        lir.IntType(8).as_pointer(),
+        [lir.IntType(8).as_pointer().as_pointer(), lir.IntType(64)],
+    )
+    fn_tp = cgutils.get_or_insert_function(
+        builder.module, fnty, name="arr_info_list_to_table"
+    )
+    return builder.call(fn_tp, [inst.data, inst.size])
 
 
 @intrinsic
@@ -1573,6 +1553,93 @@ def cpp_table_to_py_table(typingctx, cpp_table_t, table_idx_arr_t, py_table_type
         return table._getvalue()
 
     return py_table_type(cpp_table_t, table_idx_arr_t, py_table_type_t), codegen
+
+
+@intrinsic
+def py_table_to_cpp_table(typingctx, py_table_t, py_table_type_t):
+    """Extract columns of a Python table and creates a C++ table."""
+    assert isinstance(
+        py_table_t, bodo.hiframes.table.TableType
+    ), "invalid py table type"
+    assert isinstance(py_table_type_t, types.TypeRef), "invalid py table ref"
+    py_table_type = py_table_type_t.instance_type
+
+    def codegen(context, builder, sig, args):
+        py_table, _ = args
+
+        # Allocate a list for arrays.
+        # Note: This function assumes we don't have any dead
+        # columns and needs to be updated if this changes.
+        n_total_arrs = lir.Constant(lir.IntType(64), len(py_table_type.arr_types))
+        _, table_arr_list = ListInstance.allocate_ex(
+            context, builder, types.List(array_info_type), n_total_arrs
+        )
+        table_arr_list.size = n_total_arrs
+
+        # generate code for each block. This should call array_to_info
+        # and insert into the list.
+        table_struct = cgutils.create_struct_proxy(py_table_type)(
+            context, builder, py_table
+        )
+        for t, blk in py_table_type.type_to_blk.items():
+            n_arrs = context.get_constant(
+                types.int64, len(py_table_type.block_to_arr_ind[blk])
+            )
+            arr_list = getattr(table_struct, f"block_{blk}")
+            arr_list_inst = ListInstance(context, builder, types.List(t), arr_list)
+            # lower array of array indices for block to use within the loop
+            # using array since list doesn't have constant lowering
+            arr_inds = context.make_constant_array(
+                builder,
+                types.Array(types.int64, 1, "C"),
+                np.array(py_table_type.block_to_arr_ind[blk]),
+            )
+            arr_inds_struct = context.make_array(types.Array(types.int64, 1, "C"))(
+                context, builder, arr_inds
+            )
+            with cgutils.for_range(builder, n_arrs) as loop:
+                i = loop.index
+                # get array index in total list
+                arr_ind = _getitem_array_single_int(
+                    context,
+                    builder,
+                    types.int64,
+                    types.Array(types.int64, 1, "C"),
+                    arr_inds_struct,
+                    i,
+                )
+                # Ensure we don't need to unbox
+                ensure_column_unboxed_sig = signature(
+                    types.none, py_table_type, types.List(t), types.int64, types.int64
+                )
+                ensure_column_unboxed_args = (py_table, arr_list, i, arr_ind)
+                bodo.hiframes.table.ensure_column_unboxed_codegen(
+                    context,
+                    builder,
+                    ensure_column_unboxed_sig,
+                    ensure_column_unboxed_args,
+                )
+                # Get the array
+                arr = arr_list_inst.getitem(i)
+                # Call array to info
+                array_to_info_sig = signature(array_info_type, t)
+                array_to_info_args = (arr,)
+                array_info_val = array_to_info_codegen(
+                    context, builder, array_to_info_sig, array_to_info_args
+                )
+                table_arr_list.inititem(arr_ind, array_info_val, incref=False)
+
+        list_val = table_arr_list.value
+        arr_info_list_to_table_sig = signature(table_type, types.List(array_info_type))
+        arr_info_list_to_table_args = (list_val,)
+        cpp_table = arr_info_list_to_table_codegen(
+            context, builder, arr_info_list_to_table_sig, arr_info_list_to_table_args
+        )
+        # Decref the intermediate list.
+        context.nrt.decref(builder, types.List(array_info_type), list_val)
+        return cpp_table
+
+    return table_type(py_table_type, py_table_type_t), codegen
 
 
 delete_info_decref_array = types.ExternalFunction(
