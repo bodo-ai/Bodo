@@ -104,6 +104,16 @@ class StructArrayType(types.ArrayCompatible):
     def copy(self):
         return StructArrayType(self.data, self.names)
 
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
+
 
 class StructArrayPayloadType(types.Type):
     def __init__(self, data):
@@ -114,6 +124,16 @@ class StructArrayPayloadType(types.Type):
         super(StructArrayPayloadType, self).__init__(
             name="StructArrayPayloadType({})".format(data)
         )
+
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
 
 
 @register_model(StructArrayPayloadType)
@@ -727,6 +747,16 @@ class StructType(types.Type):
         self.names = names
         super(StructType, self).__init__(name="StructType({}, {})".format(data, names))
 
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
+
 
 class StructPayloadType(types.Type):
     def __init__(self, data):
@@ -735,6 +765,16 @@ class StructPayloadType(types.Type):
         super(StructPayloadType, self).__init__(
             name="StructPayloadType({})".format(data)
         )
+
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
 
 
 @register_model(StructPayloadType)

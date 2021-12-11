@@ -4512,6 +4512,16 @@ class DataFrameTupleIterator(types.SimpleIteratorType):
         yield_type = types.NamedTuple([_get_series_dtype(a) for a in arr_typs], py_ntup)
         super(DataFrameTupleIterator, self).__init__(name, yield_type)
 
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
+
 
 def _get_series_dtype(arr_typ):
     # values of datetimeindex are extracted as Timestamp
