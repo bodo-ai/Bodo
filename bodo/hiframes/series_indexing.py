@@ -55,6 +55,16 @@ class SeriesIatType(types.Type):
         name = "SeriesIatType({})".format(stype)
         super(SeriesIatType, self).__init__(name)
 
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
+
     ndim = 1
 
 
@@ -182,6 +192,16 @@ class SeriesIlocType(types.Type):
         self.stype = stype
         name = "SeriesIlocType({})".format(stype)
         super(SeriesIlocType, self).__init__(name)
+
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
 
     ndim = 1
 
@@ -445,6 +465,16 @@ class SeriesLocType(types.Type):
         self.stype = stype
         name = "SeriesLocType({})".format(stype)
         super(SeriesLocType, self).__init__(name)
+
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
 
     ndim = 1
 

@@ -1224,6 +1224,16 @@ class SeriesCatMethodType(types.Type):
         name = "SeriesCatMethodType({})".format(stype)
         super(SeriesCatMethodType, self).__init__(name)
 
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
+
 
 @register_model(SeriesCatMethodType)
 class SeriesCatModel(models.StructModel):

@@ -172,6 +172,16 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         # TODO: fix timestamp
         return self.data.iterator_type
 
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
+
 
 class HeterogeneousSeriesType(types.Type):
     """
@@ -211,6 +221,16 @@ class HeterogeneousSeriesType(types.Type):
     @property
     def key(self):
         return self.data, self.index, self.name_typ
+
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
 
 
 @lower_builtin("getiter", SeriesType)
@@ -263,6 +283,16 @@ class SeriesPayloadType(types.Type):
         super(SeriesPayloadType, self).__init__(
             name=f"SeriesPayloadType({series_type})"
         )
+
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
 
 
 @register_model(SeriesPayloadType)

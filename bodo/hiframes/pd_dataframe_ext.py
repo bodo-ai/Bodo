@@ -184,6 +184,16 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         # needed?
         return self.data, self.index, self.columns, self.dist, self.is_table_format
 
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
+
     def unify(self, typingctx, other):
         """unifies two possible dataframe types into a single type
         see test_dataframe.py::test_df_type_unify_error
@@ -285,6 +295,16 @@ class DataFramePayloadType(types.Type):
         super(DataFramePayloadType, self).__init__(
             name=f"DataFramePayloadType({df_type})"
         )
+
+    @property
+    def mangling_args(self):
+        """
+        Avoids long mangled function names in the generated LLVM, which slows down
+        compilation time. See [BE-1726]
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/funcdesc.py#L67
+        https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
+        """
+        return self.__class__.__name__, (self._code,)
 
 
 # TODO: encapsulate in meminfo since dataframe is mutible, for example:
