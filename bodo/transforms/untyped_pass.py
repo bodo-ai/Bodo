@@ -1442,11 +1442,10 @@ class UntypedPass:
                 usecols = list(range(len(dtypes)))
             else:
                 # make sure usecols has column indices (not names)
+                col_name_src = col_names if col_names else df_type.columns
+                col_name_map = {name: i for i, name in enumerate(col_name_src)}
                 usecols = [
-                    _get_col_ind_from_name_or_ind(
-                        c, col_names if col_names else df_type.columns
-                    )
-                    for c in usecols
+                    _get_col_ind_from_name_or_ind(c, col_name_map) for c in usecols
                 ]
             # convert Pandas generated integer names if any
             cols = [str(df_type.columns[i]) for i in usecols]
@@ -1460,7 +1459,10 @@ class UntypedPass:
                 usecols = list(range(len(col_names)))
             else:
                 # make sure usecols has column indices (not names)
-                usecols = [_get_col_ind_from_name_or_ind(c, col_names) for c in usecols]
+                col_name_map = {name: i for i, name in enumerate(col_names)}
+                usecols = [
+                    _get_col_ind_from_name_or_ind(c, col_name_map) for c in usecols
+                ]
 
         if _bodo_upcast_to_float64:
             dtype_map_cpy = dtype_map.copy()
@@ -1484,6 +1486,7 @@ class UntypedPass:
                 self._fix_dict_typing(dtype_var)
                 dtype_update_map = {}
                 colname_set = set(col_names)
+                col_names_map = {name: i for i, name in enumerate(col_names)}
                 missing_columns = []
                 for c, t in dtype_map_const.items():
                     # Check int to avoid cases where the key is the column index.
@@ -1492,7 +1495,7 @@ class UntypedPass:
                         missing_columns.append(c)
                     else:
                         dtype_update_map[
-                            col_names[_get_col_ind_from_name_or_ind(c, col_names)]
+                            col_names[_get_col_ind_from_name_or_ind(c, col_names_map)]
                         ] = _dtype_val_to_arr_type(t, "pd.read_csv", rhs.loc)
                 dtype_map.update(dtype_update_map)
                 if missing_columns:
@@ -2442,12 +2445,12 @@ def _dtype_val_to_arr_type(t, func_name, loc):
     raise BodoError(f"{func_name}() 'dtype' does not support {t}", loc=loc)
 
 
-def _get_col_ind_from_name_or_ind(c, col_names):
-    """get column index from column name or index"""
+def _get_col_ind_from_name_or_ind(c, col_names_map):
+    """get column index from a map {column name -> index}"""
     # TODO(ehsan): error checking
-    if isinstance(c, int) and c not in col_names:
+    if isinstance(c, int) and c not in col_names_map:
         return c
-    return col_names.index(c)
+    return col_names_map[c]
 
 
 class JSONFileInfo(FileInfo):
