@@ -2437,6 +2437,15 @@ class SeriesPass:
             return self._run_call_string(
                 assign, assign.target, rhs, func_mod, func_name
             )
+
+        if (
+            isinstance(func_mod, ir.Var)
+            and self.typemap[func_mod.name] == bodo.logging_rootlogger_type
+        ):
+            return self._run_call_logger(
+                assign, assign.target, rhs, func_mod, func_name
+            )
+
         return [assign]
 
     def _fix_unhandled_calls(self, assign, lhs, rhs):
@@ -2767,6 +2776,51 @@ class SeriesPass:
                 "format_func": format_func,
             }
             args = [string_var] + rhs.args + [kws[key] for key in keys]
+            return replace_func(
+                self,
+                f,
+                args,
+                extra_globals=glbs,
+            )
+        else:
+            return [assign]
+
+    def _run_call_logger(self, assign, lhs, rhs, logger_var, func_name):
+        """
+        Provide transformations for logging module functions that cannot be supported in regular overloads
+        """
+        if func_name == "info":
+            kws = dict(rhs.kws)
+            keys = list(kws.keys())
+            header_args = (
+                ", ".join("e{}".format(i) for i in range(len(rhs.args)))
+                + (", " if rhs.args else "")
+                + ", ".join("e{}".format(i + len(rhs.args)) for i in range(len(keys)))
+            )
+            arg_names = (
+                ", ".join("e{}".format(i) for i in range(len(rhs.args)))
+                + (", " if rhs.args else "")
+                + ", ".join(
+                    "{}=e{}".format(a, i + len(rhs.args)) for i, a in enumerate(keys)
+                )
+            )
+            func_text = "def f(logger, {}):\n".format(header_args)
+            func_text += "    return format_func(logger, {})\n".format(header_args)
+
+            format_func_text = "def format_func(logger, {}):\n".format(header_args)
+            format_func_text += "    with numba.objmode():\n"
+            format_func_text += "        logger.info({})\n".format(arg_names)
+
+            loc_vars = {}
+            exec(func_text, {}, loc_vars)
+            f = loc_vars["f"]
+            loc_vars = {}
+            exec(format_func_text, globals(), loc_vars)
+            format_func = numba.njit(loc_vars["format_func"])
+            glbs = {
+                "format_func": format_func,
+            }
+            args = [logger_var] + rhs.args + [kws[key] for key in keys]
             return replace_func(
                 self,
                 f,
