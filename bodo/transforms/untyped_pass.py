@@ -1417,7 +1417,9 @@ class UntypedPass:
                 self.func_ir,
                 msg,
                 arg_types=self.args,
-                file_info=CSVFileInfo(sep, skiprows_val, header, compression),
+                file_info=CSVFileInfo(
+                    sep, skiprows_val, header, compression, pd_low_memory
+                ),
             )
             if not isinstance(fname_const, str):
                 raise BodoError(
@@ -1435,7 +1437,7 @@ class UntypedPass:
                     got_schema = True
             if not got_schema:
                 df_type = _get_csv_df_type_from_file(
-                    fname_const, sep, skiprows_val, header, compression
+                    fname_const, sep, skiprows_val, header, compression, pd_low_memory
                 )
             dtypes = df_type.data
             if usecols is None:
@@ -2667,20 +2669,28 @@ class CSVFileInfo(FileInfo):
     """FileInfo object passed to ForceLiteralArg for
     file name arguments that refer to a CSV dataset"""
 
-    def __init__(self, sep, skiprows, header, compression):
+    def __init__(self, sep, skiprows, header, compression, low_memory):
         self.sep = sep
         self.skiprows = skiprows
         self.header = header
         self.compression = compression
+        self.low_memory = low_memory
         super().__init__()
 
     def _get_schema(self, fname):
         return _get_csv_df_type_from_file(
-            fname, self.sep, self.skiprows, self.header, self.compression
+            fname,
+            self.sep,
+            self.skiprows,
+            self.header,
+            self.compression,
+            self.low_memory,
         )
 
 
-def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
+def _get_csv_df_type_from_file(
+    fname_const, sep, skiprows, header, compression, low_memory
+):
     """get dataframe type for read_csv() using file path constant or raise error if not
     possible (e.g. file doesn't exist).
     If fname_const points to a directory, find a non-empty csv file from
@@ -2726,6 +2736,8 @@ def _get_csv_df_type_from_file(fname_const, sep, skiprows, header, compression):
                 skiprows=skiprows,
                 header=header,
                 compression=compression,
+                # Copy low memory value from runtime.
+                low_memory=low_memory,
             )
 
             # TODO: categorical, etc.
