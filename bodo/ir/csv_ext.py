@@ -230,7 +230,7 @@ def csv_distributed_run(
     skiprows_typ = (
         types.int64
         if isinstance(csv_node.skiprows, ir.Const)
-        else typemap[csv_node.skiprows.name]
+        else types.unliteral(typemap[csv_node.skiprows.name])
     )
     if csv_node.chunksize is not None:
         if array_dists is not None:
@@ -274,11 +274,6 @@ def csv_distributed_run(
         # We keep track of the function for possible dynamic addresses
         jit_func = numba.njit(csv_reader_init)
         compiled_funcs.append(jit_func)
-        skiprows_typ = (
-            types.int64
-            if isinstance(csv_node.skiprows, ir.Const)
-            else typemap[csv_node.skiprows.name]
-        )
 
         # Compile the outer function into IR
         f_block = compile_to_numba_ir(
@@ -664,6 +659,8 @@ def _gen_csv_file_reader_init(
     # and C++ code implementation differs for both cases.
     # The former means skip 4 rows from the beginning. Later means skip the 4th row.
     if is_skiprows_list:
+        # TODO: Fix sorted. This line takes ~2 seconds to compile because of how
+        # the list sort function is generated.
         func_text = "  skiprows = sorted(set(skiprows))\n"
     else:
         func_text = "  skiprows = [skiprows]\n"
@@ -741,16 +738,18 @@ def _gen_read_csv_objmode(
     # (`str`) directly in `pd.read_csv` (there's no performance penalty, we checked),
     # and specify the rest of the dtypes in the `df.astype` call.
 
-    date_inds = ", ".join(
+    data_inds_strs = [
         str(col_num)
         for i, col_num in enumerate(usecols)
         if col_typs[type_usecol_offset[i]].dtype == types.NPDatetime("ns")
-    )
+    ]
 
     # add idx col if needed
     if idx_col_typ == types.NPDatetime("ns"):
         assert not idx_col_index is None
-        date_inds += ", " + str(idx_col_index)
+        data_inds_strs.append(str(idx_col_index))
+
+    date_inds = ", ".join(data_inds_strs)
 
     # _gen_read_csv_objmode() may be called from iternext_impl when
     # used to generate a csv_iterator. That function doesn't have access
@@ -761,14 +760,17 @@ def _gen_read_csv_objmode(
     # array of column numbers that should be specified as str in pd.read_csv()
     # using a global array (constant lowered) for faster compilation for many columns
 
+    usecol_pd_dtypes = [
+        _get_pd_dtype_str(col_typs[type_usecol_offset[i]]) for i in range(len(usecols))
+    ]
+    index_pd_dtype = None if idx_col_index is None else _get_pd_dtype_str(idx_col_typ)
+
     str_col_nums_list = [
-        col_num
-        for i, col_num in enumerate(usecols)
-        if _get_pd_dtype_str(col_typs[type_usecol_offset[i]]) == "str"
+        col_num for i, col_num in enumerate(usecols) if usecol_pd_dtypes[i] == "str"
     ]
 
     # add idx col if needed
-    if idx_col_index is not None and _get_pd_dtype_str(idx_col_typ) == "str":
+    if idx_col_index is not None and index_pd_dtype == "str":
         str_col_nums_list.append(idx_col_index)
 
     str_col_nums = np.array(str_col_nums_list)
@@ -796,14 +798,13 @@ def _gen_read_csv_objmode(
     # generating a lot of code (faster compilation for many columns)
     typ_map = defaultdict(list)
     for i, col_num in enumerate(usecols):
-        t = col_typs[type_usecol_offset[i]]
-        if _get_pd_dtype_str(t) == "str":
+        if usecol_pd_dtypes[i] == "str":
             continue
-        typ_map[_get_pd_dtype_str(t)].append(col_num)
+        typ_map[usecol_pd_dtypes[i]].append(col_num)
 
     # add idx col if needed
-    if idx_col_index is not None and _get_pd_dtype_str(idx_col_typ) != "str":
-        typ_map[_get_pd_dtype_str(idx_col_typ)].append(idx_col_index)
+    if idx_col_index is not None and index_pd_dtype != "str":
+        typ_map[index_pd_dtype].append(idx_col_index)
 
     for i, t_list in enumerate(typ_map.values()):
         glbs[f"t_arr_{i}_{call_id}"] = np.asarray(t_list)
