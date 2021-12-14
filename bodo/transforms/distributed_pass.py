@@ -263,9 +263,8 @@ class DistributedPass:
         cfg = compute_cfg_from_blocks(blocks)
         all_avail_vars = find_available_vars(blocks, cfg, init_avail)
         topo_order = find_topo_order(blocks)
-        work_list = list((l, blocks[l]) for l in reversed(topo_order))
-        while work_list:
-            label, block = work_list.pop()
+        for label in topo_order:
+            block = blocks[label]
             # XXX can't change the block structure due to array analysis
             # XXX can't run transformation again on already converted code
             # since e.g. global sizes become invalid

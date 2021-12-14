@@ -224,6 +224,7 @@ class SeriesPass:
         # Keep track of the updated dataframes already visited on this pass.
         self.dataframe_pass._visited_updated_dataframes = set()
 
+        # NOTE: this is iterating in topological order; we're poping from the reversed ordering.
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         while work_list:
             label, block = work_list.pop()

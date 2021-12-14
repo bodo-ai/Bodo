@@ -315,9 +315,8 @@ class TypingTransforms:
         self._updated_containers, self._equiv_vars = _find_updated_containers(
             blocks, topo_order
         )
-        work_list = list((l, blocks[l]) for l in reversed(topo_order))
-        while work_list:
-            label, block = work_list.pop()
+        for label in topo_order:
+            block = blocks[label]
             self._working_body = []
             for inst in block.body:
                 self._replace_vars(inst)
@@ -1292,6 +1291,35 @@ class TypingTransforms:
         if not is_expr(loc_def, "getattr"):  # pragma: no cover
             raise BodoError("Invalid df.loc/iloc[] setitem")
         return loc_def.value
+
+    def _get_bodosql_ctx_name_df_typs(self, sql_context_var):  # pragma: no cover
+        """
+        Extracts the names/types of the dataframes used to intialize the bodosql context.
+        This is converted into a tuple of the names/values in
+        untyped pass (see _handle_bodosql_BodoSQLContext).
+        This function extracts the dataframe types directly from the IR, to avoid any issues
+        with incorrect type propogation (specifically, from df setitem).
+        """
+        sql_ctx_def = guard(get_definition, self.func_ir, sql_context_var)
+        df_dict_var = sql_ctx_def.args[0]
+        df_dict_def = guard(get_definition, self.func_ir, df_dict_var)
+        df_dict_def_items = df_dict_def.items
+        # floor divide
+        split_idx = (len(df_dict_def_items) // 2) + 1
+        # ommit first value, as it is a dummy
+        df_name_vars, df_vars = (
+            df_dict_def_items[1:split_idx],
+            df_dict_def_items[split_idx:],
+        )
+        df_name_typs = tuple(
+            [
+                self.typemap.get(df_name_var.name, None).literal_value
+                for df_name_var in df_name_vars
+            ]
+        )
+        df_typs = tuple([self.typemap.get(df_var.name, None) for df_var in df_vars])
+
+        return df_name_typs, df_typs
 
     def _gen_df_setitem_full_column(self, inst, df_var, col_inds, label):
         """Generate code for setitem of df.loc/iloc when setting full columns"""
@@ -2326,8 +2354,18 @@ class TypingTransforms:
         (i.e. testing scalar support using literals).
         """
         import bodosql
+        from bodosql.context_ext import BodoSQLContextType
 
-        sql_context_type = self.typemap.get(sql_context_var.name, None)
+        # In order to inline the sql() call, we must insure that the type of the input dataframe(s)
+        # are finalized. dataframe type may have changed in typing pass (e.g. due to df setitem)
+        # so we shouldn't use the actuall type of the dataframes used to initialize the sql_context_var
+        names, df_typs = self._get_bodosql_ctx_name_df_typs(sql_context_var)
+
+        for df_typ in df_typs:
+            if df_typ is None:
+                return [assign]
+
+        sql_context_type = BodoSQLContextType(names, df_typs)
         # cannot transform yet if type is not available yet
         if sql_context_type is None:
             return [assign]
@@ -2348,9 +2386,6 @@ class TypingTransforms:
             default=types.none,
         )
 
-        # get constant value for variable if possible.
-        # Otherwise, just skip, assuming that the issue may be fixed later or
-        # overload will raise an error if necessary.
         needs_transform = False
         try:
             err_msg = "BodoSQLContextType.sql() requires a constant sql string"
