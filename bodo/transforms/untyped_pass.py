@@ -115,9 +115,9 @@ class UntypedPass:
         remove_dead_branches(self.func_ir)
         # topo_order necessary since df vars need to be found before use
         topo_order = find_topo_order(blocks)
-        work_list = list((l, blocks[l]) for l in reversed(topo_order))
-        while work_list:
-            label, block = work_list.pop()
+
+        for label in topo_order:
+            block = blocks[label]
             self._working_body = []
             for inst in block.body:
                 out_nodes = [inst]
