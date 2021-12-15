@@ -1358,6 +1358,82 @@ def test_df_fillna_type_mismatch_failure():
         bodo.jit(lambda df, value: df.fillna(value))(df, value)
 
 
+@pytest.fixture(
+    params=[
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [None, None, "a", "b", None, None, "c", "d", None] * 3,
+                ),
+                "B": pd.Series([2, 3, -4, 5, 1] * 6, dtype=np.int16),
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series([2, 3, 4, 5, 1, 4] * 3, dtype=np.uint32),
+                "B": pd.Series(
+                    [None, True, None, False, True, False, None] * 3, dtype="boolean"
+                ),
+                "C": pd.Series(
+                    [None, None, 2, -1, None, -3, 4, 5] * 3, dtype=pd.Int64Dtype()
+                ),
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series([None, 1, 2, None, 3, None] * 3, dtype=pd.Int8Dtype()),
+                "B": pd.Series(
+                    [np.nan, 1.0, 2, np.nan, np.nan, 3.0, 4] * 3, dtype=np.float32
+                ),
+                "C": pd.Series(
+                    [np.nan, 1.0, -2, np.nan, np.nan, 3.0, 4] * 3, dtype=np.float64
+                ),
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [np.nan, np.nan, 1e16, 3e17, np.nan, 1e18, 500, np.nan] * 3,
+                    dtype="datetime64[ns]",
+                ),
+                "B": pd.Series(
+                    [np.nan, 3e17, 5e17, np.nan, np.nan, 1e18, 500, np.nan] * 3,
+                    dtype="timedelta64[ns]",
+                ),
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series([None] * 10 + ["a"], dtype="string"),
+                "B": pd.Series([1] + [None] * 10, dtype="Int16"),
+                "C": pd.Series([np.nan] * 5 + [1.1] + [np.nan] * 5, dtype="float32"),
+            }
+        ),
+        pd.DataFrame({"A": pd.Series([np.nan] * 35, dtype="boolean")}),
+    ],
+)
+def fillna_dataframe(request):
+    return request.param
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        "bfill",
+        pytest.param("backfill", marks=pytest.mark.slow),
+        "ffill",
+        pytest.param("pad", marks=pytest.mark.slow),
+    ],
+)
+def test_dataframe_fillna_method(fillna_dataframe, method, memory_leak_check):
+    def test_impl(df, method):
+        return df.fillna(method=method)
+
+    # Set check_dtype=False because Bodo's unboxing type does not match
+    # dtype="string"
+    check_func(test_impl, (fillna_dataframe, method), check_dtype=False)
+
+
 @pytest.mark.slow
 def test_df_replace_df_value(df_value):
     def impl(df, to_replace, value):
