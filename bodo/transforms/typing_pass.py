@@ -1635,6 +1635,7 @@ class TypingTransforms:
             "apply": [(0, "func"), (1, "axis")],
             "to_parquet": [(4, "partition_cols")],
             "insert": [(0, "loc"), (1, "column"), (3, "allow_duplicates")],
+            "fillna": [(1, "method")],
         }
 
         if func_name in df_call_const_args:

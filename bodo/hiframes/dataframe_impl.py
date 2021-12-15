@@ -3436,21 +3436,33 @@ def overload_dataframe_sort_index(
 def overload_dataframe_fillna(
     df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None
 ):
-    unsupported_args = dict(method=method, limit=limit, downcast=downcast)
-    arg_defaults = dict(method=None, limit=None, downcast=None)
+    unsupported_args = dict(limit=limit, downcast=downcast)
+    arg_defaults = dict(limit=None, downcast=None)
     check_unsupported_args("DataFrame.fillna", unsupported_args, arg_defaults)
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
-        raise BodoError("DataFrame.fillna: axis argument not supported")
+        raise BodoError("DataFrame.fillna(): 'axis' argument not supported.")
+
+    is_value_provided = not is_overload_none(value)
+    is_method_provided = not is_overload_none(method)
+
+    if is_value_provided and is_method_provided:
+        raise BodoError("DataFrame.fillna(): Cannot specify both 'value' and 'method'.")
+
+    if not is_value_provided and not is_method_provided:
+        raise BodoError("DataFrame.fillna(): Must specify one of 'value' and 'method'.")
 
     # TODO: handle possible **kwargs options?
 
     # TODO: inplace of df with parent that has a string column (reflection)
-
+    if is_value_provided:
+        fill_na_arg = "value=value"
+    else:
+        fill_na_arg = "method=method"
     data_args = [
-        f"df['{c}'].fillna(value, inplace=inplace)"
+        f"df['{c}'].fillna({fill_na_arg}, inplace=inplace)"
         if isinstance(c, str)
-        else f"df[{c}].fillna(value, inplace=inplace)"
+        else f"df[{c}].fillna({fill_na_arg}, inplace=inplace)"
         for c in df.columns
     ]
     func_text = "def impl(df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None):\n"

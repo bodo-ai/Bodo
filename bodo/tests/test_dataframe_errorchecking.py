@@ -181,6 +181,18 @@ def test_df_fillna_dict_value_error(df_fillna, memory_leak_check):
         bodo.jit(lambda: df_fillna.fillna({"A": 3}))()
 
 
+def test_df_fillna_both_value_method_args(df_fillna, memory_leak_check):
+    message = re.escape("DataFrame.fillna(): Cannot specify both 'value' and 'method'.")
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: df_fillna.fillna(value=1, method="ffill"))()
+
+
+def test_df_fillna_neither_value_method_args(df_fillna, memory_leak_check):
+    message = re.escape("DataFrame.fillna(): Must specify one of 'value' and 'method'.")
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(lambda: df_fillna.fillna())()
+
+
 @pytest.fixture
 def df_replace():
     return pd.DataFrame({"A": np.arange(12)})
