@@ -393,6 +393,10 @@ _series_no_inline_methods = {
     "apply",
     "pipe",
     "combine",
+    "bfill",
+    "ffill",
+    "pad",
+    "backfill",
 }
 # Series methods that are just aliases of another method
 _series_method_alias = {

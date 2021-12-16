@@ -1281,11 +1281,7 @@ series_unsupported_methods = (
     "add_suffix",
     "filter",
     # Missing data handling
-    "backfill",
-    "bfill",
-    "ffill",
     "interpolate",
-    "pad",
     # Reshaping, sorting
     "argmin",
     "argmax",

@@ -2606,6 +2606,72 @@ def overload_series_fillna(
         return fillna_impl
 
 
+def create_fillna_specific_method_overload(overload_name):
+    def overload_series_fillna_specific_method(
+        S, axis=None, inplace=False, limit=None, downcast=None
+    ):
+        method_arg = {
+            "ffill": "ffill",
+            "bfill": "bfill",
+            "pad": "ffill",
+            "backfill": "bfill",
+        }[overload_name]
+        unsupported_args = dict(limit=limit, downcast=downcast)
+        arg_defaults = dict(limit=None, downcast=None)
+        check_unsupported_args(
+            f"Series.{overload_name}", unsupported_args, arg_defaults
+        )
+
+        if not (is_overload_none(axis) or is_overload_zero(axis)):
+            raise BodoError(f"Series.{overload_name}(): axis argument not supported")
+
+        series_type = element_type(S.data)
+
+        valid_obj_types = (
+            types.unicode_type,
+            types.bool_,
+            bodo.datetime64ns,
+            bodo.timedelta64ns,
+        )
+        if (
+            not isinstance(series_type, (types.Integer, types.Float))
+            and series_type not in valid_obj_types
+        ):
+            raise BodoError(
+                f"Series.{overload_name}(): series of type {series_type} are not supported."
+            )
+
+        def impl(
+            S, axis=None, inplace=False, limit=None, downcast=None
+        ):  # pragma: no cover
+            in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.array_kernels.ffill_bfill_arr(in_arr, method_arg)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return impl
+
+    return overload_series_fillna_specific_method
+
+
+fillna_specific_methods = (
+    "ffill",
+    "bfill",
+    "pad",
+    "backfill",
+)
+
+
+def _install_fillna_specific_methods():
+    for overload_name in fillna_specific_methods:
+        overload_impl = create_fillna_specific_method_overload(overload_name)
+        overload_method(SeriesType, overload_name, no_unliteral=True)(overload_impl)
+
+
+_install_fillna_specific_methods()
+
+
 def check_unsupported_types(S, to_replace, value):
     """Raise errors for types Series.replace() does not support"""
     # TODO: Support array types, [BE-429]
