@@ -4667,3 +4667,11 @@ def overload_series_to_frame(S, name=None):
         return bodo.hiframes.pd_dataframe_ext.init_dataframe((arr,), index, (out_name,))
 
     return impl
+
+
+@overload_method(SeriesType, "keys", inline="always", no_unliteral=True)
+def overload_series_keys(S):
+    def impl(S):  # pragma: no cover
+        return bodo.hiframes.pd_series_ext.get_series_index(S)
+
+    return impl

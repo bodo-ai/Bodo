@@ -3358,3 +3358,17 @@ def test_series_np_select_non_unitype_set_default(series_val, memory_leak_check)
         (A1, A2, cond1, cond2, default_val),
         check_dtype=False,
     )
+
+
+@pytest.mark.parametrize(
+    "S",
+    [
+        pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name="A"),
+        pd.Series([1.0, 2.0, np.nan, 1.0, np.nan], name="A"),
+    ],
+)
+def test_series_keys(S, memory_leak_check):
+    def test_impl(A):
+        return A.keys()
+
+    check_func(test_impl, (S,))

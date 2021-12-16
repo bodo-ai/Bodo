@@ -1247,7 +1247,6 @@ series_unsupported_methods = (
     "__iter__",
     "items",
     "iteritems",
-    "keys",
     "pop",
     "item",
     "xs",
