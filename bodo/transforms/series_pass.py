@@ -2835,13 +2835,31 @@ class SeriesPass:
         # NOTE: some operations are used in Bodo's kernels and overload inline="always"
         # may require inlining them eventually (since lowered impl doesn't exist)
         # see bodo/tests/test_series.py::test_series_astype_cat"[S0]"
-        if func_name in ("count", "fillna", "sort_values", "dropna", "notna", "isna"):
+        if func_name in (
+            "count",
+            "fillna",
+            "sort_values",
+            "dropna",
+            "notna",
+            "isna",
+            "bfill",
+            "ffill",
+            "pad",
+            "backfill",
+        ):
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
-            overload_func = getattr(
-                bodo.hiframes.series_impl, "overload_series_" + func_name
-            )
+            if func_name in ("bfill", "ffill", "pad", "backfill"):
+                overload_func = (
+                    bodo.hiframes.series_impl.create_fillna_specific_method_overload(
+                        func_name
+                    )
+                )
+            else:
+                overload_func = getattr(
+                    bodo.hiframes.series_impl, "overload_series_" + func_name
+                )
             impl = overload_func(*arg_typs, **kw_typs)
             return replace_func(
                 self,

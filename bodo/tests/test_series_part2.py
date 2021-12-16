@@ -1484,6 +1484,23 @@ def test_series_fillna_method(fillna_series, method, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "name,test_impl",
+    [
+        ("bfill", lambda S: S.bfill()),
+        ("backfill", lambda S: S.backfill()),
+        ("ffill", lambda S: S.ffill()),
+        ("pad", lambda S: S.pad()),
+    ],
+)
+def test_series_fillna_specific_method(
+    fillna_series, name, test_impl, memory_leak_check
+):
+    # Set check_dtype=False because Bodo's unboxing type does not match
+    # dtype="string"
+    check_func(test_impl, (fillna_series,), check_dtype=False)
+
+
+@pytest.mark.parametrize(
     "S,value",
     [
         (pd.Series([1.0, 2.0, np.nan, 1.0], [3, 4, 2, 1], name="A"), 5.0),
