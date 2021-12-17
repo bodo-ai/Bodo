@@ -31,41 +31,90 @@ jobs:
       pip install astunparse
     displayName: 'Prepare to build'
 
+  # For M1, we need to use miniforge to enable cross compilation
   - script: |
       set -eo pipefail
-      if [[ "${{ parameters.name }}" = Linux* ]]; then
-        wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+      if [[ "${{ parameters.name }}" = "macOS_ARM" ]]; then
+        export MINIFORGE_URL="https://github.com/conda-forge/miniforge/releases/latest/download"
+        export MINIFORGE_FILE="Miniforge3-MacOSX-x86_64.sh"
+        curl -L -O "${MINIFORGE_URL}/${MINIFORGE_FILE}"
+        bash $MINIFORGE_FILE -b -p ${HOME}/miniforge3
+        export PATH=$HOME/miniforge3/bin:${PATH}
       else
-        wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
+        if [[ "${{ parameters.name }}" = Linux* ]]; then
+          wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+        else
+          wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
+        fi
+        chmod +x miniconda.sh
+        ./miniconda.sh -b
+        export PATH=$HOME/miniconda3/bin:${PATH}
       fi
-      chmod +x miniconda.sh
-      ./miniconda.sh -b
-      export PATH=$HOME/miniconda3/bin:${PATH}
-    displayName: 'Setup Miniconda'
+    displayName: 'Setup Miniconda/Miniforge'
 
+  # For M1, need to set MACOSX_DEPLOYMENT_TARGET to 11 before calling setup_osx_sdk, since it defaults to using 10.15
+  # if the value is not set. We need at least SDK 11 to do cross compilation.
   - script: |
       set -eo pipefail
       if [[ "${{ parameters.name }}" == "macOS" ]]; then
         buildscripts/setup_osx_sdk.sh
+      else
+        if [[ "${{ parameters.name }}" = "macOS_ARM" ]]; then
+          export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
+          buildscripts/setup_osx_sdk.sh
+        fi
       fi
     displayName: 'Setup OSX SDK'
 
   - script: |
       set -eo pipefail
-      export PATH=$HOME/miniconda3/bin:$PATH
+      if [[ "${{ parameters.name }}" == "macOS_ARM" ]]; then
+        export PATH=$HOME/miniforge3/bin:$PATH
+      else
+        export PATH=$HOME/miniconda3/bin:$PATH
+      fi
       conda install -y flake8
       flake8 bodo
     displayName: 'Flake8'
 
+# 'python<=3.9' is needed, so python 3.10 doesn't get installed by default, which causes issues with
+# conda-forge-ci-setup=3
   - script: |
       set -eo pipefail
-      export PATH=$HOME/miniconda3/bin:${PATH}
-      conda create -y -n bodo_build conda-build anaconda-client conda-verify
+      if [[ "${{ parameters.name }}" == "macOS_ARM" ]]; then
+        export PATH=$HOME/miniforge3/bin:$PATH
+      else
+        export PATH=$HOME/miniconda3/bin:$PATH
+      fi
+      conda create -y -n bodo_build conda-build anaconda-client conda-verify 'python<=3.9'
     displayName: 'Create Conda Env'
+
+  # It was taken from code in the Numba feedstock that handles cross compiling,
+  # and is necicary to enable it,
+  # but I (Keaton) don't fully understand what it's doing
+  # I've filed a JIRA issue to figure this out later BE-1568
+  - script: |
+      set -eo pipefail
+      if [[ "${{ parameters.name }}" == "macOS_ARM" ]]; then
+        export PATH=$HOME/miniforge3/bin:${PATH}
+        export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
+        export CONDA_BUILD_SYSROOT="/opt/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk"
+        source activate bodo_build
+        conda install -n bodo_build --quiet --yes "conda-forge-ci-setup=3" -c conda-forge
+        setup_conda_rc ./ ./buildscripts/bodo-m1-conda-recipe ./buildscripts/bodo-m1-conda-recipe/conda_build_config.yaml
+        /usr/bin/sudo mangle_homebrew
+        /usr/bin/sudo -k
+        source run_conda_forge_build_setup
+      fi
+    displayName: 'Handling setup for Cross Compilation'
 
   - script: |
       set -eo pipefail
-      export PATH=$HOME/miniconda3/bin:${PATH}
+      if [[ "${{ parameters.name }}" == "macOS_ARM" ]]; then
+        export PATH=$HOME/miniforge3/bin:$PATH
+      else
+        export PATH=$HOME/miniconda3/bin:$PATH
+      fi
       source activate bodo_build
       if [[ $OBFUSCATE == 1 ]]; then
         conda install -y astor -c conda-forge
@@ -77,10 +126,14 @@ jobs:
     displayName: 'Obfuscation'
 
   - script: |
-       set -eo pipefail
-       export PATH=$HOME/miniconda3/bin:${PATH}
-       source activate bodo_build
-       python rename_to_pyx.py
+      set -eo pipefail
+      if [[ "${{ parameters.name }}" == "macOS_ARM" ]]; then
+        export PATH=$HOME/miniforge3/bin:$PATH
+      else
+        export PATH=$HOME/miniconda3/bin:$PATH
+      fi
+      source activate bodo_build
+      python rename_to_pyx.py
     displayName: 'Rename py to pyx'
 
   - script: |
@@ -100,17 +153,27 @@ jobs:
       fi
     displayName: 'Amend Commit to remove dirty from version'
 
+  #TODO: add M1 NumbaDev recipe?
   - script: |
       set -eo pipefail
-      export PATH=$HOME/miniconda3/bin:${PATH}
-      export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-10.15}
+      if [[ "${{ parameters.name }}" == "macOS_ARM" ]]; then
+        export PATH=$HOME/miniforge3/bin:$PATH
+        export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
+      else
+        export PATH=$HOME/miniconda3/bin:$PATH
+        export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-10.15}
+      fi
       export CONDA_BUILD_SYSROOT="/opt/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk"
       source activate bodo_build
-      if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
-        cd buildscripts/bodo-numba-dev-conda-recipe/
-        echo "Using Numba-Dev Conda Recipe"
+      if [[ "${{ parameters.name }}" == "macOS_ARM" ]]; then
+        cd buildscripts/bodo-m1-conda-recipe/
       else
-        cd buildscripts/bodo-conda-recipe/
+        if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
+          cd buildscripts/bodo-numba-dev-conda-recipe/
+          echo "Using Numba-Dev Conda Recipe"
+        else
+          cd buildscripts/bodo-conda-recipe/
+        fi
       fi
       if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
         export CHECK_LICENSE_EXPIRED="0"
@@ -161,7 +224,11 @@ jobs:
       if [[ "${{ parameters.name }}" = Linux* ]]; then
         artifactory_os_dir="linux-64"
       else
-        artifactory_os_dir="osx-64"
+        if [[ "${{ parameters.name }}" = "macOS_ARM" ]]; then
+          artifactory_os_dir="osx-arm64"
+        else
+          artifactory_os_dir="osx-64"
+        fi
       fi
       echo "artifactory_os_dir: $artifactory_os_dir"
       ./buildscripts/azure/publish_binary.sh $artifactory_channel $artifactory_os_dir $BODO_VERSION
