@@ -43,7 +43,7 @@ stages:
       name: Windows
       vmImage: vs2017-win2016
       useNumbaDev: false
-  - template: buildscripts/azure/azure-build-binary-macos-m1.yml
+  - template: buildscripts/azure/azure-build-binary-linux-macos.yml
     parameters:
       name: macOS_ARM
       vmImage: macOS-latest
