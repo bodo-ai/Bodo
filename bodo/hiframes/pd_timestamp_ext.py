@@ -91,7 +91,9 @@ date_fields = [
     "nanosecond",
     "quarter",
     "dayofyear",
+    "day_of_year",
     "dayofweek",
+    "day_of_week",
     "daysinmonth",
     "days_in_month",
     "is_leap_year",
@@ -616,6 +618,7 @@ def overload_pd_timestamp(
 
 
 @overload_attribute(PandasTimestampType, "dayofyear")
+@overload_attribute(PandasTimestampType, "day_of_year")
 def overload_pd_dayofyear(ptt):
     def pd_dayofyear(ptt):  # pragma: no cover
         return get_day_of_year(ptt.year, ptt.month, ptt.day)
@@ -625,7 +628,7 @@ def overload_pd_dayofyear(ptt):
 
 @overload_method(PandasTimestampType, "weekday")
 @overload_attribute(PandasTimestampType, "dayofweek")
-@overload_method(PandasTimestampType, "weekday")
+@overload_attribute(PandasTimestampType, "day_of_week")
 def overload_pd_dayofweek(ptt):
     def pd_dayofweek(ptt):  # pragma: no cover
         return get_day_of_week(ptt.year, ptt.month, ptt.day)
@@ -2099,3 +2102,68 @@ def overload_datetime64_str(val):
             ).isoformat("T")
 
         return impl
+
+
+timestamp_unsupported_attrs = [
+    "asm8",
+    "components",
+    "freqstr",
+    "tz",
+    "fold",
+    "tzinfo",
+    "freq",
+]
+
+timestamp_unsupported_methods = [
+    "astimezone",
+    "ctime",
+    "dst",
+    "isoweekday",
+    "replace",
+    "strptime",
+    "time",
+    "timestamp",
+    "timetuple",
+    "timetz",
+    "to_datetime64",
+    "to_julian_date",
+    "to_numpy",
+    "to_period",
+    "to_pydatetime",
+    "tz_convert",
+    "tz_localize",
+    "tzname",
+    "utcoffset",
+    "utctimetuple",
+]
+
+# class method(s) handled in untyped pass
+# Timestamp.combine
+# Timestamp.fromisocalendar
+# Timestamp.fromisoformat
+# Timestamp.fromordinal
+# Timestamp.fromtimestamp
+# Timestamp.today()
+# Timestamp.utcfromtimestamp()
+# Timestamp.utcnow()
+# Timestamp.max
+# Timestamp.min
+# Timestamp.resolution
+
+
+def _install_pd_timestamp_unsupported():
+    from bodo.utils.typing import create_unsupported_overload
+
+    for attr_name in timestamp_unsupported_attrs:
+        full_name = "pandas.Timestamp." + attr_name
+        overload_attribute(PandasTimestampType, attr_name)(
+            create_unsupported_overload(full_name)
+        )
+    for fname in timestamp_unsupported_methods:
+        full_name = "pandas.Timestamp." + fname
+        overload_method(PandasTimestampType, fname)(
+            create_unsupported_overload(full_name + "()")
+        )
+
+
+_install_pd_timestamp_unsupported()

@@ -22,11 +22,12 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('.'))
 
-import sphinx_rtd_theme
+sys.path.insert(0, os.path.abspath("."))
 
-#import bodo
+import sphinx_rtd_theme  # noqa
+
+# import bodo
 
 # -- General configuration ------------------------------------------------
 
@@ -44,7 +45,7 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.githubpages",
     "sphinx_rtd_theme",
-    "sphinx_rtd_dark_mode"
+    "sphinx_rtd_dark_mode",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -100,8 +101,10 @@ default_dark_mode = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
-html_theme_path = ["_themes", ]
+html_theme = "sphinx_rtd_theme"
+html_theme_path = [
+    "_themes",
+]
 html_favicon = "source/favicon.png"
 
 # Theme options are theme-specific and customize the look and feel of a theme
@@ -110,20 +113,20 @@ html_favicon = "source/favicon.png"
 #
 # html_theme_options = {}
 html_theme_options = {
-    'analytics_id': 'UA-170687885-1',  #  Provided by Google in your dashboard
-    'analytics_anonymize_ip': False,
-    'logo_only': True,
-    'display_version': True,
-    'prev_next_buttons_location': 'bottom',
-    'style_external_links': False,
-    'vcs_pageview_mode': '',
-    'style_nav_header_background': 'none',
+    "analytics_id": "UA-170687885-1",  #  Provided by Google in your dashboard
+    "analytics_anonymize_ip": False,
+    "logo_only": True,
+    "display_version": True,
+    "prev_next_buttons_location": "bottom",
+    "style_external_links": False,
+    "vcs_pageview_mode": "",
+    "style_nav_header_background": "none",
     # Toc options
-    'collapse_navigation': False,
-    'sticky_navigation': False,
-    'navigation_depth': 4,
-    'includehidden': True,
-    'titles_only': False
+    "collapse_navigation": False,
+    "sticky_navigation": False,
+    "navigation_depth": 4,
+    "includehidden": True,
+    "titles_only": False,
 }
 
 html_show_sphinx = False
@@ -204,6 +207,21 @@ intersphinx_mapping = {
     "numba": ("http://numba.pydata.org/numba-doc/latest/", None),
     "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None),
     "pyspark": ("https://spark.apache.org/docs/latest/api/python/", None),
-    "sklearn": ("https://scikit-learn.org/stable/", None),
+    # new API, we don't support yet.
+    # "sklearn": ("https://scikit-learn.org/stable/", None),
+    "sklearn": ("https://scikit-learn.org/0.24/", None),
     "xgboost": ("http://xgboost.readthedocs.io/en/latest", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
 }
+
+
+# The reST default role (used for this markup: `text`) to use for all
+# documents.
+#
+# default_role = None
+
+# If true, '()' will be appended to :func: etc. cross-reference text.
+#
+# We disable this so you can put the method arguments on the same line.
+#
+add_function_parentheses = False

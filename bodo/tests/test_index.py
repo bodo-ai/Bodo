@@ -375,7 +375,6 @@ def test_index_get_loc_error_checking():
 
 # Need to add the code and the check for the PeriodIndex
 # pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
-@pytest.mark.slow
 @pytest.mark.parametrize(
     "index",
     [
@@ -402,7 +401,11 @@ def test_index_copy(index, memory_leak_check):
     def test_impl_copy(S):
         return S.copy()
 
+    def test_impl_copy_name(S):
+        return S.copy(name="kjahsdfbhjsd")
+
     check_func(test_impl_copy, (index,))
+    check_func(test_impl_copy_name, (index,))
 
 
 @pytest.fixture(
@@ -1595,3 +1598,45 @@ def test_boolean_index(memory_leak_check):
             idx,
         ),
     )
+
+
+def test_datetime_max_all_na():
+    """tests index.max() properly returns NA for all NA datetime index"""
+    idx = pd.DatetimeIndex([None, None, None] * 5)
+
+    # Series return is to avoid scalar NaT type boxing issue, see BE-860
+    def impl(I):
+        return pd.Series([I.max()])
+
+    check_func(impl, (idx,))
+
+
+def test_datetime_min_all_na():
+    """tests index.min() properly returns NA for all NA datetime index"""
+    idx = pd.DatetimeIndex([None, None, None] * 5)
+
+    # Series return is to avoid scalar NaT type boxing issue, see BE-860
+    def impl(I):
+        return pd.Series([I.min()])
+
+    check_func(impl, (idx,))
+
+
+def test_timedelta_min_all_na():
+    """tests index.max() properly returns NA for all NA timedelta index"""
+    idx = pd.TimedeltaIndex([None, None, None] * 5)
+
+    def impl(I):
+        return I.min()
+
+    check_func(impl, (idx,))
+
+
+def test_timedelta_max_all_na():
+    """tests index.min() properly returns NA for all NA timedelta index"""
+    idx = pd.TimedeltaIndex([None, None, None] * 5)
+
+    def impl(I):
+        return I.max()
+
+    check_func(impl, (idx,))

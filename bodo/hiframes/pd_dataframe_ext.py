@@ -14,7 +14,6 @@ from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed, lower_constant
 from numba.core.typing.templates import (
     AbstractTemplate,
-    AttributeTemplate,
     bound_function,
     infer_global,
     signature,
@@ -71,6 +70,7 @@ from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.conversion import index_to_array
+from bodo.utils.templates import OverloadedKeyAttributeTemplate
 from bodo.utils.transform import (
     gen_const_tup,
     get_const_func_output_type,
@@ -348,10 +348,8 @@ make_attribute_wrapper(DataFrameType, "meminfo", "_meminfo")
 
 
 @infer_getattr
-class DataFrameAttribute(AttributeTemplate):
+class DataFrameAttribute(OverloadedKeyAttributeTemplate):
     key = DataFrameType
-    # Set of attribute names stored for caching.
-    _attr_set = None
 
     @bound_function("df.head")
     def resolve_head(self, df, args, kws):
@@ -407,7 +405,8 @@ class DataFrameAttribute(AttributeTemplate):
                 # used np.hstack makes this "A" instead of "C"
                 numeric_col_data.append(types.Array(types.float64, 1, "A"))
         # TODO: support empty dataframe
-        assert len(numeric_col_names) != 0
+        if len(numeric_col_names) == 0:
+            raise_bodo_error("DataFrame.corr(): requires non-empty dataframe")
         numeric_col_data = tuple(numeric_col_data)
         numeric_col_names = tuple(numeric_col_names)
         index_typ = bodo.utils.typing.type_col_to_index(numeric_col_names)
@@ -798,31 +797,6 @@ class DataFrameAttribute(AttributeTemplate):
                 new_data.append(df.data[i])
             if level_found:
                 return DataFrameType(tuple(new_data), df.index, tuple(new_names))
-
-    def _is_existing_attr(self, col_name):
-        """
-        Helper function that checks if a col_name is also
-        an existing attribute found in a later overload
-        template.
-
-        All other templates aren't checked
-        """
-        if self._attr_set is None:
-            s = set()
-            templates = list(self.context._get_attribute_templates(self.key))
-            # If we reached generic_resolve of our current template, we never
-            # need to check any template before or at our current position
-            idx = templates.index(self)
-            for i in range(idx, len(templates)):
-                # All overloads are stored as _OverloadAttributeTemplate which store the name
-                # in _attr.
-                if isinstance(
-                    templates[i], numba.core.typing.templates._OverloadAttributeTemplate
-                ):
-                    s.add(templates[i]._attr)
-            self._attr_set = s
-
-        return col_name in self._attr_set
 
 
 # don't convert literal types to non-literal and rerun the typing template
@@ -2535,9 +2509,20 @@ def to_parquet_overload(
     compression="snappy",
     index=None,
     partition_cols=None,
+    storage_options=None,
     # TODO handle possible **kwargs options?
     _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
+
+    check_unsupported_args(
+        "DataFrame.to_parquet",
+        {
+            "storage_options": storage_options,
+        },
+        {
+            "storage_options": None,
+        },
+    )
 
     if not is_overload_none(engine) and get_overload_const_str(engine) not in (
         "auto",
@@ -2624,7 +2609,7 @@ def to_parquet_overload(
         for i in range(len(df.columns))
     )
 
-    func_text = "def df_to_parquet(df, fname, engine='auto', compression='snappy', index=None, partition_cols=None, _is_parallel=False):\n"
+    func_text = "def df_to_parquet(df, fname, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, _is_parallel=False):\n"
     # put arrays in table_info
     if df.is_table_format:
         func_text += (
@@ -3063,7 +3048,19 @@ def to_json_overload(
     compression="infer",
     index=True,
     indent=None,
+    storage_options=None,
 ):
+
+    check_unsupported_args(
+        "DataFrame.to_json",
+        {
+            "storage_options": storage_options,
+        },
+        {
+            "storage_options": None,
+        },
+    )
+
     # TODO: refactor when objmode() can understand global string constant
     # String output case
     if path_or_buf is None or path_or_buf == types.none:
@@ -3081,6 +3078,7 @@ def to_json_overload(
             compression="infer",
             index=True,
             indent=None,
+            storage_options=None,
         ):  # pragma: no cover
             with numba.objmode(D="unicode_type"):
                 D = df.to_json(
@@ -3095,6 +3093,7 @@ def to_json_overload(
                     compression,
                     index,
                     indent,
+                    storage_options,
                 )
             return D
 
@@ -3113,6 +3112,7 @@ def to_json_overload(
         compression="infer",
         index=True,
         indent=None,
+        storage_options=None,
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to json
@@ -3129,6 +3129,7 @@ def to_json_overload(
                 compression,
                 index,
                 indent,
+                storage_options,
             )
 
         # Assuming that path_or_buf is a string
@@ -3268,9 +3269,9 @@ pd_unsupported = (
     pd.read_table,
     pd.read_fwf,
     pd.read_clipboard,
-    pd.ExcelWriter,
-    pd.json_normalize,
+    pd.ExcelFile,
     pd.read_html,
+    pd.read_xml,
     pd.read_hdf,
     pd.read_feather,
     pd.read_orc,  # TODO: support
@@ -3280,12 +3281,16 @@ pd_unsupported = (
     pd.read_sql_query,
     pd.read_gbq,
     pd.read_stata,
+    pd.ExcelWriter,
+    pd.json_normalize,
     # General functions
     ## Data manipulations
     pd.melt,
     pd.pivot,
+    pd.pivot_table,  # TODO: Support. It's implemented as a method
     pd.merge_ordered,
     pd.factorize,
+    pd.unique,
     pd.wide_to_long,
     ## Top-level dealing with datetimelike
     pd.bdate_range,
@@ -3295,157 +3300,182 @@ pd_unsupported = (
     pd.interval_range,
     ## Top-level evaluation
     pd.eval,
+    # Testing
+    pd.test,
+    # GroupBy
+    pd.Grouper,
+)
+
+
+pd_util_unsupported = (
     ## Hashing
     pd.util.hash_array,
     pd.util.hash_pandas_object,
-    # Testing
-    pd.test,
 )
 
-dataframe_unsupported = {
-    "to_latex",
-    "from_dict",
-    "reindex_like",
-    "pivot",
-    "clip",
-    "slice_shift",
-    "tz_convert",
-    "combine",
+dataframe_unsupported = [
+    # Attributes and underlying data
+    "set_flags",
+    # Conversion
     "convert_dtypes",
-    "floordiv",
-    "eval",
-    "applymap",
-    "nlargest",
-    "to_markdown",
-    "rmul",
-    "pad",
-    "sparse",
-    "combine_first",
-    "kurt",
-    "at_time",
-    "mad",
-    "mask",
-    "to_html",
-    "unstack",
+    "infer_objects",
+    "bool",
+    # Indexing, iteration
+    "__iter__",
+    "items",
     "iteritems",
-    "between_time",
+    "keys",
+    "iterrows",
+    "lookup",
+    "pop",
+    "xs",
+    "get",
+    "where",
+    "mask",
+    # Binary operator functions
+    "add",
+    "sub",
+    "mul",
+    "div",
+    "truediv",
+    "floordiv",
     "mod",
-    "to_gbq",
+    "pow",
+    "dot",
+    "radd",
+    "rsub",
+    "rmul",
+    "rdiv",
+    "rtruediv",
+    "rfloordiv",
+    "rmod",
+    "rpow",
+    "lt",
+    "gt",
+    "le",
+    "ge",
+    "ne",
+    "eq",
+    "combine",
+    "combine_first",
+    "subtract",  # Not in the organized pd docs, putting it here
+    "divide",  # Not in the organized pd docs, putting it here
+    "multiply",  # Not in the organized pd docs, putting it here
+    # Function application, GroupBy & window
+    "applymap",
+    "agg",
+    "aggregate",
+    "transform",
+    "expanding",
+    "ewm",
+    # Computations / descriptive stats
+    "all",
+    "any",
+    "clip",
+    "corrwith",
+    "cummax",
+    "cummin",
+    "eval",
+    "kurt",
+    "kurtosis",
+    "mad",
+    "mode",
     "rank",
     "round",
-    "mode",
-    "multiply",
-    "value_counts",
-    "corrwith",
-    "set_axis",
-    "nsmallest",
-    "to_dict",
-    "to_feather",
-    "cummax",
-    "to_stata",
-    "ne",
-    "ewm",
-    "first",
-    "expanding",
-    "droplevel",
-    "truncate",
-    "asof",
-    "pow",
-    "reorder_levels",
-    "mul",
-    "last",
-    "agg",
-    "le",
-    "any",
-    "xs",
-    "explode",
-    "equals",
-    "asfreq",
-    "pop",
-    "iterrows",
-    "rename_axis",
-    "resample",
-    "to_xarray",
-    "items",
-    "radd",
-    "tshift",
-    "rsub",
-    "align",
-    "add",
-    "squeeze",
-    "swapaxes",
-    "to_pickle",
-    "to_timestamp",
-    "interpolate",
-    "eq",
-    "bool",
-    "skew",
-    "rdiv",
-    "div",
     "sem",
-    "tz_localize",
-    "lt",
-    "bfill",
-    "last_valid_index",
-    "to_records",
-    "keys",
-    "to_clipboard",
-    "transform",
-    "dot",
-    "truediv",
-    "gt",
+    "skew",
+    "value_counts",
+    # Reindexing / selection / label manipulation
     "add_prefix",
-    "divide",
-    "lookup",
-    "infer_objects",
-    "melt",
-    "rmod",
-    "aggregate",
-    "from_records",
-    "rpow",
-    "to_excel",
-    "subtract",
-    "rfloordiv",
-    "ffill",
-    "to_hdf",
-    "update",
-    "sub",
-    "hist",
-    "ge",
-    "get",
-    "all",
-    "backfill",
-    "stack",
-    "where",
-    "transpose",
-    "T",
-    "rtruediv",
-    "cummin",
-    "swaplevel",
-    "first_valid_index",
-    "compare",
-    "boxplot",
-    "to_period",
     "add_suffix",
-    "kurtosis",
+    "align",
+    "at_time",
+    "between_time",
+    "equals",
+    "first",
+    "last",
     "reindex",
-    # Indexing, iteration
-    "at",
-    "__iter__",
-}
+    "reindex_like",
+    "rename_axis",
+    "set_axis",
+    "truncate",
+    # Missing data handling
+    "backfill",
+    "bfill",
+    "ffill",
+    "interpolate",
+    "pad",
+    # Reshaping, sorting, transposing
+    "droplevel",
+    "pivot",
+    "reorder_levels",
+    "nlargest",
+    "nsmallest",
+    "swaplevel",
+    "stack",
+    "unstack",
+    "swapaxes",
+    "melt",
+    "explode",
+    "squeeze",
+    "to_xarray",
+    "T",
+    "transpose",
+    # Combining / comparing / joining / merging
+    "compare",
+    "update",
+    # Time Series-related
+    "asfreq",
+    "asof",
+    "slice_shift",
+    "tshift",
+    "first_valid_index",
+    "last_valid_index",
+    "resample",
+    "to_period",
+    "to_timestamp",
+    "tz_convert",
+    "tz_localize",
+    # Plotting
+    # TODO: handle df.plot.x
+    "boxplot",
+    "hist",
+    # Serialization / IO / conversion:
+    "from_dict",
+    "from_records",
+    "to_pickle",
+    "to_hdf",
+    "to_dict",
+    "to_excel",
+    "to_html",
+    "to_feather",
+    "to_latex",
+    "to_stata",
+    "to_gbq",
+    "to_records",
+    "to_clipboard",
+    "to_markdown",
+    "to_xml",  # Not in the organized pd docs, putting it here
+]
 
-
-dataframe_unsupported_attrs = (
-    "axes",
+dataframe_unsupported_attrs = [
     "at",
     "attrs",
-)
+    "axes",
+    "flags",
+    # property
+    "style",
+    # TODO: handle Df.sparse.x
+    "sparse",
+]
+
+# TODO: add propper error messaging for df.plot.x
 
 
-def _install_pd_unsupported():
+def _install_pd_unsupported(mod_name, pd_unsupported):
     """install an overload that raises BodoError for unsupported functions"""
     for f in pd_unsupported:
-        fname = "pd." + f.__name__
+        fname = mod_name + "." + f.__name__
         overload(f, no_unliteral=True)(create_unsupported_overload(fname))
 
 
@@ -3458,9 +3488,11 @@ def _install_dataframe_unsupported():
             create_unsupported_overload(full_name)
         )
     for fname in dataframe_unsupported:
-        full_name = "Dataframe." + fname
+        full_name = "DataFrame." + fname + "()"
         overload_method(DataFrameType, fname)(create_unsupported_overload(full_name))
 
 
-_install_pd_unsupported()
+# Run install unsupported for each module to ensure a correct error message.
+_install_pd_unsupported("pandas", pd_unsupported)
+_install_pd_unsupported("pandas.util", pd_util_unsupported)
 _install_dataframe_unsupported()

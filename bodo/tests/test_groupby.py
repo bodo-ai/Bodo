@@ -5613,6 +5613,11 @@ def test_head(memory_leak_check):
         A = df.groupby(["G", "I", "H"])[["C", "F", "G", "A"]].head(1)
         return A
 
+    def impl4(df):
+        # Check head uses the default arg of 5.
+        A = df.groupby("A").head()
+        return A
+
     df = pd.DataFrame(
         {
             "A": [2, 2, 1, 2, 2, 1, 1],
@@ -5648,6 +5653,7 @@ def test_head(memory_leak_check):
     check_func(impl1, (df,))
     check_func(impl2, (df,))
     check_func(impl3, (df,))
+    check_func(impl4, (df,))
 
     df_empty = pd.DataFrame({"A": [], "B": []})
     check_func(impl1, (df_empty,))

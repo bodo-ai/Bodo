@@ -56,7 +56,12 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
-from bodo.utils.typing import BodoError, is_overload_false, is_overload_none
+from bodo.utils.typing import (
+    BodoError,
+    is_overload_false,
+    is_overload_none,
+    raise_bodo_error,
+)
 from bodo.utils.utils import (
     CTypeEnum,
     check_and_propagate_cpp_exception,
@@ -2161,13 +2166,21 @@ def bcast_scalar_overload(val):
     val = types.unliteral(val)
     # NOTE: scatterv() can call this with string on rank 0 and None on others, or an
     # Optional type
-    assert isinstance(val, (types.Integer, types.Float)) or val in [
-        bodo.datetime64ns,
-        bodo.timedelta64ns,
-        bodo.string_type,
-        types.none,
-        types.bool_,
-    ]
+
+    if not (
+        isinstance(val, (types.Integer, types.Float))
+        or val
+        in [
+            bodo.datetime64ns,
+            bodo.timedelta64ns,
+            bodo.string_type,
+            types.none,
+            types.bool_,
+        ]
+    ):
+        raise_bodo_error(
+            f"bcast_scalar requires an argument of type Integer, Float, datetime64ns, timedelta64ns, string, None, or Bool. Found type {val}"
+        )
 
     if val == types.none:
         return lambda val: None

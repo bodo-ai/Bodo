@@ -748,6 +748,8 @@ def _test_equal(
             check_dtype,
             reset_index,
         )
+    elif py_out is pd.NaT:
+        assert py_out is bodo_out
     else:
         np.testing.assert_equal(bodo_out, py_out)
 
@@ -818,7 +820,7 @@ def _gather_output(bodo_output):
     try:
         _check_typing_issues(bodo_output)
         bodo_output = bodo.gatherv(bodo_output)
-    except:
+    except Exception as e:
         comm = MPI.COMM_WORLD
         bodo_output_list = comm.gather(bodo_output)
         if bodo.get_rank() == 0:

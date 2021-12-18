@@ -11,7 +11,6 @@ from numba.core.imputils import impl_ret_borrowed
 from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import (
     AbstractTemplate,
-    AttributeTemplate,
     bound_function,
     infer_global,
     signature,
@@ -24,6 +23,7 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
+    overload_attribute,
     overload_method,
     register_model,
 )
@@ -51,6 +51,7 @@ from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.tuple_arr_ext import TupleArrayType
+from bodo.utils.templates import OverloadedKeyAttributeTemplate
 from bodo.utils.transform import (
     gen_const_tup,
     get_call_expr_arg,
@@ -64,6 +65,7 @@ from bodo.utils.typing import (
     get_index_data_arr_types,
     get_index_name_types,
     get_literal_value,
+    get_overload_const_bool,
     get_overload_const_func,
     get_overload_const_list,
     get_overload_const_str,
@@ -1017,8 +1019,10 @@ def resolve_gb(grp, args, kws, func_name, typing_context, target_context, err_ms
 
 
 @infer_getattr
-class DataframeGroupByAttribute(AttributeTemplate):
+class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
     key = DataFrameGroupByType
+    # Set of attribute names stored for caching.
+    _attr_set = None
 
     # NOTE the resolve functions return output signature of groupby to Numba
     # typer, so we return the first value returned by `resolve_gb`
@@ -1417,7 +1421,7 @@ class DataframeGroupByAttribute(AttributeTemplate):
         return signature(ret_type, *new_args).replace(pysig=pysig)
 
     def generic_resolve(self, grpby, attr):
-        if attr in groupby_unsupported or attr in ("rolling", "value_counts"):
+        if self._is_existing_attr(attr):
             return
         if attr not in grpby.df_type.columns:
             raise_const_error(
@@ -1542,6 +1546,11 @@ class PivotTyper(AbstractTemplate):
         data = df.data[df.columns.index(values)]
         out_dtype = get_pivot_output_dtype(data, aggfunc.literal_value)
         out_arr_typ = dtype_to_array_type(out_dtype)
+
+        if is_overload_none(_pivot_values):
+            raise_bodo_error(
+                "Dataframe.pivot_table() requires explicit annotation to determine output columns. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/pandas.html"
+            )
 
         pivot_vals = _pivot_values.meta
         n_vals = len(pivot_vals)
@@ -1818,6 +1827,11 @@ def groupby_value_counts(
     if (len(grp.selection) > 1) or (not grp.as_index):
         raise BodoError("'DataFrameGroupBy' object has no attribute 'value_counts'")
 
+    if not is_overload_constant_bool(ascending):
+        raise BodoError("Groupby.value_counts() ascending must be a constant boolean")
+
+    ascending_val = get_overload_const_bool(ascending)
+
     # Series.value_counts set its index name to `None`
     # Here, last index name in MultiIndex will have series name.
     name = grp.selection[0]
@@ -1825,7 +1839,7 @@ def groupby_value_counts(
     # df.groupby("X")["Y"].value_counts() => df.groupby("X")["Y"].apply(lambda S : S.value_counts())
     func_text = f"def impl(grp, normalize=False, sort=True, ascending=False, bins=None, dropna=True):\n"
     # TODO: [BE-635] Use S.rename_axis
-    udf = f"lambda S : S.value_counts(ascending={ascending}, _index_name='{name}')"
+    udf = f"lambda S: S.value_counts(ascending={ascending_val}, _index_name='{name}')"
     func_text += f"    return grp.apply({udf})\n"
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
@@ -1833,43 +1847,66 @@ def groupby_value_counts(
     return impl
 
 
+# Unsupported general Groupby attributes
+groupby_unsupported_attr = {
+    # Indexing, Iteration
+    "groups",
+    "indices",
+}
+
+# Unsupported general Groupby operations
 groupby_unsupported = {
+    # Indexing, Iteration
+    "__iter__",
+    "get_group",
+    # Computation/ descriptive stats GroupBy
     "all",
     "any",
-    "backfill",
     "bfill",
-    "boxplot",
-    "corr",
-    "corrwith",
+    "backfill",
     "cumcount",
     "cummax",
-    "cov",
-    "diff",
-    "fillna",
-    "hist",
-    "idxmin",
-    "mad",
-    "skew",
-    "take",
     "cummin",
     "cumprod",
-    "describe",
     "ffill",
-    "filter",
-    "get_group",
     "ngroup",
     "nth",
     "ohlc",
     "pad",
-    "pct_change",
-    "plot",
-    "quantile",
     "rank",
-    "resample",
-    "sample",
+    "pct_change",
     "sem",
     "tail",
+    # DataFrame section (excluding anything already in GroupBy)
+    "corr",
+    "cov",
+    "describe",
+    "diff",
+    "fillna",
+    "filter",
+    "hist",
+    "mad",
+    "plot",
+    "quantile",
+    "resample",
+    "sample",
+    "skew",
+    "take",
     "tshift",
+}
+
+# Attributes/Methods exclusive to SeriesGroupBy
+series_only_unsupported_attrs = {
+    "is_monotonic_increasing",
+    "is_monotonic_decreasing",
+}
+
+series_only_unsupported = {"nlargest", "nsmallest", "unique"}
+
+# Attributes/Methods exclusive to DataFrameGroupBy
+dataframe_only_unsupported = {
+    "corrwith",
+    "boxplot",
 }
 
 
@@ -1878,9 +1915,31 @@ def _install_groupy_unsupported():
     DataFrameGroupBy, and SeriesGroupBy types
     """
 
+    for fname in groupby_unsupported_attr:
+        overload_attribute(DataFrameGroupByType, fname, no_unliteral=True)(
+            create_unsupported_overload(f"DataFrameGroupBy.{fname}")
+        )
+
     for fname in groupby_unsupported:
         overload_method(DataFrameGroupByType, fname, no_unliteral=True)(
-            create_unsupported_overload(f"DataFrameGroupByType: '{fname}'")
+            create_unsupported_overload(f"DataFrameGroupBy.{fname}")
+        )
+
+    # TODO: Replace DataFrameGroupByType with SeriesGroupByType once we
+    # have separate types.
+    for fname in series_only_unsupported_attrs:
+        overload_attribute(DataFrameGroupByType, fname, no_unliteral=True)(
+            create_unsupported_overload(f"SeriesGroupBy.{fname}")
+        )
+
+    for fname in series_only_unsupported:
+        overload_method(DataFrameGroupByType, fname, no_unliteral=True)(
+            create_unsupported_overload(f"SeriesGroupBy.{fname}")
+        )
+
+    for fname in dataframe_only_unsupported:
+        overload_method(DataFrameGroupByType, fname, no_unliteral=True)(
+            create_unsupported_overload(f"DataFrameGroupBy.{fname}")
         )
 
 

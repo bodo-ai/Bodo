@@ -156,46 +156,6 @@ There are multiple methods for integration with APIs that Bodo does not
 support natively: 1. Switch to python object mode inside jit functions
 2. Pass data in and out of jit functions
 
-.. _objmode:
-
-Object mode
-^^^^^^^^^^^
-
-Object mode allows switching to a python intepreted context to be able
-to run non-jittable code. The main requirement is specifying the type of
-returned values. For example, the following code calls a Scipy function
-on data elements of a distributed dataset:
-
-.. code:: ipython3
-
-    import scipy.special as sc
-
-    @bodo.jit
-    def objmode_test(n):
-        A = np.random.ranf(n)
-        s = 0
-        for i in prange(len(A)):
-            x = A[i]
-            with bodo.objmode(y="float64"):
-                y = sc.entr(x)  # call entropy function on each data element
-            s += y
-        return s
-
-    res = objmode_test(10)
-    print(res)
-
-
-.. parsed-literal::
-
-    [stdout:0] 2.150228762523836
-    [stdout:1] 2.150228762523836
-    [stdout:2] 2.150228762523836
-    [stdout:3] 2.150228762523836
-
-
-See Numba’s documentation for
-`objmode <http://numba.pydata.org/numba-doc/latest/user/withobjmode.html#the-objmode-context-manager>`__
-for more details.
 
 Passing Distributed Data
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -604,4 +564,5 @@ structures:
     </table>
     <p>250 rows × 2 columns</p>
     </div>
+
 

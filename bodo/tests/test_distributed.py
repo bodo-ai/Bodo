@@ -8,6 +8,8 @@ import pytest
 from numba.core.ir_utils import find_callname, guard
 
 import bodo
+from bodo.tests.dataframe_common import df_value  # noqa
+from bodo.tests.test_numpy_array import arr_tuple_val  # noqa
 from bodo.tests.utils import (
     DistTestPipeline,
     SeqTestPipeline,
@@ -1775,26 +1777,42 @@ def test_dist_type_change_multi_func3(memory_leak_check):
     test()
 
 
-def _check_scatterv(data, n):
-    """check the output of scatterv() on 'data'"""
-    recv_data = bodo.scatterv(data)
+def _check_scatterv_gatherv_allgatherv(orig_data, n):
+    """check the output of scatterv() on 'data'. Confirms that calling gatherv and allgatherv on the distributed data
+    succeeds"""
+    if bodo.get_rank() != 0:
+        data_to_scatter = None
+    else:
+        data_to_scatter = orig_data
+    recv_data = bodo.scatterv(data_to_scatter)
     rank = bodo.get_rank()
     n_pes = bodo.get_size()
 
+    if isinstance(recv_data, tuple):
+        recv_len = len(recv_data[0])
+    else:
+        recv_len = len(recv_data)
     # check length
     # checking on all PEs that all PEs passed avoids hangs
     passed = _test_equal_guard(
-        len(recv_data), bodo.libs.distributed_api.get_node_portion(n, n_pes, rank)
+        recv_len, bodo.libs.distributed_api.get_node_portion(n, n_pes, rank)
     )
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes
 
-    # check data
-    all_data = bodo.gatherv(recv_data)
-    if rank != 0:
-        all_data = None
+    # check data with gatherv
+    gathered_data = bodo.gatherv(recv_data)
+    if rank == 0:
+        passed = _test_equal_guard(gathered_data, orig_data)
+    else:
+        passed = 1
 
-    passed = _test_equal_guard(all_data, data)
+    n_passed = reduce_sum(passed)
+    assert n_passed == n_pes
+
+    # check data with gatherv
+    allgathered_data = bodo.allgatherv(recv_data)
+    passed = _test_equal_guard(allgathered_data, orig_data)
     n_passed = reduce_sum(passed)
     assert n_passed == n_pes
 
@@ -1874,6 +1892,11 @@ def get_random_int64index(n):
             marks=pytest.mark.slow,
         ),
         pd.Series(gen_random_string_binary_array(n), np.arange(n) + 1, name="A"),
+        pd.Series(
+            gen_random_string_binary_array(n, is_binary=True),
+            np.arange(n) + 1,
+            name="A",
+        ),
         pd.DataFrame(
             {
                 "A": gen_random_string_binary_array(n),
@@ -1885,6 +1908,13 @@ def get_random_int64index(n):
         pytest.param(
             pd.Series(["BB", "CC"] + (["AA"] * (n - 2)), dtype="category"),
             marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Index(["BB", "CC"] + (["AA"] * (n - 2)), dtype="category"),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.interval_range(start=0, end=5), marks=pytest.mark.slow, id="interval_idx"
         ),
         # list(str) array
         # unboxing crashes for case below (issue #812)
@@ -1936,23 +1966,40 @@ def get_random_int64index(n):
     ],
 )
 # TODO: Add memory_leak_check when bug is resolved (failed on data13)
-def test_scatterv(data):
-    """Test bodo.scatterv() for Bodo distributed data types"""
-    if bodo.get_rank() != 0:
-        data = None
+def test_scatterv_gatherv_allgatherv_python(data):
+    """Test bodo.scatterv(), gatherv(), and allgatherv() for Bodo distributed data types"""
 
-    _check_scatterv(data, n)
+    _check_scatterv_gatherv_allgatherv(data, n)
+    # check it works in a tuple aswell
+    _check_scatterv_gatherv_allgatherv((data,), n)
 
 
-def test_scatterv_jit(memory_leak_check):
-    """test using scatterv inside jit functions"""
+def test_scatterv_gatherv_allgatherv_df_python(df_value):
+    """Test bodo.scatterv(), gatherv(), and allgatherv() for all supported dataframe types"""
+    n = len(df_value)
+
+    _check_scatterv_gatherv_allgatherv(df_value, n)
+    # check it works in a tuple aswell
+    _check_scatterv_gatherv_allgatherv((df_value,), n)
+
+
+def test_scatterv_gatherv_allgatherv_df_jit(df_value, memory_leak_check):
+    """test using scatterv for all supported dataframe types inside jit functions"""
 
     def impl(df):
         return bodo.scatterv(df)
 
-    df = pd.DataFrame({"A": [3, 1, 4, 2, 11], "B": [1.1, 2.2, 5.5, 1.3, -1.1]})
-    df_scattered = bodo.jit(all_returns_distributed=True)(impl)(df)
-    pd.testing.assert_frame_equal(df, bodo.allgatherv(df_scattered))
+    df_scattered = bodo.jit(all_returns_distributed=True)(impl)(df_value)
+    # We have some minor dtype differences from pandas
+    _test_equal_guard(df_value, bodo.allgatherv(df_scattered), check_dtype=False)
+
+    passed = 1
+    gathered_val = bodo.gatherv(df_scattered)
+    if bodo.get_rank() == 0:
+        passed = _test_equal_guard(df_value, gathered_val, check_dtype=False)
+
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size()
 
 
 # TODO: add memory_leak_check when error with table format dataframes is fixed
@@ -1965,3 +2012,205 @@ def test_gatherv_empty_df():
     df = pd.DataFrame()
     df_gathered = bodo.jit()(impl)(df)
     pd.testing.assert_frame_equal(df, df_gathered)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "val1, val2",
+    [
+        ("hello from rank0", "other"),
+        (1, 0),
+        (
+            np.datetime64("2005-02-25").astype("datetime64[ns]"),
+            np.datetime64("2000-01-01").astype("datetime64[ns]"),
+        ),
+        (
+            np.timedelta64(10).astype("timedelta64[ns]"),
+            np.timedelta64(-1).astype("timedelta64[ns]"),
+        ),
+        (True, False),
+        (3.14159, 123.123123),
+    ],
+)
+def test_bcast_scalar(val1, val2):
+    def impl():
+        if bodo.get_rank() == 0:
+            scalar_val = val1
+        else:
+            scalar_val = val2
+        n = bodo.libs.distributed_api.bcast_scalar(scalar_val)
+        return n
+
+    check_func(impl, (), py_output=val1)
+
+
+@pytest.mark.slow
+def test_bcast_tuple():
+
+    dt_val1, dt_val2 = (
+        np.datetime64("2005-02-25").astype("datetime64[ns]"),
+        np.datetime64("2000-01-01").astype("datetime64[ns]"),
+    )
+    td_val1, td_val2 = (
+        np.timedelta64(10).astype("timedelta64[ns]"),
+        np.timedelta64(-1).astype("timedelta64[ns]"),
+    )
+
+    def impl():
+        if bodo.get_rank() == 0:
+            tuple_val = ("Hi from rank 0", 1, 3.14159, dt_val1, True, td_val1)
+        else:
+            tuple_val = ("foo", -1, -1.0, dt_val2, False, td_val2)
+        n = bodo.libs.distributed_api.bcast_tuple(tuple_val)
+        return n
+
+    check_func(
+        impl, (), py_output=("Hi from rank 0", 1, 3.14159, dt_val1, True, td_val1)
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "val",
+    [
+        1000,
+        np.datetime64("2015-05-12").astype("datetime64[ns]"),
+        np.timedelta64(100).astype("timedelta64[ns]"),
+        False,
+        0.0091823,
+    ],
+)
+def test_send_recv(val):
+    from bodo.libs.distributed_api import recv, send
+
+    if bodo.get_size() == 1:
+        return
+    np.random.seed(np.uint32(hash(val)))
+    send_rank = np.random.randint(bodo.get_size())
+    recv_rank = np.random.randint(bodo.get_size())
+    # make sure send_rank != recv_rank
+    if send_rank == recv_rank:
+        if send_rank == 0:
+            recv_rank = 1
+        else:
+            recv_rank = send_rank - 1
+    assert send_rank != recv_rank
+    print(f"send_rank: {send_rank}")
+    print(f"recv_rank: {recv_rank}")
+
+    send_type = bodo.typeof(val)
+
+    def impl(send_val, recv_rank, send_rank):
+        tag1 = 101
+        if bodo.get_rank() == send_rank:
+            send(send_val, recv_rank, tag1)
+
+        if bodo.get_rank() == recv_rank:
+            output_1 = recv(send_type, send_rank, tag1)
+
+            return output_1
+
+        return None
+
+    check_func(impl, (val, recv_rank, send_rank))
+
+
+@pytest.mark.slow
+def test_bcast(arr_tuple_val):
+    import datetime
+
+    if not isinstance(arr_tuple_val[0], np.ndarray) or isinstance(
+        arr_tuple_val[0][0], datetime.date
+    ):
+        return
+
+    def impl():
+        A = arr_tuple_val[0]
+        if bodo.get_rank() == 0:
+            arr_val = A
+        else:
+            arr_val = np.empty(len(A), A.dtype)
+        bodo.libs.distributed_api.bcast(arr_val)
+        return arr_val
+
+    check_func(
+        impl,
+        (),
+        py_output=arr_tuple_val[0],
+        is_out_distributed=False,
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "val0, val1, val2, val3",
+    [
+        (0, 1, 2, 3),
+        (
+            np.datetime64("2015-05-12").astype("datetime64[ns]"),
+            np.datetime64("2011-10-11").astype("datetime64[ns]"),
+            np.datetime64("2005-01-02").astype("datetime64[ns]"),
+            np.datetime64("2001-03-11").astype("datetime64[ns]"),
+        ),
+        (
+            np.timedelta64(100).astype("timedelta64[ns]"),
+            np.timedelta64(-25).astype("timedelta64[ns]"),
+            np.timedelta64(10).astype("timedelta64[ns]"),
+            np.timedelta64(1000).astype("timedelta64[ns]"),
+        ),
+        (False, True, False, True),
+        (0.0091823, 12.14523, -1231.12398, 11.0),
+    ],
+)
+def test_all_to_all(val0, val1, val2, val3):
+
+    if bodo.get_size() > 4:
+        return
+
+    from bodo.libs.distributed_api import alltoall
+
+    def impl(n):
+        values_to_send_to_rank_0 = [val0] * n
+        values_to_send_to_rank_1 = [val1] * n
+        values_to_send_to_rank_2 = [val2] * n
+        values_to_send_to_rank_3 = [val3] * n
+        if bodo.get_size() == 1:
+            L = values_to_send_to_rank_0
+        if bodo.get_size() >= 2:
+            L = values_to_send_to_rank_0 + values_to_send_to_rank_1
+        if bodo.get_size() >= 3:
+            L = (
+                values_to_send_to_rank_0
+                + values_to_send_to_rank_1
+                + values_to_send_to_rank_2
+            )
+        if bodo.get_size() >= 4:
+            L = (
+                values_to_send_to_rank_0
+                + values_to_send_to_rank_1
+                + values_to_send_to_rank_2
+                + values_to_send_to_rank_3
+            )
+
+        A = np.array(L)
+        recv_buf = np.empty(len(A), A.dtype)
+        alltoall(A, recv_buf, n)
+
+        return recv_buf
+
+    check_func(impl, (1,), is_out_distributed=False)
+    check_func(impl, (10,), is_out_distributed=False)
+
+
+@pytest.mark.slow
+def test_barrier_error():
+    import numba
+
+    def f():
+        bodo.barrier("foo")
+
+    with pytest.raises(
+        numba.core.errors.TypingError,
+        match=r"too many positional arguments",
+    ):
+        bodo.jit(f)()

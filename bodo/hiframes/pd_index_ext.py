@@ -32,6 +32,7 @@ import bodo
 import bodo.hiframes
 import bodo.utils.conversion
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
+from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
@@ -64,6 +65,17 @@ _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
 _timedelta_index_data_typ = types.Array(types.NPTimedelta("ns"), 1, "C")
 iNaT = pd._libs.tslibs.iNaT
 NaT = types.NPDatetime("ns")("NaT")  # TODO: pd.NaT
+
+# used in the various index copy overloads for error checking
+idx_cpy_arg_defaults = dict(deep=False, dtype=None, names=None)
+
+# maps index_types to a format string of how we refer to the index type in error messages.
+# for example:
+# RangeIndexType --> "pandas.RangeIndex.{}"
+# StringIndexType --> "pandas.Index.{} with string data"
+
+# Initialized at the bottom of this file, after all the index types have been declared
+idx_typ_to_format_str_map = dict()
 
 
 @typeof_impl.register(pd.Index)
@@ -179,10 +191,26 @@ make_attribute_wrapper(DatetimeIndexType, "dict", "_dict")
 
 
 @overload_method(DatetimeIndexType, "copy", no_unliteral=True)
-def overload_datetime_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_datetime_index(
-        A._data.copy(), A._name
-    )  # pragma: no cover
+def overload_datetime_index_copy(A, name=None, deep=False, dtype=None, names=None):
+    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    err_str = idx_typ_to_format_str_map[DatetimeIndexType].format("copy()")
+    check_unsupported_args(
+        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+    )
+
+    if not is_overload_none(name):
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_datetime_index(A._data.copy(), name)
+
+    else:
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_datetime_index(
+                A._data.copy(), A._name
+            )
+
+    return impl
 
 
 @box(DatetimeIndexType)
@@ -435,9 +463,6 @@ class DatetimeIndexAttribute(AttributeTemplate):
 def pd_datetimeindex_overload(
     data=None,
     freq=None,
-    start=None,
-    end=None,
-    periods=None,
     tz=None,
     normalize=False,
     closed=None,
@@ -447,22 +472,38 @@ def pd_datetimeindex_overload(
     dtype=None,
     copy=False,
     name=None,
-    verify_integrity=True,
 ):
     # TODO: check/handle other input
     if is_overload_none(data):
         raise BodoError("data argument in pd.DatetimeIndex() expected")
 
-    # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
-    if any(not is_overload_none(a) for a in (freq, start, end, periods, tz, closed)):
-        raise BodoError("only data argument in pd.DatetimeIndex() supported")
+    unsupported_args = dict(
+        freq=freq,
+        tz=tz,
+        normalize=normalize,
+        closed=closed,
+        ambiguous=ambiguous,
+        dayfirst=dayfirst,
+        yearfirst=yearfirst,
+        dtype=dtype,
+        copy=copy,
+    )
+    arg_defaults = dict(
+        freq=None,
+        tz=None,
+        normalize=False,
+        closed=None,
+        ambiguous="raise",
+        dayfirst=False,
+        yearfirst=False,
+        dtype=None,
+        copy=False,
+    )
+    check_unsupported_args("pandas.DatetimeIndex", unsupported_args, arg_defaults)
 
     def f(
         data=None,
         freq=None,
-        start=None,
-        end=None,
-        periods=None,
         tz=None,
         normalize=False,
         closed=None,
@@ -472,7 +513,6 @@ def pd_datetimeindex_overload(
         dtype=None,
         copy=False,
         name=None,
-        verify_integrity=True,
     ):  # pragma: no cover
         data_arr = bodo.utils.conversion.coerce_to_array(data)
         S = bodo.utils.conversion.convert_to_dt64ns(data_arr)
@@ -1217,10 +1257,26 @@ make_attribute_wrapper(TimedeltaIndexType, "dict", "_dict")
 
 
 @overload_method(TimedeltaIndexType, "copy", no_unliteral=True)
-def overload_timedelta_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_timedelta_index(
-        A._data.copy(), A._name
-    )  # pragma: no cover
+def overload_timedelta_index_copy(A, name=None, deep=False, dtype=None, names=None):
+    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    err_str = idx_typ_to_format_str_map[TimedeltaIndexType].format("copy()")
+    check_unsupported_args(
+        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+    )
+
+    if not is_overload_none(name):
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_timedelta_index(A._data.copy(), name)
+
+    else:
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_timedelta_index(
+                A._data.copy(), A._name
+            )
+
+    return impl
 
 
 @overload_method(TimedeltaIndexType, "min", inline="always", no_unliteral=True)
@@ -1329,38 +1385,38 @@ def pd_timedelta_index_overload(
     data=None,
     unit=None,
     freq=None,
-    start=None,
-    end=None,
-    periods=None,
-    closed=None,
     dtype=None,
     copy=False,
     name=None,
-    verify_integrity=None,
 ):
     # TODO handle dtype=dtype('<m8[ns]') default
     # TODO: check/handle other input
     if is_overload_none(data):
         raise BodoError("data argument in pd.TimedeltaIndex() expected")
 
-    if any(
-        not is_overload_none(a)
-        for a in (unit, freq, start, end, periods, closed, dtype)
-    ):
-        raise BodoError("only data argument in pd.TimedeltaIndex() supported")
+    unsupported_args = dict(
+        unit=unit,
+        freq=freq,
+        dtype=dtype,
+        copy=copy,
+    )
+
+    arg_defaults = dict(
+        unit=None,
+        freq=None,
+        dtype=None,
+        copy=False,
+    )
+
+    check_unsupported_args("pandas.TimedeltaIndex", unsupported_args, arg_defaults)
 
     def impl(
         data=None,
         unit=None,
         freq=None,
-        start=None,
-        end=None,
-        periods=None,
-        closed=None,
         dtype=None,
         copy=False,
         name=None,
-        verify_integrity=None,
     ):  # pragma: no cover
         data_arr = bodo.utils.conversion.coerce_to_array(data)
         S = bodo.utils.conversion.convert_to_td64ns(data_arr)
@@ -1442,10 +1498,28 @@ make_attribute_wrapper(RangeIndexType, "name", "_name")
 
 
 @overload_method(RangeIndexType, "copy", no_unliteral=True)
-def overload_range_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_range_index(
-        A._start, A._stop, A._step, A._name
-    )  # pragma: no cover
+def overload_range_index_copy(A, name=None, deep=False, dtype=None, names=None):
+    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    err_str = idx_typ_to_format_str_map[RangeIndexType].format("copy()")
+    check_unsupported_args(
+        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+    )
+
+    if not is_overload_none(name):
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_range_index(
+                A._start, A._stop, A._step, name
+            )
+
+    else:
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_range_index(
+                A._start, A._stop, A._step, A._name
+            )
+
+    return impl
 
 
 @box(RangeIndexType)
@@ -1560,7 +1634,12 @@ def lower_constant_range_index(context, builder, ty, pyval):
 
 @overload(pd.RangeIndex, no_unliteral=True, inline="always")
 def range_index_overload(
-    start=None, stop=None, step=None, dtype=None, copy=False, name=None, fastpath=None
+    start=None,
+    stop=None,
+    step=None,
+    dtype=None,
+    copy=False,
+    name=None,
 ):
 
     # validate the arguments
@@ -1598,7 +1677,7 @@ def range_index_overload(
     if is_overload_none(step):
         _step = "1"
 
-    func_text = "def _pd_range_index_imp(start=None, stop=None, step=None, dtype=None, copy=False, name=None, fastpath=None):\n"
+    func_text = "def _pd_range_index_imp(start=None, stop=None, step=None, dtype=None, copy=False, name=None):\n"
     func_text += "  return init_range_index({}, {}, {}, name)\n".format(
         _start, _stop, _step
     )
@@ -1606,6 +1685,13 @@ def range_index_overload(
     exec(func_text, {"init_range_index": init_range_index}, loc_vars)
     _pd_range_index_imp = loc_vars["_pd_range_index_imp"]
     return _pd_range_index_imp
+
+
+@overload(pd.CategoricalIndex, no_unliteral=True, inline="always")
+def categorical_index_overload(
+    data=None, categories=None, ordered=None, dtype=None, copy=False, name=None
+):
+    raise BodoError("pd.CategoricalIndex() initializer not yet supported.")
 
 
 @overload_attribute(RangeIndexType, "start")
@@ -1720,11 +1806,29 @@ make_attribute_wrapper(PeriodIndexType, "dict", "_dict")
 
 
 @overload_method(PeriodIndexType, "copy", no_unliteral=True)
-def overload_period_index_copy(A):
+def overload_period_index_copy(A, name=None, deep=False, dtype=None, names=None):
     freq = A.freq
-    return lambda A: bodo.hiframes.pd_index_ext.init_period_index(
-        A._data.copy(), A._name, freq
-    )  # pragma: no cover
+    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    err_str = idx_typ_to_format_str_map[PeriodIndexType].format("copy()")
+    check_unsupported_args(
+        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+    )
+
+    if not is_overload_none(name):
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_period_index(
+                A._data.copy(), name, freq
+            )
+
+    else:
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_period_index(
+                A._data.copy(), A._name, freq
+            )
+
+    return impl
 
 
 @intrinsic
@@ -1999,10 +2103,28 @@ make_attribute_wrapper(CategoricalIndexType, "dict", "_dict")
 
 
 @overload_method(CategoricalIndexType, "copy", no_unliteral=True)
-def overload_categorical_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_categorical_index(
-        A._data.copy(), A._name
-    )  # pragma: no cover
+def overload_categorical_index_copy(A, name=None, deep=False, dtype=None, names=None):
+    err_str = idx_typ_to_format_str_map[CategoricalIndexType].format("copy()")
+    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    check_unsupported_args(
+        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+    )
+
+    if not is_overload_none(name):
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_categorical_index(
+                A._data.copy(), name
+            )
+
+    else:
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_categorical_index(
+                A._data.copy(), A._name
+            )
+
+    return impl
 
 
 # ------------------------------ IntervalIndex ---------------------------
@@ -2257,10 +2379,26 @@ make_attribute_wrapper(NumericIndexType, "dict", "_dict")
 
 
 @overload_method(NumericIndexType, "copy", no_unliteral=True)
-def overload_numeric_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_numeric_index(
-        A._data.copy(), A._name
-    )  # pragma: no cover
+def overload_numeric_index_copy(A, name=None, deep=False, dtype=None, names=None):
+    err_str = idx_typ_to_format_str_map[NumericIndexType].format("copy()")
+    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    check_unsupported_args(
+        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+    )
+
+    if not is_overload_none(name):
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_numeric_index(A._data.copy(), name)
+
+    else:
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_numeric_index(
+                A._data.copy(), A._name
+            )
+
+    return impl
 
 
 @box(NumericIndexType)
@@ -2351,14 +2489,20 @@ def unbox_numeric_index(typ, val, c):
     return NativeValue(index_val._getvalue())
 
 
-def create_numeric_constructor(func, default_dtype):
-    def overload_impl(data=None, dtype=None, copy=False, name=None, fastpath=None):
+def create_numeric_constructor(func, func_str, default_dtype):
+    def overload_impl(data=None, dtype=None, copy=False, name=None):
+        # TODO: I'm not entirely certain what the dtype argument even does.
+        # playing around with it in ipython, it seems to have no effect unless it
+        # is not castable to the default type, in which case it throws an error.
+        # for right now, I'm just going to say we don't support it.
+        # TODO: read through the pandas source code
+        unsupported_args_dict = dict(dtype=dtype)
+        default_dict = dict(dtype=None)
+        check_unsupported_args(func_str, unsupported_args_dict, default_dict)
         if is_overload_false(copy):
             # if copy is False for sure, specialize to avoid branch
 
-            def impl(
-                data=None, dtype=None, copy=False, name=None, fastpath=None
-            ):  # pragma: no cover
+            def impl(data=None, dtype=None, copy=False, name=None):  # pragma: no cover
                 data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
                 data_res = bodo.utils.conversion.fix_arr_dtype(
                     data_arr, np.dtype(default_dtype)
@@ -2368,7 +2512,10 @@ def create_numeric_constructor(func, default_dtype):
         else:
 
             def impl(
-                data=None, dtype=None, copy=False, name=None, fastpath=None
+                data=None,
+                dtype=None,
+                copy=False,
+                name=None,
             ):  # pragma: no cover
                 data_arr = bodo.utils.conversion.coerce_to_ndarray(data)
                 if copy:
@@ -2384,12 +2531,12 @@ def create_numeric_constructor(func, default_dtype):
 
 
 def _install_numeric_constructors():
-    for func, default_dtype in (
-        (pd.Int64Index, np.int64),
-        (pd.UInt64Index, np.uint64),
-        (pd.Float64Index, np.float64),
+    for func, func_str, default_dtype in (
+        (pd.Int64Index, "pandas.Int64Index", np.int64),
+        (pd.UInt64Index, "pandas.UInt64Index", np.uint64),
+        (pd.Float64Index, "pandas.Float64Index", np.float64),
     ):
-        overload_impl = create_numeric_constructor(func, default_dtype)
+        overload_impl = create_numeric_constructor(func, func_str, default_dtype)
         overload(func, no_unliteral=True)(overload_impl)
 
 
@@ -2663,10 +2810,31 @@ def get_binary_str_codegen(is_binary=False):
 
 @overload_method(BinaryIndexType, "copy", no_unliteral=True)
 @overload_method(StringIndexType, "copy", no_unliteral=True)
-def overload_binary_string_index_copy(A):
-    return lambda A: bodo.hiframes.pd_index_ext.init_binary_str_index(
-        A._data.copy(), A._name
-    )  # pragma: no cover
+def overload_binary_string_index_copy(A, name=None, deep=False, dtype=None, names=None):
+
+    typ = type(A)
+
+    err_str = idx_typ_to_format_str_map[typ].format("copy()")
+    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    check_unsupported_args(
+        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+    )
+
+    if not is_overload_none(name):
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_binary_str_index(
+                A._data.copy(), name
+            )
+
+    else:
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_binary_str_index(
+                A._data.copy(), A._name
+            )
+
+    return impl
 
 
 # ---------------- Common Index fns -------------------
@@ -2679,7 +2847,9 @@ def overload_binary_string_index_copy(A):
 @overload_attribute(RangeIndexType, "name")
 @overload_attribute(PeriodIndexType, "name")
 @overload_attribute(NumericIndexType, "name")
-@overload_attribute(StringIndexType, "name")
+@overload_attribute(IntervalIndexType, "name")
+@overload_attribute(CategoricalIndexType, "name")
+@overload_attribute(MultiIndexType, "name")
 def Index_get_name(i):
     def impl(i):  # pragma: no cover
         return i._name
@@ -2773,7 +2943,10 @@ def is_pd_index_type(t):
 @overload_method(PeriodIndexType, "take", no_unliteral=True)
 @overload_method(DatetimeIndexType, "take", no_unliteral=True)
 @overload_method(TimedeltaIndexType, "take", no_unliteral=True)
-def overload_index_take(I, indices):
+def overload_index_take(I, indices, axis=0, allow_fill=True, fill_value=None):
+    unsupported_args = dict(axis=axis, allow_fill=allow_fill, fill_value=fill_value)
+    default_args = dict(axis=0, allow_fill=True, fill_value=None)
+    check_unsupported_args("pandas.Index.take", unsupported_args, default_args)
     return lambda I, indices: I[indices]  # pragma: no cover
 
 
@@ -3026,6 +3199,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_index_ext_get_index_data = (
 @overload_method(DatetimeIndexType, "map", inline="always", no_unliteral=True)
 @overload_method(TimedeltaIndexType, "map", inline="always", no_unliteral=True)
 def overload_index_map(I, mapper, na_action=None):
+
     if not is_const_func_type(mapper):
         raise BodoError("Index.map(): 'mapper' should be a function")
 
@@ -3050,6 +3224,7 @@ def overload_index_map(I, mapper, na_action=None):
 
     out_arr_type = get_udf_out_arr_type(f_return_type)
 
+    # Just default to ignore?
     func = get_overload_const_func(mapper, None)
     func_text = "def f(I, mapper, na_action=None):\n"
     func_text += "  name = bodo.hiframes.pd_index_ext.get_index_name(I)\n"
@@ -3321,11 +3496,27 @@ make_attribute_wrapper(HeterogeneousIndexType, "name", "_name")
 
 
 @overload_method(HeterogeneousIndexType, "copy", no_unliteral=True)
-def overload_heter_index_copy(A):
+def overload_heter_index_copy(A, name=None, deep=False, dtype=None, names=None):
+    err_str = idx_typ_to_format_str_map[HeterogeneousIndexType].format("copy()")
+    idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
+    check_unsupported_args(
+        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+    )
+
     # NOTE: assuming data is immutable
-    return lambda A: bodo.hiframes.pd_index_ext.init_heter_index(
-        A._data, A._name
-    )  # pragma: no cover
+    if not is_overload_none(name):
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_numeric_index(A._data.copy(), name)
+
+    else:
+
+        def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.init_numeric_index(
+                A._data.copy(), A._name
+            )
+
+    return impl
 
 
 # TODO(ehsan): test
@@ -3611,7 +3802,7 @@ def _install_index_getiter():
 _install_index_getiter()
 
 
-index_unsupported = [
+index_unsupported_methods = [
     "all",
     "any",
     "append",
@@ -3691,24 +3882,282 @@ index_unsupported = [
     "where",
 ]
 
+index_unsupported_atrs = [
+    "T",
+    "array",
+    "asi8",
+    "dtype",
+    "has_duplicates",
+    "hasnans",
+    "inferred_type",
+    "is_all_dates",
+    "is_monotonic",
+    "is_monotonic_decreasing",
+    "is_monotonic_increasing",
+    "is_unique",
+    "ndim",
+    "nlevels",
+    "size",
+    "names",
+    "empty",
+]
+
+# unsupported RangeIndex class methods (handled in untyped pass)
+# from_range
+
+cat_idx_unsupported_atrs = [
+    "codes",
+    "categories",
+    "ordered",
+]
+
+cat_idx_unsupported_methods = [
+    "rename_categories",
+    "reorder_categories",
+    "add_categories",
+    "remove_categories",
+    "remove_unused_categories",
+    "set_categories",
+    "as_ordered",
+    "as_unordered",
+    "get_loc",
+]
+
+
+interval_idx_unsupported_atrs = [
+    "closed",
+    "is_empty",
+    "is_non_overlapping_monotonic",
+    "is_overlapping",
+    "left",
+    "right",
+    "mid",
+    "length",
+    "values",
+    "shape",
+    "nbytes",
+]
+
+# unsupported Interval class methods (handled in untyped pass)
+# from_arrays
+# from_tuples
+# from_breaks
+
+
+interval_idx_unsupported_methods = [
+    "contains",
+    "copy",
+    "overlaps",
+    "set_closed",
+    "to_tuples",
+    "take",
+    "get_loc",
+    "isna",
+    "isnull",
+    "map",
+]
+
+
+multi_index_unsupported_atrs = [
+    "levshape",
+    "levels",
+    "codes",
+    "dtypes",
+    "values",
+    "shape",
+    "nbytes",
+]
+
+# unsupported multi-index class methods (handled in untyped pass)
+# from_arrays
+# from_tuples
+# from_frame
+
+
+multi_index_unsupported_methods = [
+    "copy",
+    "set_levels",
+    "set_codes",
+    "swaplevel",
+    "reorder_levels",
+    "remove_unused_levels",
+    "get_loc",
+    "get_locs",
+    "get_loc_level",
+    "take",
+    "isna",
+    "isnull",
+    "map",
+]
+
+
+dt_index_unsupported_atrs = [
+    "time",
+    "timez",
+    "tz",
+    "freq",
+    "freqstr",
+    "inferred_freq",
+]
+
+dt_index_unsupported_methods = [
+    "normalize",
+    "strftime",
+    "snap",
+    "tz_convert",
+    "tz_localize",
+    "round",
+    "floor",
+    "ceil",
+    "to_period",
+    "to_perioddelta",
+    "to_pydatetime",
+    "month_name",
+    "day_name",
+    "mean",
+    "indexer_at_time",
+    "indexer_between",
+    "indexer_between_time",
+]
+
+
+td_index_unsupported_atrs = [
+    "components",
+    "inferred_freq",
+]
+
+td_index_unsupported_methods = [
+    "to_pydatetime",
+    "round",
+    "floor",
+    "ceil",
+    "mean",
+]
+
+
+period_index_unsupported_atrs = [
+    "day",
+    "dayofweek",
+    "day_of_week",
+    "dayofyear",
+    "day_of_year",
+    "days_in_month",
+    "daysinmonth",
+    "freq",
+    "freqstr",
+    "hour",
+    "is_leap_year",
+    "minute",
+    "month",
+    "quarter",
+    "second",
+    "week",
+    "weekday",
+    "weekofyear",
+    "year",
+    "end_time",
+    "qyear",
+    "start_time",
+]
+
+period_index_unsupported_methods = [
+    "asfreq",
+    "strftime",
+    "to_timestamp",
+]
+
+index_types = [
+    ("pandas.RangeIndex.{}", RangeIndexType),
+    (
+        "pandas.Index.{} with numeric data",
+        NumericIndexType,
+    ),
+    (
+        "pandas.Index.{} with string data",
+        StringIndexType,
+    ),
+    (
+        "pandas.Index.{} with binary data",
+        BinaryIndexType,
+    ),
+    ("pandas.TimedeltaIndex.{}", TimedeltaIndexType),
+    ("pandas.IntervalIndex.{}", IntervalIndexType),
+    ("pandas.CategoricalIndex.{}", CategoricalIndexType),
+    ("pandas.PeriodIndex.{}", PeriodIndexType),
+    ("pandas.DatetimeIndex.{}", DatetimeIndexType),
+    ("pandas.MultiIndex.{}", MultiIndexType),
+]
+
+for name, typ in index_types:
+    idx_typ_to_format_str_map[typ] = name
+
 
 def _install_index_unsupported():
     """install an overload that raises BodoError for unsupported methods of pd.Index"""
-    index_types = [
-        ("NumericIndexType.", NumericIndexType),
-        ("StringIndexType.", StringIndexType),
-        ("BinaryIndexType.", BinaryIndexType),
-        ("TimedeltaIndexType.", TimedeltaIndexType),
-        ("IntervalIndexType.", IntervalIndexType),
-        ("CategoricalIndexType.", CategoricalIndexType),
-        ("PeriodIndexType.", PeriodIndexType),
-        ("DatetimeIndexType.", DatetimeIndexType),
+
+    # install unsupported methods that are common to all idx types
+    for fname in index_unsupported_methods:
+        for format_str, typ in index_types:
+            overload_method(typ, fname, no_unliteral=True)(
+                create_unsupported_overload(format_str.format(fname + "()"))
+            )
+
+    # install unsupported attributes that are common to all idx types
+    for attr_name in index_unsupported_atrs:
+        for format_str, typ in index_types:
+            overload_attribute(typ, attr_name, no_unliteral=True)(
+                create_unsupported_overload(format_str.format(attr_name))
+            )
+
+    unsupported_attrs_list = [
+        (CategoricalIndexType, cat_idx_unsupported_atrs),
+        (IntervalIndexType, interval_idx_unsupported_atrs),
+        (MultiIndexType, multi_index_unsupported_atrs),
+        (DatetimeIndexType, dt_index_unsupported_atrs),
+        (TimedeltaIndexType, td_index_unsupported_atrs),
+        (PeriodIndexType, period_index_unsupported_atrs),
     ]
 
-    for fname in index_unsupported:
-        for t_name, typ in index_types:
-            overload_method(typ, fname, no_unliteral=True)(
-                create_unsupported_overload(t_name + fname)
+    unsupported_methods_list = [
+        (CategoricalIndexType, cat_idx_unsupported_methods),
+        (IntervalIndexType, interval_idx_unsupported_methods),
+        (MultiIndexType, multi_index_unsupported_methods),
+        (DatetimeIndexType, dt_index_unsupported_methods),
+        (TimedeltaIndexType, td_index_unsupported_methods),
+        (PeriodIndexType, period_index_unsupported_methods),
+    ]
+
+    # install unsupported methods for the individual idx types
+    for typ, cur_typ_unsupported_methods_list in unsupported_methods_list:
+        format_str = idx_typ_to_format_str_map[typ]
+        for fn_name in cur_typ_unsupported_methods_list:
+            overload_method(typ, fn_name, no_unliteral=True)(
+                create_unsupported_overload(format_str.format(fn_name + "()"))
+            )
+
+    # install unsupported attributes for the individual idx types
+    for typ, cur_typ_unsupported_attrs_list in unsupported_attrs_list:
+        format_str = idx_typ_to_format_str_map[typ]
+        for attr_name in cur_typ_unsupported_attrs_list:
+            overload_attribute(typ, attr_name, no_unliteral=True)(
+                create_unsupported_overload(format_str.format(attr_name))
+            )
+
+    # max/min only supported for TimedeltaIndexType, DatetimeIndexType
+    for idx_typ in [
+        RangeIndexType,
+        NumericIndexType,
+        StringIndexType,
+        BinaryIndexType,
+        IntervalIndexType,
+        CategoricalIndexType,
+        PeriodIndexType,
+        MultiIndexType,
+    ]:
+        for fn_name in ["max", "min"]:
+            format_str = idx_typ_to_format_str_map[idx_typ]
+            overload_method(idx_typ, fn_name, no_unliteral=True)(
+                create_unsupported_overload(format_str.format(fn_name + "()"))
             )
 
 

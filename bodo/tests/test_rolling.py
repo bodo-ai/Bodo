@@ -43,6 +43,22 @@ def test_fixed_index(test_df, memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(test_df), impl(test_df))
 
 
+# TODO [BE-1797]: Add memory leak check
+def test_fixed_index_groupby():
+    def impl(df):
+        return df.groupby("B").rolling(2).mean()
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 24, None] * 5,
+            "B": ["421", "f31"] * 10,
+            "C": [1.51, 2.421, 233232, 12.21] * 5,
+        }
+    )
+    # Groupby ordering isn't defined so we must sort.
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+
+
 def test_variable_on_index(memory_leak_check):
     def impl(df):
         return df.rolling("2s").mean()

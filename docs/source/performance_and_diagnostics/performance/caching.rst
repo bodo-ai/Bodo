@@ -29,6 +29,8 @@ the JIT decorator:
 .. code:: ipython3
 
     import time
+    import pandas as pd
+    import bodo
 
     @bodo.jit(cache=True)
     def mean_power_speed():
@@ -41,26 +43,26 @@ the JIT decorator:
         print(result)
         print("Total execution time:", round(time.time() - t0, 3), "secs")
 
-.. parsed-literal::
+The first time that the above code runs, Bodo compiles the function and
+caches it to disk. The code times the whole function call, which includes compilation time the first time the function is run::
 
-    [stdout:0]
     power    102.078421
     speed      5.656851
     dtype: float64
-    Total execution time: 3.606 secs
+    Total execution time: 4.614 secs
 
+In subsequent runs, it will recover the function from
+cache and as a result, the execution time will be much faster::
 
-The first time that the above code runs, Bodo compiles the function and
-caches it to disk. In subsequent runs, it will recover the function from
-cache and the execution time will be much faster as a result. You can
-try this out by running the above code multiple times, and changing
-between ``cache=True`` and ``cache=False``.
+    power    102.078421
+    speed      5.656851
+    dtype: float64
+    Total execution time: 0.518 secs
 
 .. note::
 
    ``data/cycling_dataset.pq`` is located in the Bodo tutorial `repo
    <https://github.com/Bodo-inc/Bodo-tutorial>`_.
-
 
 Cache Location and Portability
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -192,3 +194,15 @@ Current Caching Limitations
    If the value of the global changes in the source code after
    compilation, the compiled object (and cache) will not rebind to the
    new value.
+
+
+Troubleshooting
+~~~~~~~~~~~~~~~
+
+During execution, Bodo will print information on caching if the environment
+variable ``NUMBA_DEBUG_CACHE`` is set to ``1``. For example, on first run it will show
+if the cache is being saved to and where, and on subsequent runs it will show if the
+compiler is successfully loading from cache.
+
+If the compiler reports that it is not able to cache a function, or load a function from
+cache, please report the issue `here <https://github.com/Bodo-inc/Feedback>`_.

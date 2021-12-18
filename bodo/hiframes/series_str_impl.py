@@ -1278,6 +1278,42 @@ def series_cat_codes_overload(S_dt):
     return impl
 
 
+unsupported_cat_attrs = {
+    "categories",
+    "ordered",
+}
+
+unsupported_cat_methods = {
+    "rename_categories",
+    "reorder_categories",
+    "add_categories",
+    "remove_categories",
+    "remove_unused_categories",
+    "set_categories",
+    "as_ordered",
+    "as_unordered",
+}
+
+
+def _install_catseries_unsupported():
+    """install an overload that raises BodoError for unsupported Series cat methods"""
+
+    for attr_name in unsupported_cat_attrs:
+        full_name = "Series.cat." + attr_name
+        overload_attribute(SeriesCatMethodType, attr_name)(
+            create_unsupported_overload(full_name)
+        )
+
+    for fname in unsupported_cat_methods:
+        full_name = "Series.cat." + fname
+        overload_method(SeriesCatMethodType, fname)(
+            create_unsupported_overload(full_name)
+        )
+
+
+_install_catseries_unsupported()
+
+
 unsupported_str_methods = {
     "casefold",
     "cat",
@@ -1285,18 +1321,17 @@ unsupported_str_methods = {
     "encode",
     "findall",
     "fullmatch",
-    "get_dummies",
     "index",
     "match",
     "normalize",
     "partition",
-    "repeat",
     "rindex",
     "rpartition",
-    "rsplit",
     "slice_replace",
+    "rsplit",
     "translate",
     "wrap",
+    "get_dummies",
 }
 
 

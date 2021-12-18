@@ -36,6 +36,7 @@ from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.io import csv_cpp
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.libs.str_ext import string_type, unicode_to_utf8
+from bodo.utils.templates import OverloadedKeyAttributeTemplate
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
@@ -244,16 +245,22 @@ def series_getiter(context, builder, sig, args):
 
 
 @infer_getattr
-class HeterSeriesAttribute(AttributeTemplate):
+class HeterSeriesAttribute(OverloadedKeyAttributeTemplate):
     key = HeterogeneousSeriesType
 
     def generic_resolve(self, S, attr):
         """Handle getattr on row Series values pass to df.apply() UDFs."""
         from bodo.hiframes.pd_index_ext import HeterogeneousIndexType
 
+        # If an column name conflicts with a Series method/attribute we
+        # shouldn't search the columns.
+        if self._is_existing_attr(attr):
+            return
+
         if isinstance(S.index, HeterogeneousIndexType) and is_overload_constant_tuple(
             S.index.data
         ):
+
             indices = get_overload_const_tuple(S.index.data)
             if attr in indices:
                 arr_ind = indices.index(attr)
@@ -1223,17 +1230,25 @@ def to_csv_overload(
 
 
 # Raise Bodo Error for unsupported attributes and methods of Series
-series_unsupported_attrs = (
-    "array",  # TODO: support
-    "at",
-    "attrs",
+series_unsupported_attrs = {
+    # attributes
     "axes",
+    "array",  # TODO: support
+    "flags",
+    # Indexing, Iteration
+    "at",
+    # Computations / descriptive stats
     "is_unique",
+    # Accessors
     "sparse",
-)
+    # Metadata
+    "attrs",
+}
 
 
 series_unsupported_methods = (
+    # Axes
+    "set_flags",
     # Conversion
     "convert_dtypes",
     "infer_objects",
@@ -1314,6 +1329,8 @@ series_unsupported_methods = (
     "to_excel",
     "to_xarray",
     "to_hdf",
+    "to_sql",
+    "to_json",
     "to_string",
     "to_clipboard",
     "to_latex",
@@ -1340,3 +1357,248 @@ def _install_series_unsupported():
 
 
 _install_series_unsupported()
+
+
+# Raise Bodo Error for unsupported attributes and methods of HeterogenousSeries
+heter_series_unsupported_attrs = {
+    # attributes
+    "axes",
+    "array",  # TODO: support
+    "dtype",
+    "memory_usage",
+    "hasnans",
+    "dtypes",
+    "flags",
+    # Indexing, Iteration
+    "at",
+    # Computations / descriptive stats
+    "is_unique",
+    "is_monotonic",
+    "is_monotonic_increasing",
+    "is_monotonic_decreasing",
+    # Accessors
+    "dt",
+    "str",
+    "cat",
+    "sparse",
+    # Metadata
+    "attrs",
+}
+
+
+heter_series_unsupported_methods = {
+    # Axes
+    "set_flags",
+    # Conversion
+    "astype",
+    "convert_dtypes",
+    "infer_objects",
+    "bool",
+    "to_numpy" "to_period",
+    "to_timestamp",
+    "to_list",
+    "tolist",
+    "__array__",
+    # Indexing, iteration
+    "get",
+    "at",
+    "iat",
+    "iloc",
+    "loc",
+    "__iter__",
+    "items",
+    "iteritems",
+    "keys",  # TODO: Support
+    "pop",
+    "item",
+    "xs",
+    # Binary operator functions
+    "add",
+    "sub",
+    "mul",
+    "div",
+    "truediv",
+    "floordiv",
+    "mod",
+    "pow",
+    "radd",
+    "rsub",
+    "rmul",
+    "rdiv",
+    "rtruediv",
+    "rfloordiv",
+    "rmod",
+    "rpow",
+    "combine",
+    "combine_first",
+    "round",
+    "lt",
+    "gt",
+    "le",
+    "ge",
+    "ne",
+    "eq",
+    "product",
+    "dot",
+    # Function application, groupby & window
+    "apply",
+    "agg",
+    "aggregate",
+    "transform",
+    "map",
+    "groupby",
+    "rolling",
+    "expanding",
+    "ewm",
+    "pipe",
+    # Computations / descriptive stats
+    "abs",
+    "all",
+    "any",
+    "autocorr",
+    "between",
+    "clip",
+    "corr",
+    "count",
+    "cov",
+    "cummax",
+    "cummin",
+    "cumprod",
+    "cumsum",
+    "describe",
+    "diff",
+    "factorize",
+    "kurt",
+    "mad",
+    "max",
+    "mean",
+    "median",
+    "min",
+    "mode",
+    "nlargest",
+    "nsmallest",
+    "pct_change",
+    "prod",
+    "quantile",
+    "rank",
+    "sem",
+    "skew",
+    "std",
+    "sum",
+    "var",
+    "kurtosis",
+    "unique",
+    "nunique",
+    "value_counts",
+    # Reindexing / selection / label manipulation
+    "align",
+    "drop",
+    "droplevel",
+    "drop_duplicates",
+    "duplicated",
+    "equals",
+    "first",
+    "head",
+    "idxmax",
+    "idxmin",
+    "isin",
+    "last",
+    "reindex",
+    "reindex_like",
+    "rename",  # TODO: Support
+    "rename_axis",
+    "reset_index",
+    "sample",
+    "set_axis",
+    "take",
+    "tail",
+    "truncate",
+    "where",
+    "mask",
+    "add_prefix",
+    "add_suffix",
+    "filter",
+    # Missing data handling
+    "backfill",
+    "bfill",
+    "dropna",
+    "ffill",
+    "fillna",
+    "interpolate",
+    "isna",  # TODO: Support
+    "isnull",  # TODO: Support
+    "notna",  # TODO: Support
+    "notnull",  # TODO: Support
+    "pad",
+    "replace",
+    # Reshaping, sorting
+    "argsort",
+    "argmin",
+    "argmax",
+    "reorder_levels",
+    "sort_values",
+    "sort_index",
+    "swaplevel",
+    "unstack",
+    "explode",
+    "searchsorted",
+    "ravel",
+    "repeat",
+    "squeeze",
+    "view",
+    # Combining / joining / merging
+    "append",
+    "compare",
+    "update",
+    # Time series-related
+    "asfreq",
+    "asof",
+    "shift",
+    "first_valid_index",
+    "last_valid_index",
+    "resample",
+    "tz_convert",
+    "tz_localize",
+    "at_time",
+    "between_time",
+    "tshift",
+    "slice_shift",
+    # Plotting
+    "plot",
+    "hist",
+    # Serialization / IO / conversion
+    "to_pickle",
+    "to_csv",
+    "to_dict",
+    "to_excel",
+    "to_frame",
+    "to_xarray",
+    "to_hdf",
+    "to_sql",
+    "to_json",
+    "to_string",
+    "to_clipboard",
+    "to_latex",
+    "to_markdown",
+}
+
+
+def _install_heter_series_unsupported():
+    """install an overload that raises BodoError for unsupported attributes and methods
+    of HeterogenousSeries
+    """
+
+    for attr_name in heter_series_unsupported_attrs:
+        full_name = "HeterogeneousSeries." + attr_name
+        overload_attribute(HeterogeneousSeriesType, attr_name)(
+            create_unsupported_overload(full_name)
+        )
+
+    for fname in heter_series_unsupported_methods:
+        full_name = "HeterogeneousSeries." + fname
+        overload_method(HeterogeneousSeriesType, fname, no_unliteral=True)(
+            create_unsupported_overload(full_name)
+        )
+
+
+_install_heter_series_unsupported()

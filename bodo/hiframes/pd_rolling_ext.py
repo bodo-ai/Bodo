@@ -309,9 +309,10 @@ def groupby_rolling_overload(
     on=None,
     axis=0,
     closed=None,
+    method="single",
 ):
-    unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
-    arg_defaults = dict(win_type=None, axis=0, closed=None)
+    unsupported_args = dict(win_type=win_type, axis=axis, closed=closed, method=method)
+    arg_defaults = dict(win_type=None, axis=0, closed=None, method="single")
     check_unsupported_args("GroupBy.rolling", unsupported_args, arg_defaults)
     _validate_rolling_args(grp, window, min_periods, center, on)
 
@@ -324,6 +325,7 @@ def groupby_rolling_overload(
         on=None,
         axis=0,
         closed=None,
+        method="single",
     ):  # pragma: no cover
         min_periods = _handle_default_min_periods(min_periods, window)
         return bodo.hiframes.pd_rolling_ext.init_rolling(

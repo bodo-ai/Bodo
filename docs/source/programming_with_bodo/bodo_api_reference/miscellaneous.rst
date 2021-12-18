@@ -1,5 +1,5 @@
-User Guide
-======================
+Miscellaneous Supported Python API
+===================================
 
 In this section, we will discuss some useful Bodo features.
 

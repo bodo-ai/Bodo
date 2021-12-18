@@ -319,6 +319,50 @@ class UntypedPass:
                     assign.target,
                 )
 
+        # multiIndex unsupported class methods
+        if (
+            (
+                rhs.attr == "from_arrays"
+                or rhs.attr == "from_tuples"
+                or rhs.attr == "from_frame"
+            )
+            and is_expr(val_def, "getattr")
+            and val_def.attr == "MultiIndex"
+        ):  # pragma: no cover
+            mod_def = guard(get_definition, self.func_ir, val_def.value)
+            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+                raise bodo.utils.typing.BodoError(
+                    f"pandas.MultiIndex.{rhs.attr}() is not yet supported"
+                )
+
+        # IntervalIndex unsupported class methods
+        if (
+            (
+                rhs.attr == "from_arrays"
+                or rhs.attr == "from_tuples"
+                or rhs.attr == "from_breaks"
+            )
+            and is_expr(val_def, "getattr")
+            and val_def.attr == "IntervalIndex"
+        ):  # pragma: no cover
+            mod_def = guard(get_definition, self.func_ir, val_def.value)
+            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+                raise bodo.utils.typing.BodoError(
+                    f"pandas.IntervalIndex.{rhs.attr}() is not yet supported"
+                )
+
+        # RangeIndex unsupported class methods
+        if (
+            rhs.attr == "from_range"
+            and is_expr(val_def, "getattr")
+            and val_def.attr == "RangeIndex"
+        ):  # pragma: no cover
+            mod_def = guard(get_definition, self.func_ir, val_def.value)
+            if isinstance(mod_def, ir.Global) and mod_def.value == pd:
+                raise bodo.utils.typing.BodoError(
+                    f"pandas.RangeIndex.{rhs.attr}() is not yet supported"
+                )
+
         # replace datetime.date.fromordinal with an internal function since class methods
         # are not supported in Numba's typing
         if (
@@ -378,6 +422,49 @@ class UntypedPass:
                     (),
                     assign.target,
                 )
+
+        # Handle timedelta unsupported class methods/attrs
+        if rhs.attr in ["max", "min", "resolution"]:
+            if is_expr(val_def, "getattr") and val_def.attr == "Timedelta":
+                mod_def = guard(get_definition, self.func_ir, val_def.value)
+                is_pd_Timedelta = isinstance(mod_def, ir.Global) and mod_def.value == pd
+            else:
+                # Handle relative imports by checking if the value matches importing from Python
+                is_pd_Timedelta = (
+                    isinstance(val_def, (ir.Global, ir.FreeVar))
+                    and val_def.value == pd.Timedelta
+                )
+            if is_pd_Timedelta:
+                raise BodoError(f"pandas.Timedelta.{rhs.attr} not yet supported.")
+
+        # Unsupported pd.Timestamp class methods
+        if rhs.attr in [
+            "combine",
+            "fromisocalendar",
+            "fromisoformat",
+            "fromordinal",
+            "fromtimestamp",
+            "today",
+            "utcfromtimestamp",
+            "utcnow",
+            "max",
+            "min",
+            "resolution",
+        ]:
+            is_timestamp_unsupported = False
+            if is_expr(val_def, "getattr") and val_def.attr == "Timestamp":
+                mod_def = guard(get_definition, self.func_ir, val_def.value)
+                is_timestamp_unsupported = (
+                    isinstance(mod_def, ir.Global) and mod_def.value == pd
+                )
+            else:
+                # Handle relative imports by checking if the value matches importing from Python
+                is_timestamp_unsupported = (
+                    isinstance(val_def, (ir.Global, ir.FreeVar))
+                    and val_def.value == pd.Timestamp
+                )
+            if is_timestamp_unsupported:
+                raise BodoError("pandas.Timestamp." + rhs.attr + " not supported yet")
 
         # replace itertools.chain.from_iterable with an internal function since
         #  class methods are not supported in Numba's typing

@@ -55,7 +55,7 @@ ll.add_symbol(
 # sentinel type representing no first input to pd.Timestamp() constructor
 # similar to _no_input object of Pandas in timestamps.pyx
 # https://github.com/pandas-dev/pandas/blob/8806ed7120fed863b3cd7d3d5f377ec4c81739d0/pandas/_libs/tslibs/timestamps.pyx#L38
-# Also used by pd.Timedelta
+# Also used by pd.Timedelta, and df.to_numpy()
 class NoInput:
     pass
 
@@ -1714,3 +1714,38 @@ def create_cmp_op_overload_arr(op):
             return impl
 
     return overload_date_arr_cmp
+
+
+timedelta_unsupported_attrs = [
+    "asm8",
+    "resolution_string",
+    "freq",
+    "is_populated",
+]
+
+timedelta_unsupported_methods = [
+    "isoformat",
+]
+
+# class methods/attrs handled in untyped pass
+# pandas.Timedelta.max
+# pandas.Timedelta.min
+# pandas.Timedelta.resolution
+
+
+def _intstall_pd_timedelta_unsupported():
+    from bodo.utils.typing import create_unsupported_overload
+
+    for attr_name in timedelta_unsupported_attrs:
+        full_name = "pandas.Timedelta." + attr_name
+        overload_attribute(PDTimeDeltaType, attr_name)(
+            create_unsupported_overload(full_name)
+        )
+    for fname in timedelta_unsupported_methods:
+        full_name = "pandas.Timedelta." + fname
+        overload_method(PDTimeDeltaType, fname)(
+            create_unsupported_overload(full_name + "()")
+        )
+
+
+_intstall_pd_timedelta_unsupported()

@@ -55,6 +55,7 @@ Save this code in ``gen_data.py`` and run in command line::
 
     $ python gen_data.py
 
+.. _example_code_in_pandas:
 
 Example Code in Pandas
 ~~~~~~~~~~~~~~~~~~~~~~

@@ -1,19 +1,13 @@
 Programming with Bodo
-=====================
+======================
 
 .. toctree::
-   :glob:
+   :maxdepth: 4
 
-   bodo_parallelism_basics
-   user_guide
-   file_io
-   pandas
-   numpy
-   require_constants
-   ml
-   dl
-   data_visualization
-   not_supported
-   advanced
-   BodoSQL
-   BodoSQLerrors
+   bodo_parallelism/index
+
+
+.. toctree::
+   :maxdepth: 4
+
+   bodo_api_reference/index

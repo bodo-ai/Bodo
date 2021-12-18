@@ -59,7 +59,7 @@ for a list of resources the platform creates.
    using for your Bodo resources (you can find the name on the `Settings` page).
    If all cluster specific resources have been deleted properly, the resource group should look something like:
 
-   .. image:: ../platform_onboarding_screenshots/az-rg-cleanup.png
+   .. image:: ../../platform_onboarding_screenshots/az-rg-cleanup.png
       :align: center
       :alt: Azure Resource Group Cleanup
 

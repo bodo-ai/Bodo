@@ -61,13 +61,15 @@ or use :ref:`Jupyter Notebook <jupyter>`.
 
    source/programming_with_bodo/index
 
-.. toctree::
-   :maxdepth: 4
-
-   source/migration_from_spark/index
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 2
+
+   source/Integrating_bodo/index
+
+
+.. toctree::
+   :maxdepth: 2
 
    source/performance_and_diagnostics/index
 
