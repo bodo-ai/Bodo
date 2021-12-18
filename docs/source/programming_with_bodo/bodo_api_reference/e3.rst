@@ -16,7 +16,7 @@ The figure below demonstrates the components of this solution:
 #. The Bodo runtime manages data and computation across the FPGAs in the compute cluster.
 #. The compute cluster can have any number of FPGAs which are fully managed by Bodo elastically.
 
-.. figure:: ../../figs/e3_bodo.jpeg
+.. figure:: ../../../figs/e3_bodo.jpeg
     :align: center
     :alt: Efficient Elastic Ensemble (E3) Architecture
 

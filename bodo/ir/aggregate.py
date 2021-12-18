@@ -370,7 +370,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
             )
             shift_periods_t = guard(find_const, func_ir, shift_periods_t)
         # To handle head(2) and head(n=2)
-        if func_name == "head" and (len(rhs.args) > 0 or len(rhs.kws) > 0):
+        if func_name == "head":
             head_n = get_call_expr_arg(
                 "head",
                 rhs.args,
@@ -379,7 +379,9 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                 "n",
                 5,  # default value
             )
-            head_n = guard(find_const, func_ir, head_n)
+            # If we use the default value skip the constant search.
+            if not isinstance(head_n, int):
+                head_n = guard(find_const, func_ir, head_n)
             # Per Pandas docs: Does not work for negative values of n.
             if head_n < 0:
                 raise BodoError(

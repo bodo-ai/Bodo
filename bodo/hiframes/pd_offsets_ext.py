@@ -17,6 +17,8 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
+    overload_attribute,
+    overload_method,
     register_jitable,
     register_model,
     typeof_impl,
@@ -27,7 +29,11 @@ from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.pd_timestamp_ext import get_days_in_month, pd_timestamp_type
 from bodo.libs import hdatetime_ext
-from bodo.utils.typing import BodoError, is_overload_none
+from bodo.utils.typing import (
+    BodoError,
+    create_unsupported_overload,
+    is_overload_none,
+)
 
 ll.add_symbol("box_date_offset", hdatetime_ext.box_date_offset)
 ll.add_symbol("unbox_date_offset", hdatetime_ext.unbox_date_offset)
@@ -36,7 +42,7 @@ ll.add_symbol("unbox_date_offset", hdatetime_ext.unbox_date_offset)
 # 1.Define a new Numba type class by subclassing the Type class
 #   Define a singleton Numba type instance for a non-parametric type
 class MonthBeginType(types.Type):
-    """Class for pd.tseries.offset.MonthBegin"""
+    """Class for pd.tseries.offsets.MonthBegin"""
 
     def __init__(self):
         super(MonthBeginType, self).__init__(name="MonthBeginType()")
@@ -236,7 +242,7 @@ def overload_add_operator_month_begin_offset_type(lhs, rhs):
 
 
 class MonthEndType(types.Type):
-    """Class for pd.tseries.offset.MonthEnd"""
+    """Class for pd.tseries.offsets.MonthEnd"""
 
     def __init__(self):
         super(MonthEndType, self).__init__(name="MonthEndType()")
@@ -522,7 +528,7 @@ def overload_mul_date_offset_types(lhs, rhs):
 
 
 class DateOffsetType(types.Type):
-    """Class for pd.tseries.offset.DateOffset"""
+    """Class for pd.tseries.offsets.DateOffset"""
 
     def __init__(self):
         super(DateOffsetType, self).__init__(name="DateOffsetType()")
@@ -1400,3 +1406,267 @@ def calculate_week_date(n, weekday, other_weekday):  # pragma: no cover
             n = n - 1
 
     return pd.Timedelta(weeks=n, days=offset)
+
+
+date_offset_unsupported_attrs = {
+    # DateOffset
+    "base",
+    # Properties
+    "freqstr",
+    "kwds",
+    "name",
+    "nanos",
+    "rule_code",
+}
+
+date_offset_unsupported = {
+    # DateOffset
+    "__call__",
+    "rollback",
+    "rollforward",
+    # Properties
+    "is_month_start",
+    "is_month_end",
+    # Methods
+    "apply",
+    "apply_index",
+    "copy",
+    "isAnchored",
+    "onOffset",
+    "is_anchored",
+    "is_on_offset",
+    "is_quarter_start",
+    "is_quarter_end",
+    "is_year_start",
+    "is_year_end",
+}
+
+month_end_unsupported_attrs = {
+    # MonthEnd
+    "base",
+    # Properties
+    "freqstr",
+    "kwds",
+    "name",
+    "nanos",
+    "rule_code",
+}
+
+month_end_unsupported = {
+    "__call__",
+    "rollback",
+    "rollforward",
+    # Methods
+    "apply",
+    "apply_index",
+    "copy",
+    "isAnchored",
+    "onOffset",
+    "is_anchored",
+    "is_on_offset",
+    "is_month_start",
+    "is_month_end",
+    "is_quarter_start",
+    "is_quarter_end",
+    "is_year_start",
+    "is_year_end",
+}
+
+month_begin_unsupported_attrs = {
+    # MonthBegin
+    "base"
+    # Properties
+    "freqstr",
+    "kwds",
+    "name",
+    "nanos",
+    "rule_code",
+}
+
+month_begin_unsupported = {
+    "__call__",
+    "rollback",
+    "rollforward",
+    # Methods
+    "apply",
+    "apply_index",
+    "copy",
+    "isAnchored",
+    "onOffset",
+    "is_anchored",
+    "is_on_offset",
+    "is_month_start",
+    "is_month_end",
+    "is_quarter_start",
+    "is_quarter_end",
+    "is_year_start",
+    "is_year_end",
+}
+
+week_unsupported_attrs = {
+    # MonthBegin
+    "base"
+    # Properties
+    "freqstr",
+    "kwds",
+    "name",
+    "nanos",
+    "rule_code",
+}
+
+week_unsupported = {
+    "__call__",
+    "rollback",
+    "rollforward",
+    # Methods
+    "apply",
+    "apply_index",
+    "copy",
+    "isAnchored",
+    "onOffset",
+    "is_anchored",
+    "is_on_offset",
+    "is_month_start",
+    "is_month_end",
+    "is_quarter_start",
+    "is_quarter_end",
+    "is_year_start",
+    "is_year_end",
+}
+
+
+# Unsupported pandas.tseries.offsets
+# TODO: Update the unsupported attrs for each class
+# once supported.
+offsets_unsupported = {
+    pd.tseries.offsets.BusinessDay,
+    pd.tseries.offsets.BDay,
+    pd.tseries.offsets.BusinessHour,
+    pd.tseries.offsets.CustomBusinessDay,
+    pd.tseries.offsets.CDay,
+    pd.tseries.offsets.CustomBusinessHour,
+    pd.tseries.offsets.BusinessMonthEnd,
+    pd.tseries.offsets.BMonthEnd,
+    pd.tseries.offsets.BusinessMonthBegin,
+    pd.tseries.offsets.BMonthBegin,
+    pd.tseries.offsets.CustomBusinessMonthEnd,
+    pd.tseries.offsets.CBMonthEnd,
+    pd.tseries.offsets.CustomBusinessMonthBegin,
+    pd.tseries.offsets.CBMonthBegin,
+    pd.tseries.offsets.SemiMonthEnd,
+    pd.tseries.offsets.SemiMonthBegin,
+    pd.tseries.offsets.WeekOfMonth,
+    pd.tseries.offsets.LastWeekOfMonth,
+    pd.tseries.offsets.BQuarterEnd,
+    pd.tseries.offsets.BQuarterBegin,
+    pd.tseries.offsets.QuarterEnd,
+    pd.tseries.offsets.QuarterBegin,
+    pd.tseries.offsets.BYearEnd,
+    pd.tseries.offsets.BYearBegin,
+    pd.tseries.offsets.YearEnd,
+    pd.tseries.offsets.YearBegin,
+    pd.tseries.offsets.FY5253,
+    pd.tseries.offsets.FY5253Quarter,
+    pd.tseries.offsets.Easter,
+    pd.tseries.offsets.Tick,
+    pd.tseries.offsets.Day,
+    pd.tseries.offsets.Hour,
+    pd.tseries.offsets.Minute,
+    pd.tseries.offsets.Second,
+    pd.tseries.offsets.Milli,
+    pd.tseries.offsets.Micro,
+    pd.tseries.offsets.Nano,
+}
+
+# Unsupported attributes for pandas.tseries.frequencies
+frequencies_unsupported = {
+    pd.tseries.frequencies.to_offset,
+}
+
+
+def _install_date_offsets_unsupported():
+    """install an overload that raises BodoError for unsupported
+    pandas.tseries.offsets.DateOffset attributes/methods"""
+
+    for attr_name in date_offset_unsupported_attrs:
+        full_name = "pandas.tseries.offsets.DateOffset." + attr_name
+        overload_attribute(DateOffsetType, attr_name)(
+            create_unsupported_overload(full_name)
+        )
+
+    for attr_name in date_offset_unsupported:
+        full_name = "pandas.tseries.offsets.DateOffset." + attr_name
+        overload_method(DateOffsetType, attr_name)(
+            create_unsupported_overload(full_name)
+        )
+
+
+def _install_month_begin_unsupported():
+    """install an overload that raises BodoError for unsupported
+    pandas.tseries.offsets.MonthBegin attributes/methods"""
+
+    for attr_name in month_begin_unsupported_attrs:
+        full_name = "pandas.tseries.offsets.MonthBegin." + attr_name
+        overload_attribute(MonthBeginType, attr_name)(
+            create_unsupported_overload(full_name)
+        )
+
+    for attr_name in month_begin_unsupported:
+        full_name = "pandas.tseries.offsets.MonthBegin." + attr_name
+        overload_method(MonthBeginType, attr_name)(
+            create_unsupported_overload(full_name)
+        )
+
+
+def _install_month_end_unsupported():
+    """install an overload that raises BodoError for unsupported
+    pandas.tseries.offsets.MonthEnd attributes/methods"""
+
+    for attr_name in date_offset_unsupported_attrs:
+        full_name = "pandas.tseries.offsets.MonthEnd." + attr_name
+        overload_attribute(MonthEndType, attr_name)(
+            create_unsupported_overload(full_name)
+        )
+
+    for attr_name in date_offset_unsupported:
+        full_name = "pandas.tseries.offsets.MonthEnd." + attr_name
+        overload_method(MonthEndType, attr_name)(create_unsupported_overload(full_name))
+
+
+def _install_week_unsupported():
+    """install an overload that raises BodoError for unsupported
+    pandas.tseries.offsets.Week attributes/methods"""
+
+    for attr_name in week_unsupported_attrs:
+        full_name = "pandas.tseries.offsets.Week." + attr_name
+        overload_attribute(WeekType, attr_name)(create_unsupported_overload(full_name))
+
+    for attr_name in week_unsupported:
+        full_name = "pandas.tseries.offsets.Week." + attr_name
+        overload_method(WeekType, attr_name)(create_unsupported_overload(full_name))
+
+
+def _install_offsets_unsupported():
+    """install an overload that raises BodoError for unsupported
+    pandas.tseries.offsets attributes"""
+
+    for f in offsets_unsupported:
+        full_name = "pandas.tseries.offsets." + f.__name__
+        overload(f)(create_unsupported_overload(full_name))
+
+
+def _install_frequencies_unsupported():
+    """install an overload that raises BodoError for unsupported
+    pandas.tseries.frequencies attributes"""
+
+    for f in frequencies_unsupported:
+        full_name = "pandas.tseries.frequencies." + f.__name__
+        overload(f)(create_unsupported_overload(full_name))
+
+
+_install_date_offsets_unsupported()
+_install_month_begin_unsupported()
+_install_month_end_unsupported()
+_install_week_unsupported()
+_install_offsets_unsupported()
+_install_frequencies_unsupported()

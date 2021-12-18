@@ -95,13 +95,17 @@ def test_df_filter_cols(memory_leak_check):
     def test_items(df):
         return df.filter(items=["one", "three"])
 
-    def test_items_with_axis(df):
+    def test_items_with_axis_str(df):
         return df.filter(items=["one", "three"], axis="columns")
+
+    def test_items_with_axis_int(df):
+        return df.filter(items=["one", "three"], axis=1)
 
     check_func(test_regex, (df,))
     check_func(test_like, (df,))
     check_func(test_items, (df,))
-    check_func(test_items_with_axis, (df,))
+    check_func(test_items_with_axis_str, (df,))
+    check_func(test_items_with_axis_int, (df,))
 
 
 def test_df_select_dtypes_str_exclude(select_dtypes_df):
@@ -575,6 +579,21 @@ def test_empty_df_create(memory_leak_check):
     # check_typing_issues=False since the input is intentionally empty
     check_func(impl2, (), check_typing_issues=False)
     check_func(impl3, ())
+
+
+@pytest.mark.slow
+def test_df_create_non_existent_columns(memory_leak_check):
+    """test selecting non-existent columns"""
+
+    def impl3():
+        return pd.DataFrame(
+            {"A": [1, 2, 3] * 5, "B": [4, 5, 6] * 5},
+            columns=["A", "C"],
+            dtype=np.float32,
+        )
+
+    # check_typing_issues=False since the input is intentionally empty
+    check_func(impl3, (), is_out_distributed=False)
 
 
 @pytest.mark.smoke
@@ -1314,6 +1333,23 @@ def test_df_abs2(numeric_df_value, memory_leak_check):
         return df.abs()
 
     check_func(impl, (numeric_df_value,))
+
+
+def test_df_abs3(memory_leak_check):
+    """test dataframe.abs with timedelta values"""
+
+    def impl(df):
+        return df.abs()
+
+    np.random.seed(42)
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                np.random.randint(0, np.iinfo(np.int64).max, size=12)
+            ).astype("timedelta64[ns]")
+        }
+    )
+    check_func(impl, (df,))
 
 
 @pytest.mark.slow

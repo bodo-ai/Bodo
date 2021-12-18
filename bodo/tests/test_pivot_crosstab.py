@@ -1,12 +1,15 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import datetime
 import random
+import re
 
 import numpy as np
 import pandas as pd
 import pytest
 
+import bodo
 from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError
 
 _pivot_df1 = pd.DataFrame(
     {
@@ -331,3 +334,28 @@ def test_crosstab_deadcolumn(datapath, memory_leak_check):
     pivot_values = {"pt": ["small", "large"]}
     add_args = {"pivots": pivot_values}
     check_func(impl, (), additional_compiler_arguments=add_args)
+
+
+def test_crosstab_invalid_types(memory_leak_check):
+    """
+    Tests that pd.crosstab produces a reasonable error message
+    when index/column use unsupported types.
+    """
+
+    @bodo.jit
+    def impl(index, columns):
+        return pd.crosstab(index, columns)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4] * 3,
+        }
+    )
+    with pytest.raises(
+        BodoError, match=re.escape("'index' argument only supported for Series types")
+    ):
+        impl(df, df.A)
+    with pytest.raises(
+        BodoError, match=re.escape("'columns' argument only supported for Series types")
+    ):
+        impl(df.A, df)

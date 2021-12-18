@@ -1809,8 +1809,13 @@ def overload_cut(
         func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(x)\n"
         func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(x)\n"
     else:
+        # TODO: Add a check that x is a supported array or can be converted by coerce_to_array
+        # with a matching dtype
         func_text += "    arr = bodo.utils.conversion.coerce_to_array(x)\n"
 
+    # TODO: Add a properly check that bin is integer or array-like that can be converted with
+    # coerce_to_array and has the proper dtype.
+    # TODO: Add a check that x.dtype is correct for Series cases.
     func_text += _gen_bins_handling(bins, x.dtype)
     func_text += "    arr = get_bin_inds(bins, arr, False, include_lowest)\n"
 
@@ -1880,8 +1885,11 @@ def overload_qcut(
         duplicates="raise",
     )
     check_unsupported_args("pd.qcut", unsupported_args, arg_defaults)
+    # TODO: Check that q is all floats if iterable (or ints for [0, 1] edge case).
     if not (is_overload_int(q) or is_iterable_type(q)):
         raise BodoError("pd.qcut(): 'q' should be an integer or a list of quantiles")
+
+    # TODO: Add error checking to ensure S is a series or array-like with proper types.
 
     # implementation is the same as pd.cut(), just uses quantiles in bins
     # https://github.com/pandas-dev/pandas/blob/ac7c043c537990be7b4b049739d544b00138875a/pandas/core/reshape/tile.py#L368
@@ -1913,13 +1921,14 @@ def overload_series_groupby(
 ):
     unsupported_args = dict(
         axis=axis,
+        sort=sort,
         group_keys=group_keys,
         squeeze=squeeze,
         observed=observed,
         dropna=dropna,
     )
     arg_defaults = dict(
-        axis=0, group_keys=True, squeeze=False, observed=True, dropna=True
+        axis=0, sort=True, group_keys=True, squeeze=False, observed=True, dropna=True
     )
     check_unsupported_args("Series.groupby", unsupported_args, arg_defaults)
 
@@ -1964,6 +1973,7 @@ def overload_series_groupby(
             # reuse DataFrame.groupby
             # Pandas assigns name=None to output Series/index, but not straightforward here.
             # we use empty/single-space to simplify
+            # TODO: FIX This. If there is a name Pandas copies it.
             df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
                 (keys, arr), index, (" ", "")
             )
@@ -2006,6 +2016,7 @@ def overload_series_groupby(
         # reuse DataFrame.groupby
         # Pandas assigns name=None to output Series/index, but not straightforward here.
         # we use empty/single-space to simplify
+        # TODO: FIX This. If there is a name Pandas copies it.
         df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
             (keys, arr), index, (" ", "")
         )

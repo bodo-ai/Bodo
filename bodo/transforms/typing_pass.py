@@ -212,6 +212,10 @@ class BodoTypeInference(PartialTypeInference):
                 return_type = state.typingctx.unify_types(*ret_types)
             except:
                 pass
+            if return_type is None:
+                raise_bodo_error(
+                    f"Unable to unify the following function return types: {ret_types}"
+                )
             if (
                 not isinstance(return_type, types.FunctionType)
                 and not return_type.is_precise()

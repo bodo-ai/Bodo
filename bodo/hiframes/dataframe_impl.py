@@ -32,6 +32,7 @@ from numba.extending import (
 )
 
 import bodo
+from bodo.hiframes.datetime_timedelta_ext import _no_input
 from bodo.hiframes.pd_dataframe_ext import (
     DataFrameType,
     handle_inplace_df_type_change,
@@ -129,7 +130,11 @@ def overload_dataframe_columns(df):
 
 @overload_attribute(DataFrameType, "values")
 def overload_dataframe_values(df):
-    # TODO: error checking to make sure df only has numerical values
+    if not is_df_values_numpy_supported_dftyp(df):
+        raise_bodo_error(
+            "DataFrame.values: only supported for dataframes containing numeric values"
+        )
+
     n_cols = len(df.columns)
     # convert nullable int columns to float to match Pandas behavior
     nullable_int_cols = set(
@@ -151,23 +156,29 @@ def overload_dataframe_values(df):
 
 
 @overload_method(DataFrameType, "to_numpy", inline="always", no_unliteral=True)
-def overload_dataframe_to_numpy(df, dtype=None, copy=False):
+def overload_dataframe_to_numpy(df, dtype=None, copy=False, na_value=_no_input):
     # The copy argument can be ignored here since we always copy the data
     # (our underlying structures are fully columnar which should be copied to get a
     # matrix). This is consistent with Pandas since copy=False doesn't guarantee it
     # won't be copied.
 
+    if not is_df_values_numpy_supported_dftyp(df):
+        raise_bodo_error(
+            "DataFrame.to_numpy(): only supported for dataframes containing numeric values"
+        )
+
     args_dict = {
         "dtype": dtype,
+        "na_value": na_value,
     }
 
     args_default_dict = {
         "dtype": None,
+        "na_value": _no_input,
     }
+    check_unsupported_args("DataFrame.to_numpy", args_dict, args_default_dict)
 
-    check_unsupported_args("to_numpy", args_dict, args_default_dict)
-
-    def impl(df, dtype=None, copy=False):  # pragma: no cover
+    def impl(df, dtype=None, copy=False, na_value=_no_input):  # pragma: no cover
         return df.values
 
     return impl
@@ -418,7 +429,12 @@ def overload_dataframe_filter(df, items=None, like=None, regex=None, axis=None):
     like_set = not is_overload_none(like)
     regex_set = not is_overload_none(regex)
     only_one_arg = items_set ^ like_set ^ regex_set
+    no_args_set = not (items_set or like_set or regex_set)
 
+    if no_args_set:
+        raise BodoError(
+            "DataFrame.filter(): one of keyword arguments `items`, `like`, and `regex` must be supplied"
+        )
     if not only_one_arg:
         raise BodoError(
             "DataFrame.filter(): keyword arguments `items`, `like`, and `regex` are mutually exclusive"
@@ -431,10 +447,22 @@ def overload_dataframe_filter(df, items=None, like=None, regex=None, axis=None):
     # get the axis for filtering
     if is_overload_constant_str(axis):
         axis = get_overload_const_str(axis)
-        assert axis in {"index", "columns"}
+        if axis not in {"index", "columns"}:
+            raise_bodo_error(
+                'DataFrame.filter(): keyword arguments `axis` must be either "index" or "columns" if string'
+            )
         axis_typ = 0 if axis == "index" else 1
-    else:
+    elif is_overload_constant_int(axis):
+        axis = get_overload_const_int(axis)
+        if axis not in {0, 1}:
+            raise_bodo_error(
+                "DataFrame.filter(): keyword arguments `axis` must be either 0 or 1 if integer"
+            )
         axis_typ = axis
+    else:
+        raise_bodo_error(
+            "DataFrame.filter(): keyword arguments `axis` must be constant string or integer"
+        )
 
     assert axis_typ in {0, 1}
 
@@ -715,9 +743,9 @@ def overload_dataframe_isin(df, values):
     # TODO: call isin on Series
     # TODO: make sure df indices match?
     # TODO: dictionary case
+    from bodo.utils.typing import is_iterable_type
 
     func_text = "def impl(df, values):\n"
-
     other_colmap = {}
     df_case = False
     # dataframe case
@@ -730,10 +758,13 @@ def overload_dataframe_isin(df, values):
                     v_name, values.columns.index(c)
                 )
                 other_colmap[c] = v_name
-    else:
-        # general iterable (e.g. list, set) case
+    # Series contains (x in y) does not seem to be supported?
+    elif is_iterable_type(values) and not isinstance(values, SeriesType):
+        # general iterable (e.g. list, set, array) case
         # TODO: handle passed in dict case (pass colname to func?)
         other_colmap = {c: "values" for c in df.columns}
+    else:
+        raise_bodo_error(f"pd.isin(): not supported for type {values}")
 
     data = []
     for i in range(len(df.columns)):
@@ -773,14 +804,21 @@ def overload_dataframe_isin(df, values):
                 func_text += isin_vals_func.format(in_var, other_col_var, out_data[i])
         else:
             func_text += bool_arr_func.format(out_data[i])
-
     return _gen_init_df(func_text, df.columns, ",".join(out_data))
 
 
 @overload_method(DataFrameType, "abs", inline="always", no_unliteral=True)
 def overload_dataframe_abs(df):
     # only works for numerical data and Timedelta
-    # TODO: handle timedelta
+
+    for arr_typ in df.data:
+        if not (
+            isinstance(arr_typ.dtype, types.Number)
+            or arr_typ.dtype == bodo.timedelta64ns
+        ):
+            raise_bodo_error(
+                f"DataFrame.abs(): Only supported for numeric and Timedelta. Encountered array with dtype {arr_typ.dtype}"
+            )
 
     n_cols = len(df.columns)
     data_args = ", ".join(
@@ -851,7 +889,8 @@ def overload_dataframe_cov(df, min_periods=None, ddof=1):
         if bodo.utils.typing._is_pandas_numeric_dtype(d.dtype)
     ]
     # TODO: support empty dataframe
-    assert len(numeric_cols) != 0
+    if len(numeric_cols) == 0:
+        raise_bodo_error("DataFrame.cov(): requires non-empty dataframe")
 
     # convert input matrix to float64 if necessary
     typ_conv = ""
@@ -884,6 +923,10 @@ def overload_dataframe_cov(df, min_periods=None, ddof=1):
 @overload_method(DataFrameType, "count", inline="always", no_unliteral=True)
 def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
     # TODO: numeric_only flag
+    unsupported_args = dict(axis=axis, level=level, numeric_only=numeric_only)
+    arg_defaults = dict(axis=0, level=None, numeric_only=False)
+    check_unsupported_args("DataFrame.count", unsupported_args, arg_defaults)
+
     data_args = ", ".join(
         f"bodo.libs.array_ops.array_op_count(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}))"
         for i in range(len(df.columns))
@@ -1104,10 +1147,12 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
     # axis is 0 by default. Some reduce functions have None as the default value.
     if is_overload_none(axis):
         axis = 0
-    else:
+    elif is_overload_constant_int(axis):
         axis = get_overload_const_int(axis)
+    else:
+        raise_bodo_error(f"DataFrame.{func_name}: axis must be a constant Integer")
 
-    assert axis in (0, 1), "invalid axis argument for DataFrame.{}".format(func_name)
+    assert axis in (0, 1), f"invalid axis argument for DataFrame.{func_name}"
 
     if func_name in ("idxmax", "idxmin"):
         out_colnames = df.columns
@@ -1310,8 +1355,8 @@ def overload_dataframe_pct_change(
 
 @overload_method(DataFrameType, "cumprod", inline="always", no_unliteral=True)
 def overload_dataframe_cumprod(df, axis=None, skipna=True):
-    unsupported_args = dict(skipna=skipna)
-    arg_defaults = dict(skipna=True)
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=None, skipna=True)
     check_unsupported_args("DataFrame.cumprod", unsupported_args, arg_defaults)
 
     data_args = ", ".join(
@@ -3229,7 +3274,16 @@ def crosstab_overload(
         dropna=True,
         normalize=False,
     )
-    check_unsupported_args("pd.crosstab", unsupported_args, arg_defaults)
+    check_unsupported_args("pandas.crosstab", unsupported_args, arg_defaults)
+    # TODO: Add error checking on which Series Types are actually supported
+    if not isinstance(index, SeriesType):
+        raise BodoError(
+            f"pandas.crosstab(): 'index' argument only supported for Series types, found {index}"
+        )
+    if not isinstance(columns, SeriesType):
+        raise BodoError(
+            f"pandas.crosstab(): 'columns' argument only supported for Series types, found {columns}"
+        )
 
     # TODO: handle multiple keys (index args).
     # TODO: handle values and aggfunc options
@@ -3391,8 +3445,8 @@ def overload_dataframe_sort_index(
     sort_remaining=True,
     ignore_index=False,
     key=None,
-    by=None,
 ):
+
     unsupported_args = dict(
         axis=axis,
         level=level,
@@ -3422,7 +3476,6 @@ def overload_dataframe_sort_index(
         sort_remaining=True,
         ignore_index=False,
         key=None,
-        by=None,
     ):  # pragma: no cover
 
         return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
@@ -3736,13 +3789,25 @@ def overload_dataframe_append(
 
 @overload_method(DataFrameType, "sample", inline="always", no_unliteral=True)
 def overload_dataframe_sample(
-    df, n=None, frac=None, replace=False, weights=None, random_state=None, axis=None
+    df,
+    n=None,
+    frac=None,
+    replace=False,
+    weights=None,
+    random_state=None,
+    axis=None,
+    ignore_index=False,
 ):
+
     """Implementation of the sample functionality from
     https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.sample.html
     """
-    unsupported_args = dict(random_state=random_state, weights=weights, axis=axis)
-    sample_defaults = dict(random_state=None, weights=None, axis=None)
+    unsupported_args = dict(
+        random_state=random_state, weights=weights, axis=axis, ignore_index=ignore_index
+    )
+    sample_defaults = dict(
+        random_state=None, weights=None, axis=None, ignore_index=False
+    )
     check_unsupported_args("sample", unsupported_args, sample_defaults)
     if not is_overload_none(n) and not is_overload_none(frac):
         raise BodoError("sample(): only one of n and frac option can be selected")
@@ -3750,7 +3815,7 @@ def overload_dataframe_sample(
     n_cols = len(df.columns)
     data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
 
-    func_text = "def impl(df, n=None, frac=None, replace=False, weights=None, random_state=None, axis=None):\n"
+    func_text = "def impl(df, n=None, frac=None, replace=False, weights=None, random_state=None, axis=None, ignore_index=False):\n"
     for i in range(n_cols):
         func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
             i
@@ -4171,6 +4236,17 @@ def overload_dataframe_plot(
 def dataframe_plot_low(context, builder, sig, args):
     impl = overload_dataframe_plot(*sig.args)
     return context.compile_internal(builder, impl, sig, args)
+
+
+def is_df_values_numpy_supported_dftyp(df_typ):
+    """helper function that checks if the dataframe type contains only numeric/boolean values"""
+    for col_typ in df_typ.data:
+        if not (
+            isinstance(col_typ, IntegerArrayType)
+            or isinstance(col_typ.dtype, types.Number)
+        ):
+            return False
+    return True
 
 
 def typeref_to_type(v):

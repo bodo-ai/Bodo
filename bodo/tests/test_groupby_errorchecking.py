@@ -1,5 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 
+import re
 from decimal import Decimal
 
 import numpy as np
@@ -1985,4 +1986,54 @@ def test_groupby_agg_head(memory_leak_check):
 
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
     with pytest.raises(BodoError, match="head cannot be mixed"):
+        bodo.jit(impl)(df)
+
+
+def test_unsupported_method(memory_leak_check):
+    def impl(df):
+        return df.groupby(by=["A"]).groups
+
+    msg = re.escape("DataFrameGroupBy.groups not supported yet")
+    df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"]})
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(impl)(df)
+
+
+def test_unsupported_attr(memory_leak_check):
+    def impl(df):
+        return df.groupby(by=["A"]).get_group()
+
+    msg = re.escape("DataFrameGroupBy.get_group not supported yet")
+    df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"]})
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(impl)(df)
+
+
+def test_unsupported_series_method(memory_leak_check):
+    def impl(S):
+        return S.groupby(level=0).nlargest()
+
+    msg = re.escape("SeriesGroupBy.nlargest not supported yet")
+    S = pd.Series([1, 2, 2])
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(impl)(S)
+
+
+def test_unsupported_series_attr(memory_leak_check):
+    def impl(S):
+        return S.groupby(level=0).is_monotonic_increasing
+
+    msg = re.escape("SeriesGroupBy.is_monotonic_increasing not supported yet")
+    S = pd.Series([1, 2, 2])
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(impl)(S)
+
+
+def test_unsupported_df_method(memory_leak_check):
+    def impl(df):
+        return df.groupby(by=["A"]).corrwith()
+
+    msg = re.escape("DataFrameGroupBy.corrwith not supported yet")
+    df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"]})
+    with pytest.raises(BodoError, match=msg):
         bodo.jit(impl)(df)

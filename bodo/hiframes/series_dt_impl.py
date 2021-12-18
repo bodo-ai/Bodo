@@ -123,12 +123,16 @@ def create_date_field_overload(field):
             func_text += "        out_arr[i] = {}\n".format(field)
         elif field in (
             "dayofyear",
+            "day_of_year",
             "dayofweek",
+            "day_of_week",
             "weekday",
         ):
             funcdict = {
                 "dayofyear": "get_day_of_year",
+                "day_of_year": "get_day_of_year",
                 "dayofweek": "get_day_of_week",
+                "day_of_week": "get_day_of_week",
                 "weekday": "get_day_of_week",
             }
             func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
@@ -1068,26 +1072,24 @@ def create_cmp_op_overload(op):
 
 
 series_dt_unsupported_methods = {
-    "asfreq",
-    "normalize",
     "to_period",
     "to_pydatetime",
-    "to_timestamp",
-    "tz_convert",
     "tz_localize",
+    "tz_convert",
+    "asfreq",
+    "to_timestamp",
 }
 
 series_dt_unsupported_attrs = {
-    "end_time",
-    "freq",
-    "qyear",
-    "start_time",
+    # attributes
     "time",
     "timetz",
     "tz",
-    "week",
-    "weekday",
-    "weekofyear",
+    "freq",
+    # Properties
+    "qyear",
+    "start_time",
+    "end_time",
 }
 
 

@@ -1930,10 +1930,21 @@ def test_iloc_setitem(memory_leak_check):
         df.iloc[df.A > 4, [1, 2]] = 11
         return df
 
+    def impl3(df):
+        df.iloc[df.A > 4, (1, 2)] = 11
+        return df
+
+    def impl4(df):
+        df.iloc[0] = pd.Series([4, -1, 3])
+        return df
+
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     check_func(impl1, (df,), copy_input=True)
     check_func(impl2, (df,), copy_input=True)
+    check_func(impl3, (df,), copy_input=True)
+    # TODO: Support impl4
+    # check_func(impl4, (df,), copy_input=True)
 
 
 def test_loc_bool_arr(memory_leak_check):

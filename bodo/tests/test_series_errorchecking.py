@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 
 import numpy as np
@@ -486,3 +487,39 @@ def test_series_init_dict_idx_kw():
 
     impl_good1()
     impl_good2()
+
+
+def test_heterogenous_series_unsupported_attr(memory_leak_check):
+    """
+    Checks that an unsupported attribute for a HeterogenousSeries
+    raises a reasonable error message. A HeterogenousSeries
+    is a generated when iterating across the rows of a DataFrame
+    with different column types.
+    """
+
+    @bodo.jit
+    def test_impl(df):
+        return df.apply(lambda row: row.axes, axis=1)
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4] * 5, "B": ["a", "c", "Er2w", ""] * 5})
+    err_msg = re.escape("HeterogeneousSeries.axes not supported yet")
+    with pytest.raises(BodoError, match=err_msg):
+        test_impl(df)
+
+
+def test_heterogenous_series_unsupported_method(memory_leak_check):
+    """
+    Checks that an unsupported method for a HeterogenousSeries
+    raises a reasonable error message. A HeterogenousSeries
+    is a generated when iterating across the rows of a DataFrame
+    with different column types.
+    """
+
+    @bodo.jit
+    def test_impl(df):
+        return df.apply(lambda row: row.any(), axis=1)
+
+    df = pd.DataFrame({"A": [1, 2, 3, 4] * 5, "B": ["a", "c", "Er2w", ""] * 5})
+    err_msg = re.escape("HeterogeneousSeries.any not supported yet")
+    with pytest.raises(BodoError, match=err_msg):
+        test_impl(df)

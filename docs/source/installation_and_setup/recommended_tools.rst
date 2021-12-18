@@ -2,6 +2,8 @@
 
 These are our recommendations to tune your application environment and achieve the best possible performance with Bodo. 
 
+.. _recommended_mpi_settings:
+
 Recommended MPI Settings
 ========================
 
@@ -18,9 +20,54 @@ Based on our internal benchmarking, we recommend setting these environment varia
     export I_MPI_ALLREDUCE=4
     export I_MPI_REDUCE=3
 
-Use `-rr` option to place ranks in round-robin scheduling as follows::
+MPI Process Placement
+---------------------
 
-    mpiexec -n <CORES> -f hostfile -rr python bodo_file.py
+Bodo assigns chunks of data and computation to MPI processes, also called *ranks*.
+For example, for a dataframe with a billion rows on a 1000-core cluster, the first one million rows are
+assigned to rank 0, the second one million rows to rank 1, and so on.
+MPI placement indicates how these ranks are assigned to physical cores across the cluster,
+and can significantly impact performance depending on hardware configuration and application behavior.
+We recommend trying *block mapping* and *round-robin mapping* options below for your application to achieve the best performance.
+
+**Block Mapping**
+
+In block mapping, cores of each node in the hostfile are filled with ranks before moving on to the next node.
+For example, for a cluster with 50-core nodes, the first 50 ranks will be on node 0, the second
+50 ranks on node 1 and so on. This mapping has the advantage of fast communication between neighboring ranks on the same node.
+
+
+**Round-Robin Mapping**
+
+In round-robin mapping, MPI assigns one rank per node in hostfile and starts over when it
+reaches end of the host list. For example, for a cluster with 50-core nodes, rank 0 is assigned to node 0, rank 1 is
+assigned to node 1 and so on. Rank 50 is assigned to node 0, 51 to node 1, and so on.
+This mapping has the advantage of avoiding communication hotspots in the network
+and tends to make large shuffles faster.
+
+We provide instructions on setting block and round-robin placement for MPICH and Intel MPI below. The following assumes the hostfile
+only contains a list of hosts (e.g. it does not specify number of processes per host) and the number of cores
+on each host is the same.
+
+**Block Mapping with MPICH and Intel MPI**::
+
+    mpiexec -n <N> -f <hostfile> -ppn <P> python bodo_file.py
+
+where ``N`` is the number of MPI processes, ``hostfile`` contains the list of hosts, and ``P`` the number of processes (cores) per node.
+
+**Round-Robin with MPICH**::
+
+    mpiexec -n <N> -f <hostfile> python bodo_file.py
+
+**Round-Robin with Intel MPI**::
+
+    mpiexec -n <N> -f <hostfile> -rr python bodo_file.py
+
+For Intel MPI, more information can be found here: `Controlling Process Placement with the Intel® MPI Library <https://www.intel.com/content/www/us/en/developer/articles/technical/controlling-process-placement-with-the-intel-mpi-library.html>`_.
+
+For MPICH, see `Using the Hydra Process Manager <https://wiki.mpich.org/mpich/index.php/Using_the_Hydra_Process_Manager>`_.
+
+.. _recommended_aws_nic:
 
 Recommended AWS Network Interface
 =================================

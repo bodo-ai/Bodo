@@ -246,7 +246,7 @@ The following figure illustrates what happens when processes call
 ``bodo.barrier()``. When barrier is called, a process pauses and waits
 until all other processes have reached the barrier:
 
-.. figure:: ../img/barrier.svg
+.. figure:: ../../img/barrier.svg
    :align: center
    :alt: Process synchronization with Barrier
 
@@ -369,7 +369,9 @@ Scattering Data
 ~~~~~~~~~~~~~~~
 
 One can distribute data manually by *scattering* data from one process
-to all processes. For example:
+to all processes with scatterv. Currently, bodo.scatterv only supports scattering from rank 0.
+When used outside of JIT code, it is required that
+the argument is None for all ranks except rank 0. For example:
 
 .. code:: ipython3
 
@@ -396,11 +398,56 @@ to all processes. For example:
     [stdout:2] 102.07842132239877
     [stdout:3] 102.07842132239877
 
+When using scatterv inside of JIT code, the argument must have the same type on each rank due to Bodo's typing constraints.
+All inputs except for rank 0 are ignored.
+
+
+.. code:: ipython3
+
+
+    @bodo.jit()
+    def impl():
+        if bodo.get_rank() == 0:
+            df = pd.DataFrame({"A": [1,2,3,4,5,6,7,8]})
+        else:
+            df = pd.DataFrame({"A": [-1]*8})
+        return bodo.scatterv(df)
+    print(impl())
+
+
+.. parsed-literal::
+
+    [stdout:6]
+          A
+    6     7
+    [stdout:0]
+          A
+    0     1
+    [stdout:1]
+          A
+    1     2
+    [stdout:4]
+          A
+    4     5
+    [stdout:7]
+          A
+    7     8
+    [stdout:3]
+          A
+    3     4
+    [stdout:2]
+          A
+    2     3
+    [stdout:5]
+          A
+    5     6
+
 
 Gathering Data
 ~~~~~~~~~~~~~~
 
-One can *gather* distributed data into a single process manually. For
+One can *gather* distributed data into a single process manually. The rank into which the data is gathered can be
+changed by using the root keyword argument (defaults to rank 0). For
 example:
 
 .. code:: ipython3
@@ -409,7 +456,7 @@ example:
     @bodo.jit
     def mean_power():
         df = pd.read_parquet("data/cycling_dataset.pq")
-        return bodo.gatherv(df)
+        return bodo.gatherv(df, root=1)
 
     df = mean_power()
     print(df)
@@ -417,7 +464,7 @@ example:
 
 .. parsed-literal::
 
-    [stdout:0]
+    [stdout:1]
           Unnamed: 0    altitude  cadence  ...  power  speed                time
     0              0  185.800003       51  ...     45  3.459 2016-10-20 22:01:26
     1              1  185.800003       68  ...      0  3.710 2016-10-20 22:01:27
@@ -432,7 +479,7 @@ example:
     3901        1131  178.399994        0  ...      0  2.853 2016-10-20 23:14:35
 
     [3902 rows x 10 columns]
-    [stdout:1]
+    [stdout:0]
     Empty DataFrame
     Columns: [Unnamed: 0, altitude, cadence, distance, hr, latitude, longitude, power, speed, time]
     Index: []
@@ -530,3 +577,12 @@ processes, effectively replicating the data:
 
     [3902 rows x 10 columns]
 
+You can also get identical behavior by using gatherv and setting the keyword aregument allgatherv to True.
+
+scatterv, gatherv, and and allgatherv work with all distributable data types. This includes:
+ * All supported numpy array types
+ * All supported pandas array types (with the exception of Interval Arrays)
+ * All supported pandas Series types
+ * All supported DataFrame types
+ * All supported Index types (with the exception of Interval Index)
+ * Tuples of the above types

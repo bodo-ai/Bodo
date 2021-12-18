@@ -421,11 +421,15 @@ def get_overload_const(val):
     (in case of non-constant).
     Supports None, bool, int, str, and tuple values.
     """
+    from bodo.hiframes.datetime_timedelta_ext import _no_input
+
     # sometimes Dispatcher objects become TypeRef, see test_groupby_agg_const_dict
     if isinstance(val, types.TypeRef):
         val = val.instance_type
     if val == types.none:
         return None
+    if val is _no_input:
+        return _no_input
     # actual value
     if val is None or isinstance(val, (bool, int, float, str, tuple, types.Dispatcher)):
         return val
@@ -523,13 +527,19 @@ def ensure_constant_values(fname, arg_name, val, const_values):
         )
 
 
-def check_unsupported_args(fname, args_dict, arg_defaults_dict, package_name="pandas"):
+def check_unsupported_args(
+    fname, args_dict, arg_defaults_dict, package_name="pandas", fn_str=None
+):
     """Check for unsupported arguments for function 'fname', and raise an error if any
     value other than the default is provided.
     'args_dict' is a dictionary of provided arguments in overload.
     'arg_defaults_dict' is a dictionary of default values for unsupported arguments.
     """
+    from bodo.hiframes.datetime_timedelta_ext import _no_input
+
     assert len(args_dict) == len(arg_defaults_dict)
+    if fn_str == None:
+        fn_str = f"{fname}()"
     error_message = ""
     unsupported = False
     for a in args_dict:
@@ -540,8 +550,10 @@ def check_unsupported_args(fname, args_dict, arg_defaults_dict, package_name="pa
             or (v1 is not None and v2 is None)
             or (v1 is None and v2 is not None)
             or v1 != v2
+            or (v1 is not _no_input and v2 is _no_input)
+            or (v1 is _no_input and v2 is not _no_input)
         ):
-            error_message = f"{fname}(): {a} parameter only supports default value {v2}"
+            error_message = f"{fn_str}: {a} parameter only supports default value {v2}"
             unsupported = True
             break
 

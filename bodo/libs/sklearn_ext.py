@@ -2045,7 +2045,7 @@ def overload_sgdc_model_fit(
 
             # TODO: Rebalance the data X and y to be the same size on every rank
             # y has to be an array
-            y_classes = bodo.libs.array_kernels.unique(y)
+            y_classes = bodo.libs.array_kernels.unique(y, parallel=True)
             y_classes = bodo.allgatherv(y_classes, False)
 
             with numba.objmode(m="sgd_classifier_type"):

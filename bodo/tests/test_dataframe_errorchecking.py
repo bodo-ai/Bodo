@@ -11,6 +11,16 @@ import bodo
 from bodo.utils.typing import BodoError
 
 
+@pytest.fixture(params=bodo.hiframes.pd_dataframe_ext.dataframe_unsupported)
+def df_unsupported_method(request):
+    return request.param
+
+
+@pytest.fixture(params=bodo.hiframes.pd_dataframe_ext.dataframe_unsupported_attrs)
+def df_unsupported_attr(request):
+    return request.param
+
+
 @pytest.mark.slow
 def test_df_filter_err_check(memory_leak_check):
     """
@@ -32,6 +42,21 @@ def test_df_filter_err_check(memory_leak_check):
     def test_non_list_items(df):
         return df.filter(items=7)
 
+    def test_invalid_axis_str(df):
+        return df.filter(axis="one", like="bla")
+
+    def test_invalid_axis_int(df):
+        return df.filter(axis=12, like="bla")
+
+    def test_no_kwd_args(df):
+        return df.filter()
+
+    def test_axis_unsupporteed_err_int(df):
+        return df.filter(axis=0, like="bla")
+
+    def test_axis_unsupporteed_err_str(df):
+        return df.filter(axis="index", like="bla")
+
     with pytest.raises(
         BodoError,
         match="keyword arguments `items`, `like`, and `regex` are mutually exclusive",
@@ -49,6 +74,46 @@ def test_df_filter_err_check(memory_leak_check):
         match="argument 'items' must be a list of constant strings",
     ):
         bodo.jit(test_non_list_items)(df)
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            'DataFrame.filter(): keyword arguments `axis` must be either "index" or "columns" if string'
+        ),
+    ):
+        bodo.jit(test_invalid_axis_str)(df)
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame.filter(): keyword arguments `axis` must be either 0 or 1 if integer"
+        ),
+    ):
+        bodo.jit(test_invalid_axis_int)(df)
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame.filter(): one of keyword arguments `items`, `like`, and `regex` must be supplied"
+        ),
+    ):
+        bodo.jit(test_no_kwd_args)(df)
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame.filter(): filtering based on index is not supported."
+        ),
+    ):
+        bodo.jit(test_axis_unsupporteed_err_int)(df)
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame.filter(): filtering based on index is not supported."
+        ),
+    ):
+        bodo.jit(test_axis_unsupporteed_err_str)(df)
 
 
 @pytest.mark.slow
@@ -1285,3 +1350,168 @@ def test_dd_map_array_drop_all(memory_leak_check):
         ),
     ):
         bodo.jit(test_impl)(df1)
+
+
+@pytest.mark.slow
+def test_df_unsupported_methods(df_unsupported_method):
+    """tests that unsupported dataframe methods throw the expected error"""
+
+    df_val = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+    func_text = f"""
+def impl(df):
+    return df.{df_unsupported_method}()
+"""
+
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+    impl = loc_vars["impl"]
+
+    err_msg = re.escape(f"DataFrame.{df_unsupported_method}() not supported yet")
+
+    with pytest.raises(
+        BodoError,
+        match=err_msg,
+    ):
+        bodo.jit(impl)(df_val)
+
+
+@pytest.mark.slow
+def test_df_unsupported_atrs(df_unsupported_attr):
+    """tests that unsupported dataframe attributes throw the expected error"""
+
+    df_val = pd.DataFrame({"A": [1, 2, 3, 4, 5]})
+    func_text = f"""
+def impl(df):
+    return df.{df_unsupported_attr}
+"""
+
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+    impl = loc_vars["impl"]
+
+    err_msg = f"DataFrame.{df_unsupported_attr} not supported yet"
+
+    with pytest.raises(
+        BodoError,
+        match=err_msg,
+    ):
+        bodo.jit(impl)(df_val)
+
+
+@pytest.mark.skip("TODO: throw the propper error messages for df.plot.x")
+def test_df_plot_submethods():
+    """tests that df.plot.x throws a propper error message"""
+    df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+
+    def impl_1(df):
+        foo = df.plot.area()
+
+    err_msg1 = f"pandas.Dataframe.plot (the attribute, not the bound function) not yet supported"
+    with pytest.raises(
+        BodoError,
+        match=err_msg1,
+    ):
+        bodo.jit(impl_1)(df)
+
+
+@pytest.mark.slow
+def test_df_values_to_numpy_err():
+    """Tests that df.values and df.to_numpy() throw a reasonable error message"""
+
+    def impl_1():
+        foo = pd.DataFrame({"A": ["hi"]}).to_numpy()
+
+    def impl_2():
+        foo = pd.DataFrame({"A": ["hi"]}).values
+
+    err_msg1 = re.escape(
+        "DataFrame.to_numpy(): only supported for dataframes containing numeric values"
+    )
+    err_msg2 = re.escape(
+        "DataFrame.values: only supported for dataframes containing numeric values"
+    )
+    with pytest.raises(
+        BodoError,
+        match=err_msg1,
+    ):
+        bodo.jit(impl_1)()
+
+    with pytest.raises(
+        BodoError,
+        match=err_msg2,
+    ):
+        bodo.jit(impl_2)()
+
+
+@pytest.mark.slow
+def test_df_abs_err():
+    """Tests that df.abs() throws a reasonable error on non numeric/timedelta dfs"""
+
+    def impl():
+        foo = pd.DataFrame({"A": ["hi"]}).abs()
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame.abs(): Only supported for numeric and Timedelta. Encountered array with dtype"
+        ),
+    ):
+        bodo.jit(impl)()
+
+
+@pytest.mark.slow
+def test_df_corr_err():
+    """Tests that df.corr() throws a reasonable error for empty dataframe"""
+
+    def impl():
+        foo = pd.DataFrame().corr()
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape("DataFrame.corr(): requires non-empty dataframe"),
+    ):
+        bodo.jit(impl)()
+
+
+@pytest.mark.slow
+def test_df_cov_err():
+    """Tests that df.cov() throws a reasonable error for empty dataframe"""
+
+    def impl():
+        foo = pd.DataFrame().cov()
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape("DataFrame.cov(): requires non-empty dataframe"),
+    ):
+        bodo.jit(impl)()
+
+
+@pytest.mark.slow
+def test_pivot_err():
+    def impl():
+        df = pd.DataFrame(
+            {
+                "A": [
+                    "X",
+                    "X",
+                    "X",
+                    "X",
+                    "Y",
+                    "Y",
+                ],
+                "B": [1, 2, 3, 4, 5, 6],
+                "C": [10, 11, 12, 20, 21, 22],
+            }
+        )
+        pivoted_tbl = df.pivot_table(columns="A", index="B", values="C")
+        return pivoted_tbl
+
+    err_msg = re.escape(
+        "Dataframe.pivot_table() requires explicit annotation to determine output columns. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/pandas.html"
+    )
+    with pytest.raises(
+        BodoError,
+        match=err_msg,
+    ):
+        bodo.jit(impl)()
