@@ -5,7 +5,7 @@ Bodo API Reference
    :glob:
 
    udfs
-   pandas
+   pandas/index
    numpy
    ml
    dl
