@@ -620,15 +620,16 @@ Classification metrics
 ~~~~~~~~~~~~~~~~~~~~~~
 
 * :func:`sklearn.metrics.accuracy_score` ``(y_true, y_pred, normalize=True, sample_weight=None)``
-  Supported Arguments:
+
+Supported Arguments:
     * ``y_true``:  1d array-like.
     * ``y_pred``:  1d array-like.
     * ``normalize``:  bool.
-    * ``sample_weight``: 1d numeric array-like or None. 
+    * ``sample_weight``: 1d numeric array-like or None.
 
     ``y_true``, ``y_pred``, and ``sample_weight`` (if provided) must be of same length.
 
-  Example Usage:
+Example Usage:
     >>> import bodo
     >>> import numpy as np
     >>> from sklearn.metrics import accuracy_score
@@ -910,6 +911,7 @@ Example Usage:
     ... 
     >>> test_le()
     [0 0 1 2]
+
 :class:`sklearn.preprocessing.MinMaxScaler`
 
   This class provides MinMax Scaler support to scale your data based on the range of its features.
@@ -1134,8 +1136,8 @@ XGBRegressor
 **Methods:**
 
   * :any:`xgboost.XGBRegressor.fit` ``(X, y, sample_weight=None, base_margin=None, eval_set=None, eval_metric=None, early_stopping_rounds=None, verbose=True, xgb_model=None, sample_weight_eval_set=None, feature_weights=None, callbacks=None)``
-  ..
-    COMMENT: In theory, we support all but to be on the safe side, until more testing is done. 
+
+  .. COMMENT: In theory, we support all but to be on the safe side, until more testing is done.
 
   Supported Arguments:
     * ``X``:  NumPy Array.

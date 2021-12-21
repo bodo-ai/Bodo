@@ -474,7 +474,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   return (ts1.weekday(), ts2.weekday())
     (3, 4)
 
-* :classmeth:`pandas.Timedelta.now` ``(tz=None)``
+* :meth:`pandas.Timedelta.now` ``(tz=None)``
 
 `Supported arguments`: None
 
