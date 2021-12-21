@@ -6,94 +6,81 @@ Date Offsets
 Bodo supports a subset of the offset types in ``pandas.tseries.offsets``:
 
 DateOffset
-~~~~~~~~~~
+**********
 
 * :func:`pandas.tseries.offsets.DateOffset` ``(n=1, normalize=False, years=None, months=None, weeks=None, days=None, hours=None, minutes=None, seconds=None, microseconds=None, nanoseconds=None, year=None, month=None, day=None, weekday=None, hour=None, minute=None, second=None, microsecond=None, nanosecond=None)``
 
-Supported Arguments:
+`Supported arguments`:
 
-  * n (default=1):
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-    - Integer
+   * - argument
+     - default value
+     - datatypes
+   * - ``n``
+     - ``1``
+     - integer
+   * - ``normalize``
+     - ``False``
+     - boolean
+   * - ``years``
+     - ``None``
+     - integer
+   * - ``months``
+     - ``None``
+     - integer
+   * - ``weeks``
+     - ``None``
+     - integer
+   * - ``days``
+     - ``None``
+     - integer
+   * - ``hours``
+     - ``None``
+     - integer
+   * - ``minutes``
+     - ``None``
+     - integer
+   * - ``seconds``
+     - ``None``
+     - integer
+   * - ``microseconds``
+     - ``None``
+     - integer
+   * - ``nanoseconds``
+     - ``None``
+     - integer
+   * - ``year``
+     - ``None``
+     - integer
+   * - ``month``
+     - ``None``
+     - integer
+   * - ``weekday``
+     - ``None``
+     - integer
+   * - ``day``
+     - ``None``
+     - integer
+   * - ``hour``
+     - ``None``
+     - integer
+   * - ``minute``
+     - ``None``
+     - integer
+   * - ``second``
+     - ``None``
+     - integer
+   * - ``microsecond``
+     - ``None``
+     - integer
+   * - ``nanosecond``
+     - ``None``
+     - integer
 
-  * normalize (default=False):
-
-    - Boolean
-
-  * years (default=None):
-
-    - integer
-
-  * months (default=None):
-
-    - integer
-
-  * weeks (default=None):
-
-    - integer
-
-  * days (default=None):
-
-    - integer
-
-  * hours (default=None):
-
-    - integer
-
-  * minutes (default=None):
-
-    - integer
-
-  * seconds (default=None):
-
-    - integer
-
-  * microseconds (default=None):
-
-    - integer
-
-  * nanoseconds (default=None):
-
-    - integer
-
-  * year (default=None):
-
-    - integer
-
-  * month (default=None):
-
-    - integer
-
-  * weekday (default=None):
-
-    - integer
-
-  * day (default=None):
-
-    - integer
-
-  * hour (default=None):
-
-    - integer
-
-  * minute (default=None):
-
-    - integer
-
-  * second (default=None):
-
-    - integer
-
-  * microsecond (default=None):
-
-    - integer
-
-  * nanosecond (default=None):
-
-    - integer
-
-
-Example Usage::
+`Example Usage`::
 
    >>> @bodo.jit
    >>> def f(ts):
@@ -103,28 +90,33 @@ Example Usage::
 
    Timestamp('2021-09-03 02:00:00')
 
-Properties
+`Properties`:
 
 * :attr:`pandas.tseries.offsets.DateOffset.normalize`
 * :attr:`pandas.tseries.offsets.DateOffset.n`
 
 MonthBegin
-~~~~~~~~~~
+**********
 
 * :func:`pandas.tseries.offsets.MonthBegin` ``(n=1, normalize=False)``
 
-Supported Arguments:
+`Supported arguments`:
 
-  * n (default=1):
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-    - Integer
+   * - argument
+     - default value
+     - datatypes
+   * - ``n``
+     - ``1``
+     - integer
+   * - ``normalize``
+     - ``False``
+     - boolean
 
-  * normalize (default=False):
-
-    - Boolean
-
-
-Example Usage::
+`Example Usage`::
 
    >>> @bodo.jit
    >>> def f(ts):
@@ -135,21 +127,27 @@ Example Usage::
    Timestamp('2021-02-01 00:00:00')
 
 MonthEnd
-~~~~~~~~
+**********
 
 * :func:`pandas.tseries.offsets.MonthEnd` ``(n=1, normalize=False)``
 
-Supported Arguments:
+`Supported arguments`:
 
-  * n (default=1):
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-    - Integer
+   * - argument
+     - default value
+     - datatypes
+   * - ``n``
+     - ``1``
+     - integer
+   * - ``normalize``
+     - ``False``
+     - boolean
 
-  * normalize (default=False):
-
-    - Boolean
-
-Example Usage::
+`Example Usage`::
 
    >>> @bodo.jit
    >>> def f(ts):
@@ -160,25 +158,30 @@ Example Usage::
 
 
 Week
-~~~~
+****
 
 * :func:`pandas.tseries.offsets.Week` ``(n=1, normalize=False, weekday=None)``
 
-Supported Arguments:
+`Supported arguments`:
 
-  * n (default=1):
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-    - Integer
+   * - argument
+     - default value
+     - datatypes
+   * - ``n``
+     - ``1``
+     - integer
+   * - ``normalize``
+     - ``False``
+     - boolean
+   * - ``weekday``
+     - ``None``
+     - integer
 
-  * normalize (default=False):
-
-    - Boolean
-
-  * weekday (default=None):
-
-    - integer
-
-Example Usage::
+`Example Usage`::
 
    >>> @bodo.jit
    >>> def f(ts):
@@ -188,8 +191,8 @@ Example Usage::
    Timestamp('2020-11-21 00:00:00')
 
 Binary Operations
-~~~~~~~~~~~~~~~~~
+******************
 
-For all offsets, addition and substraction with a scalar
+For all offsets, addition and subtraction with a scalar
 ``datetime.date``, ``datetime.datetime`` or ``pandas.Timestamp``
 is supported. Multiplication is also supported with a scalar integer.
