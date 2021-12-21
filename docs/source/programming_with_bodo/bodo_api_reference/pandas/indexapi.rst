@@ -6,10 +6,11 @@ Index
 *****
 
 Properties
+^^^^^^^^^^^
 
 * :attr:`pandas.Index.name`
 
- Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(I):
@@ -21,11 +22,12 @@ Properties
 
 * :attr:`pandas.Index.shape`
 
- Unsupported Index Types:
+`Unsupported Index Types`:
+
   * MultiIndex
   * IntervalIndex
 
- Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(I):
@@ -37,11 +39,12 @@ Properties
 
 * :attr:`pandas.Index.values`
 
- Unsupported Index Types:
+`Unsupported Index Types`:
+
   * MultiIndex
   * IntervalIndex
 
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(I):
@@ -50,16 +53,17 @@ Properties
      >>> I = pd.Index([1,2,3])
      >>> f(I)
      [1 2 3]
+     
 * :attr:`pandas.Index.nbytes`
 
- Unsupported Index Types:
+`Unsupported Index Types`:
+
   * MultiIndex
   * IntervalIndex
 
- Important Notes:
-  Currently, bodo upcasts all numeric index data types to 64 bitwidth.
+.. important:: Currently, Bodo upcasts all numeric index data types to 64 bitwidth.
 
- Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f(I):
@@ -74,19 +78,20 @@ Properties
 
 
 
-Modifying and computations:
+Modifying and computations
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * :meth:`pandas.Index.copy` ``(name=None, deep=False, dtype=None, names=None)``
 
- Unsupported Index Types:
+`Unsupported Index Types`:
+
   * MultiIndex
   * IntervalIndex
 
- Supported Arguments:
-  * name
+`Supported arguments`:
+   * ``name``
 
-
- Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f(I):
@@ -97,24 +102,33 @@ Modifying and computations:
     Int64Index([1, 2, 3], dtype='int64', name='new_name')
 
 * :meth:`pandas.Index.get_loc` ``(key, method=None, tolerance=None)``
-  Returns the location of the specified index label.
 
-  (Should be about as fast as standard python, maybe slightly slower)
+.. note:: Should be about as fast as standard python, maybe slightly slower.
 
- Unsupported Index Types:
+`Unsupported Index Types`:
+
   * CategoricalIndex
   * MultiIndex
   * IntervalIndex
 
- Supported Arguments:
-  * key (must be of same type as the index)
+`Supported arguments`:
 
- Important Notes:
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``key``
+     - must be of same type as the index
+
+.. important::
+
   * Only works for index with unique values (scalar return).
   * Only works with replicated Index
 
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f(I):
@@ -125,33 +139,40 @@ Modifying and computations:
     1
 
 * :meth:`pandas.Index.take` ``(indices, axis=0, allow_fill=True, fill_value=None, **kwargs)``
-  Return a new Index of the values selected by the indices.
 
- Supported Arguments:
-    * indicies
-      - can be boolean Array like, integer Array like, or slice
+`Supported arguments`:
 
- Unsupported Index Types:
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``indices``
+     - can be boolean Array like, integer Array like, or slice
+
+`Unsupported Index Types`:
+
   * MultiIndex
   * IntervalIndex
 
- Important Notes:
-  * Bodo **Does Not** support ``kwargs``, even for compatibility.
+.. important:: Bodo **Does Not** support ``kwargs``, even for compatibility.
 
 * :meth:`pandas.Index.min` ``(axis=None, skipna=True, *args, **kwargs)``
 
-  Supported arguments:
-    None
+`Supported arguments`: None
 
-  **Supported** Index Types:
+`**Supported** Index Types`:
+
     * TimedeltaIndex
     * DatetimeIndex
 
- Important Notes:
+.. important::
+
   * Bodo **Does Not** support ``args`` and ``kwargs``, even for compatibility.
   * For DatetimeIndex, will throw an error if all values in the index are null.
 
-    Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f(I):
@@ -164,19 +185,20 @@ Modifying and computations:
 
 * :meth:`pandas.Index.max` ``(axis=None, skipna=True, *args, **kwargs)``
 
- Supported arguments:
-  None
+`Supported arguments`: None
 
- **Supported** Index Types:
+`**Supported** Index Types`:
+
   * TimedeltaIndex
   * DatetimeIndex
 
- Important Notes:
+.. important::
+
   * Bodo **Does Not** support ``args`` and ``kwargs``, even for compatibility.
   * For DatetimeIndex, will throw an error if all values in the index are null.
 
 
-Example Usage::
+`Example Usage`::
 
   >>> @bodo.jit
   ... def f(I):
@@ -187,15 +209,18 @@ Example Usage::
   2018-04-25 00:00:00
 
 
-Missing values:
+Missing values
+^^^^^^^^^^^^^^^
 
 * :meth:`pandas.Index.isna` ``()``
 
- Unsupported Index Types:
+`Unsupported Index Types`:
+
   * MultiIndex
   * IntervalIndex
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.isna()
@@ -206,11 +231,13 @@ Example Usage::
 
 * :meth:`pandas.Index.isnull` ``()``
 
- Unsupported Index Types:
+`Unsupported Index Types`:
+
   * MultiIndex
   * IntervalIndex
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.isnull()
@@ -219,19 +246,29 @@ Example Usage::
     >>> f(I)
     [False  True False]
 
-Conversion:
+Conversion
+^^^^^^^^^^
 
 * :meth:`pandas.Index.map` ``(mapper, na_action=None)``
 
- Unsupported Index Types:
+`Unsupported Index Types`:
+
   * MultiIndex
   * IntervalIndex
 
-Supported arguments:
-  * mapper
-    - must be a function, function cannot return tuple type
+`Supported arguments`:
 
-Example Usage::
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``mapper``
+     - must be a function, function cannot return tuple type
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.map(lambda x: x + 2)
@@ -252,18 +289,26 @@ and returning them from Bodo functions (boxing) are also supported.
 * :class:`pandas.RangeIndex` ``(start=None, stop=None, step=None, dtype=None, copy=False, name=None)``
 
 
-Supported arguments:
- * start
-   - Integer
- * stop
-   - integer
- * step
-    - Integer
- * name
-   - String
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``start``
+     - integer
+   * - ``stop``
+     - integer
+   * - ``step``
+     - integer
+   * - ``name``
+     - String
 
 
-  Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f():
     ...   return pd.RangeIndex(0, 10, 2)
@@ -277,16 +322,24 @@ Supported arguments:
 * :class:`pandas.UInt64Index` ``(data=None, dtype=None, copy=False, name=None)``
 * :class:`pandas.Float64Index` ``(data=None, dtype=None, copy=False, name=None)``
 
- Supported arguments:
-  * data
-    - list or array
-  * copy
-    - Boolean
-  * name
-    - String
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``data``
+     - list or array
+   * - ``copy``
+     - Boolean
+   * - ``name``
+     - String
 
 
-  Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f():
     ... return (pd.Int64Index(np.arange(3)), pd.UInt64Index([1,2,3]), pd.Float64Index(np.arange(3)))
@@ -304,16 +357,24 @@ boxed/unboxed, and set as index to dataframes and series.
 
 * :class:`pandas.DatetimeIndex`
 
- Supported arguments:
-  * data
-    - array-like of datetime64, Integer, or strings
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``data``
+     - array-like of datetime64, Integer, or strings
 
 
 Date fields of DatetimeIndex are supported:
 
 * :attr:`pandas.DatetimeIndex.year`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.year
@@ -325,7 +386,8 @@ Example Usage::
 
 * :attr:`pandas.DatetimeIndex.month`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.month
@@ -333,9 +395,11 @@ Example Usage::
     >>> I = pd.DatetimeIndex(pd.date_range(start="2019-12-31 02:32:45", end="2020-01-01 19:12:05", periods=5))
     >>> f(I)
     Int64Index([12, 12, 12, 1, 1], dtype='int64')
+
 * :attr:`pandas.DatetimeIndex.day`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.day
@@ -343,9 +407,11 @@ Example Usage::
     >>> I = pd.DatetimeIndex(pd.date_range(start="2019-12-31 02:32:45", end="2020-01-01 19:12:05", periods=5))
     >>> f(I)
     Int64Index([31, 31, 31, 1, 1], dtype='int64')
+
 * :attr:`pandas.DatetimeIndex.hour`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.hour
@@ -356,7 +422,8 @@ Example Usage::
 
 * :attr:`pandas.DatetimeIndex.minute`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.minute
@@ -367,7 +434,8 @@ Example Usage::
 
 * :attr:`pandas.DatetimeIndex.second`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.second
@@ -378,7 +446,8 @@ Example Usage::
 
 * :attr:`pandas.DatetimeIndex.microsecond`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.microsecond
@@ -390,7 +459,8 @@ Example Usage::
 
 * :attr:`pandas.DatetimeIndex.nanosecond`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.nanosecond
@@ -401,7 +471,8 @@ Example Usage::
 
 * :attr:`pandas.DatetimeIndex.date`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.date
@@ -412,7 +483,8 @@ Example Usage::
 
 * :attr:`pandas.DatetimeIndex.dayofyear`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.dayofyear
@@ -424,7 +496,8 @@ Example Usage::
 
 * :attr:`pandas.DatetimeIndex.day_of_year`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.day_of_year
@@ -436,7 +509,8 @@ Example Usage::
 
 * :attr:`pandas.DatetimeIndex.dayofweek`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.dayofweek
@@ -448,7 +522,8 @@ Example Usage::
 
 * :attr:`pandas.DatetimeIndex.day_of_week`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.day_of_week
@@ -460,7 +535,8 @@ Example Usage::
 
 * :attr:`pandas.DatetimeIndex.is_leap_year`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.is_leap_year
@@ -471,7 +547,8 @@ Example Usage::
 
 * :attr:`pandas.DatetimeIndex.is_month_start`
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.is_month_start
@@ -481,7 +558,9 @@ Example Usage::
     Int64Index([0, 0, 0, 1, 1], dtype='int64')
 
 * :attr:`pandas.DatetimeIndex.is_month_end`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.is_month_end
@@ -491,7 +570,9 @@ Example Usage::
     Int64Index([1, 1, 1, 0, 0], dtype='int64')
 
 * :attr:`pandas.DatetimeIndex.is_quarter_start`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.is_quarter_start
@@ -501,7 +582,9 @@ Example Usage::
     Int64Index([0, 0, 0, 1, 1], dtype='int64')
 
 * :attr:`pandas.DatetimeIndex.is_quarter_end`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.is_quarter_end
@@ -511,7 +594,9 @@ Example Usage::
     Int64Index([1, 1, 1, 0, 0], dtype='int64')
 
 * :attr:`pandas.DatetimeIndex.is_year_start`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.is_year_start
@@ -521,7 +606,9 @@ Example Usage::
     Int64Index([0, 0, 0, 1, 1], dtype='int64')
 
 * :attr:`pandas.DatetimeIndex.is_year_end`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.is_year_end
@@ -529,8 +616,11 @@ Example Usage::
     >>> I = pd.DatetimeIndex(pd.date_range(start="2019-12-31 02:32:45", end="2020-01-01 19:12:05", periods=5))
     >>> f(I)
     Int64Index([1, 1, 1, 0, 0], dtype='int64')
+
 * :attr:`pandas.DatetimeIndex.week`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.week
@@ -540,7 +630,9 @@ Example Usage::
     Int64Index([1, 1, 1, 1, 1], dtype='int64')
 
 * :attr:`pandas.DatetimeIndex.weekday`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.weekday
@@ -550,7 +642,9 @@ Example Usage::
     Int64Index([1, 1, 1, 2, 2], dtype='int64')
 
 * :attr:`pandas.DatetimeIndex.weekofyear`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.weekofyear
@@ -560,7 +654,9 @@ Example Usage::
     Int64Index([1, 1, 1, 1,1], dtype='int64')
 
 * :attr:`pandas.DatetimeIndex.quarter`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.quarter
@@ -587,14 +683,23 @@ boxed/unboxed, and set as index to dataframes and series.
 
 * :class:`pandas.TimedeltaIndex` ``(data=None, unit=None, freq=NoDefault.no_default, closed=None, dtype=dtype('<m8[ns]'), copy=False, name=None)``
 
- Supported arguments:
-  * data
-   - must be array-like of timedelta64ns or Ingetger.
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``data``
+     - must be array-like of timedelta64ns or Ingetger.
 
 Time fields of TimedeltaIndex are supported:
 
 * :attr:`pandas.TimedeltaIndex.days`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.days
@@ -604,7 +709,9 @@ Example Usage::
     Int64Index([3], dtype='int64')
 
 * :attr:`pandas.TimedeltaIndex.seconds`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.seconds
@@ -612,8 +719,11 @@ Example Usage::
     >>> I = pd.TimedeltaIndex([pd.Timedelta(-2, unit="S"))])
     >>> f(I)
     Int64Index([-2], dtype='int64')
+
 * :attr:`pandas.TimedeltaIndex.microseconds`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.microseconds
@@ -621,8 +731,11 @@ Example Usage::
     >>> I = pd.TimedeltaIndex([pd.Timedelta(11, unit="micros"))])
     >>> f(I)
     Int64Index([11], dtype='int64')
+
 * :attr:`pandas.TimedeltaIndex.nanoseconds`
-Example Usage::
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f(I):
     ...   return I.nanoseconds
