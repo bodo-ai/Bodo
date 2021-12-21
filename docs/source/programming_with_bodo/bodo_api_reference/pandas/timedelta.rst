@@ -5,30 +5,37 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
 
 * :class:`pandas.Timedelta` ``(value=<object object>, unit="ns", days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0)``
 
-Supported arguments:
-  * value
-   - Integer (with constant string unit argument)
-   - String
-   - pandas Timedelta
-   - datetime Timedelta
-  * unit
-   - Constant String. Only has an effect when passing an integer value, see `here <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Timedelta.html>`_ for allowed values.
-  * days
-   - Integer
-  * seconds
-   - Integer
-  * microseconds
-   - Integer
-  * milliseconds
-   - Integer
-  * minutes
-   - Integer
-  * hours
-   - Integer
-  * weeks
-   - Integer
+`Supported arguments`:
 
-  Example Usage::
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``value``
+     - - Integer (with constant string unit argument)
+       - String
+       - Pandas Timedelta
+       - datetime Timedelta
+   * - ``unit``
+     - Constant String. Only has an effect when passing an integer value, see `here <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Timedelta.html>`_ for allowed values.
+   * - ``days``
+     - Integer
+   * - ``seconds``
+     - Integer
+   * - ``microseconds``
+     - Integer
+   * - ``milliseconds``
+     - Integer
+   * - ``minutes``
+     - Integer
+   * - ``hours``
+     - Integer
+   * - ``weeks``
+     - Integer
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -41,15 +48,16 @@ Supported arguments:
 
 * :attr:`pandas.Timedelta.components`
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
     ...   return pd.Timedelta(days=10, hours=2, minutes=7, seconds=3, milliseconds=13, microseconds=23).components
     Components(days=10, hours=2, minutes=7, seconds=3, milliseconds=13, microseconds=23, nanoseconds=0)
+
 * :attr:`pandas.Timedelta.days`
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -58,7 +66,7 @@ Supported arguments:
 
 * :attr:`pandas.Timedelta.delta`
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -67,7 +75,7 @@ Supported arguments:
 
 * :attr:`pandas.Timedelta.microseconds`
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -76,7 +84,7 @@ Supported arguments:
 
 * :attr:`pandas.Timedelta.nanoseconds`
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -85,15 +93,16 @@ Supported arguments:
 
 * :attr:`pandas.Timedelta.seconds`
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
     ...   return pd.Timedelta("10 nanoseconds").nanoseconds
     10
+
 * :attr:`pandas.Timedelta.value`
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -101,11 +110,20 @@ Supported arguments:
     13
 
 * :meth:`pandas.Timedelta.ceil` ``(freq)``
-  Supported arguments:
-    * freq
+
+
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``freq``
      - String
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -113,22 +131,39 @@ Supported arguments:
     11 days 00:00:00
 
 * :meth:`pandas.Timedelta.floor`
-  Supported arguments:
-    * freq
+
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``freq``
      - String
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
     ...   return pd.Timedelta(days=10, hours=2, minutes=7, seconds=3, milliseconds=13, microseconds=23).floor("D")
     10 days 00:00:00
+
 * :meth:`pandas.Timedelta.round`
-  Supported arguments:
-    * freq
+
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``freq``
      - String
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -137,15 +172,16 @@ Supported arguments:
 
 * :meth:`pandas.Timedelta.to_numpy` ``()``
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
     ...   return pd.Timedelta(days=10, hours=2, minutes=7, seconds=3, milliseconds=13, microseconds=23).to_numpy()
     871623013023000 nanoseconds
+
 * :meth:`pandas.Timedelta.to_pytimedelta` ``()``
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -154,15 +190,16 @@ Supported arguments:
 
 * :meth:`pandas.Timedelta.to_timedelta64` ``()``
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
     ...   return pd.Timedelta(days=10, hours=2, minutes=7, seconds=3, milliseconds=13, microseconds=23).to_timedelta64()
     871623013023000 nanoseconds
+
 * :meth:`pandas.Timedelta.total_seconds` ``()``
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
