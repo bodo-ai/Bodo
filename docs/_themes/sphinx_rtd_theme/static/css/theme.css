@@ -3293,7 +3293,7 @@ a .wy-menu-vertical li button.toctree-expand {
 .rst-content .wy-alert-warning.seealso,
 .rst-content .wy-alert-warning.tip,
 .wy-alert.wy-alert-warning article ul li ul {
-  color: white;
+  /* color: white; */
 }
 .rst-content .admonition-todo .admonition-title,
 .rst-content .admonition-todo .wy-alert-title,
@@ -3504,7 +3504,7 @@ a .wy-menu-vertical li button.toctree-expand {
 .rst-content .warning p:last-child,
 .wy-alert p:last-child {
   margin-bottom: 0;
-  color: #fff;
+  /* color: #fff; */
   font-weight: 700;
 }
 .wy-tray-container {
