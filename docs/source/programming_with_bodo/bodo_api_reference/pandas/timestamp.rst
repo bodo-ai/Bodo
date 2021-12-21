@@ -7,32 +7,39 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
 
 * :class:`pandas.Timestamp` ``(ts_input=<object object>, freq=None, tz=None, unit=None, year=None, month=None, day=None, hour=None, minute=None, second=None, microsecond=None, nanosecond=None, tzinfo=None, *, fold=None)``
 
-Supported arguments:
-    * ts_input
-     - string
-     - integer
-     - timestamp
-     - datetimedate
-    * unit
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``ts_input``
+     - - string
+       - integer
+       - timestamp
+       - datetimedate
+   * - ``unit``
      - constant string
-    * year
+   * - ``year``
      - integer
-    * month
+   * - ``month``
      - integer
-    * day
+   * - ``day``
      - integer
-    * hour
+   * - ``hour``
      - integer
-    * minute
+   * - ``minute``
      - integer
-    * second
+   * - ``second``
      - integer
-    * microsecond
+   * - ``microsecond``
      - integer
-    * nanosecond
+   * - ``nanosecond``
      - integer
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -47,7 +54,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.day`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -57,7 +64,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.hour`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -67,7 +74,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.microsecond`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -77,7 +84,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.month`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -87,7 +94,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.nanosecond`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -97,7 +104,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.second`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -107,7 +114,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.year`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -117,52 +124,57 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.dayofyear`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.dayofyear
     343
+    
 * :attr:`pandas.Timestamp.day_of_year`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.day_of_year
     343
+    
 * :attr:`pandas.Timestamp.dayofweek`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.day_of_year
     343
+    
 * :attr:`pandas.Timestamp.day_of_week`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.day_of_week
     3
+    
 * :attr:`pandas.Timestamp.days_in_month`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.days_in_month
     31
+    
 * :attr:`pandas.Timestamp.daysinmonth`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -172,7 +184,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.is_leap_year`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -180,9 +192,10 @@ Supported arguments:
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return (ts1.is_leap_year, ts2.is_leap_year)
     (True, False)
+    
 * :attr:`pandas.Timestamp.is_month_start`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -193,7 +206,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.is_month_end`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -204,7 +217,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.is_quarter_start`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -215,7 +228,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.is_quarter_end`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -226,7 +239,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.is_year_start`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -237,7 +250,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.is_year_end`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -248,7 +261,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.quarter`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -259,7 +272,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.week`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -270,7 +283,7 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.weekofyear`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -281,18 +294,27 @@ Supported arguments:
 
 * :attr:`pandas.Timestamp.value`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
     ...   return pd.Timestamp(12345, unit="ns").value
     12345
-* :meth:`pandas.Timestamp.ceil` ``(freq, ambiguous='raise', nonexistent='raise')``
-Supported arguments:
-  * freq
-   - string
 
-  Example Usage ::
+* :meth:`pandas.Timestamp.ceil` ``(freq, ambiguous='raise', nonexistent='raise')``
+
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - `freq`
+     - string
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -303,7 +325,7 @@ Supported arguments:
 
 * :meth:`pandas.Timestamp.date` ``()``
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -314,10 +336,10 @@ Supported arguments:
 
 
 * :meth:`pandas.Timestamp.day_name` ``(*args, **kwargs)``
-  Supported arguments:
-    None
 
-  Example Usage ::
+`Supported arguments`: None
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -328,11 +350,19 @@ Supported arguments:
     ('Thursday', 'Friday', 'Saturday')
 
 * :meth:`pandas.Timestamp.floor`
-Supported arguments:
-  * freq
-   - string
 
-  Example Usage ::
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - `freq`
+     - string
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -343,7 +373,7 @@ Supported arguments:
 
 * :meth:`pandas.Timestamp.isocalendar`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -353,7 +383,7 @@ Supported arguments:
 
 * :meth:`pandas.Timestamp.isoformat`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -362,10 +392,10 @@ Supported arguments:
     '2021-12-09T09:57:44'
 
 * :meth:`pandas.Timestamp.month_name` ``(*args, **kwargs)``
-  Supported arguments:
-    None
 
-  Example Usage ::
+`Supported arguments`: None
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -374,7 +404,7 @@ Supported arguments:
 
 * :meth:`pandas.Timestamp.normalize`
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -383,11 +413,19 @@ Supported arguments:
     Timestamp('2021-12-09 00:00:00')
 
 * :meth:`pandas.Timestamp.round` ``(freq, ambiguous='raise', nonexistent='raise')``
-Supported arguments:
-  * freq
-   - string
 
-  Example Usage ::
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - `freq`
+     - string
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -397,11 +435,19 @@ Supported arguments:
     (Timestamp('2021-12-09 00:00:00'),Timestamp('2021-12-10 00:00:00'))
 
 * :meth:`pandas.Timestamp.strftime` ``(format)``
-Supported arguments:
-  * format
-   - string
 
-  Example Usage ::
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - `format`
+     - string
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -409,7 +455,8 @@ Supported arguments:
     '2021-12-09 12:00:00'
 
 * :meth:`pandas.Timestamp.toordinal` ``()``
-  Example Usage ::
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -418,7 +465,7 @@ Supported arguments:
 
 * :meth:`pandas.Timestamp.weekday` ``()``
 
-  Example Usage ::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -428,10 +475,10 @@ Supported arguments:
     (3, 4)
 
 * :classmeth:`pandas.Timedelta.now` ``(tz=None)``
-Supported arguments:
-  None
 
-  Example Usage ::
+`Supported arguments`: None
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
