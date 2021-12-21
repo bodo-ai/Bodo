@@ -2,27 +2,31 @@
 General functions
 ~~~~~~~~~~~~~~~~~
 
-Data manipulations:
+Data manipulations
+******************
 
 * :func:`pandas.crosstab` ``(index, columns, values=None, rownames=None, colnames=None, aggfunc=None, margins=False, margins_name='All', dropna=True, normalize=False)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-      * index:
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
 
-        - SeriesType
+   * - argument
+     - datatypes
+   * - ``index``
+     - SeriesType
+   * - ``columns``
+     - SeriesType
 
-      * columns:
-
-        - SeriesType
-
-  Important Notes:
+.. note::
 
     Annotation of pivot values is required. For example,
     ``@bodo.jit(pivots={'pt': ['small', 'large']})`` declares
     the output table `pt` will have columns called ``small`` and ``large``.
 
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit(pivots={"pt": ["small", "large"]})
      ... def f(df):
@@ -41,21 +45,26 @@ Data manipulations:
 
 * :func:`pandas.cut` ``(x, bins, right=True, labels=None, retbins=False, precision=3, include_lowest=False, duplicates="raise", ordered=True)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * x:
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-      - Series or Array like
+   * - argument
+     - default value
+     - datatypes
+   * - ``x``
+     -
+     - Series or Array like
+   * - ``bins``
+     -
+     - Integer or Array like
+   * - ``include_lowest``
+     - ``False``
+     - Boolean
 
-    * bins:
-
-      - Integer or Array like
-
-    * include_lowest (default=False):
-
-      - Boolean
-
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(S):
@@ -85,16 +94,20 @@ Data manipulations:
 
 * :func:`pandas.qcut` ``(x, q, labels=None, retbins=False, precision=3, duplicates="raise")``
 
-  Supported Arguments:
-    * x:
+`Supported arguments`:
 
-      - Series or Array like
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
 
-    * q:
+   * - argument
+     - datatypes
+   * - ``x``
+     - Series or Array like
+   * - ``q``
+     - Integer or Array like of floats
 
-      - Integer or Array like of floats
-
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(S):
@@ -125,77 +138,78 @@ Data manipulations:
 
 * :func:`pandas.merge` ``(left, right, how="inner", on=None, left_on=None, right_on=None, left_index=False, right_index=False, sort=False, suffixes=("_x", "_y"), copy=True, indicator=False, validate=None, _bodo_na_equal=True)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * left:
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-      - DataFrame
-
-    * right:
-
-      - DataFrame
-
-    * how (default='inner'):
-
-      - **Must be constant at Compile Time**
-      - String
-      - Must be one of "inner", "outer", "left", "right"
-
-    * on (default=None):
-
-      - **Must be constant at Compile Time**
-      - Column Name, List of Column Names, or General Merge Condition
-        String (see important notes).
-
-    * left_on (default=None):
-
-      - **Must be constant at Compile Time**
-      - Column Name or List of Column Names
-
-    * right_on (default=None):
-
-      - **Must be constant at Compile Time**
-      - Column Name or List of Column Names
-
-    * left_index (default=False):
-
-      - **Must be constant at Compile Time**
-      - Boolean
-
-    * right_index (default=False):
-
-      - **Must be constant at Compile Time**
-      - Boolean
-
-    * suffixes (default=('_x', '_y')):
-
-      - **Must be constant at Compile Time**
-      - Tuple of Strings
-
-    * indicator (default=False):
-
-      - **Must be constant at Compile Time**
-      - Boolean
-
-    * _bodo_na_equal (default=True):
-
-      - **Must be constant at Compile Time**
-      - Boolean
-      - This argument is unique to Bodo and not available in Pandas.
-        If False, Bodo won't consider NA/nan keys as equal, which differs
-        from Pandas.
+   * - argument
+     - default
+     - datatypes
+     - other requirements
+   * - ``left``
+     -
+     - DataFrame
+     -
+   * - ``right``
+     -
+     - DataFrame
+     -
+   * - ``how``
+     - ``'inner'``
+     - String
+     - - Must be one of ``"inner"``, ``"outer"``, ``"left"``, ``"right"``
+       - **Must be constant at Compile Time**
+   * - ``on``
+     - ``None``
+     - Column Name, List of Column Names, or General Merge Condition String (see :ref:`merge_notes`).
+     - **Must be constant at Compile Time**
+   * - ``left_on``
+     - ``None``
+     - Column Name or List of Column Names
+     - **Must be constant at Compile Time**
+   * - ``right_on``
+     - ``None``
+     - Column Name or List of Column Names
+     - **Must be constant at Compile Time**
+   * - ``left_index``
+     - ``False``
+     - Boolean
+     - **Must be constant at Compile Time**
+   * - ``right_index``
+     - ``False``
+     - Boolean
+     - **Must be constant at Compile Time**
+   * - ``suffixes``
+     - ``('_x', '_y')``
+     - Tuple of Strings
+     - **Must be constant at Compile Time**
+   * - ``indicator``
+     - ``False``
+     - Boolean
+     - **Must be constant at Compile Time**
+   * - ``_bodo_na_equal``
+     - ``True``
+     - Boolean
+     - - **Must be constant at Compile Time**
+       - This argument is unique to Bodo and not available in Pandas. If False, Bodo won't consider NA/nan keys as equal, which differs from Pandas.
 
 
 
-  Important Notes:
 
-    * Output Ordering:
+.. _merge_notes:
+
+Merge Notes
+"""""""""""
+
+    * `Output Ordering`:
 
       The output dataframe is not sorted by default for better parallel performance
       (Pandas may preserve key order depending on `how`).
       One can use explicit sort if needed.
 
-    * General Merge Conditions:
+    * `General Merge Conditions`:
 
       Within Pandas, the merge criteria supported by `pd.merge` are limited to equality between 1
       or more pairs of keys. For some use cases, this is not sufficient and more generalized
@@ -208,37 +222,37 @@ Data manipulations:
       General merge conditions are performed by providing the condition as a string via the `on` argument. Columns in the left table
       are referred to by `left.`{column name}`` and columns in the right table are referred to by `right.`{column name}``.
 
-      To execute the example above, a user can call this example.
+To execute the example in the above note, a user can call this example.
 
-        .. code:: ipython3
+    .. code:: ipython3
 
-            >>> @bodo.jit
-            ... def general_merge(df1, df2):
-            ...   return df1.merge(df2, on="left.`A` == right.`B` & right.`C` < left.`A`", how="left")
+        >>> @bodo.jit
+        ... def general_merge(df1, df2):
+        ...   return df1.merge(df2, on="left.`A` == right.`B` & right.`C` < left.`A`", how="left")
 
-            >>> df1 = pd.DataFrame({"col": [2, 3, 5, 1, 2, 8], "A": [4, 6, 3, 9, 9, -1]})
-            >>> df2 = pd.DataFrame({"B": [1, 2, 9, 3, 2], "C": [1, 7, 2, 6, 5]})
-            >>> general_merge(df1, df2)
+        >>> df1 = pd.DataFrame({"col": [2, 3, 5, 1, 2, 8], "A": [4, 6, 3, 9, 9, -1]})
+        >>> df2 = pd.DataFrame({"B": [1, 2, 9, 3, 2], "C": [1, 7, 2, 6, 5]})
+        >>> general_merge(df1, df2)
 
-               col  A     B     C
-            0    2  4  <NA>  <NA>
-            1    3  6  <NA>  <NA>
-            2    5  3  <NA>  <NA>
-            3    1  9     9     2
-            4    2  9     9     2
-            5    8 -1  <NA>  <NA>
+           col  A     B     C
+        0    2  4  <NA>  <NA>
+        1    3  6  <NA>  <NA>
+        2    5  3  <NA>  <NA>
+        3    1  9     9     2
+        4    2  9     9     2
+        5    8 -1  <NA>  <NA>
 
 
-      These calls have a few additional requirement:
+These calls have a few additional requirements:
 
-        * The condition must be constant string.
-        * The condition must be of the form ``cond_1 & ... & cond_N`` where at least one ``cond_i``
-          is a simple equality. This restriction will be removed in a future release.
-        * The columns specified in these conditions are limited to certain column types.
-          We currently support `boolean`, `integer`, `float`, `datetime64`, `timedelta64`, `datetime.date`,
-          and `string` columns.
+    * The condition must be constant string.
+    * The condition must be of the form ``cond_1 & ... & cond_N`` where at least one ``cond_i``
+      is a simple equality. This restriction will be removed in a future release.
+    * The columns specified in these conditions are limited to certain column types.
+      We currently support `boolean`, `integer`, `float`, `datetime64`, `timedelta64`, `datetime.date`,
+      and `string` columns.
 
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(df1, df2):
@@ -259,47 +273,51 @@ Data manipulations:
 
 * :func:`pandas.merge_asof` ``(left, right, on=None, left_on=None, right_on=None, left_index=False, right_index=False, by=None, left_by=None, right_by=None, suffixes=("_x", "_y"), tolerance=None, allow_exact_matches=True, direction="backward")``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * left:
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-      - DataFrame
+   * - argument
+     - default
+     - datatypes
+     - other requirements
+   * - ``left``
+     -
+     - DataFrame
+     -
+   * - ``right``
+     -
+     - DataFrame
+     -
+   * - ``on``
+     - ``None``
+     - Column Name, List of Column Names
+     - **Must be constant at Compile Time**
+   * - ``left_on``
+     - ``None``
+     - Column Name or List of Column Names
+     - **Must be constant at Compile Time**
+   * - ``right_on``
+     - ``None``
+     - Column Name or List of Column Names
+     - **Must be constant at Compile Time**
+   * - ``left_index``
+     - ``False``
+     - Boolean
+     - **Must be constant at Compile Time**
+   * - ``right_index``
+     - ``False``
+     - Boolean
+     - **Must be constant at Compile Time**
+   * - ``suffixes``
+     - ``('_x', '_y')``
+     - Tuple of Strings
+     - **Must be constant at Compile Time**
 
-    * right:
 
-      - DataFrame
-
-    * on (default=None):
-
-      - **Must be constant at Compile Time**
-      - Column Name, List of Column Names
-
-    * left_on (default=None):
-
-      - **Must be constant at Compile Time**
-      - Column Name or List of Column Names
-
-    * right_on (default=None):
-
-      - **Must be constant at Compile Time**
-      - Column Name or List of Column Names
-
-    * left_index (default=False):
-
-      - **Must be constant at Compile Time**
-      - Boolean
-
-    * right_index (default=False):
-
-      - **Must be constant at Compile Time**
-      - Boolean
-
-    * suffixes (default=('_x', '_y')):
-
-      - **Must be constant at Compile Time**
-      - Tuple of Strings
-
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(df1, df2):
@@ -328,27 +346,33 @@ Data manipulations:
 
 * :func:`pandas.concat` ``(objs, axis=0, join="outer", join_axes=None, ignore_index=False, keys=None, levels=None, names=None, verify_integrity=False, sort=None, copy=True)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * objs:
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-      - List or Tuple of DataFrames/Series
+   * - argument
+     - default
+     - datatypes
+     - other requirements
+   * - ``objs``
+     -
+     - List or Tuple of DataFrames/Series
+     -
+   * - ``axis``
+     - ``0``
+     - Integer with either 0 or 1
+     - **Must be constant at Compile Time**
 
-    * axis (default=0):
+   * - ``ignore_index``
+     - ``False``
+     - Boolean
+     - **Must be constant at Compile Time**
 
-      - **Must be constant at Compile Time**
-      - Integer with either 0 or 1
+.. note:: Bodo currently concatenates local data chunks for distributed datasets, which does not preserve global order of concatenated objects in output.
 
-    * ignore_index (default=False):
-
-      - **Must be constant at Compile Time**
-      - Boolean
-
-  Important Notes:
-
-    Bodo currently concatenates local data chunks for distributed datasets, which does not preserve global order of concatenated objects in output.
-
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(df1, df2):
@@ -368,14 +392,20 @@ Data manipulations:
 
 * :func:`pandas.get_dummies` ``(data, prefix=None, prefix_sep="_", dummy_na=False, columns=None, sparse=False, drop_first=False, dtype=None)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * data:
+.. list-table::
+   :widths: 25 25 30
+   :header-rows: 1
 
-      - Array or Series with Categorical dtypes
-      - **Categories must be known at compile time.**
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``data``
+     - Array or Series with Categorical dtypes
+     - **Categories must be known at compile time.**
 
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(S):
@@ -394,17 +424,23 @@ Data manipulations:
      6   0  1   0  0
      7   0  0   1  0
 
-Top-level missing data:
+Top-level missing data
+*********************** 
 
 * :func:`pandas.isna` ``(obj)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * obj:
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
 
-      - DataFrame, Series, Index, Array, or Scalar
+   * - argument
+     - datatypes
+   * - ``obj``
+     - DataFrame, Series, Index, Array, or Scalar
 
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(df):
@@ -425,13 +461,18 @@ Top-level missing data:
 
 * :func:`pandas.isnull` ``(obj)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * obj:
+.. list-table::
+   :widths: 25 30
+   :header-rows: 1
 
-      - DataFrame, Series, Index, Array, or Scalar
+   * - argument
+     - datatypes
+   * - ``obj``
+     - DataFrame, Series, Index, Array, or Scalar
 
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(df):
@@ -452,13 +493,18 @@ Top-level missing data:
 
 * :func:`pandas.notna` ``(obj)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * obj:
+.. list-table::
+   :widths: 25 30
+   :header-rows: 1
 
-      - DataFrame, Series, Index, Array, or Scalar
+   * - argument
+     - datatypes
+   * - ``obj``
+     - DataFrame, Series, Index, Array, or Scalar
 
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(df):
@@ -479,13 +525,18 @@ Top-level missing data:
 
 * :func:`pandas.notnull` ``(obj)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * obj:
+.. list-table::
+   :widths: 25 30
+   :header-rows: 1
 
-      - DataFrame, Series, Index, Array, or Scalar
+   * - argument
+     - datatypes
+   * - ``obj``
+     - DataFrame, Series, Index, Array, or Scalar
 
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(df):
@@ -505,31 +556,38 @@ Top-level missing data:
       3.1   True  True
 
 
-Top-level conversions:
+Top-level conversions
+*********************
 
 * :func:`pandas.to_numeric` ``(arg, errors="raise", downcast=None)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * arg:
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-      - Series or Array
+   * - argument
+     - default
+     - datatypes
+     - other requirements
+   * - ``arg``
+     -
+     - Series or Array
+     -
+   * - ``downcast``
+     - ``None``
+     - String and one of (``'integer'``, ``'signed'``, ``'unsigned'``, ``'float'``)
+     - **Must be constant at Compile Time**
 
-    * downcast (default=None):
-
-      - **Must be constant at Compile Time**
-      - String and one of ('integer', 'signed', 'unsigned', 'float')
-
-  Important Notes:
+.. note::
 
     * Output type is float64 by default
-
     * Unlike Pandas, Bodo does not dynamically determine output type,
       and does not downcast to the smallest numerical type.
+    * ``downcast`` parameter should be used for type annotation of output.
 
-    * `downcast` parameter should be used for type annotation of output.
-
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(S):
@@ -546,65 +604,72 @@ Top-level conversions:
      5    -555
      dtype: Int64
 
-Top-level dealing with datetime and timedelta like:
+Top-level dealing with datetime and timedelta like
+**************************************************
 
 * :func:`pandas.to_datetime` ``(arg, errors='raise', dayfirst=False, yearfirst=False, utc=None, format=None, exact=True, unit=None, infer_datetime_format=False, origin='unix', cache=True)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * arg:
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-      - Series, Array or scalar of integers or strings
+   * - argument
+     - default
+     - datatypes
+     - other requirements
+   * - ``arg``
+     -
+     - Series, Array or scalar of integers or strings
+     -
+   * - ``errors``
+     - ``'raise'``
+     - String and one of ('ignore', 'raise', 'coerce')
+     -
+   * - ``dayfirst``
+     - ``False``
+     - Boolean
+     -
+   * - ``yearfirst``
+     - ``False``
+     - Boolean
+     -
+   * - ``utc``
+     - ``None``
+     - Boolean
+     -
+   * - ``format``
+     - ``None``
+     - String matching Pandas `strftime/strptime <https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior>`_
+     -
+   * - ``exact``
+     - ``True``
+     - Boolean
+     -
+   * - ``unit``
+     - ``'ns'``
+     - String
+     - Must be a `valid Pandas timedelta unit <https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases>`_
+   * - ``infer_datetime_format``
+     - ``False``
+     - Boolean
+     -
+   * - ``origin``
+     - ``'unix'``
+     - Scalar string or timestamp value
+     -
+   * - ``cache``
+     - ``True``
+     - Boolean
+     -
 
-    * errors (default='raise'):
-
-      - String and one of ('ignore', 'raise', 'coerce')
-
-    * dayfirst (default=False):
-
-      - Boolean
-
-    * yearfirst (default=False):
-
-      - Boolean
-
-    * utc (default=None):
-
-      - Boolean
-
-    * format (default=None):
-
-      - String matching Pandas `strftime/strptime <https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior>`_
-
-    * exact (default=True)
-
-      - Boolean
-
-    * unit (default='ns')
-
-      - String
-
-      - Must be a `valid Pandas timedelta unit <https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases>`_
-
-    * infer_datetime_format (default=False)
-
-      - Boolean
-
-    * origin (default='unix')
-
-      - Scalar string or timestamp value
-
-    * cache (default=True)
-
-      - Boolean
-
-  Important Notes:
+.. note::
 
     * The function is not optimized.
-
     * Bodo doesn't support Timezone-Aware datetime values
 
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(val):
@@ -618,23 +683,28 @@ Top-level dealing with datetime and timedelta like:
 
 * :func:`pandas.to_timedelta` ``(arg, unit=None, errors='raise')``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * arg:
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-      - Series, Array or scalar of integers or strings
+   * - argument
+     - default
+     - datatypes
+     - other requirements
+   * - ``arg``
+     -
+     - Series, Array or scalar of integers or strings
+     -
+   * - ``unit``
+     - None
+     - String
+     - Must be a `valid Pandas timedelta unit <https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases>`_
 
-    * unit (default=None):
+.. note:: Passing string data as ``arg`` is not optimized.
 
-      - String
-
-      - Must be a `valid Pandas timedelta unit <https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases>`_
-
-  Important Notes:
-
-    * Passing string data as ``arg`` is not optimized.
-
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f(S):
@@ -652,43 +722,49 @@ Top-level dealing with datetime and timedelta like:
 
 * :func:`pandas.date_range` ``(start=None, end=None, periods=None, freq=None, tz=None, normalize=False, name=None, closed=None, **kwargs)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * start (default=None):
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-      - String or Timestamp
+   * - argument
+     - default
+     - datatypes
+     - other requirements
+   * - ``start``
+     - ``None``
+     - String or Timestamp
+     -
+   * - ``end``
+     - ``None``
+     - String or Timestamp
+     -
+   * - ``periods``
+     - ``None``
+     - Integer
+     -
+   * - ``freq``
+     - ``None``
+     - String
+     - Must be a `valid Pandas frequency <https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases>`_
+   * - ``name``
+     - ``None``
+     - String
+     -
+   * - ``closed``
+     - ``None``
+     - String and one of (``'left'``, ``'right'``)
+     -
 
-    * end (default=None):
-
-      - String or Timestamp
-
-    * periods (default=None):
-
-      - Integer
-
-    * freq (default=None):
-
-      - String
-      - Must be a `valid Pandas frequency <https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases>`_
-
-    * name (default=None):
-
-      - String
-
-    * closed (default=None):
-
-      - String and one of ('left', 'right')
-
-  Important Notes:
+.. note::
 
     * Exactly three of ``start``, ``end``, ``periods``, and ``freq`` must
       be provided.
-
     * Bodo **Does Not** support ``kwargs``, even for compatibility.
-
     * This function is not parallelized yet.
 
-  Example Usage::
+`Example Usage`::
 
        >>> @bodo.jit
        ... def f():
@@ -703,42 +779,48 @@ Top-level dealing with datetime and timedelta like:
 
 * :func:`pandas.timedelta_range` ``(start=None, end=None, periods=None, freq=None, name=None, closed=None)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * start (default=None):
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-      - String or Timedelta
+   * - argument
+     - default
+     - datatypes
+     - other requirements
+   * - ``start``
+     - ``None``
+     - String or Timedelta
+     -
+   * - ``end``
+     - ``None``
+     - String or Timedelta
+     -
+   * - ``periods``
+     - ``None``
+     - Integer
+     -
+   * - ``freq``
+     - ``None``
+     - String
+     - Must be a `valid Pandas frequency <https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases>`_
+   * - ``name``
+     - ``None``
+     - String
+     -
+   * - ``closed``
+     - ``None``
+     - String and one of ('left', 'right')
+     -
 
-
-    * end (default=None):
-
-      - String or Timedelta
-
-    * periods (default=None):
-
-      - Integer
-
-    * freq (default=None):
-
-      - String
-      - Must be a `valid Pandas frequency <https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases>`_
-
-    * name (default=None):
-
-      - String
-
-    * closed (default=None):
-
-      - String and one of ('left', 'right')
-
-  Important Notes:
+.. note::
 
     * Exactly three of ``start``, ``end``, ``periods``, and ``freq`` must
       be provided.
-
     * This function is not parallelized yet.
 
-  Example Usage::
+`Example Usage`::
 
      >>> @bodo.jit
      ... def f():
