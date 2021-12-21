@@ -1,4 +1,3 @@
-
 DataFrame
 ~~~~~~~~~
 
@@ -7,46 +6,54 @@ Bodo provides extensive DataFrame support documented below.
 
 * :class:`pandas.DataFrame` ``(data=None, index=None, columns=None, dtype=None, copy=None)``
 
-Supported arguments:
-  * data
-   - constant key dictionary
-   - 2D Numpy array
-       * columns argument is required when using a 2D Numpy array
-  * index
-   - List
-   - Tuple
-   - pandas index types
-   - pandas array types
-   - pandas series types
-   - numpy array types
-  * columns
-   - **Must be constant at Compile Time**
-   - Constant list of String
-   - Constant tuple of String
-  * dtype
-   - All values supported with dataframe.astype (see below)
-  * copy
-   - **Must be constant at Compile Time**
-   - boolean
+`Supported arguments`:
 
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``data``
+     - - constant key dictionary
+       - 2D Numpy array
+     - columns argument is required when using a 2D Numpy array
+   * - ``index``
+     - - List
+       - Tuple
+       - Pandas index types
+       - Pandas array types
+       - Pandas series types
+       - Numpy array types
+     -
+   * - ``columns``
+     - - Constant list of String
+       - Constant tuple of String
+     - **Must be constant at Compile Time**
+   * - ``dtype``
+     - All values supported with ``dataframe.astype`` (see below)
+     -
+   * - ``copy``
+     - boolean
+     - **Must be constant at Compile Time**
 
-Attributes and underlying data:
-
+Attributes and underlying data
+******************************
 
 * :attr:`pandas.DataFrame.columns`
 
-  Example Usage::
+`Example Usage`::
 
-      >>> @bodo.jit
-      ... def f():
-      ...   df = pd.DataFrame({"A": [1,2,3], "B": ["X", "Y", "Z"], "C": [pd.Timedelta(10, unit="D"), pd.Timedelta(10, unit="H"), pd.Timedelta(10, unit="S")]})
-      ...   return df.columns
-      Index(['A', 'B', 'C'], dtype='object')
+    >>> @bodo.jit
+    ... def f():
+    ...   df = pd.DataFrame({"A": [1,2,3], "B": ["X", "Y", "Z"], "C": [pd.Timedelta(10, unit="D"), pd.Timedelta(10, unit="H"), pd.Timedelta(10, unit="S")]})
+    ...   return df.columns
+    Index(['A', 'B', 'C'], dtype='object')
 
 * :attr:`pandas.DataFrame.dtypes`
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -59,7 +66,7 @@ Attributes and underlying data:
 
 * :attr:`pandas.DataFrame.empty`
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -70,7 +77,7 @@ Attributes and underlying data:
 
 * :attr:`pandas.DataFrame.index`
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -80,7 +87,7 @@ Attributes and underlying data:
 
 * :attr:`pandas.DataFrame.ndim`
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -91,21 +98,28 @@ Attributes and underlying data:
 
 * :meth:`pandas.DataFrame.select_dtypes` ``(include=None, exclude=None)``
 
-Supported arguments:
-  * include
-   - **Must be constant at Compile Time**
-   - string
-   - type
-   - List or tuple of string/type
-  * exclude
-   - **Must be constant at Compile Time**
-   - string
-   - type
-   - List or tuple of string/type
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``include``
+     - - string
+       - type
+       - List or tuple of string/type
+     - **Must be constant at Compile Time**
+   * - ``exclude``
+     - - string
+       - type
+       - List or tuple of string/type
+     - **Must be constant at Compile Time**
 
 
-
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -124,20 +138,27 @@ Supported arguments:
 
 * :meth:`pandas.DataFrame.filter` ``(items=None, like=None, regex=None, axis=None)``
 
-Supported arguments:
-  * items
-   - Constant list of String
-  * like
-   - Constant string
-  * regex
-   - Constant String
-  * axis (only supports the "column" axis)
-   - Constant String
-   - Constant Integer
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``items``
+     - Constant list of String
+   * - ``like``
+     - Constant string
+   * - ``regex``
+     - Constant String
+   * - ``axis`` (only supports the "column" axis)
+     - - Constant String
+       - Constant integer
 
 
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -156,7 +177,7 @@ Supported arguments:
 
 * :attr:`pandas.DataFrame.shape`
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -167,7 +188,7 @@ Example Usage::
 
 * :attr:`pandas.DataFrame.size`
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -177,11 +198,18 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.to_numpy` ``(dtype=None, copy=False, na_value=NoDefault.no_default)``
 
-Supported Arguments:
-  * copy
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``copy``
      - boolean
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -193,7 +221,7 @@ Example Usage::
 
 * :attr:`pandas.DataFrame.values` (only for numeric dataframes)
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -203,20 +231,29 @@ Example Usage::
      [2.  4.2]
      [3.  5.3]]
 
-Conversion:
+Conversion
+***********
 
 * :meth:`pandas.DataFrame.astype` ``(dtype, copy=True, errors='raise')``
 
-Supported Arguments:
-  * dtype
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``dtype``
+     - - dict of string column names keys, and Strings/types values
+       - String (string must be parsable by ``np.dtype``)
+       - Valid type (see types)
+       - The following functions: float, int, bool, str
      - **Must be constant at Compile Time**
-     - dict of string column names keys, and Strings/types values
-     - String (string must be parsable by np.dtype)
-     - Valid type (see types)
-     - The following functions: float, int, bool, str
 
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -229,12 +266,19 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.copy` ``(deep=True)``
 
-Supported Arguments:
-  * copy
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``copy``
      - boolean
 
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -259,7 +303,7 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.isna` ``()``
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -272,7 +316,7 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.isnull` ``()``
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -286,7 +330,7 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.notna` ``()``
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -299,7 +343,7 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.notnull` ``()``
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -312,10 +356,9 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.info` ``(verbose=None, buf=None, max_cols=None, memory_usage=None, show_counts=None, null_counts=None)``
 
-Supported Arguments:
-  None
+`Supported arguments`: None
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -336,15 +379,23 @@ Example Usage::
   The exact output string may vary slightly from Pandas.
 
 
-Indexing, iteration:
+Indexing, iteration
+********************
 
 * :meth:`pandas.DataFrame.head` ``(n=5)``
 
-Supported Arguments:
-  * head
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``head``
      - integer
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -356,11 +407,11 @@ Example Usage::
 
 * :attr:`pandas.DataFrame.iat`
 
-We only support indexing using iat using a pair of integers. We require that the second int
+We only support indexing using ``iat`` using a pair of integers. We require that the second int
 (the column integer) is a compile time constant
 
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -376,39 +427,36 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.iloc`
 
-getitem:
-  df.iloc supports single integer indexing (returns row as series) ``df.iloc[0]``
+`getitem`:
 
-  df.iloc supports single list/array/series of integers/bool ``df.iloc[[0,1,2]]``
+  - ``df.iloc`` supports single integer indexing (returns row as series) ``df.iloc[0]``
 
-  for tuples indexing ``df.iloc[row_idx, col_idx]`` we allow:
-    row_idx can be
-      int
-      list/array/series of integers/bool
-      slice
+  - ``df.iloc`` supports single list/array/series of integers/bool ``df.iloc[[0,1,2]]``
 
-    col_idx can be
-      constant int, constant list of integers, or constant slice
+  - for tuples indexing ``df.iloc[row_idx, col_idx]`` we allow:
 
-    ex:
-      ``df.iloc[[0,1,2], :]``
+    - ``row_idx`` to be int list/array/series of integers/bool slice
 
-setitem:
+    - ``col_idx`` to be constant int, constant list of integers, or constant slice
 
-  df.iloc only supports scalar setitem
+  - e.g.: ``df.iloc[[0,1,2], :]``
 
-  df.iloc only supports tuple indexing ``df.iloc[row_idx, col_idx]``
-    row_idx can be anything supported for series setitem:
-      int
-      list/array/series of integers/bool
-      slice
+`setitem`:
 
-    col_idx can be:
+  - ``df.iloc`` only supports scalar setitem
+
+  - ``df.iloc`` only supports tuple indexing ``df.iloc[row_idx, col_idx]``
+  - ``row_idx`` can be anything supported for series setitem:
+     - int
+     - list/array/series of integers/bool
+     - slice
+
+  - ``col_idx`` can be:
       constant int, constant list/tuple of integers
 
 
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -423,22 +471,30 @@ Example Usage::
     2  3  6  9  9
 
 * :meth:`pandas.DataFrame.insert` ``(loc, column, value, allow_duplicates=False)``
-  Supported Arguments:
-    * loc
-        - constant integer
-    * column
-        - constant string
-    * value
-        - scalar
-        - list/tuple
-        - pandas/numpy array
-        - pandas index types
-        - series
-    * allow_duplicates
-        - constant boolean
+
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``loc``
+     - constant integer
+   * - ``column``
+     - constant string
+   * - ``value``
+     - - scalar
+       - list/tuple
+       - Pandas/Numpy array
+       - Pandas index types
+       - series
+   * - ``allow_duplicates``
+     - constant boolean
 
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -453,15 +509,22 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.isin` ``(values)``
 
-  Supported Arguments:
-    * values
-       - DataFrame (must have same indicies) + iterable type
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``values``
+     - - DataFrame (must have same indices) + iterable type
        - Numpy array types
        - Pandas array types
        - List/Tuple
        - Pandas Index Types (excluding interval Index and MultiIndex)
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -481,7 +544,7 @@ Example Usage::
 
 .. note::
 
-    DataFrame isin ignores DataFrame indicies. For example. ::
+    ``DataFrame.isin`` ignores DataFrame indices. For example. ::
 
       >>> @bodo.jit
       ... def f():
@@ -503,10 +566,10 @@ Example Usage::
 
 
 * :meth:`pandas.DataFrame.itertuples` ``(index=True, name='Pandas')``
-    Supported Arguments:
-      none
 
-Example Usage::
+`Supported arguments`: None
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -527,11 +590,18 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.query` ``(expr, inplace=False, **kwargs)``
 
-    Supported Arguments:
-      * expr
-        - Constant String
+`Supported arguments`:
 
-Example Usage::
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``expr``
+     - Constant String
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f(a):
@@ -551,11 +621,18 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.tail` ``(n=5)``
 
-  Supported Arguments:
-    * n
-       - Integer
+`Supported arguments`:
 
-Example Usage::
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``n``
+     - Integer
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -567,25 +644,34 @@ Example Usage::
 
 
 
-Function application, GroupBy & Window:
+Function application, GroupBy & Window
+***************************************
 
 * :meth:`pandas.DataFrame.apply` ``(func, axis=0, raw=False, result_type=None, args=(), _bodo_inline=False, **kwargs)``
 
-  Supported Arguments:
-    * func
-       - **Must be constant at Compile Time**
-       - function (e.g. lambda) (axis must = 1)
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``func``
+     - - function (e.g. lambda) (axis must = 1)
        - jit function (axis must = 1)
        - String which refers to a support DataFrame method
-    * axis
-       - **Must be constant at Compile Time**
-       - Integer (0, 1)
+     - **Must be constant at Compile Time**
+   * - ``axis``
+     - - Integer (0, 1)
        - String (only if the method takes axis as an argument )
-    * _bodo_inline
-       - **Must be constant at Compile Time**
-       - Boolean
+     - **Must be constant at Compile Time**
+   * - ``_bodo_inline``
+     - boolean
+     - **Must be constant at Compile Time**
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -599,31 +685,38 @@ Example Usage::
 
 .. note ::
 
-    Supports extra `_bodo_inline` boolean argument to manually control bodo's inlining behavior.
+    Supports extra ``_bodo_inline`` boolean argument to manually control bodo's inlining behavior.
     Inlining user-defined functions (UDFs) can potentially improve performance at the expense of
-    extra compilation time. Bodo uses heuristics to make a decision automatically if `_bodo_inline` is not provided.
+    extra compilation time. Bodo uses heuristics to make a decision automatically if ``_bodo_inline`` is not provided.
 
 * :meth:`pandas.DataFrame.groupby` ``(by=None, axis=0, level=None, as_index=True, sort=True, group_keys=True, squeeze=NoDefault.no_default, observed=False, dropna=True)``
 
-    Supported Arguments:
-      * by
-         - **Must be constant at Compile Time**
-         - String column label
-         - List/Tuple of column labels
-      * as_index
-         - **Must be constant at Compile Time**
-         - Boolean
-      * dropna
-         - **Must be constant at Compile Time**
-         - Boolean
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``by``
+     - - String column label
+       - List/Tuple of column labels
+     - **Must be constant at Compile Time**
+   * - ``as_index``
+     - boolean
+     - **Must be constant at Compile Time**
+   * - ``dropna``
+     - boolean
+     - **Must be constant at Compile Time**
 
 
 
-.. note ::
-  `sort=False` and `observed=True` are set by default. These are the only support values for sort and observed. For more information on using groupby, see :ref:`the groupby Section <pd_groupby_section>`.
+.. note:: ``sort=False`` and ``observed=True`` are set by default. These are the only support values for sort and observed. For more information on using groupby, see :ref:`the groupby Section <pd_groupby_section>`.
 
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -637,26 +730,38 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.rolling` ``(window, min_periods=None, center=False, win_type=None, on=None, axis=0, closed=None, method='single')``
 
-    Supported Arguments:
-      * window
-         - Integer
-         - String (must be parsable as a time offset)
-         - datetime.timedelta
-         - pd.Timedelta
-         - List/Tuple of column labels
-      * min_periods
-         - Integer
-      * center
-         - Boolean
-      * on
-         - **Must be constant at Compile Time**
-         - Scalar column label
-      * dropna
-         - **Must be constant at Compile Time**
-         - Boolean
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``window``
+     - - Integer
+       - String (must be parsable as a time offset)
+       - ``datetime.timedelta``
+       - ``pd.Timedelta``
+       - List/Tuple of column labels
+     -
+   * - ``min_periods``
+     - Integer
+     -
+   * - ``center``
+     - boolean
+     -
+   * - ``on``
+     - Scalar column label
+     - **Must be constant at Compile Time**
+   * - ``dropna``
+     - boolean
+     - **Must be constant at Compile Time**
 
 
-Example Usage::
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -672,13 +777,14 @@ Example Usage::
 For more information, please see :ref:`the Window section <pd_window_section>`.
 
 
-Computations / Descriptive Stats:
+Computations / Descriptive Stats
+********************************
 
 * :meth:`pandas.DataFrame.abs` ``()``
 
 Only supported for dataframes containing numerical data and Timedeltas
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -689,11 +795,19 @@ Example Usage::
     1  2  4.2 10 days
 
 * :meth:`pandas.DataFrame.corr` ``(method='pearson', min_periods=1)``
-Supported Arguments:
-   * min_periods
-           - Integer
 
-Example Usage::
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``min_periods``
+     - Integer
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -706,10 +820,10 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.count` ``(axis=0, level=None, numeric_only=False)``
 
-Supported Arguments:
-  none
+`Supported arguments`: None
 
-Example Usage::
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f():
     ...   df = pd.DataFrame({"A": [1, None, 3], "B": [None, 2, None]})
@@ -719,12 +833,19 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.cov` ``(min_periods=None, ddof=1)``
 
-Supported Arguments:
-  * min_periods
-      - Integer
+`Supported arguments`:
 
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
 
-Example Usage::
+   * - argument
+     - datatypes
+   * - ``min_periods``
+     - Integer
+
+`Example Usage`::
+
     >>> @bodo.jit
     ... def f():
     ...   df = pd.DataFrame({"A": [0.695, 0.478, 0.628], "B": [-0.695, -0.478, -0.628], "C": [0.07, -0.68, 0.193]})
@@ -734,15 +855,11 @@ Example Usage::
     B -0.012346  0.012346 -0.047577
     C  0.047577 -0.047577  0.223293
 
-
-
 * :meth:`pandas.DataFrame.cumprod` ``(axis=None, skipna=True)``
 
-Supported Arguments:
-  None
+`Supported arguments`: None
 
-
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -760,10 +877,9 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.cumsum` ``(axis=None, skipna=True)``
 
-Supported Arguments:
-  None
+`Supported arguments`: None
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -779,11 +895,9 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.describe` ``(percentiles=None, include=None, exclude=None, datetime_is_numeric=False)``
 
+`Supported arguments`: None
 
-Supported Arguments:
-  None
-
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -804,11 +918,18 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.diff` ``(periods=1, axis=0)``
 
-Supported Arguments:
-  * periods
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``periods``
      - Integer
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -825,12 +946,20 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.max` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
-Supported Arguments:
-  * axis
-     - **Must be constant at Compile Time**
-     - Integer (0 or 1)
+`Supported arguments`:
 
-Example Usage::
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``axis``
+     - Integer (0 or 1)
+     - **Must be constant at Compile Time**
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -845,12 +974,21 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.mean` ``axis=None, skipna=None, level=None, numeric_only=None)``
 
-Supported Arguments:
-  * axis
-     - **Must be constant at Compile Time**
-     - Integer (0 or 1)
+`Supported arguments`:
 
-Example Usage::
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``axis``
+     - Integer (0 or 1)
+     - **Must be constant at Compile Time**
+
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -866,12 +1004,19 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.median` ``axis=None, skipna=None, level=None, numeric_only=None)``
 
-Supported Arguments:
-  * axis
-     - **Must be constant at Compile Time**
-     - Integer (0 or 1)
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-Example Usage::
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``axis``
+     - Integer (0 or 1)
+     - **Must be constant at Compile Time**
+
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -886,12 +1031,19 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.min`
 
-Supported Arguments:
-  * axis
-     - **Must be constant at Compile Time**
-     - Integer (0 or 1)
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-Example Usage::
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``axis``
+     - Integer (0 or 1)
+     - **Must be constant at Compile Time**
+
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -906,11 +1058,16 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.nunique` ``(axis=0, dropna=True)``
 
-Supported Arguments:
-  * dropna
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``dropna``
      - boolean
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -922,12 +1079,17 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.pct_change` ``(periods=1, fill_method='pad', limit=None, freq=None)``
 
-Supported Arguments:
-  * periods
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``periods``
      - Integer
 
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -942,18 +1104,22 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.pipe` ``(func, *args, **kwargs)``
 
-Supported Arguments:
-    * func:
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-      - JIT function or callable defined within a JIT function.
-
-    * Additional arguments for ``func`` can be passed as additional arguments.
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``func``:
+     - JIT function or callable defined within a JIT function.
+     - Additional arguments for ``func`` can be passed as additional arguments.
 
 .. note::
 
-    `func` cannot be a tuple
+    ``func`` cannot be a tuple
 
-Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -970,12 +1136,19 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.prod` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
-Supported Arguments:
-  * axis
-     - **Must be constant at Compile Time**
-     - Integer (0 or 1)
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-Example Usage::
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``axis``
+     - Integer (0 or 1)
+     - **Must be constant at Compile Time**
+
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -989,12 +1162,19 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.product` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
-Supported Arguments:
-  * axis
-     - **Must be constant at Compile Time**
-     - Integer (0 or 1)
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-Example Usage::
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``axis``
+     - Integer (0 or 1)
+     - **Must be constant at Compile Time**
+
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1007,14 +1187,22 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.quantile` ``(q=0.5, axis=0, numeric_only=True, interpolation='linear')``
 
-Supported Arguments:
-  * q
-     - Float or Int, must be 0<= q <= 1
-  * axis
-     - **Must be constant at Compile Time**
-     - Integer (0 or 1)
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-Example Usage::
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``q``
+     - Float or Int
+     - must be 0<= q <= 1
+   * - ``axis``
+     - Integer (0 or 1)
+     - **Must be constant at Compile Time**
+
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1028,12 +1216,19 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.std` ``(axis=None, skipna=None, level=None, ddof=1, numeric_only=None)``
 
-Supported Arguments:
-  * axis
-     - **Must be constant at Compile Time**
-     - Integer (0 or 1)
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-Example Usage::
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``axis``
+     - Integer (0 or 1)
+     - **Must be constant at Compile Time**
+
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1046,12 +1241,19 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.sum` ``(axis=None, skipna=None, level=None, numeric_only=None, min_count=0)``
 
-Supported Arguments:
-  * axis
-     - **Must be constant at Compile Time**
-     - Integer (0 or 1)
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-Example Usage::
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``axis``
+     - Integer (0 or 1)
+     - **Must be constant at Compile Time**
+
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1065,12 +1267,19 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.var` ``(axis=None, skipna=None, level=None, ddof=1, numeric_only=None)``
 
-Supported Arguments:
-  * axis
-     - **Must be constant at Compile Time**
-     - Integer (0 or 1)
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-Example Usage::
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``axis``
+     - Integer (0 or 1)
+     - **Must be constant at Compile Time**
+
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1084,11 +1293,16 @@ Example Usage::
 
 * :meth:`pandas.DataFrame.memory_usage` ``(index=True, deep=False)``
 
-Supported Arguments:
-  * index
-     - Boolean
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
 
-Example Usage::
+   * - argument
+     - datatypes
+   * - ``index``
+     - boolean
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1101,7 +1315,8 @@ Example Usage::
     dtype: int64
 
 
-Reindexing / Selection / Label manipulation:
+Reindexing / Selection / Label manipulation
+*******************************************
 
 * :meth:`pandas.DataFrame.drop` ``(labels=None, axis=0, index=None, columns=None, level=None, inplace=False, errors='raise')``
 
@@ -1110,7 +1325,7 @@ Reindexing / Selection / Label manipulation:
   * `inplace` supported with a constant boolean value
   * All other arguments are unsupported
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1125,14 +1340,21 @@ Reindexing / Selection / Label manipulation:
 
 * :meth:`pandas.DataFrame.drop_duplicates` ``(subset=None, keep='first', inplace=False, ignore_index=False)``
 
-Supported Arguments:
-  * subset
-     - Constant list/tuple of String column names
-     - Constant list/tuple of Integer column names
-     - Constant String column names
-     - Constant Integer column names
+`Supported arguments`:
 
-  Example Usage::
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``subset``
+     - - Constant list/tuple of String column names
+       - Constant list/tuple of Integer column names
+       - Constant String column names
+       - Constant Integer column names
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1145,9 +1367,9 @@ Supported Arguments:
 
 * :meth:`pandas.DataFrame.duplicated` ``(subset=None, keep='first')``
 
-Supported Arguments: None
+`Supported arguments`: None
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1162,9 +1384,9 @@ Supported Arguments: None
 
 * :meth:`pandas.DataFrame.idxmax` ``(axis=0, skipna=True)``
 
-Supported Arguments: None
+`Supported arguments`: None
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1177,9 +1399,9 @@ Supported Arguments: None
 
 * :meth:`pandas.DataFrame.idxmin` ``(axis=0, skipna=True)``
 
-  Supported Arguments: None
+`Supported arguments`: None
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1192,19 +1414,32 @@ Supported Arguments: None
 
 * :meth:`pandas.DataFrame.rename` ``(mapper=None, index=None, columns=None, axis=None, copy=True, inplace=False, level=None, errors='ignore')``
 
-  Supported Arguments:
-    * mapper
-      - must be constant dictionary. Can only be used alongside axis=1
-    * columns
-      - must be constant dictionary
-    * axis
-      - Can only be used alongside mapper argument
-    * copy
-      - Boolean
-    * inplace
-      - must be constant boolean
+`Supported arguments`:
 
-  Example Usage::
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``mapper``
+     - must be constant dictionary.
+     - Can only be used alongside axis=1
+   * - ``columns``
+     - must be constant dictionary
+     -
+   * - ``axis``
+     - Integer
+     - Can only be used alongside mapper argument
+   * - ``copy``
+     - boolean
+     -
+   * - ``inplace``
+     - must be constant boolean
+     -
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1217,15 +1452,26 @@ Supported Arguments: None
 
 * :meth:`pandas.DataFrame.reset_index` ``(level=None, drop=False, inplace=False, col_level=0, col_fill='')``
 
-  Supported Arguments:
-    * level
-       - If specified, must drop all levels.
-    * drop
-       - Constant Boolean
-    * inplace
-       - Constant Boolean
+`Supported arguments`:
 
-  Example Usage::
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``level``
+     - Integer
+     - If specified, must drop all levels.
+   * - ``drop``
+     - Constant boolean
+     -
+   * - ``inplace``
+     - Constant boolean
+     -
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1239,11 +1485,18 @@ Supported Arguments: None
 
 * :meth:`pandas.DataFrame.set_index` ``(keys, drop=True, append=False, inplace=False, verify_integrity=False)``
 
-  Supported Arguments:
-    * keys
-       - must be a constant string
+`Supported arguments`:
 
-  Example Usage::
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - keys
+     - must be a constant string
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1258,14 +1511,21 @@ Supported Arguments: None
 
 * :meth:`pandas.DataFrame.take` ``(indices, axis=0, is_copy=None)``
 
-  Supported Arguments:
-    * indicies
-       - scalar Integer
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - indices
+     - - scalar Integer
        - Pandas Integer Array
        - Numpy Integer Array
        - Integer Series
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1276,22 +1536,30 @@ Supported Arguments: None
     1  2  5  8
 
 
-Missing data handling:
+Missing data handling
+*********************
 
 * :meth:`pandas.DataFrame.dropna` ``(axis=0, how='any', thresh=None, subset=None, inplace=False)``
 
-  Supported Arguments:
-    * how
-       - Constant String, either "all" or "any"
-    * thresh
-       - Integer
-    * subset
-       - Constant list/tuple of String column names
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``how``
+     - Constant String: either "all" or "any"
+   * - ``thresh``
+     - Integer
+   * - ``subset``
+     - - Constant list/tuple of String column names
        - Constant list/tuple of Integer column names
        - Constant String column names
        - Constant Integer column names
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1310,22 +1578,26 @@ Missing data handling:
 
 * :meth:`pandas.DataFrame.fillna` ``(value=None, method=None, axis=None, inplace=False, limit=None, downcast=None)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * value
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-      - Must be of the same type as the filled column
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``value``
+     -
+     - Must be of the same type as the filled column
+   * - ``inplace``
+     - Constant boolean
+     -
+   * - ``method``
+     - One of ``bfill``, ``backfill``, ``ffill`` , or ``pad``
+     - **Must be constant at Compile Time**
 
-    * inplace
-
-      - Constant Boolean
-
-    * method
-
-      - **Must be constant at Compile Time**
-      - One of "bfill", "backfill", "ffill" , or "pad"
-
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1334,13 +1606,23 @@ Missing data handling:
 
 * :meth:`pandas.DataFrame.replace` ``(to_replace=None, value=None, inplace=False, limit=None, regex=False, method='pad')``
 
-  Supported Arguments:
-    * to_replace
-       - Required argumnet
-    * value
-       - Must be of the same type as to_replace
+`Supported arguments`:
 
-  Example Usage::
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``to_replace``
+     -
+     - Required argument
+   * - ``value``
+     -
+     - Must be of the same type as to_replace
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1351,26 +1633,34 @@ Missing data handling:
     1  2  5  8
     2  3  6  9
 
-Reshaping, sorting, transposing:
+Reshaping, sorting, transposing
+*******************************
 
 * :meth:`pandas.DataFrame.pivot_table` ``(values=None, index=None, columns=None, aggfunc='mean', fill_value=None, margins=False, dropna=True, margins_name='All', observed=False, sort=True)``
 
 
-  Supported Arguments:
-    * values
-       - String Constant (required)
-    * index
-       - String Constant (required)
-    * columns
-       - String Constant (required)
-    * aggfunc
-       - String Constant
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``values``
+     - String Constant (required)
+   * - ``index``
+     - String Constant (required)
+   * - ``columns``
+     - String Constant (required)
+   * - ``aggfunc``
+     - String Constant
 
 
 .. note::
-  Annotation of pivot values is required. For example, `@bodo.jit(pivots={'pt': ['small', 'large']})` declares the output pivot table `pt` will have columns called `small` and `large`.
+  Annotation of pivot values is required. For example, ``@bodo.jit(pivots={'pt': ['small', 'large']})`` declares the output pivot table `pt` will have columns called `small` and `large`.
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit(pivots={'pivoted_tbl': ['X', 'Y']})
     ... def f():
@@ -1389,16 +1679,23 @@ Reshaping, sorting, transposing:
 
 * :meth:`pandas.DataFrame.sample` ``(n=None, frac=None, replace=False, weights=None, random_state=None, axis=None, ignore_index=False)``
 
-    Supported Arguments:
-      * n
-         - Integer
-      * frac
-         - Float
-      * replace
-         - boolean
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``n``
+     - Integer
+   * - ``frac``
+     - Float
+   * - ``replace``
+     - boolean
 
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1410,15 +1707,22 @@ Reshaping, sorting, transposing:
 
 * :meth:`pandas.DataFrame.sort_index` ``(axis=0, level=None, ascending=True, inplace=False, kind='quicksort', na_position='last', sort_remaining=True, ignore_index=False, key=None)``
 
-    Supported Arguments:
-      * ascending
-         - boolean
-      * na_position
-         - constant String ("first" or "last")
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``ascending``
+     - boolean
+   * - ``na_position``
+     - constant String ("first" or "last")
 
 
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1432,20 +1736,31 @@ Reshaping, sorting, transposing:
 
 * :meth:`pandas.DataFrame.sort_values` ``(by, axis=0, ascending=True, inplace=False, kind='quicksort', na_position='last', ignore_index=False, key=None)``
 
-    Supported Arguments:
-      * by
-         - constant String or constant list of strings
-      * ascending
-         - boolean
-         - list/tuple of boolean, with length equal to the number of key columns
-      * inplace
-         - Constant Boolean
-      * na_position
-         - constant String ("first" or "last")
-         - constant list/tuple of String, with length equal to the number of key columns
+`Supported arguments`:
 
+.. list-table::
+   :widths: 25 35 40
+   :header-rows: 1
 
-  Example Usage::
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``by``
+     - constant String or constant list of strings
+     -
+   * - ``ascending``
+     - - boolean
+       - list/tuple of boolean, with length equal to the number of key columns
+     -
+   * - ``inplace``
+     - Constant boolean
+     -
+   * - ``na_position``
+     - - constant String ("first" or "last")
+       - constant list/tuple of String, with length equal to the number of key columns
+     -
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1463,29 +1778,30 @@ Reshaping, sorting, transposing:
 
 (not optimized)
 
-    Supported Arguments:
-      * buf
-      * columns
-      * col_space
-      * header
-      * index*
-      * na_rep
-      * formatters
-      * float_format
-      * sparsify
-      * index_names
-      * justify
-      * max_rows
-      * min_rows
-      * max_cols
-      * how_dimensions
-      * decimal
-      * line_width
-      * max_colwidth
-      * encoding
+`Supported arguments`:
+
+  * ``buf``
+  * ``columns``
+  * ``col_space``
+  * ``header``
+  * ``index``
+  * ``na_rep``
+  * ``formatters``
+  * ``float_format``
+  * ``sparsify``
+  * ``index_names``
+  * ``justify``
+  * ``max_rows``
+  * ``min_rows``
+  * ``max_cols``
+  * ``how_dimensions``
+  * ``decimal``
+  * ``line_width``
+  * ``max_colwidth``
+  * ``encoding``
 
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1497,20 +1813,28 @@ Reshaping, sorting, transposing:
     2  3
 
 .. note::
-   When called on a dsitributed dataframe, the string returned for each rank will be reflective of the dataframe for that rank.
+   When called on a distributed dataframe, the string returned for each rank will be reflective of the dataframe for that rank.
 
-Combining / joining / merging:
+Combining / joining / merging
+******************************
 
 * :meth:`pandas.DataFrame.append` ``(other, ignore_index=False, verify_integrity=False, sort=False)``
 
-  Supported Arguments:
-    * other
-     - Dataframe
-     - list/tuple of Dataframe
-    * ignore_index
-     - constant Boolean
+`Supported arguments`:
 
-  Example Usage::
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``other``
+     - - Dataframe
+       - list/tuple of Dataframe
+   * - ``ignore_index``
+     - constant boolean
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1527,7 +1851,7 @@ Combining / joining / merging:
 
 * :meth:`pandas.DataFrame.assign` ``(**kwargs)``
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1545,14 +1869,21 @@ Combining / joining / merging:
 
 * :meth:`pandas.DataFrame.join` ``(other, on=None, how='left', lsuffix='', rsuffix='', sort=False)``
 
-  Supported Arguments:
-    * other
-       - Dataframe
-    * on
-       - constant string column name
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``other``
+     - Dataframe
+   * - ``on``
+     - - constant string column name
        - constant list/tuple of column names
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1572,7 +1903,7 @@ Combining / joining / merging:
 
 See :ref:`pd.merge <pd_merge_fn>` for full list of support arguments, and more examples.
 
-  Example Usage::
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1584,15 +1915,23 @@ See :ref:`pd.merge <pd_merge_fn>` for full list of support arguments, and more e
     2  3  6 -3  6
 
 
-Time series-related:
+Time series-related
+********************
 
 * :meth:`pandas.DataFrame.shift` ``(periods=1, freq=None, axis=0, fill_value=NoDefault.no_default)``
 
-  Supported Arguments:
-    * periods
-      - Integer
+`Supported arguments`:
 
-  Example Usage::
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``periods``
+     - Integer
+
+`Example Usage`::
 
     >>> @bodo.jit
     ... def f():
@@ -1604,13 +1943,14 @@ Time series-related:
     2  1.0  5.0
 
 .. note::
-  Only soupported for dataframes containing numeric, boolean, datetime.date and string types.
+  Only supported for dataframes containing numeric, boolean, datetime.date and string types.
 
 
 
 .. _pandas-f-out:
 
-Serialization / IO / conversion:
+Serialization / IO / conversion
+*******************************
 
 Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`file_io`.
 
@@ -1622,39 +1962,49 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`
 * :meth:`pandas.DataFrame.to_json`
 * :meth:`pandas.DataFrame.to_parquet`
 * :meth:`pandas.DataFrame.to_sql`
-  * :ref:`example usage and more system specific instructions <sql-section>`
+  * :ref:``Example Usage` and more system specific instructions <sql-section>`
   * Argument ``con`` is supported but only as a string form. SQLalchemy `connectable` is not supported.
   * Argument ``name``, ``schema``, ``if_exists``, ``index``, ``index_label``, ``dtype``, ``method`` are supported.
   * Argument ``chunksize`` is not supported.
 
 Plotting
+********
 
 * :meth:`pandas.DataFrame.plot` ``(x=None, y=None, kind="line", figsize=None, xlabel=None, ylabel=None, title=None, legend=True, fontsize=None, xticks=None, yticks=None, ax=None)``
 
 
-  Supported Arguments:
-    * x
-      - Constant String column name
-      - Constant Integer
-    * y
-      - Constant String column name
-      - Constant Integer
-    * kind
-      - constant String ("line" or "scatter")
-    * figsize
-      - constant numeric tuple (width, height)
-    * xlabel
-      - constant String
-    * ylabel
-      - constant String
-    * title
-      - constant String
-    * legend
-      - boolean
-    * fontsize
-    * xticks
-      - Constant Tuple
-    * yticks
-      - Constant Tuple
-    * ax
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 35
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``x``
+     - - Constant String column name
+       - Constant integer
+   * - ``y``
+     - - Constant String column name
+       - Constant integer
+   * - ``kind``
+     - constant String ("line" or "scatter")
+   * - ``figsize``
+     - constant numeric tuple (width, height)
+   * - ``xlabel``
+     - constant String
+   * - ``ylabel``
+     - constant String
+   * - ``title``
+     - constant String
+   * - ``legend``
+     - boolean
+   * - ``fontsize``
+     -
+   * - ``xticks``
+     - Constant Tuple
+   * - ``yticks``
+     - Constant Tuple
+   * - ``ax``
+     -
 
