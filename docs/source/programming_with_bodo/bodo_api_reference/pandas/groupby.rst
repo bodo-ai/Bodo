@@ -6,27 +6,33 @@ GroupBy
 
 * :meth:`pandas.DataFrame.groupby` ``(by=None, axis=0, level=None, as_index=True, sort=True, group_keys=True, squeeze=NoDefault.no_default, observed=False, dropna=True)``
 
-Supported Arguments:
+`Supported arguments`:
 
-  * by (default=None):
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-    - **Must be constant at Compile Time**
-    - **This argument is required**
-    - Column label or list of column labels
+   * - argument
+     - default
+     - datatypes
+     - other requirements
+   * - ``by``
+     - ``None``
+     - Column label or list of column labels
+     - - **Must be constant at Compile Time**
+       - **This argument is required**
+   * - ``as_index``
+     - ``True``
+     - Boolean
+     - **Must be constant at Compile Time**
+   * - ``dropna``
+     - ``True``
+     - Boolean
+     - **Must be constant at Compile Time**
 
 
-  * as_index (default=True):
 
-    - **Must be constant at Compile Time**
-    - Boolean
-
-  * dropna (default=True):
-
-    - **Must be constant at Compile Time**
-    - Boolean
-
-
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -50,24 +56,32 @@ Example Usage:
 
 * :meth:`pandas.Series.groupby` ``(by=None, axis=0, level=None, as_index=True, sort=True, group_keys=True, squeeze=NoDefault.no_default, observed=False, dropna=True)``
 
-Supported Arguments:
+`Supported arguments`:
 
-  * by (default=None):
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-    - **Must be constant at Compile Time**
-    - Array-like or Series data. This is not supported with Decimal or Categorical data.
+   * - argument
+     - default
+     - datatypes
+     - other requirements
+   * - ``by``
+     - ``None``
+     - Array-like or Series data. This is not supported with Decimal or Categorical data.
+     - **Must be constant at Compile Time**
+   * - ``level``
+     - ``None``
+     - integer
+     - - **Must be constant at Compile Time**
+       - Only ``level=0`` is supported and not with MultiIndex.
 
 
-  * level (default=None):
+.. important:
 
-    - **Must be constant at Compile Time**
-    - Only ``level=0`` is supported and not with MultiIndex.
+You must provide exactly one of ``by`` and ``level``
 
-  .. important:
-
-    You must provide exactly one of ``by`` and ``level``
-
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -84,19 +98,24 @@ Example Usage:
 
 .. note::
 
-  Series.groupby doesn't currently keep the name of the original Series.
+  ``Series.groupby`` doesn't currently keep the name of the original Series.
 
 * :meth:`pandas.core.groupby.GroupBy.apply` ``(func, *args, **kwargs)``
 
-Supported Arguments:
+`Supported arguments`:
 
-  * func:
+.. list-table::
+   :widths: 25 15 25
+   :header-rows: 1
 
-    - JIT function or callable defined within a JIT function that returns a DataFrame or Series
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``func``
+     - JIT function or callable defined within a JIT function that returns a DataFrame or Series
+     - Additional arguments for ``func`` can be passed as additional arguments.
 
-  * Additional arguments for ``func`` can be passed as additional arguments.
-
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -140,24 +159,25 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.agg` ``(func, *args, **kwargs)``
 
-Supported Arguments:
+`Supported arguments`:
 
-  * func:
+.. list-table::
+   :widths: 25 15 35
+   :header-rows: 1
 
-    - JIT function or callable defined within a JIT function or a constant dictionary
-      mapping column name to a function
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``func``
+     - JIT function or callable defined within a JIT function or a constant dictionary mapping column name to a function
+     - Additional arguments for ``func`` can be passed as additional arguments.
 
-    .. note:
+.. note:
 
-      Passing a list of functions is also supported if only one output column is selected.
+  - Passing a list of functions is also supported if only one output column is selected.
+  - Output column names can be specified using keyword arguments and `pd.NamedAgg()`.
 
-  * Additional arguments for ``func`` can be passed as additional arguments.
-
-  .. note:
-
-      Output column names can be specified using keyword arguments and `pd.NamedAgg()`.
-
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -181,24 +201,26 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.DataFrameGroupBy.aggregate` ``(func, *args, **kwargs)``
 
-Supported Arguments:
+`Supported arguments`:
 
-  * func:
+.. list-table::
+   :widths: 25 15 25
+   :header-rows: 1
 
-    - JIT function or callable defined within a JIT function or a constant dictionary
-      mapping column name to a function
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``func``
+     - JIT function or callable defined within a JIT function or a constant dictionary mapping column name to a function
+     - Additional arguments for ``func`` can be passed as additional arguments.
 
-    .. note:
 
-      Passing a list of functions is also supported if only one output column is selected.
+.. note:
 
-  * Additional arguments for ``func`` can be passed as additional arguments.
+  - Passing a list of functions is also supported if only one output column is selected.
+  - Output column names can be specified using keyword arguments and ``pd.NamedAgg()``.
 
-  .. note:
-
-      Output column names can be specified using keyword arguments and `pd.NamedAgg()`.
-
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -222,21 +244,24 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.DataFrameGroupBy.transform` ``(func, *args, engine=None, engine_kwargs=None, **kwargs)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * func:
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
 
-      - Either a constant string or a Python function from the builtins
-        module that matches a supported operation. Numpy functions
-        cannot be provided.
+   * - argument
+     - datatypes
+   * - ``func``
+     - Either a constant string or a Python function from the builtins module that matches a supported operation. Numpy functions cannot be provided.
 
-      .. note:
+.. note:
 
-        The supported builtin functions are `'count'`, `'first'`, `'last'`,
-        `'min'`, `'max'`, `'mean'`, `'median'`, `'nunique'`, `'prod'`,
-        `'std'`, `'sum'`, and `'var'`
+    The supported builtin functions are ``'count'``, ``'first'``, ``'last'``,
+    ``'min'``, ``'max'``, ``'mean'``, ``'median'``, ``'nunique'``, ``'prod'``,
+    ``'std'``, ``'sum'``, and ``'var'``
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -277,20 +302,23 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.pipe` ``(func, *args, **kwargs)``
 
-  Supported Arguments:
+`Supported arguments`:
 
-    * func:
+.. list-table::
+   :widths: 25 15 25
+   :header-rows: 1
 
-      - JIT function or callable defined within a JIT function.
+   * - argument
+     - datatypes
+     - other requirements
+   * - ``func``
+     - JIT function or callable defined within a JIT function.
+     - Additional arguments for ``func`` can be passed as additional arguments.
 
-    * Additional arguments for ``func`` can be passed as additional arguments.
 
+.. note:: ``func`` cannot be a tuple
 
-  .. note::
-
-    `func` cannot be a tuple
-
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -316,7 +344,7 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.count` ``()``
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -339,11 +367,9 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.cumsum` ``(axis=0)``
 
-  .. note::
+.. note:: ``cumsum`` is only supported on numeric columns and is not supported on boolean columns
 
-    cumsum is only supported on numeric columns and is not supported on boolean columns
-
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -385,12 +411,10 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.first` ``(numeric_only=False, min_count=-1)``
 
-.. note::
-
-    first is not supported on columns with nested array types
+.. note:: ``first`` is not supported on columns with nested array types
 
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -415,15 +439,23 @@ Example Usage:
 * :meth:`pandas.core.groupby.GroupBy.head` ``(n=5)``
 
 
-Supported Arguments:
+`Supported arguments`:
 
-  * n (default=5)
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-    - **Must be constant at Compile Time**
-    - Non-negative integer
+   * - argument
+     - default value
+     - datatypes
+     - other requirements
+   * - ``n``
+     - ``5``
+     - Non-negative integer
+     - **Must be constant at Compile Time**
 
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -453,12 +485,10 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.last` ``(numeric_only=False, min_count=-1)``
 
-  .. note::
-
-    last is not supported on columns with nested array types
+.. note:: ``last`` is not supported on columns with nested array types
 
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -482,13 +512,13 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.max` ``(numeric_only=False, min_count=-1)``
 
-  .. note::
+.. note::
 
-    * max is not supported on columns with nested array types.
+    * ``max`` is not supported on columns with nested array types.
     * Categorical columns must be ordered.
 
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -512,12 +542,10 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.mean` ``(numeric_only=NoDefault.no_default)``
 
-  .. note::
-
-    mean is only supported on numeric columns and is not supported on boolean column
+.. note::  ``mean`` is only supported on numeric columns and is not supported on boolean column
 
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -541,12 +569,10 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.median` ``(numeric_only=NoDefault.no_default)``
 
-  .. note::
-
-    median is only supported on numeric columns and is not supported on boolean column
+  .. note:: ``median`` is only supported on numeric columns and is not supported on boolean column
 
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -570,13 +596,12 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.min` ``(numeric_only=False, min_count=-1)``
 
-  .. note::
+.. note::
 
-    * min is not supported on columns with nested array types
+    * ``min`` is not supported on columns with nested array types
     * Categorical columns must be ordered.
 
-
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -600,12 +625,10 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.prod` ``(numeric_only=NoDefault.no_default, min_count=0)``
 
-  .. note::
-
-    prod is not supported on columns with nested array types
+.. note:: ``prod`` is not supported on columns with nested array types
 
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -630,33 +653,43 @@ Example Usage:
 * :meth:`pandas.core.groupby.GroupBy.rolling` ``(window, min_periods=None, center=False, win_type=None, on=None, axis=0, closed=None, method='single')``
 
 
-Supported Arguments:
 
-  * window:
+`Supported arguments`:
 
-    - Integer, String, Datetime, or Timedelta value
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-  * min_periods (default=None):
+   * - argument
+     - default value
+     - datatypes
+     - other requirements
+   * - ``window``
+     - Integer, String, Datetime, or Timedelta value
+     -
+     -
+   * - ``min_periods``
+     - ``None``
+     - Integer
+     -
+   * - ``center``
+     - ``False``
+     - Boolean
+     -
+   * - ``on``
+     - ``None``
+     - Column label
+     - **Must be constant at Compile Time**
 
-    - Integer
-
-  * center (default=False):
-
-    - Boolean
-
-  * on (default=None):
-
-    - **Must be constant at Compile Time**
-    - Column label
 
 
-  .. note::
+.. note::
 
     This is equivalent to performing the DataFrame API
     on each groupby. All operations of the rolling API
     can be used with groupby.
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -699,7 +732,7 @@ Example Usage:
 * :meth:`pandas.core.groupby.GroupBy.size` ``()``
 
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -723,12 +756,10 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.std` ``(ddof=1)``
 
-  .. note::
-
-    std is only supported on numeric columns and is not supported on boolean column
+.. note:: ``std`` is only supported on numeric columns and is not supported on boolean column
 
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -753,11 +784,9 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.sum` ``(numeric_only=NoDefault.no_default, min_count=0)``
 
-  .. note::
+.. note:: ``sum`` is not supported on columns with nested array types
 
-    sum is not supported on columns with nested array types
-
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -780,11 +809,9 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.GroupBy.var` ``(ddof=1)``
 
-  .. note::
+.. note:: ``var`` is only supported on numeric columns and is not supported on boolean column
 
-    var is only supported on numeric columns and is not supported on boolean column
-
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -808,7 +835,7 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.DataFrameGroupBy.idxmax` ``(axis=0, skipna=True)``
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -832,7 +859,7 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.DataFrameGroupBy.idxmin` ``(axis=0, skipna=True)``
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -855,17 +882,23 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.DataFrameGroupBy.nunique` ``(dropna=True)``
 
-Supported Arguments:
 
-  * dropna (default=True):
+`Supported arguments`:
 
-    - Boolean
+.. list-table::
+   :widths: 25 15 25
+   :header-rows: 1
 
-  .. note::
+   * - argument
+     - default value
+     - datatypes
+   * - ``dropna``
+     - ``True``
+     - boolean
 
-    nunique is not supported on columns with nested array types
+.. note:: ``nunique`` is not supported on columns with nested array types
 
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -888,11 +921,9 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.DataFrameGroupBy.shift` ``(periods=1, freq=None, axis=0, fill_value=None)``
 
-  .. note::
+.. note:: ``shift`` is not supported on columns with nested array types
 
-    shift is not supported on columns with nested array types
-
-Example Usage:
+`Example Usage`:
 
   .. code:: ipython3
 
@@ -932,14 +963,24 @@ Example Usage:
 
 * :meth:`pandas.core.groupby.SeriesGroupBy.value_counts` ``(normalize=False, sort=True, ascending=False, bins=None, dropna=True)``
 
-Supported Arguments:
 
-  * ascending (default=False):
+`Supported arguments`:
 
-    - **Must be constant at Compile Time**
-    - Boolean
+.. list-table::
+   :widths: 25 15 25 35
+   :header-rows: 1
 
-Example Usage:
+   * - argument
+     - default value
+     - datatypes
+     - other requirements
+   * - ``ascending``
+     - ``False``
+     - boolean
+     - **Must be constant at Compile Time**
+
+
+`Example Usage`:
 
   .. code:: ipython3
 
