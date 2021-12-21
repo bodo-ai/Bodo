@@ -1,5 +1,8 @@
+import datetime
+
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from mpi4py import MPI
 from numba import types
@@ -533,3 +536,138 @@ def test_df_type_change_iloc_loc(memory_leak_check):
     check_func(impl2, (df,), copy_input=True, only_seq=True)
     check_func(impl3, (df,), copy_input=True, only_seq=True)
     check_func(impl4, (df,), copy_input=True, only_seq=True)
+
+
+# TODO [BE-974]: Add memory_leak_check
+def test_df_merge_type_reset():
+    df1 = pd.DataFrame({"key": ["bar", "baz", "foo", "foo"], "value": [1, 2, 3, 5]})
+    df2 = pd.DataFrame({"key": ["bar", "baz", "foo", "foo"], "value": [5, 6, 7, 8]})
+
+    def test(df1, df2):
+        df1a = df1.groupby("key").apply(lambda x: 3).reset_index()
+        df2a = df2.groupby("key").apply(lambda x: 4).reset_index()
+        ans = df1a.merge(df2a, left_on=["key"], right_on=["key"])
+        return ans
+
+    check_func(test, (df1, df2), reset_index=True, sort_output=True)
+
+
+@pytest.mark.parametrize(
+    "func,err_regex",
+    [
+        (
+            lambda df1, df2: df1.merge(df2, left_on="x", right_on="x"),
+            r".* use of index .* is unsupported(\n|.)*",
+        ),
+        (
+            lambda df1, df2: df1.merge(df2, on="non_existant_key"),
+            r".* invalid key (\n|.)*",
+        ),
+    ],
+)
+# TODO: [BE-1738]: Add memory_leak_check
+def test_df_merge_error_handling(func, err_regex):
+    df1 = pd.DataFrame({"key": ["bar", "baz", "foo", "foo"], "value": [1, 2, 3, 5]})
+    df2 = pd.DataFrame({"key": ["bar", "baz", "foo", "foo"], "value": [5, 6, 7, 8]})
+    df1.index.name = "x"
+    df2.index.name = "x"
+
+    with pytest.raises(BodoError, match=err_regex):
+        bodo.jit(func)(df1, df2)
+
+
+pd_supported_merge_cols = [
+    pytest.param(pd.Categorical([1, 1, 1, 2, 3]), id="CategoricalArrayType"),
+    pytest.param(np.array([1, 2, 3, 4, 5]), id="Array"),
+    pytest.param(
+        pd.array([1, 2, 3, 4, 5], dtype=pd.Int32Dtype()), id="IntegerArrayType"
+    ),
+    pytest.param(
+        pa.Decimal128Array.from_pandas(
+            pd.array([1, 2, 3, 4, 5], dtype=pd.Int32Dtype())
+        ),
+        id="DecimalArrayType",
+    ),
+    pytest.param(
+        pd.Series(({1: 1, 2: 2}, {2: 2}, {3: 3}, {4: 4}, {5: 5})), id="MapArrayType"
+    ),
+    pytest.param(("a", "b", "c", "d", "e"), id="StringArrayType"),
+    pytest.param((b"a", b"b", b"c", b"d", b"e"), id="BinaryArrayType"),
+    pytest.param((False, False, False, True, True), id="BooleanArray"),
+    pytest.param(
+        tuple(datetime.date(year, 7, 22) for year in range(1999, 2004)),
+        id="DatetimeDateArrayType",
+    ),
+    pytest.param(
+        tuple(
+            datetime.date(2021, 7, 22) - datetime.date(year, 7, 22)
+            for year in range(1999, 2004)
+        ),
+        id="DatetimeTimedeltaArrayType",
+    ),
+    # TODO [BE-1804]: test once intervals are supported
+    # pytest.param(
+    #     pd.arrays.IntervalArray(
+    #         [
+    #             pd.Interval(0, 1),
+    #             pd.Interval(1, 2),
+    #             pd.Interval(2, 3),
+    #             pd.Interval(3, 4),
+    #             pd.Interval(4, 5),
+    #         ]
+    #     ),
+    #     id="IntervalArray"
+    # ),
+]
+
+
+bodo_only_merge_cols = [
+    pytest.param(
+        pd.Series(({"a": 1}, {"a": 2}, {"a": 3}, {"a": 4}, {"a": 5})),
+        id="StructArrayType",
+    ),
+    pytest.param(pd.Series(([1], [2], [3], [4], [5])), id="ArrayItemArrayType"),
+]
+
+
+@pytest.mark.parametrize("key", pd_supported_merge_cols)
+def test_df_merge_col_key_types(key, memory_leak_check):
+    def impl(df1, df2):
+        return df1.merge(df2, on="key")
+
+    df1 = pd.DataFrame({"key": key, "value": [1, 2, 3, 4, 5]})
+    df2 = pd.DataFrame({"key": key, "value": [5, 6, 7, 8, 9]})
+
+    try:
+        check_func(impl, (df1, df2), reset_index=True, sort_output=True)
+    except TypeError:
+        with pytest.raises(BodoError, match=r".* MapArrayType unsupported(.|\n)*"):
+            bodo.jit(impl)(df1, df2)
+
+
+@pytest.mark.parametrize("val", pd_supported_merge_cols + bodo_only_merge_cols)
+# TODO: [BE-1738]: Add memory_leak_check
+def test_df_merge_col_value_types(val):
+    def impl(df1, df2):
+        return df1.merge(df2, on="key")
+
+    df1 = pd.DataFrame({"key": ["bar", "bar", "baz", "foo", "foo"], "value": val})
+    df2 = pd.DataFrame({"key": ["bar", "bar", "baz", "foo", "foo"], "value": val})
+
+    check_func(impl, (df1, df2))
+
+
+@pytest.mark.parametrize("key", bodo_only_merge_cols)
+# TODO: [BE-1738]: Add memory_leak_check
+def test_df_merge_col_key_bodo_only(key):
+    def impl(df1, df2):
+        return df1.merge(df2, on="key")
+
+    val_x = [1, 2, 3, 4, 5]
+    val_y = [5, 6, 7, 8, 9]
+    df1 = pd.DataFrame({"key": key, "value": val_x})
+    df2 = pd.DataFrame({"key": key, "value": val_y})
+
+    df_exp = pd.DataFrame({"key": key, "value_x": val_x, "value_y": val_y})
+    df_act = bodo.jit(impl)(df1, df2)
+    assert df_act.equals(df_exp)

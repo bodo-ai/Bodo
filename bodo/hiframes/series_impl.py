@@ -304,7 +304,7 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
 
     func_text = "def _impl(S, level=None, drop=False, name=None, inplace=False):\n"
     func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
-    func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    func_text += "    index = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(S))\n"
     func_text += "    df_index = bodo.hiframes.pd_index_ext.init_range_index(0, len(S), 1, None)\n"
     func_text += "    col_var = {}\n".format(gen_const_tup(columns))
     func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe((index, arr), df_index, col_var)\n"

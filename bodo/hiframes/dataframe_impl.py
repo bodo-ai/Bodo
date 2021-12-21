@@ -32,7 +32,12 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.hiframes.datetime_timedelta_ext import _no_input
+from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.datetime_timedelta_ext import (
+    _no_input,
+    datetime_timedelta_array_type,
+)
+from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_dataframe_ext import (
     DataFrameType,
     handle_inplace_df_type_change,
@@ -42,9 +47,16 @@ from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.hiframes.rolling import is_supported_shift_array_type
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
+from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.interval_arr_ext import IntervalArrayType
+from bodo.libs.map_arr_ext import MapArrayType
+from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
+from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.transform import (
     bodo_types_with_params,
     gen_const_tup,
@@ -2516,13 +2528,13 @@ def overload_dataframe_merge(
         else:
             left_keys = get_overload_const_list(left_on)
             # make sure all left_keys is a valid column in left
-            validate_keys(left_keys, left.columns)
+            validate_keys(left_keys, left)
         if is_overload_true(right_index):
             right_keys = ["$_bodo_index_"]
         else:
             right_keys = get_overload_const_list(right_on)
             # make sure all right_keys is a valid column in right
-            validate_keys(right_keys, right.columns)
+            validate_keys(right_keys, right)
 
     if (not left_on or not right_on) and not is_overload_none(on):
         # If we have no left_on or right_on but we have an on, then
@@ -2592,6 +2604,43 @@ def common_validate_merge_merge_asof_spec(
     # make sure left and right are dataframes
     if not isinstance(left, DataFrameType) or not isinstance(right, DataFrameType):
         raise BodoError(name_func + "() requires dataframe inputs")
+
+    # make sure the column datatypes of the left and right are valid
+    valid_dataframe_column_types = (
+        ArrayItemArrayType,
+        MapArrayType,
+        StructArrayType,
+        CategoricalArrayType,
+        types.Array,
+        IntegerArrayType,
+        DecimalArrayType,
+        IntervalArrayType,
+    )
+    valid_dataframe_column_insts = {
+        string_array_type,
+        binary_array_type,
+        datetime_date_array_type,
+        datetime_timedelta_array_type,
+        boolean_array,
+    }
+    merge_on_names = {
+        get_overload_const_str(on_const)
+        for on_const in (left_on, right_on, on)
+        if is_overload_constant_str(on_const)
+    }
+    for df in (left, right):
+        for i, col in enumerate(df.data):
+            if (
+                not isinstance(col, valid_dataframe_column_types)
+                and col not in valid_dataframe_column_insts
+            ):
+                raise BodoError(
+                    f"{name_func}(): use of column with "
+                    f"{type(col)} in merge unsupported"
+                )
+            # ensure merge isn't being performed on non-hashable `MapArrayType`
+            if df.columns[i] in merge_on_names and isinstance(col, MapArrayType):
+                raise BodoError(f"{name_func}(): merge on MapArrayType unsupported")
 
     # make sure leftindex is of type bool
     ensure_constant_arg(name_func, "left_index", left_index, bool)
@@ -2845,12 +2894,20 @@ def validate_keys_dtypes(left, right, left_index, right_index, left_keys, right_
                 raise_bodo_error(msg)
 
 
-def validate_keys(keys, columns):
-    if len(set(keys).difference(set(columns))) > 0:
-        raise_bodo_error(
-            "merge(): invalid key {} for on/left_on/right_on".format(
-                set(keys).difference(set(columns))
+def validate_keys(keys, df):
+    key_diff = set(keys).difference(set(df.columns))
+    if len(key_diff) > 0:
+        if (
+            is_overload_constant_str(df.index.name_typ)
+            and get_overload_const_str(df.index.name_typ) in key_diff
+        ):
+            raise_bodo_error(
+                f"merge(): use of index {df.index.name_typ} as key for "
+                "on/left_on/right_on is unsupported"
             )
+        raise_bodo_error(
+            f"merge(): invalid key {key_diff} for on/left_on/right_on\n"
+            f"merge supports only valid column names {df.columns}"
         )
 
 
@@ -2904,7 +2961,7 @@ def validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort):
     # make sure 'on' is a valid column in other
     if not is_overload_none(on):
         on_keys = get_overload_const_list(on)
-        validate_keys(on_keys, left.columns)
+        validate_keys(on_keys, left)
     # make sure sort is the default value, sort=True not supported
     if not is_overload_false(sort):
         raise BodoError("join(): sort parameter only supports default value False")
@@ -3028,12 +3085,12 @@ def overload_dataframe_merge_asof(
             left_keys = ["$_bodo_index_"]
         else:
             left_keys = get_overload_const_list(left_on)
-            validate_keys(left_keys, left.columns)
+            validate_keys(left_keys, left)
         if is_overload_true(right_index):
             right_keys = ["$_bodo_index_"]
         else:
             right_keys = get_overload_const_list(right_on)
-            validate_keys(right_keys, right.columns)
+            validate_keys(right_keys, right)
 
     validate_merge_asof_keys_length(
         left_on, right_on, left_index, right_index, left_keys, right_keys
