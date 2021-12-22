@@ -250,7 +250,8 @@ Regular Expressions using ``re``
 
 Bodo supports string processing using Pandas and the ``re`` standard
 package, offering significant flexibility for string processing
-applications. For example:
+applications. For example, ``re`` can be used in
+user-defined functions (UDFs) applied to Series and DataFrame values:
 
 .. code:: ipython3
 
@@ -274,56 +275,155 @@ applications. For example:
 
 .. parsed-literal::
 
-    /Users/user/dev/bodo/bodo/transforms/distributed_analysis.py:229: BodoWarning: No parallelism found for function 'f'. This could be due to unsupported usage. See distributed diagnostics for more information.
-      warnings.warn(
-
-
-
-.. parsed-literal::
-
     0    3
     1    3
     2    5
     dtype: int64
 
 
+Below is a reference list of supported functionality.
+Full functionality is documented in `standard re documentation <https://docs.python.org/3/library/re.html>`_.
+All functions except `finditer` are supported.
+Note that currently, Bodo JIT uses Python's ``re`` package as backend and therefore the compute speed of these
+functions is similar to Python.
+
+
+* :data:`re.A`
+* :data:`re.ASCII`
+* :data:`re.DEBUG`
+* :data:`re.I`
+* :data:`re.IGNORECASE`
+* :data:`re.L`
+* :data:`re.LOCALE`
+* :data:`re.M`
+* :data:`re.MULTILINE`
+* :data:`re.S`
+* :data:`re.DOTALL`
+* :data:`re.X`
+* :data:`re.VERBOSE`
+
+* :func:`re.search` ``(pattern, string, flags=0)``
+* :func:`re.match` ``(pattern, string, flags=0)``
+* :func:`re.fullmatch` ``(pattern, string, flags=0)``
+* :func:`re.split` ``(pattern, string, maxsplit=0, flags=0)``
+* :func:`re.findall` ``(pattern, string, flags=0)``
+
+  The `pattern` argument should be a constant string for multi-group patterns
+  (for Bodo to know the output will be a list of string tuples).
+  An error is raised otherwise.
+
+Example Usage::
+
+    >>> @bodo.jit
+    ... def f(pat, in_str):
+    ...     return re.findall(pat, in_str)
+    ...
+    >>> f(r"\w+", "Words, words, words.")
+    ['Words', 'words', 'words']
+
+Constant multi-group pattern works::
+
+    >>> @bodo.jit
+    ... def f2(in_str):
+    ...     return re.findall(r"(\w+).*(\d+)", in_str)
+    ...
+    >>> f2("Words, 123")
+    [('Words', '3')]
+
+Non-constant multi-group pattern throws an error::
+
+    >>> @bodo.jit
+    ... def f(pat, in_str):
+    ...     return re.findall(pat, in_str)
+    ...
+    >>> f(r"(\w+).*(\d+)", "Words, 123")
+    Traceback (most recent call last):
+    File "<stdin>", line 1, in <module>
+    File "/Users/user/dev/bodo/bodo/libs/re_ext.py", line 338, in _pat_findall_impl
+        raise ValueError(
+    ValueError: pattern string should be constant for 'findall' with multiple groups
+
+* :func:`re.sub` ``(pattern, repl, string, count=0, flags=0)``
+* :func:`re.subn` ``(pattern, repl, string, count=0, flags=0)``
+* :func:`re.escape` ``(pattern)``
+* :func:`re.purge`
+
+* :meth:`re.Pattern.search` ``(string[, pos[, endpos]])``
+* :meth:`re.Pattern.match` ``(string[, pos[, endpos]])``
+* :meth:`re.Pattern.fullmatch` ``(string[, pos[, endpos]])``
+* :meth:`re.Pattern.split` ``(string, maxsplit=0)``
+* :meth:`re.Pattern.findall` ``(string[, pos[, endpos]])`` (has the same limitation as ``re.findall``, see above)
+* :meth:`re.Pattern.sub` ``(repl, string, count=0)``
+* :meth:`re.Pattern.subn` ``(repl, string, count=0)``
+
+* :attr:`re.Pattern.flags`
+* :attr:`re.Pattern.groups`
+* :attr:`re.Pattern.groupindex`
+* :attr:`re.Pattern.pattern`
+
+* :meth:`re.Match.expand` ``(template)``
+* :meth:`re.Match.group` ``([group1, ...])``
+* :meth:`re.Match.__getitem__` ``(g)``
+* :meth:`re.Match.groups` ``(default=None)``
+* :meth:`re.Match.groupdict` ``(default=None)`` (does not support default=None for groups that did not participate in the match)
+* :meth:`re.Match.start` ``([group])``
+* :meth:`re.Match.end` ``([group])``
+* :meth:`re.Match.span` ``([group])``
+* :attr:`re.Match.pos`
+* :attr:`re.Match.endpos`
+* :attr:`re.Match.lastindex`
+* :attr:`re.Match.lastgroup`
+* :attr:`re.Match.re`
+* :attr:`re.Match.string`
+
+
 Class Support using ``@jitclass``
 ---------------------------------
 
-Bodo supports Python classes using the @bodo.jitclass decorator. It
+Bodo supports Python classes using the ``@bodo.jitclass`` decorator. It
 requires type annotation of the fields, as well as distributed
 annotation where applicable. For example, the example class below holds
-a distributed dataframe of values and a name filed. Types can either be
+a distributed dataframe and a name filed. Types can either be
 specified directly using the imports in the bodo package or can be
 inferred from existing types using ``bodo.typeof``.
+The ``__init__`` function is required, and has to initialize
+the attributes.
+In addition, subclasses are not supported in ``jitclass`` yet.
+
+
+.. warning::
+    Class support is currently experimental and therefore we recommend refactoring computation
+    into regular JIT functions instead if possible.
+
 
 .. code:: ipython3
 
     @bodo.jitclass(
         {
-            "df": bodo.DataFrameType(
-                    (bodo.int64[::1], bodo.float64[::1]),
-                    bodo.RangeIndexType(bodo.none),
-                    ("A", "B"),
-                ),
-            "name": bodo.typeof("hello world"),
+            "df": bodo.typeof(pd.DataFrame({"A": [1], "B": [0.1]})),
+            "name": bodo.string_type,
         },
         distributed=["df"],
     )
-    class BodoClass:
+    class MyClass:
         def __init__(self, n, name):
             self.df = pd.DataFrame({"A": np.arange(n), "B": np.ones(n)})
             self.name = name
-    
+
         def sum(self):
             return self.df.A.sum()
         
         @property
         def sum_vals(self):
             return self.df.sum().sum()
-    
+
         def get_name(self):
             return self.name
+
+        @staticmethod
+        def add_one(a):
+            return a + 1
+
 
 This JIT class can be used in regular Python code, as well as other Bodo
 JIT code.
@@ -333,30 +433,39 @@ JIT code.
     # From a compiled function
     @bodo.jit
     def f():
-        myInstance = BodoClass(32, "my_name_jit")
-        return myInstance.sum(), myInstance.sum_vals, myInstance.get_name()
-    
+        my_instance = MyClass(32, "my_name_jit")
+        print(my_instance.sum())
+        print(my_instance.sum_vals)
+        print(my_instance.get_name())
+
     f()
-
-
 
 
 .. parsed-literal::
 
-    (496, 528.0, 'my_name_jit')
-
+    496
+    528.0
+    my_name_jit
 
 
 .. code:: ipython3
 
     # From regular Python
-    myInstance = BodoClass(32, "my_name_python")
-    myInstance.sum(), myInstance.sum_vals, myInstance.get_name()
+    my_instance = MyClass(32, "my_name_python")
+    print(my_instance.sum())
+    print(my_instance.sum_vals)
+    print(my_instance.get_name())
+    print(MyClass.add_one(8))
 
 
 
 .. parsed-literal::
 
-    (496, 528.0, 'my_name_python')
+    496
+    528.0
+    my_name_python
+    9
 
 
+Bodo's ``jitclass`` is built on top of Numba's ``jitclass`` (see Numba `jitclass <https://numba.pydata.org/numba-doc/dev/user/jitclass.html>`__
+for more details).

@@ -5,7 +5,12 @@ import re
 
 import numba
 from numba.core import cgutils, types
-from numba.core.imputils import impl_ret_borrowed
+from numba.core.imputils import impl_ret_borrowed, lower_constant
+from numba.core.typing.templates import (
+    ConcreteTemplate,
+    infer_global,
+    signature,
+)
 from numba.extending import (
     NativeValue,
     box,
@@ -23,17 +28,12 @@ from numba.extending import (
 
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
+    BodoError,
     gen_objmode_func_overload,
     gen_objmode_method_overload,
     get_overload_const_str,
     is_overload_constant_str,
 )
-
-# re.Pattern and re.Match classes are exposed starting Python 3.7, so we get the type
-# class using type() call to support <=3.6
-_dummy_pat = "_BODO_DUMMY_PATTERN_"
-Pattern = type(re.compile(_dummy_pat))
-Match = type(re.match(_dummy_pat, _dummy_pat))
 
 
 class RePatternType(types.Opaque):
@@ -41,7 +41,7 @@ class RePatternType(types.Opaque):
         # keep pattern string if it is a constant value
         # useful for findall() to handle multi-group case
         self.pat_const = pat_const
-        super(RePatternType, self).__init__(name="RePatternType({})".format(pat_const))
+        super(RePatternType, self).__init__(name=f"RePatternType({pat_const})")
 
     @property
     def mangling_args(self):
@@ -60,7 +60,7 @@ types.re_pattern_type = re_pattern_type
 register_model(RePatternType)(models.OpaqueModel)
 
 
-@typeof_impl.register(Pattern)
+@typeof_impl.register(re.Pattern)
 def typeof_re_pattern(val, c):
     return re_pattern_type
 
@@ -100,7 +100,7 @@ types.list_str_type = types.List(string_type)
 register_model(ReMatchType)(models.OpaqueModel)
 
 
-@typeof_impl.register(Match)
+@typeof_impl.register(re.Match)
 def typeof_re_match(val, c):
     return re_match_type
 
@@ -116,6 +116,75 @@ def unbox_re_match(typ, obj, c):
     # borrow a reference from Python
     c.pyapi.incref(obj)
     return NativeValue(obj)
+
+
+# TODO(ehsan): remove RegexFlagsType when we have IntFlag support since RegexFlags
+# is a subclass of IntFlag
+# https://bodo.atlassian.net/browse/BE-1791
+# https://github.com/python/cpython/blob/86f42851c050d756679ae7797f8720adaef381c4/Lib/re.py#L147
+# https://docs.python.org/3/library/enum.html#enum.IntFlag
+class RegexFlagsType(types.Type):
+    """Type for re.RegexFlags values like re.IGNORECASE"""
+
+    def __init__(self):
+        super().__init__(name="RegexFlagsType()")
+
+
+regex_flags_type = RegexFlagsType()
+types.regex_flags_type = regex_flags_type
+
+
+@register_model(RegexFlagsType)
+class RegexFlagsModel(models.ProxyModel):
+    """The underlying data model is just int64"""
+
+    def __init__(self, dmm, fe_type):
+        super().__init__(dmm, fe_type)
+        self._proxied_model = dmm.lookup(types.int64)
+
+
+@typeof_impl.register(re.RegexFlag)
+def typeof_re_flags(val, c):
+    return regex_flags_type
+
+
+@box(RegexFlagsType)
+def box_regex_flag(typ, val, c):
+    """box RegexFlagsType by calling re.RegexFlag class with the value object"""
+    valobj = c.box(types.int64, val)
+    cls_obj = c.pyapi.unserialize(c.pyapi.serialize_object(re.RegexFlag))
+    return c.pyapi.call_function_objargs(cls_obj, (valobj,))
+
+
+@unbox(RegexFlagsType)
+def unbox_regex_flag(typ, obj, c):
+    """unbox RegexFlags by getting its integer 'value' attribute"""
+    valobj = c.pyapi.object_getattr_string(obj, "value")
+    return c.unbox(types.int64, valobj)
+
+
+@lower_constant(RegexFlagsType)
+def regex_flags_constant(context, builder, ty, pyval):
+    """
+    get LLVM constant by getting its integer 'value' attribute
+    """
+    return context.get_constant_generic(builder, types.int64, pyval.value)
+
+
+@infer_global(operator.or_)
+class RegexFlagsOR(ConcreteTemplate):
+    """
+    'or' operation for RegexFlags (combines flags)
+    """
+
+    key = operator.or_
+    cases = [signature(regex_flags_type, regex_flags_type, regex_flags_type)]
+
+
+@lower_builtin(operator.or_, regex_flags_type, regex_flags_type)
+def re_flags_or_impl(context, builder, sig, args):
+    """simply 'or' the int values"""
+    return builder.or_(args[0], args[1])
 
 
 # implement casting to boolean to support conditions like "if match:" which are
@@ -174,11 +243,11 @@ gen_objmode_func_overload(re.escape, "unicode_type")
 
 @overload(re.findall, no_unliteral=True)
 def overload_re_findall(pattern, string, flags=0):
+    # reusing the Pattern.findall() implementation to check for non-constant pattern
+    # with multiple groups properly (which causes typing issues)
     def _re_findall_impl(pattern, string, flags=0):  # pragma: no cover
-        # TODO: check for multiple group case which can fail
-        with numba.objmode(m="list_str_type"):
-            m = re.findall(pattern, string, flags)
-        return m
+        p = re.compile(pattern, flags)
+        return p.findall(string)
 
     return _re_findall_impl
 
@@ -253,33 +322,25 @@ def overload_pat_findall(p, string, pos=0, endpos=9223372036854775807):
         typ = types.List(string_type)
         if n_groups > 1:
             typ = types.List(types.Tuple([string_type] * n_groups))
-        # HACK add type string to numba.core.types for objmode
-        typ_name = "list_tup_str_{}".format(numba.core.ir_utils.next_label())
-        setattr(types, typ_name, typ)
-        func_text = """
-def _pat_findall_const_impl(
-    p, string, pos=0, endpos=9223372036854775807
-):  # pragma: no cover
-    with numba.objmode(m="{}"):
-        m = p.findall(string, pos, endpos)
-    return m
-""".format(
-            typ_name
-        )
-        loc_vars = {}
-        exec(func_text, globals(), loc_vars)
-        impl = loc_vars["_pat_findall_const_impl"]
-        return impl
+
+        def _pat_findall_const_impl(
+            p, string, pos=0, endpos=9223372036854775807
+        ):  # pragma: no cover
+            with numba.objmode(m=typ):
+                m = p.findall(string, pos, endpos)
+            return m
+
+        return _pat_findall_const_impl
 
     def _pat_findall_impl(
         p, string, pos=0, endpos=9223372036854775807
     ):  # pragma: no cover
-        with numba.objmode(m="list_str_type"):
-            m = p.findall(string, pos, endpos)
         if p.groups > 1:
-            raise ValueError(
+            raise BodoError(
                 "pattern string should be constant for 'findall' with multiple groups"
             )
+        with numba.objmode(m="list_str_type"):
+            m = p.findall(string, pos, endpos)
         return m
 
     return _pat_findall_impl
@@ -349,8 +410,6 @@ gen_objmode_method_overload(ReMatchType, "expand", re.Match.expand, "unicode_typ
 
 @overload_method(ReMatchType, "group", no_unliteral=True)
 def overload_match_group(m, *args):
-    # TODO: support cases where a group is not matched and None should be returned
-    # for example: re.match(r"(\w+)? (\w+) (\w+)", " words word")
     # NOTE: using *args in implementation throws an error in Numba lowering
     # TODO: use simpler implementation when Numba is fixed
     # def _match_group_impl(m, *args):
@@ -375,12 +434,17 @@ def overload_match_group(m, *args):
 
         return _match_group_impl_zero
 
+    # using optional(str) type instead of just string to support cases where a group is
+    # not matched and None should be returned
+    # for example: re.match(r"(\w+)? (\w+) (\w+)", " words word")
+    optional_str = types.optional(string_type)
+
     # one argument case returns a string
     if len(args) == 1:
 
         def _match_group_impl_one(m, *args):  # pragma: no cover
             group1 = args[0]
-            with numba.objmode(out="unicode_type"):
+            with numba.objmode(out=optional_str):
                 out = m.group(group1)
             return out
 
@@ -389,7 +453,7 @@ def overload_match_group(m, *args):
     # multi-argument case returns a tuple of strings
     # TODO: avoid setting attributes to "types" when object mode can handle actual types
     type_name = "tuple_str_{}".format(len(args))
-    setattr(types, type_name, types.Tuple([string_type] * len(args)))
+    setattr(types, type_name, types.Tuple([optional_str] * len(args)))
     arg_names = ", ".join("group{}".format(i + 1) for i in range(len(args)))
     func_text = "def _match_group_impl(m, *args):\n"
     func_text += "  ({}) = args\n".format(arg_names)
@@ -411,13 +475,15 @@ def overload_match_getitem(m, ind):
 
 @overload_method(ReMatchType, "groups", no_unliteral=True)
 def overload_match_groups(m, default=None):
-    # TODO: support cases where a group is not matched and None should be returned
+    # using optional(str) type instead of just string to support cases where a group is
+    # not matched and None should be returned
     # for example: re.match(r"(\w+)? (\w+) (\w+)", " words word")
+    out_type = types.List(types.optional(string_type))
 
     # NOTE: Python returns tuple of strings, but we don't know the length in advance
     # which makes it not compilable. We return a list which is similar to tuple
     def _match_groups_impl(m, default=None):  # pragma: no cover
-        with numba.objmode(out="list_str_type"):
+        with numba.objmode(out=out_type):
             out = list(m.groups(default))
         return out
 
@@ -431,9 +497,19 @@ def overload_match_groupdict(m, default=None):
 
     types.dict_string_string = types.DictType(string_type, string_type)
 
+    # Numba's Dict doesn't support Optional, so make sure output does not have None
+    # TODO(ehsan): support Optional in Dict [BE-1815]
+    def _check_dict_none(out):
+        if any(v is None for v in out.values()):
+            raise BodoError(
+                "Match.groupdict() does not support default=None "
+                "for groups that did not participate in the match"
+            )
+
     def _match_groupdict_impl(m, default=None):  # pragma: no cover
         with numba.objmode(d="dict_string_string"):
             out = m.groupdict(default)
+            _check_dict_none(out)
             d = numba.typed.Dict.empty(
                 key_type=numba.core.types.unicode_type,
                 value_type=numba.core.types.unicode_type,
@@ -484,9 +560,11 @@ def overload_match_endpos(p):
 
 @overload_attribute(ReMatchType, "lastindex")
 def overload_match_lastindex(p):
-    # TODO: support returning None if no group was matched
+    # Optional to support returning None if no group was matched
+    typ = types.Optional(types.int64)
+
     def _match_lastindex_impl(p):  # pragma: no cover
-        with numba.objmode(lastindex="int64"):
+        with numba.objmode(lastindex=typ):
             lastindex = p.lastindex
         return lastindex
 
@@ -495,10 +573,12 @@ def overload_match_lastindex(p):
 
 @overload_attribute(ReMatchType, "lastgroup")
 def overload_match_lastgroup(p):
-    # TODO: support returning None if last group didn't have a name or no group was
-    # matched
+    # Optional to support returning None if last group didn't have a name or no group
+    # was matched
+    optional_str = types.optional(string_type)
+
     def _match_lastgroup_impl(p):  # pragma: no cover
-        with numba.objmode(lastgroup="unicode_type"):
+        with numba.objmode(lastgroup=optional_str):
             lastgroup = p.lastgroup
         return lastgroup
 

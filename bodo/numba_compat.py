@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from contextlib import ExitStack
 
 import numba
+import numba.core.boxing
 import numba.core.inline_closurecall
 import numba.np.linalg
 from numba.core import analysis, cgutils, errors, ir, ir_utils, types
@@ -4832,3 +4833,100 @@ numba.core.typed_passes.NativeLowering.run_pass = NativeLowering_run_pass
 
 
 #########  End changes to keep references to large const global arrays  #########
+
+
+#########  Start changes to allow lists of optional values unboxing  #########
+# change types.List unboxing to support optional values, see test_match_groups
+
+
+def _python_list_to_native(typ, obj, c, size, listptr, errorptr):
+    """
+    Construct a new native list from a Python list.
+    """
+    from llvmlite import ir as lir
+    from numba.core.boxing import _NumbaTypeHelper
+    from numba.cpython import listobj
+
+    def check_element_type(nth, itemobj, expected_typobj):
+        typobj = nth.typeof(itemobj)
+        # Check if *typobj* is NULL
+        with c.builder.if_then(
+            cgutils.is_null(c.builder, typobj),
+            likely=False,
+        ):
+            c.builder.store(cgutils.true_bit, errorptr)
+            loop.do_break()
+        # Mandate that objects all have the same exact type
+        type_mismatch = c.builder.icmp_signed("!=", typobj, expected_typobj)
+
+        # Bodo change: avoid typecheck for Optional types since it fails
+        # TODO(ehsan): add infrastructure for proper type check for Optional
+        if not isinstance(typ.dtype, types.Optional):
+            with c.builder.if_then(type_mismatch, likely=False):
+                c.builder.store(cgutils.true_bit, errorptr)
+                c.pyapi.err_format(
+                    "PyExc_TypeError",
+                    "can't unbox heterogeneous list: %S != %S",
+                    expected_typobj,
+                    typobj,
+                )
+                c.pyapi.decref(typobj)
+                loop.do_break()
+        c.pyapi.decref(typobj)
+
+    # Allocate a new native list
+    ok, list = listobj.ListInstance.allocate_ex(c.context, c.builder, typ, size)
+    with c.builder.if_else(ok, likely=True) as (if_ok, if_not_ok):
+        with if_ok:
+            list.size = size
+            zero = lir.Constant(size.type, 0)
+            with c.builder.if_then(c.builder.icmp_signed(">", size, zero), likely=True):
+                # Traverse Python list and unbox objects into native list
+                with _NumbaTypeHelper(c) as nth:
+                    # Note: *expected_typobj* can't be NULL
+                    expected_typobj = nth.typeof(c.pyapi.list_getitem(obj, zero))
+                    with cgutils.for_range(c.builder, size) as loop:
+                        itemobj = c.pyapi.list_getitem(obj, loop.index)
+                        check_element_type(nth, itemobj, expected_typobj)
+                        # XXX we don't call native cleanup for each
+                        # list element, since that would require keeping
+                        # of which unboxings have been successful.
+                        native = c.unbox(typ.dtype, itemobj)
+                        with c.builder.if_then(native.is_error, likely=False):
+                            c.builder.store(cgutils.true_bit, errorptr)
+                            loop.do_break()
+                        # The reference is borrowed so incref=False
+                        list.setitem(loop.index, native.value, incref=False)
+                    c.pyapi.decref(expected_typobj)
+            if typ.reflected:
+                list.parent = obj
+            # Stuff meminfo pointer into the Python object for
+            # later reuse.
+            with c.builder.if_then(
+                c.builder.not_(c.builder.load(errorptr)), likely=False
+            ):
+                c.pyapi.object_set_private_data(obj, list.meminfo)
+            list.set_dirty(False)
+            c.builder.store(list.value, listptr)
+
+        with if_not_ok:
+            c.builder.store(cgutils.true_bit, errorptr)
+
+    # If an error occurred, drop the whole native list
+    with c.builder.if_then(c.builder.load(errorptr)):
+        c.context.nrt.decref(c.builder, typ, list.value)
+
+
+if _check_numba_change:
+    lines = inspect.getsource(numba.core.boxing._python_list_to_native)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "f8e546df8b07adfe74a16b6aafb1d4fddbae7d3516d7944b3247cc7c9b7ea88a"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.boxing._python_list_to_native has changed")
+
+
+numba.core.boxing._python_list_to_native = _python_list_to_native
+
+
+#########  End changes to allow lists of optional values unboxing  #########
