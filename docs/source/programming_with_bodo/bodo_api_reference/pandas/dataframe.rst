@@ -49,6 +49,7 @@ Attributes and underlying data
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": ["X", "Y", "Z"], "C": [pd.Timedelta(10, unit="D"), pd.Timedelta(10, unit="H"), pd.Timedelta(10, unit="S")]})
     ...   return df.columns
+    >>> f()
     Index(['A', 'B', 'C'], dtype='object')
 
 * :attr:`pandas.DataFrame.dtypes`
@@ -59,6 +60,7 @@ Attributes and underlying data
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": ["X", "Y", "Z"], "C": [pd.Timedelta(10, unit="D"), pd.Timedelta(10, unit="H"), pd.Timedelta(10, unit="S")]})
     ...   return df.dtypes
+    >>> f()
     A              int64
     B             string
     C    timedelta64[ns]
@@ -73,6 +75,7 @@ Attributes and underlying data
     ...   df1 = pd.DataFrame({"A": [1,2,3]})
     ...   df2 = pd.DataFrame()
     ...   return df1.empty, df2.empty
+    >>> f()
     (False, True)
 
 * :attr:`pandas.DataFrame.index`
@@ -83,6 +86,7 @@ Attributes and underlying data
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3]}, index=["x", "y", "z"])
     ...   return df.index
+    >>> f()
     Index(['x', 'y', 'z'], dtype='object')
 
 * :attr:`pandas.DataFrame.ndim`
@@ -93,6 +97,7 @@ Attributes and underlying data
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": ["X", "Y", "Z"], "C": [pd.Timedelta(10, unit="D"), pd.Timedelta(10, unit="H"), pd.Timedelta(10, unit="S")]})
     ...   return df.ndim
+    >>> f()
     2
 
 
@@ -129,6 +134,7 @@ Attributes and underlying data
     ...   out_3 = df_l.select_dtypes(include=np.bool_, exclude=(np.int64, "timedelta64[ns]"))
     ...   formated_out = "\n".join([out_1.to_string(), out_2.to_string(), out_3.to_string()])
     ...   return formated_out
+    >>> f()
        A  B       C
     0  1  X 10 days
       A
@@ -168,6 +174,7 @@ Attributes and underlying data
     ...   filtered_df_3 = pd.DataFrame({"ababab": [1], "hello world": [2], "A": [3]}).filter(regex="(ab){3}", axis = 1)
     ...   formated_out = "\n".join([filtered_df_1.to_string(), filtered_df_2.to_string(), filtered_df_3.to_string()])
     ...   return formated_out
+    >>> f()
        A
     0  3
       hello world
@@ -183,6 +190,7 @@ Attributes and underlying data
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [3,4,5]})
     ...   return df.shape
+    >>> f()
     (3, 2)
 
 
@@ -194,6 +202,7 @@ Attributes and underlying data
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [3,4,5]})
     ...   return df.size
+    >>> f()
     6
 
 * :meth:`pandas.DataFrame.to_numpy` ``(dtype=None, copy=False, na_value=NoDefault.no_default)``
@@ -215,6 +224,7 @@ Attributes and underlying data
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [3.1,4.2,5.3]})
     ...   return df.to_numpy()
+    >>> f()
     [[1.  3.1]
      [2.  4.2]
      [3.  5.3]]
@@ -227,6 +237,7 @@ Attributes and underlying data
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [3.1,4.2,5.3]})
     ...   return df.values
+    >>> f()
     [[1.  3.1]
      [2.  4.2]
      [3.  5.3]]
@@ -259,6 +270,7 @@ Conversion
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [3.1,4.2,5.3]})
     ...   return df.astype({"A": float, "B": "datetime64[ns]"})
+    >>> f()
          A                             B
     0  1.0 1970-01-01 00:00:00.000000003
     1  2.0 1970-01-01 00:00:00.000000004
@@ -288,6 +300,7 @@ Conversion
     ...   shallow_df["A"][0] = -1
     ...   formated_out = "\n".join([df.to_string(), shallow_df.to_string(), deep_df.to_string()])
     ...   return formated_out
+    >>> f()
        A
     0  -1
     1  2
@@ -309,6 +322,7 @@ Conversion
     ... def f():
     ...   df = pd.DataFrame({"A": [1,None,3]})
     ...   return df.isna()
+    >>> f()
            A
     0  False
     1   True
@@ -322,6 +336,7 @@ Conversion
     ... def f():
     ...   df = pd.DataFrame({"A": [1,None,3]})
     ...   return df.isnull()
+    >>> f()
            A
     0  False
     1   True
@@ -336,6 +351,7 @@ Conversion
     ... def f():
     ...   df = pd.DataFrame({"A": [1,None,3]})
     ...   return df.notna()
+    >>> f()
            A
     0   True
     1  False
@@ -349,6 +365,7 @@ Conversion
     ... def f():
     ...   df = pd.DataFrame({"A": [1,None,3]})
     ...   return df.notnull()
+    >>> f()
            A
     0   True
     1  False
@@ -364,6 +381,7 @@ Conversion
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": ["X", "Y", "Z"], "C": [pd.Timedelta(10, unit="D"), pd.Timedelta(10, unit="H"), pd.Timedelta(10, unit="S")]})
     ...   return df.info()
+    >>> f()
     <class 'DataFrameType'>
     RangeIndexType(none): 3 entries, 0 to 2
     Data columns (total 3 columns):
@@ -418,6 +436,7 @@ We only support indexing using ``iat`` using a pair of integers. We require that
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   df.iat[0, 0] = df.iat[2,2]
     ...   return df
+    >>> f()
        A  B  C
     0  9  4  7
     1  2  5  8
@@ -465,6 +484,7 @@ We only support indexing using ``iat`` using a pair of integers. We require that
     ...   df.iloc[1, [1,2]] = df.iloc[0, 1]
     ...   df["D"] = df.iloc[0]
     ...   return df
+    >>> f()
        A  B  C  D
     0  9  4  7  7
     1  2  4  4  4
@@ -501,6 +521,7 @@ We only support indexing using ``iat`` using a pair of integers. We require that
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   df.insert(3, "D", [-1,-2,-3])
     ...   return df
+    >>> f()
       A  B  C  D
     0  1  4  7 -1
     1  2  5  8 -2
@@ -533,6 +554,7 @@ We only support indexing using ``iat`` using a pair of integers. We require that
     ...   isin_2 = df.isin(pd.DataFrame({"A": [4,5,6], "C": [7,8,9]}))
     ...   formated_out = "\n".join([isin_1.to_string(), isin_2.to_string()])
     ...   return formated_out
+    >>> f()
           A      B      C
     0  True   False  False
     1  False  True   False
@@ -550,6 +572,7 @@ We only support indexing using ``iat`` using a pair of integers. We require that
       ... def f():
       ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
       ...   return df.isin(pd.DataFrame({"A": [1,2,3]}, index=["A", "B", "C"]))
+      >>> f()
             A      B      C
       0  True  False  False
       1  True  False  False
@@ -558,6 +581,7 @@ We only support indexing using ``iat`` using a pair of integers. We require that
       >>> def f():
       ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
       ...   return df.isin(pd.DataFrame({"A": [1,2,3]}, index=["A", "B", "C"]))
+      >>> f()
              A      B      C
       0  False  False  False
       1  False  False  False
@@ -577,6 +601,7 @@ We only support indexing using ``iat`` using a pair of integers. We require that
     ...      print(x)
     ...      print(x[0])
     ...      print(x[2:])
+    >>> f()
     Pandas(Index=0, A=1, B=4, C=7)
     0
     (4, 7)
@@ -637,6 +662,7 @@ We only support indexing using ``iat`` using a pair of integers. We require that
     >>> @bodo.jit
     ... def f():
     ...   return pd.DataFrame({"A": np.arange(1000)}).tail(3)
+    >>> f()
           A
     997  997
     998  998
@@ -677,6 +703,7 @@ Function application, GroupBy & Window
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.apply(lambda x: x["A"] * (x["B"] + x["C"]))
+    >>> f()
     0    11
     1    26
     2    45
@@ -722,6 +749,7 @@ Function application, GroupBy & Window
     ... def f():
     ...   df = pd.DataFrame({"A": [1,1,2,2], "B": [-2,-2,2,2]})
     ...   return df.groupby("A").sum()
+    >>> f()
        B
     A
     1 -4
@@ -767,6 +795,7 @@ Function application, GroupBy & Window
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3,4,5]})
     ...   return df.rolling(3,center=True).mean()
+    >>> f()
          A
     0  NaN
     1  2.0
@@ -790,6 +819,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,-2], "B": [3.1,-4.2], "C": [pd.Timedelta(10, unit="D"), pd.Timedelta(-10, unit="D")]})
     ...   return df.abs()
+    >>> f()
        A    B       C
     0  1  3.1 10 days
     1  2  4.2 10 days
@@ -813,6 +843,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [.9, .8, .7, .4], "B": [-.8, -.9, -.8, -.4], "c": [.7, .7, .7, .4]})
     ...   return df.corr()
+    >>> f()
               A         B        c
     A  1.000000 -0.904656  0.92582
     B -0.904656  1.000000 -0.97714
@@ -828,6 +859,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1, None, 3], "B": [None, 2, None]})
     ...   return df.count()
+    >>> f()
     A    2
     B    1
 
@@ -850,6 +882,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [0.695, 0.478, 0.628], "B": [-0.695, -0.478, -0.628], "C": [0.07, -0.68, 0.193]})
     ...   return df.cov()
+    >>> f()
               A         B         C
     A  0.012346 -0.012346  0.047577
     B -0.012346  0.012346 -0.047577
@@ -865,6 +898,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1, 2, 3], "B": [.1,np.NaN,12.3],})
     ...   return df.cumprod()
+    >>> f()
        A    B
     0  1  0.1
     1  2  NaN
@@ -885,6 +919,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1, 2, 3], "B": [.1,np.NaN,12.3],})
     ...   return df.cumsum()
+    >>> f()
        A    B
     0  1  0.1
     1  3  NaN
@@ -903,6 +938,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [pd.Timestamp(2000, 10, 2), pd.Timestamp(2001, 9, 5), pd.Timestamp(2002, 3, 11)]})
     ...   return df.describe()
+    >>> f()
             A                    B
     count  3.0                    3
     mean   2.0  2001-07-16 16:00:00
@@ -935,6 +971,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [pd.Timestamp(2000, 10, 2), pd.Timestamp(2001, 9, 5), pd.Timestamp(2002, 3, 11)]})
     ...   return df.diff(1)
+    >>> f()
          A        B
     0  NaN      NaT
     1  1.0 338 days
@@ -965,6 +1002,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.max(axis=1)
+    >>> f()
     0    7
     1    8
     2    9
@@ -994,6 +1032,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.mean(axis=1)
+    >>> f()
     0    4.0
     1    5.0
     2    6.0
@@ -1022,6 +1061,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.median(axis=1)
+    >>> f()
     0    4.0
     1    5.0
     2    6.0
@@ -1049,6 +1089,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.min(axis=1)
+    >>> f()
     0    1
     1    2
     2    3
@@ -1073,6 +1114,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [1,1,1], "C": [4, None, 6]})
     ...   return df.nunique()
+    >>> f()
     A    3
     B    1
     C    2
@@ -1095,6 +1137,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [10,100,1000,10000]})
     ...   return df.pct_change()
+    >>> f()
         A
     0  NaN
     1  9.0
@@ -1126,10 +1169,10 @@ Only supported for dataframes containing numerical data and Timedeltas
     ...   df = pd.DataFrame({"A": [10,100,1000,10000]})
     ...   return df.pipe()
     ...
-    ... def g(df, axis):
+    >>> def g(df, axis):
     ...   return df.max(axis)
     ...
-    ... f()
+    >>> f()
     A    3
     dtype: int64
 
@@ -1154,6 +1197,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.prod(axis=1)
+    >>> f()
     A      6
     B    120
     C    504
@@ -1180,6 +1224,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.product(axis=1)
+    >>> f()
     A      6
     B    120
     C    504
@@ -1208,6 +1253,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.quantile()
+    >>> f()
     A    2.0
     B    5.0
     C    8.0
@@ -1234,6 +1280,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.std(axis=1)
+    >>> f()
     0    3.0
     1    3.0
     2    3.0
@@ -1259,6 +1306,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.sum(axis=1)
+    >>> f()
     0    12
     1    15
     2    18
@@ -1285,6 +1333,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.var(axis=1)
+    >>> f()
     0    9.0
     1    9.0
     2    9.0
@@ -1308,6 +1357,7 @@ Only supported for dataframes containing numerical data and Timedeltas
     ... def f():
     ...   df = pd.DataFrame({"A": np.array([1,2,3], dtype=np.int64), "B": np.array([1,2,3], dtype=np.int32), "C": ["1", "2", "3456689"]})
     ...   return df.memory_usage()
+    >>> f()
     Index    24
     A        24
     B        12
@@ -1332,6 +1382,7 @@ Reindexing / Selection / Label manipulation
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   df.drop(columns = ["B", "C"], inplace=True)
     ...   return df
+    >>> f()
        A
     0  1
     1  2
@@ -1360,6 +1411,7 @@ Reindexing / Selection / Label manipulation
     ... def f():
     ...   df = pd.DataFrame({"A": [1,1,3,4], "B": [1,1,3,3], "C": [7,8,9,10]})
     ...   return df.drop_duplicates(subset = ["A", "B"])
+    >>> f()
        A  B   C
     0  1  1   7
     2  3  3   9
@@ -1375,6 +1427,7 @@ Reindexing / Selection / Label manipulation
     ... def f():
     ...   df = pd.DataFrame({"A": [1,1,3,4], "B": [1,1,3,3]})
     ...   return df.duplicated()
+    >>> f()
     0    False
     1     True
     2    False
@@ -1392,6 +1445,7 @@ Reindexing / Selection / Label manipulation
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.idxmax()
+    >>> f()
     A    2
     B    2
     C    2
@@ -1407,6 +1461,7 @@ Reindexing / Selection / Label manipulation
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.idxmax()
+    >>> f()
     A    0
     B    0
     C    20
@@ -1445,6 +1500,7 @@ Reindexing / Selection / Label manipulation
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.rename(columns={"A": "X", "B":"Y", "C":"Z"})
+    >>> f()
        X  Y  Z
     0  1  4  7
     1  2  5  8
@@ -1477,6 +1533,7 @@ Reindexing / Selection / Label manipulation
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]}, index = ["X", "Y", "Z"])
     ...   return df.reset_index()
+    >>> f()
       index  A  B  C
     0     X  1  4  7
     1     Y  2  5  8
@@ -1502,6 +1559,7 @@ Reindexing / Selection / Label manipulation
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]}, index = ["X", "Y", "Z"])
     ...   return df.set_index("C")
+    >>> f()
        A  B
     C
     7  1  4
@@ -1531,6 +1589,7 @@ Reindexing / Selection / Label manipulation
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.take(pd.Series([-1,-2]))
+    >>> f()
        A  B  C
     2  3  6  9
     1  2  5  8
@@ -1568,6 +1627,7 @@ Missing data handling
     ...   df_2 = df.dropna(thresh=3)
     ...   formated_out = "\n".join([df_1.to_string(), df_2.to_string()])
     ...   return formated_out
+    >>> f()
        A  B     C
     0  1  4     6
     1  2  5  <NA>
@@ -1603,6 +1663,7 @@ Missing data handling
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3,None], "B": [4, 5,None, None], "C": [6, None, None, None]})
     ...   return df.fillna(-1)
+    >>> f()
 
 * :meth:`pandas.DataFrame.replace` ``(to_replace=None, value=None, inplace=False, limit=None, regex=False, method='pad')``
 
@@ -1628,6 +1689,7 @@ Missing data handling
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.replace(1, -1)
+    >>> f()
        A  B  C
     0 -1  4  7
     1  2  5  8
@@ -1667,6 +1729,7 @@ Reshaping, sorting, transposing
     ...   df = pd.DataFrame({"A": ["X","X","X","X","Y","Y"], "B": [1,2,3,4,5,6], "C": [10,11,12,20,21,22]})
     ..    pivoted_tbl = df.pivot_table(columns="A", index="B", values="C", aggfunc="mean")
     ...   return pivoted_tbl
+    >>> f()
           X     Y
     B
     1  10.0   NaN
@@ -1701,6 +1764,7 @@ Reshaping, sorting, transposing
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6], "C": [7,8,9]})
     ...   return df.sample(1)
+    >>> f()
        A  B  C
     2  3  6  9
 
@@ -1728,6 +1792,7 @@ Reshaping, sorting, transposing
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3]}, index=[1,None,3])
     ...   return df.sort_index(ascending=False, na_position="last")
+    >>> f()
          A
     3    3
     1    1
@@ -1767,6 +1832,7 @@ Reshaping, sorting, transposing
     ...   df = pd.DataFrame({"A": [1,2,2,None], "B": [4, 5, 6, None]})
     ...   df.sort_values(by=["A", "B"], ascending=[True, False], na_position=["first", "last"], inplace=True)
     ...   return df
+    >>> f()
           A     B
     3  <NA>  <NA>
     0     1     4
@@ -1807,6 +1873,7 @@ Reshaping, sorting, transposing
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3]})
     ...   return df.to_string()
+    >>> f()
        A
     0  1
     1  2
@@ -1840,6 +1907,7 @@ Combining / joining / merging
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6]})
     ...   return df.append(pd.DataFrame({"A": [-1,-2,-3], "C": [4,5,6]}))
+    >>> f()
        A    B    C
     0  1  4.0  NaN
     1  2  5.0  NaN
@@ -1858,6 +1926,7 @@ Combining / joining / merging
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6]})
     ...   df2 = df.assign(C = 2 * df["B"], D = lambda x: x.C * -1)
     ...   return df2
+    >>> f()
        A  B   C   D
     0  1  4   8  -8
     1  2  5  10 -10
@@ -1889,6 +1958,7 @@ Combining / joining / merging
     ... def f():
     ...   df = pd.DataFrame({"A": [1,1,3], "B": [4,5,6]})
     ...   return df.join(on = "A", other=pd.DataFrame({"C": [-1,-2,-3], "D": [4,5,6]}))
+    >>> f()
        A  B     C     D
     0  1  4    -2     5
     1  1  5    -2     5
@@ -1909,6 +1979,7 @@ See :ref:`pd.merge <pd_merge_fn>` for full list of support arguments, and more e
     ... def f():
     ...   df = pd.DataFrame({"A": [1,1,3], "B": [4,5,6]})
     ...   return df.merge(pd.DataFrame({"C": [-1,-2,-3], "D": [4,4,6]}), left_on = "B", right_on = "D")
+    >>> f()
        A  B  C  D
     0  1  4 -1  4
     1  1  4 -2  4
@@ -1937,6 +2008,7 @@ Time series-related
     ... def f():
     ...   df = pd.DataFrame({"A": [1,1,3], "B": [4,5,6]})
     ...   return df.shift(1)
+    >>> f()
          A    B
     0  NaN  NaN
     1  1.0  4.0

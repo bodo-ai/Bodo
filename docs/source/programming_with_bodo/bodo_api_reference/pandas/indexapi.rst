@@ -53,7 +53,7 @@ Properties
      >>> I = pd.Index([1,2,3])
      >>> f(I)
      [1 2 3]
-     
+
 * :attr:`pandas.Index.nbytes`
 
 `Unsupported Index Types`:
@@ -70,11 +70,14 @@ Properties
     ...   return I.nbytes
 
     >>> I1 = pd.Index([1,2,3,4,5,6], dtype = np.int64)
-    >>> 48
+    >>> f(I1)
+    48
     >>> I2 = pd.Index([1,2,3], dtype = np.int64)
-    >>> 24
+    >>> f(I2)
+    24
     >>> I3 = pd.Index([1,2,3], dtype = np.int32)
-    >>> 24
+    >>> f(I3)
+    24
 
 
 
