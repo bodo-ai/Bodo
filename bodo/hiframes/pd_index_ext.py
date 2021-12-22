@@ -163,6 +163,14 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
         # TODO: fix timestamp
         return types.iterators.ArrayIterator(_dt_index_data_typ)
 
+    @property
+    def pandas_type_name(self):
+        return "datetime64"
+
+    @property
+    def numpy_type_name(self):
+        return "datetime64[ns]"
+
 
 types.datetime_index = DatetimeIndexType()
 
@@ -1110,6 +1118,14 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
         # TODO: fix timedelta
         return types.iterators.ArrayIterator(_timedelta_index_data_typ)
 
+    @property
+    def pandas_type_name(self):
+        return "timedelta"
+
+    @property
+    def numpy_type_name(self):
+        return "timedelta64[ns]"
+
 
 timedelta_index = TimedeltaIndexType()
 types.timedelta_index = timedelta_index
@@ -1779,6 +1795,14 @@ class PeriodIndexType(types.IterableType):
         # TODO: handle iterator
         return types.iterators.ArrayIterator(types.Array(types.int64, 1, "C"))
 
+    @property
+    def pandas_type_name(self):
+        return "object"
+
+    @property
+    def numpy_type_name(self):
+        return f"period[{self.freq}]"
+
 
 @typeof_impl.register(pd.PeriodIndex)
 def typeof_pd_period_index(val, c):
@@ -1968,6 +1992,16 @@ class CategoricalIndexType(types.ArrayCompatible):
         https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
         """
         return self.__class__.__name__, (self._code,)
+
+    @property
+    def pandas_type_name(self):
+        return "categorical"
+
+    @property
+    def numpy_type_name(self):
+        from bodo.hiframes.pd_categorical_ext import get_categories_int_type
+
+        return str(get_categories_int_type(self.dtype))
 
 
 @register_model(CategoricalIndexType)
@@ -2169,6 +2203,14 @@ class IntervalIndexType(types.ArrayCompatible):
         https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
         """
         return self.__class__.__name__, (self._code,)
+
+    @property
+    def pandas_type_name(self):
+        return "object"
+
+    @property
+    def numpy_type_name(self):
+        return f"interval[{self.data.arr_type.dtype}, right]"  # TODO: Support for left and both intervals
 
 
 @register_model(IntervalIndexType)
@@ -3480,6 +3522,14 @@ class HeterogeneousIndexType(types.Type):
         https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
         """
         return self.__class__.__name__, (self._code,)
+
+    @property
+    def pandas_type_name(self):
+        return "object"
+
+    @property
+    def numpy_type_name(self):
+        return "object"
 
 
 # even though name attribute is mutable, we don't handle it for now
