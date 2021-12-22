@@ -164,6 +164,14 @@ def test_read_parquet_from_deltalake(memory_leak_check):
         ),
         pd.DataFrame({"A": [4, 6, 7, 1, 3]}, index=["X", "Y", "Z", "M", "N"]),
         pd.DataFrame({"A": [4, 6, 7, 1, 3]}, index=[-1, -2, -3, -4, -5]),
+        pd.DataFrame(
+            {"A": [4, 6, 7, 1, 3]},
+            index=pd.date_range(start="1/1/2022", end="1/05/2022"),
+        ),
+        # TODO: Open Issue: Missing Support for Storing Interval Type
+        # TODO: Add Test for PeriodIndex when Pandas Serializes to Parquet Correctly
+        # TODO: Add Test for CategoricalIndex after Including Metadata
+        # TODO: Add Test for TimedeltaIndex when PyArrow Adds Support
     ],
 )
 @pytest.mark.parametrize("index_name", [None, "HELLO"])
