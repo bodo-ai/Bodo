@@ -737,6 +737,9 @@ def is_heterogeneous_tuple_type(t):
         else:
             t = bodo.typeof(tuple(get_overload_const_list(t)))
 
+    if isinstance(t, bodo.NullableTupleType):
+        t = t.tuple_typ
+
     return isinstance(t, types.BaseTuple) and not isinstance(t, types.UniTuple)
 
 

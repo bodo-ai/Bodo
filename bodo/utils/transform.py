@@ -235,6 +235,8 @@ no_side_effect_call_tuples = {
         "hiframes",
         bodo,
     ),
+    # Nullable Tuple
+    ("build_nullable_tuple", "nullable_tuple_ext", "libs", bodo),
 }
 
 

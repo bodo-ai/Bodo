@@ -16,6 +16,7 @@ import pandas as pd
 from mpi4py import MPI
 from numba.core import ir, types
 from numba.core.compiler_machinery import FunctionPass, register_pass
+from numba.core.ir_utils import find_callname, guard
 from numba.core.typed_passes import NopythonRewrites
 from numba.core.untyped_passes import PreserveIR
 
@@ -961,7 +962,7 @@ class SeriesOptTestPipeline(bodo.compiler.BodoCompiler):
             distributed=True, inline_calls_pass=False
         )
         pipeline._finalized = False
-        pipeline.add_pass_after(PreserveIR, bodo.compiler.BodoSeriesPass)
+        pipeline.add_pass_after(PreserveIRTypeMap, bodo.compiler.BodoSeriesPass)
         pipeline.finalize()
         return [pipeline]
 
@@ -1686,3 +1687,26 @@ def _check_connector_columns(bodo_func, col_names, node_class):
             sql_read_found = True
 
     assert sql_read_found
+
+
+def _ensure_func_calls_optimized_out(bodo_func, call_names):
+    """
+    Ensures the bodo_func doesn't contain any calls to functions
+    that should be optimzed out.
+
+    Note: Each call_name should be a tuple that matches the output of
+    find_callname
+    """
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    typemap = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_typemap"]
+    for _, block in fir.blocks.items():
+        for stmt in block.body:
+            if (
+                isinstance(stmt, ir.Assign)
+                and isinstance(stmt.value, ir.Expr)
+                and stmt.value.op == "call"
+            ):
+                call_name = guard(find_callname, fir, stmt.value, typemap)
+                assert (
+                    call_name not in call_names
+                ), f"{call_name} found in IR when it should be optimized out"

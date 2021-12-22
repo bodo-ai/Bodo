@@ -85,6 +85,7 @@ def isna(arr, i):  # pragma: no cover
 
 @overload(isna)
 def overload_isna(arr, i):
+
     i = types.unliteral(i)
     # String array
     if arr == string_array_type:
@@ -141,6 +142,10 @@ def overload_isna(arr, i):
 
         else:
             return lambda arr, i: False
+
+    # Nullable tuple support
+    if isinstance(arr, bodo.NullableTupleType):
+        return lambda arr, i: arr._null_values[i]  # pragma: no cover
 
     # TODO: extend to other types (which ones are missing?)
     assert isinstance(arr, types.Array)

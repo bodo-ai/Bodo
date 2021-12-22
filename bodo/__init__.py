@@ -90,6 +90,7 @@ from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.map_arr_ext import MapArrayType
+from bodo.libs.nullable_tuple_ext import NullableTupleType
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.libs.csr_matrix_ext import CSRMatrixType

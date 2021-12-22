@@ -11,11 +11,7 @@ import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed
-from numba.core.typing.templates import (
-    AttributeTemplate,
-    bound_function,
-    signature,
-)
+from numba.core.typing.templates import bound_function, signature
 from numba.extending import (
     infer_getattr,
     intrinsic,
@@ -630,7 +626,7 @@ def cast_series(context, builder, fromty, toty, val):
 
 
 @infer_getattr
-class SeriesAttribute(AttributeTemplate):
+class SeriesAttribute(OverloadedKeyAttributeTemplate):
     key = SeriesType
 
     @bound_function("series.head")
@@ -861,6 +857,11 @@ class SeriesAttribute(AttributeTemplate):
     def generic_resolve(self, S, attr):
         """Handle getattr on row Series values pass to df.apply() UDFs."""
         from bodo.hiframes.pd_index_ext import HeterogeneousIndexType
+
+        # If an column name conflicts with a Series method/attribute we
+        # shouldn't search the columns.
+        if self._is_existing_attr(attr):
+            return
 
         if isinstance(S.index, HeterogeneousIndexType) and is_overload_constant_tuple(
             S.index.data
