@@ -49,6 +49,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts3 = pd.Timestamp(100, unit="days")
     ...   ts4 = pd.Timestamp(datetime.date(2021, 12, 9), hour = 9, minute=57, second=44, microsecond=114123)
     ...   return (ts1, ts2, ts3, ts4)
+    >>> f()
     (Timestamp('2021-12-09 09:57:44.114123'), Timestamp('2021-12-09 09:57:44.114123'), Timestamp('1970-04-11 00:00:00'), Timestamp('2021-12-09 09:57:44.114123'))
 
 
@@ -60,6 +61,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.day
+    >>> f()
     9
 
 * :attr:`pandas.Timestamp.hour`
@@ -70,6 +72,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.hour
+    >>> f()
     9
 
 * :attr:`pandas.Timestamp.microsecond`
@@ -80,6 +83,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.microsecond
+    >>> f()
     114123
 
 * :attr:`pandas.Timestamp.month`
@@ -90,6 +94,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.month
+    >>> f()
     month
 
 * :attr:`pandas.Timestamp.nanosecond`
@@ -100,6 +105,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(12, unit="ns")
     ...   return ts2.nanosecond
+    >>> f()
     12
 
 * :attr:`pandas.Timestamp.second`
@@ -110,6 +116,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.second
+    >>> f()
     44
 
 * :attr:`pandas.Timestamp.year`
@@ -120,6 +127,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.year
+    >>> f()
     2021
 
 * :attr:`pandas.Timestamp.dayofyear`
@@ -130,8 +138,9 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.dayofyear
+    >>> f()
     343
-    
+
 * :attr:`pandas.Timestamp.day_of_year`
 
 `Example Usage`::
@@ -140,8 +149,9 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.day_of_year
+    >>> f()
     343
-    
+
 * :attr:`pandas.Timestamp.dayofweek`
 
 `Example Usage`::
@@ -150,8 +160,9 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.day_of_year
+    >>> f()
     343
-    
+
 * :attr:`pandas.Timestamp.day_of_week`
 
 `Example Usage`::
@@ -160,8 +171,9 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.day_of_week
+    >>> f()
     3
-    
+
 * :attr:`pandas.Timestamp.days_in_month`
 
 `Example Usage`::
@@ -170,8 +182,9 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.days_in_month
+    >>> f()
     31
-    
+
 * :attr:`pandas.Timestamp.daysinmonth`
 
 `Example Usage`::
@@ -180,6 +193,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return ts2.daysinmonth
+    >>> f()
     31
 
 * :attr:`pandas.Timestamp.is_leap_year`
@@ -191,8 +205,9 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2020, month=2,day=2)
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   return (ts1.is_leap_year, ts2.is_leap_year)
+    >>> f()
     (True, False)
-    
+
 * :attr:`pandas.Timestamp.is_month_start`
 
 `Example Usage`::
@@ -202,6 +217,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=1)
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=2)
     ...   return (ts1.is_moth_start, ts2.is_moth_start)
+    >>> f()
     (True, False)
 
 * :attr:`pandas.Timestamp.is_month_end`
@@ -213,6 +229,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=31)
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=30)
     ...   return (ts1.is_moth_end, ts2.is_moth_end)
+    >>> f()
     (True, False)
 
 * :attr:`pandas.Timestamp.is_quarter_start`
@@ -224,6 +241,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=9, day=30)
     ...   ts2 = pd.Timestamp(year=2021, month=10, day=1)
     ...   return (ts1.is_quarter_start, ts2.is_quarter_start)
+    >>> f()
     (False, True)
 
 * :attr:`pandas.Timestamp.is_quarter_end`
@@ -235,6 +253,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=9, day=30)
     ...   ts2 = pd.Timestamp(year=2021, month=10, day=1)
     ...   return (ts1.is_quarter_start, ts2.is_quarter_start)
+    >>> f()
     (True, False)
 
 * :attr:`pandas.Timestamp.is_year_start`
@@ -246,6 +265,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=31)
     ...   ts2 = pd.Timestamp(year=2021, month=1, day=1)
     ...   return (ts1.is_year_start, ts2.is_year_start)
+    >>> f()
     (False, True)
 
 * :attr:`pandas.Timestamp.is_year_end`
@@ -257,6 +277,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=31)
     ...   ts2 = pd.Timestamp(year=2021, month=1, day=1)
     ...   return (ts1.is_year_end, ts2.is_year_end)
+    >>> f()
     (True, False)
 
 * :attr:`pandas.Timestamp.quarter`
@@ -268,6 +289,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=1)
     ...   ts2 = pd.Timestamp(year=2021, month=9, day=1)
     ...   return (ts1.quarter, ts2.quarter)
+    >>> f()
     (4, 3)
 
 * :attr:`pandas.Timestamp.week`
@@ -279,6 +301,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=9, day=1)
     ...   ts2 = pd.Timestamp(year=2021, month=9, day=20)
     ...   return (ts1.week, ts2.week)
+    >>> f()
     (35, 38)
 
 * :attr:`pandas.Timestamp.weekofyear`
@@ -290,6 +313,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=9, day=1)
     ...   ts2 = pd.Timestamp(year=2021, month=9, day=20)
     ...   return (ts1.weekofyear, ts2.weekofyear)
+    >>> f()
     (35, 38)
 
 * :attr:`pandas.Timestamp.value`
@@ -299,6 +323,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     >>> @bodo.jit
     ... def f():
     ...   return pd.Timestamp(12345, unit="ns").value
+    >>> f()
     12345
 
 * :meth:`pandas.Timestamp.ceil` ``(freq, ambiguous='raise', nonexistent='raise')``
@@ -321,6 +346,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123).ceil("D")
     ...   return (ts1, ts2)
+    >>> f()
     (Timestamp('2021-12-09 09:57:44.114123'), Timestamp('2021-12-10 00:00:00'))
 
 * :meth:`pandas.Timestamp.date` ``()``
@@ -332,6 +358,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123).date()
     ...   return (ts1, ts2)
+    >>> f()
     (Timestamp('2021-12-09 09:57:44.114123'), datetime.date(2021, 12, 9))
 
 
@@ -347,6 +374,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   day_2 = pd.Timestamp(year=2021, month=12, day=10).day_name()
     ...   day_3 = pd.Timestamp(year=2021, month=12, day=11).day_name()
     ...   return (day_1, day_2, day_3)
+    >>> f()
     ('Thursday', 'Friday', 'Saturday')
 
 * :meth:`pandas.Timestamp.floor`
@@ -369,6 +397,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123)
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123).ceil("D")
     ...   return (ts1, ts2)
+    >>> f()
     (Timestamp('2021-12-09 09:57:44.114123'), Timestamp('2021-12-09 00:00:00'))
 
 * :meth:`pandas.Timestamp.isocalendar`
@@ -379,6 +408,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123).isocalendar()
     ...   return (ts1, ts2)
+    >>> f()
     (2021, 49, 4)
 
 * :meth:`pandas.Timestamp.isoformat`
@@ -389,6 +419,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123).isocalendar()
     ...   return (ts1, ts2)
+    >>> f()
     '2021-12-09T09:57:44'
 
 * :meth:`pandas.Timestamp.month_name` ``(*args, **kwargs)``
@@ -400,6 +431,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     >>> @bodo.jit
     ... def f():
     ...   return pd.Timestamp(year=2021, month=12, day=9).month_name()
+    >>> f()
     'December'
 
 * :meth:`pandas.Timestamp.normalize`
@@ -410,6 +442,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ... def f():
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=9, hour = 9, minute=57, second=44, microsecond=114123).normalize()
     ...   return (ts1, ts2)
+    >>> f()
     Timestamp('2021-12-09 00:00:00')
 
 * :meth:`pandas.Timestamp.round` ``(freq, ambiguous='raise', nonexistent='raise')``
@@ -432,6 +465,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=9, hour = 12).round()
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=9, hour = 13).round()
     ...   return (ts1, ts2)
+    >>> f()
     (Timestamp('2021-12-09 00:00:00'),Timestamp('2021-12-10 00:00:00'))
 
 * :meth:`pandas.Timestamp.strftime` ``(format)``
@@ -452,6 +486,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     >>> @bodo.jit
     ... def f():
     ...   return pd.Timestamp(year=2021, month=12, day=9, hour = 12).strftime('%Y-%m-%d %X')
+    >>> f()
     '2021-12-09 12:00:00'
 
 * :meth:`pandas.Timestamp.toordinal` ``()``
@@ -461,6 +496,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     >>> @bodo.jit
     ... def f():
     ...   return pd.Timestamp(year=2021, month=12, day=9).toordinal()
+    >>> f()
     738133
 
 * :meth:`pandas.Timestamp.weekday` ``()``
@@ -472,6 +508,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     ...   ts1 = pd.Timestamp(year=2021, month=12, day=9)
     ...   ts2 = pd.Timestamp(year=2021, month=12, day=10)
     ...   return (ts1.weekday(), ts2.weekday())
+    >>> f()
     (3, 4)
 
 * :meth:`pandas.Timedelta.now` ``(tz=None)``
@@ -483,6 +520,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
     >>> @bodo.jit
     ... def f():
     ...   return pd.Timestamp.now()
+    >>> f()
     Timestamp('2021-12-10 10:54:06.457168')
 
 
