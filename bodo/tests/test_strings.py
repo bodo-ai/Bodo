@@ -16,6 +16,7 @@ import pytest
 import bodo
 from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.tests.utils import check_func
+from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
@@ -196,6 +197,11 @@ def test_in_str(request, memory_leak_check):
     return request.param
 
 
+def _assert_match_equal(m1, m2):
+    """make sure Match objects are equal since equality doesn't work for them"""
+    assert (m1 is None and m2 is None) or m1.span() == m2.span()
+
+
 def test_re_search(test_in_str, memory_leak_check):
     """make sure re.search returns None or a proper re.Match"""
 
@@ -208,6 +214,33 @@ def test_re_search(test_in_str, memory_leak_check):
     # output is None or re.Match
     # just testing span of re.Match should be enough
     assert (py_out is None and bodo_out is None) or py_out.span() == bodo_out.span()
+
+
+def test_re_flags(memory_leak_check):
+    """make sure re flags like re.I work properly"""
+
+    # flags are passed in
+    def impl1(pat, in_str, flags):
+        return re.search(pat, in_str, flags)
+
+    # flags are globals
+    my_flags = re.I | re.S
+
+    def impl2(pat, in_str):
+        return re.search(pat, in_str, my_flags)
+
+    # flags are created inside JIT
+    def impl3(pat, in_str):
+        return re.search(pat, in_str, re.I | re.S)
+
+    args = ("ABC", "abc", re.I)
+    _assert_match_equal(impl1(*args), bodo.jit(impl1)(*args))
+    args = ("AB.C", "ab\nc", re.I | re.S)
+    _assert_match_equal(impl1(*args), bodo.jit(impl1)(*args))
+
+    args = ("AB.C", "ab\nc")
+    _assert_match_equal(impl2(*args), bodo.jit(impl2)(*args))
+    _assert_match_equal(impl3(*args), bodo.jit(impl3)(*args))
 
 
 def test_re_match_cast_bool(test_in_str, memory_leak_check):
@@ -336,7 +369,9 @@ def test_pat_split(memory_leak_check):
     assert py_out == bodo_out
 
 
-def test_re_findall(memory_leak_check):
+# TODO(ehsan): investigate adding memory_leak_check, could be Numba's memory leak for
+# exceptions
+def test_re_findall():
     """make sure re.findall returns proper output (list of strings)"""
 
     def test_impl(pat, in_str):
@@ -344,9 +379,19 @@ def test_re_findall(memory_leak_check):
 
     pat = r"\w+"
     in_str = "Words, words, words."
-    py_out = test_impl(pat, in_str)
-    bodo_out = bodo.jit(test_impl)(pat, in_str)
-    assert py_out == bodo_out
+    check_func(test_impl, (pat, in_str), only_seq=True)
+
+    # an error should be raised with multiple groups if pattern is not constant
+    pat = r"(\w+).*(\d+)"
+    in_str = "ww 132"
+    with pytest.raises(BodoError, match="pattern string should be constant"):
+        bodo.jit(test_impl)(pat, in_str)
+
+    # constant multi-group pattern should work
+    def test_impl2(in_str):
+        return re.findall(r"(\w+).*(\d+)", in_str)
+
+    check_func(test_impl2, (in_str,), only_seq=True)
 
 
 def test_pat_findall(memory_leak_check):
@@ -357,41 +402,30 @@ def test_pat_findall(memory_leak_check):
 
     pat = re.compile(r"\w+")
     in_str = "Words, words, words."
-    py_out = test_impl(pat, in_str)
-    bodo_out = bodo.jit(test_impl)(pat, in_str)
-    assert py_out == bodo_out
+    check_func(test_impl, (pat, in_str), only_seq=True)
 
-    # FIXME: checking for ValueError causes a segfault sometimes
-    # # an error should be raised with multiple groups if pattern is not constant
-    # def test_impl2(pat, in_str):
-    #     return pat.findall(in_str)
+    # an error should be raised with multiple groups if pattern is not constant
+    def test_impl2(pat, in_str):
+        return pat.findall(in_str)
 
-    # pat = re.compile(r"(\w+).*(\d+)")
-    # in_str = "ww 132"
-    # with pytest.raises(
-    #     ValueError, match="pattern string should be constant"
-    # ):
-    #     bodo_out = bodo.jit(test_impl2)(pat, in_str)
+    pat = re.compile(r"(\w+).*(\d+)")
+    in_str = "ww 132"
+    with pytest.raises(BodoError, match="pattern string should be constant"):
+        bodo.jit(test_impl2)(pat, in_str)
 
     def test_impl3(in_str):
         pat = re.compile(r"(\w+).*(\d+)")
         return pat.findall(in_str)
 
     in_str = "ww 132"
-    py_out = test_impl3(in_str)
-    bodo_out = bodo.jit(test_impl3)(in_str)
-    py_out = test_impl3(in_str)
-    assert py_out == bodo_out
+    check_func(test_impl3, (in_str,), only_seq=True)
 
     def test_impl4(in_str):
         pat = re.compile(r"(\w+).*")
         return pat.findall(in_str)
 
     in_str = "ww 132"
-    py_out = test_impl4(in_str)
-    bodo_out = bodo.jit(test_impl4)(in_str)
-    py_out = test_impl4(in_str)
-    assert py_out == bodo_out
+    check_func(test_impl4, (in_str,), only_seq=True)
 
 
 def test_re_sub(memory_leak_check):
@@ -557,6 +591,13 @@ def test_match_group(memory_leak_check):
     assert test_impl_two(m, "A", 3) == bodo.jit(test_impl_two)(m, "A", 3)
     assert test_impl_three(m, 2, "A", 3) == bodo.jit(test_impl_three)(m, 2, "A", 3)
 
+    # test Match.group() when an output should be a None
+    pat = re.compile(r"(\w+)? (\w+) (\w+)")
+    m = pat.search(" words word")
+
+    assert test_impl_one(m, 1) == bodo.jit(test_impl_one)(m, 1)
+    assert test_impl_two(m, 1, 2) == bodo.jit(test_impl_two)(m, 1, 2)
+
 
 def test_match_getitem(memory_leak_check):
     """test Match[g], which is shortcut for Match.group(g)"""
@@ -583,6 +624,11 @@ def test_match_groups(memory_leak_check):
 
     assert list(test_impl(m)) == bodo.jit(test_impl)(m)
 
+    # test Match.group() when an output should be a None
+    pat = re.compile(r"(\w+)? (\w+) (\w+)")
+    m = pat.search(" words word")
+    assert list(test_impl(m)) == bodo.jit(test_impl)(m)
+
 
 def test_match_groupdict(memory_leak_check):
     """test Match.groupdict(), which returns a dictionary of named groups"""
@@ -594,6 +640,12 @@ def test_match_groupdict(memory_leak_check):
     m = pat.search("words words etc")
 
     assert test_impl(m) == bodo.jit(test_impl)(m)
+
+    # test Match.groupdict() when an output should be a None
+    pat = re.compile(r"(?P<A>\w+)? (?P<B>\w+) (?P<C>\w+)")
+    m = pat.search(" words word")
+    with pytest.raises(BodoError, match="does not support default=None"):
+        bodo.jit(test_impl)(m)
 
 
 def test_match_start(memory_leak_check):
@@ -667,6 +719,12 @@ def test_match_lastindex(memory_leak_check):
 
     assert test_impl(m) == bodo.jit(test_impl)(m)
 
+    # no group match, should return None
+    pat = re.compile(r"\w+ (\d+)?")
+    m = pat.search("  words words etc bcd bcd")
+
+    assert test_impl(m) == bodo.jit(test_impl)(m)
+
 
 def test_match_lastgroup(memory_leak_check):
     """test Match.lastgroup attribute"""
@@ -675,6 +733,12 @@ def test_match_lastgroup(memory_leak_check):
         return m.lastgroup
 
     pat = re.compile(r"(?P<A>\w+) (?P<BB>\w+)")
+    m = pat.search("  words words etc bcd bcd")
+
+    assert test_impl(m) == bodo.jit(test_impl)(m)
+
+    # no group match, should return None
+    pat = re.compile(r"\w+ (\d+)?")
     m = pat.search("  words words etc bcd bcd")
 
     assert test_impl(m) == bodo.jit(test_impl)(m)
