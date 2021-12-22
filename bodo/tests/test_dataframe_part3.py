@@ -9,6 +9,8 @@ from numba import types
 
 import bodo
 from bodo.tests.utils import (
+    SeriesOptTestPipeline,
+    _ensure_func_calls_optimized_out,
     _get_dist_arg,
     _test_equal_guard,
     check_func,
@@ -536,6 +538,67 @@ def test_df_type_change_iloc_loc(memory_leak_check):
     check_func(impl2, (df,), copy_input=True, only_seq=True)
     check_func(impl3, (df,), copy_input=True, only_seq=True)
     check_func(impl4, (df,), copy_input=True, only_seq=True)
+
+
+def test_na_df_apply_homogeneous_no_inline(memory_leak_check):
+    """
+    Checks that NA handling inside Bodo UDFs works properly
+    for homogeneous series without inlining.
+    """
+
+    def impl(df):
+        def f(row):
+            # Add an objectmode call to prevent inlining
+            with bodo.objmode(ret_val="int64"):
+                ret_val = -1
+            if pd.isna(row["A"]):
+                return ret_val
+            else:
+                total = 0
+                x = 8
+                for i in range(x):
+                    total += i * row["A"]
+                return total
+
+        return df.apply(f, axis=1)
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series([1, None, None] * 5, dtype="Int64"),
+            "B": pd.Series([None, 2, 3] * 5, dtype="Int64"),
+        }
+    )
+    check_func(impl, (df,))
+
+
+def test_apply_inline_optimization(memory_leak_check):
+    """
+    Tests that inlining a df.apply call with a single value
+    properly optimizes out the intermediate series and tuple
+    values that are used if the call can't be inlined.
+    """
+
+    def impl(df):
+        def f(row):
+            if pd.isna(row["A"]):
+                return -1
+            return row["A"]
+
+        return df.apply(f, axis=1)
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series([1, None, None] * 5, dtype="Int64"),
+            "B": pd.Series([None, 2, 3] * 5, dtype="Int64"),
+        }
+    )
+    check_func(impl, (df,))
+    # Check to ensure build_nullable_tuple has been optimized out
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+    bodo_func(df)
+    _ensure_func_calls_optimized_out(
+        bodo_func, {("build_nullable_tuple", "bodo.libs.nullable_tuple_ext")}
+    )
 
 
 # TODO [BE-974]: Add memory_leak_check

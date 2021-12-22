@@ -102,6 +102,7 @@ from bodo.utils.typing import (
     BodoError,
     get_literal_value,
     get_overload_const_func,
+    get_overload_const_int,
     get_overload_const_str,
     get_overload_const_tuple,
     is_literal_type,
@@ -551,6 +552,24 @@ class SeriesPass:
             if isinstance(val_def, ir.Expr) and val_def.op == "build_tuple":
                 assign.value = val_def.items[idx_typ.literal_value]
                 return [assign]
+
+        # optimize out getitem on build_nullable_tuple,
+        # important for df.apply since the row is converted
+        # to a nullable tuple.
+        if isinstance(target_typ, bodo.NullableTupleType) and isinstance(
+            idx_typ, types.IntegerLiteral
+        ):
+            val_def = guard(get_definition, self.func_ir, rhs.value)
+            if isinstance(val_def, ir.Expr) and val_def.op == "call":
+                call_name = guard(find_callname, self.func_ir, val_def, self.typemap)
+                if call_name == (
+                    "build_nullable_tuple",
+                    "bodo.libs.nullable_tuple_ext",
+                ):
+                    # Replace the target array with the original data.
+                    # If this is a tuple series_pass should optimize it out.
+                    assign.value.value = val_def.args[0]
+                    return [assign]
 
         # replace namedtuple access with original value if possible
         # for example: r = Row(a, b); c = r["R1"] -> c = a
@@ -1824,12 +1843,18 @@ class SeriesPass:
                 ),
             ):
                 obj_def = guard(get_definition, self.func_ir, obj_def.args[0])
-            if is_expr(obj_def, "getitem") and is_array_typ(
-                self.typemap[obj_def.value.name], False
+            # TODO: Remove static_getitem from Numba
+            if (is_expr(obj_def, "getitem") or is_expr(obj_def, "static_getitem")) and (
+                is_array_typ(self.typemap[obj_def.value.name], False)
+                or isinstance(self.typemap[obj_def.value.name], bodo.NullableTupleType)
             ):
+                if is_expr(obj_def, "getitem"):
+                    index_var = obj_def.index
+                else:
+                    index_var = obj_def.index_var
                 return compile_func_single_block(
                     eval("lambda A, i: bodo.libs.array_kernels.isna(A, i)"),
-                    (obj_def.value, obj_def.index),
+                    (obj_def.value, index_var),
                     assign.target,
                     self,
                 )
@@ -1843,6 +1868,32 @@ class SeriesPass:
                 arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
                 impl = bodo.libs.array_kernels.overload_isna(*arg_typs)
                 return replace_func(self, impl, rhs.args)
+            # Optimize out the nullable tuple if using a static index
+            if isinstance(arr_typ, bodo.NullableTupleType) and isinstance(
+                self.typemap[rhs.args[1].name], types.IntegerLiteral
+            ):
+                val_def = guard(get_definition, self.func_ir, arr)
+                if isinstance(val_def, ir.Expr) and val_def.op == "call":
+                    call_name = guard(
+                        find_callname, self.func_ir, val_def, self.typemap
+                    )
+                    if call_name == (
+                        "build_nullable_tuple",
+                        "bodo.libs.nullable_tuple_ext",
+                    ):
+                        null_values = val_def.args[1]
+                        null_idx = get_overload_const_int(
+                            self.typemap[rhs.args[1].name]
+                        )
+                        # Replace the call with a getitem on the null values tuple. This
+                        # should enable optimizing out the series.
+                        return compile_func_single_block(
+                            eval(f"lambda tup: tup[{null_idx}]"),
+                            (null_values,),
+                            assign.target,
+                            self,
+                        )
+
             return [assign]
 
         if fdef == ("argsort", "bodo.hiframes.series_impl"):

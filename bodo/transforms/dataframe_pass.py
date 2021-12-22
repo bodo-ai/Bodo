@@ -310,6 +310,14 @@ class DataFramePass:
                 self.typemap[rhs.func.name], types.Dispatcher
             ):
                 return [assign]
+            # If df.apply fails to inline an externally compiled JIT
+            # function, then we may have a CPUDispatcher
+            # (see test_df_apply_heterogeneous_series).
+            elif isinstance(func_def, ir.Const) and isinstance(
+                self.typemap[rhs.func.name], types.Dispatcher
+            ):
+                return [assign]
+
             warnings.warn("function call couldn't be found for dataframe analysis")
             return None
         else:
@@ -600,7 +608,7 @@ class DataFramePass:
         col_name_args = ", ".join(["c" + str(i) for i in range(len(used_cols))])
         row_args = ", ".join(
             [
-                "bodo.utils.conversion.box_if_dt64(c{}[i])".format(i)
+                f"bodo.utils.conversion.box_if_dt64(c{i}[i])"
                 for i in range(len(used_cols))
             ]
         )
@@ -619,11 +627,13 @@ class DataFramePass:
         func_text += "    row_idx = bodo.hiframes.pd_index_ext.init_heter_index({}, bodo.utils.conversion.box_if_dt64(index_arr[i]))\n".format(
             gen_const_tup(used_cols)
         )
-        # TODO: pass df_index[i] as row name (after issue with RangeIndex getitem in
-        # test_df_apply_assertion is resolved)
-        func_text += "    row = bodo.hiframes.pd_series_ext.init_series(({},), row_idx, bodo.utils.conversion.box_if_dt64(index_arr[i]))\n".format(
-            row_args
-        )
+        # Determine if we have a heterogenous or homogeneous series
+        null_values_list = [
+            f"bodo.libs.array_kernels.isna(c{i}, i)" for i in range(len(used_cols))
+        ]
+        null_args = ", ".join(null_values_list)
+        func_text += f"    row_data = bodo.libs.nullable_tuple_ext.build_nullable_tuple(({row_args},), ({null_args},))\n"
+        func_text += "    row = bodo.hiframes.pd_series_ext.init_series(row_data, row_idx, bodo.utils.conversion.box_if_dt64(index_arr[i]))\n"
         func_text += "    v = map_func(row, {})\n".format(udf_arg_names)
         if is_df_output:
             func_text += "    v_vals = bodo.hiframes.pd_series_ext.get_series_data(v)\n"
@@ -2420,5 +2430,7 @@ def _get_df_apply_used_cols(func, columns):
     # remove duplicates with set() since a column can be used multiple times
     # keep the order the same as original columns to avoid errors with int getitem on
     # rows
-    used_cols = [c for (_, c) in sorted((columns.index(v), v) for v in set(used_cols))]
+    # Create a dictionary for scaling to large numbers of columns.
+    cols_dict = {name: i for i, name in enumerate(columns)}
+    used_cols = [c for (_, c) in sorted((cols_dict[v], v) for v in set(used_cols))]
     return used_cols
