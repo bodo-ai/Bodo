@@ -235,7 +235,13 @@ def overload_series_to_numpy(S, dtype=None, copy=False, na_value=None):
 
     unsupported_args = dict(dtype=dtype, copy=copy, na_value=na_value)
     arg_defaults = dict(dtype=None, copy=False, na_value=None)
-    check_unsupported_args("Series.to_numpy", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.to_numpy",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     def impl(S, dtype=None, copy=False, na_value=None):  # pragma: no cover
         return S.values
@@ -252,7 +258,13 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
 
     unsupported_args = dict(name=name, inplace=inplace)
     arg_defaults = dict(name=None, inplace=False)
-    check_unsupported_args("Series.reset_index", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.reset_index",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # we only support dropping all levels currently
     if not bodo.hiframes.dataframe_impl._is_all_levels(S, level):  # pragma: no cover
@@ -363,7 +375,13 @@ def overload_series_sum(
 
     unsupported_args = dict(level=level, numeric_only=numeric_only)
     arg_defaults = dict(level=None, numeric_only=None)
-    check_unsupported_args("Series.sum", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.sum",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.sum(): axis argument not supported")
@@ -385,7 +403,13 @@ def overload_series_prod(
 
     unsupported_args = dict(level=level, numeric_only=numeric_only)
     arg_defaults = dict(level=None, numeric_only=None)
-    check_unsupported_args("Series.product", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.product",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.product(): axis argument not supported")
@@ -404,7 +428,13 @@ def overload_series_any(S, axis=0, bool_only=None, skipna=True, level=None):
 
     unsupported_args = dict(axis=axis, bool_only=bool_only, skipna=skipna, level=level)
     arg_defaults = dict(axis=0, bool_only=None, skipna=True, level=None)
-    check_unsupported_args("Series.any", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.any",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     def impl(S, axis=0, bool_only=None, skipna=True, level=None):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -471,7 +501,13 @@ def overload_series_all(S, axis=0, bool_only=None, skipna=True, level=None):
 
     unsupported_args = dict(axis=axis, bool_only=bool_only, skipna=skipna, level=level)
     arg_defaults = dict(axis=0, bool_only=None, skipna=True, level=None)
-    check_unsupported_args("Series.all", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.all",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     def impl(S, axis=0, bool_only=None, skipna=True, level=None):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -492,7 +528,13 @@ def overload_series_mad(S, axis=None, skipna=True, level=None):
 
     unsupported_args = dict(axis=axis, level=level)
     arg_defaults = dict(axis=None, level=None)
-    check_unsupported_args("Series.mad", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.mad",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.mad(): axis argument not supported")
@@ -549,7 +591,13 @@ def overload_series_mean(S, axis=None, skipna=None, level=None, numeric_only=Non
         raise BodoError(f"Series.mean(): Series with type '{S}' not supported")
     unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
     arg_defaults = dict(skipna=None, level=None, numeric_only=None)
-    check_unsupported_args("Series.mean", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.mean",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.mean(): axis argument not supported")
@@ -570,7 +618,13 @@ def overload_series_sem(
 
     unsupported_args = dict(level=level, numeric_only=numeric_only)
     arg_defaults = dict(level=None, numeric_only=None)
-    check_unsupported_args("Series.sem", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.sem",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.sem(): axis argument not supported")
@@ -610,7 +664,13 @@ def overload_series_kurt(S, axis=0, skipna=True, level=None, numeric_only=None):
 
     unsupported_args = dict(axis=axis, level=level, numeric_only=numeric_only)
     arg_defaults = dict(axis=0, level=None, numeric_only=None)
-    check_unsupported_args("Series.kurtosis", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.kurtosis",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     def impl(S, axis=0, skipna=True, level=None, numeric_only=None):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -647,7 +707,13 @@ def overload_series_skew(S, axis=None, skipna=True, level=None, numeric_only=Non
 
     unsupported_args = dict(level=level, numeric_only=numeric_only)
     arg_defaults = dict(level=None, numeric_only=None)
-    check_unsupported_args("Series.skew", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.skew",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.skew(): axis argument not supported")
@@ -686,7 +752,13 @@ def overload_series_var(
 
     unsupported_args = dict(level=level, numeric_only=numeric_only)
     arg_defaults = dict(level=None, numeric_only=None)
-    check_unsupported_args("Series.var", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.var",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.var(): axis argument not supported")
@@ -707,7 +779,13 @@ def overload_series_std(
 
     unsupported_args = dict(level=level, numeric_only=numeric_only)
     arg_defaults = dict(level=None, numeric_only=None)
-    check_unsupported_args("Series.std", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.std",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.std(): axis argument not supported")
@@ -743,7 +821,13 @@ def overload_series_cumsum(S, axis=0, skipna=True):
 
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=0, skipna=True)
-    check_unsupported_args("Series.cumsum", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.cumsum",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # TODO: support skipna
     def impl(S, axis=0, skipna=True):  # pragma: no cover
@@ -760,7 +844,13 @@ def overload_series_cumprod(S, axis=0, skipna=True):
 
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=0, skipna=True)
-    check_unsupported_args("Series.cumprod", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.cumprod",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # TODO: support skipna
     def impl(S, axis=0, skipna=True):  # pragma: no cover
@@ -776,7 +866,13 @@ def overload_series_cumprod(S, axis=0, skipna=True):
 def overload_series_cummin(S, axis=0, skipna=True):
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=0, skipna=True)
-    check_unsupported_args("Series.cummax", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.cummin",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # TODO: support skipna
     #
@@ -802,7 +898,13 @@ def overload_series_cummax(S, axis=0, skipna=True):
 
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=0, skipna=True)
-    check_unsupported_args("Series.cummax", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.cummax",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # Remarks for cummin applies here.
     # TODO: support skipna
@@ -829,7 +931,13 @@ def overload_series_rename(
 
     unsupported_args = dict(copy=copy, inplace=inplace, level=level, errors=errors)
     arg_defaults = dict(copy=True, inplace=False, level=None, errors="ignore")
-    check_unsupported_args("Series.rename", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.rename",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # Pandas ignores axis value entirely (in both implementation and documented)
     # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.rename.html
@@ -863,7 +971,13 @@ def overload_series_count(S, level=None):
 
     unsupported_args = dict(level=level)
     arg_defaults = dict(level=None)
-    check_unsupported_args("Series.count", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.count",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     def impl(S, level=None):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -877,7 +991,13 @@ def overload_series_corr(S, other, method="pearson", min_periods=None):
 
     unsupported_args = dict(method=method, min_periods=min_periods)
     arg_defaults = dict(method="pearson", min_periods=None)
-    check_unsupported_args("Series.corr", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.corr",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     def impl(S, other, method="pearson", min_periods=None):  # pragma: no cover
         n = S.count()
@@ -900,7 +1020,13 @@ def overload_series_cov(S, other, min_periods=None, ddof=1):
 
     unsupported_args = dict(min_periods=min_periods)
     arg_defaults = dict(min_periods=None)
-    check_unsupported_args("Series.cov", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.cov",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # TODO: use online algorithm, e.g. StatFunctions.scala
     # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
@@ -944,7 +1070,13 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
 
     unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
     arg_defaults = dict(skipna=None, level=None, numeric_only=None)
-    check_unsupported_args("Series.min", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.min",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):
         raise BodoError("Series.min(): axis argument not supported")
@@ -1009,7 +1141,13 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
 
     unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
     arg_defaults = dict(skipna=None, level=None, numeric_only=None)
-    check_unsupported_args("Series.max", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.max",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.max(): axis argument not supported")
@@ -1032,7 +1170,13 @@ def overload_series_idxmin(S, axis=0, skipna=True):
 
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=0, skipna=True)
-    check_unsupported_args("Series.idxmin", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.idxmin",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # TODO: Make sure we handle the issue with numpy library leading to argmin
     # https://github.com/pandas-dev/pandas/blob/7d32926db8f7541c356066dcadabf854487738de/pandas/compat/numpy/function.py#L91
@@ -1073,7 +1217,13 @@ def overload_series_idxmax(S, axis=0, skipna=True):
 
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=0, skipna=True)
-    check_unsupported_args("Series.idxmax", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.idxmax",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # TODO: Make sure we handle the issue with numpy library leading to argmax
     # https://github.com/pandas-dev/pandas/blob/7d32926db8f7541c356066dcadabf854487738de/pandas/compat/numpy/function.py#L103
@@ -1143,7 +1293,13 @@ def overload_series_autocorr(S, lag=1):
 def overload_series_median(S, axis=None, skipna=True, level=None, numeric_only=None):
     unsupported_args = dict(level=level, numeric_only=numeric_only)
     arg_defaults = dict(level=None, numeric_only=None)
-    check_unsupported_args("Series.median", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.median",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("Series.median(): axis argument not supported")
@@ -1207,7 +1363,13 @@ def overload_series_nlargest(S, n=5, keep="first"):
     # TODO: support and test keep semantics
     unsupported_args = dict(keep=keep)
     arg_defaults = dict(keep="first")
-    check_unsupported_args("Series.nlargest", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.nlargest",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     def impl(S, n=5, keep="first"):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -1229,7 +1391,13 @@ def overload_series_nsmallest(S, n=5, keep="first"):
 
     unsupported_args = dict(keep=keep)
     arg_defaults = dict(keep="first")
-    check_unsupported_args("Series.nsmallest", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.nsmallest",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     def impl(S, n=5, keep="first"):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -1257,7 +1425,13 @@ def overload_series_astype(S, dtype, copy=True, errors="raise", _bodo_nan_to_str
 
     unsupported_args = dict(errors=errors)
     arg_defaults = dict(errors="raise")
-    check_unsupported_args("Series.astype", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.astype",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # If dtype is a string, force it to be a literal
     if dtype == types.unicode_type:
@@ -1287,7 +1461,13 @@ def overload_series_take(S, indices, axis=0, is_copy=True):
 
     unsupported_args = dict(axis=axis, is_copy=is_copy)
     arg_defaults = dict(axis=0, is_copy=True)
-    check_unsupported_args("Series.take", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.take",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # Pandas requirement: Indices must be array like with integers
     if not (is_iterable_type(indices) and isinstance(indices.dtype, types.Integer)):
@@ -1316,7 +1496,13 @@ def overload_series_argsort(S, axis=0, kind="quicksort", order=None):
 
     unsupported_args = dict(axis=axis, kind=kind, order=order)
     arg_defaults = dict(axis=0, kind="quicksort", order=None)
-    check_unsupported_args("Series.argsort", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.argsort",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     def impl(S, axis=0, kind="quicksort", order=None):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -1365,7 +1551,13 @@ def overload_series_sort_index(
         ignore_index=False,
         key=None,
     )
-    check_unsupported_args("Series.sort_index", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.sort_index",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # reusing dataframe sort_index() in implementation.
     # TODO(ehsan): use a direct kernel to avoid compilation overhead
@@ -1422,7 +1614,13 @@ def overload_series_sort_values(
         ignore_index=False,
         key=None,
     )
-    check_unsupported_args("Series.sort_values", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.sort_values",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # reusing dataframe sort_values() in implementation.
     # TODO(ehsan): use a direct kernel to avoid compilation overhead
@@ -1658,7 +1856,13 @@ def overload_series_value_counts(
 ):
     unsupported_args = dict(dropna=dropna)
     arg_defaults = dict(dropna=True)
-    check_unsupported_args("Series.value_counts", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.value_counts",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     is_bins = not is_overload_none(bins)
 
@@ -1788,7 +1992,13 @@ def overload_cut(
         duplicates="raise",
         ordered=True,
     )
-    check_unsupported_args("pd.cut", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "pandas.cut",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="General",
+    )
 
     # TODO(ehsan): some helper functions support 'right' but more work is needed
     func_text = "def impl(\n"
@@ -1884,7 +2094,13 @@ def overload_qcut(
         precision=3,
         duplicates="raise",
     )
-    check_unsupported_args("pd.qcut", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "pandas.qcut",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="General",
+    )
     # TODO: Check that q is all floats if iterable (or ints for [0, 1] edge case).
     if not (is_overload_int(q) or is_iterable_type(q)):
         raise BodoError("pd.qcut(): 'q' should be an integer or a list of quantiles")
@@ -1930,7 +2146,13 @@ def overload_series_groupby(
     arg_defaults = dict(
         axis=0, sort=True, group_keys=True, squeeze=False, observed=True, dropna=True
     )
-    check_unsupported_args("Series.groupby", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.groupby",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="GroupBy",
+    )
 
     if not is_overload_true(as_index):  # pragma: no cover
         raise BodoError("as_index=False only valid with DataFrame")
@@ -2029,7 +2251,13 @@ def overload_series_groupby(
 def overload_series_append(S, to_append, ignore_index=False, verify_integrity=False):
     unsupported_args = dict(verify_integrity=verify_integrity)
     arg_defaults = dict(verify_integrity=False)
-    check_unsupported_args("Series.append", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.append",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # call pd.concat()
     # single Series case
@@ -2095,7 +2323,13 @@ def overload_series_quantile(S, q=0.5, interpolation="linear"):
 
     unsupported_args = dict(interpolation=interpolation)
     arg_defaults = dict(interpolation="linear")
-    check_unsupported_args("Series.quantile", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.quantile",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # TODO: [BE-623] q value should be between 0 and 1 only
     # Pandas API says float or iterable of floats. It allows 0 and 1.
@@ -2167,7 +2401,13 @@ def overload_series_describe(
     arg_defaults = dict(
         percentiles=None, include=None, exclude=None, datetime_is_numeric=True
     )
-    check_unsupported_args("Series.describe", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.describe",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # This check is needed for S.describe(), even though it's redundant if coming from df.describe()
     # Bodo limitations for supported types
@@ -2440,7 +2680,13 @@ def overload_series_fillna(
 ):
     unsupported_args = dict(limit=limit, downcast=downcast)
     arg_defaults = dict(limit=None, downcast=None)
-    check_unsupported_args("Series.series_fillna", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.fillna",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     is_value_provided = not is_overload_none(value)
     is_method_provided = not is_overload_none(method)
@@ -2452,7 +2698,7 @@ def overload_series_fillna(
         raise BodoError("Series.fillna(): Must specify one of 'value' and 'method'.")
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):
-        raise BodoError("Series.min(): axis argument not supported")
+        raise BodoError("Series.fillna(): axis argument not supported")
     elif is_iterable_type(value) and not isinstance(value, SeriesType):
         raise BodoError('Series.fillna(): "value" parameter cannot be a list')
     # Pandas doesn't support fillna for non-scalar values as of 1.1.0
@@ -2630,7 +2876,11 @@ def create_fillna_specific_method_overload(overload_name):
         unsupported_args = dict(limit=limit, downcast=downcast)
         arg_defaults = dict(limit=None, downcast=None)
         check_unsupported_args(
-            f"Series.{overload_name}", unsupported_args, arg_defaults
+            f"Series.{overload_name}",
+            unsupported_args,
+            arg_defaults,
+            package_name="pandas",
+            module_name="Series",
         )
 
         if not (is_overload_none(axis) or is_overload_zero(axis)):
@@ -2708,7 +2958,13 @@ def series_replace_error_checking(S, to_replace, value, inplace, limit, regex, m
     """Carry out error checking for Series.replace()"""
     unsupported_args = dict(inplace=inplace, limit=limit, regex=regex, method=method)
     replace_defaults = dict(inplace=False, limit=None, regex=False, method="pad")
-    check_unsupported_args("Series.replace", unsupported_args, replace_defaults)
+    check_unsupported_args(
+        "Series.replace",
+        unsupported_args,
+        replace_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
     check_unsupported_types(S, to_replace, value)
 
 
@@ -2999,7 +3255,13 @@ def overload_series_explode(S, ignore_index=False):
 
     unsupported_args = dict(ignore_index=ignore_index)
     merge_defaults = dict(ignore_index=False)
-    check_unsupported_args("Series.explode", unsupported_args, merge_defaults)
+    check_unsupported_args(
+        "Series.explode",
+        unsupported_args,
+        merge_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if not (
         isinstance(S.data, ArrayItemArrayType) or S.data == string_array_split_view_type
@@ -3104,7 +3366,13 @@ def overload_series_dropna(S, axis=0, inplace=False):
 
     unsupported_args = dict(axis=axis, inplace=inplace)
     merge_defaults = dict(axis=0, inplace=False)
-    check_unsupported_args("Series.dropna", unsupported_args, merge_defaults)
+    check_unsupported_args(
+        "Series.dropna",
+        unsupported_args,
+        merge_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     if S.dtype == bodo.string_type:
 
@@ -3140,7 +3408,13 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
 
     unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
     arg_defaults = dict(freq=None, axis=0, fill_value=None)
-    check_unsupported_args("Series.shift", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.shift",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int, dt64, and nullable int/bool/decimal/date
@@ -3170,7 +3444,13 @@ def overload_series_pct_change(S, periods=1, fill_method="pad", limit=None, freq
 
     unsupported_args = dict(fill_method=fill_method, limit=limit, freq=freq)
     arg_defaults = dict(fill_method="pad", limit=None, freq=None)
-    check_unsupported_args("Series.pct_change", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.pct_change",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # TODO: handle dt64, strings
     def impl(
@@ -3298,7 +3578,13 @@ def _validate_arguments_mask_where(
         inplace=inplace, level=level, errors=errors, try_cast=try_cast
     )
     arg_defaults = dict(inplace=False, level=None, errors="raise", try_cast=False)
-    check_unsupported_args(f"{func_name}", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        f"{func_name}",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError(f"{func_name}(): axis argument not supported")
 
@@ -3442,7 +3728,11 @@ def create_explicit_binary_op_overload(op):
         unsupported_args = dict(level=level, axis=axis)
         arg_defaults = dict(level=None, axis=0)
         check_unsupported_args(
-            "series.{}".format(op.__name__), unsupported_args, arg_defaults
+            "series.{}".format(op.__name__),
+            unsupported_args,
+            arg_defaults,
+            package_name="pandas",
+            module_name="Series",
         )
 
         is_str_scalar_other = other == string_type or is_overload_constant_str(other)
@@ -4581,7 +4871,13 @@ def overload_series_repeat(S, repeats, axis=None):
 
     unsupported_args = dict(axis=axis)
     arg_defaults = dict(axis=None)
-    check_unsupported_args("Series.repeat", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.repeat",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
 
     # repeats can be int or array of int
     if not (

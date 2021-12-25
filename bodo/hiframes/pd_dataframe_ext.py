@@ -432,7 +432,13 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
 
         unsupported_args = dict(raw=raw, result_type=result_type)
         merge_defaults = dict(raw=False, result_type=None)
-        check_unsupported_args("Dataframe.apply", unsupported_args, merge_defaults)
+        check_unsupported_args(
+            "Dataframe.apply",
+            unsupported_args,
+            merge_defaults,
+            package_name="pandas",
+            module_name="DataFrame",
+        )
 
         # Is the function a UDF or a builtin
         is_udf = True
@@ -2083,7 +2089,13 @@ def concat_overload(
         sort=None,
         copy=True,
     )
-    check_unsupported_args("pd.concat", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "pandas.concat",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="General",
+    )
 
     func_text = (
         "def impl(objs, axis=0, join='outer', join_axes=None, "
@@ -2319,7 +2331,13 @@ def itertuples_overload(df, index=True, name="Pandas"):
 
     unsupported_args = dict(index=index, name=name)
     arg_defaults = dict(index=True, name="Pandas")
-    check_unsupported_args("DataFrame.itertuples", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.itertuples",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     def _impl(df, index=True, name="Pandas"):  # pragma: no cover
         return bodo.hiframes.pd_dataframe_ext.itertuples_dummy(df)
@@ -2522,6 +2540,8 @@ def to_parquet_overload(
         {
             "storage_options": None,
         },
+        package_name="pandas",
+        module_name="IO",
     )
 
     if not is_overload_none(engine) and get_overload_const_str(engine) not in (
@@ -2800,7 +2820,13 @@ def to_sql_overload(
 ):
     unsupported_args = dict(chunksize=chunksize)
     arg_defaults = dict(chunksize=None)
-    check_unsupported_args("to_sql", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "to_sql",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="IO",
+    )
 
     def _impl(
         df,
@@ -2889,6 +2915,8 @@ def to_csv_overload(
             "errors": "strict",
             "storage_options": None,
         },
+        package_name="pandas",
+        module_name="IO",
     )
 
     if not (
@@ -3059,6 +3087,8 @@ def to_json_overload(
         {
             "storage_options": None,
         },
+        package_name="pandas",
+        module_name="IO",
     )
 
     # TODO: refactor when objmode() can understand global string constant
@@ -3194,10 +3224,16 @@ def get_dummies(
         "drop_first": False,
         "dtype": None,
     }
-    check_unsupported_args("pd.get_dummies", args_dict, args_default_dict)
+    check_unsupported_args(
+        "pandas.get_dummies",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+        module_name="General",
+    )
     if not categorical_can_construct_dataframe(data):
         raise BodoError(
-            "pd.get_dummies() only support categorical data types with explicitly known categories"
+            "pandas.get_dummies() only support categorical data types with explicitly known categories"
         )
 
     func_text = "def impl(data, prefix=None, prefix_sep='_', dummy_na=False, columns=None, sparse=False, drop_first=False, dtype=None,):\n"

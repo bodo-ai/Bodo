@@ -539,7 +539,11 @@ def get_agg_typ(
                     )
                     arg_defaults = dict(numeric_only=False, min_count=-1)
                     check_unsupported_args(
-                        f"Groupby.{func_name}", unsupported_args, arg_defaults
+                        f"Groupby.{func_name}",
+                        unsupported_args,
+                        arg_defaults,
+                        package_name="pandas",
+                        module_name="GroupBy",
                     )
 
                 elif func_name in ("sum", "prod"):
@@ -555,7 +559,11 @@ def get_agg_typ(
                     )
                     arg_defaults = dict(numeric_only=True, min_count=0)
                     check_unsupported_args(
-                        f"Groupby.{func_name}", unsupported_args, arg_defaults
+                        f"Groupby.{func_name}",
+                        unsupported_args,
+                        arg_defaults,
+                        package_name="pandas",
+                        module_name="GroupBy",
                     )
                 elif func_name in ("mean", "median"):
                     kws = dict(kws) if kws else {}
@@ -567,7 +575,11 @@ def get_agg_typ(
                     unsupported_args = dict(numeric_only=numeric_only)
                     arg_defaults = dict(numeric_only=True)
                     check_unsupported_args(
-                        f"Groupby.{func_name}", unsupported_args, arg_defaults
+                        f"Groupby.{func_name}",
+                        unsupported_args,
+                        arg_defaults,
+                        package_name="pandas",
+                        module_name="GroupBy",
                     )
                 elif func_name in ("idxmin", "idxmax"):
                     kws = dict(kws) if kws else {}
@@ -578,7 +590,11 @@ def get_agg_typ(
                     unsupported_args = dict(axis=axis, skipna=skipna)
                     arg_defaults = dict(axis=0, skipna=True)
                     check_unsupported_args(
-                        f"Groupby.{func_name}", unsupported_args, arg_defaults
+                        f"Groupby.{func_name}",
+                        unsupported_args,
+                        arg_defaults,
+                        package_name="pandas",
+                        module_name="GroupBy",
                     )
                 elif func_name in ("var", "std"):
                     kws = dict(kws) if kws else {}
@@ -588,7 +604,11 @@ def get_agg_typ(
                     unsupported_args = dict(ddof=ddof)
                     arg_defaults = dict(ddof=1)
                     check_unsupported_args(
-                        f"Groupby.{func_name}", unsupported_args, arg_defaults
+                        f"Groupby.{func_name}",
+                        unsupported_args,
+                        arg_defaults,
+                        package_name="pandas",
+                        module_name="GroupBy",
                     )
                 elif func_name == "nunique":
                     kws = dict(kws) if kws else {}
@@ -920,7 +940,11 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         unsupported_args = dict(axis=axis, numeric_only=numeric_only)
         arg_defaults = dict(axis=0, numeric_only=False)
         check_unsupported_args(
-            f"Groupby.{name_operation}", unsupported_args, arg_defaults
+            f"Groupby.{name_operation}",
+            unsupported_args,
+            arg_defaults,
+            package_name="pandas",
+            module_name="GroupBy",
         )
         check_args_kwargs(name_operation, 3, args, kws)
     elif name_operation == "shift":
@@ -933,7 +957,11 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
         arg_defaults = dict(freq=None, axis=0, fill_value=None)
         check_unsupported_args(
-            f"Groupby.{name_operation}", unsupported_args, arg_defaults
+            f"Groupby.{name_operation}",
+            unsupported_args,
+            arg_defaults,
+            package_name="pandas",
+            module_name="GroupBy",
         )
         check_args_kwargs(name_operation, 4, args, kws)
     elif name_operation == "transform":
@@ -944,7 +972,13 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         engine_kwargs = kws.pop("engine_kwargs", None)
         unsupported_args = dict(engine=engine, engine_kwargs=engine_kwargs)
         arg_defaults = dict(engine=None, engine_kwargs=None)
-        check_unsupported_args(f"Groupby.transform", unsupported_args, arg_defaults)
+        check_unsupported_args(
+            f"Groupby.transform",
+            unsupported_args,
+            arg_defaults,
+            package_name="pandas",
+            module_name="GroupBy",
+        )
 
     gb_info = {}
     for c in grp.selection:
@@ -1821,7 +1855,13 @@ def groupby_value_counts(
 
     unsupported_args = dict(normalize=normalize, sort=sort, bins=bins, dropna=dropna)
     arg_defaults = dict(normalize=False, sort=True, bins=None, dropna=True)
-    check_unsupported_args("Groupby.value_counts", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Groupby.value_counts",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="GroupBy",
+    )
 
     # Pandas restriction: value_counts work on SeriesGroupBy only so only one column selection is allowed
     if (len(grp.selection) > 1) or (not grp.as_index):

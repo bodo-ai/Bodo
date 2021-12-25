@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -32,3 +33,30 @@ def test_bcast_scalar_type_error():
     message = r"bcast_scalar requires an argument of type Integer, Float, datetime64ns, timedelta64ns, string, None, or Bool. Found type.*"
     with pytest.raises(BodoError, match=message):
         bodo.jit(test_impl)()
+
+
+def test_date_range_unsupported(memory_leak_check):
+    """
+    Tests an unsupported arguement for pd.date_range()
+    """
+
+    def test_impl():
+        return pd.date_range(start="1/1/2018", periods=5, tz="Asia/Tokyo")
+
+    message = "tz parameter only supports default value None"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(test_impl)()
+
+
+def test_np_sort_unsupported(memory_leak_check):
+    """
+    Tests an unsupported arguement for np.sort()
+    """
+
+    def test_impl(arr):
+        return np.sort(arr, kind="heapsort")
+
+    message = "kind parameter only supports default value None"
+    arr = pd.array(np.arange(100), dtype="Int64")
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(test_impl)(arr)

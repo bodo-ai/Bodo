@@ -6,7 +6,6 @@ from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
 
 
-@pytest.mark.slow
 def test_from_product_tuple():
     def impl():
         numbers = [0, 1, 2]

@@ -188,7 +188,13 @@ def overload_dataframe_to_numpy(df, dtype=None, copy=False, na_value=_no_input):
         "dtype": None,
         "na_value": _no_input,
     }
-    check_unsupported_args("DataFrame.to_numpy", args_dict, args_default_dict)
+    check_unsupported_args(
+        "DataFrame.to_numpy",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     def impl(df, dtype=None, copy=False, na_value=_no_input):  # pragma: no cover
         return df.values
@@ -304,7 +310,13 @@ def overload_dataframe_astype(
         "errors": errors,
     }
     args_default_dict = {"copy": True, "errors": "raise"}
-    check_unsupported_args("df.astype", args_dict, args_default_dict)
+    check_unsupported_args(
+        "df.astype",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     # If dtype is a string, force it to be a literal
     if dtype == types.unicode_type:
@@ -377,7 +389,13 @@ def overload_dataframe_rename(
     }
     args_default_dict = {"index": None, "level": None, "errors": "ignore"}
 
-    check_unsupported_args("DataFrame.rename", args_dict, args_default_dict)
+    check_unsupported_args(
+        "DataFrame.rename",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     if not (is_overload_constant_bool(inplace)):
         raise BodoError(
@@ -890,7 +908,13 @@ def overload_dataframe_cov(df, min_periods=None, ddof=1):
 
     unsupported_args = dict(ddof=ddof)
     arg_defaults = dict(ddof=1)
-    check_unsupported_args("DataFrame.cov", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.cov",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     # TODO: support calling np.cov() when there is no NA
     minpv = "1" if is_overload_none(min_periods) else "min_periods"
@@ -937,7 +961,13 @@ def overload_dataframe_count(df, axis=0, level=None, numeric_only=False):
     # TODO: numeric_only flag
     unsupported_args = dict(axis=axis, level=level, numeric_only=numeric_only)
     arg_defaults = dict(axis=0, level=None, numeric_only=False)
-    check_unsupported_args("DataFrame.count", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.count",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     data_args = ", ".join(
         f"bodo.libs.array_ops.array_op_count(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}))"
@@ -961,7 +991,13 @@ def overload_dataframe_nunique(df, axis=0, dropna=True):
     arg_defaults = dict(axis=0)
     if not is_overload_bool(dropna):
         raise BodoError("DataFrame.nunique: dropna must be a boolean value")
-    check_unsupported_args("DataFrame.nunique", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.nunique",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
     data_args = ", ".join(
         f"bodo.libs.array_kernels.nunique(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), dropna)"
         for i in range(len(df.columns))
@@ -988,7 +1024,13 @@ def overload_dataframe_prod(
         skipna=skipna, level=level, numeric_only=numeric_only, min_count=min_count
     )
     arg_defaults = dict(skipna=None, level=None, numeric_only=None, min_count=0)
-    check_unsupported_args("DataFrame.prod/product", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.prod",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     return _gen_reduce_impl(df, "prod", axis=axis)
 
@@ -1002,7 +1044,13 @@ def overload_dataframe_sum(
         skipna=skipna, level=level, numeric_only=numeric_only, min_count=min_count
     )
     arg_defaults = dict(skipna=None, level=None, numeric_only=None, min_count=0)
-    check_unsupported_args("DataFrame.sum", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.sum",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     return _gen_reduce_impl(df, "sum", axis=axis)
 
@@ -1012,7 +1060,13 @@ def overload_dataframe_max(df, axis=None, skipna=None, level=None, numeric_only=
 
     unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
     arg_defaults = dict(skipna=None, level=None, numeric_only=None)
-    check_unsupported_args("DataFrame.max", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.max",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     return _gen_reduce_impl(df, "max", axis=axis)
 
@@ -1022,7 +1076,13 @@ def overload_dataframe_min(df, axis=None, skipna=None, level=None, numeric_only=
 
     unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
     arg_defaults = dict(skipna=None, level=None, numeric_only=None)
-    check_unsupported_args("DataFrame.min", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.min",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     return _gen_reduce_impl(df, "min", axis=axis)
 
@@ -1032,7 +1092,13 @@ def overload_dataframe_mean(df, axis=None, skipna=None, level=None, numeric_only
 
     unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
     arg_defaults = dict(skipna=None, level=None, numeric_only=None)
-    check_unsupported_args("DataFrame.mean", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.mean",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     return _gen_reduce_impl(df, "mean", axis=axis)
 
@@ -1046,7 +1112,13 @@ def overload_dataframe_var(
         skipna=skipna, level=level, ddof=ddof, numeric_only=numeric_only
     )
     arg_defaults = dict(skipna=None, level=None, ddof=1, numeric_only=None)
-    check_unsupported_args("DataFrame.mean", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.var",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     return _gen_reduce_impl(df, "var", axis=axis)
 
@@ -1060,7 +1132,13 @@ def overload_dataframe_std(
         skipna=skipna, level=level, ddof=ddof, numeric_only=numeric_only
     )
     arg_defaults = dict(skipna=None, level=None, ddof=1, numeric_only=None)
-    check_unsupported_args("DataFrame.std", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.std",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     return _gen_reduce_impl(df, "std", axis=axis)
 
@@ -1072,7 +1150,13 @@ def overload_dataframe_median(
 
     unsupported_args = dict(skipna=skipna, level=level, numeric_only=numeric_only)
     arg_defaults = dict(skipna=None, level=None, numeric_only=None)
-    check_unsupported_args("DataFrame.median", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.median",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     return _gen_reduce_impl(df, "median", axis=axis)
 
@@ -1084,7 +1168,13 @@ def overload_dataframe_quantile(
 
     unsupported_args = dict(numeric_only=numeric_only, interpolation=interpolation)
     arg_defaults = dict(numeric_only=True, interpolation="linear")
-    check_unsupported_args("DataFrame.quantile", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.quantile",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     # TODO: name is str(q)
     return _gen_reduce_impl(df, "quantile", "q", axis=axis)
@@ -1096,7 +1186,13 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
     # TODO: [BE-281] Support idxmax with axis=1
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=0, skipna=True)
-    check_unsupported_args("DataFrame.idxmax", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.idxmax",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     # Pandas restrictions:
     # Only supported for numeric types with numpy arrays
@@ -1127,7 +1223,13 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
     # TODO: [BE-281] Support idxmin with axis=1
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=0, skipna=True)
-    check_unsupported_args("DataFrame.idxmin", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.idxmin",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     # Pandas restrictions:
     # Only supported for numeric types with numpy arrays
@@ -1355,7 +1457,13 @@ def overload_dataframe_pct_change(
 
     unsupported_args = dict(fill_method=fill_method, limit=limit, freq=freq)
     arg_defaults = dict(fill_method="pad", limit=None, freq=None)
-    check_unsupported_args("DataFrame.pct_change", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.pct_change",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     data_args = ", ".join(
         f"bodo.hiframes.rolling.pct_change(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), periods, False)"
@@ -1369,7 +1477,13 @@ def overload_dataframe_pct_change(
 def overload_dataframe_cumprod(df, axis=None, skipna=True):
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=None, skipna=True)
-    check_unsupported_args("DataFrame.cumprod", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.cumprod",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     data_args = ", ".join(
         f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}).cumprod()"
@@ -1383,7 +1497,13 @@ def overload_dataframe_cumprod(df, axis=None, skipna=True):
 def overload_dataframe_cumsum(df, axis=None, skipna=True):
     unsupported_args = dict(skipna=skipna)
     arg_defaults = dict(skipna=True)
-    check_unsupported_args("DataFrame.cumsum", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.cumsum",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     data_args = ", ".join(
         f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}).cumsum()"
@@ -1422,7 +1542,13 @@ def overload_dataframe_describe(
     arg_defaults = dict(
         percentiles=None, include=None, exclude=None, datetime_is_numeric=True
     )
-    check_unsupported_args("DataFrame.describe", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.describe",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     # By default, For mixed data types columns Pandas return only an analysis of numeric columns(i.e. remove non-numeric columns)
     # Drop any non-Bodo supported columns (only keep: int, float, and nullable int)
@@ -1473,7 +1599,13 @@ def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
 
     unsupported_args = dict(axis=axis, convert=convert, is_copy=is_copy)
     arg_defaults = dict(axis=0, convert=None, is_copy=True)
-    check_unsupported_args("DataFrame.take", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.take",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     data_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[indices_t]".format(i)
@@ -1491,7 +1623,13 @@ def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
     # TODO: Support nullable integer/float types
     unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
     arg_defaults = dict(freq=None, axis=0, fill_value=None)
-    check_unsupported_args("DataFrame.shift", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.shift",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int (not nullable), and dt64 are supported
@@ -1520,7 +1658,13 @@ def overload_dataframe_diff(df, periods=1, axis=0):
     # TODO: Support nullable integer/float types
     unsupported_args = dict(axis=axis)
     arg_defaults = dict(axis=0)
-    check_unsupported_args("DataFrame.diff", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.diff",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int (not nullable), and dt64 are supported
@@ -1567,7 +1711,13 @@ def overload_dataframe_set_index(
     }
     args_default_dict = {"inplace": False, "append": False, "verify_integrity": False}
 
-    check_unsupported_args("DataFrame.set_index", args_dict, args_default_dict)
+    check_unsupported_args(
+        "DataFrame.set_index",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     # Column name only supproted on constant string
     if not is_overload_constant_str(keys):
@@ -1608,7 +1758,13 @@ def overload_dataframe_query(df, expr, inplace=False):
         "inplace": False,
     }
 
-    check_unsupported_args("query", args_dict, args_default_dict)
+    check_unsupported_args(
+        "query",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     # check expr is of type string
     if not isinstance(expr, (types.StringLiteral, types.UnicodeType)):
@@ -1635,7 +1791,13 @@ def overload_dataframe_duplicated(df, subset=None, keep="first"):
         "keep": "first",
     }
 
-    check_unsupported_args("DataFrame.duplicated", args_dict, args_default_dict)
+    check_unsupported_args(
+        "DataFrame.duplicated",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     n_cols = len(df.columns)
 
@@ -1695,7 +1857,13 @@ def overload_dataframe_drop_duplicates(
             )
         subset_idx.append(df.columns.index(col_name))
 
-    check_unsupported_args("DataFrame.drop_duplicates", args_dict, args_default_dict)
+    check_unsupported_args(
+        "DataFrame.drop_duplicates",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     # dict_cols are columns with dictionaries that don't have drop_duplicates
     # implemented because dictionaries may not have the same order. We can
@@ -2210,7 +2378,13 @@ def overload_dataframe_replace(
         "method": "pad",
     }
 
-    check_unsupported_args("replace", args_dict, args_default_dict)
+    check_unsupported_args(
+        "replace",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     data_args = ", ".join(
         f"df.iloc[:, {i}].replace(to_replace, value).values"
@@ -2471,7 +2645,13 @@ def overload_dataframe_merge(
     # Pandas does)
     unsupported_args = dict(sort=sort, copy=copy, validate=validate)
     arg_defaults = dict(sort=False, copy=True, validate=None)
-    check_unsupported_args("DataFrame.merge", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.merge",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     validate_merge_spec(
         left,
@@ -2918,7 +3098,13 @@ def overload_dataframe_join(
 
     unsupported_args = dict(lsuffix=lsuffix, rsuffix=rsuffix)
     arg_defaults = dict(lsuffix="", rsuffix="")
-    check_unsupported_args("DataFrame.join", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.join",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     validate_join_spec(left, other, on, how, lsuffix, rsuffix, sort)
 
@@ -3224,7 +3410,13 @@ def validate_groupby_spec(
     )
     args_defaults = dict(sort=False, group_keys=True, squeeze=False, observed=True)
 
-    check_unsupported_args("Dataframe.groupby", unsupported_args, args_defaults)
+    check_unsupported_args(
+        "Dataframe.groupby",
+        unsupported_args,
+        args_defaults,
+        package_name="pandas",
+        module_name="GroupBy",
+    )
 
 
 @overload_method(DataFrameType, "pivot_table", inline="always", no_unliteral=True)
@@ -3251,7 +3443,13 @@ def overload_dataframe_pivot_table(
     arg_defaults = dict(
         fill_value=None, margins=False, dropna=True, margins_name="All", observed=True
     )
-    check_unsupported_args("DataFrame.pivot_table", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.pivot_table",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     if aggfunc == "mean":
 
@@ -3331,7 +3529,13 @@ def crosstab_overload(
         dropna=True,
         normalize=False,
     )
-    check_unsupported_args("pandas.crosstab", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "pandas.crosstab",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
     # TODO: Add error checking on which Series Types are actually supported
     if not isinstance(index, SeriesType):
         raise BodoError(
@@ -3379,7 +3583,13 @@ def overload_dataframe_sort_values(
 ):
     unsupported_args = dict(ignore_index=ignore_index, key=key)
     arg_defaults = dict(ignore_index=False, key=None)
-    check_unsupported_args("DataFrame.sort_values", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.sort_values",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     # df type can change if inplace is set (e.g. RangeIndex to Int64Index)
     handle_inplace_df_type_change(inplace, _bodo_transformed, "sort_values")
@@ -3520,7 +3730,13 @@ def overload_dataframe_sort_index(
         ignore_index=False,
         key=None,
     )
-    check_unsupported_args("DataFrame.sort_index", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.sort_index",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     def _impl(
         df,
@@ -3548,7 +3764,13 @@ def overload_dataframe_fillna(
 ):
     unsupported_args = dict(limit=limit, downcast=downcast)
     arg_defaults = dict(limit=None, downcast=None)
-    check_unsupported_args("DataFrame.fillna", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.fillna",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise BodoError("DataFrame.fillna(): 'axis' argument not supported.")
@@ -3601,7 +3823,13 @@ def overload_dataframe_reset_index(
 
     unsupported_args = dict(col_level=col_level, col_fill=col_fill)
     arg_defaults = dict(col_level=0, col_fill="")
-    check_unsupported_args("DataFrame.reset_index", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.reset_index",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     handle_inplace_df_type_change(inplace, _bodo_transformed, "reset_index")
 
@@ -3743,7 +3971,13 @@ def overload_dataframe_drop(
 ):
     unsupported_args = dict(index=index, level=level, errors=errors)
     arg_defaults = dict(index=None, level=None, errors="raise")
-    check_unsupported_args("DataFrame.drop", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.drop",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
 
     handle_inplace_df_type_change(inplace, _bodo_transformed, "drop")
 
@@ -3865,9 +4099,17 @@ def overload_dataframe_sample(
     sample_defaults = dict(
         random_state=None, weights=None, axis=None, ignore_index=False
     )
-    check_unsupported_args("sample", unsupported_args, sample_defaults)
+    check_unsupported_args(
+        "DataFrame.sample",
+        unsupported_args,
+        sample_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
     if not is_overload_none(n) and not is_overload_none(frac):
-        raise BodoError("sample(): only one of n and frac option can be selected")
+        raise BodoError(
+            "DataFrame.sample(): only one of n and frac option can be selected"
+        )
 
     n_cols = len(df.columns)
     data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
@@ -3934,7 +4176,13 @@ def overload_dataframe_info(
         "show_counts": None,
         "null_counts": None,
     }
-    check_unsupported_args("DataFrame.info", args_dict, args_default_dict)
+    check_unsupported_args(
+        "DataFrame.info",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
     class_name = f"<class '{str(type(df)).split('.')[-1]}"
     # Empty dataframe
     if len(df.columns) == 0:

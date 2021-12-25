@@ -43,6 +43,22 @@ def test_fixed_index(test_df, memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(test_df), impl(test_df))
 
 
+def test_rolling_unsupported(test_df, memory_leak_check):
+    """
+    Test an unsupported argument for df.rolling
+    """
+
+    def impl(df):
+        return df.rolling(2, axis=1)
+
+    err_msg = "axis parameter only supports default value 0"
+    with pytest.raises(
+        BodoError,
+        match=err_msg,
+    ):
+        bodo.jit(impl)(test_df)
+
+
 # TODO [BE-1797]: Add memory leak check
 def test_fixed_index_groupby():
     def impl(df):

@@ -528,12 +528,21 @@ def ensure_constant_values(fname, arg_name, val, const_values):
 
 
 def check_unsupported_args(
-    fname, args_dict, arg_defaults_dict, package_name="pandas", fn_str=None
+    fname,
+    args_dict,
+    arg_defaults_dict,
+    package_name="pandas",
+    fn_str=None,
+    module_name="",
 ):
     """Check for unsupported arguments for function 'fname', and raise an error if any
     value other than the default is provided.
     'args_dict' is a dictionary of provided arguments in overload.
     'arg_defaults_dict' is a dictionary of default values for unsupported arguments.
+
+    'package_name' is used to differentiate by various libraries in documentation links (i.e. numpy, pandas)
+
+    'module_name' is used for libraries that are split into multiple different files per module.
     """
     from bodo.hiframes.datetime_timedelta_ext import _no_input
 
@@ -558,11 +567,33 @@ def check_unsupported_args(
             break
 
     if unsupported and package_name == "pandas":
-        error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/pandas.html).\n"
+        if module_name == "IO":
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/io.html).\n"
+        elif module_name == "General":
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/general.html).\n"
+        elif module_name == "DataFrame":
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/dataframe.html).\n"
+        elif module_name == "Window":
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/window.html).\n"
+        elif module_name == "GroupBy":
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/groupby.html).\n"
+        elif module_name == "Series":
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/series.html).\n"
+        elif module_name == "HeterogeneousSeries":
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/series.html#heterogeneous-series).\n"
+        elif module_name == "Index":
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/indexapi.html).\n"
+        elif module_name == "Timestamp":
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/timestamp.html).\n"
+        elif module_name == "Timedelta":
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/timedelta.html).\n"
+        elif module_name == "DateOffsets":
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/dateoffsets.html).\n"
+
     elif unsupported and package_name == "ml":
-        error_message += "\nPlease check supported ML operations here (https://docs.bodo.ai/latest/source/ml.html).\n"
+        error_message += "\nPlease check supported ML operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/ml.html).\n"
     elif unsupported and package_name == "numpy":
-        error_message += "\nPlease check supported Numpy operations here (https://docs.bodo.ai/latest/source/numpy.html).\n"
+        error_message += "\nPlease check supported Numpy operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/numpy.html).\n"
     if unsupported:
         raise BodoError(error_message)
 

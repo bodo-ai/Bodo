@@ -203,7 +203,12 @@ def overload_datetime_index_copy(A, name=None, deep=False, dtype=None, names=Non
     idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
     err_str = idx_typ_to_format_str_map[DatetimeIndexType].format("copy()")
     check_unsupported_args(
-        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+        "copy",
+        idx_cpy_unsupported_args,
+        idx_cpy_arg_defaults,
+        fn_str=err_str,
+        package_name="pandas",
+        module_name="Index",
     )
 
     if not is_overload_none(name):
@@ -419,7 +424,13 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
     # TODO skipna = False
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=None, skipna=True)
-    check_unsupported_args("DatetimeIndex.min", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DatetimeIndex.min",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -442,7 +453,13 @@ def overload_datetime_index_max(dti, axis=None, skipna=True):
     # TODO skipna = False
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=None, skipna=True)
-    check_unsupported_args("DatetimeIndex.max", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DatetimeIndex.max",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -507,7 +524,13 @@ def pd_datetimeindex_overload(
         dtype=None,
         copy=False,
     )
-    check_unsupported_args("pandas.DatetimeIndex", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "pandas.DatetimeIndex",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
 
     def f(
         data=None,
@@ -845,7 +868,13 @@ def pd_date_range_overload(
 
     unsupported_args = dict(tz=tz, normalize=normalize)
     arg_defaults = dict(tz=None, normalize=False)
-    check_unsupported_args("pd.date_range", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "pandas.date_range",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="General",
+    )
 
     if not is_overload_none(tz):
         raise BodoError("pd.date_range(): tz argument not supported yet")
@@ -1277,7 +1306,12 @@ def overload_timedelta_index_copy(A, name=None, deep=False, dtype=None, names=No
     idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
     err_str = idx_typ_to_format_str_map[TimedeltaIndexType].format("copy()")
     check_unsupported_args(
-        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+        "TimedeltaIndex.copy",
+        idx_cpy_unsupported_args,
+        idx_cpy_arg_defaults,
+        fn_str=err_str,
+        package_name="pandas",
+        module_name="Index",
     )
 
     if not is_overload_none(name):
@@ -1299,7 +1333,13 @@ def overload_timedelta_index_copy(A, name=None, deep=False, dtype=None, names=No
 def overload_timedelta_index_min(tdi, axis=None, skipna=True):
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=None, skipna=True)
-    check_unsupported_args("TimedeltaIndex.min", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "TimedeltaIndex.min",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
 
     def impl(tdi, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -1326,7 +1366,13 @@ def overload_timedelta_index_min(tdi, axis=None, skipna=True):
 def overload_timedelta_index_max(tdi, axis=None, skipna=True):
     unsupported_args = dict(axis=axis, skipna=skipna)
     arg_defaults = dict(axis=None, skipna=True)
-    check_unsupported_args("TimedeltaIndex.max", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "TimedeltaIndex.max",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
 
     if not is_overload_none(axis) or not is_overload_true(skipna):
         raise BodoError("Index.min(): axis and skipna arguments not supported yet")
@@ -1424,7 +1470,13 @@ def pd_timedelta_index_overload(
         copy=False,
     )
 
-    check_unsupported_args("pandas.TimedeltaIndex", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "pandas.TimedeltaIndex",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
 
     def impl(
         data=None,
@@ -1518,7 +1570,12 @@ def overload_range_index_copy(A, name=None, deep=False, dtype=None, names=None):
     idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
     err_str = idx_typ_to_format_str_map[RangeIndexType].format("copy()")
     check_unsupported_args(
-        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+        "RangeIndex.copy",
+        idx_cpy_unsupported_args,
+        idx_cpy_arg_defaults,
+        fn_str=err_str,
+        package_name="pandas",
+        module_name="Index",
     )
 
     if not is_overload_none(name):
@@ -1835,7 +1892,12 @@ def overload_period_index_copy(A, name=None, deep=False, dtype=None, names=None)
     idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
     err_str = idx_typ_to_format_str_map[PeriodIndexType].format("copy()")
     check_unsupported_args(
-        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+        "PeriodIndex.copy",
+        idx_cpy_unsupported_args,
+        idx_cpy_arg_defaults,
+        fn_str=err_str,
+        package_name="pandas",
+        module_name="Index",
     )
 
     if not is_overload_none(name):
@@ -2141,7 +2203,12 @@ def overload_categorical_index_copy(A, name=None, deep=False, dtype=None, names=
     err_str = idx_typ_to_format_str_map[CategoricalIndexType].format("copy()")
     idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
     check_unsupported_args(
-        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+        "CategoricalIndex.copy",
+        idx_cpy_unsupported_args,
+        idx_cpy_arg_defaults,
+        fn_str=err_str,
+        package_name="pandas",
+        module_name="Index",
     )
 
     if not is_overload_none(name):
@@ -2425,7 +2492,12 @@ def overload_numeric_index_copy(A, name=None, deep=False, dtype=None, names=None
     err_str = idx_typ_to_format_str_map[NumericIndexType].format("copy()")
     idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
     check_unsupported_args(
-        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+        "Index.copy",
+        idx_cpy_unsupported_args,
+        idx_cpy_arg_defaults,
+        fn_str=err_str,
+        package_name="pandas",
+        module_name="Index",
     )
 
     if not is_overload_none(name):
@@ -2540,7 +2612,13 @@ def create_numeric_constructor(func, func_str, default_dtype):
         # TODO: read through the pandas source code
         unsupported_args_dict = dict(dtype=dtype)
         default_dict = dict(dtype=None)
-        check_unsupported_args(func_str, unsupported_args_dict, default_dict)
+        check_unsupported_args(
+            func_str,
+            unsupported_args_dict,
+            default_dict,
+            package_name="pandas",
+            module_name="Index",
+        )
         if is_overload_false(copy):
             # if copy is False for sure, specialize to avoid branch
 
@@ -2859,7 +2937,12 @@ def overload_binary_string_index_copy(A, name=None, deep=False, dtype=None, name
     err_str = idx_typ_to_format_str_map[typ].format("copy()")
     idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
     check_unsupported_args(
-        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+        "Index.copy",
+        idx_cpy_unsupported_args,
+        idx_cpy_arg_defaults,
+        fn_str=err_str,
+        package_name="pandas",
+        module_name="Index",
     )
 
     if not is_overload_none(name):
@@ -2988,7 +3071,13 @@ def is_pd_index_type(t):
 def overload_index_take(I, indices, axis=0, allow_fill=True, fill_value=None):
     unsupported_args = dict(axis=axis, allow_fill=allow_fill, fill_value=fill_value)
     default_args = dict(axis=0, allow_fill=True, fill_value=None)
-    check_unsupported_args("pandas.Index.take", unsupported_args, default_args)
+    check_unsupported_args(
+        "Index.take",
+        unsupported_args,
+        default_args,
+        package_name="pandas",
+        module_name="Index",
+    )
     return lambda I, indices: I[indices]  # pragma: no cover
 
 
@@ -3052,7 +3141,13 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
     """
     unsupported_args = dict(method=method, tolerance=tolerance)
     arg_defaults = dict(method=None, tolerance=None)
-    check_unsupported_args("Index.get_loc", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Index.get_loc",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
 
     # Timestamp/Timedelta types are handled the same as datetime64/timedelta64
     key = types.unliteral(key)
@@ -3550,7 +3645,12 @@ def overload_heter_index_copy(A, name=None, deep=False, dtype=None, names=None):
     err_str = idx_typ_to_format_str_map[HeterogeneousIndexType].format("copy()")
     idx_cpy_unsupported_args = dict(deep=deep, dtype=dtype, names=names)
     check_unsupported_args(
-        "copy", idx_cpy_unsupported_args, idx_cpy_arg_defaults, fn_str=err_str
+        "Index.copy",
+        idx_cpy_unsupported_args,
+        idx_cpy_arg_defaults,
+        fn_str=err_str,
+        package_name="pandas",
+        module_name="Index",
     )
 
     # NOTE: assuming data is immutable

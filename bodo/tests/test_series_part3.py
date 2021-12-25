@@ -479,6 +479,34 @@ def test_series_ufunc(memory_leak_check):
     check_func(test_impl2, (S,))
 
 
+def test_series_corr(memory_leak_check):
+    """
+    Test running series.corr().
+    """
+
+    def test_impl(S1, S2):
+        return S1.corr(S2)
+
+    S1 = pd.Series(list(np.arange(100)) + list(np.arange(100)))
+    S2 = pd.Series(np.arange(200))
+
+    check_func(test_impl, (S1, S2))
+
+
+def test_series_cov(memory_leak_check):
+    """
+    Test running series.cov().
+    """
+
+    def test_impl(S1, S2):
+        return S1.cov(S2)
+
+    S1 = pd.Series(list(np.arange(100)) + list(np.arange(100)))
+    S2 = pd.Series(np.arange(200))
+
+    check_func(test_impl, (S1, S2))
+
+
 @pytest.mark.slow
 def test_series_apply_numpy_unsupported_ufunc_function(memory_leak_check):
     """

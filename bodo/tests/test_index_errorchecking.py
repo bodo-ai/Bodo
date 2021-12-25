@@ -574,7 +574,7 @@ def test_index_take_kwd_arg_err_msg(all_index_types):
         err_string = f"{idx_typ_str} not supported yet"
     else:
         err_string = (
-            "pandas.Index.take(): fill_value parameter only supports default value None"
+            "Index.take(): fill_value parameter only supports default value None"
         )
 
     def impl(I):

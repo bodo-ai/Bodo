@@ -189,7 +189,13 @@ def from_product_error_checking(iterables, sortorder, names):
     fname = "pandas.MultiIndex.from_product"
     unsupported_args = dict(sortorder=sortorder)
     arg_defaults = dict(sortorder=None)
-    check_unsupported_args(fname, unsupported_args, arg_defaults)
+    check_unsupported_args(
+        fname,
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
     if not (is_overload_none(names) or isinstance(names, types.BaseTuple)):
         raise BodoError(f"{fname}: names must be None or a tuple.")
     elif not isinstance(iterables, types.BaseTuple):

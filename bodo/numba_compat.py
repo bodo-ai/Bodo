@@ -1855,7 +1855,7 @@ def convert_code_obj_to_function(code_obj, caller_ir):
     msg = (
         "Inner function is using non-constant variable '{}' from outer function. "
         "Please pass as argument if possible. See "
-        "https://docs.bodo.ai/latest/source/pandas.html#user-defined-functions-udfs"
+        "https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/udfs.html"
     )
     freevars = []
     for x in free_var_names:
