@@ -475,7 +475,13 @@ def create_timedelta_freq_overload(method):
             return
         unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
         floor_defaults = dict(ambiguous="raise", nonexistent="raise")
-        check_unsupported_args("floor", unsupported_args, floor_defaults)
+        check_unsupported_args(
+            "Series.dt.floor",
+            unsupported_args,
+            floor_defaults,
+            package_name="pandas",
+            module_name="Series",
+        )
         func_text = "def impl(S_dt, freq, ambiguous='raise', nonexistent='raise'):\n"
         func_text += "    S = S_dt._obj\n"
         func_text += "    A = bodo.hiframes.pd_series_ext.get_series_data(S)\n"

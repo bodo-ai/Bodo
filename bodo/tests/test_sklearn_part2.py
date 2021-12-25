@@ -31,6 +31,7 @@ from sklearn.utils.validation import check_random_state
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
+from bodo.utils.typing import BodoError
 
 # ---------------------- RandomForestClassifier tests ----------------------
 
@@ -325,7 +326,7 @@ def test_logistic_regression_predict_proba_log_proba():
     X_train = X[:splitN]
     y_train = y[:splitN]
     X_test = X[splitN:]
-    
+
     # Create exact same model on all ranks using sklearn python implementation
     # That way, we can test predict_proba and predict_log_proba implementation
     # independent of the model.
@@ -335,7 +336,7 @@ def test_logistic_regression_predict_proba_log_proba():
     def impl_predict_proba(clf, X_test):
         y_pred_proba = clf.predict_proba(X_test)
         return y_pred_proba
-    
+
     def impl_predict_log_proba(clf, X_test):
         y_pred_log_proba = clf.predict_log_proba(X_test)
         return y_pred_log_proba
@@ -859,6 +860,30 @@ def test_train_test_split_df(train_size, test_size, memory_leak_check):
     bodo_X_test = bodo.allgatherv(X_test)
     bodo_X = np.sort(np.concatenate((bodo_X_train, bodo_X_test), axis=0), axis=0)
     assert_array_equal(bodo_X, train)
+
+
+def test_train_test_split_unsupported(memory_leak_check):
+    """
+    Test an supported argument to train_test_split
+    """
+
+    def impl(X, y, train_size, test_size):
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, train_size=train_size, test_size=test_size, stratify=True
+        )
+        return X_train, X_test, y_train, y_test
+
+    train = pd.DataFrame({"A": range(20), "B": range(100, 120)})
+    train_labels = pd.Series(range(20))
+    train_size = 0.6
+    test_size = 0.3
+
+    err_msg = "stratify parameter only supports default value None"
+    with pytest.raises(
+        BodoError,
+        match=err_msg,
+    ):
+        bodo.jit(impl)(train, train_labels, train_size, test_size)
 
 
 @pytest.mark.parametrize(

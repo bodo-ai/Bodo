@@ -119,7 +119,13 @@ def df_rolling_overload(
 ):
     unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
     arg_defaults = dict(win_type=None, axis=0, closed=None)
-    check_unsupported_args("DataFrame.rolling", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "DataFrame.rolling",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Window",
+    )
     _validate_rolling_args(df, window, min_periods, center, on)
 
     def impl(
@@ -153,7 +159,13 @@ def overload_series_rolling(
 ):
     unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
     arg_defaults = dict(win_type=None, axis=0, closed=None)
-    check_unsupported_args("Series.rolling", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Series.rolling",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Window",
+    )
     _validate_rolling_args(S, window, min_periods, center, on)
 
     def impl(
@@ -284,7 +296,13 @@ def overload_rolling_apply(
         engine=engine, engine_kwargs=engine_kwargs, args=args, kwargs=kwargs
     )
     arg_defaults = dict(engine=None, engine_kwargs=None, args=None, kwargs=None)
-    check_unsupported_args("Rolling.apply", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Rolling.apply",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Window",
+    )
 
     # func should be function
     if not is_const_func_type(func):
@@ -313,7 +331,13 @@ def groupby_rolling_overload(
 ):
     unsupported_args = dict(win_type=win_type, axis=axis, closed=closed, method=method)
     arg_defaults = dict(win_type=None, axis=0, closed=None, method="single")
-    check_unsupported_args("GroupBy.rolling", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "GroupBy.rolling",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Window",
+    )
     _validate_rolling_args(grp, window, min_periods, center, on)
 
     def _impl(

@@ -765,7 +765,13 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         map_defaults = dict(
             na_action=None,
         )
-        check_unsupported_args("Series.map", unsupported_args, map_defaults)
+        check_unsupported_args(
+            "Series.map",
+            unsupported_args,
+            map_defaults,
+            package_name="pandas",
+            module_name="Series",
+        )
 
         def map_stub(arg, na_action=None):  # pragma: no cover
             pass
@@ -789,7 +795,13 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         apply_defaults = dict(
             convert_dtype=True,
         )
-        check_unsupported_args("Series.apply", unsupported_args, apply_defaults)
+        check_unsupported_args(
+            "Series.apply",
+            unsupported_args,
+            apply_defaults,
+            package_name="pandas",
+            module_name="Series",
+        )
 
         # add dummy default value for UDF kws to avoid errors
         kw_names = ", ".join("{} = ''".format(a) for a in kws.keys())

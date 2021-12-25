@@ -205,16 +205,35 @@ def test_df_iat_setitem_immutable_array(memory_leak_check):
         bodo.jit(test_impl)(df)
 
 
+def test_df_sample_error(memory_leak_check):
+    def test_impl(df):
+        return df.sample(n=10, frac=0.5)
+
+    df = pd.DataFrame({"A": [[1, 2, 3], [2, 1, 1], [1, 2, 3], [2, 1, 1]]})
+
+    with pytest.raises(
+        BodoError,
+        match="only one of n and frac option can be selected",
+    ):
+        bodo.jit(test_impl)(df)
+
+
+def test_df_info_unsupported(memory_leak_check):
+    def test_impl(df):
+        return df.info(verbose=True)
+
+    df = pd.DataFrame({"A": [[1, 2, 3], [2, 1, 1], [1, 2, 3], [2, 1, 1]]})
+
+    with pytest.raises(
+        BodoError,
+        match="verbose parameter only supports default value",
+    ):
+        bodo.jit(test_impl)(df)
+
+
 @pytest.fixture
 def df_fillna():
     return pd.DataFrame({"A": [1, np.nan, 2]})
-
-
-@pytest.mark.slow
-def test_df_fillna_method_error(df_fillna, memory_leak_check):
-    match = "method parameter only supports default value None"
-    with pytest.raises(BodoError, match=match):
-        bodo.jit(lambda: df_fillna.fillna(method="pad"))()
 
 
 @pytest.mark.slow
@@ -232,9 +251,8 @@ def test_df_fillna_downcast_error(df_fillna, memory_leak_check):
         bodo.jit(lambda: df_fillna.fillna(0, downcast="infer"))()
 
 
-@pytest.mark.slow
 def test_df_fillna_axis_error(df_fillna, memory_leak_check):
-    match = "axis argument not supported"
+    match = "'axis' argument not supported"
     with pytest.raises(BodoError, match=match):
         bodo.jit(lambda: df_fillna.fillna(0, axis=1))()
 

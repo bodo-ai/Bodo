@@ -615,6 +615,17 @@ def test_df_merge_type_reset():
     check_func(test, (df1, df2), reset_index=True, sort_output=True)
 
 
+def test_df_itertuples(memory_leak_check):
+    def test_impl(df):
+        res = 0.0
+        for r in df.itertuples():
+            res += r[1]
+        return res
+
+    df = pd.DataFrame({"A": [13, 31, 42] * 4, "B": [1, 2, 3, 5] * 3})
+    check_func(test_impl, (df,), dist_test=False)
+
+
 @pytest.mark.parametrize(
     "func,err_regex",
     [

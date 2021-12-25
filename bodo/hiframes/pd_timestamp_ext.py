@@ -831,7 +831,13 @@ def overload_pd_timestamp_day_name(ptt, locale=None):
     """
     unsupported_args = dict(locale=locale)
     arg_defaults = dict(locale=None)
-    check_unsupported_args("Timestamp.day_name", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Timestamp.day_name",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Timestamp",
+    )
 
     def impl(ptt, locale=None):  # pragma: no cover
         day_names = (
@@ -858,7 +864,13 @@ def overload_pd_timestamp_month_name(ptt, locale=None):
     """
     unsupported_args = dict(locale=locale)
     arg_defaults = dict(locale=None)
-    check_unsupported_args("Timestamp.month_name", unsupported_args, arg_defaults)
+    check_unsupported_args(
+        "Timestamp.month_name",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Timestamp",
+    )
 
     def impl(ptt, locale=None):  # pragma: no cover
         month_names = (
