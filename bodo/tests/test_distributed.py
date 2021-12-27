@@ -2002,6 +2002,32 @@ def test_scatterv_gatherv_allgatherv_df_jit(df_value, memory_leak_check):
     assert n_passed == bodo.get_size()
 
 
+def test_scatterv_None_warning(df_value):
+    """ Test that scatterv returns warning if value is not None on ranks != 0 """
+
+    if bodo.get_rank() == 0:
+        df_proper = df_value
+    else:
+        df_proper = None
+    df_proper = bodo.scatterv(df_proper)
+
+    df_improper = df_value
+    if bodo.get_rank() == 0:
+        df_improper = bodo.scatterv(df_improper)
+    else:
+        with pytest.warns(BodoWarning) as warn:
+            df_improper = bodo.scatterv(df_improper)
+
+        assert len(warn) == 1
+        assert (
+            str(warn[0].message)
+            == "bodo.scatterv(): A non-None value for 'data' was found on a rank other than the root. "
+            "This data won't be sent to any other ranks and will be overwritten with data from rank 0."
+        )
+
+    pd.testing.assert_frame_equal(df_proper, df_improper)
+
+
 # TODO: add memory_leak_check when error with table format dataframes is fixed
 def test_gatherv_empty_df():
     """test using gatherv inside jit functions"""

@@ -370,7 +370,7 @@ Scattering Data
 
 One can distribute data manually by *scattering* data from one process
 to all processes with scatterv. Currently, bodo.scatterv only supports scattering from rank 0.
-When used outside of JIT code, it is required that
+When used outside of JIT code, it is recommended that
 the argument is None for all ranks except rank 0. For example:
 
 .. code:: ipython3
@@ -393,6 +393,26 @@ the argument is None for all ranks except rank 0. For example:
 
 .. parsed-literal::
 
+    [stdout:0] 102.07842132239877
+    [stdout:1] 102.07842132239877
+    [stdout:2] 102.07842132239877
+    [stdout:3] 102.07842132239877
+
+This is not a strict requirement. However, since this might be bad practice in certain situations, Bodo will throw a warning if the data is not None on other ranks.
+
+
+.. code:: ipython3
+
+
+    df = pd.read_parquet("data/cycling_dataset.pq")
+    df = bodo.scatterv(df)
+    res = mean_power(df)
+    print(res)
+
+
+.. parsed-literal::
+    BodoWarning: bodo.scatterv(): A non-None value for 'data' was found on a rank other than the root. This data won't be sent to any other ranks and will be overwritten with data from rank 0.
+    
     [stdout:0] 102.07842132239877
     [stdout:1] 102.07842132239877
     [stdout:2] 102.07842132239877
