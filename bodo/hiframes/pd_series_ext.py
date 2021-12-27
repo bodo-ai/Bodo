@@ -1264,7 +1264,6 @@ series_unsupported_methods = (
     "set_flags",
     # Conversion
     "convert_dtypes",
-    "infer_objects",
     "bool",
     "to_period",
     "to_timestamp",

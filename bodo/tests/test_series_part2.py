@@ -783,6 +783,23 @@ def test_series_idxmax(series_val, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "S",
+    [
+        pytest.param(pd.Series([1.0, 2.2, 3.1, 4.6, 5.9]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([2, 3, 5.2, 8, 7]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([7, 6, 5, 4, 1]), marks=pytest.mark.slow),
+        pytest.param(pd.Series([1, None, 5, None, 1]), marks=pytest.mark.slow),
+        pytest.param(pd.Series(["a", "b", "c", "d", "e"]), marks=pytest.mark.slow),
+    ],
+)
+def test_series_infer_objects(S, memory_leak_check):
+    def test_impl(S):
+        return S.infer_objects()
+
+    check_func(test_impl, (S,))
+
+
+@pytest.mark.parametrize(
     "numeric_series_median",
     [
         pytest.param(pd.Series([1, 2, 3]), marks=pytest.mark.slow),

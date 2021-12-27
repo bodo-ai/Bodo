@@ -1259,6 +1259,16 @@ def overload_series_idxmax(S, axis=0, skipna=True):
     return impl
 
 
+@overload_method(SeriesType, "infer_objects", inline="always")
+def overload_series_infer_objects(S):
+    """
+    Performs deep copy as per pandas FrameOrSeries infer_objects() implementation:
+    https://github.com/pandas-dev/pandas/blob/v1.3.5/pandas/core/generic.py#L5987-L6031
+    (eventually calls https://github.com/pandas-dev/pandas/blob/master/pandas/core/internals/blocks.py#L580-L592)
+    """
+    return lambda S: S.copy()  # pragma: no cover
+
+
 @overload_attribute(SeriesType, "is_monotonic", inline="always")
 @overload_attribute(SeriesType, "is_monotonic_increasing", inline="always")
 def overload_series_is_monotonic_increasing(S):

@@ -3354,7 +3354,6 @@ dataframe_unsupported = [
     "set_flags",
     # Conversion
     "convert_dtypes",
-    "infer_objects",
     "bool",
     # Indexing, iteration
     "__iter__",
