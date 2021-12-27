@@ -4,6 +4,7 @@ import datetime
 import operator
 import sys
 import time
+import warnings
 from collections import defaultdict
 from decimal import Decimal
 from enum import Enum
@@ -58,6 +59,7 @@ from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import (
     BodoError,
+    BodoWarning,
     is_overload_false,
     is_overload_none,
     raise_bodo_error,
@@ -1594,12 +1596,15 @@ def get_value_for_type(dtype):  # pragma: no cover
 
 def scatterv(data, send_counts=None, warn_if_dist=True):
     """scatterv() distributes data from rank 0 to all ranks.
-    Rank 0 passes the data but the other ranks just pass None.
+    Rank 0 passes the data but the other ranks should just pass None.
     """
     rank = bodo.libs.distributed_api.get_rank()
     if rank != MPI_ROOT and data is not None:  # pragma: no cover
-        raise BodoError(
-            "bodo.scatterv() requires 'data' argument to be None on all ranks except rank 0."
+        warnings.warn(
+            BodoWarning(
+                "bodo.scatterv(): A non-None value for 'data' was found on a rank other than the root. "
+                "This data won't be sent to any other ranks and will be overwritten with data from rank 0."
+            )
         )
 
     # make sure all ranks receive the proper data type as input (instead of None)
