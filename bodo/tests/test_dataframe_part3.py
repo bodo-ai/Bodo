@@ -540,6 +540,39 @@ def test_df_type_change_iloc_loc(memory_leak_check):
     check_func(impl4, (df,), copy_input=True, only_seq=True)
 
 
+@pytest.mark.parametrize(
+    "A",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 2, 3, 4.1, 5],
+                    "B": ["a", "d", "c", "e", "d"],
+                    "C": [4.3, 5.6, 3.2, 8.4, 9.6],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(pd.DataFrame({"A": [1, 2, 3, 4, 5]}), marks=pytest.mark.slow),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [1, 2, 3, None, 5],
+                    "B": ["a", "d", "c", "e", "d"],
+                    "C": [4.3, 5.6, None, 8.4, 9.6],
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_dataframe_infer_objects(A, memory_leak_check):
+    def test_impl(df):
+        return df.infer_objects()
+
+    check_func(test_impl, (A,))
+
+
 def test_na_df_apply_homogeneous_no_inline(memory_leak_check):
     """
     Checks that NA handling inside Bodo UDFs works properly

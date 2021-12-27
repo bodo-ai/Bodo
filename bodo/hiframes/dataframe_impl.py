@@ -1254,6 +1254,16 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
     return _gen_reduce_impl(df, "idxmin", axis=axis)
 
 
+@overload_method(DataFrameType, "infer_objects", inline="always")
+def overload_dataframe_infer_objects(df):
+    """
+    Performs deep copy as per pandas FrameOrSeries infer_objects() implementation:
+    https://github.com/pandas-dev/pandas/blob/v1.3.5/pandas/core/generic.py#L5987-L6031
+    (eventually calls https://github.com/pandas-dev/pandas/blob/master/pandas/core/internals/blocks.py#L580-L592)
+    """
+    return lambda df: df.copy()  # pragma: no cover
+
+
 def _gen_reduce_impl(df, func_name, args=None, axis=None):
     """generate implementation for dataframe reduction functions like min, max, sum, ..."""
     args = "" if is_overload_none(args) else args

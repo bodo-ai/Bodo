@@ -397,6 +397,22 @@ Conversion
   The exact output string may vary slightly from Pandas.
 
 
+* :meth:`pandas.DataFrame.infer_objects` ``()``
+
+`Example Usage`::
+
+    >>> @bodo.jit
+    ... def f():
+    ...   df = pd.DataFrame({"A": [1,2,3]})
+    ...   return df.infer_objects()
+       A
+    0  1
+    1  2
+    2  3
+
+.. note::
+  Bodo does not internally use the object dtype, so types are never inferred. As a result, this API just produces a deep copy, consistent with Pandas.
+
 Indexing, iteration
 ********************
 

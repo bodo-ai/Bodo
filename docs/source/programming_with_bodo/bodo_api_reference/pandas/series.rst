@@ -41,6 +41,7 @@ Conversion:
 
 * :meth:`pandas.Series.astype` (only ``dtype`` argument)
 * :meth:`pandas.Series.copy` (including ``deep`` argument)
+* :meth:`pandas.Series.infer_objects`
 * :meth:`pandas.Series.to_numpy`
 * :meth:`pandas.Series.to_list`
 * :meth:`pandas.Series.tolist`
