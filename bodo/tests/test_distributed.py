@@ -1913,9 +1913,7 @@ def get_random_int64index(n):
             pd.Index(["BB", "CC"] + (["AA"] * (n - 2)), dtype="category"),
             marks=pytest.mark.slow,
         ),
-        pytest.param(
-            pd.interval_range(start=0, end=5), marks=pytest.mark.slow, id="interval_idx"
-        ),
+        pytest.param(pd.interval_range(start=0, end=5), id="interval_idx"),
         # list(str) array
         # unboxing crashes for case below (issue #812)
         # pd.Series(gen_random_string_binary_array(n)).map(lambda a: None if pd.isna(a) else [a, "A"]).values
@@ -1968,6 +1966,7 @@ def get_random_int64index(n):
 # TODO: Add memory_leak_check when bug is resolved (failed on data13)
 def test_scatterv_gatherv_allgatherv_python(data):
     """Test bodo.scatterv(), gatherv(), and allgatherv() for Bodo distributed data types"""
+    n = len(data)
 
     _check_scatterv_gatherv_allgatherv(data, n)
     # check it works in a tuple aswell

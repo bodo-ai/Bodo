@@ -603,8 +603,12 @@ def test_apply_inline_optimization(memory_leak_check):
 
 # TODO [BE-974]: Add memory_leak_check
 def test_df_merge_type_reset():
-    df1 = pd.DataFrame({"key": ["bar", "baz", "foo", "foo"], "value": [1, 2, 3, 5]})
-    df2 = pd.DataFrame({"key": ["bar", "baz", "foo", "foo"], "value": [5, 6, 7, 8]})
+    df1 = pd.DataFrame(
+        {"key": ["bar", "baz", "foo", "foo"] * 3, "value": [1, 2, 3, 5] * 3}
+    )
+    df2 = pd.DataFrame(
+        {"key": ["bar", "baz", "foo", "foo"] * 3, "value": [5, 6, 7, 8] * 3}
+    )
 
     def test(df1, df2):
         df1a = df1.groupby("key").apply(lambda x: 3).reset_index()

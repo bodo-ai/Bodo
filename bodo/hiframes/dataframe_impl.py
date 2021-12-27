@@ -4544,11 +4544,12 @@ def dataframe_plot_low(context, builder, sig, args):
 
 
 def is_df_values_numpy_supported_dftyp(df_typ):
-    """helper function that checks if the dataframe type contains only numeric/boolean values"""
+    """helper function that checks if the dataframe type contains only numeric/boolean/dt64/td64 values"""
     for col_typ in df_typ.data:
         if not (
             isinstance(col_typ, IntegerArrayType)
             or isinstance(col_typ.dtype, types.Number)
+            or col_typ.dtype in (bodo.datetime64ns, bodo.timedelta64ns)
         ):
             return False
     return True
