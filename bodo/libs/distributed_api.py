@@ -1916,6 +1916,24 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
 
         return scatterv_impl_int_arr
 
+    # interval array
+    if isinstance(data, IntervalArrayType):
+        # scatter the left/right arrays
+        def impl_interval_arr(
+            data, send_counts=None, warn_if_dist=True
+        ):  # pragma: no cover
+            left_chunk = bodo.libs.distributed_api.scatterv_impl(
+                data._left, send_counts
+            )
+            right_chunk = bodo.libs.distributed_api.scatterv_impl(
+                data._right, send_counts
+            )
+            return bodo.libs.interval_arr_ext.init_interval_array(
+                left_chunk, right_chunk
+            )
+
+        return impl_interval_arr
+
     if isinstance(data, bodo.hiframes.pd_index_ext.RangeIndexType):
         # TODO: support send_counts
         def impl_range_index(
