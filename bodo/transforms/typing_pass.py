@@ -37,6 +37,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 from bodo.hiframes.pd_rolling_ext import RollingType
 from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.series_str_impl import SeriesStrMethodType
 from bodo.utils.transform import (
     compile_func_single_block,
     get_call_expr_arg,
@@ -1525,6 +1526,12 @@ class TypingTransforms:
         ):
             return self._run_call_df_groupby(assign, rhs, func_mod, func_name, label)
 
+        # handle Series.str.method() calls
+        if isinstance(func_mod, ir.Var) and isinstance(
+            self._get_method_obj_type(func_mod, rhs.func), SeriesStrMethodType
+        ):
+            return self._run_call_str_method(assign, rhs, func_mod, func_name, label)
+
         # handle BodoSQLContextType.sql() calls here since the generated code cannot
         # be handled in regular overloads (requires Bodo's untyped pass, typing pass)
         #
@@ -2042,6 +2049,24 @@ class TypingTransforms:
 
         return nodes + [assign]
 
+    def _run_call_str_method(self, assign, rhs, str_var, func_name, label):
+        """Handle Series.str calls that need transformation to meet Bodo
+        requirements
+        """
+        nodes = []
+
+        # mapping of groupby functions to their arguments that require constant values
+        str_call_const_args = {
+            "extract": [(0, "pat"), (1, "flags")],
+            "extractall": [(0, "pat"), (1, "flags")],
+        }
+
+        if func_name in str_call_const_args:
+            func_args = str_call_const_args[func_name]
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args, label)
+
+        return nodes + [assign]
+
     def _run_call_series(self, assign, rhs, series_var, func_name, label):
         """Handle Series calls that need transformation to meet Bodo requirements"""
         nodes = []
@@ -2089,6 +2114,7 @@ class TypingTransforms:
 
         # mapping of pandas functions to their arguments that require constant values
         top_level_call_const_args = {
+            "concat": [(1, "axis"), (3, "ignore_index")],
             "DataFrame": [(2, "columns")],
             "merge": [
                 (2, "how"),

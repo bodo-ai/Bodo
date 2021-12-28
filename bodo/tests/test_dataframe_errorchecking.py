@@ -982,6 +982,41 @@ def test_astype_non_constant_string(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_concat_const_args(memory_leak_check):
+    """
+    make sure proper error is raised when axis/ignore_index arguments to pd.concat
+    are not constant
+    """
+
+    def impl1(S1, S2, flag):
+        axis = 0
+        if flag:
+            axis = 1
+        return pd.concat((S1, S2), axis=axis)
+
+    def impl2(S1, S2, flag):
+        ignore_index = True
+        if flag:
+            ignore_index = False
+        return pd.concat((S1, S2), ignore_index=ignore_index)
+
+    S1 = pd.Series([1, 2, 3], name="A")
+    S2 = pd.Series([3, 4, 5], name="B")
+
+    with pytest.raises(
+        BodoError,
+        match=r"'axis' should be a constant integer",
+    ):
+        bodo.jit(impl1)(S1, S2, True)
+
+    with pytest.raises(
+        BodoError,
+        match=r"'ignore_index' should be a constant boolean",
+    ):
+        bodo.jit(impl2)(S1, S2, True)
+
+
+@pytest.mark.slow
 def test_df_getitem_non_const_columname_error(memory_leak_check):
     g = bodo.jit(lambda a: a)
 
