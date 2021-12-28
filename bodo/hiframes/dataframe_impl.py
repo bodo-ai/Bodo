@@ -42,7 +42,7 @@ from bodo.hiframes.pd_dataframe_ext import (
     DataFrameType,
     handle_inplace_df_type_change,
 )
-from bodo.hiframes.pd_index_ext import StringIndexType
+from bodo.hiframes.pd_index_ext import StringIndexType, is_pd_index_type
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
@@ -4633,6 +4633,8 @@ class SetDfColInfer(AbstractTemplate):
                 if len(target.columns) == 0:
                     index = val.index
                 val = val.data
+            if is_pd_index_type(val):
+                val = bodo.utils.typing.get_index_data_arr_types(val)[0]
 
             if isinstance(val, types.List):
                 val = dtype_to_array_type(val.dtype)

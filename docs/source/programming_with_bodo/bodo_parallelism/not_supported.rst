@@ -17,6 +17,8 @@ Type Stability
 To enable type inference, the program should be `type stable`, which means Bodo
 should be able to assign a single type to every variable.
 
+.. _schemastability:
+
 
 DataFrame Schema
 ~~~~~~~~~~~~~~~~
@@ -171,6 +173,9 @@ The solution is to check for NA values using `pd.isna` to handle NA values appro
 
 We are working on making it possible to avoid stability issues automatically
 in most practical cases.
+
+
+.. _notsupportedpython:
 
 
 Unsupported Python Constructs

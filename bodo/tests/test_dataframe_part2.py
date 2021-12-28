@@ -82,6 +82,18 @@ def test_setitem_na(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_set_column_index(memory_leak_check):
+    """set df column with an Index value"""
+
+    def test_impl(df):
+        df["C"] = df.index
+        return df
+
+    df = pd.DataFrame({"A": [1, 3, 4]}, index=["a", "ab", "cd"])
+    check_func(test_impl, (df,), copy_input=True, only_seq=True)
+
+
+@pytest.mark.slow
 def test_set_column_categorical(memory_leak_check):
     """set df column with a categorical array"""
 

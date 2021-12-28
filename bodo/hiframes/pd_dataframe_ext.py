@@ -2065,6 +2065,13 @@ def concat_overload(
 ):
     # TODO: handle options
     # TODO: support Index
+
+    # axis and ignore_index should be constant values
+    if not is_overload_constant_int(axis):
+        raise BodoError("pd.concat(): 'axis' should be a constant integer")
+    if not is_overload_constant_bool(ignore_index):
+        raise BodoError("pd.concat(): 'ignore_index' should be a constant boolean")
+
     axis = get_overload_const_int(axis)
     ignore_index = is_overload_true(ignore_index)
 

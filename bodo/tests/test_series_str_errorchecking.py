@@ -500,21 +500,11 @@ def test_extract_args(test_sr, memory_leak_check):
     def impl(test_sr, pat, flags, expand):
         return test_sr.str.extract(pat, 1, True)
 
-    def impl2(test_sr, pat, flags, expand):
-        return test_sr.str.extract("x", flags, True)
-
-    def impl3(test_sr, pat, flags, expand):
-        return test_sr.str.extract("x", 2, expand)
-
     pat = "x"
     flags = 1
     expand = False
-    with pytest.raises(BodoError, match="argument should be a constant"):
+    with pytest.raises(BodoError, match="contains no capture groups"):
         bodo.jit(impl)(test_sr, pat, flags, expand)
-    with pytest.raises(BodoError, match="argument should be a constant"):
-        bodo.jit(impl2)(test_sr, pat, flags, expand)
-    with pytest.raises(BodoError, match="argument should be a constant"):
-        bodo.jit(impl3)(test_sr, pat, flags, expand)
 
 
 # ------------------------------ join() ------------------------------ #

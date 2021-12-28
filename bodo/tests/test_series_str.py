@@ -640,6 +640,17 @@ def test_extract(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,), check_typing_issues=False)
 
 
+def test_extract_const(memory_leak_check):
+    """make sure 'pat' argument can be forced to a constant value"""
+
+    def test_impl(S, pat):
+        return S.str.extract(pat)
+
+    S = pd.Series(["a1", "b2", "c3"])
+    p = r"(\w)(\d)"
+    check_func(test_impl, (S, p), only_seq=True)
+
+
 def test_extract_noexpand(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.extract(r"(?P<BBB>[abd]+)\d+", expand=False)
