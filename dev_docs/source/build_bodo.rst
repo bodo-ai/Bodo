@@ -17,7 +17,6 @@ such as Numba on Ubuntu Linux::
     export PATH=$HOME/miniconda3/bin:$PATH
     conda create -n DEV 'python<=3.9' 'numpy=1.20' scipy pandas='1.3.*' boost-cpp cmake h5py mpich mpi -c conda-forge
     source activate DEV
-    conda install setuptools -c conda-forge
     conda install mpi4py pytest cython -c conda-forge
     # Linux: conda install 'gcc_linux-64>=9' 'gxx_linux-64>=9' -c conda-forge
     # Mac: conda install clang_osx-64 clangxx_osx-64 -c conda-forge
@@ -50,10 +49,18 @@ such as Numba on Ubuntu Linux::
     # conda install -c conda-forge pyspark openjdk
     # Required for ML tests
     # conda install -c conda-forge scikit-learn=0.24.2
+    # For building docs locally
+    # conda install sphinx -c conda-forge
+    # pip install sphinx_rtd_theme
+    # pip install sphinx_rtd_dark_mode
     git clone https://github.com/Bodo-inc/Bodo.git
     cd Bodo
     # build Bodo
     python setup.py develop
+
+For local development you will also want to enable more detailed error messages.
+This can be done with ``export NUMBA_DEVELOPER_MODE=1``. To ensure this is activated
+on every new shell you should also add this to your preferred shell's rc file.
 
 For HDFS related development, use the :ref:`docker image <docker-images>`.
 
