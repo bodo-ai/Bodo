@@ -649,3 +649,28 @@ def test_series_categorical_astype_str(memory_leak_check):
     py_output = S.astype(str)
     py_output[py_output == "nan"] = None
     check_func(impl, (S,), py_output=py_output)
+
+
+def test_heterogeneous_series_box(memory_leak_check):
+    """
+    Tests support for boxing a Heterogeneeous Series.
+    """
+
+    def g(row):
+        return 0
+
+    def impl(df):
+        def f(row):
+            with bodo.objmode(res="int64"):
+                res = g(row)
+            return res
+
+        return df.apply(f, axis=1)
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series([1, None, None] * 5, dtype="Int64"),
+            "B": pd.Series([None, "a", "c"] * 5),
+        }
+    )
+    check_func(impl, (df,))

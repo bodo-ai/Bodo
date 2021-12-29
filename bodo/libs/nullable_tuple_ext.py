@@ -9,6 +9,7 @@ import operator
 
 from numba.core import cgutils, types
 from numba.extending import (
+    box,
     intrinsic,
     make_attribute_wrapper,
     models,
@@ -102,6 +103,65 @@ def build_nullable_tuple(typingctx, data_tuple, null_values):
 
     sig = NullableTupleType(data_tuple, null_values)(data_tuple, null_values)
     return sig, codegen
+
+
+@box(NullableTupleType)
+def box_nullable_tuple(typ, val, c):
+    """
+    Boxes a nullable tuple as a regular Python tuple with the appropriate
+    NA value based on the scalar types.
+    """
+    nullable_tuple_struct = cgutils.create_struct_proxy(typ)(
+        c.context, c.builder, value=val
+    )
+    # incref since boxing functions steal a reference
+    c.context.nrt.incref(c.builder, typ.tuple_typ, nullable_tuple_struct.data)
+    c.context.nrt.incref(c.builder, typ.null_typ, nullable_tuple_struct.null_values)
+    # box both the tuple and the null values.
+    tuple_obj = c.pyapi.from_native_value(
+        typ.tuple_typ, nullable_tuple_struct.data, c.env_manager
+    )
+    null_values_obj = c.pyapi.from_native_value(
+        typ.null_typ, nullable_tuple_struct.null_values, c.env_manager
+    )
+    n_elems = c.context.get_constant(types.int64, len(typ.tuple_typ))
+    # Create a list to convert to a tuple
+    list_obj = c.pyapi.list_new(n_elems)
+    with cgutils.for_range(c.builder, n_elems) as loop:
+        i = loop.index
+        py_index = c.pyapi.long_from_longlong(i)
+        null_val = c.pyapi.object_getitem(null_values_obj, py_index)
+        # TODO: Check True vs False with converting the value back
+        null_bool_val = c.pyapi.to_native_value(types.bool_, null_val).value
+        with c.builder.if_else(null_bool_val) as (then, orelse):
+            with then:
+                # TODO: Generate the correct null type for each type.
+                # For example:
+                # None for Strings
+                # pd.NA for NullableIntegers
+                # NaN for Float
+                # NaT for Datetime64/Timedelta64
+                c.pyapi.list_setitem(list_obj, i, c.pyapi.make_none())
+            with orelse:
+                tuple_val = c.pyapi.object_getitem(tuple_obj, py_index)
+                c.pyapi.list_setitem(list_obj, i, tuple_val)
+        # Decref py objects
+        c.pyapi.decref(py_index)
+        c.pyapi.decref(null_val)
+
+    tuple_func = c.pyapi.unserialize(c.pyapi.serialize_object(tuple))
+    final_tuple_obj = c.pyapi.call_function_objargs(tuple_func, (list_obj,))
+
+    # Decref py objects
+    c.pyapi.decref(tuple_obj)
+    c.pyapi.decref(null_values_obj)
+    c.pyapi.decref(tuple_func)
+    c.pyapi.decref(list_obj)
+
+    # Decref val
+    c.context.nrt.decref(c.builder, typ, val)
+
+    return final_tuple_obj
 
 
 @overload(operator.getitem)

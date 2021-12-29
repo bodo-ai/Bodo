@@ -1875,7 +1875,11 @@ def convert_code_obj_to_function(code_obj, caller_ir):
             # value can be constant function
             if isinstance(val, pytypes.FunctionType):
                 func_name = ir_utils.mk_unique_var("nested_func").replace(".", "_")
-                glbls[func_name] = numba.njit(val)
+                glbls[func_name] = bodo.jit(distributed=False)(val)
+                # add a flag indicating that the Dispatcher is a converted nested func
+                # that may need to be reverted back to regular Python in objmode.
+                # done in untyped pass, see test_heterogeneous_series_box
+                glbls[func_name].is_nested_func = True
                 val = func_name
             if isinstance(val, CPUDispatcher):
                 func_name = ir_utils.mk_unique_var("nested_func").replace(".", "_")
@@ -1886,7 +1890,8 @@ def convert_code_obj_to_function(code_obj, caller_ir):
         elif isinstance(freevar_def, ir.Expr) and freevar_def.op == "make_function":
             nested_func = convert_code_obj_to_function(freevar_def, caller_ir)
             func_name = ir_utils.mk_unique_var("nested_func").replace(".", "_")
-            glbls[func_name] = numba.njit(nested_func)
+            glbls[func_name] = bodo.jit(distributed=False)(nested_func)
+            glbls[func_name].is_nested_func = True
             freevars.append(func_name)
         else:
             raise bodo.utils.typing.BodoError(msg.format(x), loc=code_obj.loc)
