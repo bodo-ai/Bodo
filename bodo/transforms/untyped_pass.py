@@ -28,6 +28,7 @@ from numba.core.ir_utils import (
     build_definitions,
     compute_cfg_from_blocks,
 )
+from numba.core.registry import CPUDispatcher
 
 
 import bodo
@@ -702,6 +703,20 @@ class UntypedPass:
             ir.Global(type_name, objmode_val.output_types, loc), type_var, loc
         )
         assign.value.args = list(assign.value.args) + [type_var]
+
+        # convert_code_obj_to_function() replaces nested functions/lambdas with jitted
+        # calls to enable jit compilation. However, functions inside objmode shouldn't
+        # be jitted so we revert them back to regular functions here
+        # see test_heterogeneous_series_box
+        for block in objmode_val.func_ir.blocks.values():
+            for stmt in block.body:
+                if (
+                    is_assign(stmt)
+                    and isinstance(stmt.value, (ir.Global, ir.FreeVar, ir.Const))
+                    and isinstance(stmt.value.value, CPUDispatcher)
+                    and getattr(stmt.value.value, "is_nested_func", False)
+                ):
+                    stmt.value.value = stmt.value.value.py_func
 
         return [glb_assign, assign]
 

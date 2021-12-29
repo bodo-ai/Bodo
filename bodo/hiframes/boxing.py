@@ -1144,13 +1144,24 @@ def box_series(typ, val, c):
     )
 
     # call pd.Series()
-    dtype = c.pyapi.make_none()  # TODO: dtype
+    if isinstance(typ, HeterogeneousSeriesType) and isinstance(
+        typ.data, bodo.NullableTupleType
+    ):
+        # Use object value to preserve NA values (i.e None)
+        dtype = c.pyapi.unserialize(c.pyapi.serialize_object(object))
+    else:
+        dtype = c.pyapi.make_none()  # TODO: dtype
     res = c.pyapi.call_method(
         pd_class_obj, "Series", (arr_obj, index_obj, dtype, name_obj)
     )
     c.pyapi.decref(arr_obj)
     c.pyapi.decref(index_obj)
     c.pyapi.decref(name_obj)
+    # Decref object if used.
+    if isinstance(typ, HeterogeneousSeriesType) and isinstance(
+        typ.data, bodo.NullableTupleType
+    ):
+        c.pyapi.decref(dtype)
 
     _set_bodo_meta_series(res, c, typ)
 
