@@ -3317,6 +3317,9 @@ numba.core.ir_utils.alias_func_extensions[
 def get_index_data_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 1 and not kws
     var = args[0]
+    # avoid returning shape for tuple input (results in dimension mismatch error)
+    if isinstance(self.typemap[var.name], HeterogeneousIndexType):
+        return None
     if equiv_set.has_shape(var):
         return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
     return None
@@ -3755,6 +3758,71 @@ def overload_nbytes(I):
         return _impl_nbytes
 
 
+@overload_method(NumericIndexType, "rename", inline="always")
+@overload_method(DatetimeIndexType, "rename", inline="always")
+@overload_method(TimedeltaIndexType, "rename", inline="always")
+@overload_method(RangeIndexType, "rename", inline="always")
+@overload_method(StringIndexType, "rename", inline="always")
+@overload_method(BinaryIndexType, "rename", inline="always")
+@overload_method(CategoricalIndexType, "rename", inline="always")
+@overload_method(PeriodIndexType, "rename", inline="always")
+@overload_method(IntervalIndexType, "rename", inline="always")
+@overload_method(HeterogeneousIndexType, "rename", inline="always")
+def overload_rename(I, name, inplace=False):
+    """Add support for Index.rename"""
+    if is_overload_true(inplace):
+        raise BodoError("Index.rename(): inplace index renaming unsupported")
+
+    return init_index(I, name)
+
+
+def init_index(I, name):
+    """Creates an Index value using data of input Index 'I' and new name value 'name'"""
+    # TODO: add more possible initializer types
+    standard_init_map = {
+        NumericIndexType: bodo.hiframes.pd_index_ext.init_numeric_index,
+        DatetimeIndexType: bodo.hiframes.pd_index_ext.init_datetime_index,
+        TimedeltaIndexType: bodo.hiframes.pd_index_ext.init_timedelta_index,
+        StringIndexType: bodo.hiframes.pd_index_ext.init_binary_str_index,
+        BinaryIndexType: bodo.hiframes.pd_index_ext.init_binary_str_index,
+        CategoricalIndexType: bodo.hiframes.pd_index_ext.init_categorical_index,
+        IntervalIndexType: bodo.hiframes.pd_index_ext.init_interval_index,
+    }
+
+    if type(I) in standard_init_map:
+        init_func = standard_init_map[type(I)]
+        return lambda I, name, inplace=False: init_func(
+            I._data.copy(), name
+        )  # pragma: no cover
+
+    if isinstance(I, RangeIndexType):
+        return (
+            lambda I, name, inplace=False: bodo.hiframes.pd_index_ext.init_range_index(
+                I.start, I.stop, I.step, name
+            )
+        )  # pragma: no cover
+
+    if isinstance(I, PeriodIndexType):
+        freq = I.freq
+        return (
+            lambda I, name, inplace=False: bodo.hiframes.pd_index_ext.init_period_index(
+                I._data.copy(),
+                name,
+                freq,
+            )
+        )  # pragma: no cover
+
+    if isinstance(I, HeterogeneousIndexType):
+        return (
+            lambda I, name, inplace=False: bodo.hiframes.pd_index_ext.init_heter_index(
+                bodo.hiframes.pd_index_ext.get_index_data(I),
+                name,
+            )
+        )  # pragma: no cover
+
+    raise TypeError(f"init_index(): Unknown type {type(I)}")
+
+
 # TODO(ehsan): test
 @overload(operator.getitem, no_unliteral=True)
 def overload_heter_index_getitem(I, ind):  # pragma: no cover
@@ -4004,7 +4072,6 @@ index_unsupported_methods = [
     "putmask",
     "ravel",
     "reindex",
-    "rename",
     "repeat",
     "searchsorted",
     "set_names",

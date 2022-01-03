@@ -808,16 +808,14 @@ class DistributedAnalysis:
                 # match input and output distributions
                 self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
-        
+
         if (
             func_name == "predict_proba"
             and "bodo.libs.xgb_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                (
-                    bodo.libs.xgb_ext.BodoXGBClassifierType,
-                ),
+                (bodo.libs.xgb_ext.BodoXGBClassifierType,),
             )
         ):  # pragma: no cover
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
@@ -851,7 +849,7 @@ class DistributedAnalysis:
             elif func_name == "score":
                 self._meet_array_dists(rhs.args[0].name, rhs.args[1].name, array_dists)
             return
-        
+
         if (
             func_name in {"predict_proba", "predict_log_proba"}
             and "bodo.libs.sklearn_ext" in sys.modules
@@ -866,7 +864,7 @@ class DistributedAnalysis:
             )
         ):
             # match input and output distributions
-            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)  
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         if (
@@ -952,7 +950,7 @@ class DistributedAnalysis:
                 self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
                     lhs, func_name, rhs, kws, array_dists
                 )
-            
+
             if func_name == "confusion_matrix":
                 # output is always replicated, and the output is an array
                 self._set_REP(
@@ -965,8 +963,12 @@ class DistributedAnalysis:
                 # if it is provided, then set it to REP
                 if "labels" in kws:
                     labels_arg_name = kws["labels"].name
-                    self._set_REP(labels_arg_name, array_dists, f"labels when provided are assumed to be REP", rhs.loc)
-                
+                    self._set_REP(
+                        labels_arg_name,
+                        array_dists,
+                        f"labels when provided are assumed to be REP",
+                        rhs.loc,
+                    )
 
             return
 
@@ -1607,6 +1609,8 @@ class DistributedAnalysis:
             "init_categorical_index",
             "init_datetime_index",
             "init_timedelta_index",
+            "init_period_index",
+            "init_interval_index",
             "get_index_data",
         ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)

@@ -1517,7 +1517,7 @@ heter_series_unsupported_methods = {
     "last",
     "reindex",
     "reindex_like",
-    "rename",  # TODO: Support
+    "rename",
     "rename_axis",
     "reset_index",
     "sample",
