@@ -1323,12 +1323,6 @@ def test_index_unsupported(data):
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_reindex)(idx=pd.Index(data))
 
-    def test_rename(idx):
-        return idx.rename()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_rename)(idx=pd.Index(data))
-
     def test_repeat(idx):
         return idx.repeat()
 
@@ -1640,3 +1634,63 @@ def test_timedelta_max_all_na():
         return I.max()
 
     check_func(impl, (idx,))
+
+
+@pytest.mark.parametrize(
+    "idx,new_name",
+    [
+        pytest.param(pd.RangeIndex(start=0, stop=5), "a", id="RangeIndexType"),
+        pytest.param(pd.Index([1, 2, 3, 4, 5]), "a", id="NumericIndexType"),
+        pytest.param(pd.Index(["a", "b", "c", "d", "e"]), "a", id="StringIndexType"),
+        pytest.param(
+            pd.Index([b"a", b"b", b"c", b"d", b"e"]), "a", id="BinaryIndexType"
+        ),
+        pytest.param(
+            pd.PeriodIndex(
+                year=[2000, 2001, 2002, 2003, 2004], quarter=[1, 2, 3, 2, 1]
+            ),
+            "a",
+            id="PeriodIndexType",
+        ),
+        pytest.param(
+            pd.DatetimeIndex(
+                ["2000-01-01", "2001-01-01", "2002-01-01", "2003-01-01", "2004-01-01"]
+            ),
+            "a",
+            id="DatetimeIndexType",
+        ),
+        pytest.param(
+            pd.TimedeltaIndex(["1 days", "2 days", "3 days", "4 days", "5 days"]),
+            "a",
+            id="TimedeltaIndexType",
+        ),
+        pytest.param(pd.interval_range(start=0, end=5), "a", id="IntervalIndexType"),
+        pytest.param(
+            pd.CategoricalIndex(["a", "a", "b", "c", "d"]),
+            "a",
+            id="CategoricalIndexType",
+        ),
+    ],
+)
+def test_index_rename(idx, new_name):
+    """tests index.rename() for all types of supported indexes"""
+
+    def impl(I, name):
+        return I.rename(name)
+
+    check_func(impl, (idx, new_name))
+
+
+def test_index_rename_heter():
+    """tests the special case for heterogeneous indices"""
+    df = pd.DataFrame(
+        {"key": ["bar", "bat", "baz", "fii", "foo"], "value": [1, 2, 3, 4, 5]}
+    )
+
+    def impl(df):
+        def row_index_renamer(row):
+            return row.index.rename("a").name
+
+        return df.apply(row_index_renamer, axis=1)
+
+    check_func(impl, (df,))

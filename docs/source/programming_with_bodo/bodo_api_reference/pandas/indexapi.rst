@@ -211,6 +211,33 @@ Modifying and computations
   >>> f(I)
   2018-04-25 00:00:00
 
+* :meth:`pandas.Index.rename` ``(name, inplace=False)``
+
+`Supported arguments`:
+
+.. list-table::
+   :widths: 25 25
+   :header-rows: 1
+
+   * - argument
+     - datatypes
+   * - ``name``
+     - label or list of labels
+
+`Unsupported Index Types`:
+
+  * MutliIndex
+
+`Example Usage`::
+
+  >>> @bodo.jit
+  ... def f(I, name):
+  ...   return I.rename(name)
+
+  >>> I = pd.Index(["a", "b", "c"])
+  >>> f(I, "new_name")
+  Index(['a', 'b', 'c'], dtype='object', name='new_name')
+
 
 Missing values
 ^^^^^^^^^^^^^^^
