@@ -1,5 +1,6 @@
 import datetime
 from decimal import Decimal
+from enum import IntEnum
 
 import numpy as np
 import pandas as pd
@@ -1213,7 +1214,6 @@ def test_np_where_impl_nullable(arr_tuple_val, memory_leak_check):
     check_func(impl, (A1, A2, cond))
 
 
-
 def test_np_select_none_default(arr_tuple_val, memory_leak_check):
     """tests np select when passing "None" as a default value with numpy arrays"""
     np.random.seed(42)
@@ -1232,14 +1232,16 @@ def test_np_select_none_default(arr_tuple_val, memory_leak_check):
     def impl(A1, A2, cond1, cond2):
         choicelist = [A1, A2]
         condlist = [cond1, cond2]
-        return np.select(condlist, choicelist, default = None)
+        return np.select(condlist, choicelist, default=None)
 
     def py_impl(A1, A2, cond1, cond2):
         choicelist = [A1, A2]
         condlist = [cond1, cond2]
-        return np.select(condlist, choicelist, default = pd.NA)
+        return np.select(condlist, choicelist, default=pd.NA)
 
-    py_out = py_impl(arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2) #.astype(arr_tuple_val[0].dtype)
+    py_out = py_impl(
+        arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2
+    )  # .astype(arr_tuple_val[0].dtype)
 
     if arr_tuple_val[0].dtype.name.startswith("float"):
         py_out[pd.isna(py_out)] = np.NAN
@@ -1249,7 +1251,7 @@ def test_np_select_none_default(arr_tuple_val, memory_leak_check):
         impl,
         (arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2),
         check_dtype=False,
-        py_output = py_out,
+        py_output=py_out,
     )
 
 
@@ -1273,9 +1275,34 @@ def test_np_select_set_default(arr_tuple_val, memory_leak_check):
         condlist = [cond1, cond2]
         return np.select(condlist, choicelist, default)
 
-
     check_func(
         impl,
-        (arr_tuple_val[0][:minsize], arr_tuple_val[1][:minsize], cond1, cond2, arr_tuple_val[0][0]),
+        (
+            arr_tuple_val[0][:minsize],
+            arr_tuple_val[1][:minsize],
+            cond1,
+            cond2,
+            arr_tuple_val[0][0],
+        ),
         check_dtype=False,
     )
+
+
+@pytest.mark.parametrize(
+    "arr_fun",
+    [
+        pytest.param(lambda x: np.empty((x, x), dtype="int64").fill(-1), id="empty"),
+        pytest.param(lambda x: np.zeros((x, x), dtype="int64"), id="zeros"),
+        pytest.param(lambda x: np.ones((x, x), dtype="int64"), id="ones"),
+    ],
+)
+def test_np_array_from_enum(arr_fun):
+    """tests np array from IntEnum"""
+
+    class TestEnum(IntEnum):
+        A = 1
+        B = 2
+        C = 3
+
+    for member in TestEnum:
+        check_func(arr_fun, (member,))

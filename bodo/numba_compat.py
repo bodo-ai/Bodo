@@ -4935,3 +4935,33 @@ numba.core.boxing._python_list_to_native = _python_list_to_native
 
 
 #########  End changes to allow lists of optional values unboxing  #########
+
+#########  Start changes to allow IntEnum support for `np.empty`, `np.zeros`, and `np.ones`  #########
+# change `parse_shape` to support IntEnum
+
+
+def parse_shape(shape):
+    """
+    Given a shape, return the number of dimensions.
+    """
+    ndim = None
+    if isinstance(shape, types.Integer):
+        ndim = 1
+    elif isinstance(shape, (types.Tuple, types.UniTuple)):
+        # Bodo Change: support IntEnum members within tuples
+        # see: https://github.com/Bodo-inc/Bodo/pull/3499
+        if all(isinstance(s, (types.Integer, types.IntEnumMember)) for s in shape):
+            ndim = len(shape)
+    return ndim
+
+
+if _check_numba_change: #pragma: no cover
+    lines = inspect.getsource(numba.core.typing.npydecl.parse_shape)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "e62e3ff09d36df5ac9374055947d6a8be27160ce32960d3ef6cb67f89bd16429"
+    ):
+        warnings.warn("numba.core.typing.npydecl.parse_shape has changed")
+
+numba.core.typing.npydecl.parse_shape = parse_shape
+#########  End changes to allow IntEnum support for `np.empty`, `np.zeros`, and `np.ones`  #########
