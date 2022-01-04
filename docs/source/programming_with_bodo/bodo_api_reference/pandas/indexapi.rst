@@ -37,6 +37,55 @@ Properties
      >>> f(I)
      (3,)
 
+* :attr:`pandas.Index.is_monotonic_increasing` and :attr:`pandas.Index.is_monotonic`
+
+`Unsupported Index Types`:
+
+  * StringIndex
+  * BinaryIndex
+  * IntervalIndex
+  * CategoricalIndex
+  * PeriodIndex
+  * MultiIndex
+
+`Example Usage`::
+     >>> @bodo.jit
+     ... def f(I):
+     ...   return I.is_monotonic_increasing
+     
+     >>> I = pd.Index([1,2,3])
+     >>> f(I)
+     True
+
+     >>> @bodo.jit
+     ... def g(I):
+     ...   return I.is_monotonic
+
+     >>> I = pd.Index(1,2,3])
+     >>> g(I)
+     True
+
+* :attr:`pandas.Index.is_monotonic_decreasing`
+
+`Unsupported Index Types`:
+
+  * StringIndex
+  * BinaryIndex
+  * IntervalIndex
+  * CategoricalIndex
+  * PeriodIndex
+  * MultiIndex
+
+`Example Usage`::
+
+     >>> @bodo.jit
+     ... def f(I):
+     ...   return I.is_monotonic_decreasing
+
+     >>> I = pd.Index([1,2,3])
+     >>> f(I)
+     False
+
 * :attr:`pandas.Index.values`
 
 `Unsupported Index Types`:

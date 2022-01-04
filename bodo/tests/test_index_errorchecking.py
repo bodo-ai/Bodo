@@ -707,3 +707,58 @@ def test_idx_map_tup_return():
         return I.map(lambda a: (1, a))
 
     check_func(test_impl, (index,))
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index(["A", "B", "C", "D"]),
+        pytest.param(
+            pd.Index([b"hello", b"world", b"", b"test", bytes(2), b"CC"]),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex(["A", "B", "B", "A", "C", "A", "B", "C"]),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.IntervalIndex.from_arrays(np.arange(11), np.arange(11) + 1),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.PeriodIndex(
+                year=[2015, 2015, 2016, 1026, 2018, 2018, 2019],
+                month=[1, 2, 3, 1, 2, 3, 4],
+                freq="M",
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.MultiIndex.from_arrays([[1, 5, 9], [2, 1, 8]]), marks=pytest.mark.slow
+        ),
+    ],
+)
+def test_monotonic_unsupported(index):
+    """
+    Checks that is_monotonic, is_monotonic_increasing, and is_monotonic_decreasing attributes
+    throw error for unsupported index types (i.e. not a NumericIndex, DatetimeIndex,
+    TimedeltaIndex, or RangeIndex).
+    """
+
+    def test_unsupp_is_monotonic(idx):
+        return idx.is_monotonic
+
+    def test_unsupp_is_monotonic_increasing(idx):
+        return idx.is_monotonic_increasing
+
+    def test_unsupp_is_monotonic_decreasing(idx):
+        return idx.is_monotonic_decreasing
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_unsupp_is_monotonic)(index)
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_unsupp_is_monotonic_increasing)(index)
+
+    with pytest.raises(BodoError, match="not supported yet"):
+        bodo.jit(test_unsupp_is_monotonic_decreasing)(index)

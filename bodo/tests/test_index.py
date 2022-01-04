@@ -998,6 +998,71 @@ def test_map(index, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([i for i in range(100)]),
+        pytest.param(pd.UInt64Index([i for i in range(100)]), marks=pytest.mark.slow),
+        pytest.param(pd.Float64Index([i for i in range(100)]), marks=pytest.mark.slow),
+        pd.Index([i for i in range(100, -1, -1)]),
+        pd.Index([1, 4, 3, 2, 5, 6, 4]),
+        pytest.param(
+            pd.date_range(start="2018-04-24", end="2018-04-27", periods=10),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.date_range(start="2018-04-24", end="2018-04-22", periods=100),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Index(
+                [
+                    np.datetime64("2018-01-02"),
+                    np.datetime64("2018-01-03"),
+                    np.datetime64("2018-01-01"),
+                    np.datetime64("2018-01-06"),
+                    np.datetime64("2018-01-04"),
+                    np.datetime64("2018-01-05"),
+                ]
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.timedelta_range(start="1D", end="15D", freq="1D"), marks=pytest.mark.slow
+        ),
+        pytest.param(
+            pd.timedelta_range(start="3Y", end="1Y", periods=100),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Index([pd.Timedelta(1), pd.Timedelta(3), pd.Timedelta(2)]),
+            marks=pytest.mark.slow,
+        ),
+        pd.RangeIndex(1, 100, 2),
+        pytest.param(pd.RangeIndex(1, 100, -1), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(1, 1, 1), marks=pytest.mark.slow),
+    ],
+)
+def test_monotonicity(index, memory_leak_check):
+    """
+    Test is_monotonic, is_monotonic_increasing, and is_monotonic_decreasing attributes for indices
+    of type Int64Index, UInt64Index, Float64Index, DatetimeIndex, TimedeltaIndex, and RangeIndex.
+    """
+
+    def f1(index):
+        return index.is_monotonic
+
+    def f2(index):
+        return index.is_monotonic_increasing
+
+    def f3(index):
+        return index.is_monotonic_decreasing
+
+    check_func(f1, (index,))
+    check_func(f2, (index,))
+    check_func(f3, (index,))
+
+
+@pytest.mark.parametrize(
     "data",
     [
         np.array([1, 3, 4]),  # Int array
