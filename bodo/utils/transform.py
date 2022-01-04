@@ -21,6 +21,7 @@ from numba.core.ir_utils import (
     find_const,
     get_definition,
     guard,
+    is_setitem,
     mk_unique_var,
     replace_arg_nodes,
     require,
@@ -86,6 +87,29 @@ bodo_types_with_params = {
     "TimedeltaIndexType",
     "TupleArrayType",
 }
+
+
+# list of list/set/dict function names that update the container inplace
+container_update_method_names = (
+    # dict
+    "clear",
+    "pop",
+    "popitem",
+    "update",
+    # set
+    "add",
+    "difference_update",
+    "discard",
+    "intersection_update",
+    "remove",
+    "symmetric_difference_update",
+    # list
+    "append",
+    "extend",
+    "insert",
+    "reverse",
+    "sort",
+)
 
 
 no_side_effect_call_tuples = {
@@ -893,7 +917,123 @@ def get_const_value_inner(
         }
         return getattr(bodo, call_name[0])(*args, **kwargs)
 
+    # evaluate JIT function at compile time if arguments can be constant and it is a
+    # "pure" function (has no side effects and only depends on input values for output)
+    if (
+        is_call(var_def)
+        and typemap
+        and isinstance(typemap.get(var_def.func.name, None), types.Dispatcher)
+    ):
+        py_func = typemap[var_def.func.name].dispatcher.py_func
+        require(var_def.vararg is None)
+        args = tuple(
+            get_const_value_inner(func_ir, v, arg_types, typemap, updated_containers)
+            for v in var_def.args
+        )
+        kwargs = {
+            name: get_const_value_inner(
+                func_ir, v, arg_types, typemap, updated_containers
+            )
+            for name, v in dict(var_def.kws).items()
+        }
+        arg_types = tuple(bodo.typeof(v) for v in args)
+        kw_types = {k: bodo.typeof(v) for k, v in kwargs.items()}
+        require(_func_is_pure(py_func, arg_types, kw_types))
+        return py_func(*args, **kwargs)
+
     raise GuardException("Constant value not found")
+
+
+def _func_is_pure(py_func, arg_types, kw_types):
+    """return True if py_func is a pure function: output depends on input only
+    (e.g. no I/O) and has no side-effects"""
+    from bodo.hiframes.pd_dataframe_ext import DataFrameType
+    from bodo.hiframes.pd_series_ext import SeriesType
+    from bodo.ir.csv_ext import CsvReader
+    from bodo.ir.json_ext import JsonReader
+    from bodo.ir.parquet_ext import ParquetReader
+    from bodo.ir.sql_ext import SqlReader
+
+    f_ir, typemap, _, _ = bodo.compiler.get_func_type_info(py_func, arg_types, kw_types)
+    for block in f_ir.blocks.values():
+        for stmt in block.body:
+            # print
+            if isinstance(stmt, ir.Print):
+                return False
+            # I/O nodes
+            if isinstance(stmt, (CsvReader, JsonReader, ParquetReader, SqlReader)):
+                return False
+            # setitem of input arguments like lists causes reflection
+            if is_setitem(stmt) and isinstance(
+                guard(get_definition, f_ir, stmt.target), ir.Arg
+            ):
+                return False
+            if is_assign(stmt):
+                rhs = stmt.value
+                # generators keep state so not pure
+                if isinstance(rhs, ir.Yield):
+                    return False
+                if is_call(rhs):
+                    func_var_def = guard(get_definition, f_ir, rhs.func)
+                    # assume objmode is not pure since we can't fully analyze it
+                    if isinstance(func_var_def, ir.Const) and isinstance(
+                        func_var_def.value, numba.core.dispatcher.ObjModeLiftedWith
+                    ):
+                        return False
+                    fdef = guard(find_callname, f_ir, rhs)
+                    # assume not pure if function call can't be analyzed
+                    if fdef is None:
+                        return False
+                    func_name, func_mod = fdef
+                    # check I/O functions
+                    if func_mod == "pandas" and func_name.startswith("read_"):
+                        return False
+                    if fdef in (
+                        ("fromfile", "numpy"),
+                        ("file_read", "bodo.io.np_io"),
+                    ):
+                        return False
+                    if fdef == ("File", "h5py"):
+                        return False
+                    if isinstance(func_mod, ir.Var):
+                        typ = typemap[func_mod.name]
+                        if isinstance(
+                            typ, (DataFrameType, SeriesType)
+                        ) and func_name in (
+                            "to_csv",
+                            "to_excel",
+                            "to_json",
+                            "to_sql",
+                            "to_pickle",
+                            "to_parquet",
+                            "info",
+                        ):
+                            return False
+                        if isinstance(typ, types.Array) and func_name == "tofile":
+                            return False
+                        # logging calls have side effects
+                        if isinstance(typ, bodo.libs.logging_ext.LoggingRootLoggerType):
+                            return False
+                        # matplotlib types
+                        if str(typ).startswith("Mpl"):
+                            return False
+                        # inplace container update
+                        if func_name in container_update_method_names and isinstance(
+                            guard(get_definition, f_ir, func_mod), ir.Arg
+                        ):
+                            return False
+
+                    # random functions are not pure since change across calls
+                    # time() is not deterministic across calls
+                    if func_mod in (
+                        "numpy.random",
+                        "time",
+                        "logging",
+                        "matplotlib.pyplot",
+                    ):
+                        return False
+
+    return True
 
 
 # similar to Dispatcher.fold_argument_types in Numba
