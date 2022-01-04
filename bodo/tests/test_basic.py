@@ -6,6 +6,7 @@ import numba
 import numpy as np
 import pandas as pd
 import pytest
+from numba.core import types
 
 import bodo
 from bodo.tests.utils import (
@@ -782,6 +783,132 @@ def test_updated_container_df_rename():
         match=r"rename\(\): argument 'mapper' requires a constant value",
     ):
         bodo.jit(impl)()
+
+
+def test_unroll_label_offset_bug():
+    """Test for a bug in loop unrolling where block labels would clash"""
+
+    def impl(df):
+        df.columns = [
+            f"quality_metrics_{c}" if c not in ["hex_id"] else c for c in df.columns
+        ]
+        return df
+
+    df = pd.DataFrame({"A": [1, 2, 3], "hex_id": [4, 5, 6], "C": ["a", "b", "c"]})
+    with pytest.raises(
+        BodoError,
+        match=r"dataframe columns requires constant names",
+    ):
+        bodo.jit(impl)(df)
+
+
+def test_const_func_eval(memory_leak_check):
+    """test evaluating jit functions in compile time for extracting constants"""
+
+    @bodo.jit
+    def g(df_cols):
+        return [f"quality_metrics_{c}" if c not in ["hex_id"] else c for c in df_cols]
+
+    def impl(df):
+        df.columns = g(df.columns)
+        return df
+
+    df = pd.DataFrame({"A": [1, 2, 3], "hex_id": [4, 5, 6], "C": ["a", "b", "c"]})
+    check_func(impl, (df,), copy_input=True, only_seq=True)
+
+
+def test_pure_func(datapath):
+    """Test determining pure functions.
+    Tests a representative sample of various cases and code paths.
+    """
+    import time
+
+    import h5py
+
+    from bodo.utils.transform import _func_is_pure
+
+    fname_pq = datapath("example.parquet")
+    fname_h5 = datapath("lr.hdf5")
+    fname_np = datapath("np_file1.dat")
+    fname_csv = datapath("csv_data1.csv")
+
+    # print
+    def impl1():
+        print("abc")
+
+    # yield
+    def impl2():
+        for a in [1, 2, 3]:
+            yield a
+
+    # objmode
+    def impl3():
+        with bodo.objmode():
+            impl1()
+
+    # pq read
+    def impl4():
+        return pd.read_parquet(fname_pq)
+
+    # np read
+    def impl5():
+        return np.fromfile(fname_np, np.float64)
+
+    # np write
+    def impl6():
+        np.ones(3).tofile("example.dat")
+
+    # pq write
+    def impl7():
+        df = pd.DataFrame({"A": [1, 2, 3]})
+        df.to_parquet("example.pq")
+
+    # h5py
+    def impl8():
+        f = h5py.File(fname_h5)
+        X = f["points"][:, :]
+        f.close()
+        return X
+
+    # random
+    def impl9():
+        return np.random.ranf(10)
+
+    # time
+    def impl10():
+        return time.time()
+
+    # csv read
+    def impl11():
+        return pd.read_csv(fname_csv)
+
+    # csv write
+    def impl12():
+        df = pd.DataFrame({"A": [1, 2, 3]})
+        df.to_csv("example.pq")
+
+    # input list setitem
+    def impl13(l):
+        l[1] = 3
+
+    # input dict update in place
+    def impl14(d):
+        d.pop(3)
+
+    assert not _func_is_pure(impl1, (), {})
+    assert not _func_is_pure(impl2, (), {})
+    assert not _func_is_pure(impl3, (), {})
+    assert not _func_is_pure(impl4, (), {})
+    assert not _func_is_pure(impl5, (), {})
+    assert not _func_is_pure(impl6, (), {})
+    assert not _func_is_pure(impl7, (), {})
+    assert not _func_is_pure(impl8, (), {})
+    assert not _func_is_pure(impl9, (), {})
+    assert not _func_is_pure(impl10, (), {})
+    assert not _func_is_pure(impl11, (), {})
+    assert not _func_is_pure(impl12, (), {})
+    assert not _func_is_pure(impl13, (types.List(types.int64),), {})
+    assert not _func_is_pure(impl14, (types.DictType(types.int64, types.int64),), {})
 
 
 def test_objmode_types():

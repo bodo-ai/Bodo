@@ -389,7 +389,7 @@ Type Stability
 ~~~~~~~~~~~~~~
 
 
-The key requirement of JIT compilation is being able to infer
+The main requirement of JIT compilation is being able to infer
 data types for all variables and values.
 In Bodo, column names are part of dataframe data types,
 so Bodo tries to infer column name related inputs in all operations.
@@ -402,54 +402,53 @@ data type and need to be known to Bodo:
     import bodo
 
     @bodo.jit
-    def get_keys():
-        keys = []
-        keys.append("A")
-        return keys
-
-    @bodo.jit
-    def groupby_keys():
+    def groupby_keys(extra_keys):
         df = pd.read_parquet("pd_example.pq")
-        keys = get_keys()  # some computation that cannot be inferred
+        keys = [c for c in df.columns if c not in ["B", "C"]]
+        if extra_keys:
+            keys.append("B")
         df2 = df.groupby(keys).sum()
         print(df2)
 
     if __name__ == "__main__":
-        groupby_keys()
+        groupby_keys(False)
 
 Save this code as ``groupby_keys.py`` and run from command line::
 
     $ python groupby_keys.py
-    # bodo.utils.typing.BodoError: groupby(): 'by' parameter only supports a constant column label or column labels, not list(unicode_type)<iv=None>.
+    # bodo.utils.typing.BodoError: groupby(): argument 'by' requires a constant value but variable 'keys' is updated inplace using 'append'
 
-In this case, the list of groupby keys is determined by a separate ``get_keys()`` function,
-and Bodo is not able to infer it from the program during compilation time.
-The alternative is to pass the keys as an argument to the JIT function to make the values
-known to Bodo:
+In this case, the list of groupby keys is determined using the runtime value of ``extra_keys``
+in a way that Bodo is not able to infer it from the program during compilation time.
+The alternative is to compute the keys in a separate JIT function to make it easier for Bodo to infer:
 
 .. code:: ipython3
 
     import pandas as pd
     import bodo
 
-    def get_keys():
-        keys = []
-        keys.append("A")
+    @bodo.jit
+    def get_keys(f_columns, extra_keys):
+        keys = [c for c in df_columns if c not in ["B", "C"]]
+        if extra_keys:
+            keys.append("B")
         return keys
 
     @bodo.jit
-    def groupby_keys(keys):
+    def groupby_keys(extra_keys):
         df = pd.read_parquet("pd_example.pq")
+        keys = get_keys(df.columns, extra_keys)
         df2 = df.groupby(keys).sum()
         print(df2)
 
     if __name__ == "__main__":
         keys = get_keys()
-        groupby_keys(keys)
+        groupby_keys(False)
 
-This program works since ``keys`` is passed from regular Python to the JIT function.
-In addition, we recommend small functions like ``get_keys`` that don't use large datasets
-to be in regular Python in general.
+This program works since ``get_keys`` can be evaluated in compile time.
+It only uses ``df.columns`` and ``extra_keys`` values that can be constant at compile time,
+and does not use non-deterministic features like I/O.
+
 
 Python Features
 ~~~~~~~~~~~~~~~

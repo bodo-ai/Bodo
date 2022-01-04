@@ -40,6 +40,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
 from bodo.utils.transform import (
     compile_func_single_block,
+    container_update_method_names,
     get_call_expr_arg,
     get_const_value_inner,
     set_call_expr_arg,
@@ -3393,7 +3394,11 @@ class TypingTransforms:
 
         # generate an instance of the loop body for each iteration
         for c in iter_vals:
-            offset = ir_utils.next_label()
+            # NOTE: Using ir_utils.next_label() can cause conflicts with block numbers
+            # across copied iteration bodies. For example, for block numbers (1, 2, 3),
+            # and initial next label 1, the first and second iteration bodies will
+            # conflict with (2, 3, 4) and (3, 4, 5) labels overlapping.
+            offset = max(self.func_ir.blocks.keys()) + 1
             # new unique loop body IR
             new_body = ir_utils.add_offset_to_labels(copy.deepcopy(loop_body), offset)
             new_first_label = first_label + offset
@@ -3423,7 +3428,6 @@ class TypingTransforms:
                 {"func_ir": self.func_ir, "locals": self.locals}
             )
         )
-
         self.changed = True
 
     def _get_enclosing_loop(self, var, label, cfg):
@@ -3663,27 +3667,7 @@ def _find_updated_containers(blocks, topo_order):
             elif (
                 is_assign(stmt)
                 and is_expr(stmt.value, "getattr")
-                and stmt.value.attr
-                in (
-                    # dict
-                    "clear",
-                    "pop",
-                    "popitem",
-                    "update",
-                    # set
-                    "add",
-                    "difference_update",
-                    "discard",
-                    "intersection_update",
-                    "remove",
-                    "symmetric_difference_update",
-                    # list
-                    "append",
-                    "extend",
-                    "insert",
-                    "reverse",
-                    "sort",
-                )
+                and stmt.value.attr in container_update_method_names
             ):
                 _set_updated_container(
                     stmt.value.value.name,
