@@ -1,7 +1,9 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import datetime
+import json
 import os
 import random
+import urllib
 
 import numpy as np
 import pandas as pd
@@ -10,10 +12,10 @@ import pytest
 import bodo
 from bodo.tests.utils import (
     SeriesOptTestPipeline,
+    _check_connector_columns,
     _check_for_io_reader_filters,
     check_func,
     get_start_end,
-    _check_connector_columns,
 )
 
 sql_user_pass_and_hostname = (
@@ -370,7 +372,7 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
         [
             "l_suppkey",
         ],
-        bodo.ir.sql_ext.SqlReader
+        bodo.ir.sql_ext.SqlReader,
     )
 
     str_val = "O"
@@ -441,7 +443,6 @@ def test_sql_snowflake_na_pushdown(memory_leak_check):
     # need to sort the output to make sure pandas and Bodo get the same rows
     query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
 
-
     check_func(impl_or_isna, (query, conn), check_dtype=False, reset_index=True)
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_or_isna)
     bodo_func(query, conn)
@@ -465,3 +466,32 @@ def test_sql_snowflake_na_pushdown(memory_leak_check):
     bodo_func(query, conn)
     _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
     _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_sql_snowflake_json_url(memory_leak_check):
+    """
+    Check running a snowflake query with a dictionary for connection parameters
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    username = os.environ["SF_USER"]
+    password = os.environ["SF_PASSWORD"]
+    account = "bodopartner.us-east-1"
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    connection_params = {
+        "warehouse": "DEMO_WH",
+        "session_parameters": json.dumps({"JSON_INDENT": 0}),
+        "paramstyle": "pyformat",
+        "insecure_mode": True,
+    }
+    conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?{urllib.parse.urlencode(connection_params)}"
+    # session_parameters bug exists in sqlalchemy/snowflake connector
+    del connection_params["session_parameters"]
+    pandas_conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?{urllib.parse.urlencode(connection_params)}"
+    query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+    check_func(impl, (query, conn), py_output=impl(query, pandas_conn))
