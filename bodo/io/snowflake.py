@@ -6,7 +6,7 @@ import bodo
 from bodo.utils import tracing
 
 
-def get_connection_params(conn_str):
+def get_connection_params(conn_str):  # pragma: no cover
     """From Snowflake connection URL, return dictionary of connection
     parameters that can be passed directly to
     snowflake.connector.connect(**conn_params)
@@ -14,6 +14,8 @@ def get_connection_params(conn_str):
     # Snowflake connection string URL format:
     # snowflake://<user_login_name>:<password>@<account_identifier>/<database_name>/<schema_name>?warehouse=<warehouse_name>&role=<role_name>
     # https://docs.snowflake.com/en/user-guide/sqlalchemy.html#additional-connection-parameters
+    import json
+
     u = urlparse(conn_str)
     params = {}
     if u.username:
@@ -37,6 +39,11 @@ def get_connection_params(conn_str):
         # query contains warehouse_name and role_name
         for key, val in parse_qsl(u.query):
             params[key] = val
+            if key == "session_parameters":
+                # Snowflake connector appends to session_parameters and
+                # assumes it is a dictionary if provided. This is an existing
+                # bug in SqlAlchemy/SnowflakeSqlAlchemy
+                params[key] = json.loads(val)
     # pass Bodo identifier to Snowflake
     params["application"] = "bodo"
     return params
