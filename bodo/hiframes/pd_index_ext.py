@@ -3278,6 +3278,63 @@ def overload_range_index_shape(s):
     return lambda s: (len(s),)  # pragma: no cover
 
 
+@overload_attribute(NumericIndexType, "is_monotonic", inline="always")
+@overload_attribute(RangeIndexType, "is_monotonic", inline="always")
+@overload_attribute(DatetimeIndexType, "is_monotonic", inline="always")
+@overload_attribute(TimedeltaIndexType, "is_monotonic", inline="always")
+@overload_attribute(NumericIndexType, "is_monotonic_increasing", inline="always")
+@overload_attribute(RangeIndexType, "is_monotonic_increasing", inline="always")
+@overload_attribute(DatetimeIndexType, "is_monotonic_increasing", inline="always")
+@overload_attribute(TimedeltaIndexType, "is_monotonic_increasing", inline="always")
+def overload_index_is_montonic(I):
+    """
+    Implementation of is_monotonic and is_monotonic_increasing attributes for Int64Index,
+    UInt64Index, Float64Index, DatetimeIndex, TimedeltaIndex, and RangeIndex types.
+    """
+    if isinstance(I, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType)):
+
+        def impl(I):  # pragma: no cover
+            arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+            return bodo.libs.array_kernels.series_monotonicity(arr, 1)
+
+        return impl
+
+    elif isinstance(I, RangeIndexType):
+
+        def impl(I):  # pragma: no cover
+            # Implementation matches pandas.RangeIndex.is_monotonic:
+            # https://github.com/pandas-dev/pandas/blob/66e3805b8cabe977f40c05259cc3fcf7ead5687d/pandas/core/indexes/range.py#L356-L362
+            return I._step > 0 or len(I) <= 1
+
+        return impl
+
+
+@overload_attribute(NumericIndexType, "is_monotonic_decreasing", inline="always")
+@overload_attribute(RangeIndexType, "is_monotonic_decreasing", inline="always")
+@overload_attribute(DatetimeIndexType, "is_monotonic_decreasing", inline="always")
+@overload_attribute(TimedeltaIndexType, "is_monotonic_decreasing", inline="always")
+def overload_index_is_montonic_decreasing(I):
+    """
+    Implementation of is_monotonic_decreasing attribute for Int64Index,
+    UInt64Index, Float64Index, DatetimeIndex, TimedeltaIndex, and RangeIndex.
+    """
+    if isinstance(I, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType)):
+
+        def impl(I):  # pragma: no cover
+            arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+            return bodo.libs.array_kernels.series_monotonicity(arr, 2)
+
+        return impl
+    elif isinstance(I, RangeIndexType):
+
+        def impl(I):  # pragma: no cover
+            # Implementation matches pandas.RangeIndex.is_monotonic_decreasing:
+            # https://github.com/pandas-dev/pandas/blob/66e3805b8cabe977f40c05259cc3fcf7ead5687d/pandas/core/indexes/range.py#L356-L362
+            return I._step < 0 or len(I) <= 1
+
+        return impl
+
+
 @numba.generated_jit(nopython=True)
 def get_index_data(S):
     return lambda S: S._data  # pragma: no cover
@@ -4019,7 +4076,6 @@ def _install_index_getiter():
 
 _install_index_getiter()
 
-
 index_unsupported_methods = [
     "all",
     "any",
@@ -4108,9 +4164,6 @@ index_unsupported_atrs = [
     "hasnans",
     "inferred_type",
     "is_all_dates",
-    "is_monotonic",
-    "is_monotonic_decreasing",
-    "is_monotonic_increasing",
     "is_unique",
     "ndim",
     "nlevels",
@@ -4126,6 +4179,9 @@ cat_idx_unsupported_atrs = [
     "codes",
     "categories",
     "ordered",
+    "is_monotonic",
+    "is_monotonic_increasing",
+    "is_monotonic_decreasing",
 ]
 
 cat_idx_unsupported_methods = [
@@ -4153,6 +4209,9 @@ interval_idx_unsupported_atrs = [
     "values",
     "shape",
     "nbytes",
+    "is_monotonic",
+    "is_monotonic_increasing",
+    "is_monotonic_decreasing",
 ]
 
 # unsupported Interval class methods (handled in untyped pass)
@@ -4183,6 +4242,9 @@ multi_index_unsupported_atrs = [
     "values",
     "shape",
     "nbytes",
+    "is_monotonic",
+    "is_monotonic_increasing",
+    "is_monotonic_decreasing",
 ]
 
 # unsupported multi-index class methods (handled in untyped pass)
@@ -4275,6 +4337,21 @@ period_index_unsupported_atrs = [
     "end_time",
     "qyear",
     "start_time",
+    "is_monotonic",
+    "is_monotonic_increasing",
+    "is_monotonic_decreasing",
+]
+
+string_index_unsupported_atrs = [
+    "is_monotonic",
+    "is_monotonic_increasing",
+    "is_monotonic_decreasing",
+]
+
+binary_index_unsupported_atrs = [
+    "is_monotonic",
+    "is_monotonic_increasing",
+    "is_monotonic_decreasing",
 ]
 
 period_index_unsupported_methods = [
@@ -4327,6 +4404,8 @@ def _install_index_unsupported():
             )
 
     unsupported_attrs_list = [
+        (StringIndexType, string_index_unsupported_atrs),
+        (BinaryIndexType, binary_index_unsupported_atrs),
         (CategoricalIndexType, cat_idx_unsupported_atrs),
         (IntervalIndexType, interval_idx_unsupported_atrs),
         (MultiIndexType, multi_index_unsupported_atrs),
