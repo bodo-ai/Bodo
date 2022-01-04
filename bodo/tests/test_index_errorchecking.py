@@ -504,7 +504,7 @@ def impl(I):
     impl = loc_vars["impl"]
 
     unsupported_str = idx_format_str.format(unsupported_atr)
-    err_msg = f"{unsupported_str} not supported yet."
+    err_msg = f"{unsupported_str} not supported yet"
 
     with pytest.raises(
         BodoError,

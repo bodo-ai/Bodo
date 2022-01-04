@@ -2227,7 +2227,7 @@ def test_all_to_all(val0, val1, val2, val3):
     check_func(impl, (10,), is_out_distributed=False)
 
 
-@pytest.mark.slow
+@pytest.mark.skip("[BE-1847]")
 def test_barrier_error():
     import numba
 
