@@ -25,10 +25,3 @@ from bodo.tests.utils import InputDist
 )
 def fn_distribution(request):
     return request.param
-
-
-@pytest.fixture()
-def is_cached(pytestconfig):
-    """Fixture used with caching tests, returns true if pytest was called with --is_cached
-    and false otherwise"""
-    return pytestconfig.getoption("is_cached")

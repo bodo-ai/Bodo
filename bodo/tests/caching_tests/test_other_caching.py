@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import pandas as pd
 import pytest
+from caching_tests_common import fn_distribution  # noqa
 
 from bodo.tests.test_metadata import (  # noqa
     bytes_gen_dist_df,

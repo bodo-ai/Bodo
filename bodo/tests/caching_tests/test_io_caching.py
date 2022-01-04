@@ -1,9 +1,9 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import pandas as pd
 import pytest
+from caching_tests_common import fn_distribution  # noqa
 
 from bodo.tests.utils import check_caching
-from caching_tests_common import fn_distribution, is_cached
 
 
 @pytest.mark.smoke
