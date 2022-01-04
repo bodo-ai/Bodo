@@ -25,7 +25,7 @@ jobs:
 
   - script: |
       set -eo pipefail
-      if [[ "${{ parameters.name }}" == "Linux" ]]; then
+      if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
         wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
       else
         wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
@@ -86,11 +86,10 @@ jobs:
       mkdir -p $HOME/bodo-inc
       cd $HOME/bodo-inc
       mkdir bodo
-      mkdir bodo/tests
-      if [[ "${{ parameters.name }}" == "Linux" ]]; then
-        cp -avr $(System.DefaultWorkingDirectory)/bodo/tests/data bodo/tests/
+      if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
+        cp -avr $(System.DefaultWorkingDirectory)/bodo/tests bodo
       else
-        cp -r $(System.DefaultWorkingDirectory)/bodo/tests/data bodo/tests/
+        cp -r $(System.DefaultWorkingDirectory)/bodo/tests bodo
       fi
     displayName: 'Copy test data'
 
@@ -174,7 +173,7 @@ jobs:
       cd $HOME/bodo-inc
       cp `python -c "import bodo; print(bodo.__file__[:-11])"`pytest.ini .
       if [[ "${{ parameters.caching_test }}" == "true" ]]; then
-        python -m bodo.runtests_caching.py "$NP" bodo/tests/caching_tests/
+        python -m bodo.runtests_caching "$NP" bodo/tests/caching_tests
       elif [[ "$NP" -eq 3 ]] && [[ "${{ parameters.name }}" == "Linux" ]]; then
         python -m bodo.runtests "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
       else

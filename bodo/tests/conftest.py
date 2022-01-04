@@ -366,4 +366,16 @@ def is_slow_run(request):
 def pytest_addoption(parser):
     """Used with caching tests, stores if the --is_cached flag was used when calling pytest
     into the pytestconfig"""
-    parser.addoption("--is_cached", action="store_true", default=False)
+
+    # Minor check
+    try:
+        parser.addoption("--is_cached", action="store_true", default=False)
+    except:
+        pass
+
+
+@pytest.fixture()
+def is_cached(pytestconfig):
+    """Fixture used with caching tests, returns true if pytest was called with --is_cached
+    and false otherwise"""
+    return pytestconfig.getoption("is_cached")
