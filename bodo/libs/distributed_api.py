@@ -1590,8 +1590,12 @@ def get_value_for_type(dtype):  # pragma: no cover
             [get_value_for_type(dtype.dtype), get_value_for_type(dtype.dtype)]
         ).values
 
+    if isinstance(dtype, IntervalArrayType):
+        arr_type = get_value_for_type(dtype.arr_type)
+        return pd.arrays.IntervalArray([pd.Interval(arr_type[0], arr_type[0])])
+
     # TODO: Add missing data types
-    raise BodoError("get_value_for_type(dtype): Missing data type")
+    raise BodoError(f"get_value_for_type(dtype): Missing data type {dtype}")
 
 
 def scatterv(data, send_counts=None, warn_if_dist=True):
