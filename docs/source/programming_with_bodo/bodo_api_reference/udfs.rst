@@ -38,7 +38,7 @@ a Timestamp Series to the last day of the current month.
 
 UDFs can be used to compute one value per row or group (map functions) or compute
 an aggregation (agg functions). Bodo provides APIs for both, which are summarized below.
-Please refer to :ref:`pandas` for more information.
+Please refer to :ref:`supported Pandas API <pandas>` for more information.
 
 Map Functions:
 
@@ -103,7 +103,7 @@ Alternatively, arguments can be passed by keyword.
 .. note::
 
     Not all APIs support additional arguments. Please refer to
-    :ref:`pandas`    for more information on intended API
+    :ref:`supported Pandas API <pandas>` for more information on intended API
     usage.
 
 Apply with Pandas Methods and Numpy ufuncs

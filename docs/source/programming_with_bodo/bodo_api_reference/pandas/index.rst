@@ -1,5 +1,7 @@
+.. _pandas:
+
 Pandas
-==================
+=======
 
 .. toctree::
    :glob:
