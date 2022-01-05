@@ -201,6 +201,10 @@ inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
 
 inline void *NRT_Allocate(size_t size) {
     void *ptr = TheMSys.allocator.malloc(size);
+    if (!ptr) {
+        std::cerr << "bad alloc: possible Out of Memory error\n"; 
+        exit(9);
+    }
 #ifdef BODO_DEBUG
     std::cerr << "NRT_Allocate bytes=" << size << " ptr=" << ptr << "\n";
 #endif
