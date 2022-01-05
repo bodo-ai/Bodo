@@ -11,6 +11,7 @@ from numba.core import cgutils, types
 from numba.extending import (
     box,
     intrinsic,
+    lower_builtin,
     make_attribute_wrapper,
     models,
     overload,
@@ -18,7 +19,7 @@ from numba.extending import (
 )
 
 
-class NullableTupleType(types.Type):
+class NullableTupleType(types.IterableType):
     """
     Wrapper around various tuple classes that
     includes a null bitmap.
@@ -66,6 +67,12 @@ class NullableTupleType(types.Type):
         https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
         """
         return self.__class__.__name__, (self._code,)
+
+    @property
+    def iterator_type(self):
+        # just provide the iterator over the data
+        # TODO: Support nullable section (likely optional issues)
+        return self.tuple_typ.iterator_type
 
 
 @register_model(NullableTupleType)
@@ -170,3 +177,16 @@ def overload_getitem(A, idx):
         return
 
     return lambda A, idx: A._data[idx]  # pragma: no cover
+
+
+@lower_builtin("getiter", NullableTupleType)
+def nullable_tuple_getiter(context, builder, sig, args):
+    """support getting an iterator object for NullableTupleType by calling 'getiter'
+    on the underlying data tuple.
+    """
+    # TODO: Support include the null values in iteration
+    nullable_tuple = cgutils.create_struct_proxy(sig.args[0])(
+        context, builder, value=args[0]
+    )
+    impl = context.get_function("getiter", sig.return_type(sig.args[0].tuple_typ))
+    return impl(builder, (nullable_tuple.data,))

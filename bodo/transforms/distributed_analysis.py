@@ -2516,7 +2516,21 @@ class DistributedAnalysis:
                 array_dists[in_list] = out_dist
             return
 
-        tup_def = guard(get_definition, self.func_ir, args[0])
+        if isinstance(in_type, bodo.NullableTupleType):
+            nullable_tup_def = guard(get_definition, self.func_ir, args[0])
+            assert (
+                isinstance(nullable_tup_def, ir.Expr) and nullable_tup_def.op == "call"
+            ), "bodo.libs.array_kernels.concat only nullable tuples created with build_nullable_tuple"
+            fdef = find_callname(self.func_ir, nullable_tup_def, self.typemap)
+            assert fdef == (
+                "build_nullable_tuple",
+                "bodo.libs.nullable_tuple_ext",
+            ), "bodo.libs.array_kernels.concat only nullable tuples created with build_nullable_tuple"
+            tup_val = nullable_tup_def.args[0]
+        else:
+            tup_val = args[0]
+
+        tup_def = guard(get_definition, self.func_ir, tup_val)
         assert isinstance(tup_def, ir.Expr) and tup_def.op == "build_tuple"
         in_arrs = tup_def.items
 

@@ -979,6 +979,10 @@ def concat(arr_list):  # pragma: no cover
 @overload(concat, no_unliteral=True)
 def concat_overload(arr_list):
 
+    # TODO: Support actually handling the possibles null values
+    if isinstance(arr_list, bodo.NullableTupleType):
+        return lambda arr_list: bodo.libs.array_kernels.concat(arr_list._data)
+
     # array(item) arrays
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
         arr_list.dtype, ArrayItemArrayType
@@ -1318,7 +1322,9 @@ def concat_overload(arr_list):
             for t in arr_list.types
         )
     ):
-        return lambda arr_list: np.concatenate(astype_float_tup(arr_list))
+        return lambda arr_list: np.concatenate(
+            astype_float_tup(arr_list)
+        )  # pragma: no cover
 
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
         arr_list.dtype, bodo.MapArrayType
@@ -1339,7 +1345,7 @@ def concat_overload(arr_list):
             raise_bodo_error("concat of array types {} not supported".format(arr_list))
 
     # numpy array input
-    return lambda arr_list: np.concatenate(arr_list)
+    return lambda arr_list: np.concatenate(arr_list)  # pragma: no cover
 
 
 def astype_float_tup(arr_tup):
@@ -2535,7 +2541,7 @@ def np_hstack(tup):
     is_sequence = isinstance(tup, (types.BaseTuple, types.List))
     is_series = isinstance(
         tup, (bodo.SeriesType, bodo.hiframes.pd_series_ext.HeterogeneousSeriesType)
-    ) and isinstance(tup.data, (types.BaseTuple, types.List))
+    ) and isinstance(tup.data, (types.BaseTuple, types.List, bodo.NullableTupleType))
     if isinstance(tup, types.BaseTuple):
         # Determine that each type is an array type
         for typ in tup.types:
@@ -2544,7 +2550,13 @@ def np_hstack(tup):
     elif isinstance(tup, types.List):
         is_sequence = bodo.utils.utils.is_array_typ(tup.dtype, False)
     elif is_series:
-        for typ in tup.data.types:
+        # Replace nullable tuples with the underlying type
+        tup_data_val = (
+            tup.data.tuple_typ
+            if isinstance(tup.data, bodo.NullableTupleType)
+            else tup.data
+        )
+        for typ in tup_data_val.types:
             # TODO: Add proper checking for if the arrays can be merged
             is_series = is_series and bodo.utils.utils.is_array_typ(typ, False)
 

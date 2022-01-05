@@ -283,7 +283,6 @@ def test_size(dataframe_val, memory_leak_check):
     check_func(test_impl, (df,))
 
 
-@pytest.mark.slow
 def test_concat_arrays(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df[["A", "B"]].apply(lambda x: np.hstack(x), axis=1)
