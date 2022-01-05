@@ -35,7 +35,7 @@ Unsupported Bodo Functionality
 - :exc:`BodoError: <operation> : <parameter_name> parameter only supports default value`
 
     Certain methods only support default parameter values for some of their parameters.
-    Please see :ref:`pandas` for a list of supported pandas functionality and their respective parameters. We also have a list of
+    Please see :ref:`supported Pandas API <pandas>` for a list of supported pandas functionality and their respective parameters. We also have a list of
     supported :ref:`numpy` , as well as :ref:`ml` operations.
 
 Typing Errors

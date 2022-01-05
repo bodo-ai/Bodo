@@ -382,7 +382,7 @@ Save this code as ``df_unsupported.py`` and run from command line::
 
 As the error indicates, Bodo doesn't  currently support the ``transpose`` call in JIT functions.
 In these cases, an alternative API should be used or this portion of the code should be done in regular Python.
-See :ref:`pandas` for the complete list of supported Pandas operations.
+See :ref:`supported Pandas API <pandas>` for the complete list of supported Pandas operations.
 
 
 Type Stability
