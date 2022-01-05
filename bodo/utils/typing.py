@@ -882,6 +882,7 @@ def get_index_data_arr_types(t):
         BinaryIndexType,
         CategoricalIndexType,
         DatetimeIndexType,
+        IntervalIndexType,
         NumericIndexType,
         PeriodIndexType,
         RangeIndexType,
@@ -905,6 +906,7 @@ def get_index_data_arr_types(t):
             DatetimeIndexType,
             TimedeltaIndexType,
             CategoricalIndexType,
+            IntervalIndexType,
         ),
     ):
         return (t.data,)
