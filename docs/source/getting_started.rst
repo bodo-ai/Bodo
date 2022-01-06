@@ -124,7 +124,7 @@ except that it includes the ``bodo.jit`` decorator:
 Save this code in ``bodo_data_transform.py`` and run on a single core from command line::
 
     $ python bodo_data_transform.py
-    Total time: .78
+    Total time: 1.78
 
 Even though the code is still running on a single core, it is 94x faster
 because Bodo compiles the function into a native binary, eliminating
