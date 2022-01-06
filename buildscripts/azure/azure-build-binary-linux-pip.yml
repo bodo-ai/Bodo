@@ -1,0 +1,63 @@
+parameters:
+  name: ''
+  vmImage: ''
+
+jobs:
+- job: ${{ parameters.name }}
+  timeoutInMinutes: 90
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+
+  steps:
+  - script: |
+      set -eo pipefail
+
+      export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+      echo "##vso[task.setvariable variable=BODO_VERSION]$BODO_VERSION"
+      echo "BODO_VERSION: $BODO_VERSION"
+
+      export IS_RELEASE=`git tag --points-at HEAD`
+      echo "##vso[task.setvariable variable=IS_RELEASE]$IS_RELEASE"
+      echo "IS_RELEASE: $IS_RELEASE"
+      export IS_MAJOR_RELEASE=0
+      if [[ -n "$IS_RELEASE" ]]; then
+        export IS_MAJOR_RELEASE=`python -c "import os; print(int(len(os.environ[\"IS_RELEASE\"].split(\".\")) < 3))"`
+      fi
+      echo "##vso[task.setvariable variable=IS_MAJOR_RELEASE]$IS_MAJOR_RELEASE"
+    displayName: 'Get Bodo Version and Release Tag (if any)'
+
+  - task: DownloadSecureFile@1
+    name: ecr_secret_file
+    displayName: 'Download ECR login secrets file'
+    inputs:
+      secureFile: 'aws_ecr_secrets'
+
+  - task: DownloadSecureFile@1
+    name: pypi_secret_file
+    displayName: 'Download pypi secrets file'
+    inputs:
+      secureFile: 'pypi_secrets'
+
+  - script: |
+      set -eo pipefail
+      export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
+      export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
+      if [[ "$IS_MAJOR_RELEASE" == 1 ]]; then
+        # get secrets
+        sudo chmod a+r $(ecr_secret_file.secureFilePath) $(pypi_secret_file.secureFilePath)
+        sudo cp $(ecr_secret_file.secureFilePath) $HOME/ecr_secret_file
+        sudo cp $(pypi_secret_file.secureFilePath) $HOME/pypi_secret_file
+        cd $(System.DefaultWorkingDirectory)
+        PYPI_TOKEN=`cat $HOME/pypi_secret_file | grep pypi.token | cut -f 2 -d' '`
+        AWS_AKI=`cat $HOME/ecr_secret_file | grep AAKI | cut -f 2 -d' '`
+        AWS_SAK=`cat $HOME/ecr_secret_file | grep ASAK | cut -f 2 -d' '`
+
+        # save the PyPI username and password to ~/.pypirc for twine to pick it up
+        echo -e "[pypi]\nusername = __token__ \npassword = ${PYPI_TOKEN}" > .pypirc
+
+        # login to ECR and run the docker
+        aws_token=`AWS_ACCESS_KEY_ID=$AWS_AKI AWS_SECRET_ACCESS_KEY=$AWS_SAK AWS_DEFAULT_REGION=us-east-2 aws ecr get-login-password`
+        docker login -u AWS -p $aws_token https://427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-pip-centos
+        docker run -v `pwd`:/bodo -e IS_RELEASE=$IS_RELEASE -e CHECK_LICENSE_EXPIRED=$CHECK_LICENSE_EXPIRED -e CHECK_LICENSE_CORE_COUNT=$CHECK_LICENSE_CORE_COUNT 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-pip-centos:1.0 /bodo/buildscripts/pip/centos7/generate_manylinux_wheels.sh
+      fi
+    displayName: 'Build and publish pip wheel'

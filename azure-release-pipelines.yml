@@ -49,6 +49,12 @@ stages:
       vmImage: macOS-latest
       useNumbaDev: false
       platformBuild: false
+  - template: buildscripts/azure/azure-build-binary-linux-pip.yml
+    parameters:
+      name: Linux_pip
+      vmImage: ubuntu-latest
+      useNumbaDev: false
+      platformBuild: false
 
 - stage: Test_Bodo_Binary
   displayName: Test Bodo Binary

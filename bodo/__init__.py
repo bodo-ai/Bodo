@@ -9,13 +9,12 @@ isort:skip_file
 import os
 import platform
 
-if platform.system() == "Windows":
-    # loads the Arrow DLLs (we require arrow.dll and parquet.dll) so that they
-    # are found in memory when loading our own modules that depend on them.
-    # This might not be necessary for the conda version, but is needed for
-    # the pip version because the libraries are not in any PATH
-    import pyarrow
-    import pyarrow.parquet
+# For pip version of Bodo:
+# Bodo needs to use the same libraries as Arrow (the same library files that pyarrow
+# loads at runtime). We don't know what the path to these could be, so we have to
+# preload them into memory to make sure the dynamic linker finds them
+import pyarrow
+import pyarrow.parquet
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"

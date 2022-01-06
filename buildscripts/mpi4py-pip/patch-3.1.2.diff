@@ -1,0 +1,59 @@
+diff --git a/DESCRIPTION.rst b/DESCRIPTION.rst
+index 313f984..64aae5d 100644
+--- a/DESCRIPTION.rst
++++ b/DESCRIPTION.rst
+@@ -6,6 +6,11 @@ Interface* (MPI_) standard. It is implemented on top of the MPI
+ specification and exposes an API which grounds on the standard MPI-2
+ C++ bindings.
+ 
++NOTE: This package includes MPICH binaries (an implementation of MPI) and does
++not require installing MPI before mpi4py. The MPI launcher (mpiexec) is also
++included and you can directly invoke it after installing this package. If
++Python's bin folder is not in your PATH, you can also launch with `python -m mpiexec ...`
++
+ .. _MPI: https://www.mpi-forum.org
+ 
+ Features
+diff --git a/setup.py b/setup.py
+index 01cdc34..5b04279 100644
+--- a/setup.py
++++ b/setup.py
+@@ -4,7 +4,7 @@
+ 
+ __doc__ = \
+ """
+-Python bindings for MPI
++Python bindings for MPI (includes MPICH binaries)
+ """
+ 
+ import sys
+@@ -123,6 +123,10 @@ metadata = {
+ 
+ metadata['provides'] = ['mpi4py']
+ 
++# Changes for mpi4py_mpich package
++metadata["name"] = "mpi4py_mpich"
++metadata["entry_points"] = {'console_scripts': ['mpiexec = mpiexec.__main__:main']}
++
+ # --------------------------------------------------------------------
+ # Extension modules
+ # --------------------------------------------------------------------
+@@ -492,6 +496,7 @@ def run_setup():
+             'mpi4py',
+             'mpi4py.futures',
+             'mpi4py.util',
++            'mpiexec',  # added mpiexec for mpi4py_mpich package
+         ],
+         package_data = {
+             'mpi4py' : [
+@@ -504,8 +509,9 @@ def run_setup():
+                 'py.typed',
+                 '*.pyi',
+             ],
++            'mpiexec' : ['mpiexec', 'hydra_pmi_proxy'],  # added for mpi4py_mpich package
+         },
+-        package_dir = {'' : 'src'},
++        package_dir = {'' : 'src', 'mpiexec' : 'mpiexec'},  # added mpiexec for mpi4py_mpich package
+         ext_modules = [Ext(**ext) for ext in ext_modules()],
+         executables = [Exe(**exe) for exe in executables()],
+         libraries   = [Lib(**lib) for lib in libraries()  ],

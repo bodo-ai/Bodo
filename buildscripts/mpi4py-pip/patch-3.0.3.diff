@@ -1,0 +1,57 @@
+diff --git a/DESCRIPTION.rst b/DESCRIPTION.rst
+index 5bf8749..2783405 100644
+--- a/DESCRIPTION.rst
++++ b/DESCRIPTION.rst
+@@ -6,6 +6,11 @@ Interface** (MPI_) standard. It is implemented on top of the MPI-1/2/3
+ specification and exposes an API which grounds on the standard MPI-2
+ C++ bindings.
+ 
++NOTE: This package includes MPICH binaries (an implementation of MPI) and does
++not require installing MPI before mpi4py. The MPI launcher (mpiexec) is also
++included and you can directly invoke it after installing this package. If
++Python's bin folder is not in your PATH, you can also launch with `python -m mpiexec ...`
++
+ .. _MPI: http://www.mpi-forum.org/
+ 
+ Features
+diff --git a/setup.py b/setup.py
+index eb40ba1..233a7c0 100644
+--- a/setup.py
++++ b/setup.py
+@@ -4,7 +4,7 @@
+ 
+ __doc__ = \
+ """
+-Python bindings for MPI
++Python bindings for MPI (includes MPICH binaries)
+ """
+ 
+ import sys
+@@ -116,6 +116,10 @@ metadata = {
+ 
+ metadata['provides'] = ['mpi4py']
+ 
++# Changes for mpi4py_mpich package
++metadata["name"] = "mpi4py_mpich"
++metadata["entry_points"] = {'console_scripts': ['mpiexec = mpiexec.__main__:main']}
++
+ # --------------------------------------------------------------------
+ # Extension modules
+ # --------------------------------------------------------------------
+@@ -473,12 +477,13 @@ def run_setup():
+         if not has_src or has_git or has_hg:
+             setup_args['setup_requires'] = ['Cython>='+CYTHON]
+     #
+-    setup(packages     = ['mpi4py', 'mpi4py.futures'],
+-          package_dir  = {'mpi4py' : 'src/mpi4py'},
++    setup(packages     = ['mpi4py', 'mpi4py.futures', 'mpiexec'],
++          package_dir  = {'mpi4py' : 'src/mpi4py', 'mpiexec' : 'mpiexec'},  # added mpiexec for mpi4py_mpich package
+           package_data = {'mpi4py' : ['*.pxd',
+                                       'include/mpi4py/*.h',
+                                       'include/mpi4py/*.i',
+-                                      'include/mpi4py/*.pxi',]},
++                                      'include/mpi4py/*.pxi',],
++                          'mpiexec' : ['mpiexec', 'hydra_pmi_proxy']},  # added for mpi4py_mpich package
+           ext_modules  = [Ext(**ext) for ext in ext_modules()],
+           libraries    = [Lib(**lib) for lib in libraries()  ],
+           executables  = [Exe(**exe) for exe in executables()],

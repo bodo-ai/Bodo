@@ -55,7 +55,7 @@ clean_mode = "clean" in sys.argv
 
 
 def readme():
-    with open("README.md") as f:
+    with open("README_pypi.md") as f:
         return f.read()
 
 
@@ -116,8 +116,6 @@ else:
 
 
 MPI_LIBS = ["mpi"]
-if "setup_centos7" in os.environ:
-    MPI_LIBS = ["mpich"]
 H5_CPP_FLAGS = []
 
 
@@ -157,8 +155,6 @@ ext_io = Extension(
 
 
 s3_reader_libraries = MPI_LIBS + ["arrow"]
-if "setup_centos7" in os.environ:
-    s3_reader_libraries += ["boost_system"]
 ext_s3 = Extension(
     name="bodo.io.s3_reader",
     sources=["bodo/io/_s3_reader.cpp"],
@@ -174,8 +170,6 @@ ext_s3 = Extension(
 
 
 fsspec_reader_libraries = MPI_LIBS + ["arrow", "arrow_python"]
-if "setup_centos7" in os.environ:
-    fsspec_reader_libraries += ["boost_system"]
 ext_fsspec = Extension(
     name="bodo.io.fsspec_reader",
     sources=["bodo/io/_fsspec_reader.cpp"],
@@ -191,8 +185,6 @@ ext_fsspec = Extension(
 
 
 hdfs_reader_libraries = MPI_LIBS + ["arrow"]
-if "setup_centos7" in os.environ:
-    hdfs_reader_libraries += ["boost_system"]
 ext_hdfs = Extension(
     name="bodo.io.hdfs_reader",
     sources=["bodo/io/_hdfs_reader.cpp"],
@@ -549,28 +541,29 @@ setup(
     description="The Python Supercomputing Analytics Platform",
     long_description=readme(),
     classifiers=[
-        "Development Status :: 4 - Beta",
+        "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
         "Operating System :: POSIX :: Linux",
         "Programming Language :: Python",
+        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
         "Topic :: Software Development :: Compilers",
         "Topic :: System :: Distributed Computing",
     ],
     keywords="data analytics cluster",
     url="https://bodo.ai",
     author="Bodo.ai",
-    packages=find_packages(),
+    packages=find_packages(exclude=("bodo.tests",)),
     package_data={
-        "bodo.tests": [
-            "data/*",
-            "data/*/*",
-        ],
         # on Windows we copy libssl and libcrypto DLLs to bodo/libs to bundle
         # them with our package and avoid external dependency
-        "bodo": ["pytest.ini", "libs/*.dll"],
+        "bodo": ["libs/*.dll"],
     },
-    install_requires=["numba"],
+    # When doing `python setup.py develop`, setuptools will try to install whatever is
+    # in `install_requires` after building, so we set it to empty (we don't want to
+    # install mpi4py_mpich in development mode, and it will also break CI)
+    install_requires=[] if development_mode else ["numba==0.54.1", "pyarrow==5.0.0", "pandas==1.3.*", "numpy>=1.17,<1.21", "mpi4py_mpich>3.0.3"],
     extras_require={"HDF5": ["h5py"], "Parquet": ["pyarrow"]},
     cmdclass=versioneer.get_cmdclass(),
     ext_modules=_ext_mods
