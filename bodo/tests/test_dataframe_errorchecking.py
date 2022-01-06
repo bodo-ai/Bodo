@@ -1568,3 +1568,16 @@ def test_pivot_err():
         match=err_msg,
     ):
         bodo.jit(impl)()
+
+
+@pytest.mark.slow
+def test_df_rolling_unsupported():
+    def impl():
+        df = pd.DataFrame({"B": [1, 2, 3, 4, 5, 6]}).rolling(1).kurt()
+
+    err_msg = re.escape("pandas.core.window.rolling.Rolling.kurt() not supported yet")
+    with pytest.raises(
+        BodoError,
+        match=err_msg,
+    ):
+        bodo.jit(impl)()

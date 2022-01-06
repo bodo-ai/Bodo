@@ -621,11 +621,15 @@ def int_arr_nbytes_overload(A):
 
 
 @overload_method(IntegerArrayType, "copy", no_unliteral=True)
-def overload_int_arr_copy(A):
-    return lambda A: bodo.libs.int_arr_ext.init_integer_array(
-        bodo.libs.int_arr_ext.get_int_arr_data(A).copy(),
-        bodo.libs.int_arr_ext.get_int_arr_bitmap(A).copy(),
-    )
+def overload_int_arr_copy(A, dtype=None):
+    # TODO: Update dtype to do proper parsing with supported types.
+    if not is_overload_none(dtype):
+        return lambda A, dtype=None: A.astype(dtype, copy=True)  # pragma: no cover
+    else:
+        return lambda A, dtype=None: bodo.libs.int_arr_ext.init_integer_array(
+            bodo.libs.int_arr_ext.get_int_arr_data(A).copy(),
+            bodo.libs.int_arr_ext.get_int_arr_bitmap(A).copy(),
+        )  # pragma: no cover
 
 
 @overload_method(IntegerArrayType, "astype", no_unliteral=True)

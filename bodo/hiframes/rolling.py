@@ -39,6 +39,15 @@ supported_rolling_funcs = (
 )
 
 
+unsupported_rolling_methods = [
+    "skew",
+    "kurt",
+    "aggregate",
+    "quantile",
+    "sem",
+]
+
+
 def rolling_fixed(arr, win):  # pragma: no cover
     return arr
 
