@@ -1,28 +1,24 @@
-FROM centos:centos7
+# NOTE: It's safer to use a specific version of the manylinux2014_x86_64
+# image, to maintain the same hash for libmpi.so
+FROM quay.io/pypa/manylinux2014_x86_64:2021-12-12-e5100b5
 
-RUN yum update -y
-RUN yum install -y centos-release-scl
-RUN yum install -y ncurses git vim wget
-RUN yum -y groupinstall "Development Tools"
-RUN yum install -y rh-python38
-RUN yum install -y rh-python38-python-devel
+# We don't need to install dev tools or Python.
+# manylinux2014 image already has dev tools installed and
+# multiple versions of Python
 
-RUN yum install -y mpich-devel
-RUN yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-RUN yum install -y hdf5-mpich-devel
+# Set up the Python environment to build Bodo pip packages
+ADD setup-py-env.sh /
+RUN chmod +x /setup-py-env.sh ; /setup-py-env.sh
 
+# Build mpich ourselves to have less dependencies.
+# yum install -y mpich-devel installs compilers that we don't need.
+# We also don't need Fortran or C++ support in MPI which just
+# complicates things and increases the size of the pip packages
+RUN curl https://www.mpich.org/static/downloads/3.3.2/mpich-3.3.2.tar.gz --output mpich-3.3.2.tar.gz
+RUN tar xf mpich-3.3.2.tar.gz
+RUN mkdir /mpich ; cd mpich-3.3.2 ; ./configure --prefix=/mpich --enable-fast --enable-shared --disable-fortran --disable-opencl --disable-cxx --with-device=ch3
+RUN cd mpich-3.3.2 ; make ; make install
+
+# Install remaining build dependencies for Bodo
 RUN yum install -y openssl-devel
 RUN yum install -y boost-devel
-
-SHELL ["usr/bin/scl", "enable", "rh-python38" ]
-
-RUN pip install Cython numpy numba==0.53.0 wheel pandas==1.3.* pyarrow==5.0.0
-RUN MPICC=/usr/lib64/mpich/bin/mpicc pip install mpi4py
-RUN ln -s /opt/rh/rh-python38/root/usr/local/lib64/python3.8/site-packages/pyarrow/libarrow.so.300 /opt/rh/rh-python38/root/usr/local/lib64/python3.8/site-packages/pyarrow/libarrow.so
-RUN ln -s /opt/rh/rh-python38/root/usr/local/lib64/python3.8/site-packages/pyarrow/libparquet.so.300 /opt/rh/rh-python38/root/usr/local/lib64/python3.8/site-packages/pyarrow/libparquet.so
-
-# Once inside the image call
-# scl enable rh-python38 bash
-# Then git clone Bodo
-# Then Bodo can be built with the command
-# CONDA_PREFIX='' setup_centos7=true CFLAGS="-I/usr/include/mpich-x86_64/ -I/opt/rh/rh-python38/root/usr/local/lib64/python3.8/site-packages/pyarrow/include/ -L/usr/lib64/mpich/lib/ -L/opt/rh/rh-python38/root/usr/local/lib64/python3.8/site-packages/pyarrow/ -Wl,-rpath,/usr/lib64/mpich/lib/ -Wl,-rpath,/opt/rh/rh-python38/root/usr/local/lib64/python3.8/site-packages/pyarrow/" python3 setup.py bdist_wheel
