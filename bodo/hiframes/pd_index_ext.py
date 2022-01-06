@@ -3853,11 +3853,10 @@ def init_index(I, name):
         )  # pragma: no cover
 
     if isinstance(I, RangeIndexType):
-        return (
-            lambda I, name, inplace=False: bodo.hiframes.pd_index_ext.init_range_index(
-                I.start, I.stop, I.step, name
-            )
-        )  # pragma: no cover
+        # Distributed Pass currently assumes init_range_index is using integers
+        # that are equal on all cores. Since we can't interpret the distributed
+        # behavior from just scalars, we call copy instead.
+        return lambda I, name, inplace=False: I.copy(name=name)  # pragma: no cover
 
     if isinstance(I, PeriodIndexType):
         freq = I.freq
