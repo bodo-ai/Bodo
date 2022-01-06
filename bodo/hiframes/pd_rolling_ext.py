@@ -28,10 +28,14 @@ from bodo.hiframes.datetime_timedelta_ext import (
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.rolling import supported_rolling_funcs
+from bodo.hiframes.rolling import (
+    supported_rolling_funcs,
+    unsupported_rolling_methods,
+)
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
+    create_unsupported_overload,
     get_literal_value,
     is_const_func_type,
     is_literal_type,
@@ -39,6 +43,7 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_int,
     is_overload_none,
+    raise_bodo_error,
     raise_const_error,
 )
 
@@ -478,7 +483,17 @@ def _install_rolling_methods():
         )
 
 
+def _install_rolling_unsupported_methods():
+    """install unsupported overloads for rolling functions"""
+    for fname in unsupported_rolling_methods:
+        overload_method(RollingType, fname, no_unliteral=True)(
+            create_unsupported_overload(f"pandas.core.window.rolling.Rolling.{fname}()")
+        )
+
+
 _install_rolling_methods()
+
+_install_rolling_unsupported_methods()
 
 
 def _get_corr_cov_out_cols(rolling, other, func_name):
@@ -486,6 +501,11 @@ def _get_corr_cov_out_cols(rolling, other, func_name):
     # TODO(ehsan): support other=None
     # XXX pandas only accepts variable window cov/corr
     # when both inputs have time index
+    # TODO: Support Mixing DataFrame and Series
+    if not isinstance(other, DataFrameType):
+        raise_bodo_error(
+            f"DataFrame.rolling.{func_name}(): requires providing a DataFrame for 'other'"
+        )
     columns = rolling.selection
     if rolling.on is not None:
         raise BodoError(f"variable window rolling {func_name} not supported yet.")
@@ -526,12 +546,45 @@ def _gen_corr_cov_out_data(out_cols, df_cols, other_cols, window_type, func_name
 
 
 @overload_method(RollingType, "corr", inline="always", no_unliteral=True)
-def overload_rolling_corr(rolling, other=None, pairwise=None):
+def overload_rolling_corr(rolling, other=None, pairwise=None, ddof=1):
+
+    args_dict = {
+        "pairwise": pairwise,
+        "ddof": ddof,
+    }
+
+    args_default_dict = {"pairwise": None, "ddof": 1}
+    check_unsupported_args(
+        "pandas.core.window.rolling.Rolling.corr",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+        module_name="Window",
+    )
+
     return _gen_rolling_impl(rolling, "corr", other)
 
 
 @overload_method(RollingType, "cov", inline="always", no_unliteral=True)
 def overload_rolling_cov(rolling, other=None, pairwise=None, ddof=1):
+
+    args_dict = {
+        "ddof": ddof,
+        "pairwise": pairwise,
+    }
+
+    args_default_dict = {
+        "ddof": 1,
+        "pairwise": None,
+    }
+    check_unsupported_args(
+        "pandas.core.window.rolling.Rolling.cov",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+        module_name="Window",
+    )
+
     return _gen_rolling_impl(rolling, "cov", other)
 
 

@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import itertools
 import os
+import re
 import unittest
 
 import numpy as np
@@ -41,6 +42,52 @@ def test_fixed_index(test_df, memory_leak_check):
 
     bodo_func = bodo.jit(impl)
     pd.testing.assert_frame_equal(bodo_func(test_df), impl(test_df))
+
+
+def test_rolling_cov_unsupported_args(memory_leak_check):
+    def impl1(df):
+        return df.rolling(2).cov(df.A)
+
+    def impl2(df):
+        return df.rolling(2).cov(df, pairwise=True)
+
+    df = pd.DataFrame(
+        {
+            "A": [1.51, 2.421, 233232, 12.21] * 5,
+        }
+    )
+
+    err_msg = re.escape(
+        "DataFrame.rolling.cov(): requires providing a DataFrame for 'other'"
+    )
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(df)
+    err_msg = "pairwise parameter only supports default value None"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl2)(df)
+
+
+def test_rolling_corr_unsupported_args(memory_leak_check):
+    def impl1(df):
+        return df.rolling(2).corr(df.A)
+
+    def impl2(df):
+        return df.rolling(2).corr(df, pairwise=True)
+
+    df = pd.DataFrame(
+        {
+            "A": [1.51, 2.421, 233232, 12.21] * 5,
+        }
+    )
+
+    err_msg = re.escape(
+        "DataFrame.rolling.corr(): requires providing a DataFrame for 'other'"
+    )
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(df)
+    err_msg = "pairwise parameter only supports default value None"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl2)(df)
 
 
 def test_rolling_unsupported(test_df, memory_leak_check):
