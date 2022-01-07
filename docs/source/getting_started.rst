@@ -3,7 +3,6 @@ Getting Started
 
 This section provides a quick start guide to Bodo
 and explains its important concepts briefly.
-Other sections provide more detailed explanations.
 We strongly recommend reading this page before
 using Bodo.
 
@@ -11,15 +10,17 @@ using Bodo.
 Installation
 ------------
 
-Bodo can be installed using `Conda <https://docs.conda.io>`_ easily::
+Bodo can be installed using `Conda <https://docs.conda.io>`_ :
 
-    conda create -n Bodo python=3.9 -c conda-forge
-    conda activate Bodo
-    conda install bodo -c bodo.ai -c conda-forge
+.. code-block:: console
+
+    $ conda create -n Bodo python=3.9 -c conda-forge
+    $ conda activate Bodo
+    $ conda install bodo -c bodo.ai -c conda-forge
 
 This command installs Bodo Community Edition by default, which is free and
-works on up to 8 cores. Please `contact us <https://bodo.ai/contact/>`_ for trial licenses
-You can also `request a 30 day free trial <https://bodo.ai/try-bodo>`_ on up to 128 cores. If you need a trial license for even more cores, please `contact us <https://bodo.ai/contact/>`_.
+works on up to 8 cores. You can also `request a 30 day free trial <https://bodo.ai/try-bodo>`_ on up to 128 cores.
+If you need a trial license for even more cores, please `contact us <https://bodo.ai/contact/>`_.
 See :ref:`install` for more details of setting up Bodo.
 
 
@@ -51,14 +52,16 @@ Let's generate some example data and write to a `Parquet <http://parquet.apache.
     # using row_group_size helps with efficient parallel read of data later
     df.to_parquet("pd_example.pq", row_group_size=100000)
 
-Save this code in ``gen_data.py`` and run in command line::
+Save this code in ``gen_data.py`` and run in command line:
+
+.. code-block:: console
 
     $ python gen_data.py
 
 .. _example_code_in_pandas:
 
-Example Code in Pandas
-~~~~~~~~~~~~~~~~~~~~~~
+Example Pandas Code
+~~~~~~~~~~~~~~~~~~~~
 
 Here is a simple data transformation code in Pandas that processes a column of datetime values
 and creates two new columns:
@@ -81,7 +84,9 @@ and creates two new columns:
         data_transform()
 
 
-Save this code in ``data_transform.py`` and run in command line::
+Save this code in ``data_transform.py`` and run in command line:
+
+.. code-block:: console
 
     $ python data_transform.py
     Total time: 166.18
@@ -89,18 +94,17 @@ Save this code in ``data_transform.py`` and run in command line::
 Standard Python is quite slow for these data transforms since:
 
     1. The use of custom code inside ``apply()`` does not let Pandas run an optimized prebuilt C library in its backend. Therefore, the Python interpreter overheads dominate.
-    2. Python uses just a single CPU core and does not parallelize computation.
+    2. Python uses a single CPU core and does not parallelize computation.
 
 Bodo solves both of these problems as we demonstrate below.
 
-
-Using Bodo JIT Decorator
-~~~~~~~~~~~~~~~~~~~~~~~~
+Using the Bodo JIT Decorator
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Bodo optimizes and parallelizes data workloads by providing just-in-time (JIT)
 compilation.
-This code is identical to the previous code,
-except that it includes the ``bodo.jit`` decorator:
+This code is identical to the original Pandas code,
+except that it annotates the ``data_transform`` function with the ``bodo.jit`` decorator:
 
 .. code:: ipython3
 
@@ -121,24 +125,29 @@ except that it includes the ``bodo.jit`` decorator:
         data_transform()
 
 
-Save this code in ``bodo_data_transform.py`` and run on a single core from command line::
+Save this code in ``bodo_data_transform.py`` and run on a single core from command line:
+
+.. code-block:: console
 
     $ python bodo_data_transform.py
     Total time: 1.78
 
-Even though the code is still running on a single core, it is 94x faster
+This code is 94x faster with Bodo than Pandas even on a single core,
 because Bodo compiles the function into a native binary, eliminating
 the interpreter overheads in ``apply``.
 
-Now let's run the code on 8 cores using ``mpiexec`` in command line::
+Now let's run the code on 8 CPU cores using ``mpiexec`` in command line:
+
+.. code-block:: console
 
     $ mpiexec -n 8 python bodo_data_transform.py
     Total time: 0.38
 
-This brings an additional ~2x speedup because of using 8 CPU cores.
+Using 8 cores gets an additional ~2x speedup.
 The same program can be scaled to larger datasets and as many cores as necessary
 in compute clusters and cloud environments (e.g. ``mpiexec -n 10000 python bodo_data_transform.py``).
 
+See the section on :ref:`basics` for more details about Bodo's JIT compilation workflow and parallel computation model.
 
 Compilation Time and Caching
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -171,7 +180,9 @@ Let's move the timers outside and call the function twice:
         print("Total time second call: {:.2f}".format(time.time()-t0))
 
 
-Save this code in ``data_transform2.py`` and run in command line::
+Save this code in ``data_transform2.py`` and run in command line:
+
+.. code-block:: console
 
     $ python data_transform2.py
     Total time first call: 4.72
@@ -203,7 +214,9 @@ Compilation time can be avoided across program runs by using the ``cache=True`` 
         print("Total time: {:.2f}".format(time.time()-t0))
 
 
-Save this code in ``data_transform_cache.py`` and run in command line twice::
+Save this code in ``data_transform_cache.py`` and run in command line twice:
+
+.. code-block:: console
 
     $ python data_transform_cache.py
     Total time: 4.70
@@ -248,10 +261,12 @@ Let's try a simple example that demonstrates how chunks of data are loaded in pa
 
 
 Save this code in ``load_data.py`` and run on two cores
-(output prints of the cores are mixed)::
+(output prints of the cores are mixed):
+
+.. code-block:: console
 
     $ mpiexec -n 2 python load_data.py
-    pandas dataframe:  pandas dataframe:
+    pandas dataframe:
                      A        B
     0              NaT        0
     1       2013-01-03        1
@@ -266,6 +281,8 @@ Save this code in ``load_data.py`` and run on two cores
     9999999 2015-09-29  9999999
 
     [10000000 rows x 2 columns]
+
+    pandas dataframe:
                      A        B
     0              NaT        0
     1       2013-01-03        1
@@ -280,7 +297,8 @@ Save this code in ``load_data.py`` and run on two cores
     9999999 2015-09-29  9999999
 
     [10000000 rows x 2 columns]
-    Bodo dataframe:  Bodo dataframe:
+
+    Bodo dataframe:
                      A        B
     0       1970-01-01        0
     1       2013-01-03        1
@@ -295,6 +313,8 @@ Save this code in ``load_data.py`` and run on two cores
     4999999 2014-05-17  4999999
 
     [5000000 rows x 2 columns]
+
+    pandas dataframe:
                      A        B
     5000000 2014-05-18  5000000
     5000001 2014-05-18  5000001
@@ -342,7 +362,9 @@ this example demonstrates:
     if __name__ == "__main__":
         data_groupby()
 
-Save this code as ``data_groupby.py`` and run from command line::
+Save this code as ``data_groupby.py`` and run from command line:
+
+.. code-block:: console
 
     $ mpiexec -n 8 python data_groupby.py
 
@@ -351,8 +373,11 @@ aggregated together.
 Therefore, Bodo *shuffles* the data automatically under the hoods using MPI,
 and the user doesn't need to worry about parallelism challenges like communication.
 
-.. TODO: add graph in https://bodo.atlassian.net/browse/TEC-765
+.. figure:: img/python_parallel_process.jpg
+   :align: center
+   :alt: Parallel python processes with Bodo
 
+|
 
 Bodo JIT Requirements
 ---------------------
@@ -375,7 +400,9 @@ For example:
     if __name__ == "__main__":
         df_unsupported()
 
-Save this code as ``df_unsupported.py`` and run from command line::
+Save this code as ``df_unsupported.py`` and run from command line:
+
+.. code-block:: console
 
     $ python df_unsupported.py
     # bodo.utils.typing.BodoError: Dataframe.transpose not supported yet
@@ -413,7 +440,9 @@ data type and need to be known to Bodo:
     if __name__ == "__main__":
         groupby_keys(False)
 
-Save this code as ``groupby_keys.py`` and run from command line::
+Save this code as ``groupby_keys.py`` and run from command line:
+
+.. code-block:: console
 
     $ python groupby_keys.py
     # bodo.utils.typing.BodoError: groupby(): argument 'by' requires a constant value but variable 'keys' is updated inplace using 'append'
@@ -498,13 +527,17 @@ See our `Unsupported Python Programs <https://docs.bodo.ai/latest/source/program
 Using Bodo in Jupyter Notebooks
 -------------------------------
 
-To setup Bodo in a Jupyter environment::
+To setup Bodo in a Jupyter environment:
 
-    conda install bodo ipyparallel=7 jupyterlab=3 -c conda-forge
+.. code-block:: console
 
-Start a JupyterLab server from terminal::
+    $ conda install bodo ipyparallel=7 jupyterlab=3 -c conda-forge
 
-    jupyter lab
+Start a JupyterLab server from terminal:
+
+.. code-block:: console
+
+    $ jupyter lab
 
 Start a new notebook and run the following code in a cell to start a
 local 8 core `IPyParallel <https://ipyparallel.readthedocs.io>`_ cluster:
