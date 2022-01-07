@@ -782,3 +782,70 @@ def test_df_merge_col_key_bodo_only(key):
     df_exp = pd.DataFrame({"key": key, "value_x": val_x, "value_y": val_y})
     df_act = bodo.jit(impl)(df1, df2)
     assert df_act.equals(df_exp)
+
+
+def test_df_getitem_columname_func(memory_leak_check):
+    """
+    Tests using a string literal in df[] after passing the
+    string through a function
+    """
+
+    g = bodo.jit(lambda a: a)
+
+    def impl(df, a):
+        return df[g(a)]
+
+    df = pd.DataFrame({"A": [1, 2, 3] * 5})
+    check_func(impl, (df, "A"))
+
+    df = pd.DataFrame({1: [1, 2, 3] * 5})
+    check_func(impl, (df, 1))
+
+
+def test_df_getitem_columname_list_func(memory_leak_check):
+    """
+    Tests using a list in df[] after passing the
+    list through a function
+    """
+    g = bodo.jit(lambda a: a)
+
+    def impl(df, a):
+        return df[g(a)]
+
+    df = pd.DataFrame({"A": [1, 2, 3] * 5})
+    check_func(impl, (df, ["A"]))
+
+    df = pd.DataFrame({1: [1, 2, 3] * 5})
+    check_func(impl, (df, [1]))
+
+
+def test_df_loc_getitem_list_func(memory_leak_check):
+    """
+    Tests using a list in df.loc after passing the
+    list through a function
+    """
+    g = bodo.jit(lambda a: a)
+
+    def impl(df, a):
+        return df.loc[1:, g(a)]
+
+    df = pd.DataFrame({"A": np.arange(10)})
+    check_func(impl, (df, ["A"]))
+
+
+def test_df_iloc_getitem_slice_func(memory_leak_check):
+    """
+    Tests using a slice in df.iloc after passing the
+    slice through a function
+    """
+    g = bodo.jit(lambda a: a)
+
+    def impl(df, a):
+        x = df.iloc[1:, g(a)]
+        return x
+
+    df = pd.DataFrame({"A": np.arange(10)})
+
+    # Use py_output because regular slices cannot be boxed yet.
+    py_output = df.iloc[1:, 0:1]
+    check_func(impl, (df, slice(0, 1)), py_output=py_output)

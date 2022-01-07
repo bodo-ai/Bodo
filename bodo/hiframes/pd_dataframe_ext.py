@@ -1083,7 +1083,10 @@ class GetDataFrameDataInfer(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 2
-        assert is_overload_constant_int(args[1])
+        if not is_overload_constant_int(args[1]):
+            raise_bodo_error(
+                "Selecting a DataFrame column requires a constant column label"
+            )
         df = args[0]
         i = get_overload_const_int(args[1])
         ret = df.data[i]
