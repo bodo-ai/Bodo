@@ -193,6 +193,8 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
             ("groupby3.pq", datapath("groupby3.pq")),
             ("example.json", datapath("example.json")),
             ("example.csv", datapath("example.csv")),
+            ("example.parquet", datapath("example.parquet")),
+            ("example2.parquet", datapath("example2.parquet")),
         ]
         for s3_key, file_name in test_s3_files:
             s3.meta.client.upload_file(file_name, bucket_name, s3_key)

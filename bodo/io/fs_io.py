@@ -556,6 +556,11 @@ def get_s3_bucket_region_njit(s3_filepath, parallel):  # pragma: no cover
     """
     with numba.objmode(bucket_loc="unicode_type"):
         bucket_loc = ""
+        # The parquet read path might call this function with a list of files,
+        # in which case we retrieve the region of the first one. We assume
+        # every file is in the same region
+        if isinstance(s3_filepath, list):
+            s3_filepath = s3_filepath[0]
         if s3_filepath.startswith("s3://"):
             bucket_loc = get_s3_bucket_region(s3_filepath, parallel)
     return bucket_loc
