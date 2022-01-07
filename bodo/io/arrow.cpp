@@ -7,7 +7,7 @@
 #include "../libs/_bodo_common.h"
 
 // --------- functions defined in parquet_reader.cpp ---------
-table_info* pq_read(char* path, bool parallel, char* bucket_region,
+table_info* pq_read(PyObject* path, bool parallel, char* bucket_region,
                     PyObject* dnf_filters, PyObject* expr_filters, PyObject* storage_options,
                     int64_t tot_rows_to_read, int32_t* selected_cols,
                     int32_t num_selected_cols, int32_t* is_nullable,

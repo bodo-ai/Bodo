@@ -57,6 +57,27 @@ def test_read_parquet_cache_fname_arg(
     check_caching(impl2, (fname2,), is_cached, fn_distribution, py_output=py_out)
 
 
+def test_read_parquet_cache_fname_arg_list_files(
+    fn_distribution, is_cached, datapath, memory_leak_check
+):
+    """
+    test read_parquet with cache=True and passing different list of files as
+    argument to the Bodo function
+    """
+
+    def impl(fpaths):
+        return pd.read_parquet(fpaths)
+
+    if not is_cached:
+        fpaths = [datapath("example.parquet"), datapath("example2.parquet")]
+    else:
+        fpaths = [datapath("example2.parquet"), datapath("example.parquet")]
+    py_output_part1 = pd.read_parquet(fpaths[0])
+    py_output_part2 = pd.read_parquet(fpaths[1])
+    py_out = pd.concat([py_output_part1, py_output_part2])
+    check_caching(impl, (fpaths,), is_cached, fn_distribution, py_output=py_out)
+
+
 def test_read_csv_cache_fname_arg(fn_distribution, is_cached, datapath):
     # TODO: investigate/fix memory leak check, see BE-1375
     """

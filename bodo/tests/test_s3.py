@@ -223,6 +223,25 @@ def test_s3_pq_groupby3(minio_server, s3_bucket, datapath):
     check_func(test_impl, (), py_output=py_output)
 
 
+def test_s3_pq_list_files(minio_server, s3_bucket, datapath, memory_leak_check):
+    """
+    test s3 read_parquet list of files
+    """
+
+    def test_impl():
+        return pd.read_parquet(["s3://bodo-test/example.parquet", "s3://bodo-test/example2.parquet"])
+
+    def test_impl2(fpaths):
+        return pd.read_parquet(fpaths)
+
+    py_output_part1 = pd.read_parquet(datapath("example.parquet"))
+    py_output_part2 = pd.read_parquet(datapath("example2.parquet"))
+    py_output = pd.concat([py_output_part1, py_output_part2])
+    check_func(test_impl, (), py_output=py_output)
+    fpaths = ["s3://bodo-test/example.parquet", "s3://bodo-test/example2.parquet"]
+    check_func(test_impl2, (fpaths,), py_output=py_output)
+
+
 @pytest.mark.parametrize(
     "bucket_fixture,bucket_name",
     [("s3_bucket", "bodo-test"), ("s3_bucket_us_west_2", "bodo-test-2")],

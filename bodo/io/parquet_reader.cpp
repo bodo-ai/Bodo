@@ -94,7 +94,7 @@ class ParquetReader : public ArrowDataframeReader {
      * Initialize ParquetReader.
      * See pq_read function below for description of arguments.
      */
-    ParquetReader(char* _path, bool _parallel, char* _bucket_region,
+    ParquetReader(PyObject* _path, bool _parallel, char* _bucket_region,
                   PyObject* _dnf_filters, PyObject* _expr_filters,
                   PyObject* _storage_options, int64_t _tot_rows_to_read,
                   int32_t* _selected_fields, int32_t num_selected_fields,
@@ -192,9 +192,10 @@ class ParquetReader : public ArrowDataframeReader {
         // ds = bodo.io.parquet_pio.get_parquet_dataset(path, true, filters,
         // storage_options)
         PyObject* ds = PyObject_CallMethod(
-            pq_mod, "get_parquet_dataset", "sOOOOOO", path, Py_True,
+            pq_mod, "get_parquet_dataset", "OOOOOOO", path, Py_True,
             dnf_filters, expr_filters, storage_options, Py_False,
             PyBool_FromLong(parallel));
+        Py_DECREF(path);
         Py_DECREF(dnf_filters);
         Py_DECREF(pq_mod);
         if (PyErr_Occurred()) throw std::runtime_error("python");
@@ -240,7 +241,7 @@ class ParquetReader : public ArrowDataframeReader {
         // Filter pushdown is only supported in new path
         bool old_path = f_name.find("hdfs://") == 0 ||
                         f_name.find("abfs://") == 0 ||
-                        f_name.find("abfss://") == 0 || protocol == "gcs" ||
+                        f_name.find("abfss://") == 0 || protocol == "gcs" || protocol == "gs" ||
                         pyfs.count(protocol);
         if (!old_path) {
             size_t cur_piece = 0;
@@ -382,7 +383,7 @@ class ParquetReader : public ArrowDataframeReader {
     }
 
    private:
-    const char* path;  // path passed to pd.read_parquet() call
+    PyObject* path;  // path passed to pd.read_parquet() call
     PyObject* dnf_filters = nullptr;
     PyObject* expr_filters = nullptr;
     PyObject* storage_options;
@@ -478,7 +479,7 @@ void pq_init_reader(const char* file_name,
         CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
         *a_reader = std::move(arrow_reader);
     // Google Cloud Storage
-    } else if (protocol == "gcs" || pyfs.count(protocol)) {
+    } else if (protocol == "gcs" || protocol == "gs" || pyfs.count(protocol)) {
         std::shared_ptr<::arrow::io::RandomAccessFile> file;
         fsspec_open_file(f_name, protocol, &file);
         status = parquet::arrow::FileReader::Make(
@@ -498,7 +499,9 @@ void pq_init_reader(const char* file_name,
 /**
  * Read a parquet dataset.
  *
- * @param path : path to parquet dataset
+ * @param path : path to parquet dataset (can be a Python string -single path- or
+ * a Python list of strings -multiple files constituting a single dataset-).
+ * The PyObject is passed throught to parquet_pio.py::get_parquet_dataset
  * @param parallel: true if reading in parallel
  * @param bucket_region : S3 bucket region (when reading from S3)
  * @param filters : PyObject passed to pyarrow.parquet.ParquetDataset filters
@@ -525,7 +528,7 @@ void pq_init_reader(const char* file_name,
  * followed by selected partition columns, in same order as specified to this
  * function).
  */
-table_info* pq_read(char* path, bool parallel, char* bucket_region,
+table_info* pq_read(PyObject* path, bool parallel, char* bucket_region,
                     PyObject* dnf_filters, PyObject* expr_filters,
                     PyObject* storage_options, int64_t tot_rows_to_read,
                     int32_t* selected_fields, int32_t num_selected_fields,

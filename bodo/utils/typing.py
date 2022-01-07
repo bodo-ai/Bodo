@@ -182,7 +182,7 @@ class FileInfo:
         return fname + self._concat_str
 
 
-class FilenameType(types.StringLiteral):
+class FilenameType(types.Literal):
     """Arguments of Bodo functions that are a constant literal are
     converted to this type instead of plain Literal to allow us
     to reuse the cache for differing file names that have the
@@ -210,21 +210,39 @@ class FilenameType(types.StringLiteral):
 
 types.FilenameType = FilenameType
 
-# Data model, unboxing and lower cast are the same as unicode to
+# Data model, unboxing and lower cast are the same as fname (unicode or list) to
 # allow passing different file names to compiled code (note that if
 # data model is literal the file name would be part of the binary code)
+# see test_pq_cache_print
 
 # datamodel
-register_model(types.FilenameType)(numba.cpython.unicode.UnicodeModel)
+@register_model(types.FilenameType)
+class FilenameModel(models.StructModel):
+    """FilenameType can hold either a string or a list, so get the fields based on
+    value type.
+    """
 
-# unbox
-unbox(types.FilenameType)(numba.cpython.unicode.unbox_unicode_str)
+    def __init__(self, dmm, fe_type):
+        val_model = dmm.lookup(bodo.typeof(fe_type.fname))
+        members = [(a, b) for a, b in zip(val_model._fields, val_model._members)]
+        super().__init__(dmm, fe_type, members)
+
+
+@unbox(FilenameType)
+def unbox_file_name_type(typ, obj, c):
+    return c.unbox(bodo.typeof(typ.fname), obj)
+
 
 # lower cast
 @lower_cast(types.FilenameType, types.unicode_type)
+@lower_cast(types.FilenameType, types.List)
 def cast_filename_to_unicode(context, builder, fromty, toty, val):
-    # do nothing
     return val
+
+
+@box(FilenameType)
+def box_filename_type(typ, val, c):
+    return c.box(bodo.typeof(typ.fname), val)
 
 
 # sentinel value representing non-constant values

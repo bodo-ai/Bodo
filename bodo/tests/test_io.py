@@ -881,6 +881,43 @@ def test_h5_remove_dead(datapath, memory_leak_check):
         )
 
 
+def test_read_parquet_list_files(datapath, memory_leak_check):
+    """test read_parquet passing a list of files"""
+
+    def test_impl():
+        return pd.read_parquet(
+            ["bodo/tests/data/example.parquet", "bodo/tests/data/example2.parquet"]
+        )
+
+    def test_impl2(fpaths):
+        return pd.read_parquet(fpaths)
+
+    py_output_part1 = pd.read_parquet(datapath("example.parquet"))
+    py_output_part2 = pd.read_parquet(datapath("example2.parquet"))
+    py_output = pd.concat([py_output_part1, py_output_part2])
+    check_func(test_impl, (), py_output=py_output)
+    fpaths = [datapath("example.parquet"), datapath("example2.parquet")]
+    check_func(test_impl2, (fpaths,), py_output=py_output)
+
+
+def test_pq_cache_print(datapath, capsys):
+    """Make sure FilenameType behaves like a regular value and not a literal when loaded
+    from cache. This allows the file name value to be set correctly and not baked in.
+    """
+
+    @bodo.jit(cache=True)
+    def f(fname):
+        bodo.parallel_print(fname)
+        return pd.read_parquet(fname)
+
+    fname1 = datapath("example.parquet")
+    fname2 = datapath("example2.parquet")
+    f(fname1)
+    f(fname2)
+    captured = capsys.readouterr()
+    assert "example2.parquet" in captured.out
+
+
 def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
     if bodo.get_rank() == 0:
         try:

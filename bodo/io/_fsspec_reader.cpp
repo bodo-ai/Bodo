@@ -100,7 +100,7 @@ void gcs_get_fs(std::shared_ptr<arrow::py::fs::PyFileSystem> *fs) {
     }
 }
 
-std::shared_ptr<arrow::py::fs::PyFileSystem> get_fsspec_fs(string protocol) {
+std::shared_ptr<arrow::py::fs::PyFileSystem> get_fsspec_fs(const std::string &protocol) {
     // Get the fsspec filesystem
     if (!pyfs[protocol]) {
         PyObject *fsspec = PyImport_ImportModule("fsspec");
@@ -130,10 +130,10 @@ std::shared_ptr<arrow::py::fs::PyFileSystem> get_fsspec_fs(string protocol) {
     return pyfs_cpp;
 }
 
-void fsspec_open_file(string fname, string protocol,
+void fsspec_open_file(const std::string &fname, const std::string &protocol,
                       std::shared_ptr<::arrow::io::RandomAccessFile> *file) {
     std::shared_ptr<arrow::py::fs::PyFileSystem> fs;
-    if (protocol == "gcs") {
+    if ((protocol == "gcs") || (protocol == "gs")) {
         fs = get_gcs_fs();
     } else {
         fs = get_fsspec_fs(protocol);

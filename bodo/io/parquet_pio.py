@@ -102,6 +102,27 @@ def unbox_parquet_predicate_type(typ, val, c):
     return NativeValue(val)
 
 
+class ReadParquetFilepathType(types.Opaque):
+    """Type for file path object passed to C++. It is just a Python object passed
+    as a pointer to C++ (can be Python list of strings or Python string)
+    """
+
+    def __init__(self):
+        super(ReadParquetFilepathType, self).__init__(name="ReadParquetFilepathType")
+
+
+read_parquet_fpath_type = ReadParquetFilepathType()
+types.read_parquet_fpath_type = read_parquet_fpath_type
+register_model(ReadParquetFilepathType)(models.OpaqueModel)
+
+
+@unbox(ReadParquetFilepathType)
+def unbox_read_parquet_fpath_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
 class StorageOptionsDictType(types.Opaque):
     def __init__(self):
         super(StorageOptionsDictType, self).__init__(name="StorageOptionsDictType")
@@ -476,7 +497,10 @@ def pq_distributed_run(
         pq_node.index_column_index,
         pq_node.index_column_type,
     )
-    arg_types = (string_type,) + tuple(typemap[v.name] for v in filter_vars)
+    # First arg is the path to the parquet dataset, and can be a string or a list
+    # of strings
+    fname_type = typemap[pq_node.file_name.name]
+    arg_types = (fname_type,) + tuple(typemap[v.name] for v in filter_vars)
     f_block = compile_to_numba_ir(
         pq_impl,
         {"_pq_reader_py": pq_reader_py},
@@ -529,6 +553,15 @@ def overload_get_filters_pyobject(dnf_filter_str, expr_filter_str, var_tup):
     return loc_vars["impl"]
 
 
+@numba.njit
+def get_fname_pyobject(fname):
+    """Convert fname native object (which can be a string or a list of strings)
+    to its corresponding PyObject by going through unboxing and boxing"""
+    with numba.objmode(fname_py="read_parquet_fpath_type"):
+        fname_py = fname
+    return fname_py
+
+
 def get_storage_options_pyobject(storage_options):  # pragma: no cover
     pass
 
@@ -574,6 +607,9 @@ def _gen_pq_reader_py(
     func_text += "    ev.add_attribute('fname', fname)\n"
     func_text += f"    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={is_parallel})\n"
     func_text += f'    dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({extra_args}{comma}))\n'
+    # convert the filename, which could be a string or a list of strings, to a
+    # PyObject to pass to C++. C++ just passes it through to parquet_pio.py::get_parquet_dataset()
+    func_text += "    fname_py = get_fname_pyobject(fname)\n"
 
     # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
     storage_options["bodo_dummy"] = "dummy"
@@ -665,9 +701,9 @@ def _gen_pq_reader_py(
     # single-element numpy array to return number of global rows from C++
     func_text += f"    total_rows_np = np.array([0], dtype=np.int64)\n"
     if len(selected_partition_cols) > 0:
-        func_text += f"    out_table = pq_read(unicode_to_utf8(fname), {is_parallel}, unicode_to_utf8(bucket_region), dnf_filters, expr_filters, storage_options_py, {tot_rows_to_read}, selected_cols_arr_{call_id}.ctypes, {len(selected_cols)}, nullable_cols_arr_{call_id}.ctypes, np.array({selected_partition_cols}, dtype=np.int32).ctypes, np.array({partition_col_cat_dtypes}, dtype=np.int32).ctypes, {len(selected_partition_cols)}, total_rows_np.ctypes)\n"
+        func_text += f"    out_table = pq_read(fname_py, {is_parallel}, unicode_to_utf8(bucket_region), dnf_filters, expr_filters, storage_options_py, {tot_rows_to_read}, selected_cols_arr_{call_id}.ctypes, {len(selected_cols)}, nullable_cols_arr_{call_id}.ctypes, np.array({selected_partition_cols}, dtype=np.int32).ctypes, np.array({partition_col_cat_dtypes}, dtype=np.int32).ctypes, {len(selected_partition_cols)}, total_rows_np.ctypes)\n"
     else:
-        func_text += f"    out_table = pq_read(unicode_to_utf8(fname), {is_parallel}, unicode_to_utf8(bucket_region), dnf_filters, expr_filters, storage_options_py, {tot_rows_to_read}, selected_cols_arr_{call_id}.ctypes, {len(selected_cols)}, nullable_cols_arr_{call_id}.ctypes, 0, 0, 0, total_rows_np.ctypes)\n"
+        func_text += f"    out_table = pq_read(fname_py, {is_parallel}, unicode_to_utf8(bucket_region), dnf_filters, expr_filters, storage_options_py, {tot_rows_to_read}, selected_cols_arr_{call_id}.ctypes, {len(selected_cols)}, nullable_cols_arr_{call_id}.ctypes, 0, 0, 0, total_rows_np.ctypes)\n"
     func_text += "    check_and_propagate_cpp_exception()\n"
 
     # handle index column
@@ -730,6 +766,7 @@ def _gen_pq_reader_py(
         "unicode_to_utf8": unicode_to_utf8,
         "get_filters_pyobject": get_filters_pyobject,
         "get_storage_options_pyobject": get_storage_options_pyobject,
+        "get_fname_pyobject": get_fname_pyobject,
         "np": np,
         "pd": pd,
         "bodo": bodo,
@@ -912,11 +949,28 @@ def get_parquet_dataset(
 
     comm = MPI.COMM_WORLD
 
-    fpath = fpath.rstrip("/")
-    if fpath.startswith("gs://"):
-        fpath = fpath[:1] + "c" + fpath[1:]
+    if isinstance(fpath, list):
+        # list of file paths
+        parsed_url = urlparse(fpath[0])
+        protocol = parsed_url.scheme
+        bucket_name = parsed_url.netloc  # netloc can be empty string (e.g. non s3)
+        for i in range(len(fpath)):
+            f = fpath[i]
+            u_p = urlparse(f)
+            # make sure protocol and bucket name of every file matches
+            if u_p.scheme != protocol:
+                raise BodoError(
+                    "All parquet files must use the same filesystem protocol"
+                )
+            if u_p.netloc != bucket_name:
+                raise BodoError("All parquet files must be in the same S3 bucket")
+            fpath[i] = f.rstrip("/")
+    else:
+        parsed_url = urlparse(fpath)
+        protocol = parsed_url.scheme
+        fpath = fpath.rstrip("/")
 
-    if fpath.startswith("gcs://"):
+    if protocol in {"gcs", "gs"}:
         try:
             import gcsfs
         except ImportError:
@@ -927,7 +981,7 @@ def get_parquet_dataset(
             )
             raise BodoError(message)
 
-    if fpath.startswith("http://"):
+    if protocol == "http":
         try:
             import fsspec
         except ImportError:
@@ -942,24 +996,28 @@ def get_parquet_dataset(
     def getfs(parallel=False):
         if len(fs) == 1:
             return fs[0]
-        if fpath.startswith("s3://"):
+        if protocol == "s3":
             fs.append(
                 get_s3_fs_from_path(
                     fpath, parallel=parallel, storage_options=storage_options
                 )
+                if not isinstance(fpath, list)
+                else get_s3_fs_from_path(
+                    fpath[0], parallel=parallel, storage_options=storage_options
+                )
             )
-        elif fpath.startswith("gcs://"):
+        elif protocol in {"gcs", "gs"}:
             # TODO pass storage_options to GCSFileSystem
             google_fs = gcsfs.GCSFileSystem(token=None)
             fs.append(google_fs)
-        elif fpath.startswith("http://"):
+        elif protocol == "http":
             fs.append(fsspec.filesystem("http"))
-        elif (
-            fpath.startswith("hdfs://")
-            or fpath.startswith("abfs://")
-            or fpath.startswith("abfss://")
-        ):  # pragma: no cover
-            fs.append(get_hdfs_fs(fpath))
+        elif protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
+            fs.append(
+                get_hdfs_fs(fpath)
+                if not isinstance(fpath, list)
+                else get_hdfs_fs(fpath[0])
+            )
         else:
             fs.append(None)
         return fs[0]
@@ -1080,9 +1138,7 @@ def get_parquet_dataset(
         for p in pieces:
             p._bodo_num_rows = 0
 
-        parsed_url = urlparse(fpath)
-        protocol = parsed_url.scheme
-        if protocol in {"gcs", "hdfs", "abfs", "abfss"}:
+        if protocol in {"gcs", "gs", "hdfs", "abfs", "abfss"}:
             for p in pieces[start:end]:
                 file_metadata = p.get_metadata()
                 if get_row_counts:
@@ -1138,7 +1194,9 @@ def get_parquet_dataset(
                 fpaths = [
                     f[len(prefix) :] for f in fpaths
                 ]  # remove prefix from file paths
-                filesystem = get_s3_subtree_fs(bucket_name, region=getfs().region, storage_options=storage_options)
+                filesystem = get_s3_subtree_fs(
+                    bucket_name, region=getfs().region, storage_options=storage_options
+                )
             else:
                 filesystem = None
             # Presumably the work is partitioned more or less equally among ranks,
@@ -1233,17 +1291,15 @@ For best performance the number of row groups should be greater than the number 
     # Therefore, in case this prefix is not present, we add it
     # to the dataset object as a new attribute (_prefix).
 
-    # Parse the URI
-    fpath_options = urlparse(fpath)
     # Only hdfs seems to be affected based on:
     # https://github.com/apache/arrow/blob/ab307365198d5724a0b3331a05704d0fe4bcd710/python/pyarrow/parquet.py#L50
     # which is called in pq.ParquetDataset.__init__
     # https://github.com/apache/arrow/blob/ab307365198d5724a0b3331a05704d0fe4bcd710/python/pyarrow/parquet.py#L1235
     dataset._prefix = ""
-    if fpath_options.scheme in ["hdfs"]:
+    if protocol == "hdfs":
         # Compute the prefix that is expected to be there in the
         # path of the pieces
-        prefix = f"{fpath_options.scheme}://{fpath_options.netloc}"
+        prefix = f"{protocol}://{parsed_url.netloc}"
         # As a heuristic, we only check if the first piece is missing
         # this prefix
         if len(dataset.pieces) > 0:
@@ -1262,7 +1318,13 @@ For best performance the number of row groups should be greater than the number 
 
 
 def get_scanner_batches(
-    fpaths, expr_filters, selected_fields, avg_num_pieces, is_parallel, storage_options, region
+    fpaths,
+    expr_filters,
+    selected_fields,
+    avg_num_pieces,
+    is_parallel,
+    storage_options,
+    region,
 ):
     """return RecordBatchReader for dataset of 'fpaths' that contain the rows
     that match expr_filters (or all rows if expr_filters is None). Only project the
@@ -1291,7 +1353,9 @@ def get_scanner_batches(
         bucket_name = urlparse(fpaths[0]).netloc
         prefix = "s3://" + bucket_name + "/"
         fpaths = [f[len(prefix) :] for f in fpaths]  # remove prefix from file paths
-        filesystem = get_s3_subtree_fs(bucket_name, region=region, storage_options=storage_options)
+        filesystem = get_s3_subtree_fs(
+            bucket_name, region=region, storage_options=storage_options
+        )
     else:
         filesystem = None
     # We only support hive partitioning right now and will need to change this
@@ -1487,7 +1551,7 @@ def _get_partition_cat_dtype(part_set):
 _pq_read = types.ExternalFunction(
     "pq_read",
     table_type(
-        types.voidptr,
+        read_parquet_fpath_type,
         types.boolean,
         types.voidptr,
         parquet_predicate_type,  # dnf filters
