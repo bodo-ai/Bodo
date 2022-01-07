@@ -85,7 +85,6 @@ def isna(arr, i):  # pragma: no cover
 
 @overload(isna)
 def overload_isna(arr, i):
-
     i = types.unliteral(i)
     # String array
     if arr == string_array_type:

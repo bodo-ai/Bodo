@@ -1352,18 +1352,6 @@ def test_index_unsupported(data):
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_memory_usage)(idx=pd.Index(data))
 
-    def test_notna(idx):
-        return idx.notna()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_notna)(idx=pd.Index(data))
-
-    def test_notnull(idx):
-        return idx.notnull()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_notnull)(idx=pd.Index(data))
-
     def test_nunique(idx):
         return idx.nunique()
 
@@ -1630,6 +1618,14 @@ def test_index_nbytes(index, memory_leak_check):
     elif isinstance(index[0], bytes):
         py_out = 92 + (bodo.get_size() - 1) * 9
         check_func(impl, (index,), py_output=py_out, only_1D=True)
+
+    # PeriodIndex example:
+    # data = 24 bytes
+    # null_bit_map= 1 byte
+    # Total = 25 bytes
+    elif isinstance(index, pd.PeriodIndex):
+        py_out = 25
+        check_func(impl, (index,), py_output=py_out)
     else:
         check_func(impl, (index,))
 
@@ -1759,3 +1755,81 @@ def test_index_rename_heter():
         return df.apply(row_index_renamer, axis=1)
 
     check_func(impl, (df,))
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [
+        pytest.param(pd.RangeIndex(start=0, stop=5), id="RangeIndexType"),
+        pytest.param(
+            pd.Index([1, 2, None, 4, 5]), id="NumericIndexType", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            pd.Index(["a", "b", None, "d", "e"]),
+            id="StringIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Index([b"a", b"b", None, b"d", b"e"]),
+            id="BinaryIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex(["a", "a", None, "c", "d"]),
+            id="CategoricalIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.PeriodIndex(
+                [
+                    pd.Period("2001-01", freq="M"),
+                    pd.Period("2002-01", freq="M"),
+                    None,
+                    pd.Period("2004-01", freq="M"),
+                    pd.Period("2005-01", freq="M"),
+                ],
+            ),
+            id="PeriodIndexType",
+        ),
+        pytest.param(
+            pd.DatetimeIndex(
+                ["2000-01-01", "2001-01-01", None, "2003-01-01", "2004-01-01"]
+            ),
+            id="DatetimeIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.TimedeltaIndex(["1 days", "2 days", None, "4 days", "5 days"]),
+            id="TimedeltaIndexType",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "impl",
+    [
+        pytest.param(lambda I: I.isna(), id="isna"),
+        pytest.param(lambda I: I.notna(), id="notna"),
+        pytest.param(lambda I: I.isnull(), id="isnull"),
+        pytest.param(lambda I: I.notnull(), id="notnull"),
+    ],
+)
+def test_index_check_na(idx, impl):
+    check_func(impl, (idx,))
+
+
+def test_period_index_lower_check_na():
+    idx = pd.PeriodIndex(
+        [
+            pd.Period("2001-01", freq="M"),
+            pd.Period("2002-01", freq="M"),
+            None,
+            pd.Period("2004-01", freq="M"),
+            pd.Period("2005-01", freq="M"),
+        ],
+    )
+
+    def impl():
+        return idx.isna()
+
+    check_func(impl, (), dist_test=False)

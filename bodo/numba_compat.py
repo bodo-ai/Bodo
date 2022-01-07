@@ -370,6 +370,8 @@ if _check_numba_change:
 
 
 ir_utils.find_potential_aliases = find_potential_aliases
+# This is also imported in array analysis
+numba.parfors.array_analysis.find_potential_aliases = find_potential_aliases
 
 
 if _check_numba_change:

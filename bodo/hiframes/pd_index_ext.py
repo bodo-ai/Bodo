@@ -1831,7 +1831,7 @@ def overload_range_len(r):
 
 
 # Simple type for PeriodIndex for now, freq is saved as a constant string
-class PeriodIndexType(types.IterableType):
+class PeriodIndexType(types.IterableType, types.ArrayCompatible):
     """type class for pd.PeriodIndex. Contains frequency as constant string"""
 
     def __init__(self, freq, name_typ=None):
@@ -1843,6 +1843,11 @@ class PeriodIndexType(types.IterableType):
         )
 
     ndim = 1
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
 
     def copy(self):
         return PeriodIndexType(self.freq, self.name_typ)
@@ -1874,7 +1879,7 @@ class PeriodIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         # TODO: nullable integer array?
         members = [
-            ("data", types.Array(types.int64, 1, "C")),
+            ("data", bodo.IntegerArrayType(types.int64)),
             ("name", fe_type.name_typ),
             ("dict", types.DictType(types.int64, types.int64)),
         ]
@@ -1956,9 +1961,9 @@ def box_period_index(typ, val, c):
 
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
-    c.context.nrt.incref(c.builder, types.Array(types.int64, 1, "C"), index_val.data)
+    c.context.nrt.incref(c.builder, bodo.IntegerArrayType(types.int64), index_val.data)
     data_obj = c.pyapi.from_native_value(
-        types.Array(types.int64, 1, "C"), index_val.data, c.env_manager
+        bodo.IntegerArrayType(types.int64), index_val.data, c.env_manager
     )
     c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
@@ -1986,13 +1991,24 @@ def box_period_index(typ, val, c):
 @unbox(PeriodIndexType)
 def unbox_period_index(typ, val, c):
     # get data and name attributes
-    arr_typ = types.Array(types.int64, 1, "C")
+    arr_typ = bodo.IntegerArrayType(types.int64)
     asi8_obj = c.pyapi.object_getattr_string(val, "asi8")
-    data = c.pyapi.to_native_value(arr_typ, asi8_obj).value
+    isna_obj = c.pyapi.call_method(val, "isna", ())
     name_obj = c.pyapi.object_getattr_string(val, "name")
     name = c.pyapi.to_native_value(typ.name_typ, name_obj).value
+
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    arr_mod_obj = c.pyapi.object_getattr_string(pd_class_obj, "arrays")
+    data_obj = c.pyapi.call_method(arr_mod_obj, "IntegerArray", (asi8_obj, isna_obj))
+    data = c.pyapi.to_native_value(arr_typ, data_obj).value
+
     c.pyapi.decref(asi8_obj)
+    c.pyapi.decref(isna_obj)
     c.pyapi.decref(name_obj)
+    c.pyapi.decref(pd_class_obj)
+    c.pyapi.decref(arr_mod_obj)
+    c.pyapi.decref(data_obj)
 
     # create index struct
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder)
@@ -3184,46 +3200,76 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
     return impl
 
 
-@overload_method(RangeIndexType, "isna", no_unliteral=True)
-@overload_method(NumericIndexType, "isna", no_unliteral=True)
-@overload_method(StringIndexType, "isna", no_unliteral=True)
-@overload_method(BinaryIndexType, "isna", no_unliteral=True)
-@overload_method(CategoricalIndexType, "isna", no_unliteral=True)
-@overload_method(PeriodIndexType, "isna", no_unliteral=True)
-@overload_method(DatetimeIndexType, "isna", no_unliteral=True)
-@overload_method(TimedeltaIndexType, "isna", no_unliteral=True)
-@overload_method(RangeIndexType, "isnull", no_unliteral=True)
-@overload_method(NumericIndexType, "isnull", no_unliteral=True)
-@overload_method(StringIndexType, "isnull", no_unliteral=True)
-@overload_method(BinaryIndexType, "isnull", no_unliteral=True)
-@overload_method(CategoricalIndexType, "isnull", no_unliteral=True)
-@overload_method(PeriodIndexType, "isnull", no_unliteral=True)
-@overload_method(DatetimeIndexType, "isnull", no_unliteral=True)
-@overload_method(TimedeltaIndexType, "isnull", no_unliteral=True)
-def overload_index_isna(I):
-    if isinstance(I, RangeIndexType):
-        # TODO: parallelize np.full in PA
-        # return lambda I: np.full(len(I), False, np.bool_)
-        def impl(I):  # pragma: no cover
-            numba.parfors.parfor.init_prange()
-            n = len(I)
-            out_arr = np.empty(n, np.bool_)
-            for i in numba.parfors.parfor.internal_prange(n):
-                out_arr[i] = False
-            return out_arr
+def create_isna_specific_method(overload_name):
+    def overload_index_isna_specific_method(I):
+        """Generic implementation for Index.isna() and Index.notna()."""
+        cond_when_isna = overload_name in {"isna", "isnull"}
 
+        if isinstance(I, RangeIndexType):
+            # TODO: parallelize np.full in PA
+            # return lambda I: np.full(len(I), <cond>, np.bool_)
+            def impl(I):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(I)
+                out_arr = np.empty(n, np.bool_)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    out_arr[i] = not cond_when_isna
+                return out_arr
+
+            return impl
+
+        func_text = (
+            "def impl(I):\n"
+            "    numba.parfors.parfor.init_prange()\n"
+            "    arr = bodo.hiframes.pd_index_ext.get_index_data(I)\n"
+            "    n = len(arr)\n"
+            "    out_arr = np.empty(n, np.bool_)\n"
+            "    for i in numba.parfors.parfor.internal_prange(n):\n"
+            f"       out_arr[i] = {'' if cond_when_isna else 'not '}"
+            "bodo.libs.array_kernels.isna(arr, i)\n"
+            "    return out_arr\n"
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo, "np": np, "numba": numba}, loc_vars)
+        impl = loc_vars["impl"]
         return impl
 
-    def impl(I):  # pragma: no cover
-        numba.parfors.parfor.init_prange()
-        arr = bodo.hiframes.pd_index_ext.get_index_data(I)
-        n = len(arr)
-        out_arr = np.empty(n, np.bool_)
-        for i in numba.parfors.parfor.internal_prange(n):
-            out_arr[i] = bodo.libs.array_kernels.isna(arr, i)
-        return out_arr
+    return overload_index_isna_specific_method
 
-    return impl
+
+isna_overload_types = (
+    RangeIndexType,
+    NumericIndexType,
+    StringIndexType,
+    BinaryIndexType,
+    CategoricalIndexType,
+    PeriodIndexType,
+    DatetimeIndexType,
+    TimedeltaIndexType,
+)
+
+
+isna_specific_methods = (
+    "isna",
+    "notna",
+    "isnull",
+    "notnull",
+)
+
+
+def _install_isna_specific_methods():
+    for overload_type in isna_overload_types:
+        for overload_name in isna_specific_methods:
+            overload_impl = create_isna_specific_method(overload_name)
+            overload_method(
+                overload_type,
+                overload_name,
+                no_unliteral=True,
+                inline="always",
+            )(overload_impl)
+
+
+_install_isna_specific_methods()
 
 
 @overload_attribute(RangeIndexType, "values")
@@ -3928,7 +3974,9 @@ def lower_constant_time_index(context, builder, ty, pyval):
 def lower_constant_period_index(context, builder, ty, pyval):
     """ Constant lowering for PeriodIndexType. """
     data = context.get_constant_generic(
-        builder, types.Array(types.int64, 1, "C"), pyval.asi8
+        builder,
+        bodo.IntegerArrayType(types.int64),
+        pd.arrays.IntegerArray(pyval.asi8, pyval.isna()),
     )
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
@@ -4121,8 +4169,6 @@ index_unsupported_methods = [
     "item",
     "join",
     "memory_usage",
-    "notna",
-    "notnull",
     "nunique",
     "putmask",
     "ravel",
