@@ -4955,7 +4955,7 @@ def parse_shape(shape):
     return ndim
 
 
-if _check_numba_change: #pragma: no cover
+if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typing.npydecl.parse_shape)
     if (
         hashlib.sha256(lines.encode()).hexdigest()

@@ -1016,38 +1016,49 @@ def test_concat_const_args(memory_leak_check):
         bodo.jit(impl2)(S1, S2, True)
 
 
-@pytest.mark.slow
 def test_df_getitem_non_const_columname_error(memory_leak_check):
+
     g = bodo.jit(lambda a: a)
 
     @bodo.jit
     def f(df, a):
-        return df[g(a)]
-
-    df = pd.DataFrame({"A": [1, 2, 3]})
-    df = pd.DataFrame({1: [1, 2, 3]})
+        flag = len(df) > 10
+        if flag:
+            col = g(a)
+        else:
+            col = df.columns[0]
+        return df[col]
 
     message = r"df\[\] getitem selecting a subset of columns requires providing constant column names. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
+
+    df = pd.DataFrame({"A": [1, 2, 3]})
     with pytest.raises(BodoError, match=message):
         f(df, "A")
+
+    df = pd.DataFrame({1: [1, 2, 3]})
     with pytest.raises(BodoError, match=message):
         f(df, 1)
 
 
-@pytest.mark.slow
 def test_df_getitem_non_const_columname_list_error(memory_leak_check):
     g = bodo.jit(lambda a: a)
 
     @bodo.jit
     def f(df, a):
-        return df[g(a)]
-
-    df = pd.DataFrame({"A": [1, 2, 3]})
-    df = pd.DataFrame({1: [1, 2, 3]})
+        flag = len(df) > 10
+        if flag:
+            cols = g(a)
+        else:
+            cols = [df.columns[0]]
+        return df[cols]
 
     message = r"df\[\] getitem using .* not supported. If you are trying to select a subset of the columns, you must provide the column names you are selecting as a constant. See https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
+
+    df = pd.DataFrame({"A": [1, 2, 3]})
     with pytest.raises(BodoError, match=message):
         f(df, ["A"])
+
+    df = pd.DataFrame({1: [1, 2, 3]})
     with pytest.raises(BodoError, match=message):
         f(df, [1])
 
@@ -1076,18 +1087,27 @@ def test_df_loc_getitem_non_const_columname_error(memory_leak_check):
         f2(df, "A")
 
 
-@pytest.mark.slow
 def test_df_loc_getitem_non_const_columname_list_error(memory_leak_check):
     g = bodo.jit(lambda a: a)
 
     @bodo.jit
     def f(df, a):
-        x = df.loc[0, g(a)]
+        flag = len(df) > 10
+        if flag:
+            cols = g(a)
+        else:
+            cols = ["A"]
+        x = df.loc[0, cols]
         return x
 
     @bodo.jit
     def f2(df, a):
-        return df.loc[1:, g(a)]
+        flag = len(df) > 10
+        if flag:
+            cols = g(a)
+        else:
+            cols = ["A"]
+        return df.loc[1:, cols]
 
     df = pd.DataFrame({"A": np.arange(10)})
     # TODO: add when loc supports indexing with integer col names
@@ -1124,13 +1144,17 @@ def test_df_iloc_getitem_non_const_columname_error(memory_leak_check):
         f2(df, [1])
 
 
-@pytest.mark.slow
 def test_df_iloc_getitem_non_const_slice_error(memory_leak_check):
     g = bodo.jit(lambda a: a)
 
     @bodo.jit
     def f(df, a):
-        x = df.iloc[1:, g(a)]
+        flag = len(df) > 10
+        if flag:
+            cols = g(a)
+        else:
+            cols = slice(0, 2)
+        x = df.iloc[1:, cols]
         return x
 
     df = pd.DataFrame({"A": np.arange(10)})

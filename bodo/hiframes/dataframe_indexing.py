@@ -165,7 +165,9 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                         df_columns_indexer_type
                     )
 
-                    if df_columns_indexer_type.dtype == types.bool_:
+                    unliteral_lst_typ = types.unliteral(df_columns_indexer_type)
+
+                    if unliteral_lst_typ.dtype == types.bool_:
                         if len(df.columns) != len(df_col_inds_literal):
                             raise_bodo_error(
                                 f"dataframe {df} has {len(df.columns)} columns, but boolean array used with DataFrame.loc[] {df_col_inds_literal} has {len(df_col_inds_literal)} values"
@@ -184,7 +186,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                         )
                         return ret(*args)
 
-                    elif df_columns_indexer_type.dtype == bodo.string_type:
+                    elif unliteral_lst_typ.dtype == bodo.string_type:
                         (new_cols, new_data) = self.get_kept_cols_and_data(
                             df, df_col_inds_literal
                         )
