@@ -554,11 +554,15 @@ setup(
     keywords="data analytics cluster",
     url="https://bodo.ai",
     author="Bodo.ai",
-    packages=find_packages(exclude=("bodo.tests",)),
+    packages=find_packages(),
     package_data={
+        "bodo.tests": [
+            "data/*",
+            "data/*/*",
+        ],
         # on Windows we copy libssl and libcrypto DLLs to bodo/libs to bundle
         # them with our package and avoid external dependency
-        "bodo": ["libs/*.dll"],
+        "bodo": ["pytest.ini", "libs/*.dll"],
     },
     # When doing `python setup.py develop`, setuptools will try to install whatever is
     # in `install_requires` after building, so we set it to empty (we don't want to
