@@ -1614,6 +1614,9 @@ def check_caching(
         args_maybe_distributed=args_maybe_distributed,
     )(impl)
 
+    # Add a barrier to reduce the odds of possible race condition
+    # between ranks getting a cached implementation.
+    bodo.barrier()
     bodo_output = bodo_func(*args)
 
     # correctness check, copied from the various check_func's

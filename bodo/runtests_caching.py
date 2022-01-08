@@ -15,13 +15,19 @@ cache_test_dir = sys.argv[2]
 
 pytest_working_dir = os.getcwd()
 try:
-    # change to directory of this file
-    os.chdir(os.path.dirname(cache_test_dir))
+    # change directory to cache location
+    # NOTE:
+    os.chdir(cache_test_dir)
     shutil.rmtree("__pycache__", ignore_errors=True)
 finally:
     # make sure all state is restored even in the case of exceptions
     os.chdir(pytest_working_dir)
 
+# Remove NUMBA_CACHE_DIR if it is set to enable local testing
+# This env variable sets the cache location, which will violate
+# our caching assumptions.
+if "NUMBA_CACHE_DIR" in os.environ:
+    del os.environ["NUMBA_CACHE_DIR"]
 
 pytest_cmd_not_cached_flag = [
     "pytest",

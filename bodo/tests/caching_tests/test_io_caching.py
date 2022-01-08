@@ -46,15 +46,13 @@ def test_read_parquet_cache_fname_arg(
     def impl(fname):
         return pd.read_parquet(fname)
 
-    def impl2(fname):
-        return pd.read_parquet(fname)
+    if is_cached:
+        fname = datapath("int_nulls_multi.pq")
+    else:
+        fname = datapath("int_nulls_single.pq")
 
-    fname1 = datapath("int_nulls_single.pq")
-    fname2 = datapath("int_nulls_multi.pq")
-
-    py_out = impl(fname1)
-    check_caching(impl, (fname1,), is_cached, fn_distribution, py_output=py_out)
-    check_caching(impl2, (fname2,), is_cached, fn_distribution, py_output=py_out)
+    py_out = impl(fname)
+    check_caching(impl, (fname,), is_cached, fn_distribution, py_output=py_out)
 
 
 def test_read_parquet_cache_fname_arg_list_files(
