@@ -89,8 +89,9 @@ def test_format_cache(fn_distribution, is_cached, memory_leak_check):
     ],
 )
 def test_metadata_cache(gen_type_annotated_df_func, is_cached, memory_leak_check):
-    """Checks that, in a situation where we need type inference to determine the type of the input dataframe, we still get
-    caching when running on other dataframes of the same type.
+    """Checks that, in a situation where we need type inference to determine the type of the input
+    dataframe (i.e. empty array on certain ranks), we still get caching when running on other
+    dataframes of the same type.
 
     gen_type_annotated_df_func: function that returns a dataframe that requires type annotation to infer the dtype
     """
