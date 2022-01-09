@@ -1093,6 +1093,9 @@ class GetDataFrameDataInfer(AbstractTemplate):
         return ret(*args)
 
 
+GetDataFrameDataInfer.prefer_literal = True
+
+
 def get_dataframe_data_impl(df, i):
     if df.is_table_format:
 
@@ -1894,6 +1897,9 @@ class GetItemTuple(AbstractTemplate):
             ret = types.BaseTuple.from_types(tup.types[idx_val])
 
         return signature(ret, *args)
+
+
+GetItemTuple.prefer_literal = True
 
 
 # adapted from targets/tupleobj.py

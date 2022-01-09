@@ -4658,6 +4658,9 @@ class SetDfColInfer(AbstractTemplate):
         return ret(*args)
 
 
+SetDfColInfer.prefer_literal = True
+
+
 def _parse_query_expr(
     expr,
     env,
@@ -4953,6 +4956,9 @@ class TypeIterTuples(AbstractTemplate):
         arr_types = [types.Array(types.int64, 1, "C")] + arr_types
         iter_typ = DataFrameTupleIterator(col_names, arr_types)
         return iter_typ(*args)
+
+
+TypeIterTuples.prefer_literal = True
 
 
 @register_model(DataFrameTupleIterator)

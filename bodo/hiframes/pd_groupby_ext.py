@@ -269,6 +269,9 @@ class GetItemDataFrameGroupBy(AbstractTemplate):
             return signature(ret_grp, *args)
 
 
+GetItemDataFrameGroupBy.prefer_literal = True
+
+
 # dummy lowering for groupby getitem to avoid errors (e.g. test_series_groupby_arr)
 @lower_builtin("static_getitem", DataFrameGroupByType, types.Any)
 @lower_builtin(operator.getitem, DataFrameGroupByType, types.Any)
