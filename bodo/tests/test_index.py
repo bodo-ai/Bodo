@@ -1596,7 +1596,7 @@ def test_index_nbytes(index, memory_leak_check):
     if isinstance(index, pd.RangeIndex):
         py_out = 24
         check_func(impl, (index,), py_output=py_out)
-    # String/BinaryIndex has three 3 underlying arrays (data, offsets, nulll_bit_map)
+    # String/BinaryIndex has three 3 underlying arrays (data, offsets, null_bit_map)
 
     # In the String example: 15 characters,
     # data=15 characters * 1 byte +
@@ -1621,11 +1621,11 @@ def test_index_nbytes(index, memory_leak_check):
 
     # PeriodIndex example:
     # data = 24 bytes
-    # null_bit_map= 1 byte
-    # Total = 25 bytes
+    # null_bit_map= 1 byte per rank
+    # Total = 24 + num_ranks bytes
     elif isinstance(index, pd.PeriodIndex):
-        py_out = 25
-        check_func(impl, (index,), py_output=py_out)
+        py_out = 24 + bodo.get_size()
+        check_func(impl, (index,), py_output=py_out, only_1D=True)
     else:
         check_func(impl, (index,))
 
@@ -1765,12 +1765,12 @@ def test_index_rename_heter():
             pd.Index([1, 2, None, 4, 5]), id="NumericIndexType", marks=pytest.mark.slow
         ),
         pytest.param(
-            pd.Index(["a", "b", None, "d", "e"]),
+            pd.Index(["a", "b", None, "d", "e"] * 2),
             id="StringIndexType",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.Index([b"a", b"b", None, b"d", b"e"]),
+            pd.Index([b"a", b"b", None, b"d", b"e"] * 2),
             id="BinaryIndexType",
             marks=pytest.mark.slow,
         ),
