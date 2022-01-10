@@ -457,7 +457,7 @@ def _get_rolling_func_args(fname):
             "func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None\n"
         )
     elif fname == "corr":
-        return "other=None, pairwise=None\n"
+        return "other=None, pairwise=None, ddof=1\n"
     elif fname == "cov":
         return "other=None, pairwise=None, ddof=1\n"
     return ""
