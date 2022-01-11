@@ -3381,6 +3381,54 @@ def overload_index_is_montonic_decreasing(I):
         return impl
 
 
+@overload_method(RangeIndexType, "drop_duplicates", no_unliteral=True, inline="always")
+@overload_method(
+    NumericIndexType, "drop_duplicates", no_unliteral=True, inline="always"
+)
+@overload_method(StringIndexType, "drop_duplicates", no_unliteral=True, inline="always")
+@overload_method(BinaryIndexType, "drop_duplicates", no_unliteral=True, inline="always")
+@overload_method(
+    CategoricalIndexType, "drop_duplicates", no_unliteral=True, inline="always"
+)
+@overload_method(PeriodIndexType, "drop_duplicates", no_unliteral=True, inline="always")
+@overload_method(
+    DatetimeIndexType, "drop_duplicates", no_unliteral=True, inline="always"
+)
+@overload_method(
+    TimedeltaIndexType, "drop_duplicates", no_unliteral=True, inline="always"
+)
+def overload_index_drop_duplicates(I, keep="first"):
+    """Overload `Index.drop_duplicates` method for all index types."""
+    unsupported_args = dict(keep=keep)
+    arg_defaults = dict(keep="first")
+    check_unsupported_args(
+        "Index.drop_duplicates",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
+
+    if isinstance(I, RangeIndexType):
+        return lambda I, keep="first": I.copy()  # pragma: no cover
+
+    func_text = (
+        "def impl(I, keep='first'):\n"
+        "    data = bodo.hiframes.pd_index_ext.get_index_data(I)\n"
+        "    arr = bodo.libs.array_kernels.drop_duplicates_array(data)\n"
+        "    name = bodo.hiframes.pd_index_ext.get_index_name(I)\n"
+    )
+    if isinstance(I, PeriodIndexType):
+        func_text += f"    return bodo.hiframes.pd_index_ext.init_period_index(arr, name, '{I.freq}')\n"
+    else:
+        func_text += "    return bodo.utils.conversion.index_from_array(arr, name)"
+
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
 @numba.generated_jit(nopython=True)
 def get_index_data(S):
     return lambda S: S._data  # pragma: no cover
@@ -4136,7 +4184,6 @@ index_unsupported_methods = [
     "delete",
     "difference",
     "drop",
-    "drop_duplicates",
     "droplevel",
     "dropna",
     "duplicated",

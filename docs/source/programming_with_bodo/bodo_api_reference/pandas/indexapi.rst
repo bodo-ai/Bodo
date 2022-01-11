@@ -287,6 +287,23 @@ Modifying and computations
   >>> f(I, "new_name")
   Index(['a', 'b', 'c'], dtype='object', name='new_name')
 
+* :meth:`pandas.Index.drop_duplicates` ``(keep='first')``
+
+`Supported arguments`: None
+
+`Unsupported Index Types`:
+
+  * MultiIndex
+
+`Example Usage`::
+
+  >>> @bodo.jit
+  ... def f(I):
+  ...   return I.drop_duplicates()
+
+  >>> I = pd.Index(["a", "b", "c", "a", "b", "c"])
+  >>> f(I)
+  Index(['a', 'b', 'c'], dtype='object')
 
 Missing values
 ^^^^^^^^^^^^^^^
