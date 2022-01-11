@@ -5,7 +5,9 @@ compiler optimizations (i.e. dce) are working properly.
 """
 
 import numba
+import numpy as np
 import pandas as pd
+from numba import prange
 
 import bodo
 from bodo.tests.utils import ParforTestPipeline, check_func
@@ -40,7 +42,7 @@ def test_setna_parfor_dce(memory_leak_check):
 
     bodo_func = bodo.jit(pipeline_class=ParforTestPipeline)(test_impl)
     bodo_func(df)
-    _check_no_parfors(bodo_func)
+    _check_num_parfors(bodo_func, 0)
 
 
 def test_parfor_and_or_dce(memory_leak_check):
@@ -77,13 +79,13 @@ def test_parfor_and_or_dce(memory_leak_check):
     # Check that there is no parfor in the code.
     bodo_func = bodo.jit(pipeline_class=ParforTestPipeline)(test_impl_and)
     bodo_func(df)
-    _check_no_parfors(bodo_func)
+    _check_num_parfors(bodo_func, 0)
 
     check_func(test_impl_or, (df,))
     # Check that there is no parfor in the code.
     bodo_func = bodo.jit(pipeline_class=ParforTestPipeline)(test_impl_or)
     bodo_func(df)
-    _check_no_parfors(bodo_func)
+    _check_num_parfors(bodo_func, 0)
 
 
 def test_parfor_str_eq_dce(memory_leak_check):
@@ -110,16 +112,44 @@ def test_parfor_str_eq_dce(memory_leak_check):
     # Check that there is no parfor in the code.
     bodo_func = bodo.jit(pipeline_class=ParforTestPipeline)(test_impl)
     bodo_func(df)
-    _check_no_parfors(bodo_func)
+    _check_num_parfors(bodo_func, 0)
 
 
-def _check_no_parfors(bodo_func):
+def test_tuple_parfor_fusion():
     """
-    Ensure that the bodo function does not contain a parfor.
+    Check to make sure numba can fuse a loop when `ShapeEquivSet._getnames()
+    attempts to analyze an unsupported type (float tuple).
+    """
+
+    def test_impl(arr):
+        a = (1.2, 1.3)
+        n1 = len(arr)
+        arr2 = np.empty(n1, np.float64)
+        for i in prange(n1):
+            arr2[i] = arr[i] * a[0]
+        n2 = len(arr2)
+        arr3 = np.empty(n2, np.float64)
+        for j in prange(n2):
+            arr3[j] = arr2[j] - a[1]
+        total = 0.0
+        n3 = len(arr3)
+        for k in prange(n3):
+            total += arr3[k]
+        return total + a[0]
+
+    bodo_func = bodo.jit(pipeline_class=ParforTestPipeline)(test_impl)
+    bodo_func(np.arange(100))
+    _check_num_parfors(bodo_func, 1)
+
+
+def _check_num_parfors(bodo_func, expected):
+    """
+    Ensure that the bodo function contains a specific number of parfors.
     """
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    num_parfors = 0
     for block in fir.blocks.values():
         for stmt in block.body:
-            assert not isinstance(
-                stmt, numba.parfors.parfor.Parfor
-            ), "Encountered an unexpected parfor"
+            if isinstance(stmt, numba.parfors.parfor.Parfor):
+                num_parfors += 1
+    assert num_parfors == expected, f"Expected {expected}, found {num_parfors} parfors"
