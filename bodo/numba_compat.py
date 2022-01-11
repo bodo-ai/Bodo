@@ -4967,3 +4967,100 @@ if _check_numba_change:  # pragma: no cover
 
 numba.core.typing.npydecl.parse_shape = parse_shape
 #########  End changes to allow IntEnum support for `np.empty`, `np.zeros`, and `np.ones`  #########
+
+#########  Start changes to allow unsupported types in `ShapeEquivSet._getnames()`  #########
+
+
+def _get_names(self, obj):
+    """Return a set of names for the given obj, where array and tuples
+    are broken down to their individual shapes or elements. This is
+    safe because both Numba array shapes and Python tuples are immutable.
+    """
+    if isinstance(obj, ir.Var) or isinstance(obj, str):
+        name = obj if isinstance(obj, str) else obj.name
+        if name not in self.typemap:
+            return (name,)
+        typ = self.typemap[name]
+        if isinstance(typ, (types.BaseTuple, types.ArrayCompatible)):
+            ndim = typ.ndim if isinstance(typ, types.ArrayCompatible) else len(typ)
+            # Treat 0d array as if it were a scalar.
+            if ndim == 0:
+                return (name,)
+            else:
+                return tuple("{}#{}".format(name, i) for i in range(ndim))
+        else:
+            return (name,)
+    elif isinstance(obj, ir.Const):
+        if isinstance(obj.value, tuple):
+            return obj.value
+        else:
+            return (obj.value,)
+    elif isinstance(obj, tuple):
+
+        def get_names(x):
+            names = self._get_names(x)
+            if len(names) != 0:
+                return names[0]
+            return names
+
+        return tuple(get_names(x) for x in obj)
+    elif isinstance(obj, int):
+        return (obj,)
+    # Bodo Change: removed error throwing
+    return ()
+
+
+def get_equiv_const(self, obj):
+    """If the given object is equivalent to a constant scalar,
+    return the scalar value, or None otherwise.
+    """
+    names = self._get_names(obj)
+    # Bodo Change: accounted for the case where len(names) == 0
+    if len(names) != 1:
+        return None
+    return super(numba.parfors.array_analysis.ShapeEquivSet, self).get_equiv_const(
+        names[0]
+    )
+
+
+def get_equiv_set(self, obj):
+    """Return the set of equivalent objects."""
+    names = self._get_names(obj)
+    # Bodo Change: accounted for the case where len(names) == 0
+    if len(names) != 1:
+        return None
+    return super(numba.parfors.array_analysis.ShapeEquivSet, self).get_equiv_set(
+        names[0]
+    )
+
+
+if _check_numba_change:  # pragma: no cover
+    for name, orig, new, hash in (
+        (
+            "numba.parfors.array_analysis.ShapeEquivSet._get_names",
+            numba.parfors.array_analysis.ShapeEquivSet._get_names,
+            _get_names,
+            "8c9bf136109028d5445fd0a82387b6abeb70c23b20b41e2b50c34ba5359516ee",
+        ),
+        (
+            "numba.parfors.array_analysis.ShapeEquivSet.get_equiv_const",
+            numba.parfors.array_analysis.ShapeEquivSet.get_equiv_const,
+            get_equiv_const,
+            "bef410ca31a9e29df9ee74a4a27d339cc332564e4a237828b8a4decf625ce44e",
+        ),
+        (
+            "numba.parfors.array_analysis.ShapeEquivSet.get_equiv_set",
+            numba.parfors.array_analysis.ShapeEquivSet.get_equiv_set,
+            get_equiv_set,
+            "ec936d340c488461122eb74f28a28b88227cb1f1bca2b9ba3c19258cfe1eb40a",
+        ),
+    ):
+        lines = inspect.getsource(orig)
+        if hashlib.sha256(lines.encode()).hexdigest() != hash:
+            warnings.warn(f"{name} has changed")
+
+
+numba.parfors.array_analysis.ShapeEquivSet._get_names = _get_names
+numba.parfors.array_analysis.ShapeEquivSet.get_equiv_const = get_equiv_const
+numba.parfors.array_analysis.ShapeEquivSet.get_equiv_set = get_equiv_set
+#########  End changes to allow unsupported types in `ShapeEquivSet._getnames()`  #########
