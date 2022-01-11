@@ -858,6 +858,29 @@ def overload_drop_duplicates(data, ind_arr, ncols, parallel=False):
     return impl
 
 
+def drop_duplicates_array(data_arr, parallel=False):
+    return data_arr
+
+
+@overload(drop_duplicates_array, no_unliteral=True)
+def overload_drop_duplicates_array(data_arr, parallel=False):
+    """
+    Kernel implementation for drop_duplicates on a single array
+    """
+
+    def impl(data_arr, parallel=False): # pragma: no cover
+        info_list_total = [array_to_info(data_arr)]
+        table_total = arr_info_list_to_table(info_list_total)
+        keep_i = 0
+        out_table = drop_duplicates_table(table_total, parallel, 1, keep_i, False)
+        out_arr = info_to_array(info_from_table(out_table, 0), data_arr)
+        delete_table(out_table)
+        delete_table(table_total)
+        return out_arr
+
+    return impl
+
+
 def dropna(data, how, thresh, subset, parallel=False):  # pragma: no cover
     return data
 

@@ -1154,12 +1154,6 @@ def test_index_unsupported(data):
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_drop)(idx=pd.Index(data))
 
-    def test_drop_duplicates(idx):
-        return idx.drop_duplicates()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_drop_duplicates)(idx=pd.Index(data))
-
     def test_droplevel(idx):
         return idx.droplevel()
 
@@ -1833,3 +1827,60 @@ def test_period_index_lower_check_na():
         return idx.isna()
 
     check_func(impl, (), dist_test=False)
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [
+        pytest.param(pd.RangeIndex(start=0, stop=5), id="RangeIndexType"),
+        pytest.param(
+            pd.Index([1, 1, 2, 2, 3]), id="NumericIndexType", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            pd.Index(["a", "a", "b", "b", "c"]),
+            id="StringIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Index([b"a", b"a", b"b", b"b", b"c"]),
+            id="BinaryIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex(["a", "a", "b", "b", "c"]),
+            id="CategoricalIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.PeriodIndex(
+                [
+                    pd.Period("2001-01", freq="M"),
+                    pd.Period("2001-01", freq="M"),
+                    pd.Period("2002-01", freq="M"),
+                    pd.Period("2002-01", freq="M"),
+                    pd.Period("2003-01", freq="M"),
+                ],
+            ),
+            id="PeriodIndexType",
+        ),
+        pytest.param(
+            pd.DatetimeIndex(
+                ["2000-01-01", "2000-01-01", "2001-01-01", "2001-01-01", "2002-01-01"]
+            ),
+            id="DatetimeIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.TimedeltaIndex(["1 days", "1 days", "2 days", "2 days", "3 days"]),
+            id="TimedeltaIndexType",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_index_drop_duplicates(idx):
+    """tests index.drop_duplicates() for all types of supported indexes"""
+
+    def impl(I):
+        return I.drop_duplicates()
+
+    check_func(impl, (idx,))
