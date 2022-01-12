@@ -1970,6 +1970,23 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
 
         return impl_range_index
 
+    # Period index requires special handling because index_from_array
+    # doesn't work properly (can't infer the index).
+    # See [BE-2067]
+    if isinstance(data, bodo.hiframes.pd_index_ext.PeriodIndexType):
+        freq = data.freq
+
+        def impl_period_index(
+            data, send_counts=None, warn_if_dist=True
+        ):  # pragma: no cover
+            data_in = data._data
+            name = data._name
+            name = bcast_scalar(name)
+            arr = bodo.libs.distributed_api.scatterv_impl(data_in, send_counts)
+            return bodo.hiframes.pd_index_ext.init_period_index(arr, name, freq)
+
+        return impl_period_index
+
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
 
         def impl_pd_index(

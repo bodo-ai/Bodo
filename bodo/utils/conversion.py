@@ -1109,6 +1109,7 @@ def overload_convert_to_index(data, name=None):
         CategoricalIndexType,
         DatetimeIndexType,
         NumericIndexType,
+        PeriodIndexType,
         RangeIndexType,
         StringIndexType,
         TimedeltaIndexType,
@@ -1125,6 +1126,7 @@ def overload_convert_to_index(data, name=None):
             StringIndexType,
             BinaryIndexType,
             CategoricalIndexType,
+            PeriodIndexType,
             types.NoneType,
         ),
     ):
