@@ -203,7 +203,12 @@ class FilenameType(types.Literal):
         if isinstance(other, types.FilenameType):
             assert self.schema is not None
             assert other.schema is not None
-            return self.schema == other.schema
+            # NOTE: check fname type match since the type objects are interned in Numba,
+            # and the fact that data model can be either list or string can cause
+            # issues if the same type object is reused. See [BE-2050]
+            return (bodo.typeof(self.fname) == bodo.typeof(other.fname)) and (
+                self.schema == other.schema
+            )
         else:
             return False
 
