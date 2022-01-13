@@ -1,7 +1,7 @@
 .. _file_io:
 
-File I/O
-===============
+Bodo Data Sources and Connectors
+==================================
 
 Efficient parallel data processing requires data I/O to be parallelized
 effectively as well. Bodo provides parallel file I/O for many different
@@ -520,3 +520,69 @@ These environment variables are used for File I/O with HDFS:
         export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
 
 Bodo uses `Apache Arrow <https://arrow.apache.org/>`_ internally for read and write of data on HDFS. ``$HADOOP_HOME/etc/hadoop/hdfs-site.xml`` provides default behaviors for the HDFS client used by Bodo. Inconsistent configurations (e.g. ``dfs.replication``) could potentially cause errors in Bodo programs.
+
+
+.. _db:
+
+Supported Databases
+====================
+
+
+Currently, Bodo supports most RDBMS that work with SQLAlchemy, with a corresponding driver.
+
+.. _snowflake-section:
+
+Snowflake
+----------
+
+To read a dataframe from a Snowflake database, users can use ``pd.read_sql`` with their Snowflake username and password:
+``pd.read_sql(query,snowflake://<username>:<password>@url)``.
+
+
+Prerequisites
+~~~~~~~~~~~~~~
+
+In order to be able to query Snowflake from Bodo, you will have to install the Snowflake connector. If you're using
+Bodo in a conda environment:
+
+.. code-block:: console
+
+    $ conda install -c conda-forge snowflake-connector-python
+
+
+If you've installed Bodo using pip, then you can install the Snowflake connector using pip as well:
+
+.. code-block:: console
+
+    $ pip install snowflake-connector-python
+
+
+Usage
+~~~~~~
+
+Bodo requires the Snowflake connection string to be passed as an argument to the ``pd.read_sql`` function.
+The complete code looks as follows:
+
+.. code-block:: python3
+
+    import bodo
+    import pandas as pd
+
+    @bodo.jit(distributed=["df"])
+    def read_snowflake(db_name, table_name):
+        df = pd.read_sql(
+                f"SELECT * FROM {table_name}",
+                f"snowflake://user:password@url/{db_name}/schema?warehouse=warehouse_name",
+            )
+        return df
+    df = read_snowflake(db_name, temp_table_name)
+
+We can use the ``pd.to_sql`` method to persist a dataframe to a Snowflake table:
+
+.. code-block:: python3
+
+    df.to_sql('<table_name>',f"snowflake://<username>:<password>@url/<db_name>/public?warehouse=XL_WH",schema="<schema>",if_exists="append",index=False)
+
+.. note::
+    - ``index=False`` is required as Snowflake does not support indexes.
+    - ``if_exists=append`` is needed if the table already exists in snowflake.

@@ -12,5 +12,3 @@ Bodo API Reference
    ml
    dl
    miscellaneous
-   BodoSQL
-   BodoSQLerrors
