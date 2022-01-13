@@ -1883,4 +1883,4 @@ def test_index_drop_duplicates(idx):
     def impl(I):
         return I.drop_duplicates()
 
-    check_func(impl, (idx,))
+    check_func(impl, (idx,), sort_output=True)
