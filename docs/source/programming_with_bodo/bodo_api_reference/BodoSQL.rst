@@ -120,7 +120,37 @@ the final output columns (``a`` vs ``A``).
 
     For Example::
 
-        SELECT A FROM table1
+        SELECT A FROM customers
+
+    `Example Usage`::
+
+        >>> @bodo.jit
+        ... def g(df):
+        ...    bc = bodosql.BodoSQLContext({"customers":df})
+        ...    query = "SELECT name FROM customers"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> customers_df = pd.DataFrame({
+        ...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        ...     "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez", 
+        ...                 "Demetrius Chavez","Weston Jefferson","Jonathon Middleton", 
+        ...                 "Shawn Winters","Keely Hutchinson", "Darryl Rosales",],
+        ...     "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
+        ... })
+
+        >>> g(customers_df)
+                        name
+        0       Deangelo Todd
+        1        Nikolai Kent
+        2          Eden Heath
+        3    Taliyah Martinez
+        4    Demetrius Chavez
+        5    Weston Jefferson
+        6  Jonathon Middleton
+        7       Shawn Winters
+        8    Keely Hutchinson
+        9      Darryl Rosales
 
     The ``SELECT DISTINCT`` statement is used to return only distinct (different) values::
 
@@ -131,6 +161,36 @@ the final output columns (``a`` vs ``A``).
         SELECT DISTINCT A FROM table1
 
         SELECT COUNT DISTINCT A FROM table1
+
+    `Example Usage`::
+
+        >>> @bodo.jit
+        ... def g(df): 
+        ...    bc = bodosql.BodoSQLContext({"payments":df})
+        ...    query = "SELECT DISTINCT paymentType FROM payments"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> payment_df = pd.DataFrame({
+        ...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        ...     "paymentType": ["VISA", "VISA", "AMEX", "VISA", "WIRE", "VISA", "VISA", "WIRE", "VISA", "AMEX"],
+        ... })
+
+        >>> g(payment_df) # inside SELECT
+        paymentType
+        0        VISA
+        2        AMEX
+        4        WIRE
+
+        >>> def g(df):
+        ...    bc = bodosql.BodoSQLContext({"payments":df})
+        ...    query = "SELECT COUNT(DISTINCT paymentType) as num_payment_types FROM payments"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> g(payment_df) # inside aggregate
+        num_payment_types
+        0                  3
 
 
 * `WHERE`
@@ -143,6 +203,29 @@ the final output columns (``a`` vs ``A``).
 
         SELECT A FROM table1 WHERE B > 4
 
+    `Example Usage`::
+
+        >>> @bodo.jit
+        ... def g(df):
+        ...    bc = bodosql.BodoSQLContext({"customers":df})
+        ...    query = "SELECT name FROM customers WHERE balance > 3000"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> customers_df = pd.DataFrame({
+        ...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        ...     "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez", 
+        ...                 "Demetrius Chavez","Weston Jefferson","Jonathon Middleton", 
+        ...                 "Shawn Winters","Keely Hutchinson", "Darryl Rosales",],
+        ...     "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
+        ... })
+
+        >>> g(customers_df)
+                        name
+        3    Taliyah Martinez
+        6  Jonathon Middleton
+        7       Shawn Winters
+        9      Darryl Rosales
 
 * `ORDER BY`
 
@@ -158,6 +241,36 @@ the final output columns (``a`` vs ``A``).
     For Example::
 
         SELECT A, B FROM table1 ORDER BY B, A DESC NULLS FIRST
+
+    `Example Usage`::
+
+        >>> @bodo.jit
+        ... def g(df):
+        ...    bc = bodosql.BodoSQLContext({"customers":df})
+        ...    query = "SELECT name, balance FROM customers ORDER BY balance"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> customers_df = pd.DataFrame({
+        ...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        ...     "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez", 
+        ...                 "Demetrius Chavez","Weston Jefferson","Jonathon Middleton", 
+        ...                 "Shawn Winters","Keely Hutchinson", "Darryl Rosales",],
+        ...     "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
+        ... })
+
+        >>> g(customers_df)
+                        name   balance
+        2          Eden Heath     23.58
+        5    Weston Jefferson     68.34
+        8    Keely Hutchinson    654.24
+        4    Demetrius Chavez    943.43
+        0       Deangelo Todd   1123.34
+        1        Nikolai Kent   2133.43
+        7       Shawn Winters   3489.25
+        3    Taliyah Martinez   8345.15
+        6  Jonathon Middleton  12764.50
+        9      Darryl Rosales  25645.39
 
 
 * `LIMIT`
@@ -183,6 +296,44 @@ the final output columns (``a`` vs ``A``).
     For Example::
 
         SELECT B FROM table2 LIMIT 3, 8
+    
+    `Example Usage`::
+    
+        >>> @bodo.jit
+        ... def g1(df):
+        ...    bc = bodosql.BodoSQLContext({"customers":df})
+        ...    query = "SELECT name FROM customers LIMIT 4"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> @bodo.jit
+        ... def g2(df):
+        ...    bc = bodosql.BodoSQLContext({"customers":df})
+        ...    query = "SELECT name FROM customers LIMIT 4 OFFSET 2"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> customers_df = pd.DataFrame({
+        ...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        ...     "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez", 
+        ...                 "Demetrius Chavez","Weston Jefferson","Jonathon Middleton", 
+        ...                 "Shawn Winters","Keely Hutchinson", "Darryl Rosales",],
+        ...     "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
+        ... })
+
+        >>> g1(customers_df) # LIMIT 4
+                       name
+        0     Deangelo Todd
+        1      Nikolai Kent
+        2        Eden Heath
+        3  Taliyah Martinez
+
+        >>> g2(customers_df) # LIMIT 4 OFFSET 2
+                       name
+        2        Eden Heath
+        3  Taliyah Martinez
+        4  Demetrius Chavez
+        5  Weston Jefferson
 
 
 * [NOT] `IN`
@@ -197,6 +348,39 @@ the final output columns (``a`` vs ``A``).
     For example::
 
         SELECT A FROM table1 WHERE A IN (5, 10, 15, 20, 25)
+    
+    `Example Usage`::
+
+        >>> @bodo.jit
+        ... def g1(df):
+        ...    bc = bodosql.BodoSQLContext({"payments":df})
+        ...    query = "SELECT customerID FROM payments WHERE paymentType IN ('AMEX', 'WIRE')"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> @bodo.jit
+        ... def g2(df):
+        ...    bc = bodosql.BodoSQLContext({"payments":df})
+        ...    query = "SELECT customerID FROM payments WHERE paymentType NOT IN ('AMEX', 'VISA')"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> payment_df = pd.DataFrame({
+        ...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        ...     "paymentType": ["VISA", "VISA", "AMEX", "VISA", "WIRE", "VISA", "VISA", "WIRE", "VISA", "AMEX"],
+        ... })
+
+        >>> g1(payment_df) # IN
+           customerID
+        2           2
+        4           4
+        7           7
+        9           9
+
+        >>> g2(payment_df) # NOT IN
+           customerID
+        4           4
+        7           7
 
 
 * [NOT] `BETWEEN`
@@ -211,6 +395,43 @@ the final output columns (``a`` vs ``A``).
     For example::
 
         SELECT A FROM table1 WHERE A BETWEEN 10 AND 100
+
+    `Example Usage`::
+
+        >>> @bodo.jit
+        ... def g(df):
+        ...    bc = bodosql.BodoSQLContext({"customers":df})
+        ...    query = "SELECT name, balance FROM customers WHERE balance BETWEEN 1000 and 5000"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> @bodo.jit
+        ... def g2(df):
+        ...    bc = bodosql.BodoSQLContext({"customers":df})
+        ...    query = "SELECT name, balance FROM customers WHERE balance NOT BETWEEN 100 and 10000"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> customers_df = pd.DataFrame({
+        ...     "customerID": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        ...     "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez", 
+        ...                 "Demetrius Chavez","Weston Jefferson","Jonathon Middleton", 
+        ...                 "Shawn Winters","Keely Hutchinson", "Darryl Rosales",],
+        ...     "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43, 68.34, 12764.50, 3489.25, 654.24, 25645.39]
+        ... })
+
+        >>> g1(payment_df) # BETWEEN
+                    name  balance
+        0  Deangelo Todd  1123.34
+        1   Nikolai Kent  2133.43
+        7  Shawn Winters  3489.25
+
+        >>> g2(payment_df) # NOT BETWEEN
+                         name   balance
+        2          Eden Heath     23.58
+        5    Weston Jefferson     68.34
+        6  Jonathon Middleton  12764.50
+        9      Darryl Rosales  25645.39
 
 
 * `CAST`
@@ -298,6 +519,51 @@ the final output columns (``a`` vs ``A``).
     Bodo SQL currently supports inner join on all conditions, but all outer joins are only supported on an
     equality between columns.
 
+    `Example Usage`::
+
+        >>> @bodo.jit
+        ... def g1(df1, df2):
+        ...    bc = bodosql.BodoSQLContext({"customers":df1, "payments":df2})
+        ...    query = "SELECT name, paymentType FROM customers JOIN payments ON customers.customerID = payments.customerID"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> @bodo.jit
+        ... def g2(df1, df2):
+        ...    bc = bodosql.BodoSQLContext({"customers":df1, "payments":df2})
+        ...    query = "SELECT name, paymentType FROM customers FULL JOIN payments ON customers.customerID = payments.customerID"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> customer_df = pd.DataFrame({
+        ...    "customerID": [0, 2, 4, 5, 7,],
+        ...    "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez","Demetrius Chavez",],
+        ...    "address": ["223 Iroquois Lane\nWest New York, NJ 07093","37 Depot Street\nTaunton, MA 02780",
+        ...                "639 Maple St.\nNorth Kingstown, RI 02852","93 Bowman Rd.\nChester, PA 19013", 
+        ...                "513 Manchester Ave.\nWindsor, CT 06095",],
+        ...    "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43,]
+        ... })
+        >>> payment_df = pd.DataFrame({
+        ...     "customerID": [0, 1, 4, 6, 7], 
+        ...     "paymentType": ["VISA", "VISA", "AMEX", "VISA", "WIRE",],
+        ... })
+
+        >>> g1(customer_df, payment_df) # INNER JOIN
+                       name paymentType
+        0     Deangelo Todd        VISA
+        1        Eden Heath        AMEX
+        2  Demetrius Chavez        WIRE
+
+        >>> g2(customer_df, payment_df) # OUTER JOIN
+                       name paymentType
+        0     Deangelo Todd        VISA
+        1      Nikolai Kent         NaN
+        2        Eden Heath        AMEX
+        3  Taliyah Martinez         NaN
+        4  Demetrius Chavez        WIRE
+        5               NaN        VISA
+        6               NaN        VISA
+
 * `UNION`
 
     The UNION operator is used to combine the result-set of two SELECT statements::
@@ -314,6 +580,48 @@ the final output columns (``a`` vs ``A``).
         SELECT <COLUMN_NAMES> FROM <TABLE1>
         UNION ALL
         SELECT <COLUMN_NAMES> FROM <TABLE2>
+
+    `Example Usage`::
+
+        >>> @bodo.jit
+        ... def g1(df):
+        ...    bc = bodosql.BodoSQLContext({"customers":df1, "payments":df2})
+        ...    query = "SELECT name, paymentType FROM customers JOIN payments ON customers.customerID = payments.customerID WHERE paymentType in ('WIRE') \
+        ...             UNION SELECT name, paymentType FROM customers JOIN payments ON customers.customerID = payments.customerID WHERE balance < 1000"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> @bodo.jit
+        ... def g2(df):
+        ...    bc = bodosql.BodoSQLContext({"customers":df1, "payments":df2})
+        ...    query = "SELECT name, paymentType FROM customers JOIN payments ON customers.customerID = payments.customerID WHERE paymentType in ('WIRE') \
+        ...             UNION ALL SELECT name, paymentType FROM customers JOIN payments ON customers.customerID = payments.customerID WHERE balance < 1000"
+        ...    res = bc.sql(query)
+        ...    return res
+
+        >>> customer_df = pd.DataFrame({
+        ...    "customerID": [0, 2, 4, 5, 7,],
+        ...    "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez","Demetrius Chavez",],
+        ...    "address": ["223 Iroquois Lane\nWest New York, NJ 07093","37 Depot Street\nTaunton, MA 02780",
+        ...                "639 Maple St.\nNorth Kingstown, RI 02852","93 Bowman Rd.\nChester, PA 19013", 
+        ...                "513 Manchester Ave.\nWindsor, CT 06095",],
+        ...    "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43,]
+        ... })
+        >>> payment_df = pd.DataFrame({
+        ...     "customerID": [0, 1, 4, 6, 7], 
+        ...     "paymentType": ["VISA", "VISA", "AMEX", "VISA", "WIRE",],
+        ... })
+
+        >>> g1(customer_df, payment_df) # UNION
+                       name paymentType  balance
+        0  Demetrius Chavez        WIRE   943.43
+        0        Eden Heath        AMEX    23.58
+
+        >>> g2(customer_df, payment_df) # UNION ALL
+                        name paymentType  balance
+        0  Demetrius Chavez        WIRE   943.43
+        0        Eden Heath        AMEX    23.58
+        1  Demetrius Chavez        WIRE   943.43
 
 
 * `INTERSECT`
