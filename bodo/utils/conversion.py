@@ -400,6 +400,14 @@ def overload_coerce_to_array(
             data
         )  # pragma: no cover
 
+    # Empty Tuple
+    # TODO: Remove once we can iterate with an empty tuple (next condition will capture this case)
+    # Related Task: https://bodo.atlassian.net/browse/BE-1936
+    if isinstance(data, types.BaseTuple) and data.count == 0:
+        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.str_arr_ext.empty_str_arr(
+            data
+        )  # pragma: no cover
+
     # string tuple
     if (
         isinstance(data, types.UniTuple)
