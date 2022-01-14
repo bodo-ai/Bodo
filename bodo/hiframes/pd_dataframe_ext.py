@@ -158,6 +158,15 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         super(DataFrameType, self).__init__(
             name=f"dataframe({data}, {index}, {columns}, {dist}, {is_table_format})"
         )
+    
+    def __str__(self):
+        """Returns DataFrame name, if DataFrame has many columns returns compact representation of name."""
+        if len(self.columns) > 20: 
+            data_str = f"{len(self.data)} columns of types {set(self.data)}"
+            columns_str = f"('{self.columns[0]}', '{self.columns[1]}', ..., '{self.columns[-1]}')"
+            return f"dataframe({data_str}, {self.index}, {columns_str}, {self.dist}, {self.is_table_format})"
+        return super().__str__()
+        
 
     def copy(
         self, data=None, index=None, columns=None, dist=None, is_table_format=None
