@@ -1062,6 +1062,24 @@ _print_str_arr = types.ExternalFunction(
 
 
 @numba.generated_jit(nopython=True)
+def empty_str_arr(in_seq):  # pragma: no cover
+    func_text = "def f(in_seq):\n"
+    func_text += "    n_strs = len(in_seq)\n"
+    func_text += "    A = pre_alloc_string_array(n_strs, -1)\n"
+    func_text += "    return A\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "pre_alloc_string_array": pre_alloc_string_array,
+        },
+        loc_vars,
+    )
+    f = loc_vars["f"]
+    return f
+
+
+@numba.generated_jit(nopython=True)
 def str_arr_from_sequence(in_seq):  # pragma: no cover
     if in_seq.dtype == bodo.bytes_type:
         alloc_fn = "pre_alloc_binary_array"
@@ -1122,6 +1140,15 @@ def set_all_offsets_to_0(typingctx, arr_typ=None):
 
 @numba.njit
 def pre_alloc_string_array(n_strs, n_chars):  # pragma: no cover
+    """
+    Wrapper for String Array Allocation with Pre- and Post- Processing
+    Preprocessing: Convering Inputs to Numpy Types
+    Postprocessing: Sets offsets to 0 if n_chars == 0
+
+    n_strs: int = Number of Strings in Array
+    n_chars: Optional[int] = Number of Chars per String, or None if Unknown
+    """
+
     if n_chars is None:
         n_chars = -1
     str_arr = init_str_arr(

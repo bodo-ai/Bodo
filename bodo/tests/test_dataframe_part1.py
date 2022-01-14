@@ -949,6 +949,16 @@ def test_df_columns(df_value, memory_leak_check):
     check_func(impl, (df_value,), is_out_distributed=False)
 
 
+# TODO: Remove test when more empty DataFrame functionality is supported
+# Include empty DataFrame in dataframe_common.py
+def test_empty_df_columns(memory_leak_check):
+    def impl(df):
+        return df.columns
+
+    df = pd.DataFrame()
+    check_func(impl, (df,), is_out_distributed=False)
+
+
 @pytest.mark.slow
 def test_df_columns_nested(memory_leak_check):
     """make sure nested df column names can be returned properly"""
