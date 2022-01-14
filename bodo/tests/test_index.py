@@ -1834,20 +1834,22 @@ def test_period_index_lower_check_na():
     [
         pytest.param(pd.RangeIndex(start=0, stop=5), id="RangeIndexType"),
         pytest.param(
-            pd.Index([1, 1, 2, 2, 3]), id="NumericIndexType", marks=pytest.mark.slow
+            pd.Index([5, 1, 1, 2, 2, 3, 4] * 2),
+            id="NumericIndexType",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.Index(["a", "a", "b", "b", "c"]),
+            pd.Index(["e", "a", "a", "b", "b", "c", "d"] * 2),
             id="StringIndexType",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.Index([b"a", b"a", b"b", b"b", b"c"]),
+            pd.Index([b"e", b"a", b"a", b"b", b"b", b"c", b"d"] * 2),
             id="BinaryIndexType",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.CategoricalIndex(["a", "a", "b", "b", "c"]),
+            pd.CategoricalIndex(["e", "a", "a", "b", "b", "c", "d"] * 2),
             id="CategoricalIndexType",
             marks=pytest.mark.slow,
         ),
@@ -1859,19 +1861,33 @@ def test_period_index_lower_check_na():
                     pd.Period("2002-01", freq="M"),
                     pd.Period("2002-01", freq="M"),
                     pd.Period("2003-01", freq="M"),
-                ],
+                    pd.Period("2004-01", freq="M"),
+                    pd.Period("2005-01", freq="M"),
+                ]
+                * 2,
             ),
             id="PeriodIndexType",
         ),
         pytest.param(
             pd.DatetimeIndex(
-                ["2000-01-01", "2000-01-01", "2001-01-01", "2001-01-01", "2002-01-01"]
+                [
+                    "2000-01-01",
+                    "2000-01-01",
+                    "2001-01-01",
+                    "2001-01-01",
+                    "2002-01-01",
+                    "2003-01-01",
+                    "2004-01-01",
+                ]
+                * 2
             ),
             id="DatetimeIndexType",
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.TimedeltaIndex(["1 days", "1 days", "2 days", "2 days", "3 days"]),
+            pd.TimedeltaIndex(
+                ["4 days", "1 days", "1 days", "2 days", "2 days", "3 days", "5 days"]
+            ),
             id="TimedeltaIndexType",
             marks=pytest.mark.slow,
         ),
