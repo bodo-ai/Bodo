@@ -1605,3 +1605,33 @@ def test_df_rolling_unsupported():
         match=err_msg,
     ):
         bodo.jit(impl)()
+
+
+@pytest.mark.slow
+def test_df_error_message_truncates():
+    """
+    Checks that DataFrames with large number of columns have string representation truncated in error messages
+    """
+    @bodo.jit 
+    def impl(df):
+        # non-existent column 
+        return df["qwerty"] 
+    
+    num_cols_over_3 = 1000
+    data_dict = {}
+    for i in range(num_cols_over_3):
+        for j in range(3):
+            modulo = j % 3
+            if modulo == 0:
+                arr = np.arange(1000) * (i + 1)
+            if modulo == 1:
+                arr = np.arange(1000) * 0.5 * (i + 1)
+            if modulo == 2:
+                arr = [f"value{k}" for k in (np.arange(1000) * (i + 1))]
+            data_dict[f"Column{(i * 3) + j}"] = arr
+    large_df = pd.DataFrame(data_dict)
+    
+    with pytest.raises(BodoError) as bodo_err:
+        impl(large_df)
+    # 500 insignifigant, expected message should have 453 (without truncation 10,000+)
+    assert len(bodo_err.value.msg) < 500
