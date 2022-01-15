@@ -812,19 +812,31 @@ def overload_fix_arr_dtype(
     nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
 
     # Matching data case
-    if do_copy and data.dtype == nb_dtype:
+    if isinstance(data, bodo.libs.int_arr_ext.IntegerArrayType):
+        same_typ = (
+            isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype)
+            and data.dtype == nb_dtype.dtype
+        )
+    else:
+        same_typ = data.dtype == nb_dtype
+
+    if do_copy and same_typ:
         return (
             lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data.copy()
         )  # pragma: no cover
 
-    if data.dtype == nb_dtype:
+    if same_typ:
         return (
             lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data
         )  # pragma: no cover
 
     # nullable int array case
     if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
-        _dtype = nb_dtype.dtype
+        if isinstance(nb_dtype, types.Integer):
+            _dtype = nb_dtype
+        else:
+            _dtype = nb_dtype.dtype
+
         if isinstance(data.dtype, types.Float):
 
             def impl_float(
@@ -862,6 +874,16 @@ def overload_fix_arr_dtype(
                 return B
 
             return impl
+
+    # nullable int array to non-nullable int array case
+    if isinstance(nb_dtype, types.Integer) and isinstance(data.dtype, types.Integer):
+
+        def impl(
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
+        ):  # pragma: no cover
+            return data.astype(nb_dtype)
+
+        return impl
 
     # nullable bool array case
     if nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
