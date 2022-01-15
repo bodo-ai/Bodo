@@ -3,7 +3,8 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.test_parfor_optimizations import _check_num_parfors
+from bodo.tests.utils import ParforTestPipeline, check_func
 from bodo.utils.typing import BodoError
 
 
@@ -674,3 +675,33 @@ def test_heterogeneous_series_box(memory_leak_check):
         }
     )
     check_func(impl, (df,))
+
+
+@pytest.mark.parametrize("dtype", ["Int64", "Int32", np.int32, np.int64])
+def test_astype_int32(dtype, memory_leak_check):
+    """
+    Tests conversion of pd.Int32 series to np.int32.
+    """
+
+    def impl(A):
+        return A.astype(np.int32)
+
+    A = pd.Series([1, 2, 3, 4, 5], dtype=dtype)
+    check_func(impl, (A,))
+
+
+def test_astype_nocopy(memory_leak_check):
+    """
+    Tests to make sure conversion of pd.Int32 series to pd.Int32 does no conversion.
+    """
+
+    def impl(A):
+        return A.astype("Int32", copy=False)
+
+    A = pd.Series([1, 2, 3, 4, 5], dtype="Int32")
+    check_func(impl, (A,))
+
+    # ensure no parfor is created
+    bodo_func = bodo.jit(pipeline_class=ParforTestPipeline)(impl)
+    bodo_func(A)
+    _check_num_parfors(bodo_func, 0)
