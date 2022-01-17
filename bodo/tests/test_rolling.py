@@ -44,6 +44,7 @@ def test_fixed_index(test_df, memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(test_df), impl(test_df))
 
 
+@pytest.mark.slow
 def test_rolling_cov_unsupported_args(memory_leak_check):
     def impl1(df):
         return df.rolling(2).cov(df.A)
@@ -67,6 +68,7 @@ def test_rolling_cov_unsupported_args(memory_leak_check):
         bodo.jit(impl2)(df)
 
 
+@pytest.mark.slow
 def test_rolling_corr_unsupported_args(memory_leak_check):
     def impl1(df):
         return df.rolling(2).corr(df.A)
@@ -90,6 +92,7 @@ def test_rolling_corr_unsupported_args(memory_leak_check):
         bodo.jit(impl2)(df)
 
 
+@pytest.mark.slow
 def test_rolling_unsupported(test_df, memory_leak_check):
     """
     Test an unsupported argument for df.rolling
@@ -107,6 +110,7 @@ def test_rolling_unsupported(test_df, memory_leak_check):
 
 
 # TODO [BE-1797]: Add memory leak check
+@pytest.mark.slow
 def test_fixed_index_groupby():
     def impl(df):
         return df.groupby("B").rolling(2).mean()
@@ -122,6 +126,7 @@ def test_fixed_index_groupby():
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_variable_on_index(memory_leak_check):
     def impl(df):
         return df.rolling("2s").mean()
@@ -140,6 +145,7 @@ def test_variable_on_index(memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(df), impl(df))
 
 
+@pytest.mark.slow
 def test_column_select(memory_leak_check):
     """test selecting columns explicitly in rolling calls"""
 
@@ -240,6 +246,7 @@ def test_min_periods(memory_leak_check):
     check_func(impl4, (df, 2))
 
 
+@pytest.mark.slow
 def test_apply_raw_false(memory_leak_check):
     """make sure raw=False argument of apply() works (which is the default)"""
 
@@ -267,6 +274,7 @@ def test_apply_raw_false(memory_leak_check):
     check_func(impl2, (df,))
 
 
+@pytest.mark.slow
 def test_nullable_int(memory_leak_check):
     def impl(S):
         return S.rolling(2).sum()
@@ -280,6 +288,7 @@ def g(a):
     return a.sum()
 
 
+@pytest.mark.slow
 def test_fixed_apply_nested_func(memory_leak_check):
     """test nested UDF decorated with Bodo (make sure it doesn't hang due to barriers)"""
     # test sequentially with manually created dfs
@@ -290,6 +299,7 @@ def test_fixed_apply_nested_func(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+@pytest.mark.slow
 def test_groupby_rolling(is_slow_run):
     """test groupby rolling combination"""
 
@@ -337,6 +347,7 @@ def test_groupby_rolling(is_slow_run):
     check_func(impl3, (df,), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_skip_non_numeric_columns(memory_leak_check):
     """Make sure non-numeric columns are skipped properly"""
 

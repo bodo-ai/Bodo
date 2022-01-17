@@ -36,6 +36,7 @@ def test_membership(memory_leak_check):
     check_func(test_impl, (d,))
 
 
+@pytest.mark.slow
 def test_dict_unbox(memory_leak_check):
     """test unboxing a regular dictionary"""
     d = {"A": 1, "B": 2}
@@ -95,6 +96,7 @@ def test_setitem2(memory_leak_check):
     check_func(test_impl, (n,))
 
 
+@pytest.mark.slow
 def test_astype(memory_leak_check):
     def test_impl(N):
         return np.ones(N).astype(np.int32).sum()

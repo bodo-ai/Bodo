@@ -2,7 +2,6 @@
 """
 PYTEST_DONT_REWRITE
 """
-import unittest
 
 import pandas as pd
 import pytest
@@ -13,23 +12,22 @@ from bodo.tests.utils import check_func
 
 # using separate file for assert tests to avoid pytest rewrite errors
 @pytest.mark.slow
-class AssertTest(unittest.TestCase):
-    @unittest.skip("TODO: fix static raise issue")
-    def test_assert(self):
-        # make sure assert in an inlined function works
-        def g(a):
-            assert a == 0
+def test_assert_inline():
+    # make sure assert in an inlined function works
+    def g(a):
+        assert a == 0
 
-        hpat_g = bodo.jit(g)
+    bodo_g = bodo.jit(g)
 
-        def f():
-            hpat_g(0)
+    def f():
+        bodo_g(0)
 
-        # TODO: check for static raise presence in IR
-        hpat_f = bodo.jit(f)
-        hpat_f()
+    # TODO: check for static raise presence in IR
+    bodo_f = bodo.jit(f)
+    bodo_f()
 
 
+@pytest.mark.slow
 def test_df_apply_assertion(memory_leak_check):
     """test assertion in UDF passed to df.apply().
     Bodo shouldn't inline the UDF since Numba's prange doesn't support assertions
