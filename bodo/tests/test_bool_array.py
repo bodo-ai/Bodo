@@ -19,6 +19,7 @@ def bool_arr_value(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_np_where(memory_leak_check):
     def impl(arr):
         return np.where(arr)
@@ -29,6 +30,7 @@ def test_np_where(memory_leak_check):
     check_func(impl, (A,))
 
 
+@pytest.mark.slow
 def test_np_sort(memory_leak_check):
     def impl(arr):
         return np.sort(arr)
@@ -38,6 +40,7 @@ def test_np_sort(memory_leak_check):
     check_func(impl, (A,))
 
 
+@pytest.mark.slow
 def test_np_repeat(bool_arr_value, memory_leak_check):
     def impl(arr):
         return np.repeat(arr, 2)
@@ -45,6 +48,7 @@ def test_np_repeat(bool_arr_value, memory_leak_check):
     check_func(impl, (bool_arr_value,))
 
 
+@pytest.mark.slow
 def test_np_unique(memory_leak_check):
     def impl(arr):
         return np.unique(arr)
@@ -110,6 +114,7 @@ def test_cmp(op, memory_leak_check):
     check_func(test_impl, (A1, A2))
 
 
+@pytest.mark.slow
 def test_cmp_scalar(memory_leak_check):
     """Test comparison of boolean array and a scalar"""
 
@@ -124,6 +129,7 @@ def test_cmp_scalar(memory_leak_check):
     check_func(test_impl2, (A,))
 
 
+@pytest.mark.slow
 def test_max(memory_leak_check):
     def test_impl(A):
         return max(A)
@@ -158,6 +164,7 @@ def test_np_min(bool_arr_value, memory_leak_check):
     check_func(test_impl, (bool_arr_value,))
 
 
+@pytest.mark.slow
 def test_sum(memory_leak_check):
     def test_impl(A):
         return sum(A)
@@ -309,6 +316,7 @@ def test_or_null_scalar(memory_leak_check):
     check_func(test_impl, (False, arr))
 
 
+@pytest.mark.slow
 def test_and_null(memory_leak_check):
     """
     Checks and null behavior inside boolean arrays
@@ -323,6 +331,7 @@ def test_and_null(memory_leak_check):
     check_func(test_impl, (arr1, arr2))
 
 
+@pytest.mark.slow
 def test_and_null_numpy(memory_leak_check):
     """
     Checks and null behavior inside boolean arrays with numpy

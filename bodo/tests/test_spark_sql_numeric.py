@@ -33,7 +33,7 @@ def dataframe_val(request):
     return request.param
 
 
-# TODO: Move test to slow after merge
+@pytest.mark.slow
 def test_cbrt(dataframe_val, memory_leak_check):
     def test_impl(df):
         return df.A.map(lambda x: np.cbrt(x))

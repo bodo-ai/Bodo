@@ -480,6 +480,7 @@ def test_series_ufunc(memory_leak_check):
     check_func(test_impl2, (S,))
 
 
+@pytest.mark.slow
 def test_series_corr(memory_leak_check):
     """
     Test running series.corr().
@@ -494,6 +495,7 @@ def test_series_corr(memory_leak_check):
     check_func(test_impl, (S1, S2))
 
 
+@pytest.mark.slow
 def test_series_cov(memory_leak_check):
     """
     Test running series.cov().
@@ -572,6 +574,7 @@ def test_series_apply_numpy_func_non_ufunc(memory_leak_check):
         bodo.jit(impl1)(S)
 
 
+@pytest.mark.slow
 def test_series_is_none(memory_leak_check):
     """
     Test that series is None can compile and keep the series distributed.
@@ -588,6 +591,7 @@ def test_series_is_none(memory_leak_check):
     check_func(impl2, (S,))
 
 
+@pytest.mark.slow
 def test_astype_str_null(memory_leak_check):
     """
     Checks that astype(str) converts Null values to strings
@@ -624,6 +628,7 @@ def test_astype_str_keep_null(memory_leak_check):
     check_func(impl, (S,), py_output=py_output)
 
 
+@pytest.mark.slow
 def test_series_apply_multi_freevar(memory_leak_check):
     """
     Bug revealed by starschema in BodoSQL. Ensures that if you
@@ -637,6 +642,7 @@ def test_series_apply_multi_freevar(memory_leak_check):
     check_func(impl, (S, 2, 5))
 
 
+@pytest.mark.slow
 def test_series_categorical_astype_str(memory_leak_check):
     """
     Tests support for Series.astype(str, _bodo_nan_to_str=False)

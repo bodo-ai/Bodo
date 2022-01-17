@@ -245,6 +245,7 @@ def series_replace_impl(series, to_replace, value):
     return series.replace(to_replace, value)
 
 
+@pytest.mark.slow
 def test_replace_series_val(series_val):
     """Run series.replace on the types in the series_val fixture. Catch
     expected failures from lack of coverage.
@@ -284,6 +285,7 @@ def test_series_replace_bitwidth(memory_leak_check):
     check_func(impl, (S,), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_series_float_literal(memory_leak_check):
     """Checks that series.replace with an integer and a float
     that can never be equal will return a copy."""
@@ -295,6 +297,7 @@ def test_series_float_literal(memory_leak_check):
     check_func(impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_replace_str_literal(memory_leak_check):
     """Checks that series.replace works with str literals"""
 
@@ -436,6 +439,7 @@ def test_replace_types_unsupported(series_replace):
         bodo.jit(series_replace_impl)(series, to_replace, value)
 
 
+@pytest.mark.slow
 def test_replace_float_int_scalar_scalar():
     series = pd.Series([1.0, 2.0, 3.0] * 4)
     to_replace = 1
@@ -443,6 +447,7 @@ def test_replace_float_int_scalar_scalar():
     check_func(series_replace_impl, (series, to_replace, value))
 
 
+@pytest.mark.slow
 def test_replace_float_int_list_scalar():
     series = pd.Series([1.0, 2.0, 3.0] * 4)
     to_replace = [1, 3, 6]
@@ -450,6 +455,7 @@ def test_replace_float_int_list_scalar():
     check_func(series_replace_impl, (series, to_replace, value))
 
 
+@pytest.mark.slow
 def test_replace_float_int_list_list():
     series = pd.Series([1.0, 2.0, 3.0] * 4)
     to_replace = [1, 3]
@@ -473,6 +479,7 @@ def test_replace_inf_nan():
     check_func(series_replace_impl, (series, to_replace, value))
 
 
+@pytest.mark.slow
 def test_series_concat(series_val, memory_leak_check):
     """test of concatenation of series.
     We convert to dataframe in order to reset the index.
@@ -497,6 +504,7 @@ def test_series_concat(series_val, memory_leak_check):
         check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
 
+@pytest.mark.slow
 def test_series_between(memory_leak_check):
     def impl_inclusive(S):
         return S.between(1, 4)
@@ -509,6 +517,7 @@ def test_series_between(memory_leak_check):
     check_func(impl_inclusive, (S,))
 
 
+@pytest.mark.slow
 def test_datetime_series_between(memory_leak_check):
     def impl(S):
         lower = pd.Timestamp(year=2020, month=10, day=5)
@@ -524,6 +533,7 @@ def test_datetime_series_between(memory_leak_check):
     check_func(impl, (S_with_nan,))
 
 
+@pytest.mark.slow
 def test_series_concat_categorical(memory_leak_check):
     """test of concatenation of categorical series.
     TODO: refactor concat tests
@@ -546,6 +556,7 @@ def test_series_concat_categorical(memory_leak_check):
 
 # TODO: readd memory leak check when PDCategorical type constant lowering
 # no longer leaks memory
+@pytest.mark.slow
 def test_dataframe_concat(series_val):
     """This is actually a dataframe test that adds empty
     column when missing

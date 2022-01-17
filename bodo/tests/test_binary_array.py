@@ -76,6 +76,7 @@ def test_constant_lowering(binary_arr_value):
     check_func(test_impl, (), only_seq=True)
 
 
+@pytest.mark.slow
 def test_hex_method(binary_arr_value, memory_leak_check):
     def test_impl(A):
         return pd.Series(A).apply(lambda x: None if pd.isna(x) else x.hex())
@@ -83,6 +84,7 @@ def test_hex_method(binary_arr_value, memory_leak_check):
     check_func(test_impl, (binary_arr_value,))
 
 
+@pytest.mark.slow
 def test_bytes_hash(binary_arr_value, memory_leak_check):
     """
     Test support for Bytes.__hash using nunique.
@@ -225,6 +227,7 @@ def test_bytes_fromhex():
     check_func(impl, ("1e21\t",))
 
 
+@pytest.mark.slow
 def test_binary_series_apply(binary_arr_value, memory_leak_check):
     def test_impl1(S):
         return S.apply(lambda x: None if pd.isna(x) else x)
@@ -243,6 +246,7 @@ def test_binary_series_apply(binary_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_binary_dataframe_apply(binary_arr_value, memory_leak_check):
     def test_impl(df):
         return df.apply(lambda x: None if pd.isna(x["A"]) else x["A"], axis=1)

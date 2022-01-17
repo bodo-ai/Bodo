@@ -183,6 +183,7 @@ def test_series_map_func_cases1(memory_leak_check):
     check_func(test_impl5, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_global_jit(memory_leak_check):
     """Test UDF defined as a global jit function"""
 
@@ -194,6 +195,7 @@ def test_series_map_global_jit(memory_leak_check):
 
 
 # TODO: add memory_leak_check
+@pytest.mark.slow
 def test_series_map_tup1():
     def test_impl(S):
         return S.map(lambda a: (a, 2 * a))
@@ -205,6 +207,7 @@ def test_series_map_tup1():
     # check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_tup_map1(memory_leak_check):
     def test_impl(S):
         A = S.map(lambda a: (a, 2 * a))
@@ -214,6 +217,7 @@ def test_series_map_tup_map1(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_tup_list1(memory_leak_check):
     """test returning a list of tuples from UDF"""
 
@@ -225,6 +229,7 @@ def test_series_map_tup_list1(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_tup_list2(memory_leak_check):
     """test returning a list of list of tuples from UDF"""
 
@@ -238,6 +243,7 @@ def test_series_map_tup_list2(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_tup_list3(memory_leak_check):
     """test returning a list of tuples with variable size data from UDF"""
 
@@ -249,6 +255,7 @@ def test_series_map_tup_list3(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_str(memory_leak_check):
     """test string output in map"""
 
@@ -259,6 +266,7 @@ def test_series_map_str(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_list_str(memory_leak_check):
     """test list(str) output in map"""
 
@@ -269,6 +277,7 @@ def test_series_map_list_str(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_array_item(memory_leak_check):
     """test array(item) output in map"""
 
@@ -279,6 +288,7 @@ def test_series_map_array_item(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_array_item_input(memory_leak_check):
     """test array(item) input and output in map"""
 
@@ -295,6 +305,7 @@ def test_series_map_array_item_input(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_dict(memory_leak_check):
     """test dict output in map"""
 
@@ -311,6 +322,7 @@ def test_series_map_dict(memory_leak_check):
     check_func(impl2, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_dict_input(memory_leak_check):
     """test dict input in map"""
 
@@ -321,6 +333,7 @@ def test_series_map_dict_input(memory_leak_check):
     check_func(impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_date(memory_leak_check):
     """make sure datetime.date output can be handled in map() properly"""
 
@@ -387,6 +400,7 @@ def test_series_map_dt_str(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_series_map_nested_func(memory_leak_check):
     """test nested Bodo call in map UDF"""
 
@@ -404,6 +418,7 @@ def test_series_map_nested_func(memory_leak_check):
     pd.testing.assert_series_equal(res, py_res)
 
 
+@pytest.mark.slow
 def test_series_map_arg_fold(memory_leak_check):
     """test handling UDF default value (argument folding)"""
 
@@ -414,6 +429,7 @@ def test_series_map_arg_fold(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.slow
 def test_autocorr(memory_leak_check):
     def f(S, lag):
         return S.autocorr(lag=lag)
@@ -599,6 +615,7 @@ def test_series_min(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
+@pytest.mark.slow
 def test_series_max(series_val, memory_leak_check):
     # timedelta setitem not supported yet
     if series_val.dtype == np.dtype("timedelta64[ns]"):
@@ -630,6 +647,7 @@ def test_series_max(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
+@pytest.mark.slow
 def test_series_min_max_cat(memory_leak_check):
     """test min/max of Categorical data"""
 
@@ -648,6 +666,7 @@ def test_series_min_max_cat(memory_leak_check):
     check_func(impl2, (S,))
 
 
+@pytest.mark.slow
 def test_min_max_sum_series(memory_leak_check):
     """Another syntax for computing the maximum"""
 
@@ -680,6 +699,7 @@ def test_series_min_max_int_output_type(memory_leak_check):
     check_func(impl2, (S,), is_out_distributed=False)
 
 
+@pytest.mark.slow
 def test_series_idxmin(series_val, memory_leak_check):
 
     # Binary not supported in pandas
@@ -848,6 +868,7 @@ def test_series_median_nullable(memory_leak_check):
     assert pd.isnull(ret_val1) == pd.isnull(ret_val2)
 
 
+@pytest.mark.slow
 def test_series_equals(memory_leak_check):
     def f(S1, S2):
         return S1.equals(S2)
@@ -1050,6 +1071,7 @@ def test_series_nlargest(numeric_series_val, k, memory_leak_check):
     check_func(test_impl, (numeric_series_val, k), False)
 
 
+@pytest.mark.slow
 def test_series_nlargest_non_index(memory_leak_check):
     # test Series with None as Index
     def test_impl(k):
@@ -1085,6 +1107,7 @@ def test_series_nsmallest_non_index(memory_leak_check):
     pd.testing.assert_series_equal(bodo_func(k), test_impl(k))
 
 
+@pytest.mark.slow
 def test_series_take(series_val, memory_leak_check):
     def test_impl(A):
         return A.take([2, 3])
@@ -1176,6 +1199,7 @@ def test_series_sort_values(series_val):
 
 
 # TODO(ehsan): add memory_leak_check when categorical (series_val18) leak is fixed
+@pytest.mark.slow
 def test_series_repeat(series_val):
     """Test Series.repeat() method"""
 
@@ -1248,6 +1272,7 @@ def test_series_append_multi(series_val, ignore_index, memory_leak_check):
     )  # XXX append can't set name yet
 
 
+@pytest.mark.slow
 def test_series_quantile(numeric_series_val, memory_leak_check):
 
     if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
@@ -1268,6 +1293,7 @@ def test_series_quantile(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,), py_output=py_out)
 
 
+@pytest.mark.slow
 def test_series_quantile_q(memory_leak_check):
     """ Tests passing list, int, and unsupported type to q argument"""
 
@@ -1300,6 +1326,7 @@ def test_series_quantile_q(memory_leak_check):
         bodo.jit(test_str)(S)
 
 
+@pytest.mark.slow
 def test_series_nunique(series_val, memory_leak_check):
     # Not supported for lists because they aren't hashable
     if isinstance(series_val.values[0], list):
@@ -1356,6 +1383,7 @@ def test_series_unique(series_val, memory_leak_check):
     check_func(test_impl, (series_val,), sort_output=True, is_out_distributed=False)
 
 
+@pytest.mark.slow
 def test_series_describe(numeric_series_val, memory_leak_check):
     def test_impl(A):
         return A.describe(datetime_is_numeric=True)
@@ -1363,7 +1391,7 @@ def test_series_describe(numeric_series_val, memory_leak_check):
     check_func(test_impl, (numeric_series_val,), False)
 
 
-# TODO: move some cases to slow path
+@pytest.mark.slow
 def test_series_reset_index_no_drop(memory_leak_check):
     """Test Series.reset_index(drop=False)"""
 

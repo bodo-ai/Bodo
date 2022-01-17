@@ -42,6 +42,7 @@ def test_unbox(csr_matrix_value, memory_leak_check):
     check_func(impl2, (csr_matrix_value,))
 
 
+@pytest.mark.slow
 def test_getitem_slice(csr_matrix_value, memory_leak_check):
     """test basic slice getitem for csr matrix"""
 
@@ -51,7 +52,7 @@ def test_getitem_slice(csr_matrix_value, memory_leak_check):
     check_func(test_impl, (csr_matrix_value,), dist_test=False)
 
 
-# TODO: add @pytest.mark.slow
+@pytest.mark.slow
 def test_len(csr_matrix_value, memory_leak_check):
     """test len(A) for CSR matrix"""
 
@@ -62,7 +63,7 @@ def test_len(csr_matrix_value, memory_leak_check):
     assert bodo.jit(test_impl)(csr_matrix_value) == csr_matrix_value.shape[0]
 
 
-# TODO: add @pytest.mark.slow
+@pytest.mark.slow
 def test_ndim(csr_matrix_value, memory_leak_check):
     """test A.ndim for CSR matrix"""
 
@@ -72,7 +73,7 @@ def test_ndim(csr_matrix_value, memory_leak_check):
     assert bodo.jit(test_impl)(csr_matrix_value) == test_impl(csr_matrix_value)
 
 
-# TODO: add @pytest.mark.slow
+@pytest.mark.slow
 def test_copy(csr_matrix_value, memory_leak_check):
     """test A.copy() for CSR matrix"""
 

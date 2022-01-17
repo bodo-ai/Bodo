@@ -192,6 +192,7 @@ def test_unicode_no_nan(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_len(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.len()
@@ -200,6 +201,7 @@ def test_len(test_unicode, memory_leak_check):
 
 
 # TODO: Add memory_leak_check when bugs are resolved.
+@pytest.mark.slow
 def test_split(test_unicode_no_nan):
     def test_impl(S):
         return S.str.split(",")
@@ -210,6 +212,7 @@ def test_split(test_unicode_no_nan):
 
 
 # TODO: Add memory_leak_check when bugs are resolved.
+@pytest.mark.slow
 def test_split_empty(test_unicode_no_nan):
     def test_impl(S):
         return S.str.split("")
@@ -410,6 +413,7 @@ def test_get_array_item(S, memory_leak_check):
     check_func(test_impl, (S,), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_replace_regex(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.replace("AB*", "EE", regex=True)
@@ -421,6 +425,7 @@ def test_replace_regex(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,))
 
 
+@pytest.mark.slow
 def test_replace_noregex(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.replace("AB", "EE", regex=False)
@@ -432,6 +437,7 @@ def test_replace_noregex(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("case", [True, False])
 def test_contains_regex(test_unicode, case, memory_leak_check):
     def test_impl(S):
@@ -692,6 +698,7 @@ def test_extractall():
     check_func(test_impl2, (S2,))
 
 
+@pytest.mark.slow
 def test_count_noflag(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.count("A")
@@ -703,6 +710,7 @@ def test_count_noflag(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_count_flag(test_unicode, memory_leak_check):
     import re
 
@@ -743,6 +751,7 @@ def test_find_start_end(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_rfind(test_unicode, memory_leak_check):
     def test_impl(S):
         return S.str.rfind("AB")
@@ -754,6 +763,7 @@ def test_rfind(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_pad_fill_fast(test_unicode, memory_leak_check):
     # this function increases coverage for not slow test suite
     def test_impl1(S):
@@ -1174,6 +1184,7 @@ def test_setitem_unichar_arr(memory_leak_check):
         check_func(test_impl, (S, idx, arr), copy_input=True, dist_test=False)
 
 
+@pytest.mark.slow
 def test_join_string(test_unicode, memory_leak_check):
     """test the functionality of bodo's join with just a string"""
 
@@ -1187,6 +1198,7 @@ def test_join_string(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,))
 
 
+@pytest.mark.slow
 def test_join_splitview(test_unicode_no_nan, memory_leak_check):
     """test the functionality of bodo's join with split view type as an input"""
 
@@ -1197,6 +1209,7 @@ def test_join_splitview(test_unicode_no_nan, memory_leak_check):
     check_func(test_impl, (test_unicode_no_nan,))
 
 
+@pytest.mark.slow
 def test_join_splitview_nan_entry(memory_leak_check):
     """test the functionality of bodo's join with split view type as an input"""
 

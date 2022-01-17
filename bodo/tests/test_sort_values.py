@@ -162,6 +162,7 @@ def df_value(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_sort_datetime_missing(is_slow_run, memory_leak_check):
     """Test the datetime for missing entries"""
 
@@ -247,6 +248,7 @@ def test_single_col(memory_leak_check):
         bodo.ir.sort.MIN_SAMPLES = save_min_samples  # restore global val
 
 
+@pytest.mark.slow
 def test_sort_values_val(memory_leak_check):
     """
     Test sort_values(): with just 1 column
@@ -261,6 +263,7 @@ def test_sort_values_val(memory_leak_check):
     check_func(impl, (df,))
 
 
+@pytest.mark.slow
 def test_sort_values_tuple_keys(memory_leak_check):
     """
     Test sort_values() where column names are tuples
@@ -280,6 +283,7 @@ def test_sort_values_tuple_keys(memory_leak_check):
     check_func(impl2, (df,), check_dtype=False, dist_test=False)
 
 
+@pytest.mark.slow
 def test_sort_values_1col(df_value, memory_leak_check):
     """
     Test sort_values(): with just 1 column
@@ -295,6 +299,7 @@ def test_sort_values_1col(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
+@pytest.mark.slow
 def test_sort_values_1col_ascending(df_value, memory_leak_check):
     """
     Test sort_values(): with just 1 column and ascending=True
@@ -310,6 +315,7 @@ def test_sort_values_1col_ascending(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
+@pytest.mark.slow
 def test_sort_values_1col_inplace(df_value, memory_leak_check):
     """
     Test sort_values(): with just 1 column
@@ -326,6 +332,7 @@ def test_sort_values_1col_inplace(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
+@pytest.mark.slow
 def test_sort_values_2col(df_value, memory_leak_check):
     """
     Test sort_values(): with 2 columns
@@ -341,6 +348,7 @@ def test_sort_values_2col(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
+@pytest.mark.slow
 def test_sort_values_2col_inplace(df_value, memory_leak_check):
     """
     Test sort_values(): with just 1 column
@@ -359,6 +367,7 @@ def test_sort_values_2col_inplace(df_value, memory_leak_check):
     check_func(impl, (df_value,))
 
 
+@pytest.mark.slow
 def test_sort_values_str(memory_leak_check):
     """
     Test sort_values():
@@ -393,6 +402,7 @@ def test_sort_values_str(memory_leak_check):
     check_func(test_impl, (df,))
 
 
+@pytest.mark.slow
 def test_sort_values_binary(memory_leak_check):
     """
     Test sort_values():
@@ -824,6 +834,7 @@ def test_sort_values_na_position_list(memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_sort_values_by_index(memory_leak_check):
     """Sorting with a non-trivial index"""
 
@@ -836,6 +847,7 @@ def test_sort_values_by_index(memory_leak_check):
     check_func(test_impl1, (df1,), sort_output=False)
 
 
+@pytest.mark.slow
 def test_sort_values_bool_list(memory_leak_check):
     """Test of NaN values for the sorting with vector of ascending"""
 
@@ -944,6 +956,7 @@ def test_sort_values_list_inference(memory_leak_check):
     check_func(impl, (df,))
 
 
+@pytest.mark.slow
 def test_sort_values_force_literal(memory_leak_check):
     """
     Test forcing JIT args to be literal if required by sort_values()
@@ -983,6 +996,7 @@ def test_list_string(memory_leak_check):
     check_func(test_impl, (df1,))
 
 
+@pytest.mark.slow
 def test_list_string_missing(memory_leak_check):
     """Sorting values by list of strings"""
 
@@ -1027,6 +1041,7 @@ def test_list_string_arrow():
     check_func(f, (df1,))
 
 
+@pytest.mark.slow
 def test_sort_values_bytes_null(memory_leak_check):
     """
     Test sort_values(): for bytes keys with NULL char inside them to make sure value

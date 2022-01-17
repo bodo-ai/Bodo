@@ -136,6 +136,7 @@ def test_setitem_cat_array_compile_time(cat_arr_value, memory_leak_check):
 
 
 # TODO: Add memory leak check when constant lowering memory leak is fixed.
+@pytest.mark.slow
 def test_setitem_cat_array_compile_time_err(cat_arr_value):
     """
     Tests setitem err for Categorical Arrays with Categorical
@@ -217,6 +218,7 @@ def test_setitem_cat_array_runtime_err(cat_arr_value):
             bodo.jit(test_impl)(cat_arr_value, idx, val)
 
 
+@pytest.mark.slow
 def test_setitem_categories(cat_arr_value, memory_leak_check):
     """
     Tests setitem for Categorical Arrays with a list/array
@@ -286,6 +288,7 @@ def test_cmp(memory_leak_check):
     check_func(impl3, (A, 2))
 
 
+@pytest.mark.slow
 def test_pd_categorical(memory_leak_check):
     """test pd.Categorical() constructor"""
 
@@ -314,6 +317,7 @@ def test_pd_categorical(memory_leak_check):
     check_func(impl4, (pd.array(np.abs(A), "UInt64"),), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_astype(memory_leak_check):
     """test astype for categorical array, which allows going back to original values"""
 
@@ -348,6 +352,7 @@ def test_pd_get_dummies(cat_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_pd_get_dummies_series(cat_arr_value, memory_leak_check):
     def test_impl(S):
         return pd.get_dummies(S)
@@ -364,6 +369,7 @@ def test_pd_get_dummies_series(cat_arr_value, memory_leak_check):
 
 
 # TODO(ehsan): add memory_leak_check when leaks in the literal case are resolved
+@pytest.mark.slow
 def test_replace():
     def test_impl(A, to_replace, value):
         return A.replace(to_replace, value)
@@ -423,6 +429,7 @@ def test_replace_const_list():
 
 
 # TODO(ehsan): add memory_leak_check when leaks in the literal case are resolved
+@pytest.mark.slow
 def test_replace_delete():
     def test_impl(A, to_replace, value):
         return A.replace(to_replace, value)
@@ -535,6 +542,7 @@ def test_pd_categorical_compile_time():
 
 
 # TODO: fix memory leak and add memory_leak_check
+@pytest.mark.slow
 def test_constant_lowering():
     arr = pd.Categorical(["A", "B", "A", "ABC", "B", None, "ABC", "D"])
 

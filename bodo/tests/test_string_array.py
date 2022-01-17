@@ -37,6 +37,7 @@ def str_arr_value(request):
     return request.param
 
 
+@pytest.mark.slow
 def test_np_sort(memory_leak_check):
     def impl(arr):
         return np.sort(arr)
@@ -46,6 +47,7 @@ def test_np_sort(memory_leak_check):
     check_func(impl, (A,))
 
 
+@pytest.mark.slow
 def test_hash(str_arr_value, memory_leak_check):
     def impl(S):
         return S.map(lambda x: None if pd.isna(x) else hash(x))
@@ -55,6 +57,7 @@ def test_hash(str_arr_value, memory_leak_check):
     check_func(impl, (pd.Series(str_arr_value),), check_dtype=False, dist_test=False)
 
 
+@pytest.mark.slow
 def test_np_repeat(str_arr_value, memory_leak_check):
     def impl(arr):
         return np.repeat(arr, 2)
@@ -62,6 +65,7 @@ def test_np_repeat(str_arr_value, memory_leak_check):
     check_func(impl, (str_arr_value,))
 
 
+@pytest.mark.slow
 def test_np_unique(memory_leak_check):
     def impl(arr):
         return np.unique(arr)
@@ -126,6 +130,7 @@ def test_getitem_int(str_arr_value, memory_leak_check):
     check_func(test_impl, (str_arr_value, -1))
 
 
+@pytest.mark.slow
 def test_getitem_int_arr(str_arr_value, memory_leak_check):
     """
     Test operator.getitem on String array with an integer list ind
@@ -146,6 +151,7 @@ def test_getitem_int_arr(str_arr_value, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_getitem_bool(str_arr_value, memory_leak_check):
     """
     Test operator.getitem on String array with a boolean ind
@@ -172,6 +178,7 @@ def test_getitem_bool(str_arr_value, memory_leak_check):
     check_func(test_impl, (str_arr_value, ind), check_dtype=False, dist_test=False)
 
 
+@pytest.mark.slow
 def test_getitem_slice(str_arr_value, memory_leak_check):
     """
     Test operator.getitem on String array with a slice ind
@@ -233,6 +240,7 @@ def test_setitem_optional_int(memory_leak_check):
     check_func(test_impl, (8, 1), copy_input=True, dist_test=False, py_output=py_output)
 
 
+@pytest.mark.slow
 def test_setitem_slice(memory_leak_check):
     """
     Test operator.setitem with a slice index. String arrays
@@ -408,6 +416,7 @@ def test_ndim(memory_leak_check):
     check_func(test_impl, (pd.array(["AA", "B"] * 4),))
 
 
+@pytest.mark.slow
 def test_tolist(memory_leak_check):
     def impl(A):
         return A.tolist()

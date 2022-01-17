@@ -356,6 +356,7 @@ def test_dataframe_show(memory_leak_check, capsys):
         assert "0" in captured.out
 
 
+@pytest.mark.slow
 def test_dataframe_print_schema(memory_leak_check, capsys):
     """test Spark dataframe.printSchema()"""
 
@@ -375,6 +376,7 @@ def test_dataframe_print_schema(memory_leak_check, capsys):
         assert "B" in captured.out
 
 
+@pytest.mark.slow
 def test_dataframe_limit(memory_leak_check):
     """test SparkDataFrame.limit()"""
 
@@ -397,6 +399,7 @@ def test_dataframe_limit(memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_dataframe_collect(memory_leak_check):
     """test SparkDataFrame.collect()"""
 
@@ -413,6 +416,7 @@ def test_dataframe_collect(memory_leak_check):
         assert out_list == [Row(A=A[i], B=B[i]) for i in range(len(df))]
 
 
+@pytest.mark.slow
 def test_dataframe_take(memory_leak_check):
     """test SparkDataFrame.take()"""
 
