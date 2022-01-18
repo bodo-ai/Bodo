@@ -1,0 +1,39 @@
+[data-md-color-primary=indigo] .md-header,
+[data-md-color-primary=indigo] .md-hero {
+    background-color: #0B1327
+}
+
+[data-md-color-primary=indigo] .md-nav__link--active,
+[data-md-color-primary=indigo] .md-nav__link:active {
+    color: #0B1327
+}
+
+[data-md-color-primary=indigo] .md-nav__item--nested>.md-nav__link {
+    color: inherit
+}
+
+[data-md-color-primary=indigo] .md-tabs {
+        background-color: #0B1327
+}
+
+[data-md-color-primary=indigo] .md-nav__source {
+    background-color: #0B1327
+}
+
+html [data-md-color-primary=indigo] .md-nav--primary .md-nav__title--site {
+    background-color: #0B1327
+}
+
+html [data-md-color-primary=indigo] .md-footer {
+    background-color: #0B1327
+}
+
+html [data-md-color-primary=indigo] .md-nav--primary .md-nav__title--site {
+    background-color: #0B1327
+}
+
+.md-typeset blockquote{
+    padding-left:.6rem;
+    border: none;
+    color: rgba(0, 0, 0, 1)
+}
