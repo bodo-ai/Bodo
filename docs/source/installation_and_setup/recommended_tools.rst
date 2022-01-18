@@ -76,6 +76,22 @@ Recommended AWS Network Interface
 
 To enable EFA with Intel-MPI on your cluster, follow instructions `here <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html>`_.
 
+Some things to note in addition to the referenced instructions:
+    
+1. All instances must be in the same subnet. For more information, see the "EFA Limitations" section `here <https://www.hpcworkshops.com/07-efa/00-efa-basics.html>`_.
+
+2. All instances must be part of a security group that allows all inbound and outbound traffic to and from the security group itself.
+   Follow these `instructions <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html#efa-start-security>`_ to set up the security group correctly.
+
+3. For use with Intel-MPI, a minimal installation of the EFA drivers is sufficient and recommended::
+        
+        sudo ./efa_installer.sh -y --minimal
+    
+   Depending on where the drivers were downloaded from, you might need to include a ``--no-verify`` flag::
+        
+        sudo ./efa_installer.sh -y --minimal --no-verify
+
+
 We recommend the following versions for the EFA installer and Intel-MPI::
 
     EFA_INSTALLER_VERSION: 1.13.0

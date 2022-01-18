@@ -2872,7 +2872,7 @@ def _check_type(val, typ):
 
 
 def _check_int_list(list_val):
-    """ check whether list_val is list/tuple and its elements are of type int"""
+    """check whether list_val is list/tuple and its elements are of type int"""
     return isinstance(list_val, (list, tuple)) and all(
         isinstance(val, int) for val in list_val
     )

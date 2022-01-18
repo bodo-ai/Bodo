@@ -685,7 +685,7 @@ def test_df_duplicated_errors(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_apply_all_args(memory_leak_check):
-    """ Test DataFrame.apply with unsupported and wrong arguments """
+    """Test DataFrame.apply with unsupported and wrong arguments"""
 
     def test_axis(df):
         return df.apply(lambda r: r.A)
@@ -748,7 +748,7 @@ def test_dataframe_idxmin_unordered_cat(memory_leak_check):
 # --------------------- df.describe() ----------------------
 @pytest.mark.slow
 def test_describe_args(memory_leak_check):
-    """ Test df.describe with unsupported arguments """
+    """Test df.describe with unsupported arguments"""
 
     def impl_percentiles(df):
         return df.describe(percentiles=[0.25, 0.5, 0.75])
@@ -812,7 +812,7 @@ def test_describe_args(memory_leak_check):
     ],
 )
 def test_describe_unsupported_types(df, memory_leak_check):
-    """ Test df.describe with its unsupported Bodo types"""
+    """Test df.describe with its unsupported Bodo types"""
 
     def impl(df):
         return df.describe()
@@ -1612,11 +1612,12 @@ def test_df_error_message_truncates():
     """
     Checks that DataFrames with large number of columns have string representation truncated in error messages
     """
-    @bodo.jit 
+
+    @bodo.jit
     def impl(df):
-        # non-existent column 
-        return df["qwerty"] 
-    
+        # non-existent column
+        return df["qwerty"]
+
     num_cols_over_3 = 1000
     data_dict = {}
     for i in range(num_cols_over_3):
@@ -1630,7 +1631,7 @@ def test_df_error_message_truncates():
                 arr = [f"value{k}" for k in (np.arange(1000) * (i + 1))]
             data_dict[f"Column{(i * 3) + j}"] = arr
     large_df = pd.DataFrame(data_dict)
-    
+
     with pytest.raises(BodoError) as bodo_err:
         impl(large_df)
     # 500 insignifigant, expected message should have 453 (without truncation 10,000+)
