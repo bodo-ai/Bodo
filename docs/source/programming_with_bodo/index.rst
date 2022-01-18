@@ -1,13 +1,16 @@
 Programming with Bodo
 ======================
 
-.. toctree::
-   :maxdepth: 4
+.. panels::
 
-   bodo_parallelism/index
+    .. toctree::
+       :maxdepth: 1
 
+       bodo_parallelism/index
 
-.. toctree::
-   :maxdepth: 4
+    ---
 
-   bodo_api_reference/index
+    .. toctree::
+       :maxdepth: 1
+
+       bodo_api_reference/index

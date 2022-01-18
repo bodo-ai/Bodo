@@ -2,14 +2,47 @@ Integrating Bodo into your Pipeline
 ====================================
 
 
-.. toctree::
-   :glob:
+.. panels::
 
-   file_io
-   Databricks_integration
-   migration_from_spark/index
-   objmode
-   front_end
-   data_visualization
+    .. toctree::
+       :maxdepth: 1
+
+       file_io
+
+    ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       Databricks_integration
+
+    ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       migration_from_spark/index
+
+    ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       objmode
+
+    ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       front_end
+
+    ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       data_visualization
+
 
 

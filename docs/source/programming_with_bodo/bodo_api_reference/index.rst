@@ -3,12 +3,44 @@
 Bodo API Reference
 ==================
 
-.. toctree::
-   :glob:
+.. panels::
 
-   udfs
-   pandas/index
-   numpy
-   ml
-   dl
-   miscellaneous
+    .. toctree::
+       :maxdepth: 1
+
+       udfs
+
+   ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       pandas/index
+
+   ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       numpy
+
+   ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       ml
+
+   ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       dl
+
+   ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       miscellaneous

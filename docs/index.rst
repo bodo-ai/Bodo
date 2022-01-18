@@ -46,34 +46,44 @@ simply use the command line such as `mpiexec -n 1024 python data_transform.py`
 or use :ref:`Jupyter Notebook <jupyter>`.
 
 
-.. toctree::
-   :maxdepth: 1
+.. panels::
 
-   source/getting_started
+   .. toctree::
+      :maxdepth: 1
 
-.. toctree::
-   :maxdepth: 4
+      source/getting_started
 
-   source/installation_and_setup/index
+   ---
 
-.. toctree::
-   :maxdepth: 4
+   .. toctree::
+      :maxdepth: 1
 
-   source/programming_with_bodo/index
+      source/installation_and_setup/index
 
+   ---
 
-.. toctree::
-   :maxdepth: 2
+   .. toctree::
+      :maxdepth: 1
 
-   source/Integrating_bodo/index
+      source/programming_with_bodo/index
 
+   ---
 
-.. toctree::
-   :maxdepth: 2
+   .. toctree::
+      :maxdepth: 1
 
-   source/performance_and_diagnostics/index
+      source/Integrating_bodo/index
 
-.. toctree::
-   :maxdepth: 4
+   ---
 
-   source/help_and_reference/index
+   .. toctree::
+      :maxdepth: 1
+
+      source/performance_and_diagnostics/index
+
+   ---
+
+   .. toctree::
+      :maxdepth: 1
+
+      source/help_and_reference/index

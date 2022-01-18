@@ -1,8 +1,17 @@
 Migration From Spark
 ====================
 
-.. toctree::
-   :glob:
 
-   spark
-   sparkcheatsheet
+.. panels ::
+
+    .. toctree::
+       :maxdepth: 1
+
+       spark
+
+    ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       sparkcheatsheet

@@ -1,10 +1,30 @@
 Diagnostics and Troubleshooting
 ===============================
 
-.. toctree::
-   :glob:
+.. panels::
 
-   compilation
-   Bodoerrors
-   troubleaws
-   troubleazure
+    .. toctree::
+       :maxdepth: 1
+
+       compilation
+
+    ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       Bodoerrors
+
+    ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       troubleaws
+
+    ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       troubleazure
