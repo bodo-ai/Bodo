@@ -127,6 +127,21 @@ html_theme_options = {
     'globaltoc_includehidden': False,
     'html_minify': True,
     'css_minify': False,
+    "nav_links": [
+        {
+            "href": "https://bodo.ai",
+            "internal": False,
+            "title": "Bodo Website",
+        },
+        {
+            "href": "https://bodo.ai/blog",
+            "internal": False,
+            "title": "Blog",
+        },
+    ],
+    "heroes": {
+        "index": "Parallel computing for extreme-performance Python data analytics",
+    },
 }
 
 html_show_sphinx = False
