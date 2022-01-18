@@ -2,13 +2,16 @@ Performance and Diagnostics
 =============================
 
 
-.. toctree::
-   :maxdepth: 2
+.. panels::
 
-   performance/index
+    .. toctree::
+       :maxdepth: 1
 
+       performance/index
 
-.. toctree::
-   :maxdepth: 2
+    ---
 
-   diagnostics_and_troubleshooting/index
+    .. toctree::
+       :maxdepth: 1
+
+       diagnostics_and_troubleshooting/index

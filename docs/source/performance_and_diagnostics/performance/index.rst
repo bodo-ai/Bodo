@@ -1,9 +1,24 @@
 Measuring and improving Performance with Bodo
 ===============================================
 
-.. toctree::
-   :glob:
 
-   performance
-   caching
-   inlining
+.. panels::
+
+    .. toctree::
+       :maxdepth: 1
+
+       performance
+
+    ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       caching
+
+    ---
+
+    .. toctree::
+       :maxdepth: 1
+
+       inlining
