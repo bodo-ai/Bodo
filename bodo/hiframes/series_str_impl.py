@@ -963,7 +963,7 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
 
 
 @overload_method(SeriesStrMethodType, "extractall", inline="always", no_unliteral=True)
-def overload_str_method_extractall(S_str, pat, flags=0, expand=True):
+def overload_str_method_extractall(S_str, pat, flags=0):
 
     columns, _ = _get_column_names_from_regex(pat, flags, "extractall")
     n_cols = len(columns)
@@ -971,7 +971,7 @@ def overload_str_method_extractall(S_str, pat, flags=0, expand=True):
 
     # generate one loop for finding character count and another for computation
     # TODO: avoid multiple loops if possible, or even avoid inlined loops if needed
-    func_text = "def impl(S_str, pat, flags=0, expand=True):\n"
+    func_text = "def impl(S_str, pat, flags=0):\n"
     func_text += "  regex = re.compile(pat, flags=flags)\n"
     func_text += "  S = S_str._obj\n"
     func_text += "  str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
@@ -1143,6 +1143,8 @@ def create_str2str_methods_overload(func_name):
     if func_name in ["lstrip", "rstrip", "strip"]:
 
         def overload_strip_method(S_str, to_strip=None):
+            if not is_overload_none(to_strip):
+                str_arg_check(func_name, "to_strip", to_strip)
             return f
 
         return overload_strip_method

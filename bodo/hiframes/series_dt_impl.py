@@ -179,39 +179,56 @@ _install_date_fields()
 def create_date_method_overload(method):
     is_str_method = method in ["day_name", "month_name"]
 
-    def overload_method(S_dt):
-        """.dt methods on only datetime64s. Only normalize and day_name supported so far."""
-        if not S_dt.stype.dtype == types.NPDatetime("ns"):  # pragma: no cover
-            return
-        func_text = "def impl(S_dt):\n"
-        func_text += "    S = S_dt._obj\n"
-        func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
-        func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
-        func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
-        func_text += "    numba.parfors.parfor.init_prange()\n"
-        func_text += "    n = len(arr)\n"
-        if is_str_method:
-            func_text += "    out_arr = bodo.utils.utils.alloc_type(n, bodo.string_array_type, (-1,))\n"
-        else:
-            func_text += "    out_arr = np.empty(n, np.dtype('datetime64[ns]'))\n"
-        func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
-        func_text += "        if bodo.libs.array_kernels.isna(arr, i):\n"
-        func_text += "            bodo.libs.array_kernels.setna(out_arr, i)\n"
-        func_text += "            continue\n"
-        func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(arr[i])\n"
-        func_text += f"        method_val = ts.{method}()\n"
-        if is_str_method:
-            func_text += "        out_arr[i] = method_val\n"
-        else:
-            func_text += "        out_arr[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(method_val.value)\n"
-        func_text += (
-            "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
-        )
-        loc_vars = {}
-        exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, loc_vars)
-        impl = loc_vars["impl"]
-        return impl
-
+    if is_str_method:
+        func_text = "def overload_method(S_dt, locale=None):\n"
+        # Only string methods both have locale as an argument.
+        func_text += "    unsupported_args = dict(locale=locale)\n"
+        func_text += "    arg_defaults = dict(locale=None)\n"
+        func_text += "    bodo.utils.typing.check_unsupported_args(\n"
+        func_text += f"        'Series.dt.{method}',\n"
+        func_text += "        unsupported_args,\n"
+        func_text += "        arg_defaults,\n"
+        func_text += "        package_name='pandas',\n"
+        func_text += "        module_name='Series',\n"
+        func_text += "    )\n"
+    else:
+        func_text = "def overload_method(S_dt):\n"
+    # .dt methods only work on datetime64s"""
+    func_text += (
+        "    if not S_dt.stype.dtype == bodo.datetime64ns:\n"  # pragma: no cover
+    )
+    func_text += "        return\n"
+    if is_str_method:
+        func_text += "    def impl(S_dt, locale=None):\n"
+    else:
+        func_text += "    def impl(S_dt):\n"
+    func_text += "        S = S_dt._obj\n"
+    func_text += "        arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "        index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    func_text += "        name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+    func_text += "        numba.parfors.parfor.init_prange()\n"
+    func_text += "        n = len(arr)\n"
+    if is_str_method:
+        func_text += "        out_arr = bodo.utils.utils.alloc_type(n, bodo.string_array_type, (-1,))\n"
+    else:
+        func_text += "        out_arr = np.empty(n, np.dtype('datetime64[ns]'))\n"
+    func_text += "        for i in numba.parfors.parfor.internal_prange(n):\n"
+    func_text += "            if bodo.libs.array_kernels.isna(arr, i):\n"
+    func_text += "                bodo.libs.array_kernels.setna(out_arr, i)\n"
+    func_text += "                continue\n"
+    func_text += "            ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(arr[i])\n"
+    func_text += f"            method_val = ts.{method}()\n"
+    if is_str_method:
+        func_text += "            out_arr[i] = method_val\n"
+    else:
+        func_text += "            out_arr[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(method_val.value)\n"
+    func_text += (
+        "        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+    )
+    func_text += "    return impl\n"
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, loc_vars)
+    overload_method = loc_vars["overload_method"]
     return overload_method
 
 
@@ -441,11 +458,16 @@ _install_S_dt_timedelta_methods()
 @overload_method(
     SeriesDatetimePropertiesType, "strftime", inline="always", no_unliteral=True
 )
-def dt_strftime(S_dt, format_str):
+def dt_strftime(S_dt, date_format):
     if S_dt.stype.dtype != types.NPDatetime("ns"):  # pragma: no cover
         return
 
-    def impl(S_dt, format_str):  # pragma: no cover
+    if types.unliteral(date_format) != types.unicode_type:
+        raise BodoError(
+            "Series.str.strftime(): 'date_format' argument must be a string"
+        )
+
+    def impl(S_dt, date_format):  # pragma: no cover
         S = S_dt._obj
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
@@ -459,7 +481,7 @@ def dt_strftime(S_dt, format_str):
                 continue
             B[j] = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
                 A[j]
-            ).strftime(format_str)
+            ).strftime(date_format)
         return bodo.hiframes.pd_series_ext.init_series(B, index, name)
 
     return impl
@@ -476,7 +498,7 @@ def create_timedelta_freq_overload(method):
         unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
         floor_defaults = dict(ambiguous="raise", nonexistent="raise")
         check_unsupported_args(
-            "Series.dt.floor",
+            f"Series.dt.{method}",
             unsupported_args,
             floor_defaults,
             package_name="pandas",

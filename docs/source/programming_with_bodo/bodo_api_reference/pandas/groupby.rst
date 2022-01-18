@@ -695,7 +695,7 @@ You must provide exactly one of ``by`` and ``level``
 
     >>> @bodo.jit
     ... def f(df):
-    ...     return df.groupby("B").rolling(2).mean
+    ...     return df.groupby("B").rolling(2).mean()
     >>> df = pd.DataFrame(
     ...      {
     ...          "A": [1, 2, 24, None] * 5,

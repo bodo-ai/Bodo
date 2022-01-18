@@ -434,7 +434,7 @@ def overload_pd_timestamp(
         if is_overload_none(unit):
             unit = "ns"
         if not is_overload_constant_str(unit):
-            raise BodoError("pd.Timedelta(): unit argument must be a constant str")
+            raise BodoError("pandas.Timedelta(): unit argument must be a constant str")
         unit = pd._libs.tslibs.timedeltas.parse_timedelta_unit(
             get_overload_const_str(unit)
         )
@@ -1578,7 +1578,7 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
     # TODO: fix call inliner to hande 'arg' name properly
 
     if not is_overload_constant_str(unit):  # pragma: no cover
-        raise BodoError("pd.to_timedelta(): unit should be a constant string")
+        raise BodoError("pandas.to_timedelta(): unit should be a constant string")
 
     # internal Pandas API that normalizes variations of unit. e.g. 'seconds' -> 's'
     unit = pd._libs.tslibs.timedeltas.parse_timedelta_unit(get_overload_const_str(unit))
@@ -1804,7 +1804,16 @@ def toordinal(date):
 # https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timestamps.pyx#L1149
 # https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timedeltas.pyx#L1219
 def overload_freq_methods(method):
-    def freq_overload(td, freq):
+    def freq_overload(td, freq, ambiguous="raise", nonexistent="raise"):
+        unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
+        floor_defaults = dict(ambiguous="raise", nonexistent="raise")
+        check_unsupported_args(
+            f"Timestamp.{method}",
+            unsupported_args,
+            floor_defaults,
+            package_name="pandas",
+            module_name="Timestamp",
+        )
         freq_conditions = [
             "freq == 'D'",
             "freq == 'H'",
@@ -1823,7 +1832,7 @@ def overload_freq_methods(method):
             1000,
             1,
         ]
-        func_text = "def impl(td, freq):\n"
+        func_text = "def impl(td, freq, ambiguous='raise', nonexistent='raise'):\n"
         for i, cond in enumerate(freq_conditions):
             cond_label = "if" if i == 0 else "elif"
             func_text += "    {} {}:\n".format(cond_label, cond)
@@ -2037,12 +2046,19 @@ def timestamp_max(lhs, rhs):
         return impl
 
 
-@overload_method(DatetimeDateType, "strftime", no_unliteral=True)
-@overload_method(PandasTimestampType, "strftime", no_unliteral=True)
-def strftime(ts, format_str):
-    def impl(ts, format_str):  # pragma: no cover
+@overload_method(DatetimeDateType, "strftime")
+@overload_method(PandasTimestampType, "strftime")
+def strftime(ts, format):
+    if isinstance(ts, DatetimeDateType):
+        cls_name = "datetime.date"
+    else:
+        cls_name = "pandas.Timestamp"
+    if types.unliteral(format) != types.unicode_type:
+        raise BodoError(f"{cls_name}.strftime(): 'strftime' argument must be a string")
+
+    def impl(ts, format):  # pragma: no cover
         with numba.objmode(res="unicode_type"):
-            res = ts.strftime(format_str)
+            res = ts.strftime(format)
         return res
 
     return impl
