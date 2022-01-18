@@ -189,7 +189,13 @@ def check_func(
     n_pes = bodo.get_size()
 
     # avoid running sequential tests on multi-process configs to save time
-    if n_pes > 1 and not numba.core.config.DEVELOPER_MODE:
+    # is_out_distributed=False may lead to avoiding parallel runs and seq run is
+    # necessary to capture the parallelism warning (see "w is not None" below)
+    if (
+        n_pes > 1
+        and not numba.core.config.DEVELOPER_MODE
+        and is_out_distributed is not False
+    ):
         run_seq = False
 
     call_args = tuple(_get_arg(a, copy_input) for a in args)
