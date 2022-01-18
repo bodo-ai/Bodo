@@ -188,6 +188,10 @@ def check_func(
 
     n_pes = bodo.get_size()
 
+    # avoid running sequential tests on multi-process configs to save time
+    if n_pes > 1 and not numba.core.config.DEVELOPER_MODE:
+        run_seq = False
+
     call_args = tuple(_get_arg(a, copy_input) for a in args)
     w = None
 
