@@ -62,6 +62,7 @@ from bodo.libs.distributed_api import (
     gatherv,
     get_rank,
     get_size,
+    get_nodes_first_ranks,
     parallel_print,
     rebalance,
     random_shuffle,

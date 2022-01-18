@@ -1,7 +1,7 @@
 .. _ipyparallelsetup:
 
-Interactive Bodo Cluster Setup using Ipyparallel
-=================================================
+Interactive Bodo Cluster Setup using IPyParallel
+================================================
 
 Bodo can be used with ``ipyparallel`` to allow interactive code execution on a
 local or remote cluster.
@@ -11,7 +11,8 @@ local or remote cluster.
 - :ref:`quickstart_multiple_hosts`
 - :ref:`run_bodo_ipyparallel`
 - :ref:`run_from_python_script`
-
+- :ref:`run_on_single_rank`
+- :ref:`run_on_each_node`
 
 .. _quickstart_local:
 
@@ -20,7 +21,7 @@ Getting started on your machine
 
 Install IPyParallel, JupyterLab and Bodo in your conda environment::
 
-    conda install bodo ipyparallel=8 jupyterlab=3 -c bodo.ai -c conda-forge
+    conda install bodo ipyparallel=8.1 jupyterlab=3 -c bodo.ai -c conda-forge
 
 Start a JupyterLab server::
 
@@ -29,14 +30,8 @@ Start a JupyterLab server::
 Start a new notebook and run the following code in a cell to start an IPyParallel cluster::
 
     import ipyparallel as ipp
-    import psutil
-    c = ipp.Cluster(engines='mpi', n=min(psutil.cpu_count(logical=False), 8))
-    c.start_cluster_sync()
-    rc = c.connect_client_sync()
-    rc.wait_for_engines(n=c.n)
-    view = rc.broadcast_view()
-    view.activate()
-    view.block = True
+    import psutil; n = min(psutil.cpu_count(logical=False), 8)
+    rc = ipp.Cluster(engines='mpi', n=n).start_and_connect_sync(activate=True)
 
 
 This starts a local N-core MPI cluster on your machine, where N is the minimum of the number of cores on your machine,
@@ -80,29 +75,29 @@ To start an IPyParallel cluster across multiple hosts, you need to do the follow
 
     conda install jupyterlab=3 -c bodo.ai -c conda-forge
 
-- Set up passwordless SSH between each of these hosts (this is needed for ``mpiexec``).
+- Set up passwordless SSH between each of these hosts (this is needed for ``mpiexec``). See :ref:`passwordless_ssh`.
 
 - The controller node must be able to connect to all engines via TCP on any port.
   If you have a restricted network, please refer to the ``ipyparallel``
   `documentation <https://ipyparallel.readthedocs.io/en/latest/tutorial/process.html>`_
   for other options such as SSH tunneling.
 
-- Create a machinefile that contains list of IP addresses or host names where you want to launch engines.
+- Create a hostfile that contains list of IP addresses or host names where you want to launch engines.
 
   .. note::
-    Make sure your machinefile is in the following format::
+    Make sure your hostfile is in the following format::
 
         ip_1
         ip_2
         ...
 
-  You can find more information about `machinefiles` `here <https://www.open-mpi.org/faq/?category=running#mpirun-hostfile>`_.
+  You can find more information about `hostfiles` `here <https://www.open-mpi.org/faq/?category=running#mpirun-hostfile>`_.
   It is important to note that other MPI systems and launchers (such as QSUB/PBS)
   may use a different user interface for the allocation of computational nodes.
 
 - Create the default IPython profile on all nodes by executing::
   
-    mpiexec -ppn 1 -machinefile <PATH_TO_MACHINEFILE> ipython profile create
+    mpiexec -ppn 1 -f <PATH_TO_HOSTFILE> ipython profile create
 
   from the controller node.
 
@@ -114,16 +109,13 @@ Starting an IPyParallel cluster across multiple hosts requires setting a couple 
 
     import ipyparallel as ipp
     c = ipp.Cluster(engines='mpi',
-                    n=8,  # Number of engines, you can change this
+                    n=8,  # Number of engines: Set this to the total number of physical cores in your cluster
                     controller_ip='*',
                     controller_args=["--nodb"])
-    c.engine_launcher_class.mpi_args = ["-machinefile", <PATH_TO_MACHINEFILE>]
-    c.start_cluster_sync()
-    rc = c.connect_client_sync()
-    rc.wait_for_engines(n=c.n)
-    view = rc.broadcast_view()
+    c.engine_launcher_class.mpi_args = ["-f", <PATH_TO_HOSTFILE>]
+    rc = c.start_and_connect_sync()
+    view = rc.broadcast_view(block=True)
     view.activate()
-    view.block = True
 
 You have now successfully started an IPyParallel cluster across multiple hosts.
 
@@ -229,6 +221,16 @@ You can run code on an IPyParallel cluster from a python script instead of IPyth
             result = ar.get()
             print("Result is", result)
 
-            client.close()
+            rc.close()
 
         main()
+
+
+Useful References
+-----------------
+    
+- `IPyParallel Documentation <https://ipyparallel.readthedocs.io/en/latest/>`_
+
+- `Using MPI with IPython <https://ipyparallel.readthedocs.io/en/latest/reference/mpi.html>`_
+
+- `IPython Parallel in 2021 <https://blog.jupyter.org/ipython-parallel-in-2021-2945985c032a>`_
