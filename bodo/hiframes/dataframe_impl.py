@@ -3750,6 +3750,23 @@ def overload_dataframe_sort_index(
         module_name="DataFrame",
     )
 
+    if not is_overload_bool(ascending):
+        raise BodoError(
+            "DataFrame.sort_index(): 'ascending' parameter must be of type bool"
+        )
+
+    if not is_overload_bool(inplace):
+        raise BodoError(
+            "DataFrame.sort_index(): 'inplace' parameter must be of type bool"
+        )
+
+    if not is_overload_constant_str(na_position) or get_overload_const_str(
+        na_position
+    ) not in ("first", "last"):
+        raise_bodo_error(
+            "DataFrame.sort_index(): 'na_position' should either be 'first' or 'last'"
+        )
+
     def _impl(
         df,
         axis=0,

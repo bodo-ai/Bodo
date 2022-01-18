@@ -747,7 +747,7 @@ Function application, GroupBy & Window
            * - ``func``
              - - function (e.g. lambda) (axis must = 1)
                - jit function (axis must = 1)
-               - String which refers to a support DataFrame method
+               - String which refers to a supported DataFrame method
              - - **Must be constant at Compile Time**
            * - ``axis``
              - - Integer (0, 1)

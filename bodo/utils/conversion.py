@@ -620,8 +620,7 @@ def overload_fix_arr_dtype(
     operations where the casting behavior changes depending on if the input is a Series
     or an Array (specifically, S.astype(str) vs S.values.astype(str))
     """
-    # TODO: support copy=True and copy=False when literals are passed reliably
-    do_copy = not is_overload_none(copy)
+    do_copy = is_overload_true(copy)
 
     if is_overload_none(new_dtype):
         if do_copy:

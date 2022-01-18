@@ -433,7 +433,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
         >>> f()
         ('Thursday', 'Friday', 'Saturday')
 
-* :meth:`pandas.Timestamp.floor`
+* :meth:`pandas.Timestamp.floor` ``(freq, ambiguous='raise', nonexistent='raise')``
 
     `Supported arguments`:
 
@@ -458,7 +458,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
         >>> f()
         (Timestamp('2021-12-09 09:57:44.114123'), Timestamp('2021-12-09 00:00:00'))
 
-* :meth:`pandas.Timestamp.isocalendar`
+* :meth:`pandas.Timestamp.isocalendar` ``()``
 
     `Example Usage`:
 
@@ -471,7 +471,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
         >>> f()
         (2021, 49, 4)
 
-* :meth:`pandas.Timestamp.isoformat`
+* :meth:`pandas.Timestamp.isoformat` ``()``
 
     `Example Usage`:
 
@@ -484,7 +484,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
         >>> f()
         '2021-12-09T09:57:44'
 
-* :meth:`pandas.Timestamp.month_name` ``(*args, **kwargs)``
+* :meth:`pandas.Timestamp.month_name` ``(locale=None)``
 
     `Supported arguments`: None
 
@@ -498,7 +498,7 @@ Timestamp functionality is documented in `pandas.Timestamp <https://pandas.pydat
         >>> f()
         'December'
 
-* :meth:`pandas.Timestamp.normalize`
+* :meth:`pandas.Timestamp.normalize` ``()``
 
     `Example Usage`:
 

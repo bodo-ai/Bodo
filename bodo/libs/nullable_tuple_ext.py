@@ -179,6 +179,14 @@ def overload_getitem(A, idx):
     return lambda A, idx: A._data[idx]  # pragma: no cover
 
 
+@overload(len)
+def overload_len(A):
+    if not isinstance(A, NullableTupleType):  # pragma: no cover
+        return
+
+    return lambda A: len(A._data)  # pragma: no cover
+
+
 @lower_builtin("getiter", NullableTupleType)
 def nullable_tuple_getiter(context, builder, sig, args):
     """support getting an iterator object for NullableTupleType by calling 'getiter'

@@ -3297,6 +3297,7 @@ def overload_index_len(I):
             CategoricalIndexType,
             DatetimeIndexType,
             TimedeltaIndexType,
+            HeterogeneousIndexType,
         ),
     ):
         # TODO: test

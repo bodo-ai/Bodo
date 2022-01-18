@@ -1545,7 +1545,7 @@ def overload_explode(arr, index_arr):
     output.
     """
     assert isinstance(arr, ArrayItemArrayType) or arr == string_array_split_view_type
-    data_arr_type = arr.dtype
+    data_arr_type = bodo.utils.typing.to_nullable_type(arr.dtype)
     index_arr_type = index_arr
     index_dtype = index_arr_type.dtype
 
