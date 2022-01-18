@@ -67,9 +67,7 @@ def test_copy(binary_arr_value, memory_leak_check):
     check_func(test_impl, (binary_arr_value,))
 
 
-# TODO: Add memory_leak_check when memory leak
-# with constant lowering is resolved
-def test_constant_lowering(binary_arr_value):
+def test_constant_lowering(binary_arr_value, memory_leak_check):
     def test_impl():
         return binary_arr_value
 

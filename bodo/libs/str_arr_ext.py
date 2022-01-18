@@ -2293,15 +2293,33 @@ def lower_constant_str_arr(context, builder, typ, pyval):
     )
 
     # create array(item) data array
-    array_item_data_type = ArrayItemArrayType(char_arr_type)
-    data_arr = bodo.libs.array_item_arr_ext.init_array_item_array_codegen(
-        context,
-        builder,
-        array_item_data_type(
-            types.int64, char_arr_type, offset_arr_type, null_bitmap_arr_type
-        ),
-        [n_const, char_const_arr, offsets_const_arr, nulls_const_arr],
+
+    # create a constant payload with the same data model as ArrayItemArrayPayloadType
+    # "n_arrays", "data", "offsets", "null_bitmap"
+    payload = lir.Constant.literal_struct(
+        [n_const, char_const_arr, offsets_const_arr, nulls_const_arr]
     )
+    payload = cgutils.global_constant(builder, ".const.payload", payload).bitcast(
+        cgutils.voidptr_t
+    )
+
+    # create a constant meminfo with the same data model as Numba:
+    # https://github.com/numba/numba/blob/0499b906a850af34f0e2fdcc6b3b3836cdc95297/numba/core/runtime/nrtdynmod.py#L14
+    # https://github.com/numba/numba/blob/2776e1a7cf49aeb513e0319fe4a94a12836a995b/numba/core/runtime/nrt.c#L16
+    # we set refcount=-1 to avoid calling the destructor (see _define_atomic_inc_dec
+    # patch in numba_compat and test_constant_lowering_refcount)
+    minus_one = context.get_constant(types.int64, -1)
+    null_ptr = context.get_constant_null(types.voidptr)
+    meminfo = lir.Constant.literal_struct(
+        [minus_one, null_ptr, null_ptr, payload, minus_one]
+    )
+    meminfo = cgutils.global_constant(builder, ".const.meminfo", meminfo).bitcast(
+        cgutils.voidptr_t
+    )
+
+    array_item_array = context.make_helper(builder, ArrayItemArrayType(char_arr_type))
+    array_item_array.meminfo = meminfo
+    data_arr = array_item_array._getvalue()
 
     string_array = context.make_helper(builder, typ)
     string_array.data = data_arr

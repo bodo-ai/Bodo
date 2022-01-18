@@ -108,12 +108,12 @@ get_stats_mi_free_qa = types.ExternalFunction(
 @numba.njit
 def get_allocation_stats():  # pragma: no cover
     """get allocation stats for arrays allocated in Bodo's C++ runtimes"""
-    stats = [
+    stats = (
         get_allocation_stats_arr(),
         get_allocation_stats_dec(),
         get_allocation_stats_pq(),
         get_allocation_stats_qa(),
-    ]
+    )
     allocs, frees, mi_allocs, mi_frees = 0, 0, 0, 0
     for stat in stats:
         allocs += stat[0]

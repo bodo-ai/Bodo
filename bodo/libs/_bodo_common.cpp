@@ -56,7 +56,8 @@ void bodo_common_init() {
     NRT_MemSys_init();
 }
 
-Bodo_CTypes::CTypeEnum arrow_to_bodo_type(std::shared_ptr<arrow::DataType> type) {
+Bodo_CTypes::CTypeEnum arrow_to_bodo_type(
+    std::shared_ptr<arrow::DataType> type) {
     switch (type->id()) {
         case arrow::Type::INT8:
             return Bodo_CTypes::INT8;
@@ -92,7 +93,8 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(std::shared_ptr<arrow::DataType> type)
             return Bodo_CTypes::_BOOL;
         // TODO Date, Datetime, Timedelta, String, Bool
         default: {
-            throw std::runtime_error("arrow_to_bodo_type : Unsupported type " + type->ToString());
+            throw std::runtime_error("arrow_to_bodo_type : Unsupported type " +
+                                     type->ToString());
         }
     }
 }
@@ -233,19 +235,22 @@ NRT_MemInfo* alloc_meminfo(int64_t length) {
  */
 void dtor_array_item_arr(array_item_arr_payload* payload, int64_t size,
                          void* in) {
-    payload->data->refct--;
+    if (payload->data->refct != -1) payload->data->refct--;
     if (payload->data->refct == 0) NRT_MemInfo_call_dtor(payload->data);
 
-    payload->offsets.meminfo->refct--;
+    if (payload->offsets.meminfo->refct != -1)
+        payload->offsets.meminfo->refct--;
     if (payload->offsets.meminfo->refct == 0)
         NRT_MemInfo_call_dtor(payload->offsets.meminfo);
 
-    payload->null_bitmap.meminfo->refct--;
+    if (payload->null_bitmap.meminfo->refct != -1)
+        payload->null_bitmap.meminfo->refct--;
     if (payload->null_bitmap.meminfo->refct == 0)
         NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
 }
 
-array_info* alloc_list_string_array(int64_t n_lists, array_info* string_arr, int64_t extra_null_bytes) {
+array_info* alloc_list_string_array(int64_t n_lists, array_info* string_arr,
+                                    int64_t extra_null_bytes) {
     int64_t n_strings = string_arr->length;
     int64_t n_chars = string_arr->n_sub_elems;
     NRT_MemInfo* meminfo_string_array = string_arr->meminfo;
@@ -310,7 +315,7 @@ numpy_arr_payload allocate_numpy_payload(int64_t length,
  * @param arr
  */
 void decref_numpy_payload(numpy_arr_payload arr) {
-    arr.meminfo->refct--;
+    if (arr.meminfo->refct != -1) arr.meminfo->refct--;
     if (arr.meminfo->refct == 0) NRT_MemInfo_call_dtor(arr.meminfo);
 }
 
@@ -324,15 +329,17 @@ void decref_numpy_payload(numpy_arr_payload arr) {
  */
 void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size,
                            void* in) {
-    payload->data.meminfo->refct--;
+    if (payload->data.meminfo->refct != -1) payload->data.meminfo->refct--;
     if (payload->data.meminfo->refct == 0)
         NRT_MemInfo_call_dtor(payload->data.meminfo);
 
-    payload->offsets.meminfo->refct--;
+    if (payload->offsets.meminfo->refct != -1)
+        payload->offsets.meminfo->refct--;
     if (payload->offsets.meminfo->refct == 0)
         NRT_MemInfo_call_dtor(payload->offsets.meminfo);
 
-    payload->null_bitmap.meminfo->refct--;
+    if (payload->null_bitmap.meminfo->refct != -1)
+        payload->null_bitmap.meminfo->refct--;
     if (payload->null_bitmap.meminfo->refct == 0)
         NRT_MemInfo_call_dtor(payload->null_bitmap.meminfo);
 }
@@ -619,36 +626,22 @@ void delete_table_decref_arrays(table_info* table) {
   Thus we have two calls for destructors when they are not NULL.
  */
 void decref_array(array_info* arr) {
-#ifdef DEBUG_MEMORY
-    std::cout << "decref_array step 1\n";
-#endif
-    if (arr->meminfo != NULL) {
+    if (arr->meminfo != NULL && arr->meminfo->refct != -1) {
         arr->meminfo->refct--;
-#ifdef DEBUG_MEMORY
-        std::cout << "decref_array 1: refct=" << arr->meminfo->refct << "\n";
-#endif
         if (arr->meminfo->refct == 0) NRT_MemInfo_call_dtor(arr->meminfo);
     }
-#ifdef DEBUG_MEMORY
-    std::cout << "decref_array step 2\n";
-#endif
-    if (arr->meminfo_bitmask != NULL) {
+    if (arr->meminfo_bitmask != NULL && arr->meminfo_bitmask->refct != -1) {
         arr->meminfo_bitmask->refct--;
-#ifdef DEBUG_MEMORY
-        std::cout << "decref_array 2: refct=" << arr->meminfo_bitmask->refct
-                  << "\n";
-#endif
         if (arr->meminfo_bitmask->refct == 0)
             NRT_MemInfo_call_dtor(arr->meminfo_bitmask);
     }
-#ifdef DEBUG_MEMORY
-    std::cout << "decref_array step 3\n";
-#endif
 }
 
 void incref_array(array_info* arr) {
-    if (arr->meminfo != NULL) arr->meminfo->refct++;
-    if (arr->meminfo_bitmask != NULL) arr->meminfo_bitmask->refct++;
+    if (arr->meminfo != NULL && arr->meminfo->refct != -1)
+        arr->meminfo->refct++;
+    if (arr->meminfo_bitmask != NULL && arr->meminfo_bitmask->refct != -1)
+        arr->meminfo_bitmask->refct++;
 }
 
 // get memory alloc/free info from _meminfo.h
