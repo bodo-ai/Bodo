@@ -46,6 +46,8 @@ extensions = [
     "sphinx.ext.githubpages",
     "sphinx_material",
     "sphinx_panels",
+    "sphinx_copybutton",
+    "sphinx_search.extension",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -126,7 +128,7 @@ html_theme_options = {
     # If True, show hidden TOC entries
     'globaltoc_includehidden': False,
     'html_minify': True,
-    'css_minify': False,
+    'css_minify': True,
     "nav_links": [
         {
             "href": "https://bodo.ai",
