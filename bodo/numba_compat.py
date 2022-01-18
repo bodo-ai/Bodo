@@ -2991,133 +2991,6 @@ def object_hasattr_string(self, obj, attr):
 numba.core.pythonapi.PythonAPI.object_hasattr_string = object_hasattr_string
 
 
-# Support unboxing regular dictionaries as Numba's typed dictionary
-# TODO(ehsan): move to Numba
-# TODO(ehsan): reflection is not supported. Throw warning if dict is modified?
-@typeof_impl.register(dict)
-def _typeof_dict(val, c):
-    if len(val) == 0:
-        raise ValueError("Cannot type empty dict")
-    k, v = next(iter(val.items()))
-    key_type = typeof_impl(k, c)
-    value_type = typeof_impl(v, c)
-    if key_type is None or value_type is None:
-        raise ValueError(f"Cannot type dict element type {type(k)}, {type(v)}")
-    return types.DictType(key_type, value_type)
-
-
-# replace Dict unboxing to support regular dictionaries as well
-def unbox_dicttype(typ, val, c):
-    from llvmlite import ir as lir
-    from numba.typed import dictobject
-    from numba.typed.typeddict import Dict
-
-    context = c.context
-
-    # Bodo change: check for regular dictionary by checking '_opaque' attribute which is
-    # typed.Dict specific. If regular dict, convert to typed.Dict before unboxing
-    valptr = cgutils.alloca_once_value(c.builder, val)
-    has_opaque = c.pyapi.object_hasattr_string(val, "_opaque")
-    is_regular_dict = c.builder.icmp_unsigned(
-        "==", has_opaque, lir.Constant(has_opaque.type, 0)
-    )
-
-    kt = typ.key_type
-    vt = typ.value_type
-
-    def make_dict():
-        return numba.typed.Dict.empty(kt, vt)
-
-    def copy_dict(out_dict, in_dict):
-        for k, v in in_dict.items():
-            out_dict[k] = v
-
-    with c.builder.if_then(is_regular_dict):
-        # allocate a new typed.Dict and copy values
-        make_dict_obj = c.pyapi.unserialize(c.pyapi.serialize_object(make_dict))
-        dct_val = c.pyapi.call_function_objargs(make_dict_obj, [])
-        copy_dict_obj = c.pyapi.unserialize(c.pyapi.serialize_object(copy_dict))
-        c.pyapi.call_function_objargs(copy_dict_obj, [dct_val, val])
-        c.builder.store(dct_val, valptr)
-
-    val = c.builder.load(valptr)
-    # done Bodo change
-
-    # Check that `type(val) is Dict`
-    dict_type = c.pyapi.unserialize(c.pyapi.serialize_object(Dict))
-    valtype = c.pyapi.object_type(val)
-    same_type = c.builder.icmp_unsigned("==", valtype, dict_type)
-
-    with c.builder.if_else(same_type) as (then, orelse):
-        with then:
-            miptr = c.pyapi.object_getattr_string(val, "_opaque")
-
-            mip_type = types.MemInfoPointer(types.voidptr)
-            native = c.unbox(mip_type, miptr)
-
-            mi = native.value
-
-            argtypes = mip_type, typeof(typ)
-
-            def convert(mi, typ):
-                return dictobject._from_meminfo(mi, typ)
-
-            sig = signature(typ, *argtypes)
-            nil_typeref = context.get_constant_null(argtypes[1])
-            args = (mi, nil_typeref)
-            is_error, dctobj = c.pyapi.call_jit_code(convert, sig, args)
-            # decref here because we are stealing a reference.
-            c.context.nrt.decref(c.builder, typ, dctobj)
-
-            c.pyapi.decref(miptr)
-            bb_unboxed = c.builder.basic_block
-
-        with orelse:
-            # Raise error on incorrect type
-            c.pyapi.err_format(
-                "PyExc_TypeError",
-                "can't unbox a %S as a %S",
-                valtype,
-                dict_type,
-            )
-            bb_else = c.builder.basic_block
-
-    # Phi nodes to gather the output
-    dctobj_res = c.builder.phi(dctobj.type)
-    is_error_res = c.builder.phi(is_error.type)
-
-    dctobj_res.add_incoming(dctobj, bb_unboxed)
-    dctobj_res.add_incoming(dctobj.type(None), bb_else)
-
-    is_error_res.add_incoming(is_error, bb_unboxed)
-    is_error_res.add_incoming(cgutils.true_bit, bb_else)
-
-    # cleanup
-    c.pyapi.decref(dict_type)
-    c.pyapi.decref(valtype)
-
-    # Bodo change: remove the typed.Dict object that is not necessary anymore
-    with c.builder.if_then(is_regular_dict):
-        c.pyapi.decref(val)
-
-    return NativeValue(dctobj_res, is_error=is_error_res)
-
-
-# Import numba.core.types.typeddict to DictType unboxing
-import numba.typed.typeddict  # noqa
-
-if _check_numba_change:
-    lines = inspect.getsource(
-        numba.core.pythonapi._unboxers.functions[numba.core.types.DictType]
-    )
-    if (
-        hashlib.sha256(lines.encode()).hexdigest()
-        != "5f6f183b94dc57838538c668a54c2476576c85d8553843f3219f5162c61e7816"
-    ):  # pragma: no cover
-        warnings.warn("unbox_dicttype has changed")
-numba.core.pythonapi._unboxers.functions[types.DictType] = unbox_dicttype
-
-
 #################   Start Timedelta Arithmetic Changes   ###################
 # The following changes are needed to support datetime64 arr + timedelta64
 # They are being merged into Numba in this PR:
@@ -4673,6 +4546,9 @@ def make_constant_array(self, builder, typ, ary):
     Create an array structure reifying the given constant array.
     A low-level contiguous array constant is created in the LLVM IR.
     """
+    import math
+
+    from llvmlite import ir as lir
     from llvmlite.llvmpy.core import Constant, Type
 
     datatype = self.get_data_type(typ.dtype)
@@ -4712,21 +4588,33 @@ def make_constant_array(self, builder, typ, ary):
     stridevals = [self.get_constant(types.intp, s) for s in ary.strides]
     cstrides = Constant.array(llintp, stridevals)
 
-    # Create array structure
-    cary = self.make_array(typ)(self, builder)
-
     intp_itemsize = self.get_constant(types.intp, ary.dtype.itemsize)
-    self.populate_array(
-        cary,
-        data=builder.bitcast(data, cary.data.type),
-        shape=cshape,
-        strides=cstrides,
-        itemsize=intp_itemsize,
-        parent=rt_addr,
-        meminfo=None,
-    )
 
-    return cary._getvalue()
+    # Bodo change: create a LiteralStruct that can be embedded in constant globals
+    # instead of calling populate_array (which creates a regular struct reference)
+
+    nitems = self.get_constant(types.intp, math.prod(ary.shape))
+
+    # create a literal struct that matches data model of arrays in Numba:
+    # https://github.com/numba/numba/blob/0499b906a850af34f0e2fdcc6b3b3836cdc95297/numba/core/datamodel/models.py#L862
+    return lir.Constant.literal_struct(
+        [
+            # meminfo
+            self.get_constant_null(types.MemInfoPointer(typ.dtype)),
+            # parent
+            self.get_constant_null(types.pyobject),
+            # nitems
+            nitems,
+            # itemsize
+            intp_itemsize,
+            # data
+            data.bitcast(self.get_value_type(types.CPointer(typ.dtype))),
+            # shape
+            cshape,
+            # strides
+            cstrides,
+        ]
+    )
 
 
 if _check_numba_change:
@@ -4739,6 +4627,57 @@ if _check_numba_change:
 
 
 numba.core.base.BaseContext.make_constant_array = make_constant_array
+
+
+# Bodo change: avoid incref/decref if the meminfo is a constant global (writing to
+# constant globals can lead to segfault)
+def _define_atomic_inc_dec(module, op, ordering):
+    """Define a llvm function for atomic increment/decrement to the given module
+    Argument ``op`` is the operation "add"/"sub".  Argument ``ordering`` is
+    the memory ordering.  The generated function returns the new value.
+    """
+    from llvmlite import ir as lir
+    from numba.core.runtime.nrtdynmod import _word_type
+
+    ftype = lir.FunctionType(_word_type, [_word_type.as_pointer()])
+    fn_atomic = lir.Function(module, ftype, name="nrt_atomic_{0}".format(op))
+
+    [ptr] = fn_atomic.args
+    bb = fn_atomic.append_basic_block()
+    builder = lir.IRBuilder(bb)
+    ONE = lir.Constant(_word_type, 1)
+    # Bodo change: disable atomic incref/decref since we don't use threading
+    if False:  # pragma: no cover
+        oldval = builder.atomic_rmw(op, ptr, ONE, ordering=ordering)
+        # Perform the operation on the old value so that we can pretend returning
+        # the "new" value.
+        res = getattr(builder, op)(oldval, ONE)
+        builder.ret(res)
+    else:
+        oldval = builder.load(ptr)
+        newval = getattr(builder, op)(oldval, ONE)
+        # Bodo change: store value only if not a constant global. we set refcount = -1
+        # in case of globals (see lower_constant of StringArrayType)
+        is_not_const = builder.icmp_signed("!=", oldval, lir.Constant(oldval.type, -1))
+        with cgutils.if_likely(builder, is_not_const):
+            builder.store(newval, ptr)
+        # Bodo change: fix a bug in Numba code that returns old value instead of new
+        # (as expected by _define_nrt_decref)
+        builder.ret(newval)
+
+    return fn_atomic
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.runtime.nrtdynmod._define_atomic_inc_dec)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "9cc02c532b2980b6537b702f5608ea603a1ff93c6d3c785ae2cf48bace273f48"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.runtime.nrtdynmod._define_atomic_inc_dec has changed")
+
+
+numba.core.runtime.nrtdynmod._define_atomic_inc_dec = _define_atomic_inc_dec
 
 
 def NativeLowering_run_pass(self, state):
@@ -5064,3 +5003,132 @@ numba.parfors.array_analysis.ShapeEquivSet._get_names = _get_names
 numba.parfors.array_analysis.ShapeEquivSet.get_equiv_const = get_equiv_const
 numba.parfors.array_analysis.ShapeEquivSet.get_equiv_set = get_equiv_set
 #########  End changes to allow unsupported types in `ShapeEquivSet._getnames()`  #########
+
+
+# Support unboxing regular dictionaries as Numba's typed dictionary
+# TODO(ehsan): move to Numba
+# TODO(ehsan): reflection is not supported. Throw warning if dict is modified?
+@typeof_impl.register(dict)
+def _typeof_dict(val, c):
+    if len(val) == 0:  # pragma: no cover
+        raise ValueError("Cannot type empty dict")
+    k, v = next(iter(val.items()))
+    key_type = typeof_impl(k, c)
+    value_type = typeof_impl(v, c)
+    if key_type is None or value_type is None:  # pragma: no cover
+        raise ValueError(f"Cannot type dict element type {type(k)}, {type(v)}")
+    return types.DictType(key_type, value_type)
+
+
+# replace Dict unboxing to support regular dictionaries as well
+def unbox_dicttype(typ, val, c):
+    from llvmlite import ir as lir
+    from numba.typed import dictobject
+    from numba.typed.typeddict import Dict
+
+    context = c.context
+
+    # Bodo change: check for regular dictionary by checking '_opaque' attribute which is
+    # typed.Dict specific. If regular dict, convert to typed.Dict before unboxing
+    valptr = cgutils.alloca_once_value(c.builder, val)
+    has_opaque = c.pyapi.object_hasattr_string(val, "_opaque")
+    is_regular_dict = c.builder.icmp_unsigned(
+        "==", has_opaque, lir.Constant(has_opaque.type, 0)
+    )
+
+    kt = typ.key_type
+    vt = typ.value_type
+
+    def make_dict():
+        return numba.typed.Dict.empty(kt, vt)
+
+    def copy_dict(out_dict, in_dict):
+        for k, v in in_dict.items():
+            out_dict[k] = v
+
+    with c.builder.if_then(is_regular_dict):
+        # allocate a new typed.Dict and copy values
+        make_dict_obj = c.pyapi.unserialize(c.pyapi.serialize_object(make_dict))
+        dct_val = c.pyapi.call_function_objargs(make_dict_obj, [])
+        copy_dict_obj = c.pyapi.unserialize(c.pyapi.serialize_object(copy_dict))
+        c.pyapi.call_function_objargs(copy_dict_obj, [dct_val, val])
+        c.builder.store(dct_val, valptr)
+
+    val = c.builder.load(valptr)
+    # done Bodo change
+
+    # Check that `type(val) is Dict`
+    dict_type = c.pyapi.unserialize(c.pyapi.serialize_object(Dict))
+    valtype = c.pyapi.object_type(val)
+    same_type = c.builder.icmp_unsigned("==", valtype, dict_type)
+
+    with c.builder.if_else(same_type) as (then, orelse):
+        with then:
+            miptr = c.pyapi.object_getattr_string(val, "_opaque")
+
+            mip_type = types.MemInfoPointer(types.voidptr)
+            native = c.unbox(mip_type, miptr)
+
+            mi = native.value
+
+            argtypes = mip_type, typeof(typ)
+
+            def convert(mi, typ):  # pragma: no cover
+                return dictobject._from_meminfo(mi, typ)
+
+            sig = signature(typ, *argtypes)
+            nil_typeref = context.get_constant_null(argtypes[1])
+            args = (mi, nil_typeref)
+            is_error, dctobj = c.pyapi.call_jit_code(convert, sig, args)
+            # decref here because we are stealing a reference.
+            c.context.nrt.decref(c.builder, typ, dctobj)
+
+            c.pyapi.decref(miptr)
+            bb_unboxed = c.builder.basic_block
+
+        with orelse:
+            # Raise error on incorrect type
+            c.pyapi.err_format(
+                "PyExc_TypeError",
+                "can't unbox a %S as a %S",
+                valtype,
+                dict_type,
+            )
+            bb_else = c.builder.basic_block
+
+    # Phi nodes to gather the output
+    dctobj_res = c.builder.phi(dctobj.type)
+    is_error_res = c.builder.phi(is_error.type)
+
+    dctobj_res.add_incoming(dctobj, bb_unboxed)
+    dctobj_res.add_incoming(dctobj.type(None), bb_else)
+
+    is_error_res.add_incoming(is_error, bb_unboxed)
+    is_error_res.add_incoming(cgutils.true_bit, bb_else)
+
+    # cleanup
+    c.pyapi.decref(dict_type)
+    c.pyapi.decref(valtype)
+
+    # Bodo change: remove the typed.Dict object that is not necessary anymore
+    with c.builder.if_then(is_regular_dict):
+        c.pyapi.decref(val)
+
+    return NativeValue(dctobj_res, is_error=is_error_res)
+
+
+# Import numba.core.types.typeddict to replace DictType unboxing
+# NOTE: this import triggers some compilation so it has to be at the end of this file
+# to make sure all patches are applied first
+import numba.typed.typeddict  # noqa
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(
+        numba.core.pythonapi._unboxers.functions[numba.core.types.DictType]
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "5f6f183b94dc57838538c668a54c2476576c85d8553843f3219f5162c61e7816"
+    ):  # pragma: no cover
+        warnings.warn("unbox_dicttype has changed")
+numba.core.pythonapi._unboxers.functions[types.DictType] = unbox_dicttype

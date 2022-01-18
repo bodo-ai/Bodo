@@ -190,9 +190,8 @@ def test_np_prod(bool_arr_value, memory_leak_check):
     check_func(test_impl, (bool_arr_value,))
 
 
-# TODO: fix memory leak and add memory_leak_check
 @pytest.mark.slow
-def test_constant_lowering(bool_arr_value):
+def test_constant_lowering(bool_arr_value, memory_leak_check):
     def impl():
         return bool_arr_value
 

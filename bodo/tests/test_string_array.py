@@ -91,15 +91,33 @@ def test_unbox(str_arr_value, memory_leak_check):
     check_func(impl2, (str_arr_value,))
 
 
-# TODO: fix memory leak and add memory_leak_check
 @pytest.mark.slow
-def test_constant_lowering(str_arr_value):
+def test_constant_lowering(str_arr_value, memory_leak_check):
     def impl():
         return str_arr_value
 
     pd.testing.assert_series_equal(
         pd.Series(bodo.jit(impl)()), pd.Series(str_arr_value), check_dtype=False
     )
+
+
+@pytest.mark.slow
+def test_constant_lowering_refcount(memory_leak_check):
+    """make sure refcount handling works for constant globals and destructor is not
+    called leading to a segfault.
+    """
+    arr = np.array(["AB", "", "ABC", None, "C", "D", "abcd", "ABCD"])
+
+    @bodo.jit(distributed=False)
+    def g(A):
+        if len(A) > 30:
+            print(len(A[0]))
+
+    @bodo.jit(distributed=False)
+    def f():
+        g(arr)
+
+    f()
 
 
 @pytest.mark.slow
