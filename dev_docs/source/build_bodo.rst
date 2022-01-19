@@ -11,7 +11,8 @@ Python for setting up Bodo. These commands install Bodo and its dependencies
 such as Numba on Ubuntu Linux::
 
     # Linux: wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
-    # Mac: wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
+    # Intel Mac: wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
+    # M1 Mac: wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-arm64.sh -O miniconda.sh
     chmod +x miniconda.sh
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
@@ -19,7 +20,8 @@ such as Numba on Ubuntu Linux::
     source activate DEV
     conda install mpi4py pytest cython -c conda-forge
     # Linux: conda install 'gcc_linux-64>=9' 'gxx_linux-64>=9' -c conda-forge
-    # Mac: conda install clang_osx-64 clangxx_osx-64 -c conda-forge
+    # Intel Mac: conda install clang_osx-64 clangxx_osx-64 -c conda-forge
+    # M1 Mac: conda install clang_osx-arm64 clangxx_osx-arm64 -c conda-forge
     # If you don't want to install Numba from source: conda install numba=0.54.1 -c conda-forge
     # For development/debugging purposes, it's best to install Numba from source instead
     # START OF BUILD NUMBA FROM SOURCE
