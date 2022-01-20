@@ -33,6 +33,7 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
+    register_jitable,
     register_model,
     type_callable,
     typeof_impl,
@@ -1108,10 +1109,13 @@ def str_arr_from_sequence(in_seq):  # pragma: no cover
 @intrinsic
 def set_all_offsets_to_0(typingctx, arr_typ=None):
     """
-    Set all the offsets of a string/bniary array to 0. Useful for
+    Set all the offsets of a string/binary array to 0. Useful for
     all null columns.
     """
-    assert arr_typ in [string_array_type, binary_array_type]
+    assert arr_typ in (
+        string_array_type,
+        binary_array_type,
+    ), "set_all_offsets_to_0 requires a string or binary array"
 
     def codegen(context, builder, sig, args):
         (in_str_arr,) = args
@@ -1133,6 +1137,39 @@ def set_all_offsets_to_0(typingctx, arr_typ=None):
             context, builder, payload.offsets
         ).data
         cgutils.memset(builder, null_offsets_ptr, n_bytes, 0)
+        return context.get_dummy_value()
+
+    return types.none(arr_typ), codegen
+
+
+@intrinsic
+def set_bitmap_all_NA(typingctx, arr_typ=None):
+    """
+    Set all the bitmap of a string/binary array to 0. Useful for
+    operations that have missing values as NA.
+
+    Note: This function assumes the string is preallocated with its length.
+    """
+
+    assert arr_typ in (
+        string_array_type,
+        binary_array_type,
+    ), "set_bitmap_all_NA requires a string or binary array"
+
+    def codegen(context, builder, sig, args):
+        (in_str_arr,) = args
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, sig.args[0])
+        n_arrays = payload.n_arrays
+        # We use 1 byte for every 8 entries, so ((x + 7) >> 3) to compute the ceil(x, 8).
+        n_bytes = builder.lshr(
+            builder.add(n_arrays, lir.Constant(lir.IntType(64), 7)),
+            lir.Constant(lir.IntType(64), 3),
+        )
+        null_bitmap_ptr = context.make_array(null_bitmap_arr_type)(
+            context, builder, payload.null_bitmap
+        ).data
+        # NA is represented with 0
+        cgutils.memset(builder, null_bitmap_ptr, n_bytes, 0)
         return context.get_dummy_value()
 
     return types.none(arr_typ), codegen
@@ -1161,6 +1198,27 @@ def pre_alloc_string_array(n_strs, n_chars):  # pragma: no cover
     # offset array to 0s.
     if n_chars == 0:
         set_all_offsets_to_0(str_arr)
+    return str_arr
+
+
+@register_jitable
+def gen_na_str_array_lens(n_strs, total_len, len_arr):
+    """
+    Allocates a string array with initally all NA values,
+    but sets the offsets with values based on the cummulative
+    sum of the len_arr.
+    """
+    str_arr = pre_alloc_string_array(n_strs, total_len)
+    set_bitmap_all_NA(str_arr)
+    # Get the offsets array
+    offsets = bodo.libs.array_item_arr_ext.get_offsets(str_arr._data)
+    # Compute the cumsum to set the offsets
+    curr_total = 0
+    n_elems = len(len_arr)
+    for i in range(n_elems):
+        offsets[i] = curr_total
+        curr_total += len_arr[i]
+    offsets[n_elems] = curr_total
     return str_arr
 
 

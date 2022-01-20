@@ -56,8 +56,12 @@ from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
     delete_info_decref_array,
+    delete_table,
     delete_table_decref_arrays,
+    info_from_table,
+    info_to_array,
     py_table_to_cpp_table,
+    shuffle_table,
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
@@ -128,7 +132,12 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     ndim = 2
 
     def __init__(
-        self, data=None, index=None, columns=None, dist=None, is_table_format=False
+        self,
+        data=None,
+        index=None,
+        columns=None,
+        dist=None,
+        is_table_format=False,
     ):
         # data is tuple of Array types (not Series) or tuples (for df.describe)
         # index is Index obj (not Array type)
@@ -153,23 +162,38 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         self.dist = dist
         # flag indicating data is stored in the new Table format (needed for data model)
         self.is_table_format = is_table_format
-        # save TableType to avoid recreating it in other places like column unbox & dtor
-        self.table_type = TableType(data) if is_table_format else None
+        # If columns is None, we are determining the number of columns art runtime.
+        if columns is None:
+            assert (
+                is_table_format
+            ), "Determining columns at runtime is only supported for DataFrame with table format"
+            # If we have columns determined at runtime, we change the arguments to create the table.
+            self.table_type = TableType((data[0],), True)
+        else:
+            # save TableType to avoid recreating it in other places like column unbox & dtor
+            self.table_type = TableType(data) if is_table_format else None
+
         super(DataFrameType, self).__init__(
             name=f"dataframe({data}, {index}, {columns}, {dist}, {is_table_format})"
         )
-    
+
     def __str__(self):
         """Returns DataFrame name, if DataFrame has many columns returns compact representation of name."""
-        if len(self.columns) > 20: 
+        if not self.has_runtime_cols and len(self.columns) > 20:
             data_str = f"{len(self.data)} columns of types {set(self.data)}"
-            columns_str = f"('{self.columns[0]}', '{self.columns[1]}', ..., '{self.columns[-1]}')"
+            columns_str = (
+                f"('{self.columns[0]}', '{self.columns[1]}', ..., '{self.columns[-1]}')"
+            )
             return f"dataframe({data_str}, {self.index}, {columns_str}, {self.dist}, {self.is_table_format})"
         return super().__str__()
-        
 
     def copy(
-        self, data=None, index=None, columns=None, dist=None, is_table_format=None
+        self,
+        data=None,
+        index=None,
+        columns=None,
+        dist=None,
+        is_table_format=None,
     ):
         if data is None:
             data = self.data
@@ -181,7 +205,33 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             dist = self.dist
         if is_table_format is None:
             is_table_format = self.is_table_format
-        return DataFrameType(data, index, columns, dist, is_table_format)
+
+        return DataFrameType(
+            data,
+            index,
+            columns,
+            dist,
+            is_table_format,
+        )
+
+    @property
+    def has_runtime_cols(self):
+        """
+        Is the number of columns contained in this DataFrame
+        determined at runtime
+        """
+        return self.columns is None
+
+    @property
+    def runtime_colname_typ(self):
+        """
+        When the number of columns are determined at runtime then the
+        DataFrame also contains the column names. This returns the array
+        type for how the names are stored.
+        """
+        # If we have runtime columns the second element of the data tuple
+        # is the column names array.
+        return self.data[1] if self.has_runtime_cols else None
 
     @property
     def as_array(self):
@@ -191,7 +241,13 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
     @property
     def key(self):
         # needed?
-        return self.data, self.index, self.columns, self.dist, self.is_table_format
+        return (
+            self.data,
+            self.index,
+            self.columns,
+            self.dist,
+            self.is_table_format,
+        )
 
     @property
     def mangling_args(self):
@@ -213,6 +269,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             isinstance(other, DataFrameType)
             and len(other.data) == len(self.data)
             and other.columns == self.columns
+            and other.has_runtime_cols == self.has_runtime_cols
         ):
             # NOTE: checking equality since Index types may not have unify() implemented
             # TODO: add unify() to all Index types and remove this
@@ -233,14 +290,22 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             # see: https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/types/npytypes.py#L436
             if new_index is not None and None not in data:  # pragma: no cover
                 return DataFrameType(
-                    data, new_index, self.columns, dist, self.is_table_format
+                    data,
+                    new_index,
+                    self.columns,
+                    dist,
+                    self.is_table_format,
                 )
 
         # convert empty dataframe to any other dataframe to support important common
         # cases (see test_append_empty_df), even though it's not fully accurate.
         # TODO: detect and handle wrong corner cases (or raise warning) in compiler
         # passes
-        if isinstance(other, DataFrameType) and len(self.data) == 0:
+        if (
+            isinstance(other, DataFrameType)
+            and len(self.data) == 0
+            and not self.has_runtime_cols
+        ):
             return other
 
     def can_convert_to(self, typingctx, other):
@@ -252,6 +317,7 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             and self.index == other.index
             and self.columns == other.columns
             and self.dist != other.dist
+            and self.has_runtime_cols == other.has_runtime_cols
         ):
             return Conversion.safe
 
@@ -297,6 +363,17 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         )
 
 
+def check_runtime_cols_unsupported(df, func_name):
+    """
+    Checks if df is a DataFrameType with has_runtime_cols=True.
+    If so it raises a Bodo error for the provided function name.
+    """
+    if isinstance(df, DataFrameType) and df.has_runtime_cols:
+        raise BodoError(
+            f"{func_name} on DataFrames with columns determined at runtime is not yet supported. Please return the DataFrame to regular Python to update typing information."
+        )
+
+
 # payload type inside meminfo so that mutation are seen by all references
 class DataFramePayloadType(types.Type):
     def __init__(self, df_type):
@@ -335,6 +412,8 @@ class DataFramePayloadModel(models.StructModel):
             ("index", fe_type.df_type.index),
             ("parent", types.pyobject),
         ]
+        if fe_type.df_type.has_runtime_cols:
+            members.append(("columns", fe_type.df_type.runtime_colname_typ))
         super(DataFramePayloadModel, self).__init__(dmm, fe_type, members)
 
 
@@ -363,6 +442,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
     @bound_function("df.head")
     def resolve_head(self, df, args, kws):
         func_name = "DataFrame.head"
+        check_runtime_cols_unsupported(df, f"{func_name}()")
 
         # Obtain a the pysig and folded args
         arg_names = ("n",)
@@ -387,6 +467,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
     @bound_function("df.corr")
     def resolve_corr(self, df, args, kws):
         func_name = "DataFrame.corr"
+        check_runtime_cols_unsupported(df, f"{func_name}()")
 
         # Obtain a the pysig and folded args
         full_args = (df,) + args
@@ -425,12 +506,14 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
 
     @bound_function("df.pipe", no_unliteral=True)
     def resolve_pipe(self, df, args, kws):
+        check_runtime_cols_unsupported(df, "DataFrame.pipe()")
         return bodo.hiframes.pd_groupby_ext.resolve_obj_pipe(
             self, df, args, kws, "DataFrame"
         )
 
     @bound_function("df.apply", no_unliteral=True)
     def resolve_apply(self, df, args, kws):
+        check_runtime_cols_unsupported(df, "DataFrame.apply()")
         kws = dict(kws)
         # pop apply() arguments from kws so only UDF kws remain
         func = args[0] if len(args) > 0 else kws.pop("func", None)
@@ -581,6 +664,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
     def resolve_plot(self, df, args, kws):
         # Obtain a the pysig and folded args
         func_name = "DataFrame.plot"
+        check_runtime_cols_unsupported(df, f"{func_name}()")
         arg_names = (
             "x",
             "y",
@@ -786,10 +870,11 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         return signature(return_typ, *folded_args).replace(pysig=pysig)
 
     def generic_resolve(self, df, attr):
+        if self._is_existing_attr(attr):
+            return
+        check_runtime_cols_unsupported(df, "Acessing DataFrame columns by attribute")
         # column selection
         if attr in df.columns:
-            if self._is_existing_attr(attr):
-                return
             ind = df.columns.index(attr)
             arr_typ = df.data[ind]
             return SeriesType(
@@ -838,6 +923,8 @@ def decref_df_data(context, builder, payload, df_type):
             builder, df_type.table_type, builder.extract_value(payload.data, 0)
         )
         context.nrt.decref(builder, df_type.index, payload.index)
+        if df_type.has_runtime_cols:
+            context.nrt.decref(builder, df_type.data[1], payload.columns)
         return
 
     for i in range(len(df_type.data)):
@@ -888,13 +975,19 @@ def define_df_dtor(context, builder, df_type, payload_type):
     return fn
 
 
-def construct_dataframe(context, builder, df_type, data_tup, index_val, parent=None):
-
+def construct_dataframe(
+    context, builder, df_type, data_tup, index_val, parent=None, colnames=None
+):
     # create payload struct and store values
     payload_type = DataFramePayloadType(df_type)
     dataframe_payload = cgutils.create_struct_proxy(payload_type)(context, builder)
     dataframe_payload.data = data_tup
     dataframe_payload.index = index_val
+    if colnames is not None:
+        assert (
+            df_type.has_runtime_cols
+        ), "construct_dataframe can only provide colnames if columns are determined at runtime"
+        dataframe_payload.columns = colnames
 
     # create meminfo and store payload
     payload_ll_type = context.get_value_type(payload_type)
@@ -925,6 +1018,43 @@ def construct_dataframe(context, builder, df_type, data_tup, index_val, parent=N
 
     builder.store(dataframe_payload._getvalue(), meminfo_data_ptr)
     return dataframe._getvalue()
+
+
+@intrinsic
+def init_runtime_cols_dataframe(typingctx, data_typ, index_typ, colnames_arr_typ=None):
+    """Create a DataFrame from the provided table, index, and column
+    names when the number of columns is determined at runtime.
+    """
+    assert (
+        isinstance(data_typ, types.BaseTuple)
+        and isinstance(data_typ.dtype, TableType)
+        and data_typ.dtype.has_runtime_cols
+    ), "init_runtime_cols_dataframe must be called with a table that determines columns at runtime."
+    assert bodo.utils.utils.is_array_typ(
+        colnames_arr_typ, False
+    ), "Column names must be an array type"
+    ret_typ = DataFrameType(
+        (data_typ.dtype.arr_types[0], colnames_arr_typ),
+        index_typ,
+        None,
+        is_table_format=True,
+    )
+
+    def codegen(context, builder, signature, args):
+        df_type = signature.return_type
+        data_tup, index, col_names = args
+        parent = None
+        dataframe_val = construct_dataframe(
+            context, builder, df_type, data_tup, index, parent, col_names
+        )
+        # increase refcount of stored values
+        context.nrt.incref(builder, data_typ, data_tup)
+        context.nrt.incref(builder, index_typ, index)
+        context.nrt.incref(builder, colnames_arr_typ, col_names)
+        return dataframe_val
+
+    sig = signature(ret_typ, data_typ, index_typ, colnames_arr_typ)
+    return sig, codegen
 
 
 @intrinsic
@@ -984,7 +1114,7 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
             parent = table.parent
 
         dataframe_val = construct_dataframe(
-            context, builder, df_type, data_tup, index_val, parent
+            context, builder, df_type, data_tup, index_val, parent, None
         )
         # increase refcount of stored values
         context.nrt.incref(builder, data_tup_typ, data_tup)
@@ -997,6 +1127,8 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
 
 @intrinsic
 def has_parent(typingctx, df=None):
+    check_runtime_cols_unsupported(df, "has_parent")
+
     def codegen(context, builder, sig, args):
         dataframe = cgutils.create_struct_proxy(sig.args[0])(
             context, builder, value=args[0]
@@ -1008,6 +1140,7 @@ def has_parent(typingctx, df=None):
 
 @intrinsic
 def _column_needs_unboxing(typingctx, df_typ, i_typ=None):
+    check_runtime_cols_unsupported(df_typ, "_column_needs_unboxing")
     assert isinstance(df_typ, DataFrameType) and is_overload_constant_int(i_typ)
 
     def codegen(context, builder, sig, args):
@@ -1051,6 +1184,7 @@ def get_dataframe_payload(context, builder, df_type, value):
 
 @intrinsic
 def _get_dataframe_data(typingctx, df_typ=None):
+    check_runtime_cols_unsupported(df_typ, "_get_dataframe_data")
     ret_typ = types.Tuple(df_typ.data)
     if df_typ.is_table_format:
         ret_typ = types.Tuple([TableType(df_typ.data)])
@@ -1070,6 +1204,8 @@ def _get_dataframe_data(typingctx, df_typ=None):
 
 @intrinsic
 def get_dataframe_index(typingctx, df_typ=None):
+    check_runtime_cols_unsupported(df_typ, "get_dataframe_index")
+
     def codegen(context, builder, signature, args):
         dataframe_payload = get_dataframe_payload(
             context, builder, signature.args[0], args[0]
@@ -1097,6 +1233,7 @@ class GetDataFrameDataInfer(AbstractTemplate):
                 "Selecting a DataFrame column requires a constant column label"
             )
         df = args[0]
+        check_runtime_cols_unsupported(df, "get_dataframe_data")
         i = get_overload_const_int(args[1])
         ret = df.data[i]
         return ret(*args)
@@ -1280,6 +1417,7 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_tabl
 @intrinsic
 def set_dataframe_data(typingctx, df_typ, c_ind_typ, arr_typ=None):
     """set column data of a dataframe inplace"""
+    check_runtime_cols_unsupported(df_typ, "set_dataframe_data")
     assert is_overload_constant_int(c_ind_typ)
     col_ind = get_overload_const_int(c_ind_typ)
 
@@ -1336,6 +1474,7 @@ def set_df_index(typingctx, df_t, index_t=None):
     dataframe with index
     """
     # TODO: make inplace when dfs are full objects
+    check_runtime_cols_unsupported(df_t, "set_df_index")
 
     def codegen(context, builder, signature, args):
         in_df_arg = args[0]
@@ -1351,6 +1490,7 @@ def set_df_index(typingctx, df_t, index_t=None):
             in_df_payload.data,
             index_val,
             in_df.parent,
+            None,
         )
 
         # increase refcount of stored values
@@ -1370,6 +1510,7 @@ def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
     """Set df column and reflect to parent Python object
     return a new df.
     """
+    check_runtime_cols_unsupported(df_type, "set_df_column_with_reflect")
     assert is_literal_type(cname_type), "constant column name expected"
     col_name = get_literal_value(cname_type)
     n_cols = len(df_type.columns)
@@ -1441,6 +1582,7 @@ def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
             data_tup,
             index_val,
             in_dataframe.parent,
+            None,
         )
 
         # update existing native dataframe inplace if possible (not a new column name
@@ -1517,6 +1659,7 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
     """embed constant DataFrame value by getting constant values for data arrays and
     Index.
     """
+    check_runtime_cols_unsupported(df_type, "lowering a constant DataFrame")
     n_cols = len(pyval.columns)
     data_arrs = tuple(pyval.iloc[:, i].values for i in range(n_cols))
 
@@ -1536,7 +1679,9 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
 
     index_val = context.get_constant_generic(builder, df_type.index, pyval.index)
 
-    dataframe_val = construct_dataframe(context, builder, df_type, data_tup, index_val)
+    dataframe_val = construct_dataframe(
+        context, builder, df_type, data_tup, index_val, None
+    )
 
     return dataframe_val
 
@@ -1557,15 +1702,21 @@ def cast_df_to_df(context, builder, fromty, toty, val):
         and fromty.columns == toty.columns
         and fromty.is_table_format == toty.is_table_format
         and fromty.dist != toty.dist
+        and fromty.has_runtime_cols == toty.has_runtime_cols
     ):
         return val
 
     # cast empty df with no columns to empty df with columns
-    if len(fromty.data) == 0 and len(toty.columns):
+    if (
+        not fromty.has_runtime_cols
+        and not toty.has_runtime_cols
+        and len(fromty.data) == 0
+        and len(toty.columns)
+    ):
         return _cast_empty_df(context, builder, toty)
 
     # cases below assume data types are the same (only index and format changes)
-    if fromty.data != toty.data:
+    if fromty.data != toty.data or fromty.has_runtime_cols != toty.has_runtime_cols:
         raise BodoError(f"Invalid dataframe cast from {fromty} to {toty}")
 
     in_dataframe_payload = get_dataframe_payload(context, builder, fromty, val)
@@ -1602,7 +1753,7 @@ def cast_df_to_df(context, builder, fromty, toty, val):
             )
 
     return construct_dataframe(
-        context, builder, toty, new_data, new_index, in_dataframe_payload.parent
+        context, builder, toty, new_data, new_index, in_dataframe_payload.parent, None
     )
 
 
@@ -1649,6 +1800,9 @@ def _cast_empty_df(context, builder, toty):
 
 def _cast_df_data_to_table_format(context, builder, fromty, toty, in_dataframe_payload):
     """cast df data from tuple data format to table data format"""
+    check_runtime_cols_unsupported(
+        toty, "casting traditional DataFrame to table format"
+    )
     table_type = toty.table_type
     table = cgutils.create_struct_proxy(table_type)(context, builder)
     table.parent = in_dataframe_payload.parent
@@ -1681,6 +1835,9 @@ def _cast_df_data_to_table_format(context, builder, fromty, toty, in_dataframe_p
 
 def _cast_df_data_to_tuple_format(context, builder, fromty, toty, in_dataframe_payload):
     """cast df data from table data format to tuple data format"""
+    check_runtime_cols_unsupported(
+        fromty, "casting table format to traditional DataFrame"
+    )
     # TODO(ehsan): test
     table_type = fromty.table_type
     table = cgutils.create_struct_proxy(table_type)(
@@ -1869,6 +2026,15 @@ def _fill_null_arrays(data_dict, col_names, df_len, dtype):
 def df_len_overload(df):
     if not isinstance(df, DataFrameType):
         return
+
+    if df.has_runtime_cols:
+        # If columns are determined at runtime we have determine
+        # the length through the table.
+        def impl(df):  # pragma: no cover
+            t = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
+            return len(t)
+
+        return impl
 
     if len(df.columns) == 0:  # empty df
         return lambda df: 0  # pragma: no cover
@@ -2138,6 +2304,7 @@ def concat_overload(
         names = []
         for i, obj in enumerate(objs.types):
             assert isinstance(obj, (SeriesType, DataFrameType))
+            check_runtime_cols_unsupported(obj, "pd.concat()")
             if isinstance(obj, SeriesType):
                 # TODO: use Series name if possible
                 names.append(str(col_no))
@@ -2166,6 +2333,7 @@ def concat_overload(
         # get output column names
         all_colnames = []
         for df in objs.types:
+            check_runtime_cols_unsupported(df, "pd.concat()")
             all_colnames.extend(df.columns)
 
         # remove duplicates but keep original order
@@ -2252,6 +2420,7 @@ def concat_overload(
 
     # list of dataframes
     if isinstance(objs, types.List) and isinstance(objs.dtype, DataFrameType):
+        check_runtime_cols_unsupported(objs.dtype, "pd.concat()")
         # TODO(ehsan): index
         df_type = objs.dtype
         for col_no, c in enumerate(df_type.columns):
@@ -2353,7 +2522,7 @@ def lower_sort_values_dummy(context, builder, sig, args):
 # (no_cpython_wrapper to avoid error for iterator object)
 @overload_method(DataFrameType, "itertuples", inline="always", no_unliteral=True)
 def itertuples_overload(df, index=True, name="Pandas"):
-
+    check_runtime_cols_unsupported(df, "DataFrame.itertuples()")
     unsupported_args = dict(index=index, name=name)
     arg_defaults = dict(index=True, name="Pandas")
     check_unsupported_args(
@@ -2435,6 +2604,177 @@ class ValIsinTyper(AbstractTemplate):
 def lower_val_isin_dummy(context, builder, sig, args):
     out_obj = cgutils.create_struct_proxy(sig.return_type)(context, builder)
     return out_obj._getvalue()
+
+
+@numba.generated_jit(nopython=True)
+def pivot_impl(
+    index_arr, columns_arr, values_arr, pivot_values, index_name, parallel=False
+):  # pragma: no cover
+    """
+    Python implementation for pivot. This provides a parallel implementation
+    by shuffling the table and constructs an output DataFrame where the columns
+    may not be known at runtime.
+
+    Pandas implements this by first creating a new DataFrame from the reduced values
+    and then unstacking the DataFrame. We do something similar on each rank, but rather
+    than create any intermediate DataFrames we immediately start updating the output arrays.
+
+    https://github.com/pandas-dev/pandas/blob/ad190575aa75962d2d0eade2de81a5fe5a2e285b/pandas/core/reshape/pivot.py#L520
+    https://github.com/pandas-dev/pandas/blob/ad190575aa75962d2d0eade2de81a5fe5a2e285b/pandas/core/reshape/reshape.py#L462
+    https://github.com/pandas-dev/pandas/blob/ad190575aa75962d2d0eade2de81a5fe5a2e285b/pandas/_libs/reshape.pyx#L22
+
+
+    index_arr - Array containing the index values used in pivot
+    columns_arr - Values to check to determine the column dest.
+    values_arr - Values that will be used for pivoting
+    pivot_values - Replicated arrays of unique column names. Each entry
+                   represents a unique output column. These values are already sorted
+                   in ascending order on each rank.
+    index_name - Name of the index column.
+    parallel - Are index_arr, columns_arr, and values_arr distributed or replicated.
+    """
+
+    # Convert the data to nullable for empty values.
+    data_arr_typ = to_nullable_type(values_arr)
+
+    func_text = "def impl(\n"
+    func_text += "    index_arr, columns_arr, values_arr, pivot_values, index_name, parallel=False\n"
+    func_text += "):\n"
+    # If the data is parallel we need to shuffle to get all values
+    # in a row on the same rank.
+    func_text += "    if parallel:\n"
+    # Shuffle based on index so each rank contains all values for
+    # the same index
+    func_text += "        info_list = [\n"
+    func_text += "            array_to_info(index_arr),\n"
+    func_text += "            array_to_info(columns_arr),\n"
+    func_text += "            array_to_info(values_arr),\n"
+    func_text += "        ]\n"
+    func_text += "        cpp_table = arr_info_list_to_table(info_list)\n"
+    func_text += "        out_cpp_table = shuffle_table(cpp_table, 1, parallel, 0)\n"
+    func_text += "        index_arr = info_to_array(info_from_table(out_cpp_table, 0), index_arr)\n"
+    func_text += "        columns_arr = info_to_array(\n"
+    func_text += "            info_from_table(out_cpp_table, 1), columns_arr\n"
+    func_text += "        )\n"
+    func_text += "        values_arr = info_to_array(\n"
+    func_text += "            info_from_table(out_cpp_table, 2), values_arr\n"
+    func_text += "        )\n"
+    # Delete the tables
+    func_text += "        delete_table(cpp_table)\n"
+    func_text += "        delete_table(out_cpp_table)\n"
+    # Create a map on each rank for the index values.
+    func_text += "    unique_index_arr, row_vector = bodo.libs.array_ops.array_unique_vector_map(\n"
+    func_text += "        index_arr\n"
+    func_text += "    )\n"
+    func_text += "    n_rows = len(unique_index_arr)\n"
+    # Create a map for columns using the unique values
+    func_text += "    n_cols = len(pivot_values)\n"
+    func_text += "    col_map = {}\n"
+    func_text += "    for i in range(n_cols):\n"
+    func_text += "        if bodo.libs.array_kernels.isna(pivot_values, i):\n"
+    func_text += "            raise ValueError(\n"
+    func_text += "                \"DataFrame.pivot(): NA values in 'columns' array not supported\"\n"
+    func_text += "            )\n"
+    func_text += "        col_map[pivot_values[i]] = i\n"
+    # If we have a string array then we need to do 2 passes
+    if values_arr == bodo.string_array_type:
+        # Allocate arrays for the lengths
+        func_text += (
+            "    len_arrs = [np.zeros(n_rows, np.int64) for _ in range(n_cols)]\n"
+        )
+        func_text += "    total_lens = np.zeros(n_cols, np.int64)\n"
+        # Strings need to detect duplicates as soon as possible to avoid possible
+        # segfaults with setitem.
+        func_text += "    nbytes = (n_rows + 7) >> 3\n"
+        func_text += (
+            "    seen_bitmaps = [np.zeros(nbytes, np.int8) for _ in range(n_cols)]\n"
+        )
+        # Get the lengths for each value
+        func_text += "    for i in range(len(columns_arr)):\n"
+        func_text += "        col_name = columns_arr[i]\n"
+        # Determine which column we are in by checking the map
+        func_text += "        col_idx = col_map[col_name]\n"
+        func_text += "        col_arr = len_arrs[col_idx]\n"
+        func_text += "        row_idx = row_vector[i]\n"
+        # If this value has already been seen raise an exception.
+        func_text += "        seen_bitmap = seen_bitmaps[col_idx]\n"
+        func_text += "        if bodo.libs.int_arr_ext.get_bit_bitmap_arr(seen_bitmap, row_idx):\n"
+        func_text += "            raise ValueError(\"DataFrame.pivot(): 'index' contains duplicate entries for the same output column\")\n"
+        func_text += "        else:\n"
+        func_text += "            bodo.libs.int_arr_ext.set_bit_to_arr(seen_bitmap, row_idx, 1)\n"
+        # Compute the lengths
+        func_text += "        if not bodo.libs.array_kernels.isna(values_arr, i):\n"
+        func_text += "            col_arr[row_idx] = len(values_arr[i])\n"
+        func_text += "            total_lens[col_idx] += len(values_arr[i])\n"
+
+    # Allocate the data arrays. If we have string data we use the info from the first pass
+    if values_arr == bodo.string_array_type:
+        func_text += "    data_arrs = [\n"
+        func_text += "        bodo.libs.str_arr_ext.gen_na_str_array_lens(\n"
+        func_text += "            n_rows, total_lens[i], len_arrs[i]\n"
+        func_text += "        )\n"
+        func_text += "        for i in range(n_cols)\n"
+        func_text += "    ]\n"
+    else:
+        func_text += "    data_arrs = [\n"
+        func_text += (
+            "        bodo.libs.array_kernels.gen_na_array(n_rows, data_arr_typ)\n"
+        )
+        func_text += "        for _ in range(n_cols)\n"
+        func_text += "    ]\n"
+        # We skip the seen bitmaps for strings because those were computed in the first
+        # pass.
+        func_text += "    nbytes = (n_rows + 7) >> 3\n"
+        func_text += (
+            "    seen_bitmaps = [np.zeros(nbytes, np.int8) for _ in range(n_cols)]\n"
+        )
+
+    # Set values that aren't NA
+    func_text += "    for i in range(len(columns_arr)):\n"
+    func_text += "        col_name = columns_arr[i]\n"
+    # Determine which column we are in by checking the map
+    func_text += "        col_idx = col_map[col_name]\n"
+    func_text += "        col_arr = data_arrs[col_idx]\n"
+    func_text += "        row_idx = row_vector[i]\n"
+    if values_arr != bodo.string_array_type:
+        # If this value has already been seen raise an exception.
+        func_text += "        seen_bitmap = seen_bitmaps[col_idx]\n"
+        func_text += "        if bodo.libs.int_arr_ext.get_bit_bitmap_arr(seen_bitmap, row_idx):\n"
+        func_text += "            raise ValueError(\"DataFrame.pivot(): 'index' contains duplicate entries for the same output column\")\n"
+        func_text += "        else:\n"
+        func_text += "            bodo.libs.int_arr_ext.set_bit_to_arr(seen_bitmap, row_idx, 1)\n"
+    # Set the Data using the row info.
+    func_text += "        if bodo.libs.array_kernels.isna(values_arr, i):\n"
+    func_text += "            bodo.libs.array_kernels.setna(col_arr, row_idx)\n"
+    func_text += "        else:\n"
+    func_text += "            col_arr[row_idx] = values_arr[i]\n"
+    # Convert the index array to a proper index.
+    func_text += "    index = bodo.utils.conversion.index_from_array(unique_index_arr, index_name)\n"
+    # Create the output Table and DataFrame.
+    func_text += "    table = bodo.hiframes.table.init_runtime_table_from_list(data_arrs, n_rows)\n"
+    func_text += (
+        "    return bodo.hiframes.pd_dataframe_ext.init_runtime_cols_dataframe(\n"
+    )
+    func_text += "        (table,), index, pivot_values\n"
+    func_text += "    )\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "np": np,
+            "array_to_info": array_to_info,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "shuffle_table": shuffle_table,
+            "info_to_array": info_to_array,
+            "delete_table": delete_table,
+            "info_from_table": info_from_table,
+            "data_arr_typ": data_arr_typ,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
 
 
 def gen_pandas_parquet_metadata(
@@ -2556,7 +2896,7 @@ def to_parquet_overload(
     # TODO handle possible **kwargs options?
     _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-
+    check_runtime_cols_unsupported(df, "DataFrame.to_parquet()")
     check_unsupported_args(
         "DataFrame.to_parquet",
         {
@@ -2843,6 +3183,7 @@ def to_sql_overload(
     # Additional entry
     _is_parallel=False,
 ):
+    check_runtime_cols_unsupported(df, "DataFrame.to_sql()")
     unsupported_args = dict(chunksize=chunksize)
     arg_defaults = dict(chunksize=None)
     check_unsupported_args(
@@ -2925,7 +3266,7 @@ def to_csv_overload(
     errors="strict",
     storage_options=None,
 ):
-
+    check_runtime_cols_unsupported(df, "DataFrame.to_csv()")
     check_unsupported_args(
         "DataFrame.to_csv",
         {
@@ -3103,7 +3444,7 @@ def to_json_overload(
     indent=None,
     storage_options=None,
 ):
-
+    check_runtime_cols_unsupported(df, "DataFrame.to_json()")
     check_unsupported_args(
         "DataFrame.to_json",
         {
@@ -3467,7 +3808,6 @@ dataframe_unsupported = [
     "pad",
     # Reshaping, sorting, transposing
     "droplevel",
-    "pivot",
     "reorder_levels",
     "nlargest",
     "nsmallest",

@@ -337,7 +337,7 @@ class DataFramePass:
         #         rhs.loc)]
 
         if fdef == ("len", "builtins") and self._is_df_var(rhs.args[0]):
-            return self._run_call_len(lhs, rhs.args[0])
+            return self._run_call_len(lhs, rhs.args[0], assign)
 
         if fdef == ("set_df_col", "bodo.hiframes.dataframe_impl"):
             return self._run_call_set_df_column(assign, lhs, rhs)
@@ -1157,8 +1157,13 @@ class DataFramePass:
             extra_globals={"out_df_type": out_df_type},
         )
 
-    def _run_call_len(self, lhs, df_var):
+    def _run_call_len(self, lhs, df_var, assign):
         df_typ = self.typemap[df_var.name]
+
+        # DataFrames with columns determined at runtime aren't
+        # transformed
+        if df_typ.has_runtime_cols:
+            return [assign]
 
         # empty dataframe has 0 len
         if len(df_typ.columns) == 0:

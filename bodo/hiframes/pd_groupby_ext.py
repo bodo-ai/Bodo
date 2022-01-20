@@ -1552,7 +1552,7 @@ def gen_apply_pysig(n_args, kws):
     return numba.core.utils.pysignature(apply_stub)
 
 
-# a dummy pivot_table function that will be replace in dataframe_pass
+# a dummy pivot_table function that will be replaced in dataframe_pass
 def pivot_table_dummy(
     df, values, index, columns, aggfunc, _pivot_values
 ):  # pragma: no cover
@@ -1560,7 +1560,7 @@ def pivot_table_dummy(
 
 
 @infer_global(pivot_table_dummy)
-class PivotTyper(AbstractTemplate):
+class PivotTableTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         df, values, index, columns, aggfunc, _pivot_values = args
@@ -1603,7 +1603,7 @@ class PivotTyper(AbstractTemplate):
 
 
 # don't convert literal types to non-literal and rerun the typing template
-PivotTyper._no_unliteral = True
+PivotTableTyper._no_unliteral = True
 
 
 # dummy lowering to avoid overload errors, remove after overload inline PR

@@ -34,7 +34,10 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_dataframe_ext import (
+    DataFrameType,
+    check_runtime_cols_unsupported,
+)
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -340,6 +343,7 @@ def overload_create_df(
 ):
     """create a Spark dataframe from Pandas DataFrame or list of Rows"""
     # Pandas dataframe input
+    check_runtime_cols_unsupported(data, "spark.createDataFrame()")
     if isinstance(data, DataFrameType):
 
         def impl_df(
