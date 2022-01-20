@@ -2674,6 +2674,40 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                     }
                 }
                 return;
+            } else if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::last) { 
+                // NOTE: Bodo_FTypes::max is handled for categorical type since NA is -1.
+                for (int64_t i = 0; i < in_col->length; i++) {
+                    int64_t i_grp = f(i);
+                    if (i_grp != -1) {
+                        T& val = getv<ARR_I, T>(in_col, i);
+                        if (!isnan_categorical<T, dtype>(val)) {
+                            aggfunc<T, dtype, ftype>::apply(
+                                getv<ARR_O, T>(out_col, i_grp), val);
+                        }
+                    }
+                }
+                // aggfunc_output_initialize_kernel, min defaults 
+                // to num_categories if all entries are NA
+                // this needs to be replaced with -1 
+                if (ftype == Bodo_FTypes::min) {
+                    for (int64_t i = 0; i < out_col->length; i++) {
+                        T& val = getv<ARR_O, T>(out_col, i);
+                        set_na_if_num_categories<T, dtype>(val, out_col->num_categories);
+                    }
+                }
+                return;
+            } else if (ftype == Bodo_FTypes::first) {
+                int64_t n_bytes = ((out_col->length + 7) >> 3);
+                std::vector<uint8_t> bitmask_vec(n_bytes, 0);
+                for (int64_t i = 0; i < in_col->length; i++) {
+                    int64_t i_grp = f(i);
+                    T val = getv<ARR_I, T>(in_col, i);
+                    if ((i_grp != -1) && !GetBit(bitmask_vec.data(), i_grp) &&
+                        !isnan_categorical<T, dtype>(val)) {
+                        getv<ARR_O, T>(out_col, i_grp) = val;
+                        SetBitTo(bitmask_vec.data(), i_grp, true);
+                    }
+                }
             }
         case bodo_array_type::NUMPY:
             if (ftype == Bodo_FTypes::mean) {
@@ -3927,6 +3961,35 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
         out_col->arr_type == bodo_array_type::LIST_STRING) {
         InitializeBitMask((uint8_t*)out_col->null_bitmask, out_col->length,
                           false);
+    }
+    if (out_col->arr_type == bodo_array_type::CATEGORICAL) {
+        if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
+            ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last) {
+            int init_val = -1;
+            // if input is all nulls, max, first and last output will be -1
+            // min will be num of categories
+            if (ftype == Bodo_FTypes::min) {
+                init_val = out_col->num_categories;
+            }
+            switch (out_col->dtype) {
+                case Bodo_CTypes::INT8:
+                    std::fill((int8_t*)out_col->data1,
+                              (int8_t*)out_col->data1 + out_col->length, init_val);
+                    return;
+                case Bodo_CTypes::INT16:
+                    std::fill((int16_t*)out_col->data1,
+                              (int16_t*)out_col->data1 + out_col->length, init_val);
+                    return;
+                case Bodo_CTypes::INT32:
+                    std::fill((int32_t*)out_col->data1,
+                              (int32_t*)out_col->data1 + out_col->length, init_val);
+                    return;
+                case Bodo_CTypes::INT64:
+                    std::fill((int64_t*)out_col->data1,
+                              (int64_t*)out_col->data1 + out_col->length, init_val);
+                    return;
+            }
+        }
     }
     switch (ftype) {
         case Bodo_FTypes::prod:

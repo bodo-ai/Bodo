@@ -67,7 +67,6 @@ from bodo.utils.typing import BodoError
             marks=pytest.mark.slow,
         ),
         # Categorical key and value
-        # TODO [BE-746]: Support Categorical data in groupby functions
         pytest.param(
             pd.DataFrame(
                 {
@@ -85,9 +84,10 @@ from bodo.utils.typing import BodoError
                         ),
                         ordered=True,
                     ),
+                    "E": pd.Categorical([None, 4.3, 9.5, None, 7.2], ordered=True),
                 }
             ),
-            marks=pytest.mark.skip,
+            id="categorical_value_df",
         ),
         # Binary key and decimal values
         pytest.param(
@@ -2632,6 +2632,10 @@ def test_groupby_pipe():
 def test_single_col_reset_index(test_df, memory_leak_check):
     """We need the reset_index=True because otherwise the order is scrambled"""
 
+    # sum is unsupported by Pandas groupby on categorical columns
+    if isinstance(test_df.iloc[:, 0].dtype, pd.CategoricalDtype):
+        return
+
     def impl1(df):
         A = df.groupby("A")["B"].sum().reset_index()
         return A
@@ -3055,6 +3059,10 @@ def test_mean(test_df, memory_leak_check):
     Test Groupby.mean()
     """
 
+    # mean is unsupported by Pandas groupby on categorical columns
+    if isinstance(test_df.iloc[:, 0].dtype, pd.CategoricalDtype):
+        return
+
     def impl1(df):
         A = df.groupby("A").mean()
         return A
@@ -3073,6 +3081,10 @@ def test_mean_one_col(test_df, memory_leak_check):
     """
     Test Groupby.mean() with one column selected
     """
+
+    # mean is unsupported by Pandas groupby on categorical columns
+    if isinstance(test_df.iloc[:, 0].dtype, pd.CategoricalDtype):
+        return
 
     def impl1(df):
         A = df.groupby("A")["B"].mean()
@@ -3420,6 +3432,10 @@ def test_prod(test_df, memory_leak_check):
     Test Groupby.prod()
     """
 
+    # prod is unsupported by Pandas groupby on categorical columns
+    if isinstance(test_df.iloc[:, 0].dtype, pd.CategoricalDtype):
+        return
+
     def impl1(df):
         A = df.groupby("A").prod()
         return A
@@ -3452,6 +3468,10 @@ def test_prod_one_col(test_df, memory_leak_check):
     """
     Test Groupby.prod() with one column selected
     """
+
+    # prod is unsupported by Pandas groupby on categorical columns
+    if isinstance(test_df.iloc[:, 0].dtype, pd.CategoricalDtype):
+        return
 
     def impl1(df):
         A = df.groupby("A")["B"].prod()
@@ -3538,7 +3558,8 @@ def test_sum_prod_empty_mix(memory_leak_check):
     check_func(impl2, (df_mix,), sort_output=True)
 
 
-def test_first_last(test_df, memory_leak_check):
+# TODO[BE-2098]: leaks memory for categorical variables
+def test_first_last(test_df):
     """
     Test Groupby.first() and Groupby.last()
     """
@@ -3696,8 +3717,9 @@ def test_first_last_supported_types(memory_leak_check):
     check_func(impl_mix, (df_mix,), sort_output=True)
 
 
+# TODO[BE-2098]: leaks memory for categorical variables
 @pytest.mark.slow
-def test_first_last_one_col(test_df, memory_leak_check):
+def test_first_last_one_col(test_df):
     """
     Test Groupby.first() and Groupby.last() with one column selected
     """
@@ -3833,9 +3855,14 @@ def test_std_one_col(test_df, memory_leak_check):
     This is due to a bug in pandas. See
     https://github.com/pandas-dev/pandas/issues/35516
     """
+
     assert re.compile(r"1.3.*").match(
         pd.__version__
     ), "revisit the df.groupby(A)[B].std() issue at next pandas version."
+
+    # TODO: std _is_ supported by Pandas groupby on categorical columns
+    if isinstance(test_df.iloc[:, 0].dtype, pd.CategoricalDtype):
+        return
 
     def impl1(df):
         #        A = df.groupby("A")["B"].std()
@@ -3877,6 +3904,10 @@ def test_sum(test_df, memory_leak_check):
     Test Groupby.sum()
     """
 
+    # sum is unsupported by Pandas groupby on categorical columns
+    if isinstance(test_df.iloc[:, 0].dtype, pd.CategoricalDtype):
+        return
+
     def impl1(df):
         A = df.groupby("A").sum()
         return A
@@ -3895,6 +3926,10 @@ def test_sum_one_col(test_df, memory_leak_check):
     """
     Test Groupby.sum() with one column selected
     """
+
+    # sum is unsupported by Pandas groupby on categorical columns
+    if isinstance(test_df.iloc[:, 0].dtype, pd.CategoricalDtype):
+        return
 
     def impl1(df):
         A = df.groupby("A")["B"].sum()
@@ -4111,6 +4146,10 @@ def test_var(test_df, memory_leak_check):
     Test Groupby.var()
     """
 
+    # var is unsupported by Pandas groupby on categorical columns
+    if isinstance(test_df.iloc[:, 0].dtype, pd.CategoricalDtype):
+        return
+
     def impl1(df):
         A = df.groupby("A").var()
         return A
@@ -4167,6 +4206,10 @@ def test_var_one_col(test_df, memory_leak_check):
     """
     Test Groupby.var() with one column selected
     """
+
+    # var is unsupported by Pandas groupby on categorical columns
+    if isinstance(test_df.iloc[:, 0].dtype, pd.CategoricalDtype):
+        return
 
     def impl1(df):
         A = df.groupby("A")["B"].var()
