@@ -1177,7 +1177,7 @@ class TypingTransforms:
     def _run_setitem_df_loc(self, inst, target_typ, idx_typ, idx_var, nodes, label):
         """transform df.loc setitem nodes, e.g. df.loc[:, "B"] = 3"""
 
-        col_inds, row_ind = self._get_loc_indices(idx_var, label, inst.loc)
+        col_inds, row_ind = self._get_loc_indices(idx_var, label, inst.loc, target_typ)
 
         # couldn't find column name values, just return to be handled later
         if col_inds is None:
@@ -1222,8 +1222,7 @@ class TypingTransforms:
 
     def _run_setitem_df_iloc(self, inst, target_typ, idx_typ, idx_var, nodes, label):
         """transform df.iloc setitem nodes, e.g. df.loc[:, 1] = 3"""
-
-        col_inds, row_ind = self._get_loc_indices(idx_var, label, inst.loc)
+        col_inds, row_ind = self._get_loc_indices(idx_var, label, inst.loc, target_typ)
 
         # couldn't find column name values, just return to be handled later
         if col_inds is None:
@@ -1254,7 +1253,7 @@ class TypingTransforms:
             impl, [inst.target, idx_var, inst.value], None
         )
 
-    def _get_loc_indices(self, idx_var, label, loc):
+    def _get_loc_indices(self, idx_var, label, loc, target_typ):
         """get row/column index values for df.loc/df.iloc if possible"""
         # get column index var
         tup_list = guard(find_build_tuple, self.func_ir, idx_var)
@@ -1272,7 +1271,15 @@ class TypingTransforms:
 
         # normalize single column name to list
         if not isinstance(col_inds, (list, tuple, np.ndarray)):
-            col_inds = [col_inds]
+            # if is slice, form list form column names / numbers as appropriate
+            if isinstance(col_inds, slice):
+                all_cols = list(target_typ.df_type.columns)
+                # if iloc, use numbers
+                if isinstance(target_typ, DataFrameILocType):
+                    all_cols = list(range(len(all_cols)))
+                col_inds = all_cols[col_inds]
+            else:
+                col_inds = [col_inds]
 
         # try to find index values
         # NOTE: not using _get_const_value() since constant isn't fully necessary
