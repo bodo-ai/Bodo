@@ -20,7 +20,10 @@ from numba.extending import (
 )
 
 import bodo
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_dataframe_ext import (
+    DataFrameType,
+    check_runtime_cols_unsupported,
+)
 from bodo.utils.transform import gen_const_tup
 from bodo.utils.typing import (
     BodoError,
@@ -50,6 +53,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
         assert len(args) == 2
+        check_runtime_cols_unsupported(args[0], "DataFrame getitem (df[])")
         if isinstance(args[0], DataFrameType):
             return self.typecheck_df_getitem(args)
         elif isinstance(args[0], DataFrameLocType):
@@ -413,6 +417,7 @@ def df_getitem_overload(df, ind):
 # DataFrame setitem
 @overload(operator.setitem, no_unliteral=True)
 def df_setitem_overload(df, idx, val):
+    check_runtime_cols_unsupported(df, "DataFrame setitem (df[])")
     if not isinstance(df, DataFrameType):
         return
 
@@ -473,9 +478,10 @@ def init_dataframe_iloc(typingctx, obj=None):
 
 
 @overload_attribute(DataFrameType, "iloc")
-def overload_series_iloc(s):
-    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_iloc(
-        s
+def overload_dataframe_iloc(df):
+    check_runtime_cols_unsupported(df, "DataFrame.iloc")
+    return lambda df: bodo.hiframes.dataframe_indexing.init_dataframe_iloc(
+        df
     )  # pragma: no cover
 
 
@@ -691,9 +697,10 @@ def init_dataframe_loc(typingctx, obj=None):
 
 
 @overload_attribute(DataFrameType, "loc")
-def overload_dataframe_loc(s):
-    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_loc(
-        s
+def overload_dataframe_loc(df):
+    check_runtime_cols_unsupported(df, "DataFrame.loc")
+    return lambda df: bodo.hiframes.dataframe_indexing.init_dataframe_loc(
+        df
     )  # pragma: no cover
 
 
@@ -861,9 +868,10 @@ def init_dataframe_iat(typingctx, obj=None):
 
 
 @overload_attribute(DataFrameType, "iat")
-def overload_series_iat(s):
-    return lambda s: bodo.hiframes.dataframe_indexing.init_dataframe_iat(
-        s
+def overload_dataframe_iat(df):
+    check_runtime_cols_unsupported(df, "DataFrame.iat")
+    return lambda df: bodo.hiframes.dataframe_indexing.init_dataframe_iat(
+        df
     )  # pragma: no cover
 
 

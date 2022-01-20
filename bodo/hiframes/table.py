@@ -109,8 +109,9 @@ class TableType(types.ArrayCompatible):
     for each column (important for dataframes with many columns).
     """
 
-    def __init__(self, arr_types):
+    def __init__(self, arr_types, has_runtime_cols=False):
         self.arr_types = arr_types
+        self.has_runtime_cols = has_runtime_cols
 
         # block number for each array in arr_types
         block_nums = []
@@ -122,20 +123,31 @@ class TableType(types.ArrayCompatible):
         blk_curr_ind = defaultdict(int)
         # indices of arrays in arr_types for each block
         block_to_arr_ind = defaultdict(list)
-        for i, t in enumerate(arr_types):
-            if t not in type_to_blk:
-                type_to_blk[t] = len(type_to_blk)
-            blk = type_to_blk[t]
-            block_nums.append(blk)
-            block_offsets.append(blk_curr_ind[blk])
-            blk_curr_ind[blk] += 1
-            block_to_arr_ind[blk].append(i)
+        # We only don't have mapping information if
+        # columns are only known at runtime.
+        if not has_runtime_cols:
+            for i, t in enumerate(arr_types):
+                if t not in type_to_blk:
+                    type_to_blk[t] = len(type_to_blk)
+                blk = type_to_blk[t]
+                block_nums.append(blk)
+                block_offsets.append(blk_curr_ind[blk])
+                blk_curr_ind[blk] += 1
+                block_to_arr_ind[blk].append(i)
+        else:
+            # Verify that with runtime columns arr_types is just a tuple
+            # with a single type.
+            assert (
+                isinstance(arr_types, tuple) and len(arr_types) == 1
+            ), "Mixing columns known at compile time with number of columns determined at runtime is not yet supported"
 
         self.block_nums = block_nums
         self.block_offsets = block_offsets
         self.type_to_blk = type_to_blk
         self.block_to_arr_ind = block_to_arr_ind
-        super(TableType, self).__init__(name=f"TableType({arr_types})")
+        super(TableType, self).__init__(
+            name=f"TableType({arr_types}, {has_runtime_cols})"
+        )
 
     @property
     def as_array(self):
@@ -144,7 +156,7 @@ class TableType(types.ArrayCompatible):
 
     @property
     def key(self):
-        return self.arr_types
+        return self.arr_types, self.has_runtime_cols
 
     @property
     def mangling_args(self):
@@ -166,9 +178,13 @@ def typeof_table(val, c):
 class TableTypeModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         # store a list of arrays for each block of same type column arrays
-        members = [
-            (f"block_{blk}", types.List(t)) for t, blk in fe_type.type_to_blk.items()
-        ]
+        if fe_type.has_runtime_cols:
+            members = [("block_0", types.List(fe_type.arr_types[0]))]
+        else:
+            members = [
+                (f"block_{blk}", types.List(t))
+                for t, blk in fe_type.type_to_blk.items()
+            ]
         # parent df object if result of df unbox, used for unboxing arrays lazily
         # NOTE: Table could be result of set_table_data() and therefore different than
         # the parent (have more columns and/or different types). However, NULL arrays
@@ -262,6 +278,22 @@ def box_table(typ, val, c, ensure_unboxed=None):
     from bodo.hiframes.boxing import get_df_obj_column_codegen
 
     table = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+
+    # variable number of columns case
+    # NOTE: assuming there are no null arrays
+    if typ.has_runtime_cols:
+        list_arr_typ = types.List(typ.arr_types[0])
+        c.context.nrt.incref(c.builder, list_arr_typ, table.block_0)
+        table_arr_list_obj = c.pyapi.from_native_value(
+            list_arr_typ, table.block_0, c.env_manager
+        )
+        cls_obj = c.pyapi.unserialize(c.pyapi.serialize_object(Table))
+        out_table_obj = c.pyapi.call_function_objargs(cls_obj, (table_arr_list_obj,))
+        c.pyapi.decref(cls_obj)
+        c.pyapi.decref(table_arr_list_obj)
+        c.context.nrt.decref(c.builder, typ, val)
+        return out_table_obj
+
     table_arr_list_obj = c.pyapi.list_new(
         c.context.get_constant(types.int64, len(typ.arr_types))
     )
@@ -355,6 +387,14 @@ def table_len_overload(T):
 
 @overload_attribute(TableType, "shape")
 def table_shape_overload(T):
+    if T.has_runtime_cols:
+        # If the number of columns is determined at runtime we can't
+        # use compile time values
+        def impl(T):  # pragma: no cover
+            return (T._len, len(T.block_0))
+
+        return impl
+
     ncols = len(T.arr_types)
     # using types.int64 due to lowering error (a Numba tuple handling bug)
     return lambda T: (T._len, types.int64(ncols))  # pragma: no cover
@@ -876,3 +916,33 @@ def table_getitem(T, idx):
         return
 
     return gen_table_filter(T)
+
+
+@intrinsic
+def init_runtime_table_from_list(typingctx, arr_list_typ, nrows_typ=None):
+    """
+    Takes a list of arrays and the length of each array and creates a Python
+    Table from this list (without making a copy).
+
+    The number of arrays in this table is NOT known at compile time.
+    """
+    assert isinstance(
+        arr_list_typ, types.List
+    ), "init_runtime_table_from_list requires a list of arrays"
+    assert isinstance(
+        nrows_typ, types.Integer
+    ), "init_runtime_table_from_list requires an integer length"
+
+    def codegen(context, builder, sig, args):
+        (arr_list, nrows) = args
+        table = cgutils.create_struct_proxy(table_type)(context, builder)
+        # Update the table length. This is assume to be 0 if the arr_list is empty
+        table.len = nrows
+        # Store the array list in the table and increment its refcount.
+        table.block_0 = arr_list
+        context.nrt.incref(builder, arr_list_typ, arr_list)
+        return table._getvalue()
+
+    table_type = TableType((arr_list_typ.dtype,), True)
+    sig = table_type(arr_list_typ, nrows_typ)
+    return sig, codegen

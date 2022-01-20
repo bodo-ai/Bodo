@@ -25,7 +25,10 @@ from bodo.hiframes.datetime_timedelta_ext import (
     datetime_timedelta_type,
     pd_timedelta_type,
 )
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.hiframes.pd_dataframe_ext import (
+    DataFrameType,
+    check_runtime_cols_unsupported,
+)
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.rolling import (
@@ -122,6 +125,7 @@ def df_rolling_overload(
     axis=0,
     closed=None,
 ):
+    check_runtime_cols_unsupported(df, "DataFrame.rolling()")
     unsupported_args = dict(win_type=win_type, axis=axis, closed=closed)
     arg_defaults = dict(win_type=None, axis=0, closed=None)
     check_unsupported_args(

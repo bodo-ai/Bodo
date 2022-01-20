@@ -672,6 +672,7 @@ def _test_equal(
             py_out,
             check_names=check_names,
             check_dtype=check_dtype,
+            check_index_type="equiv" if check_dtype else False,
             check_column_type=False,
             check_freq=False,
             check_categorical=check_categorical,

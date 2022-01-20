@@ -1383,11 +1383,7 @@ class TypingTransforms:
             self.needs_transform = True
 
         # DataFrame.attr = val
-        if isinstance(target_typ, DataFrameType):
-            # df.B = A transform
-            # Pandas only allows setting existing columns using setattr
-            if inst.attr in target_typ.columns:
-                return self._run_df_set_column(inst, inst.attr, label)
+        if isinstance(target_typ, DataFrameType) and not target_typ.has_runtime_cols:
             # transform df.columns = new_names
             # creates a new dataframe and replaces the old variable, only possible if
             # df.columns dominates the df creation due to type stability
@@ -1458,6 +1454,11 @@ class TypingTransforms:
                 )
                 self.replace_var_dict[df_var.name] = nodes[-1].target
                 return nodes
+
+            # df.B = A transform
+            # Pandas only allows setting existing columns using setattr
+            if inst.attr in target_typ.columns:
+                return self._run_df_set_column(inst, inst.attr, label)
 
         # Series.index = arr
         if isinstance(target_typ, SeriesType) and inst.attr == "index":
@@ -1648,6 +1649,7 @@ class TypingTransforms:
             "to_parquet": [(4, "partition_cols")],
             "insert": [(0, "loc"), (1, "column"), (3, "allow_duplicates")],
             "fillna": [(1, "method")],
+            "pivot": [(0, "index"), (1, "columns"), (0, "values")],
         }
 
         if func_name in df_call_const_args:

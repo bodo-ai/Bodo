@@ -1449,6 +1449,46 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
             return
 
+        if fdef == ("pivot_impl", "bodo.hiframes.pd_dataframe_ext"):
+            # output of pivot_impl is variable-length even if input is 1D
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            # arg0, arg1, and arg2 are arrays that must share a distribution.
+            arr0_dist = array_dists[rhs.args[0].name]
+            arr1_dist = array_dists[rhs.args[1].name]
+            arr2_dist = array_dists[rhs.args[2].name]
+            in_dist = Distribution(
+                min(
+                    arr0_dist.value,
+                    arr1_dist.value,
+                    arr2_dist.value,
+                )
+            )
+            out_dist = array_dists[lhs]
+            final_dist = Distribution(min(in_dist.value, out_dist.value))
+            self._set_var_dist(lhs, array_dists, in_dist)
+            # output can cause input REP
+            if final_dist != Distribution.OneD_Var:
+                self._set_var_dist(rhs.args[0].name, array_dists, final_dist)
+                self._set_var_dist(rhs.args[1].name, array_dists, final_dist)
+                self._set_var_dist(rhs.args[2].name, array_dists, final_dist)
+            else:
+                # Even if the input distributions doesn't need to change to
+                # REP all args must be the same.
+                self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+                self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
+                self._set_var_dist(rhs.args[2].name, array_dists, in_dist)
+
+            # arg 3 must be replicated
+            self._set_REP(
+                rhs.args[3].name,
+                array_dists,
+                "list of unique values for pivot is replicated",
+                rhs.loc,
+            )
+            return
+
         if fdef == ("get", "bodo.libs.array_kernels"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return

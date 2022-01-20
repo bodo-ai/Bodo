@@ -2480,7 +2480,6 @@ def overload_multinomial_nb_model_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-
     """ MultinomialNB fit overload """
     # If data is replicated, run scikit-learn directly
     if is_overload_false(_is_data_distributed):

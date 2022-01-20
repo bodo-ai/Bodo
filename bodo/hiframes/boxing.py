@@ -27,6 +27,7 @@ from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
 from bodo.hiframes.pd_dataframe_ext import (
     DataFramePayloadType,
     DataFrameType,
+    check_runtime_cols_unsupported,
     construct_dataframe,
 )
 from bodo.hiframes.pd_index_ext import (
@@ -168,6 +169,8 @@ def unbox_dataframe(typ, val, c):
     """unbox dataframe to an empty DataFrame struct
     columns will be extracted later if necessary.
     """
+    check_runtime_cols_unsupported(typ, "Unboxing")
+
     # unbox index
     # TODO: unbox index only if necessary
     ind_obj = c.pyapi.object_getattr_string(val, "index")
@@ -205,7 +208,7 @@ def unbox_dataframe(typ, val, c):
         data_tup = c.context.make_tuple(c.builder, types.Tuple(typ.data), data_nulls)
 
     dataframe_val = construct_dataframe(
-        c.context, c.builder, typ, data_tup, index_val, val
+        c.context, c.builder, typ, data_tup, index_val, val, None
     )
 
     return NativeValue(dataframe_val)
@@ -800,6 +803,108 @@ def _infer_series_dtype(S, array_metadata=None):
         raise BodoError(f"data type {S.dtype} for column {S.name} not supported yet")
 
 
+def _get_use_df_parent_obj_flag(builder, context, pyapi, parent_obj, n_cols):
+    """Returns a flag (LLVM value) that determines if the parent object of the DataFrame
+    value should be used for boxing.
+    """
+    # the dataframe doesn't have a parent obj if the number of columns is unknown
+    # (e.g. output of Bodo operations like pivot)
+    if n_cols is None:
+        return context.get_constant(types.bool_, False)
+
+    # df unboxed from Python
+    has_parent = cgutils.is_not_null(builder, parent_obj)
+    # corner case (which should be avoided):
+    # df parent could come from the data table used for df initialization.
+    # The table may have changed (new columns added) using set_table_data() so parent
+    # object may not usable since number of columns don't match anymore
+    parent_ncols = cgutils.alloca_once_value(
+        builder, context.get_constant(types.int64, 0)
+    )
+    with builder.if_then(has_parent):
+        cols_obj = pyapi.object_getattr_string(parent_obj, "columns")
+        n_obj = pyapi.call_method(cols_obj, "__len__", ())
+        builder.store(pyapi.long_as_longlong(n_obj), parent_ncols)
+        pyapi.decref(n_obj)
+        pyapi.decref(cols_obj)
+
+    use_parent_obj = builder.and_(
+        has_parent,
+        builder.icmp_unsigned(
+            "==", builder.load(parent_ncols), context.get_constant(types.int64, n_cols)
+        ),
+    )
+    return use_parent_obj
+
+
+def _get_df_columns_obj(c, builder, context, pyapi, df_typ, dataframe_payload):
+    """create the columns object for the boxed dataframe object"""
+
+    # if columns are determined during runtime, column names are stored in payload
+    if df_typ.has_runtime_cols:
+        cols_arr_typ = df_typ.runtime_colname_typ
+        context.nrt.incref(builder, cols_arr_typ, dataframe_payload.columns)
+        return pyapi.from_native_value(
+            cols_arr_typ, dataframe_payload.columns, c.env_manager
+        )
+
+    # avoid generating large tuples and lower a constant array if possible
+    # (int and string types currently, TODO: support other types)
+    if all(isinstance(c, int) for c in df_typ.columns):
+        columns_vals = np.array(df_typ.columns, "int64")
+    elif all(isinstance(c, str) for c in df_typ.columns):
+        columns_vals = pd.array(df_typ.columns, "string")
+    else:
+        columns_vals = df_typ.columns
+
+    columns_typ = numba.typeof(columns_vals)
+    columns = context.get_constant_generic(builder, columns_typ, columns_vals)
+    columns_obj = pyapi.from_native_value(columns_typ, columns, c.env_manager)
+    return columns_obj
+
+
+def _create_initial_df_object(
+    builder, context, pyapi, c, df_typ, obj, dataframe_payload, res, use_parent_obj
+):
+    """create the initial dataframe object to fill in boxing and store in 'res'"""
+    # get initial dataframe object
+    with c.builder.if_else(use_parent_obj) as (use_parent, otherwise):
+        with use_parent:
+            pyapi.incref(obj)
+            # set parent dataframe column names to numbers for robust setting of columns
+            # df.columns = np.arange(len(df.columns))
+            mod_name = context.insert_const_string(c.builder.module, "numpy")
+            class_obj = pyapi.import_module_noblock(mod_name)
+            if df_typ.has_runtime_cols:
+                # If we have columns determined at runtime, use_parent is always False
+                num_cols = 0
+            else:
+                num_cols = len(df_typ.columns)
+            n_cols_obj = pyapi.long_from_longlong(
+                lir.Constant(lir.IntType(64), num_cols)
+            )
+            col_nums_arr_obj = pyapi.call_method(class_obj, "arange", (n_cols_obj,))
+            pyapi.object_setattr_string(obj, "columns", col_nums_arr_obj)
+            pyapi.decref(class_obj)
+            pyapi.decref(col_nums_arr_obj)
+            pyapi.decref(n_cols_obj)
+        with otherwise:
+            # df_obj = pd.DataFrame(index=index)
+            context.nrt.incref(builder, df_typ.index, dataframe_payload.index)
+            index_obj = c.pyapi.from_native_value(
+                df_typ.index, dataframe_payload.index, c.env_manager
+            )
+
+            mod_name = context.insert_const_string(c.builder.module, "pandas")
+            class_obj = pyapi.import_module_noblock(mod_name)
+            df_obj = pyapi.call_method(
+                class_obj, "DataFrame", (pyapi.borrow_none(), index_obj)
+            )
+            pyapi.decref(class_obj)
+            pyapi.decref(index_obj)
+            builder.store(df_obj, res)
+
+
 @box(DataFrameType)
 def box_dataframe(typ, val, c):
     """Boxes native dataframe value into Python dataframe object, required for function
@@ -816,81 +921,16 @@ def box_dataframe(typ, val, c):
         c.context, c.builder, typ, val
     )
     dataframe = cgutils.create_struct_proxy(typ)(context, builder, value=val)
-    n_cols = len(typ.columns)
+    n_cols = len(typ.columns) if not typ.has_runtime_cols else None
 
     # see boxing of reflected list in Numba:
     # https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L561
     obj = dataframe.parent
-    res = cgutils.alloca_once_value(c.builder, obj)
-
-    # df unboxed from Python
-    has_parent = cgutils.is_not_null(builder, obj)
-    # corner case (which should be avoided):
-    # df parent could come from the data table used for df initialization.
-    # The table may have changed (new columns added) using set_table_data() so parent
-    # object may not usable since number of columns don't match anymore
-    parent_ncols = cgutils.alloca_once_value(
-        c.builder, context.get_constant(types.int64, 0)
+    res = cgutils.alloca_once_value(builder, obj)
+    use_parent_obj = _get_use_df_parent_obj_flag(builder, context, pyapi, obj, n_cols)
+    _create_initial_df_object(
+        builder, context, pyapi, c, typ, obj, dataframe_payload, res, use_parent_obj
     )
-    with builder.if_then(has_parent):
-        cols_obj = c.pyapi.object_getattr_string(obj, "columns")
-        n_obj = pyapi.call_method(cols_obj, "__len__", ())
-        builder.store(pyapi.long_as_longlong(n_obj), parent_ncols)
-        pyapi.decref(n_obj)
-        pyapi.decref(cols_obj)
-
-    use_parent_obj = builder.and_(
-        has_parent,
-        builder.icmp_unsigned(
-            "==", builder.load(parent_ncols), context.get_constant(types.int64, n_cols)
-        ),
-    )
-
-    # get column names object
-    # avoid generating large tuples and lower a constant array if possible
-    # (int and string types currently, TODO: support other types)
-    if all(isinstance(c, int) for c in typ.columns):
-        columns_vals = np.array(typ.columns, "int64")
-    elif all(isinstance(c, str) for c in typ.columns):
-        columns_vals = pd.array(typ.columns, "string")
-    else:
-        columns_vals = typ.columns
-
-    columns_typ = numba.typeof(columns_vals)
-    columns = context.get_constant_generic(builder, columns_typ, columns_vals)
-    columns_obj = pyapi.from_native_value(columns_typ, columns, c.env_manager)
-
-    # get initial dataframe object
-    with c.builder.if_else(use_parent_obj) as (use_parent, otherwise):
-        with use_parent:
-            pyapi.incref(obj)
-            # set parent dataframe column names to numbers for robust setting of columns
-            # df.columns = np.arange(len(df.columns))
-            mod_name = context.insert_const_string(c.builder.module, "numpy")
-            class_obj = pyapi.import_module_noblock(mod_name)
-            n_cols_obj = pyapi.long_from_longlong(
-                lir.Constant(lir.IntType(64), len(typ.columns))
-            )
-            col_nums_arr_obj = pyapi.call_method(class_obj, "arange", (n_cols_obj,))
-            pyapi.object_setattr_string(obj, "columns", col_nums_arr_obj)
-            pyapi.decref(class_obj)
-            pyapi.decref(col_nums_arr_obj)
-            pyapi.decref(n_cols_obj)
-        with otherwise:
-            # df_obj = pd.DataFrame(index=index)
-            context.nrt.incref(builder, typ.index, dataframe_payload.index)
-            index_obj = c.pyapi.from_native_value(
-                typ.index, dataframe_payload.index, c.env_manager
-            )
-
-            mod_name = context.insert_const_string(c.builder.module, "pandas")
-            class_obj = pyapi.import_module_noblock(mod_name)
-            df_obj = pyapi.call_method(
-                class_obj, "DataFrame", (pyapi.borrow_none(), index_obj)
-            )
-            pyapi.decref(class_obj)
-            pyapi.decref(index_obj)
-            builder.store(df_obj, res)
 
     # get data arrays and box them
     if typ.is_table_format:
@@ -905,7 +945,12 @@ def box_dataframe(typ, val, c):
                 arrs_obj = pyapi.object_getattr_string(table_obj, "arrays")
                 none_obj = c.pyapi.make_none()
 
-                n_arrs = context.get_constant(types.int64, n_cols)
+                if n_cols is None:
+                    n_obj = pyapi.call_method(arrs_obj, "__len__", ())
+                    n_arrs = pyapi.long_as_longlong(n_obj)
+                    pyapi.decref(n_obj)
+                else:
+                    n_arrs = context.get_constant(types.int64, n_cols)
                 with cgutils.for_range(builder, n_arrs) as loop:
                     # df[i] = arr
                     i = loop.index
@@ -970,13 +1015,19 @@ def box_dataframe(typ, val, c):
                 pyapi.decref(c_ind_obj)
 
     df_obj = builder.load(res)
+    columns_obj = _get_df_columns_obj(
+        c, builder, context, pyapi, typ, dataframe_payload
+    )
     # set df columns separately to support repeated names and fix potential multi-index
     # issues, see test_dataframe.py::test_unbox_df_multi, test_box_repeated_names
     pyapi.object_setattr_string(df_obj, "columns", columns_obj)
     pyapi.decref(columns_obj)
 
     # TODO[BE-1538]: reduce overhead and enable for table format
-    if not typ.is_table_format or len(typ.columns) < TABLE_FORMAT_THRESHOLD:
+    # TODO: support for dataframes with variable number of columns
+    if not typ.has_runtime_cols and (
+        not typ.is_table_format or len(typ.columns) < TABLE_FORMAT_THRESHOLD
+    ):
         _set_bodo_meta_dataframe(c, df_obj, typ)
 
     # decref() should be called on native value

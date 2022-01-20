@@ -571,6 +571,10 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
     """
     from bodo.libs.csr_matrix_ext import CSRMatrixType
 
+    bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(
+        data, "bodo.gatherv()"
+    )
+
     if isinstance(data, CategoricalArrayType):
 
         def impl_cat(
@@ -1220,6 +1224,9 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
 @numba.generated_jit(nopython=True)
 def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
+    bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(
+        data, "bodo.rebalance()"
+    )
     func_text = (
         "def impl(data, dests=None, random=False, random_seed=None, parallel=False):\n"
     )
@@ -1623,6 +1630,9 @@ def scatterv(data, send_counts=None, warn_if_dist=True):
 @overload(scatterv)
 def scatterv_overload(data, send_counts=None, warn_if_dist=True):
     """support scatterv inside jit functions"""
+    bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(
+        data, "bodo.scatterv()"
+    )
     return lambda data, send_counts=None, warn_if_dist=True: scatterv_impl(
         data, send_counts
     )  # pragma: no cover
@@ -3176,6 +3186,9 @@ def bcast_comm_overload(data, comm_ranks, nranks):
 @numba.generated_jit(nopython=True)
 def bcast_comm_impl(data, comm_ranks, nranks):  # pragma: no cover
     """nopython implementation of bcast_comm()"""
+    bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(
+        data, "bodo.bcast_comm()"
+    )
     if isinstance(data, (types.Integer, types.Float)):
         typ_val = numba_to_c_type(data)
         func_text = (

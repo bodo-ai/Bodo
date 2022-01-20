@@ -359,3 +359,360 @@ def test_crosstab_invalid_types(memory_leak_check):
         BodoError, match=re.escape("'columns' argument only supported for Series types")
     ):
         impl(df.A, df)
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # Basic DataFrame with NAs to insert
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "B": [str(i) for i in range(10)] * 100,
+                "C": np.arange(1000, 2000),
+            }
+        ),
+        # Integer column names
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "B": [i for i in range(10)] * 100,
+                "C": np.arange(1000, 2000),
+            }
+        ),
+        # Timestamp values
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "B": [i for i in range(10)] * 100,
+                "C": pd.Series(pd.date_range("1/1/2022", freq="H", periods=1000)),
+            }
+        ),
+        # Nullable Integer Values
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "B": [i for i in range(10)] * 100,
+                "C": pd.array(([i for i in range(9)] + [None]) * 100, dtype="Int32"),
+            }
+        ),
+        # String Index
+        pd.DataFrame(
+            {
+                "A": [str(i) for i in range(1000)],
+                "B": [i for i in range(10)] * 100,
+                "C": np.arange(1000, 2000),
+            }
+        ),
+        # String values
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "B": [i for i in range(10)] * 100,
+                "C": [str(i) for i in range(1000, 2000)],
+            }
+        ),
+    ],
+)
+def test_pivot_basic(df, memory_leak_check):
+    """
+    Checks basic support for DataFrame.pivot on various datatypes.
+    """
+    # Test pivot unboxing
+    def impl1(df):
+        return df.pivot(index="A", columns="B", values="C")
+
+    # Test that len still works
+    def impl2(df):
+        res = df.pivot(index="A", columns="B", values="C")
+        return len(res)
+
+    # Test that a list works.
+    def impl3(df):
+        res = df.pivot(index=["A"], columns=["B"], values=["C"])
+        return len(res)
+
+    # We don't capture the name field of the columns index,
+    # so we set check_names=False.
+
+    # Pivot produces nullable float values instead of nullable int
+    # values for the data. As a result, since we don't support Float64,
+    # we set check_dtype=False.
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl1,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+    check_func(impl2, (df,), check_names=False, check_dtype=False, sort_output=True)
+    check_func(impl3, (df,), check_names=False, check_dtype=False, sort_output=True)
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # Basic DataFrame with NAs to insert
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "B": [str(i) for i in range(1000)],
+                "C": np.arange(1000, 2000),
+            }
+        ),
+        # Integer column names
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "B": np.arange(1000),
+                "C": np.arange(1000, 2000),
+            }
+        ),
+        # Timestamp values
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "B": np.arange(1000),
+                "C": pd.Series(pd.date_range("1/1/2022", freq="H", periods=1000)),
+            }
+        ),
+        # Nullable Integer Values
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "B": np.arange(1000),
+                "C": pd.array(([i for i in range(9)] + [None]) * 100, dtype="Int32"),
+            }
+        ),
+        # String Index
+        pd.DataFrame(
+            {
+                "A": [str(i) for i in range(1000)],
+                "B": np.arange(1000),
+                "C": np.arange(1000, 2000),
+            }
+        ),
+        # String values
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "B": np.arange(1000),
+                "C": [str(i) for i in range(1000, 2000)],
+            }
+        ),
+    ],
+)
+def test_pivot_empty(df, memory_leak_check):
+    """
+    Tests support for DataFrame.pivot on various
+    types when each rank will contain at least 1
+    empty column.
+    """
+
+    def impl(df):
+        return df.pivot(index="A", columns="B", values="C")
+
+    # We don't capture the name field of the columns index,
+    # so we set check_names=False.
+
+    # Pivot produces nullable float values instead of nullable int
+    # values for the data. As a result, since we don't support Float64,
+    # we set check_dtype=False.
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # Basic DataFrame with NAs to insert
+        pd.DataFrame(
+            {
+                "A": [i for i in range(3)] * 5,
+                "B": [str(i) for i in range(5)] * 3,
+                "C": np.arange(1000, 1015),
+            }
+        ),
+        # Integer column names
+        pd.DataFrame(
+            {
+                "A": [i for i in range(3)] * 5,
+                "B": [i for i in range(5)] * 3,
+                "C": np.arange(1000, 1015),
+            }
+        ),
+        # Timestamp values
+        pd.DataFrame(
+            {
+                "A": [i for i in range(3)] * 5,
+                "B": [i for i in range(5)] * 3,
+                "C": pd.Series(pd.date_range("1/1/2022", freq="H", periods=15)),
+            }
+        ),
+        # Nullable Integer Values
+        pd.DataFrame(
+            {
+                "A": [i for i in range(3)] * 5,
+                "B": [i for i in range(5)] * 3,
+                "C": pd.array(
+                    [i for i in range(11)] + [None, None, None, None], dtype="Int32"
+                ),
+            }
+        ),
+        # String Index
+        pd.DataFrame(
+            {
+                "A": [str(i) for i in range(3)] * 5,
+                "B": [i for i in range(5)] * 3,
+                "C": np.arange(1000, 1015),
+            }
+        ),
+        # String values
+        pd.DataFrame(
+            {
+                "A": [i for i in range(3)] * 5,
+                "B": [i for i in range(5)] * 3,
+                "C": [str(i) for i in range(1000, 1015)],
+            }
+        ),
+    ],
+)
+def test_pivot_full(df, memory_leak_check):
+    """
+    Tests support for DataFrame.pivot on various
+    types when there won't be NAs due to missing values.
+    """
+
+    def impl(df):
+        return df.pivot(index="A", columns="B", values="C")
+
+    # We don't capture the name field of the columns index,
+    # so we set check_names=False.
+
+    # Pivot produces nullable float values instead of nullable int
+    # values for the data. As a result, since we don't support Float64,
+    # we set check_dtype=False.
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # Basic case
+        pd.DataFrame(
+            {
+                "A": pd.array(
+                    [i for i in range(996)] + [None, None, None, None], dtype="Int32"
+                ),
+                "B": [i for i in range(10)] * 100,
+                "C": np.arange(1000, 2000),
+            }
+        ),
+        # Empty case
+        pd.DataFrame(
+            {
+                "A": pd.array(
+                    [i for i in range(996)] + [None, None, None, None], dtype="Int32"
+                ),
+                "B": np.arange(1000),
+                "C": np.arange(1000, 2000),
+            }
+        ),
+        # Full case
+        pd.DataFrame(
+            {
+                "A": pd.array([0, 1, None] * 5, dtype="Int32"),
+                "B": [i for i in range(5)] * 3,
+                "C": np.arange(1000, 1015),
+            }
+        ),
+    ],
+)
+def test_pivot_na_index(df, memory_leak_check):
+    """
+    Tests support for DataFrame.pivot on various
+    types when one of the index values is NA.
+    """
+
+    def impl(df):
+        return df.pivot(index="A", columns="B", values="C")
+
+    # We don't capture the name field of the columns index,
+    # so we set check_names=False.
+
+    # Pivot produces nullable float values instead of nullable int
+    # values for the data. As a result, since we don't support Float64,
+    # we set check_dtype=False.
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # Normal case
+        pd.DataFrame(
+            {
+                "A": [i for i in range(5)] * 4,
+                "B": [i for i in range(2)] * 10,
+                "C": np.arange(20),
+            }
+        ),
+        # String data
+        pd.DataFrame(
+            {
+                "A": [i for i in range(5)] * 4,
+                "B": [i for i in range(2)] * 10,
+                "C": [str(i) for i in range(20)],
+            }
+        ),
+    ],
+)
+# TODO: Enable memory_leak_check. Disabled because we raise an exception
+def test_pivot_repeat_value(df):
+    """
+    Tests that DataFrame.pivot raises an exception
+    when an (index, column) pair is repeated more
+    than once.
+    """
+
+    def impl(df):
+        return df.pivot(index="A", columns="B", values="C")
+
+    err_msg = re.escape(
+        "DataFrame.pivot(): 'index' contains duplicate entries for the same output column"
+    )
+    with pytest.raises(ValueError, match=err_msg):
+        bodo.jit(impl)(df)
