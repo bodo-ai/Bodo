@@ -849,3 +849,55 @@ def test_df_iloc_getitem_slice_func(memory_leak_check):
     # Use py_output because regular slices cannot be boxed yet.
     py_output = df.iloc[1:, 0:1]
     check_func(impl, (df, slice(0, 1)), py_output=py_output)
+
+
+def test_df_loc_col_slice_assign():
+    """
+    Test assignment to a columns slice of a dataframe using df.loc
+    """
+
+    def impl1(df):
+        df.loc[1, :] = -1
+        return df
+
+    def impl2(df):
+        df.loc[1, ::2] = -1
+        return df
+
+    df = pd.DataFrame(
+        {
+            "A": np.arange(0, 5),
+            "B": np.arange(5, 10),
+            "C": np.arange(10, 15),
+            "D": np.arange(15, 20),
+        }
+    )
+
+    check_func(impl1, (df,), copy_input=True)
+    check_func(impl2, (df,), copy_input=True)
+
+
+def test_df_iloc_col_slice_assign():
+    """
+    Test assignment to a columns slice of a dataframe using df.iloc
+    """
+
+    def impl1(df):
+        df.iloc[1, :] = -1
+        return df
+
+    def impl2(df):
+        df.iloc[1, 1:4:2] = -1
+        return df
+
+    df = pd.DataFrame(
+        {
+            "A": np.arange(0, 5),
+            "B": np.arange(5, 10),
+            "C": np.arange(10, 15),
+            "D": np.arange(15, 20),
+        }
+    )
+
+    check_func(impl1, (df,), copy_input=True)
+    check_func(impl2, (df,), copy_input=True)
