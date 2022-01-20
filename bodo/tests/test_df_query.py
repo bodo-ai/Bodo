@@ -41,7 +41,7 @@ def test_df_query_unicode_expr(expr):
             "B B": [1.1, np.nan, 4.2, 3.1, -1.3] * 3,
             "C": ["AA", "BBB", "C", "AA", "C"] * 3,
         },
-        index=[3, 1, 2, 4, 5] * 3,
+        index=[3, 1, 2, 4, 5, -1, 6, 7, -2, 8, 9, 11, 10, 12, 0],
     )
     check_func(impl, (df, expr, 1))
 

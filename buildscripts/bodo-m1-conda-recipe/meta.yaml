@@ -25,7 +25,7 @@ requirements:
     - cython                                 # [build_platform != target_platform]
     - numpy                                  # [build_platform != target_platform]
     - pybind11                               # [build_platform != target_platform]
-    - numba 0.54.1
+    - numba 0.55.0
 
   host:
     - python
@@ -55,7 +55,7 @@ requirements:
     - fsspec
     - pyarrow =5.0.0
     - libcurl
-    - numba 0.54.1
+    - numba 0.55.0
     - mpich =3.3.2=h* # [not win]
     - msmpi # [win]
     - mpi4py
@@ -70,7 +70,7 @@ requirements:
     - matplotlib <= 3.4.3
 
   run_constrained:
-    - numpy >=1.17,<1.21
+    - numpy >=1.18,<1.22
 test:
   imports:
     - bodo

@@ -20,7 +20,7 @@ RUN conda create -n BODODEV numpy scipy pandas='1.3.*' boost-cpp=1.74.0 cmake h5
 RUN conda install -n BODODEV hdf5=*=*mpich* -c conda-forge
 RUN conda install -n BODODEV python pyarrow=5.0.0 fsspec -c conda-forge
 RUN conda install -n BODODEV pytest sqlalchemy pymysql xlrd openpyxl mpi4py cython -c conda-forge
-RUN conda install -n BODODEV numba=0.54.1 scikit-learn=0.24.2 -c conda-forge
+RUN conda install -n BODODEV numba=0.55.0 scikit-learn=0.24.2 -c conda-forge
 RUN conda install ccache -c conda-forge
 RUN conda run -n BODODEV pip install astor
 #

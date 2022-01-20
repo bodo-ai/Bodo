@@ -20,10 +20,10 @@ requirements:
   host:
     - python
     - setuptools
-    - numba 0.54.1
+    - numba 0.55.0
     # Compatable with Numba requirements.
     # Resolves build issues on nightly
-    - numpy >=1.17
+    - numpy >=1.18
     - cython
     - pandas 1.3.*
     - fsspec
@@ -46,7 +46,7 @@ requirements:
     - fsspec
     - pyarrow =5.0.0
     - libcurl
-    - numba 0.54.1
+    - numba 0.55.0
     - mpich =3.3.2=h* # [not win]
     - msmpi # [win]
     - mpi4py

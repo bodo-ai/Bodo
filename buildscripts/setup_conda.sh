@@ -57,12 +57,12 @@ then
    # We lock fsspec at version 0.8 because in 0.9 it
    # caused us import errors with s3fs for Pandas tests.
    $CONDA_INSTALL fsspec=0.8 -c conda-forge
-   $CONDA_INSTALL pandas='1.3.*' -c conda-forge
-   $CONDA_INSTALL numba=0.54.1 -c conda-forge
+   $CONDA_INSTALL pandas='1.3.3' -c conda-forge
+   $CONDA_INSTALL numba=0.55.0 -c conda-forge
    $CONDA_INSTALL cython -c conda-forge
    $CONDA_INSTALL mpi4py -c conda-forge
    $CONDA_INSTALL scikit-learn=0.24.2 gcsfs -c conda-forge
-   $CONDA_INSTALL matplotlib -c conda-forge
+   $CONDA_INSTALL matplotlib='3.4.3' -c conda-forge
    $CONDA_INSTALL pyspark openjdk -c conda-forge
    $CONDA_INSTALL hdf5=*=*mpich* -c conda-forge
    $CONDA_INSTALL xlrd xlsxwriter openpyxl -c conda-forge
