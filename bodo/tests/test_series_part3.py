@@ -420,7 +420,7 @@ def test_series_apply_numpy_unsupported_ufunc(memory_leak_check):
     """
 
     def impl1(S):
-        return S.apply("cbrt")
+        return S.apply("frexp")
 
     S = pd.Series(list(np.arange(100) + list(np.arange(100))))
     with pytest.raises(BodoError, match="user-defined function not supported"):
@@ -519,10 +519,12 @@ def test_series_apply_numpy_unsupported_ufunc_function(memory_leak_check):
     """
 
     def impl1(S):
-        return S.apply(np.cbrt)
+        return S.apply(np.frexp)
 
     S = pd.Series(list(np.arange(100) + list(np.arange(100))))
-    with pytest.raises(BodoError, match="user-defined function not supported"):
+    with pytest.raises(
+        BodoError, match="Unsupported Numpy ufunc encountered in JIT code"
+    ):
         bodo.jit(impl1)(S)
 
 

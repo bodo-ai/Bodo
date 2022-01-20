@@ -33,7 +33,7 @@ jobs:
       chmod +x miniconda.sh
       ./miniconda.sh -b
       export PATH=$HOME/miniconda3/bin:${PATH}
-      conda create -y -n $CONDA_ENV
+      conda create -y -n $CONDA_ENV python=3.9
       source activate $CONDA_ENV
     displayName: 'Download miniconda and create conda env'
 

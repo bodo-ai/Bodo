@@ -74,9 +74,9 @@ class BodoError(NumbaError):
         super(BodoError, self).__init__(highlight(msg), loc)
 
 
-class BodoException(Exception):
-    """Bodo exception that inherits from Exception to allow typing pass to catch it
-    and potentially transform the IR.
+class BodoException(numba.core.errors.TypingError):
+    """Bodo exception that inherits from numba.core.errors.TypingError
+    to allow typing pass to catch it and potentially transform the IR.
     """
 
 
@@ -1533,8 +1533,8 @@ def get_common_scalar_dtype(scalar_types):
             return (numba.np.numpy_support.from_dtype(common_dtype), True)
 
     # If we have a Bodo or Numba type that isn't implemented in
-    # Numpy, we will get a NotImplementedError
-    except NotImplementedError:
+    # Numpy, we will get a NumbaNotImplementedError
+    except numba.core.errors.NumbaNotImplementedError:
         pass
 
     # Timestamp/dt64 can be used interchangably
