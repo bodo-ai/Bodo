@@ -321,6 +321,20 @@ isnan_categorical(T const& val) {
     return false;
 }
 
+template<typename T, int dtype>
+inline typename std::enable_if<std::is_integral<T>::value, void>::type
+set_na_if_num_categories(T& val, int64_t num_categories) {
+    if (val == num_categories) {
+        val = -1;
+    }
+}
+
+template<typename T, int dtype>
+inline typename std::enable_if<!std::is_integral<T>::value, void>::type
+set_na_if_num_categories(T& val, int64_t num_categories) {
+    return;
+}
+
 /** This function is used to determine if the value in a Categorical pointer
  * (pointer to a single value in a CategoricalArrayType) isnan.
  * @param the data type for the codes.
