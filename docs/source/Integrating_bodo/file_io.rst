@@ -3,6 +3,10 @@
 Bodo Data Sources and Connectors
 ==================================
 
+.. comment:: I think the title of this section should be something more high-level or abstract, like Connectors or Loading and Storing Data
+
+.. comment:: I think it's better if below paragraph says "Bodo provides parallel IO for all of its supported formats"
+
 Efficient parallel data processing requires data I/O to be parallelized
 effectively as well. Bodo provides parallel file I/O for many different
 formats such as `Parquet <http://parquet.apache.org>`__, CSV, JSON,
@@ -10,15 +14,18 @@ Numpy binaries, `HDF5 <http://www.h5py.org>`__ and SQL databases. This
 diagram demonstrates how chunks of data are partitioned among parallel
 execution engines by Bodo.
 
+.. comment:: Figure should say dataset instead of file (dataset can consist of multiple files,
+and is the common case with big data). Also I think we could have a better figure, maybe showing the MPI
+ranks/workers
 
 .. figure:: ../img/file-read.jpg
    :align: center
-   :alt: Bodo reads file chunks in parallel
+   :alt: Bodo reads dataset chunks in parallel
 
-   Bodo reads file chunks in parallel
+   Bodo reads dataset chunks in parallel
 
 
-Bodo automatically parallelizes I/O of different nodes in a distributed setting
+Bodo automatically parallelizes I/O for any number of cores and cluster size
 without any additional API layers.
 
 Supported formats
@@ -26,8 +33,10 @@ Supported formats
 
 Currently, Bodo supports I/O for `Parquet <http://parquet.apache.org/>`_,
 CSV, SQL, JSON, `HDF5 <http://www.h5py.org/>`_ , and Numpy binaries formats.
+It can read these formats from multiple filesystems, including S3, HDFS and Azure Data Lake (ADLS)
+(see `File Systems`_ below for more information).
 
-Also see :ref:`Supported Pandas Operations <pandas>` for supported arguments.
+Also see :ref:`Supported pandas Operations <pandas>` for supported arguments of I/O functions.
 
 .. _parquet-section:
 
@@ -38,6 +47,9 @@ Parquet is a commonly used file format in analytics due to its efficient
 columnar storage. Bodo supports the standard pandas API for reading
 Parquet: ``pd.read_parquet(path)``, where path can be a parquet file or a directory with multiple parquet files
 (all are part of the same dataframe)::
+
+    import pandas as pd
+    import bodo
 
     @bodo.jit
     def write_pq(df):
@@ -52,7 +64,7 @@ Parquet: ``pd.read_parquet(path)``, where path can be a parquet file or a direct
 Each process writes one file into the folder, but if the data is not distributed,
 ``to_parquet(name)`` writes to a single file called ``name``::
 
-    df = pd.DataFrame({'A': np.arange(n)})
+    df = pd.DataFrame({'A': range(10)})
 
     @bodo.jit
     def example1_pq(df):
@@ -82,6 +94,57 @@ Run the code above with 4 processors::
 
 See :ref:`read_parquet() <pandas-f-in>`, :ref:`to_parquet() <pandas-f-out>` for supported arguments.
 
+
+Filter pushdown
+***************
+
+Bodo can detect filters used by the code and optimize the ``read_parquet`` call by pushing the filters
+down to the storage layer, so that only the rows required by the program are read. This can significantly
+speed up I/O in many cases and will reduce the program's memory footprint, sometimes substantially.
+
+.. comment:: Should we mention removal of unused columns somewhere? That is not filter pushdown but it's similar.
+
+For example, suppose we have a large dataset that spans many years and we only need to read data
+for a particular year.
+With pandas, we might perform a query on the year 2021 like this::
+
+    @bodo.jit
+    def query():
+        df = pd.read_parquet("s3://my-bucket/data.pq")
+        df = df[(df["year"] == 2021)]
+        return df.groupby("customer_key")["revenue"].max()
+
+When compiling the above, Bodo detects the ``df[(df["year"] == 2021)]`` filter and optimizes
+the ``read_parquet`` call so that it only reads data for year 2021 from S3. Because the data
+will have already been filtered after reading, Bodo removes the filter operation during compilation.
+Note that this requires code transformation and optimization and is something
+that pandas cannot do. Bodo automatically infers which filters can be pushed down.
+
+.. comment:: A reference for hive-partitioning below might be good, but I didn't see a good one.
+
+If your dataset is *hive-partitioned* and partition columns appear in filter expressions,
+only the files that contain relevant data are read, and the rest are discarded based on their
+path. For example, if ``year`` is a partition column above and we have a dataset::
+
+    .
+    └── data.pq/
+        │   ...
+        ├───year=2020/
+        │   ├── part-00.parquet
+        │   └── part-01.parquet
+        └───year=2021/
+            ├── part-02.parquet
+            └── part-03.parquet
+
+Bodo will only read the files in the ``year=2021`` directory.
+
+For non-partition columns, Bodo may discard files entirely just by looking at their parquet metadata (depending
+on the filters and statistics contained in the metadata) or filter the rows during read.
+
+.. note::
+    Filter pushdown can be a very significant optimization. Please refer to the :ref:`inlining`
+    section to make sure these optimizations are applied in your program.
+
 Exploring Large Data Without Full Read
 **************************************
 
@@ -105,7 +168,10 @@ CSV
 
 
 CSV is a common text format for data exchange. Bodo supports most of the
-standard Pandas API to read CSV files::
+standard pandas API to read CSV files::
+
+    import pandas as pd
+    import bodo
 
     @bodo.jit
     def write_csv(df):
@@ -116,9 +182,8 @@ standard Pandas API to read CSV files::
         df = pd.read_csv('example.csv')
         return df
 
-Unlike ``read_csv`` in regular Pandas, Bodo can read a directory that contains multiple partitioned CSV files as well.
-
-All files in the folder must have same number and datatype of columns. They can have different number of rows.
+Unlike ``read_csv`` in regular pandas, Bodo can read a directory that contains multiple partitioned CSV files as well.
+All files in the folder must have the same number and datatype of columns. They can have different number of rows.
 
 Usage::
 
@@ -141,8 +206,8 @@ or there are too many columns to read efficiently)::
 .. note::
 
 
-   Bodo uses nullable integer types of Pandas to ensure type stability (see :ref:`Integer NA issue in Pandas <integer-na-issue-pandas>` for more details).
-   Therefore, data types must be specified explicitly for accurate performance comparisons of Bodo and Pandas for ``read_csv``.
+   Bodo uses nullable integer types of pandas to ensure type stability (see :ref:`Integer NA issue in pandas <integer-na-issue-pandas>` for more details).
+   Therefore, data types must be specified explicitly for accurate performance comparisons of Bodo and pandas for ``read_csv``.
 
 
 ``to_csv(name)`` has different behaviors for different file systems:
@@ -214,7 +279,7 @@ See :ref:`read_csv() <pandas-f-in>`, :ref:`to_csv() <pandas-f-out>` for supporte
 JSON
 ~~~~
 
-For JSON, the syntax is also the same as Pandas::
+For JSON, the syntax is also the same as pandas::
 
     @bodo.jit
     def example_write_json(df, fname):
@@ -226,11 +291,12 @@ For JSON, the syntax is also the same as Pandas::
 
     @bodo.jit
     def example_read_json_multi_lines():
-        # dtype argument required when reading a regular multi-line JSON file
-        # cannot read a directory containing multiple multi-line JSON files
         df = pd.read_json('example_file.json', orient = 'records', lines = False,
             dtype={"A": float, "B": "bool", "C": int})
 
+
+.. note:: - The dtype argument required when reading a regular multi-line JSON file.
+          - Bodo cannot read a directory containing multiple multi-line JSON files
 
 ``to_json(name)`` has different behaviors for different file systems:
 
@@ -306,7 +372,7 @@ See :ref:`read_json() <pandas-f-in>`, :ref:`to_json() <pandas-f-out>` for suppor
 SQL
 ~~~
 
-For SQL, the syntax is also the same as Pandas. For reading::
+For SQL, the syntax is also the same as pandas. For reading::
 
     @bodo.jit
     def example_read_sql():
@@ -411,7 +477,7 @@ this information can be supplied through the `names` and `dtypes` keyword argume
                 dtype={"A": int, "B": float, "C": str, "D": str, "E": np.bool_},
             )
 
-For the remaining Pandas read functions, the existing APIs do not currently allow this information to be supplied.
+For the remaining pandas read functions, the existing APIs do not currently allow this information to be supplied.
 Users can still provide this information by adding type information in the ``bodo.jit`` decorator, similar to `Numba's typing syntax
 <http://numba.pydata.org/numba-doc/latest/reference/types.html>`_. For
 example::
@@ -441,9 +507,10 @@ example::
          X = f['points'][:]
          Y = f['responses'][:]
 
-For the complete list of supported types, please see the :ref:`Pandas dtype section <pandas-dtype>`.
+For the complete list of supported types, please see the :ref:`pandas dtype section <pandas-dtype>`.
 In the event that the dtypes are improperly specified, Bodo will throw a runtime error.
 
+.. _File Systems:
 
 File Systems
 ------------
@@ -524,8 +591,8 @@ Bodo uses `Apache Arrow <https://arrow.apache.org/>`_ internally for read and wr
 
 .. _db:
 
-Supported Databases
-====================
+Databases
+----------
 
 
 Currently, Bodo supports most RDBMS that work with SQLAlchemy, with a corresponding driver.
