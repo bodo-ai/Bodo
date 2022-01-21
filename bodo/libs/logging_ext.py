@@ -5,6 +5,7 @@ import logging
 
 import numba
 from numba.core import types
+from numba.core.imputils import lower_constant
 from numba.core.typing.templates import (
     AttributeTemplate,
     bound_function,
@@ -54,6 +55,12 @@ def box_logging_logger(typ, val, c):
 def unbox_logging_logger(typ, obj, c):
     c.pyapi.incref(obj)
     return NativeValue(obj)
+
+
+@lower_constant(LoggingRootLoggerType)
+def lower_constant_logger(context, builder, ty, pyval):
+    pyapi = context.get_python_api(builder)
+    return pyapi.unserialize(pyapi.serialize_object(pyval))
 
 
 @infer_getattr
