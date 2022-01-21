@@ -2608,7 +2608,7 @@ def lower_val_isin_dummy(context, builder, sig, args):
 
 @numba.generated_jit(nopython=True)
 def pivot_impl(
-    index_arr, columns_arr, values_arr, pivot_values, index_name, parallel=False
+    index_arr, columns_arr, values_arr, pivot_values, index_name, check_duplicates=True, parallel=False
 ):  # pragma: no cover
     """
     Python implementation for pivot. This provides a parallel implementation
@@ -2631,14 +2631,20 @@ def pivot_impl(
                    represents a unique output column. These values are already sorted
                    in ascending order on each rank.
     index_name - Name of the index column.
+    check_duplicates - Do we need to add error checking for duplicates. This is a compile
+                       time check to generate the bitmaps and can be skipped if we have
+                       already done a reduction or removed duplicates (i.e. pivot_table).
     parallel - Are index_arr, columns_arr, and values_arr distributed or replicated.
     """
+    if not is_overload_constant_bool(check_duplicates):
+        raise BodoError("pivot_impl(): check_duplicates must be a constant boolean")
+    check_duplicates_codegen = get_overload_const_bool(check_duplicates)
 
     # Convert the data to nullable for empty values.
     data_arr_typ = to_nullable_type(values_arr)
 
     func_text = "def impl(\n"
-    func_text += "    index_arr, columns_arr, values_arr, pivot_values, index_name, parallel=False\n"
+    func_text += "    index_arr, columns_arr, values_arr, pivot_values, index_name, check_duplicates=True, parallel=False\n"
     func_text += "):\n"
     # If the data is parallel we need to shuffle to get all values
     # in a row on the same rank.
@@ -2686,9 +2692,10 @@ def pivot_impl(
         # Strings need to detect duplicates as soon as possible to avoid possible
         # segfaults with setitem.
         func_text += "    nbytes = (n_rows + 7) >> 3\n"
-        func_text += (
-            "    seen_bitmaps = [np.zeros(nbytes, np.int8) for _ in range(n_cols)]\n"
-        )
+        if check_duplicates_codegen:
+            func_text += (
+                "    seen_bitmaps = [np.zeros(nbytes, np.int8) for _ in range(n_cols)]\n"
+            )
         # Get the lengths for each value
         func_text += "    for i in range(len(columns_arr)):\n"
         func_text += "        col_name = columns_arr[i]\n"
@@ -2697,11 +2704,12 @@ def pivot_impl(
         func_text += "        col_arr = len_arrs[col_idx]\n"
         func_text += "        row_idx = row_vector[i]\n"
         # If this value has already been seen raise an exception.
-        func_text += "        seen_bitmap = seen_bitmaps[col_idx]\n"
-        func_text += "        if bodo.libs.int_arr_ext.get_bit_bitmap_arr(seen_bitmap, row_idx):\n"
-        func_text += "            raise ValueError(\"DataFrame.pivot(): 'index' contains duplicate entries for the same output column\")\n"
-        func_text += "        else:\n"
-        func_text += "            bodo.libs.int_arr_ext.set_bit_to_arr(seen_bitmap, row_idx, 1)\n"
+        if check_duplicates_codegen:
+            func_text += "        seen_bitmap = seen_bitmaps[col_idx]\n"
+            func_text += "        if bodo.libs.int_arr_ext.get_bit_bitmap_arr(seen_bitmap, row_idx):\n"
+            func_text += "            raise ValueError(\"DataFrame.pivot(): 'index' contains duplicate entries for the same output column\")\n"
+            func_text += "        else:\n"
+            func_text += "            bodo.libs.int_arr_ext.set_bit_to_arr(seen_bitmap, row_idx, 1)\n"
         # Compute the lengths
         func_text += "        if not bodo.libs.array_kernels.isna(values_arr, i):\n"
         func_text += "            col_arr[row_idx] = len(values_arr[i])\n"
@@ -2725,9 +2733,10 @@ def pivot_impl(
         # We skip the seen bitmaps for strings because those were computed in the first
         # pass.
         func_text += "    nbytes = (n_rows + 7) >> 3\n"
-        func_text += (
-            "    seen_bitmaps = [np.zeros(nbytes, np.int8) for _ in range(n_cols)]\n"
-        )
+        if check_duplicates_codegen:
+            func_text += (
+                "    seen_bitmaps = [np.zeros(nbytes, np.int8) for _ in range(n_cols)]\n"
+            )
 
     # Set values that aren't NA
     func_text += "    for i in range(len(columns_arr)):\n"
@@ -2736,7 +2745,7 @@ def pivot_impl(
     func_text += "        col_idx = col_map[col_name]\n"
     func_text += "        col_arr = data_arrs[col_idx]\n"
     func_text += "        row_idx = row_vector[i]\n"
-    if values_arr != bodo.string_array_type:
+    if values_arr != bodo.string_array_type and check_duplicates_codegen:
         # If this value has already been seen raise an exception.
         func_text += "        seen_bitmap = seen_bitmaps[col_idx]\n"
         func_text += "        if bodo.libs.int_arr_ext.get_bit_bitmap_arr(seen_bitmap, row_idx):\n"

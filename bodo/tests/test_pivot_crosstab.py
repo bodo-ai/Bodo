@@ -31,7 +31,16 @@ _pivot_df1 = pd.DataFrame(
 )
 
 
-def test_pivot_random_int_count_sum_prod_min_max(memory_leak_check):
+@pytest.mark.parametrize(
+    "add_args",
+    [
+        # Run with output columns known at compile time.
+        {"pivots": {"pt": ["small", "large"]}},
+        # Run with output columns unknown at compile time
+        None,
+    ],
+)
+def test_pivot_random_int_count_sum_prod_min_max(add_args, memory_leak_check):
     """Since the pivot can have missing values for keys (unlike groupby
     for which every rows has a matching key) integer columns are converted
     to nullable int bool"""
@@ -56,6 +65,10 @@ def test_pivot_random_int_count_sum_prod_min_max(memory_leak_check):
         pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="min")
         return pt
 
+    def f6(df):
+        pt = df.pivot_table(index="A", columns="C", values="D", aggfunc="first")
+        return pt
+
     random.seed(5)
     n = 30
     n_keyA = 10
@@ -63,8 +76,6 @@ def test_pivot_random_int_count_sum_prod_min_max(memory_leak_check):
     list_C = [random.choice(["small", "large"]) for _ in range(n)]
     list_D = [random.randint(1, 1000) for _ in range(n)]
     df = pd.DataFrame({"A": list_A, "C": list_C, "D": list_D})
-    pivot_values = {"pt": ["small", "large"]}
-    add_args = {"pivots": pivot_values}
     check_func(
         f1,
         (df,),
@@ -110,6 +121,19 @@ def test_pivot_random_int_count_sum_prod_min_max(memory_leak_check):
         set_columns_name_to_none=True,
         reorder_columns=True,
     )
+    # The pivot table infrastructure when annotating output columns only
+    # supports a subset of operations, but without annotation all functions
+    # supported by groupby apply are supported.
+    # TODO: Unify these infrastructures.
+    if add_args is None:
+        check_func(
+            f6,
+            (df,),
+            sort_output=True,
+            check_dtype=False,
+            set_columns_name_to_none=True,
+            reorder_columns=True,
+        )
 
 
 @pytest.mark.slow
