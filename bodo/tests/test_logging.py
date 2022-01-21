@@ -28,6 +28,22 @@ def test_logging_rootlogger_info():
     assert f.getvalue() == g.getvalue()
 
 
+def test_logging_rootlogger_lowering():
+    logger = logging.getLogger()
+
+    def test_impl():
+        logger.info("info1")
+        logger.info("info2")
+
+    f = io.StringIO()
+    logging.basicConfig(stream=f, force=True, level=logging.INFO)
+    bodo.jit(test_impl)()
+    g = io.StringIO()
+    logging.basicConfig(stream=g, force=True, level=logging.INFO)
+    test_impl()
+    assert f.getvalue() == g.getvalue()
+
+
 def test_logging_rootlogger_unsupported():
     @bodo.jit
     def test_unsupp_attr(l):

@@ -1,4 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import logging
+
 import pandas as pd
 import pytest
 from caching_tests_common import fn_distribution  # noqa
@@ -75,6 +77,20 @@ def test_format_cache(fn_distribution, is_cached, memory_leak_check):
 
     def impl():
         return "{}".format(3)
+
+    check_caching(impl, (), is_cached, fn_distribution, is_out_dist=False)
+
+
+def test_lowered_rootlogger_cache(fn_distribution, is_cached, memory_leak_check):
+    """
+    test caching for rootlogger
+    """
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger()
+
+    def impl():
+        logger.info("Compilation Finished")
+        return 0
 
     check_caching(impl, (), is_cached, fn_distribution, is_out_dist=False)
 
