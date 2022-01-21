@@ -212,6 +212,8 @@ def init_groupby(typingctx, obj_type, by_type, as_index_type=None, dropna_type=N
 @lower_builtin("groupby.count", types.VarArg(types.Any))
 @lower_builtin("groupby.size", types.VarArg(types.Any))
 @lower_builtin("groupby.apply", types.VarArg(types.Any))
+# groupby.agg is used in pivot_table
+@lower_builtin("groupby.agg", types.VarArg(types.Any))
 def lower_groupby_count_dummy(context, builder, sig, args):
     return context.get_constant_null(sig.return_type)
 

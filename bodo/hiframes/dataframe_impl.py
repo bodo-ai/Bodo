@@ -3503,36 +3503,33 @@ def validate_groupby_spec(
     )
 
 
-@overload_method(DataFrameType, "pivot", inline="always", no_unliteral=True)
-def overload_dataframe_pivot(df, index=None, columns=None, values=None):
+def pivot_error_checking(df, index, columns, values, func_name):
     """
-    This implementation verifies that we
-    have a single column, which is distinct, for each argument and then
-    calls an intermedate function that is handled through infer_global.
+        Performs common error checking shared by pivot and functions
+        that depend on pivot.
 
-    The infer_global function is used for constructing a DataFrame type
-    with number of output columns determined at runtime.
+        Returns the literals string for the column names and their index
+        in the columns.
     """
-    check_runtime_cols_unsupported(df, "DataFrame.pivot()")
     # All arguments are required.
     if is_overload_none(index) or not is_literal_type(index):
         raise BodoError(
-            "DataFrame.pivot(): 'index' argument is required and must be a constant column label"
+            f"{func_name}(): 'index' argument is required and must be a constant column label"
         )
     if is_overload_none(columns) or not is_literal_type(columns):
         raise BodoError(
-            "DataFrame.pivot(): 'columns' argument is required and must be a constant column label"
+            f"{func_name}(): 'columns' argument is required and must be a constant column label"
         )
     if is_overload_none(values) or not is_literal_type(values):
         raise BodoError(
-            "DataFrame.pivot(): 'values' argument is required and must be a constant column label"
+            f"{func_name}(): 'values' argument is required and must be a constant column label"
         )
     # Column labels can be a variety of types, so we just check for constants.
     index_lit = get_literal_value(index)
     if isinstance(index_lit, (list, tuple)):
         if len(index_lit) > 1:
             raise BodoError(
-                f"DataFrame.pivot(): 'index' argument must be a constant column label not a {index_lit}"
+                f"{func_name}(): 'index' argument must be a constant column label not a {index_lit}"
             )
         index_lit = index_lit[0]
 
@@ -3541,7 +3538,7 @@ def overload_dataframe_pivot(df, index=None, columns=None, values=None):
     if isinstance(columns_lit, (list, tuple)):
         if len(columns_lit) > 1:
             raise BodoError(
-                f"DataFrame.pivot(): 'columns' argument must be a constant column label not a {columns_lit}"
+                f"{func_name}(): 'columns' argument must be a constant column label not a {columns_lit}"
             )
         columns_lit = columns_lit[0]
 
@@ -3549,24 +3546,24 @@ def overload_dataframe_pivot(df, index=None, columns=None, values=None):
     if isinstance(values_lit, (list, tuple)):
         if len(values_lit) > 1:
             raise BodoError(
-                f"DataFrame.pivot(): 'values' argument must be a constant column label not a {values_lit}"
+                f"{func_name}(): 'values' argument must be a constant column label not a {values_lit}"
             )
         values_lit = values_lit[0]
 
     # Verify that each column can be found in the DataFrame
     if index_lit not in df.columns:
         raise BodoError(
-            f"DataFrame.pivot(): 'index' column {index_lit} not found in DataFrame {df}."
+            f"{func_name}(): 'index' column {index_lit} not found in DataFrame {df}."
         )
 
     if columns_lit not in df.columns:
         raise BodoError(
-            f"DataFrame.pivot(): 'columns' column {columns_lit} not found in DataFrame {df}."
+            f"{func_name}(): 'columns' column {columns_lit} not found in DataFrame {df}."
         )
 
     if values_lit not in df.columns:
         raise BodoError(
-            f"DataFrame.pivot(): 'values' column {values_lit} not found in DataFrame {df}."
+            f"{func_name}(): 'values' column {values_lit} not found in DataFrame {df}."
         )
 
     # Get the column numbers
@@ -3577,7 +3574,7 @@ def overload_dataframe_pivot(df, index=None, columns=None, values=None):
     # Verify that none of the columns are the same.
     if len({index_idx, columns_idx, values_idx}) != 3:
         raise BodoError(
-            f"DataFrame.pivot(): 'index', 'columns', and 'values' must all refer to different columns"
+            f"{func_name}(): 'index', 'columns', and 'values' must all refer to different columns"
         )
 
     # Verify that the allowed column types.
@@ -3593,13 +3590,13 @@ def overload_dataframe_pivot(df, index=None, columns=None, values=None):
         ),
     ):
         raise BodoError(
-            f"DataFrame.pivot(): 'index' DataFrame column must have scalar rows"
+            f"{func_name}(): 'index' DataFrame column must have scalar rows"
         )
 
     # TODO: Support
     if isinstance(index_column, bodo.CategoricalArrayType):
         raise BodoError(
-            f"DataFrame.pivot(): 'index' DataFrame column does not support categorical data"
+            f"{func_name}(): 'index' DataFrame column does not support categorical data"
         )
 
     columns_column = df.data[columns_idx]
@@ -3614,14 +3611,14 @@ def overload_dataframe_pivot(df, index=None, columns=None, values=None):
         ),
     ):
         raise BodoError(
-            f"DataFrame.pivot(): 'columns' DataFrame column must have scalar rows"
+            f"{func_name}(): 'columns' DataFrame column must have scalar rows"
         )
 
     # TODO: Support and generate a DataFrame with column known at compile time if the
     # categories are known at compile time.
     if isinstance(columns_column, bodo.CategoricalArrayType):
         raise BodoError(
-            f"DataFrame.pivot(): 'columns' DataFrame column does not support categorical data"
+            f"{func_name}(): 'columns' DataFrame column does not support categorical data"
         )
 
     # TODO: Support. The existing implementation doesn't support setting data with immutable array
@@ -3640,8 +3637,30 @@ def overload_dataframe_pivot(df, index=None, columns=None, values=None):
         or values_column == bodo.binary_array_type
     ):
         raise BodoError(
-            f"DataFrame.pivot(): 'values' DataFrame column must have scalar rows"
+            f"{func_name}(): 'values' DataFrame column must have scalar rows"
         )
+    return (
+        index_lit,
+        columns_lit,
+        values_lit,
+        index_idx,
+        columns_idx,
+        values_idx,
+    )
+
+@overload_method(DataFrameType, "pivot", inline="always", no_unliteral=True)
+def overload_dataframe_pivot(df, index=None, columns=None, values=None):
+    """
+    This implementation verifies that we
+    have a single column, which is distinct, for each argument and then
+    calls an intermedate function that is handled through infer_global.
+
+    The infer_global function is used for constructing a DataFrame type
+    with number of output columns determined at runtime.
+    """
+    check_runtime_cols_unsupported(df, "DataFrame.pivot()")
+
+    (index_lit, columns_lit, values_lit, index_idx, columns_idx, values_idx) = pivot_error_checking(df, index, columns, values, "DataFrame.pivot")
 
     # TODO: Provide a Bodo specific optional argument for specifying pivot_values
     # without requiring communication. If this value is constant at compile time
@@ -3657,7 +3676,7 @@ def overload_dataframe_pivot(df, index=None, columns=None, values=None):
             columns_arr,
             values_arr,
             pivot_values,
-            index,
+            index_lit,
         )
 
     return impl
@@ -3674,7 +3693,8 @@ def overload_dataframe_pivot_table(
     margins=False,
     dropna=True,
     margins_name="All",
-    observed=True,
+    observed=False,
+    sort=True,
     _pivot_values=None,  # bodo argument
 ):
     check_runtime_cols_unsupported(df, "DataFrame.pivot_table()")
@@ -3684,9 +3704,10 @@ def overload_dataframe_pivot_table(
         dropna=dropna,
         margins_name=margins_name,
         observed=observed,
+        sort=sort
     )
     arg_defaults = dict(
-        fill_value=None, margins=False, dropna=True, margins_name="All", observed=True
+        fill_value=None, margins=False, dropna=True, margins_name="All", observed=False, sort=True
     )
     check_unsupported_args(
         "DataFrame.pivot_table",
@@ -3695,6 +3716,51 @@ def overload_dataframe_pivot_table(
         package_name="pandas",
         module_name="DataFrame",
     )
+
+    if _pivot_values is None:
+        # If we don't know columns at compile time we reuse pivot.
+        # TODO: Reuse pivot even if we know the columns at compile time.
+
+        # TODO: Add error checking or supported aggfunc?
+        (index_lit, columns_lit, values_lit, index_idx, columns_idx, values_idx) = pivot_error_checking(df, index, columns, values, "DataFrame.pivot_table")
+
+        def _impl(
+            df,
+            values=None,
+            index=None,
+            columns=None,
+            aggfunc="mean",
+            fill_value=None,
+            margins=False,
+            dropna=True,
+            margins_name="All",
+            observed=False,
+            sort=True,
+            _pivot_values=None,
+        ): # pragma: no cover
+            # Truncate the dataframe to just the columns in question.
+            df = df.iloc[:, [index_idx, columns_idx, values_idx]]
+            # Perform the groupby with the agg function
+            df = df.groupby([index_lit, columns_lit], as_index=False)[values_lit].agg(aggfunc)
+            # Select the columns
+            index_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, index_idx)
+            columns_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, columns_idx)
+            values_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, values_idx)
+            # Compute the unique columns
+            pivot_values = df.iloc[:, columns_idx].unique()
+            return bodo.hiframes.pd_dataframe_ext.pivot_impl(
+                index_arr,
+                columns_arr,
+                values_arr,
+                pivot_values,
+                index_lit,
+                # We don't need to check for duplicates because we have already
+                # done an aggregation.
+                check_duplicates=False,
+            )
+
+        return _impl
+
 
     if aggfunc == "mean":
 
@@ -3708,7 +3774,8 @@ def overload_dataframe_pivot_table(
             margins=False,
             dropna=True,
             margins_name="All",
-            observed=True,
+            observed=False,
+            sort=True,
             _pivot_values=None,
         ):  # pragma: no cover
 
@@ -3728,7 +3795,8 @@ def overload_dataframe_pivot_table(
         margins=False,
         dropna=True,
         margins_name="All",
-        observed=True,
+        observed=False,
+        sort=True,
         _pivot_values=None,
     ):  # pragma: no cover
 

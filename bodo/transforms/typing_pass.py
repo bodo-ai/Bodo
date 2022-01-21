@@ -1656,7 +1656,8 @@ class TypingTransforms:
             "to_parquet": [(4, "partition_cols")],
             "insert": [(0, "loc"), (1, "column"), (3, "allow_duplicates")],
             "fillna": [(1, "method")],
-            "pivot": [(0, "index"), (1, "columns"), (0, "values")],
+            "pivot": [(0, "index"), (1, "columns"), (2, "values")],
+            "pivot_table": [(0, "values"), (1, "index"), (2, "columns"), (3, "aggfunc")],
         }
 
         if func_name in df_call_const_args:
