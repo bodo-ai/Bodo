@@ -3667,6 +3667,7 @@ def overload_dataframe_pivot(df, index=None, columns=None, values=None):
     # we don't need table format.
     def impl(df, index=None, columns=None, values=None):  # pragma: no cover
         # Compute a common list of column names
+        # TODO [BE-2105]: Move to a table when we support multiple values columns.
         index_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, index_idx)
         columns_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, columns_idx)
         values_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, values_idx)
@@ -3742,10 +3743,12 @@ def overload_dataframe_pivot_table(
             df = df.iloc[:, [index_idx, columns_idx, values_idx]]
             # Perform the groupby with the agg function
             df = df.groupby([index_lit, columns_lit], as_index=False)[values_lit].agg(aggfunc)
-            # Select the columns
-            index_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, index_idx)
-            columns_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, columns_idx)
-            values_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, values_idx)
+            # Select the columns. Since we have applied an iloc/groupby the new
+            # locations are now always 0, 1, 2.
+            # TODO [BE-2105]: Move to a table when we support multiple values columns.
+            index_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0)
+            columns_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 1)
+            values_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 2)
             # Compute the unique columns
             pivot_values = df.iloc[:, columns_idx].unique()
             return bodo.hiframes.pd_dataframe_ext.pivot_impl(
