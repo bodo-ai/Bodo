@@ -134,6 +134,16 @@ def test_pivot_random_int_count_sum_prod_min_max(add_args, memory_leak_check):
             set_columns_name_to_none=True,
             reorder_columns=True,
         )
+        # Add an extra column to verify the selcted indices are correct.
+        df = pd.DataFrame({"A": list_A, "C": list_C, "B": list_C, "D": list_D})
+        check_func(
+            f6,
+            (df,),
+            sort_output=True,
+            check_dtype=False,
+            set_columns_name_to_none=True,
+            reorder_columns=True,
+        )
 
 
 @pytest.mark.slow
