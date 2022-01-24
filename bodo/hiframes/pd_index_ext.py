@@ -6,6 +6,7 @@ import llvmlite.llvmpy.core as lc
 import numba
 import numpy as np
 import pandas as pd
+from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_new_ref, lower_constant
 from numba.core.typing.templates import AttributeTemplate, signature
@@ -1697,12 +1698,7 @@ def lower_constant_range_index(context, builder, ty, pyval):
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
     # create range struct
-    range_val = cgutils.create_struct_proxy(ty)(context, builder)
-    range_val.start = start
-    range_val.stop = stop
-    range_val.step = step
-    range_val.name = name
-    return range_val._getvalue()
+    return lir.Constant.literal_struct([start, stop, step, name])
 
 
 @overload(pd.RangeIndex, no_unliteral=True, inline="always")

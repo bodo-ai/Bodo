@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, types
-from numba.core.imputils import lower_builtin
+from numba.core.imputils import lower_builtin, lower_constant
 from numba.core.ir_utils import (
     find_callname,
     find_const,
@@ -39,7 +39,7 @@ from bodo.libs.str_arr_ext import (
     string_array_type,
 )
 from bodo.libs.str_ext import string_type
-from bodo.utils.typing import NOT_CONSTANT, BodoError
+from bodo.utils.typing import NOT_CONSTANT, BodoError, BodoWarning
 
 int128_type = types.Integer("int128", 128)
 
@@ -102,6 +102,10 @@ numba.core.errors.error_extras = {
 
 
 np_alloc_callnames = ("empty", "zeros", "ones", "full")
+
+
+# size threshold for throwing warning for const dictionary lowering (in slow path)
+CONST_DICT_SLOW_WARN_THRESHOLD = 100
 
 
 def unliteral_all(args):
@@ -1204,3 +1208,95 @@ dt_err = """
         If you are trying to set NULL values for timedelta64 in regular Python, \n
         consider using np.timedelta64('nat') instead of None
         """
+
+
+def lower_const_dict_fast_path(context, builder, typ, pyval):
+    """fast path for lowering a constant dictionary. It lowers key and value arrays
+    and creates a dictionary from them.
+    This approach allows faster compilation time for very large dictionaries.
+    """
+    from bodo.utils.typing import can_replace
+
+    key_arr = pd.Series(pyval.keys()).values
+    vals_arr = pd.Series(pyval.values()).values
+    key_arr_type = bodo.typeof(key_arr)
+    vals_arr_type = bodo.typeof(vals_arr)
+    require(
+        key_arr_type.dtype == typ.key_type
+        or can_replace(typ.key_type, key_arr_type.dtype)
+    )
+    require(
+        vals_arr_type.dtype == typ.value_type
+        or can_replace(typ.value_type, vals_arr_type.dtype)
+    )
+    key_arr_const = context.get_constant_generic(builder, key_arr_type, key_arr)
+    vals_arr_const = context.get_constant_generic(builder, vals_arr_type, vals_arr)
+
+    def create_dict(keys, vals):  # pragma: no cover
+        """create a dictionary from key and value arrays"""
+        out = {}
+        for k, v in zip(keys, vals):
+            out[k] = v
+        return out
+
+    dict_val = context.compile_internal(
+        builder,
+        # TODO: replace when dict(zip()) works [BE-2113]
+        # lambda keys, vals: dict(zip(keys, vals)),
+        create_dict,
+        typ(key_arr_type, vals_arr_type),
+        [key_arr_const, vals_arr_const],
+    )
+    return dict_val
+
+
+@lower_constant(types.DictType)
+def lower_constant_dict(context, builder, typ, pyval):
+    """Support constant lowering of dictionries.
+    Has a fast path for dictionaries that their keys/values fit in arrays, and a slow
+    path for the general case.
+    Currently has memory leaks since Numba's dictionaries have malloc() calls in C
+    [BE-2114]
+    """
+    # fast path for cases that fit in arrays
+    try:
+        return lower_const_dict_fast_path(context, builder, typ, pyval)
+    except:
+        pass
+
+    # throw warning for large dicts in slow path since compilation can take long
+    if len(pyval) > CONST_DICT_SLOW_WARN_THRESHOLD:  # pragma: no cover
+        warnings.warn(
+            BodoWarning(
+                "Using large global dictionaries can result in long compilation times. Please pass large dictionaries as arguments to JIT functions."
+            )
+        )
+
+    # slow path: create a dict and fill values individually
+    key_type = typ.key_type
+    val_type = typ.value_type
+
+    def make_dict():  # pragma: no cover
+        return numba.typed.Dict.empty(key_type, val_type)
+
+    dict_val = context.compile_internal(
+        builder,
+        make_dict,
+        typ(),
+        [],
+    )
+
+    def set_dict_val(d, k, v):  # pragma: no cover
+        d[k] = v
+
+    for k, v in pyval.items():
+        k_const = context.get_constant_generic(builder, key_type, k)
+        v_const = context.get_constant_generic(builder, val_type, v)
+        context.compile_internal(
+            builder,
+            set_dict_val,
+            types.none(typ, key_type, val_type),
+            [dict_val, k_const, v_const],
+        )
+
+    return dict_val
