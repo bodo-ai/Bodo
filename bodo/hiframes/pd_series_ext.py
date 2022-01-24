@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
-from numba.core.imputils import impl_ret_borrowed
+from numba.core.imputils import impl_ret_borrowed, lower_constant
 from numba.core.typing.templates import bound_function, signature
 from numba.extending import (
     infer_getattr,
@@ -1240,6 +1240,35 @@ def to_csv_overload(
         bodo.io.fs_io.csv_write(path_or_buf, D, _is_parallel)
 
     return _impl
+
+
+@lower_constant(SeriesType)
+def lower_constant_series(context, builder, series_type, pyval):
+    """embed constant Series value by getting constant values for data array and
+    Index.
+    """
+    data_val = context.get_constant_generic(builder, series_type.data, pyval.values)
+    index_val = context.get_constant_generic(builder, series_type.index, pyval.index)
+    name_val = context.get_constant_generic(builder, series_type.name_typ, pyval.name)
+
+    # create a constant payload with the same data model as SeriesPayloadType
+    payload = lir.Constant.literal_struct([data_val, index_val, name_val])
+    payload = cgutils.global_constant(builder, ".const.payload", payload).bitcast(
+        cgutils.voidptr_t
+    )
+
+    # create a constant meminfo with the same data model as Numba
+    minus_one = context.get_constant(types.int64, -1)
+    null_ptr = context.get_constant_null(types.voidptr)
+    meminfo = lir.Constant.literal_struct(
+        [minus_one, null_ptr, null_ptr, payload, minus_one]
+    )
+    meminfo = cgutils.global_constant(builder, ".const.meminfo", meminfo).bitcast(
+        cgutils.voidptr_t
+    )
+
+    series_val = lir.Constant.literal_struct([meminfo, null_ptr])
+    return series_val
 
 
 # Raise Bodo Error for unsupported attributes and methods of Series

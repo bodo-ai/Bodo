@@ -63,6 +63,28 @@ def test_dict_unbox(memory_leak_check):
     numba.core.config.DEVELOPER_MODE = default_mode
 
 
+# using a global instead of freevar to test the raise_on_unsupported_feature patch
+d1 = {"A": 1, "B": 2}
+
+
+# TODO(ehsan): add memory_leak_check when memory leak is resolved [BE-2114]
+def test_dict_constant_lowering():
+    """test constant lowering for dictionaries"""
+
+    # fast path, keys/values can be arrays
+    def impl1():
+        return d1["B"]
+
+    # slow path, keys/values are lowered individually
+    d2 = {"A": pd.Series([1, 2, 4]), "B": pd.Series([5, 4])}
+
+    def impl2():
+        return d2["B"]
+
+    check_func(impl1, (), only_seq=True)
+    check_func(impl2, (), only_seq=True)
+
+
 @pytest.mark.smoke
 def test_getitem(memory_leak_check):
     def test_impl(N):

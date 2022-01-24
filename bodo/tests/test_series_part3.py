@@ -713,3 +713,17 @@ def test_astype_nocopy(memory_leak_check):
     bodo_func = bodo.jit(pipeline_class=ParforTestPipeline)(impl)
     bodo_func(A)
     _check_num_parfors(bodo_func, 0)
+
+
+S = pd.Series([1, 2, 3])
+
+
+def test_constant_lowering(memory_leak_check):
+    """
+    Tests constant lowering for Series values
+    """
+
+    def impl():
+        return S
+
+    check_func(impl, (), only_seq=True)
