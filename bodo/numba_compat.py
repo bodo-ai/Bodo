@@ -4371,6 +4371,60 @@ numba.core.boxing._python_list_to_native = _python_list_to_native
 
 #########  End changes to allow lists of optional values unboxing  #########
 
+
+# change string constant lowering to use literal struct (to be able to use in other
+# constant globals like Series)
+def make_string_from_constant(context, builder, typ, literal_string):
+    """
+    Get string data by `compile_time_get_string_data()` and return a
+    unicode_type LLVM value
+    """
+    from llvmlite import ir as lir
+    from numba.cpython.hashing import _Py_hash_t
+    from numba.cpython.unicode import compile_time_get_string_data
+
+    databytes, length, kind, is_ascii, hashv = compile_time_get_string_data(
+        literal_string
+    )
+    mod = builder.module
+    gv = context.insert_const_bytes(mod, databytes)
+
+    # Bodo change: use literal struct instead of struct proxy
+    # literal struct that matches unicode data model:
+    return lir.Constant.literal_struct(
+        [
+            # ('data', types.voidptr)
+            gv,
+            # ('length', types.intp)
+            context.get_constant(types.intp, length),
+            # ('kind', types.int32)
+            context.get_constant(types.int32, kind),
+            # ('is_ascii', types.uint32)
+            context.get_constant(types.uint32, is_ascii),
+            # ('hash', _Py_hash_t),
+            # Set hash to -1 to indicate that it should be computed.
+            # We cannot bake in the hash value because of hashseed randomization.
+            context.get_constant(_Py_hash_t, -1),
+            # ('meminfo', types.MemInfoPointer(types.voidptr))
+            context.get_constant_null(types.MemInfoPointer(types.voidptr)),
+            # ('parent', types.pyobject),
+            context.get_constant_null(types.pyobject),
+        ]
+    )
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.cpython.unicode.make_string_from_constant)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "525bd507383e06152763e2f046dae246cd60aba027184f50ef0fc9a80d4cd7fa"
+    ):
+        warnings.warn("numba.cpython.unicode.make_string_from_constant has changed")
+
+
+numba.cpython.unicode.make_string_from_constant = make_string_from_constant
+
+
 #########  Start changes to allow IntEnum support for `np.empty`, `np.zeros`, and `np.ones`  #########
 # change `parse_shape` to support IntEnum
 
@@ -4390,7 +4444,7 @@ def parse_shape(shape):
     return ndim
 
 
-if _check_numba_change:  # pragma: no cover  # pragma: no cover
+if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.typing.npydecl.parse_shape)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
