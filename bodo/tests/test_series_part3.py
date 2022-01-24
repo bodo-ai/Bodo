@@ -715,7 +715,7 @@ def test_astype_nocopy(memory_leak_check):
     _check_num_parfors(bodo_func, 0)
 
 
-S = pd.Series([1, 2, 3])
+S = pd.Series([1, 2, 3], name="ABC")
 
 
 def test_constant_lowering(memory_leak_check):
