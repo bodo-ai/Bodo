@@ -46,7 +46,7 @@ import bodo.ir.sort
 from bodo.ir import csv_ext
 from bodo.ir import sql_ext
 from bodo.ir import json_ext
-from bodo.io.parquet_pio import ParquetHandler
+from bodo.io.parquet_pio import ParquetHandler, _get_numba_typ_from_pa_typ
 
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArrayType
 import bodo.hiframes.pd_dataframe_ext
@@ -2717,6 +2717,28 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
 
     comm = MPI.COMM_WORLD
 
+    if db_type == "snowflake":
+        try:
+            import snowflake.connector
+        except ImportError:
+            message = (
+                "Snowflake Python connector not found."
+                " It can be installed by calling"
+                " 'conda install -c conda-forge snowflake-connector-python' or"
+                " 'pip install snowflake-connector-python'."
+            )
+            raise BodoError(message)
+    else:
+        try:
+            import sqlalchemy  # noqa
+        except ImportError:  # pragma: no cover
+            message = (
+                "Using URI string without sqlalchemy installed."
+                " sqlalchemy can be installed by calling"
+                " 'conda install -c conda-forge sqlalchemy'."
+            )
+            raise BodoError(message)
+
     df_info = None
     if bodo.get_rank() == 0:
         # Any columns that had their name converted. These need to be reverted
@@ -2725,12 +2747,22 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
         rows_to_read = 100  # TODO: tune this
         sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
         if db_type == "snowflake":
-            import snowflake.connector
             from bodo.io.snowflake import get_connection_params
 
             conn_params = get_connection_params(con_const)
             conn = snowflake.connector.connect(**conn_params)
-            df = conn.cursor().execute(sql_call).fetch_pandas_all()
+            pa_schema = conn.cursor().execute(sql_call).fetch_arrow_all().schema
+            # arrow schema
+            col_names = pa_schema.names
+            col_types = [
+                _get_numba_typ_from_pa_typ(
+                    pa_schema.field(c),
+                    False,  # index_col
+                    None,  # nullable_from_metadata
+                    None,  # category_info
+                )
+                for c in col_names
+            ]
 
             # Ensure column name case matches Pandas/sqlalchemy. See:
             # https://github.com/snowflakedb/snowflake-sqlalchemy#object-name-case-handling
@@ -2739,25 +2771,16 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
             # uppercase with double quotes. In both of these situations
             # pd.read_sql() returns the name with all lower case
             new_colnames = []
-            for x in df.columns:
+            for x in col_names:
                 if x.isupper():
                     converted_colnames.add(x.lower())
                     new_colnames.append(x.lower())
                 else:
                     new_colnames.append(x)
-            df.columns = new_colnames
+            df_type = DataFrameType(data=tuple(col_types), columns=tuple(new_colnames))
         else:
-            try:
-                import sqlalchemy  # noqa
-            except ImportError:  # pragma: no cover
-                message = (
-                    "Using URI string without sqlalchemy installed."
-                    " sqlalchemy can be installed by calling"
-                    " 'conda install -c conda-forge sqlalchemy'."
-                )
-                raise BodoError(message)
             df = pd.read_sql(sql_call, con_const)
-        df_type = numba.typeof(df)
+            df_type = numba.typeof(df)
         # always convert to nullable type since initial rows of a column could be all
         # int for example, but later rows could have NAs
         df_type = to_nullable_type(df_type)
