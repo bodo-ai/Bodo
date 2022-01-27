@@ -740,7 +740,7 @@ def _gen_pq_reader_py(
                 j += 1
             else:
                 table_idx.append(-1)
-        table_idx = np.array(table_idx, np.int64)
+        table_idx = np.array(table_idx, dtype=np.int64)
 
     if is_dead_table:
         func_text += "    T = None\n"

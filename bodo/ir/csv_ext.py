@@ -773,7 +773,7 @@ def _gen_read_csv_objmode(
     if idx_col_index is not None and index_pd_dtype == "str":
         str_col_nums_list.append(idx_col_index)
 
-    str_col_nums = np.array(str_col_nums_list)
+    str_col_nums = np.array(str_col_nums_list, dtype=np.int64)
 
     glbs[f"str_col_nums_{call_id}"] = str_col_nums
     # NOTE: assigning a new variable to make globals used inside objmode local to the
@@ -788,7 +788,7 @@ def _gen_read_csv_objmode(
     glbs[f"usecols_arr_{call_id}"] = use_cols_arr
     func_text += f"  usecols_arr_{call_id}_2 = usecols_arr_{call_id}\n"
     # Array of offsets within the type used for creating the table.
-    usecol_type_offset_arr = np.array(type_usecol_offset)
+    usecol_type_offset_arr = np.array(type_usecol_offset, dtype=np.int64)
     if usecols:
         glbs[f"type_usecols_offsets_arr_{call_id}"] = usecol_type_offset_arr
         func_text += f"  type_usecols_offsets_arr_{call_id}_2 = type_usecols_offsets_arr_{call_id}\n"

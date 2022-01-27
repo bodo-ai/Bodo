@@ -226,7 +226,11 @@ def unbox_table(typ, val, c):
         arr_inds = c.context.make_constant_array(
             c.builder,
             types.Array(types.int64, 1, "C"),
-            np.array(typ.block_to_arr_ind[blk]),
+            # On windows np.array defaults to the np.int32 for integers.
+            # As a result, we manually specify int64 during the array
+            # creation to keep the lowered constant consistent with the
+            # expected type.
+            np.array(typ.block_to_arr_ind[blk], dtype=np.int64),
         )
         arr_inds_struct = c.context.make_array(types.Array(types.int64, 1, "C"))(
             c.context, c.builder, arr_inds
@@ -311,7 +315,7 @@ def box_table(typ, val, c, ensure_unboxed=None):
         arr_inds = c.context.make_constant_array(
             c.builder,
             types.Array(types.int64, 1, "C"),
-            np.array(typ.block_to_arr_ind[blk]),
+            np.array(typ.block_to_arr_ind[blk], dtype=np.int64),
         )
         arr_inds_struct = c.context.make_array(types.Array(types.int64, 1, "C"))(
             c.context, c.builder, arr_inds
@@ -869,7 +873,7 @@ def gen_table_filter(T, used_cols=None):
         "ensure_contig_if_np": ensure_contig_if_np,
     }
     if used_cols is not None:
-        glbls["used_cols"] = np.array(used_cols)
+        glbls["used_cols"] = np.array(used_cols, dtype=np.int64)
 
     func_text = "def impl(T, idx):\n"
     func_text += f"  T2 = init_table(T)\n"
@@ -888,7 +892,7 @@ def gen_table_filter(T, used_cols=None):
     if used_cols is not None:
         func_text += f"  used_set = set(used_cols)\n"
     for blk in T.type_to_blk.values():
-        glbls[f"arr_inds_{blk}"] = np.array(T.block_to_arr_ind[blk])
+        glbls[f"arr_inds_{blk}"] = np.array(T.block_to_arr_ind[blk], dtype=np.int64)
         func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
         func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk})\n"
         func_text += f"  for i in range(len(arr_list_{blk})):\n"
