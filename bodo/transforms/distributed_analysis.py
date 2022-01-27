@@ -1454,32 +1454,33 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
 
-            # arg0, arg1, and arg2 are arrays that must share a distribution.
-            arr0_dist = array_dists[rhs.args[0].name]
-            arr1_dist = array_dists[rhs.args[1].name]
-            arr2_dist = array_dists[rhs.args[2].name]
+            # arg0 is a tuple of arrays that must share a distribution.
+            index_dist = array_dists[rhs.args[0].name]
+            index_final_dist = Distribution(min(index_dist, key=lambda x: x.value))
+            columns_dist = array_dists[rhs.args[1].name]
+            columns_final_dist = Distribution(min(columns_dist, key=lambda x: x.value))
+            values_dist = array_dists[rhs.args[2].name]
+            values_final_dist = Distribution(min(values_dist, key=lambda x: x.value))
             in_dist = Distribution(
                 min(
-                    arr0_dist.value,
-                    arr1_dist.value,
-                    arr2_dist.value,
+                    index_final_dist.value,
+                    columns_final_dist.value,
+                    values_final_dist.value,
                 )
             )
             out_dist = array_dists[lhs]
             final_dist = Distribution(min(in_dist.value, out_dist.value))
-            self._set_var_dist(lhs, array_dists, in_dist)
+            self._set_var_dist(lhs, array_dists, final_dist)
             # output can cause input REP
             if final_dist != Distribution.OneD_Var:
-                self._set_var_dist(rhs.args[0].name, array_dists, final_dist)
-                self._set_var_dist(rhs.args[1].name, array_dists, final_dist)
-                self._set_var_dist(rhs.args[2].name, array_dists, final_dist)
-            else:
-                # Even if the input distributions doesn't need to change to
-                # REP all args must be the same.
-                self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
-                self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
-                self._set_var_dist(rhs.args[2].name, array_dists, in_dist)
-
+                in_dist = final_dist
+            # Update args 0, 1, 2 so all arrays have the same dist
+            index_dist = len(index_dist) * [in_dist]
+            self._set_var_dist(rhs.args[0].name, array_dists, index_dist)
+            columns_dist = len(columns_dist) * [in_dist]
+            self._set_var_dist(rhs.args[1].name, array_dists, columns_dist)
+            values_dist = len(values_dist) * [in_dist]
+            self._set_var_dist(rhs.args[2].name, array_dists, values_dist)
             # arg 3 must be replicated
             self._set_REP(
                 rhs.args[3].name,
@@ -1487,6 +1488,14 @@ class DistributedAnalysis:
                 "list of unique values for pivot is replicated",
                 rhs.loc,
             )
+            # arg 6 must be replicated if it is an array
+            if self.typemap[rhs.args[6].name] != types.none:
+                self._set_REP(
+                    rhs.args[6].name,
+                    array_dists,
+                    "column names for pivot is replicated",
+                    rhs.loc,
+                )
             return
 
         if fdef == ("get", "bodo.libs.array_kernels"):

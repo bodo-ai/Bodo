@@ -750,3 +750,339 @@ def test_pivot_repeat_value(df):
     )
     with pytest.raises(ValueError, match=err_msg):
         bodo.jit(impl)(df)
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # (string, string) multi-index columns
+        pd.DataFrame(
+            {
+                "A": [
+                    "foo",
+                    "foo",
+                    "foo",
+                    "foo",
+                    "foo",
+                    "bar",
+                    "bar",
+                    "bar",
+                    "bar",
+                    "f",
+                    "g",
+                ],
+                "B": [
+                    "one",
+                    "one",
+                    "one",
+                    "two",
+                    "two",
+                    "one",
+                    "one",
+                    "two",
+                    "two",
+                    "three",
+                    "seven",
+                ],
+                "C": [
+                    "small",
+                    "large",
+                    "large",
+                    "small",
+                    "small",
+                    "large",
+                    "small",
+                    "small",
+                    "large",
+                    "medium",
+                    "medium",
+                ],
+                "D": [1, 2, 2, 6, 3, 4, 5, 6, 9, 6, 5],
+            }
+        ),
+        # (int64, string) multi-index columns
+        pd.DataFrame(
+            {
+                "A": [
+                    "foo",
+                    "foo",
+                    "foo",
+                    "foo",
+                    "foo",
+                    "bar",
+                    "bar",
+                    "bar",
+                    "bar",
+                    "f",
+                    "g",
+                ],
+                0: [
+                    "one",
+                    "one",
+                    "one",
+                    "two",
+                    "two",
+                    "one",
+                    "one",
+                    "two",
+                    "two",
+                    "three",
+                    "seven",
+                ],
+                "C": [
+                    "small",
+                    "large",
+                    "large",
+                    "small",
+                    "small",
+                    "large",
+                    "small",
+                    "small",
+                    "large",
+                    "medium",
+                    "medium",
+                ],
+                1: [1, 2, 2, 6, 3, 4, 5, 6, 9, 6, 5],
+            }
+        ),
+        # (string, int64) multi-index columns
+        pd.DataFrame(
+            {
+                "A": [
+                    "foo",
+                    "foo",
+                    "foo",
+                    "foo",
+                    "foo",
+                    "bar",
+                    "bar",
+                    "bar",
+                    "bar",
+                    "f",
+                    "g",
+                ],
+                "B": [
+                    "one",
+                    "one",
+                    "one",
+                    "two",
+                    "two",
+                    "one",
+                    "one",
+                    "two",
+                    "two",
+                    "three",
+                    "seven",
+                ],
+                "C": [
+                    4,
+                    35,
+                    35,
+                    4,
+                    4,
+                    35,
+                    4,
+                    4,
+                    35,
+                    11,
+                    11,
+                ],
+                "D": [1, 2, 2, 6, 3, 4, 5, 6, 9, 6, 5],
+            }
+        ),
+        # (int64, int64) multi-index columns
+        pd.DataFrame(
+            {
+                "A": [
+                    "foo",
+                    "foo",
+                    "foo",
+                    "foo",
+                    "foo",
+                    "bar",
+                    "bar",
+                    "bar",
+                    "bar",
+                    "f",
+                    "g",
+                ],
+                0: [
+                    "one",
+                    "one",
+                    "one",
+                    "two",
+                    "two",
+                    "one",
+                    "one",
+                    "two",
+                    "two",
+                    "three",
+                    "seven",
+                ],
+                "C": [
+                    4,
+                    35,
+                    35,
+                    4,
+                    4,
+                    35,
+                    4,
+                    4,
+                    35,
+                    11,
+                    11,
+                ],
+                1: [1, 2, 2, 6, 3, 4, 5, 6, 9, 6, 5],
+            }
+        ),
+    ],
+)
+def test_pivot_table_multiple_values_numeric(df):
+    # TODO: Add memory_leak_check. Fails with integer array inside
+    # the multi-index.
+    """
+    Test for using > 1 value column with pivot_table where each column
+    holds numeric data. Each value passed has the same exact data and
+    differs only in the types tested for the new column names.
+    """
+
+    def impl(df):
+        return df.pivot_table(index="A", columns="C", values=None, aggfunc="count")
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+
+
+def test_pivot_table_multiple_values_string(memory_leak_check):
+    """
+    Test for using > 1 value column with pivot_table where each column
+    holds string data.
+    """
+
+    def impl(df):
+        return df.pivot_table(
+            index="A", columns="C", values=["D", "B"], aggfunc="first"
+        )
+
+    df = pd.DataFrame(
+        {
+            "A": [
+                "foo",
+                "foo",
+                "foo",
+                "foo",
+                "foo",
+                "bar",
+                "bar",
+                "bar",
+                "bar",
+                "f",
+                "g",
+            ],
+            "B": [
+                "one",
+                "one",
+                "one",
+                "two",
+                "two",
+                "one",
+                "one",
+                "two",
+                "two",
+                "three",
+                "seven",
+            ],
+            "C": [
+                "small",
+                "large",
+                "large",
+                "small",
+                "small",
+                "large",
+                "small",
+                "small",
+                "large",
+                "medium",
+                "medium",
+            ],
+            "D": [
+                "A",
+                "B",
+                "B",
+                "fdwfefw",
+                "#424",
+                "fewfe",
+                "#$@5234",
+                "fdwfefw",
+                "r2r324f23ce",
+                "fdwfefw",
+                "#$@5234",
+            ],
+        }
+    )
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # String values
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "D": [str(i) for i in range(2000, 3000)],
+                "B": [i for i in range(10)] * 100,
+                "C": [str(i) for i in range(1000, 2000)],
+            }
+        ),
+        # Numeric values
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "D": np.arange(2000, 3000),
+                "B": [i for i in range(10)] * 100,
+                "C": np.arange(1000, 2000),
+            }
+        ),
+    ],
+)
+def test_pivot_multiple_values(df):
+    """
+    Test running DataFrame.pivot() with multiple values
+    of various types.
+    """
+    # TODO: Add memory_leak_check. Fails with integer array inside
+    # the multi-index.
+    def impl(df):
+        return df.pivot(index="A", columns="B", values=["C", "D"])
+
+    # Pivot may produce different nullable data, so we set check_dtype=False.
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )

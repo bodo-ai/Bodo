@@ -1021,7 +1021,9 @@ def construct_dataframe(
 
 
 @intrinsic
-def init_runtime_cols_dataframe(typingctx, data_typ, index_typ, colnames_arr_typ=None):
+def init_runtime_cols_dataframe(
+    typingctx, data_typ, index_typ, colnames_index_typ=None
+):
     """Create a DataFrame from the provided table, index, and column
     names when the number of columns is determined at runtime.
     """
@@ -1030,11 +1032,13 @@ def init_runtime_cols_dataframe(typingctx, data_typ, index_typ, colnames_arr_typ
         and isinstance(data_typ.dtype, TableType)
         and data_typ.dtype.has_runtime_cols
     ), "init_runtime_cols_dataframe must be called with a table that determines columns at runtime."
-    assert bodo.utils.utils.is_array_typ(
-        colnames_arr_typ, False
-    ), "Column names must be an array type"
+    assert bodo.hiframes.pd_index_ext.is_pd_index_type(
+        colnames_index_typ
+    ) or isinstance(
+        colnames_index_typ, bodo.hiframes.pd_multi_index_ext.MultiIndexType
+    ), "Column names must be an index"
     ret_typ = DataFrameType(
-        (data_typ.dtype.arr_types[0], colnames_arr_typ),
+        (data_typ.dtype.arr_types[0], colnames_index_typ),
         index_typ,
         None,
         is_table_format=True,
@@ -1050,10 +1054,10 @@ def init_runtime_cols_dataframe(typingctx, data_typ, index_typ, colnames_arr_typ
         # increase refcount of stored values
         context.nrt.incref(builder, data_typ, data_tup)
         context.nrt.incref(builder, index_typ, index)
-        context.nrt.incref(builder, colnames_arr_typ, col_names)
+        context.nrt.incref(builder, colnames_index_typ, col_names)
         return dataframe_val
 
-    sig = signature(ret_typ, data_typ, index_typ, colnames_arr_typ)
+    sig = signature(ret_typ, data_typ, index_typ, colnames_index_typ)
     return sig, codegen
 
 
@@ -2608,7 +2612,15 @@ def lower_val_isin_dummy(context, builder, sig, args):
 
 @numba.generated_jit(nopython=True)
 def pivot_impl(
-    index_arr, columns_arr, values_arr, pivot_values, index_name, check_duplicates=True, parallel=False
+    index_tup,
+    columns_tup,
+    values_tup,
+    pivot_values,
+    index_name,
+    columns_name,
+    value_names,
+    check_duplicates=True,
+    parallel=False,
 ):  # pragma: no cover
     """
     Python implementation for pivot. This provides a parallel implementation
@@ -2624,9 +2636,9 @@ def pivot_impl(
     https://github.com/pandas-dev/pandas/blob/ad190575aa75962d2d0eade2de81a5fe5a2e285b/pandas/_libs/reshape.pyx#L22
 
 
-    index_arr - Array containing the index values used in pivot
-    columns_arr - Values to check to determine the column dest.
-    values_arr - Values that will be used for pivoting
+    index_tup - Tuple of arrays used for the index input.
+    columns_tup - Tuple of arrays used for the columns input.
+    values_tup - Tuple of arrays used for the values input.
     pivot_values - Replicated arrays of unique column names. Each entry
                    represents a unique output column. These values are already sorted
                    in ascending order on each rank.
@@ -2634,56 +2646,90 @@ def pivot_impl(
     check_duplicates - Do we need to add error checking for duplicates. This is a compile
                        time check to generate the bitmaps and can be skipped if we have
                        already done a reduction or removed duplicates (i.e. pivot_table).
-    parallel - Are index_arr, columns_arr, and values_arr distributed or replicated.
+    parallel - Are index_tup, columns_tup, and values_tup distributed or replicated.
     """
     if not is_overload_constant_bool(check_duplicates):
         raise BodoError("pivot_impl(): check_duplicates must be a constant boolean")
     check_duplicates_codegen = get_overload_const_bool(check_duplicates)
 
+    # value_names is lowered as an array for faster compilation. However it
+    # is only used if len(value_names) > 1, so we pass None to distinguish
+    # different index types.
+    use_multi_index = not is_overload_none(value_names)
+
+    # Check that all value arrays have the same type.
+    # TODO: Support multiple output types
+    if not isinstance(values_tup, types.UniTuple):
+        raise BodoError(
+            "DataFrame.pivot(): When pivoting with multiple 'values' all columns must have the same type."
+        )
+
     # Convert the data to nullable for empty values.
-    data_arr_typ = to_nullable_type(values_arr)
+    data_arr_typ = to_nullable_type(values_tup.dtype)
 
     func_text = "def impl(\n"
-    func_text += "    index_arr, columns_arr, values_arr, pivot_values, index_name, check_duplicates=True, parallel=False\n"
+    func_text += "    index_tup, columns_tup, values_tup, pivot_values, index_name, columns_name, value_names, check_duplicates=True, parallel=False\n"
     func_text += "):\n"
     # If the data is parallel we need to shuffle to get all values
     # in a row on the same rank.
     func_text += "    if parallel:\n"
     # Shuffle based on index so each rank contains all values for
     # the same index
-    func_text += "        info_list = [\n"
-    func_text += "            array_to_info(index_arr),\n"
-    func_text += "            array_to_info(columns_arr),\n"
-    func_text += "            array_to_info(values_arr),\n"
-    func_text += "        ]\n"
+    array_to_infos = ", ".join(
+        [f"array_to_info(index_tup[{i}])" for i in range(len(index_tup))]
+        + [f"array_to_info(columns_tup[{i}])" for i in range(len(columns_tup))]
+        + [f"array_to_info(values_tup[{i}])" for i in range(len(values_tup))]
+    )
+    func_text += f"        info_list = [{array_to_infos}]\n"
     func_text += "        cpp_table = arr_info_list_to_table(info_list)\n"
     func_text += "        out_cpp_table = shuffle_table(cpp_table, 1, parallel, 0)\n"
-    func_text += "        index_arr = info_to_array(info_from_table(out_cpp_table, 0), index_arr)\n"
-    func_text += "        columns_arr = info_to_array(\n"
-    func_text += "            info_from_table(out_cpp_table, 1), columns_arr\n"
-    func_text += "        )\n"
-    func_text += "        values_arr = info_to_array(\n"
-    func_text += "            info_from_table(out_cpp_table, 2), values_arr\n"
-    func_text += "        )\n"
+    index_info_to_arrays = ", ".join(
+        [
+            f"info_to_array(info_from_table(out_cpp_table, {i}), index_tup[{i}])"
+            for i in range(len(index_tup))
+        ]
+    )
+    columns_info_to_arrays = ", ".join(
+        [
+            f"info_to_array(info_from_table(out_cpp_table, {i + len(index_tup)}), columns_tup[{i}])"
+            for i in range(len(columns_tup))
+        ]
+    )
+    values_info_to_arrays = ", ".join(
+        [
+            f"info_to_array(info_from_table(out_cpp_table, {i + len(index_tup) + len(columns_tup)}), values_tup[{i}])"
+            for i in range(len(values_tup))
+        ]
+    )
+    func_text += f"        index_tup = ({index_info_to_arrays},)\n"
+    func_text += f"        columns_tup = ({columns_info_to_arrays},)\n"
+    func_text += f"        values_tup = ({values_info_to_arrays},)\n"
     # Delete the tables
     func_text += "        delete_table(cpp_table)\n"
     func_text += "        delete_table(out_cpp_table)\n"
+    # Load the index and column arrays. Move value arrays to a
+    # list since access won't be known at compile time.
+    func_text += "    index_arr = index_tup[0]\n"
+    func_text += "    columns_arr = columns_tup[0]\n"
+    func_text += "    values_arrs = [arr for arr in values_tup]\n"
     # Create a map on each rank for the index values.
     func_text += "    unique_index_arr, row_vector = bodo.libs.array_ops.array_unique_vector_map(\n"
     func_text += "        index_arr\n"
     func_text += "    )\n"
     func_text += "    n_rows = len(unique_index_arr)\n"
     # Create a map for columns using the unique values
-    func_text += "    n_cols = len(pivot_values)\n"
+    func_text += "    num_values_arrays = len(values_tup)\n"
+    func_text += "    n_unique_pivots = len(pivot_values)\n"
+    func_text += "    n_cols = num_values_arrays * n_unique_pivots\n"
     func_text += "    col_map = {}\n"
-    func_text += "    for i in range(n_cols):\n"
+    func_text += "    for i in range(n_unique_pivots):\n"
     func_text += "        if bodo.libs.array_kernels.isna(pivot_values, i):\n"
     func_text += "            raise ValueError(\n"
     func_text += "                \"DataFrame.pivot(): NA values in 'columns' array not supported\"\n"
     func_text += "            )\n"
     func_text += "        col_map[pivot_values[i]] = i\n"
     # If we have a string array then we need to do 2 passes
-    if values_arr == bodo.string_array_type:
+    if data_arr_typ == bodo.string_array_type:
         # Allocate arrays for the lengths
         func_text += (
             "    len_arrs = [np.zeros(n_rows, np.int64) for _ in range(n_cols)]\n"
@@ -2693,30 +2739,32 @@ def pivot_impl(
         # segfaults with setitem.
         func_text += "    nbytes = (n_rows + 7) >> 3\n"
         if check_duplicates_codegen:
-            func_text += (
-                "    seen_bitmaps = [np.zeros(nbytes, np.int8) for _ in range(n_cols)]\n"
-            )
+            # Bitmaps can be allocated per unique value rather than per output column.
+            func_text += "    seen_bitmaps = [np.zeros(nbytes, np.int8) for _ in range(n_unique_pivots)]\n"
         # Get the lengths for each value
         func_text += "    for i in range(len(columns_arr)):\n"
         func_text += "        col_name = columns_arr[i]\n"
         # Determine which column we are in by checking the map
-        func_text += "        col_idx = col_map[col_name]\n"
-        func_text += "        col_arr = len_arrs[col_idx]\n"
+        func_text += "        pivot_idx = col_map[col_name]\n"
         func_text += "        row_idx = row_vector[i]\n"
         # If this value has already been seen raise an exception.
         if check_duplicates_codegen:
-            func_text += "        seen_bitmap = seen_bitmaps[col_idx]\n"
+            func_text += "        seen_bitmap = seen_bitmaps[pivot_idx]\n"
             func_text += "        if bodo.libs.int_arr_ext.get_bit_bitmap_arr(seen_bitmap, row_idx):\n"
             func_text += "            raise ValueError(\"DataFrame.pivot(): 'index' contains duplicate entries for the same output column\")\n"
             func_text += "        else:\n"
             func_text += "            bodo.libs.int_arr_ext.set_bit_to_arr(seen_bitmap, row_idx, 1)\n"
         # Compute the lengths
-        func_text += "        if not bodo.libs.array_kernels.isna(values_arr, i):\n"
-        func_text += "            col_arr[row_idx] = len(values_arr[i])\n"
-        func_text += "            total_lens[col_idx] += len(values_arr[i])\n"
+        func_text += "        for j in range(num_values_arrays):\n"
+        func_text += "            col_idx = (j * len(pivot_values)) + pivot_idx\n"
+        func_text += "            len_arr = len_arrs[col_idx]\n"
+        func_text += "            values_arr = values_arrs[j]\n"
+        func_text += "            if not bodo.libs.array_kernels.isna(values_arr, i):\n"
+        func_text += "                len_arr[row_idx] = len(values_arr[i])\n"
+        func_text += "                total_lens[col_idx] += len(values_arr[i])\n"
 
     # Allocate the data arrays. If we have string data we use the info from the first pass
-    if values_arr == bodo.string_array_type:
+    if data_arr_typ == bodo.string_array_type:
         func_text += "    data_arrs = [\n"
         func_text += "        bodo.libs.str_arr_ext.gen_na_str_array_lens(\n"
         func_text += "            n_rows, total_lens[i], len_arrs[i]\n"
@@ -2734,37 +2782,68 @@ def pivot_impl(
         # pass.
         func_text += "    nbytes = (n_rows + 7) >> 3\n"
         if check_duplicates_codegen:
-            func_text += (
-                "    seen_bitmaps = [np.zeros(nbytes, np.int8) for _ in range(n_cols)]\n"
-            )
+            # Bitmaps can be allocated per unique value rather than per output column.
+            func_text += "    seen_bitmaps = [np.zeros(nbytes, np.int8) for _ in range(n_unique_pivots)]\n"
 
     # Set values that aren't NA
     func_text += "    for i in range(len(columns_arr)):\n"
     func_text += "        col_name = columns_arr[i]\n"
     # Determine which column we are in by checking the map
-    func_text += "        col_idx = col_map[col_name]\n"
-    func_text += "        col_arr = data_arrs[col_idx]\n"
+    func_text += "        pivot_idx = col_map[col_name]\n"
     func_text += "        row_idx = row_vector[i]\n"
-    if values_arr != bodo.string_array_type and check_duplicates_codegen:
+    if data_arr_typ != bodo.string_array_type and check_duplicates_codegen:
         # If this value has already been seen raise an exception.
-        func_text += "        seen_bitmap = seen_bitmaps[col_idx]\n"
+        func_text += "        seen_bitmap = seen_bitmaps[pivot_idx]\n"
         func_text += "        if bodo.libs.int_arr_ext.get_bit_bitmap_arr(seen_bitmap, row_idx):\n"
         func_text += "            raise ValueError(\"DataFrame.pivot(): 'index' contains duplicate entries for the same output column\")\n"
         func_text += "        else:\n"
         func_text += "            bodo.libs.int_arr_ext.set_bit_to_arr(seen_bitmap, row_idx, 1)\n"
     # Set the Data using the row info.
-    func_text += "        if bodo.libs.array_kernels.isna(values_arr, i):\n"
-    func_text += "            bodo.libs.array_kernels.setna(col_arr, row_idx)\n"
-    func_text += "        else:\n"
-    func_text += "            col_arr[row_idx] = values_arr[i]\n"
+    func_text += "        for j in range(num_values_arrays):\n"
+    func_text += "            col_idx = (j * len(pivot_values)) + pivot_idx\n"
+    func_text += "            col_arr = data_arrs[col_idx]\n"
+    func_text += "            values_arr = values_arrs[j]\n"
+    func_text += "            if bodo.libs.array_kernels.isna(values_arr, i):\n"
+    func_text += "                bodo.libs.array_kernels.setna(col_arr, row_idx)\n"
+    func_text += "            else:\n"
+    func_text += "                col_arr[row_idx] = values_arr[i]\n"
     # Convert the index array to a proper index.
     func_text += "    index = bodo.utils.conversion.index_from_array(unique_index_arr, index_name)\n"
+    # Convert the columns to a proper index.
+    if use_multi_index:
+        # If we have a multi-index we have to update value_names and pivot_values for each entry.
+        func_text += "    num_rows = len(value_names) * len(pivot_values)\n"
+        if value_names == bodo.string_array_type:
+            func_text += "    total_chars = 0\n"
+            func_text += "    for i in range(len(value_names)):\n"
+            func_text += "        total_chars += len(value_names[i])\n"
+            func_text += "    new_value_names = bodo.libs.str_arr_ext.pre_alloc_string_array(num_rows, total_chars * len(pivot_values))\n"
+        else:
+            func_text += "    new_value_names = bodo.utils.utils.alloc_type(num_rows, value_names, (-1,))\n"
+
+        if pivot_values == bodo.string_array_type:
+            func_text += "    total_chars = 0\n"
+            func_text += "    for i in range(len(pivot_values)):\n"
+            func_text += "        total_chars += len(pivot_values[i])\n"
+            func_text += "    new_pivot_values = bodo.libs.str_arr_ext.pre_alloc_string_array(num_rows, total_chars * len(value_names))\n"
+        else:
+            func_text += "    new_pivot_values = bodo.utils.utils.alloc_type(num_rows, pivot_values, (-1,))\n"
+
+        # Copy the data to the new arrays
+        func_text += "    for i in range(len(value_names)):\n"
+        func_text += "        for j in range(len(pivot_values)):\n"
+        func_text += "            new_value_names[(i * len(pivot_values)) + j] = value_names[i]\n"
+        func_text += "            new_pivot_values[(i * len(pivot_values)) + j] = pivot_values[j]\n"
+
+        func_text += "    column_index = bodo.hiframes.pd_multi_index_ext.init_multi_index((new_value_names, new_pivot_values), (None, columns_name), None)\n"
+    else:
+        func_text += "    column_index =  bodo.utils.conversion.index_from_array(pivot_values, columns_name)\n"
     # Create the output Table and DataFrame.
     func_text += "    table = bodo.hiframes.table.init_runtime_table_from_list(data_arrs, n_rows)\n"
     func_text += (
         "    return bodo.hiframes.pd_dataframe_ext.init_runtime_cols_dataframe(\n"
     )
-    func_text += "        (table,), index, pivot_values\n"
+    func_text += "        (table,), index, column_index\n"
     func_text += "    )\n"
     loc_vars = {}
     exec(
