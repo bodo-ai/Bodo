@@ -606,9 +606,9 @@ def astype(df, typemap, parallel):
         try:
             df_list.append(df.loc[:, columns].astype(col_type, copy=False))
             df = df.drop(columns, axis=1)
-        except TypeError as e:
+        except (ValueError, TypeError) as e:
             message = (
-                f"Caught the TypeError '{e}' on columns {columns}."
+                f"Caught the runtime error '{e}' on columns {columns}."
                 " Consider setting the 'dtype' argument in 'read_csv' or investigate"
                 " if the data is corrupted."
             )
