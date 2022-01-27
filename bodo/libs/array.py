@@ -1498,7 +1498,7 @@ def cpp_table_to_py_table(typingctx, cpp_table_t, table_idx_arr_t, py_table_type
             arr_inds = context.make_constant_array(
                 builder,
                 types.Array(types.int64, 1, "C"),
-                np.array(py_table_type.block_to_arr_ind[blk]),
+                np.array(py_table_type.block_to_arr_ind[blk], dtype=np.int64),
             )
             arr_inds_struct = context.make_array(types.Array(types.int64, 1, "C"))(
                 context, builder, arr_inds
@@ -1592,7 +1592,7 @@ def py_table_to_cpp_table(typingctx, py_table_t, py_table_type_t):
             arr_inds = context.make_constant_array(
                 builder,
                 types.Array(types.int64, 1, "C"),
-                np.array(py_table_type.block_to_arr_ind[blk]),
+                np.array(py_table_type.block_to_arr_ind[blk], dtype=np.int64),
             )
             arr_inds_struct = context.make_array(types.Array(types.int64, 1, "C"))(
                 context, builder, arr_inds

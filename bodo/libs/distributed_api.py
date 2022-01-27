@@ -912,7 +912,9 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
         func_text += "  T = data\n"
         func_text += "  T2 = init_table(T)\n"
         for blk in data.type_to_blk.values():
-            glbls[f"arr_inds_{blk}"] = np.array(data.block_to_arr_ind[blk])
+            glbls[f"arr_inds_{blk}"] = np.array(
+                data.block_to_arr_ind[blk], dtype=np.int64
+            )
             func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
             func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk})\n"
             func_text += f"  for i in range(len(arr_list_{blk})):\n"
