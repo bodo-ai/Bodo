@@ -1422,6 +1422,68 @@ def overload_series_tail(S, n=5):
     return impl
 
 
+@overload_method(SeriesType, "first", inline="always", no_unliteral=True)
+def overload_series_first(S, offset):
+    supp_types = (
+        types.unicode_type,
+        bodo.month_begin_type,
+        bodo.month_end_type,
+        bodo.week_type,
+        bodo.date_offset_type,
+    )
+    if types.unliteral(offset) not in supp_types:
+        raise BodoError("Series.first(): 'offset' must be a string or a DateOffset")
+
+    def impl(S, offset):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        # as with pd.Series.first, assumes index is ordered
+        if len(index):
+            start_date = index[0]
+            valid_entries = bodo.libs.array_kernels.get_valid_entries_from_date_offset(
+                index, offset, start_date, False
+            )
+        else:
+            valid_entries = 0
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        new_data = arr[:valid_entries]
+        new_index = index[:valid_entries]
+        return bodo.hiframes.pd_series_ext.init_series(new_data, new_index, name)
+
+    return impl
+
+
+@overload_method(SeriesType, "last", inline="always", no_unliteral=True)
+def overload_series_last(S, offset):
+    supp_types = (
+        types.unicode_type,
+        bodo.month_begin_type,
+        bodo.month_end_type,
+        bodo.week_type,
+        bodo.date_offset_type,
+    )
+    if types.unliteral(offset) not in supp_types:
+        raise BodoError("Series.last(): 'offset' must be a string or a DateOffset")
+
+    def impl(S, offset):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        # as with pd.Series.last, assumes index is ordered
+        if len(index):
+            last_date = index[-1]
+            valid_entries = bodo.libs.array_kernels.get_valid_entries_from_date_offset(
+                index, offset, last_date, True
+            )
+        else:
+            valid_entries = 0
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        new_data = arr[len(arr) - valid_entries :]
+        new_index = index[len(arr) - valid_entries :]
+        return bodo.hiframes.pd_series_ext.init_series(new_data, new_index, name)
+
+    return impl
+
+
 @overload_method(SeriesType, "nlargest", inline="always", no_unliteral=True)
 def overload_series_nlargest(S, n=5, keep="first"):
     # TODO: cache implementation

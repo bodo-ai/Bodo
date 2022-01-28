@@ -60,6 +60,7 @@ from bodo.utils.typing import (
     check_unsupported_args,
     element_type,
     find_common_np_dtype,
+    get_overload_const_bool,
     get_overload_const_list,
     get_overload_const_str,
     is_overload_none,
@@ -416,6 +417,72 @@ def series_monotonicity(arr, inc_dec, parallel=False):  # pragma: no cover
     series_monotonicity_call(res.ctypes, arr, inc_dec, parallel)
     is_correct = res[0] > 0.5
     return is_correct
+
+
+################################ DateTime ####################################
+
+
+@numba.generated_jit(nopython=True)
+def get_valid_entries_from_date_offset(
+    index_arr, offset, initial_date, is_last, is_parallel=False
+):
+    """
+    Determines number of valid entries in DateTime index_arr computed from initial date +/- offset
+    """
+    if get_overload_const_bool(is_last):
+        # df.first() is called, iterate backwards in index until threshhold is found
+        threshhold_str = "-"
+        last_val_check_str = "index_arr[0] > threshhold_date"
+        range_str = "1, n+1"
+        for_loop_check_str = "index_arr[-i] <= threshhold_date"
+        loc_valid_str = "i - 1"
+    else:
+        # df.first() is called, iterate forward in index until threshhold is found
+        threshhold_str = "+"
+        last_val_check_str = "index_arr[-1] < threshhold_date"
+        range_str = "n"
+        for_loop_check_str = "index_arr[i] >= threshhold_date"
+        loc_valid_str = "i"
+    func_text = (
+        "def impl(index_arr, offset, initial_date, is_last, is_parallel=False):\n"
+    )
+    if types.unliteral(offset) == types.unicode_type:
+        func_text += "  with numba.objmode(threshhold_date=bodo.pd_timestamp_type):\n"
+        func_text += "    date_offset = pd.tseries.frequencies.to_offset(offset)\n"
+        if not get_overload_const_bool(is_last):
+            func_text += "    if not isinstance(date_offset, pd._libs.tslibs.Tick) and date_offset.is_on_offset(index_arr[0]):\n"
+            func_text += "      threshhold_date = initial_date - date_offset.base + date_offset\n"
+            func_text += "    else:\n"
+            func_text += "      threshhold_date = initial_date + date_offset\n"
+        else:
+            func_text += (
+                f"    threshhold_date = initial_date {threshhold_str} date_offset\n"
+            )
+    else:
+        func_text += f"  threshhold_date = initial_date {threshhold_str} offset\n"
+    func_text += "  local_valid = 0\n"
+    func_text += f"  n = len(index_arr)\n"
+    func_text += f"  if n:\n"
+    func_text += f"    if {last_val_check_str}:\n"
+    func_text += "      loc_valid = n\n"
+    func_text += "    else:\n"
+    func_text += f"      for i in range({range_str}):\n"
+    func_text += f"        if {for_loop_check_str}:\n"
+    func_text += f"          loc_valid = {loc_valid_str}\n"
+    func_text += "          break\n"
+    func_text += "  if is_parallel:\n"
+    func_text += (
+        "    total_valid = bodo.libs.distributed_api.dist_reduce(loc_valid, sum_op)\n"
+    )
+    func_text += "    return total_valid\n"
+    func_text += "  else:\n"
+    func_text += "    return loc_valid\n"
+    # print(func_text)
+    loc_vars = {}
+    exec(
+        func_text, {"bodo": bodo, "pd": pd, "numba": numba, "sum_op": sum_op}, loc_vars
+    )
+    return loc_vars["impl"]
 
 
 ################################ quantile ####################################
@@ -868,7 +935,7 @@ def overload_drop_duplicates_array(data_arr, parallel=False):
     Kernel implementation for drop_duplicates on a single array
     """
 
-    def impl(data_arr, parallel=False): # pragma: no cover
+    def impl(data_arr, parallel=False):  # pragma: no cover
         info_list_total = [array_to_info(data_arr)]
         table_total = arr_info_list_to_table(info_list_total)
         keep_i = 0

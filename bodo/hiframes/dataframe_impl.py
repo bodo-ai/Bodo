@@ -739,6 +739,64 @@ def overload_dataframe_tail(df, n=5):
     return _gen_init_df(header, df.columns, data_args, index)
 
 
+@overload_method(DataFrameType, "first", inline="always", no_unliteral=True)
+def overload_dataframe_first(df, offset):
+    check_runtime_cols_unsupported(df, "DataFrame.first()")
+    supp_types = (
+        types.unicode_type,
+        bodo.month_begin_type,
+        bodo.month_end_type,
+        bodo.week_type,
+        bodo.date_offset_type,
+    )
+    if types.unliteral(offset) not in supp_types:
+        raise BodoError("DataFrame.first(): 'offset' must be an string or DateOffset")
+    # determine first() on underlying arrays
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[:valid_entries]"
+    data_args = ", ".join(
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[:valid_entries]"
+        for i in range(len(df.columns))
+    )
+    header = "def impl(df, offset):\n"
+    header += "  df_index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
+    header += "  if len(df_index):\n"
+    header += "    start_date = df_index[0]\n"
+    header += "    valid_entries = bodo.libs.array_kernels.get_valid_entries_from_date_offset(df_index, offset, start_date, False)\n"
+    header += "  else:\n"
+    header += "    valid_entries = 0\n"
+    return _gen_init_df(header, df.columns, data_args, index)
+
+
+@overload_method(DataFrameType, "last", inline="always", no_unliteral=True)
+def overload_dataframe_last(df, offset):
+    check_runtime_cols_unsupported(df, "DataFrame.last()")
+    supp_types = (
+        types.unicode_type,
+        bodo.month_begin_type,
+        bodo.month_end_type,
+        bodo.week_type,
+        bodo.date_offset_type,
+    )
+    if types.unliteral(offset) not in supp_types:
+        raise BodoError("DataFrame.last(): 'offset' must be an string or DateOffset")
+    # determine last() on underlying arrays
+    index = (
+        "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[len(df)-valid_entries:]"
+    )
+    data_args = ", ".join(
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[len(df)-valid_entries:]"
+        for i in range(len(df.columns))
+    )
+    header = "def impl(df, offset):\n"
+    header += "  df_index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
+    header += "  if len(df_index):\n"
+    header += "    final_date = df_index[-1]\n"
+    header += "    valid_entries = bodo.libs.array_kernels.get_valid_entries_from_date_offset(df_index, offset, final_date, True)\n"
+    header += "  else:\n"
+    header += "    valid_entries = 0\n"
+    return _gen_init_df(header, df.columns, data_args, index)
+
+
 @overload_method(DataFrameType, "to_string", no_unliteral=True)
 def to_string_overload(
     df,
