@@ -2490,9 +2490,8 @@ class SeriesPass:
                 assign, assign.target, rhs, func_mod, func_name
             )
 
-        if (
-            isinstance(func_mod, ir.Var)
-            and self.typemap[func_mod.name] == bodo.logging_rootlogger_type
+        if isinstance(func_mod, ir.Var) and isinstance(
+            self.typemap[func_mod.name], bodo.LoggingLoggerType
         ):
             return self._run_call_logger(
                 assign, assign.target, rhs, func_mod, func_name
@@ -2841,7 +2840,18 @@ class SeriesPass:
         """
         Provide transformations for logging module functions that cannot be supported in regular overloads
         """
-        if func_name == "info":
+        func_names = (
+            "debug",
+            "warning",
+            "warn",
+            "info",
+            "error",
+            "exception",
+            "critical",
+            "log",
+            "setLevel",
+        )
+        if func_name in func_names:
             kws = dict(rhs.kws)
             keys = list(kws.keys())
             header_args = (
@@ -2861,7 +2871,7 @@ class SeriesPass:
 
             format_func_text = "def format_func(logger, {}):\n".format(header_args)
             format_func_text += "    with numba.objmode():\n"
-            format_func_text += "        logger.info({})\n".format(arg_names)
+            format_func_text += "        logger.{}({})\n".format(func_name, arg_names)
 
             loc_vars = {}
             exec(func_text, {}, loc_vars)
