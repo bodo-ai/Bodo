@@ -1772,7 +1772,7 @@ def test_timestamp_unit_constructor_error(memory_leak_check):
 
     unit = "s"
     with pytest.raises(
-        BodoError, match=r"pd\.Timedelta\(\): unit argument must be a constant str"
+        BodoError, match=r"pandas\.Timedelta\(\): unit argument must be a constant str"
     ):
         bodo.jit(test_impl)(10210420, unit)
 
