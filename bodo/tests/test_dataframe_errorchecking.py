@@ -1565,36 +1565,6 @@ def test_df_cov_err():
 
 
 @pytest.mark.slow
-def test_pivot_err():
-    def impl():
-        df = pd.DataFrame(
-            {
-                "A": [
-                    "X",
-                    "X",
-                    "X",
-                    "X",
-                    "Y",
-                    "Y",
-                ],
-                "B": [1, 2, 3, 4, 5, 6],
-                "C": [10, 11, 12, 20, 21, 22],
-            }
-        )
-        pivoted_tbl = df.pivot_table(columns="A", index="B", values="C")
-        return pivoted_tbl
-
-    err_msg = re.escape(
-        "Dataframe.pivot_table() requires explicit annotation to determine output columns. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/pandas.html"
-    )
-    with pytest.raises(
-        BodoError,
-        match=err_msg,
-    ):
-        bodo.jit(impl)()
-
-
-@pytest.mark.slow
 def test_df_rolling_unsupported():
     def impl():
         df = pd.DataFrame({"B": [1, 2, 3, 4, 5, 6]}).rolling(1).kurt()
