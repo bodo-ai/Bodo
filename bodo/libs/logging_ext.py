@@ -6,9 +6,9 @@ import logging
 import numba
 from numba.core import types
 from numba.core.imputils import lower_constant
+from numba.core.typing.templates import bound_function  # noqa
 from numba.core.typing.templates import (
     AttributeTemplate,
-    bound_function,
     infer_getattr,
     signature,
 )
@@ -23,56 +23,75 @@ from numba.extending import (
     unbox,
 )
 
-from bodo.utils.typing import create_unsupported_overload
+from bodo.utils.typing import (
+    create_unsupported_overload,
+    gen_objmode_attr_overload,
+)
 
 
-class LoggingRootLoggerType(types.Type):
-    """JIT type for logging.RootLogger"""
+class LoggingLoggerType(types.Type):
+    """JIT type for logging.Logger and logging.RootLogger"""
 
-    def __init__(self):
-        super(LoggingRootLoggerType, self).__init__(name="LoggingRootLoggerType()")
-
-
-logging_rootlogger_type = LoggingRootLoggerType()
+    def __init__(self, is_root=False):
+        # TODO: flag is unused, remove?
+        self.is_root = is_root
+        super(LoggingLoggerType, self).__init__(
+            name=f"LoggingLoggerType(is_root={is_root})"
+        )
 
 
 @typeof_impl.register(logging.RootLogger)
+@typeof_impl.register(logging.Logger)
 def typeof_logging(val, c):
-    return logging_rootlogger_type
+    # logging.RootLogger is the child of logging.Logger
+    if isinstance(val, logging.RootLogger):
+        return LoggingLoggerType(is_root=True)
+    else:
+        return LoggingLoggerType(is_root=False)
 
 
-register_model(LoggingRootLoggerType)(models.OpaqueModel)
-types.logging_rootlogger_type = logging_rootlogger_type
+register_model(LoggingLoggerType)(models.OpaqueModel)
 
 
-@box(LoggingRootLoggerType)
+@box(LoggingLoggerType)
 def box_logging_logger(typ, val, c):
     c.pyapi.incref(val)
     return val
 
 
-@unbox(LoggingRootLoggerType)
+@unbox(LoggingLoggerType)
 def unbox_logging_logger(typ, obj, c):
     c.pyapi.incref(obj)
     return NativeValue(obj)
 
 
-@lower_constant(LoggingRootLoggerType)
+@lower_constant(LoggingLoggerType)
 def lower_constant_logger(context, builder, ty, pyval):
     pyapi = context.get_python_api(builder)
     return pyapi.unserialize(pyapi.serialize_object(pyval))
 
 
+# Generate attribute overloads for LoggerLoggingType
+gen_objmode_attr_overload(LoggingLoggerType, "level", None, types.int64)
+gen_objmode_attr_overload(LoggingLoggerType, "name", None, "unicode_type")
+gen_objmode_attr_overload(LoggingLoggerType, "propagate", None, types.boolean)
+gen_objmode_attr_overload(LoggingLoggerType, "disabled", None, types.boolean)
+gen_objmode_attr_overload(LoggingLoggerType, "parent", None, LoggingLoggerType())
+gen_objmode_attr_overload(
+    LoggingLoggerType, "root", None, LoggingLoggerType(is_root=True)
+)
+
+
 @infer_getattr
-class LoggingRootLoggerAttribute(AttributeTemplate):
+class LoggingLoggerAttribute(AttributeTemplate):
     """
-    Template used for typing logging.RootLogger attributes. This is used for functions that cannot use a traditional overload due to *args and **kwargs limitations in overloads.
+    Template used for typing logging.Logger and logging.RootLogger attributes.
+    This is used for functions that cannot use a traditional overload due to *args and **kwargs limitations in overloads.
     """
 
-    key = LoggingRootLoggerType
+    key = LoggingLoggerType
 
-    @bound_function("logging.RootLogger.info")
-    def resolve_info(self, string_typ, args, kws):
+    def _resolve_helper(self, logger_typ, args, kws):
         kws = dict(kws)
         # add dummy default value for kws to avoid errors
         arg_names = ", ".join("e{}".format(i) for i in range(len(args)))
@@ -85,61 +104,66 @@ class LoggingRootLoggerAttribute(AttributeTemplate):
         exec(func_text, {}, loc_vars)
         format_stub = loc_vars["format_stub"]
         pysig = numba.core.utils.pysignature(format_stub)
-        arg_types = (string_typ,) + args + tuple(kws.values())
-        return signature(string_typ, arg_types).replace(pysig=pysig)
+        arg_types = (logger_typ,) + args + tuple(kws.values())
+        return signature(logger_typ, arg_types).replace(pysig=pysig)
+
+    func_names = (
+        "debug",
+        "warning",
+        "warn",
+        "info",
+        "error",
+        "exception",
+        "critical",
+        "log",
+        "setLevel",
+    )
+
+    for logger in ("logging.Logger", "logging.RootLogger"):
+        for func_name in func_names:
+            resolve_text = f"""@bound_function("{logger}.{func_name}")\n"""
+            resolve_text += f"def resolve_{func_name}(self, logger_typ, args, kws):\n"
+            resolve_text += "    return self._resolve_helper(logger_typ, args, kws)"
+            exec(resolve_text)
 
 
-logging_rootlogger_unsupported_attrs = {
-    "disabled",
+logging_logger_unsupported_attrs = {
     "filters",
     "handlers",
-    "level",
     "manager",
-    "name",
-    "parent",
-    "propagate",
-    "root",
 }
 
 
-logging_rootlogger_unsupported_methods = {
+logging_logger_unsupported_methods = {
     "addHandler",
     "callHandlers",
-    "critical",
-    "debug",
-    "error",
-    "exception",
     "fatal",
     "findCaller",
     "getChild",
     "getEffectiveLevel",
     "handle",
     "hasHandlers",
-    "info",
     "isEnabledFor",
-    "log",
     "makeRecord",
     "removeHandler",
-    "setLevel",
-    "warn",
-    "warning",
 }
 
 
-def _install_logging_rootlogger_unsupported_objects():
-    """install overload that raises BodoError for unsupported logger.RootLogger methods"""
+def _install_logging_logger_unsupported_objects():
+    """install overload that raises BodoError for unsupported logger.Logger methods"""
 
-    for attr_name in logging_rootlogger_unsupported_attrs:
-        full_name = "logging.RootLogger." + attr_name
-        overload_attribute(LoggingRootLoggerType, attr_name)(
+    # Installs overload for logger.Logger
+    for attr_name in logging_logger_unsupported_attrs:
+        full_name = "logging.Logger." + attr_name
+        overload_attribute(LoggingLoggerType, attr_name)(
             create_unsupported_overload(full_name)
         )
 
-    for fname in logging_rootlogger_unsupported_methods:
-        full_name = "logging.Rootlogger." + fname
-        overload_method(LoggingRootLoggerType, fname)(
+    for fname in logging_logger_unsupported_methods:
+        full_name = "logging.Logger." + fname
+        overload_method(LoggingLoggerType, fname)(
             create_unsupported_overload(full_name)
         )
 
 
-_install_logging_rootlogger_unsupported_objects()
+_install_logging_logger_unsupported_objects()

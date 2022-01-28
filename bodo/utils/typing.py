@@ -25,6 +25,7 @@ from numba.extending import (
     lower_cast,
     models,
     overload,
+    overload_attribute,
     overload_method,
     register_jitable,
     register_model,
@@ -1610,38 +1611,43 @@ def get_nullable_and_non_nullable_types(array_of_types):
     return all_types
 
 
-def _gen_objmode_overload(func, output_type, method_name=None, single_rank=False):
+def _gen_objmode_overload(
+    func, output_type, attr_name=None, is_function=True, single_rank=False
+):
     """code gen for gen_objmode_func_overload and gen_objmode_method_overload"""
-    func_spec = getfullargspec(func)
+    if is_function:
+        func_spec = getfullargspec(func)
 
-    assert func_spec.varargs is None, "varargs not supported"
-    assert func_spec.varkw is None, "varkw not supported"
+        assert func_spec.varargs is None, "varargs not supported"
+        assert func_spec.varkw is None, "varkw not supported"
 
-    defaults = [] if func_spec.defaults is None else func_spec.defaults
-    n_pos_args = len(func_spec.args) - len(defaults)
+        defaults = [] if func_spec.defaults is None else func_spec.defaults
+        n_pos_args = len(func_spec.args) - len(defaults)
 
-    # Matplotlib specifies some arguments as `<deprecated parameter>`.
-    # We can't support them, and it breaks our infrastructure, so omit them.
+        # Matplotlib specifies some arguments as `<deprecated parameter>`.
+        # We can't support them, and it breaks our infrastructure, so omit them.
 
-    args = func_spec.args[1:] if method_name else func_spec.args[:]
-    arg_strs = []
-    for i, arg in enumerate(func_spec.args):
-        if i < n_pos_args:
-            arg_strs.append(arg)
-        elif str(defaults[i - n_pos_args]) != "<deprecated parameter>":
-            arg_strs.append(arg + "=" + str(defaults[i - n_pos_args]))
-        else:
-            args.remove(arg)
+        args = func_spec.args[1:] if attr_name else func_spec.args[:]
+        arg_strs = []
+        for i, arg in enumerate(func_spec.args):
+            if i < n_pos_args:
+                arg_strs.append(arg)
+            elif str(defaults[i - n_pos_args]) != "<deprecated parameter>":
+                arg_strs.append(arg + "=" + str(defaults[i - n_pos_args]))
+            else:
+                args.remove(arg)
 
-    # Handle kwonly args. This assumes they have default values.
-    if func_spec.kwonlyargs is not None:
-        for arg in func_spec.kwonlyargs:
-            # write args as arg=arg to handle kwonly requirement
-            args.append(f"{arg}={arg}")
-            arg_strs.append(f"{arg}={str(func_spec.kwonlydefaults[arg])}")
+        # Handle kwonly args. This assumes they have default values.
+        if func_spec.kwonlyargs is not None:
+            for arg in func_spec.kwonlyargs:
+                # write args as arg=arg to handle kwonly requirement
+                args.append(f"{arg}={arg}")
+                arg_strs.append(f"{arg}={str(func_spec.kwonlydefaults[arg])}")
 
-    sig = ", ".join(arg_strs)
-    args = ", ".join(args)
+        sig = ", ".join(arg_strs)
+        args = ", ".join(args)
+    else:
+        sig = "self"
 
     # workaround objmode string type name requirement by adding the type to types module
     # TODO: fix Numba's object mode to take type refs
@@ -1650,12 +1656,12 @@ def _gen_objmode_overload(func, output_type, method_name=None, single_rank=False
         type_name = f"objmode_type{ir_utils.next_label()}"
         setattr(types, type_name, output_type)
 
-    if not method_name:
+    if not attr_name:
         # This Python function is going to be set at the global scope of this
         # module (bodo.utils.typing) so we need a name that won't clash
         func_name = func.__module__.replace(".", "_") + "_" + func.__name__ + "_func"
 
-    call_str = f"self.{method_name}" if method_name else f"{func_name}"
+    call_str = f"self.{attr_name}" if attr_name else f"{func_name}"
     func_text = f"def overload_impl({sig}):\n"
     func_text += f"    def impl({sig}):\n"
     if single_rank:
@@ -1664,7 +1670,10 @@ def _gen_objmode_overload(func, output_type, method_name=None, single_rank=False
     else:
         extra_indent = ""
     func_text += f"        {extra_indent}with numba.objmode(res='{type_name}'):\n"
-    func_text += f"            {extra_indent}res = {call_str}({args})\n"
+    if is_function:
+        func_text += f"            {extra_indent}res = {call_str}({args})\n"
+    else:
+        func_text += f"            {extra_indent}res = {call_str}\n"
     func_text += f"        return res\n"
     func_text += f"    return impl\n"
 
@@ -1672,7 +1681,7 @@ def _gen_objmode_overload(func, output_type, method_name=None, single_rank=False
     # XXX For some reason numba needs a reference to the module or caching
     # won't work (and seems related to objmode).
     glbls = globals()
-    if not method_name:
+    if not attr_name:
         glbls[func_name] = func
     exec(func_text, glbls, loc_vars)
     overload_impl = loc_vars["overload_impl"]
@@ -1685,7 +1694,7 @@ def gen_objmode_func_overload(func, output_type=None, single_rank=False):
     """
     try:
         overload_impl = _gen_objmode_overload(
-            func, output_type, single_rank=single_rank
+            func, output_type, is_function=True, single_rank=single_rank
         )
         overload(func, no_unliteral=True)(overload_impl)
     except Exception:
@@ -1702,12 +1711,26 @@ def gen_objmode_method_overload(
     """
     try:
         overload_impl = _gen_objmode_overload(
-            method, output_type, method_name, single_rank
+            method, output_type, method_name, True, single_rank
         )
         overload_method(obj_type, method_name, no_unliteral=True)(overload_impl)
     except Exception:
         # If the module has changed in a way we can't support (i.e. varargs in matplotlib),
         # then don't do the overload
+        pass
+
+
+def gen_objmode_attr_overload(
+    obj_type, attr_name, attr, output_type=None, single_rank=False
+):
+    try:
+        overload_impl = _gen_objmode_overload(
+            attr, output_type, attr_name, False, single_rank
+        )
+        overload_attribute(obj_type, attr_name, no_unliteral=True)(overload_impl)
+    except Exception:  # pragma: no cover
+        # This is preserved from the func/method objmode overloads to handle unsupported
+        # changes (e.g. varargs), this is likely not stricly necessary here.
         pass
 
 
