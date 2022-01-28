@@ -2720,6 +2720,13 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
     if db_type == "snowflake":
         try:
             import snowflake.connector
+
+            # snowflake.connector.errors.DatabaseError: snowflake access credentials error
+            # snowflake.connector.errors.ProgrammingError: SQL has an error
+            except_classes = (
+                snowflake.connector.errors.DatabaseError,
+                snowflake.connector.errors.ProgrammingError,
+            )
         except ImportError:
             message = (
                 "Snowflake Python connector not found."
@@ -2731,6 +2738,13 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
     else:
         try:
             import sqlalchemy  # noqa
+
+            # sqlalchemy.exc.ProgrammingError: SQL has an error
+            # sqlalchemy.exc.OperationalError: DB access credentials error
+            except_classes = (
+                sqlalchemy.exc.ProgrammingError,
+                sqlalchemy.exc.OperationalError,
+            )
         except ImportError:  # pragma: no cover
             message = (
                 "Using URI string without sqlalchemy installed."
@@ -2740,52 +2754,73 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
             raise BodoError(message)
 
     df_info = None
+    message = ""
     if bodo.get_rank() == 0:
-        # Any columns that had their name converted. These need to be reverted
-        # in any dead column elimination
-        converted_colnames = set()
-        rows_to_read = 100  # TODO: tune this
-        sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
-        if db_type == "snowflake":
-            from bodo.io.snowflake import get_connection_params
+        try:
+            # Any columns that had their name converted. These need to be reverted
+            # in any dead column elimination
+            converted_colnames = set()
+            rows_to_read = 100  # TODO: tune this
+            sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
+            if db_type == "snowflake":  # pragma: no cover
+                from bodo.io.snowflake import get_connection_params
 
-            conn_params = get_connection_params(con_const)
-            conn = snowflake.connector.connect(**conn_params)
-            pa_schema = conn.cursor().execute(sql_call).fetch_arrow_all().schema
-            # arrow schema
-            col_names = pa_schema.names
-            col_types = [
-                _get_numba_typ_from_pa_typ(
-                    pa_schema.field(c),
-                    False,  # index_col
-                    None,  # nullable_from_metadata
-                    None,  # category_info
+                conn_params = get_connection_params(con_const)
+                conn = snowflake.connector.connect(**conn_params)
+                pa_schema = conn.cursor().execute(sql_call).fetch_arrow_all().schema
+                # arrow schema
+                col_names = pa_schema.names
+                col_types = [
+                    _get_numba_typ_from_pa_typ(
+                        pa_schema.field(c),
+                        False,  # index_col
+                        None,  # nullable_from_metadata
+                        None,  # category_info
+                    )
+                    for c in col_names
+                ]
+
+                # Ensure column name case matches Pandas/sqlalchemy. See:
+                # https://github.com/snowflakedb/snowflake-sqlalchemy#object-name-case-handling
+                # If a name is returned as all uppercase by the Snowflake connector
+                # it means it is case insensitive or it was inserted as all
+                # uppercase with double quotes. In both of these situations
+                # pd.read_sql() returns the name with all lower case
+                new_colnames = []
+                for x in col_names:
+                    if x.isupper():
+                        converted_colnames.add(x.lower())
+                        new_colnames.append(x.lower())
+                    else:
+                        new_colnames.append(x)
+                df_type = DataFrameType(
+                    data=tuple(col_types), columns=tuple(new_colnames)
                 )
-                for c in col_names
-            ]
+            else:
+                df = pd.read_sql(sql_call, con_const)
+                df_type = numba.typeof(df)
+            # always convert to nullable type since initial rows of a column could be all
+            # int for example, but later rows could have NAs
+            # Q: Is this needed for snowflake?
+            df_type = to_nullable_type(df_type)
+            df_info = (df_type, converted_colnames)
+        except except_classes as e:
+            message = f"{type(e).__name__}:'{e}'"
 
-            # Ensure column name case matches Pandas/sqlalchemy. See:
-            # https://github.com/snowflakedb/snowflake-sqlalchemy#object-name-case-handling
-            # If a name is returned as all uppercase by the Snowflake connector
-            # it means it is case insensitive or it was inserted as all
-            # uppercase with double quotes. In both of these situations
-            # pd.read_sql() returns the name with all lower case
-            new_colnames = []
-            for x in col_names:
-                if x.isupper():
-                    converted_colnames.add(x.lower())
-                    new_colnames.append(x.lower())
-                else:
-                    new_colnames.append(x)
-            df_type = DataFrameType(data=tuple(col_types), columns=tuple(new_colnames))
+    raise_error = bool(message)
+    # check if more than 1 rank, then propagate the error to raise on all ranks.
+    if bodo.get_size() > 1:
+        comm = MPI.COMM_WORLD
+        raise_error = comm.allreduce(raise_error, op=MPI.LOR)
+    if raise_error:
+        common_err_msg = f"pd.read_sql(): Error executing query `{sql_const}`."
+        # raised general exception since except checks for multiple exceptions (sqlalchemy, snowflake)
+        if message:
+            raise RuntimeError(f"{common_err_msg}\n{message}")
         else:
-            df = pd.read_sql(sql_call, con_const)
-            df_type = numba.typeof(df)
-        # always convert to nullable type since initial rows of a column could be all
-        # int for example, but later rows could have NAs
-        df_type = to_nullable_type(df_type)
-        df_info = (df_type, converted_colnames)
-
+            raise RuntimeError(
+                f"{common_err_msg}\nPlease refer to errors on other ranks."
+            )
     df_type, converted_colnames = comm.bcast(df_info)
     return df_type, converted_colnames
 
