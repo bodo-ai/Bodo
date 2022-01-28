@@ -92,8 +92,8 @@ jobs:
       set -eo pipefail
       source activate bodo_build
       ## Copy OpenSSL DLLs to bodo source directory to bundle them in package
-      cp $CONDA_PREFIX/Library/bin/libssl-1_1-x64.dll bodo/libs
-      cp $CONDA_PREFIX/Library/bin/libcrypto-1_1-x64.dll bodo/libs
+      cp `cygpath -u $CONDA_PREFIX`/Library/bin/libssl-*-x64.dll bodo/libs
+      cp `cygpath -u $CONDA_PREFIX`/Library/bin/libcrypto-*-x64.dll bodo/libs
       if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
         cd buildscripts/bodo-numba-dev-conda-recipe/
         echo "Using Numba-Dev Conda Recipe"

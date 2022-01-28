@@ -15,6 +15,10 @@ import platform
 # preload them into memory to make sure the dynamic linker finds them
 import pyarrow
 import pyarrow.parquet
+if platform.system() == "Windows":
+    # importing our modified mpi4py (see buildscripts/mpi4py-pip/patch-3.1.2.diff)
+    # guarantees that msmpi.dll is loaded, and therefore found when MPI calls are made
+    import mpi4py
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
