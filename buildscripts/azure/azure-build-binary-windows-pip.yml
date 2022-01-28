@@ -1,0 +1,56 @@
+parameters:
+  name: ''
+  vmImage: ''
+
+jobs:
+- job: ${{ parameters.name }}
+  timeoutInMinutes: 90
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+
+  steps:
+  - bash: |
+      set -eo pipefail
+
+      export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+      echo "##vso[task.setvariable variable=BODO_VERSION]$BODO_VERSION"
+      echo "BODO_VERSION: $BODO_VERSION"
+
+      export IS_RELEASE=`git tag --points-at HEAD`
+      echo "##vso[task.setvariable variable=IS_RELEASE]$IS_RELEASE"
+      echo "IS_RELEASE: $IS_RELEASE"
+      export IS_MAJOR_RELEASE=0
+      if [[ -n "$IS_RELEASE" ]]; then
+        export IS_MAJOR_RELEASE=`python -c "import os; print(int(len(os.environ[\"IS_RELEASE\"].split(\".\")) < 3))"`
+      fi
+      echo "##vso[task.setvariable variable=IS_MAJOR_RELEASE]$IS_MAJOR_RELEASE"
+    displayName: 'Get Bodo Version and Release Tag (if any)'
+
+  - powershell: |
+        Write-Host "##vso[task.prependpath]$env:CONDA\Scripts"
+        Write-Host "##vso[task.prependpath]$HOME/miniconda3/bin"
+    displayName: 'Add conda to PATH'
+
+  - script: conda update -q -n base conda
+    displayName: 'Update conda'
+
+  - task: DownloadSecureFile@1
+    name: pypi_secret_file
+    displayName: 'Download pypi secrets file'
+    inputs:
+      secureFile: 'pypi_secrets'
+
+  - bash: |
+      set -eo pipefail
+      export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
+      export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
+      if [[ "$IS_MAJOR_RELEASE" == 1 ]]; then
+        # get secrets
+        cp `cygpath -u "$(pypi_secret_file.secureFilePath)"` $HOME/pypi_secret_file
+        cd `cygpath -u "$(System.DefaultWorkingDirectory)"`
+        PYPI_TOKEN=`cat $HOME/pypi_secret_file | grep pypi.token | cut -f 2 -d' '`
+        # save the PyPI username and password to ~/.pypirc for twine to pick it up
+        echo -e "[pypi]\nusername = __token__ \npassword = ${PYPI_TOKEN}" > .pypirc
+        ./buildscripts/pip/centos7/generate_manylinux_wheels_win.sh
+      fi
+    displayName: 'Build and publish pip wheel'

@@ -15,7 +15,7 @@ index 313f984..64aae5d 100644
  
  Features
 diff --git a/setup.py b/setup.py
-index 01cdc34..5b04279 100644
+index 01cdc34..26b02e7 100644
 --- a/setup.py
 +++ b/setup.py
 @@ -4,7 +4,7 @@
@@ -50,10 +50,27 @@ index 01cdc34..5b04279 100644
                  'py.typed',
                  '*.pyi',
              ],
-+            'mpiexec' : ['mpiexec', 'hydra_pmi_proxy'],  # added for mpi4py_mpich package
++            'mpiexec' : ['mpiexec', 'hydra_pmi_proxy', 'mpiexec.exe', 'smpd.exe', '.libs/msmpi.dll'],  # added for mpi4py_mpich package
          },
 -        package_dir = {'' : 'src'},
 +        package_dir = {'' : 'src', 'mpiexec' : 'mpiexec'},  # added mpiexec for mpi4py_mpich package
          ext_modules = [Ext(**ext) for ext in ext_modules()],
          executables = [Exe(**exe) for exe in executables()],
          libraries   = [Lib(**lib) for lib in libraries()  ],
+diff --git a/src/mpi4py/__init__.py b/src/mpi4py/__init__.py
+index d0815a6..8bc9220 100644
+--- a/src/mpi4py/__init__.py
++++ b/src/mpi4py/__init__.py
+@@ -162,3 +162,12 @@ def profile(name, *, path=None, logfile=None):
+     else:
+         from warnings import warn
+         warn(dlerror())
++
++
++import platform
++if platform.system() == "Windows":
++    import os
++    import ctypes
++    PATH_TO_MSMPI_DLL = os.path.join(os.path.dirname(__file__), "..", "mpiexec", ".libs")
++    # load MS-MPI dll into memory to make sure it is found (because it's not in PATH)
++    ctypes.CDLL(os.path.join(PATH_TO_MSMPI_DLL, "msmpi.dll"))

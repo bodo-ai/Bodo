@@ -122,6 +122,10 @@ H5_CPP_FLAGS = []
 if is_win:
     # use Microsoft MPI on Windows
     MPI_LIBS = ["msmpi"]
+    if os.environ.get("BUILD_PIP", "") == "1":
+        # building pip package, need to set additional include and library paths
+        ind.append(os.path.join(os.path.dirname(pyarrow.__file__), "include"))
+        ela.append(f"/LIBPATH:{os.path.join(os.path.dirname(pyarrow.__file__))}")
     # hdf5-parallel Windows build uses CMake which needs this flag
     H5_CPP_FLAGS = [("H5_BUILT_AS_DYNAMIC_LIB", None)]
 
@@ -482,6 +486,7 @@ ext_tracing = Extension(
     sources=[
         "bodo/utils/tracing.pyx",
     ],
+    include_dirs=ind,
     libraries=MPI_LIBS,
     define_macros=[],
     extra_compile_args=eca_c,
@@ -544,6 +549,7 @@ setup(
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
         "Operating System :: POSIX :: Linux",
+        "Operating System :: Microsoft :: Windows",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
@@ -567,7 +573,7 @@ setup(
     # When doing `python setup.py develop`, setuptools will try to install whatever is
     # in `install_requires` after building, so we set it to empty (we don't want to
     # install mpi4py_mpich in development mode, and it will also break CI)
-    install_requires=[] if development_mode else ["numba==0.54.1", "pyarrow==5.0.0", "pandas==1.3.*", "numpy>=1.17,<1.21", "mpi4py_mpich>3.0.3"],
+    install_requires=[] if development_mode else ["numba==0.55.0", "pyarrow==5.0.0", "pandas==1.3.*", "numpy>=1.17,<1.21", "mpi4py_mpich>3.0.3"],
     extras_require={"HDF5": ["h5py"], "Parquet": ["pyarrow"]},
     cmdclass=versioneer.get_cmdclass(),
     ext_modules=_ext_mods
