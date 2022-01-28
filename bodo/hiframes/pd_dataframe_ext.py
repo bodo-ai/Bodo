@@ -3881,8 +3881,6 @@ dataframe_unsupported = [
     "at_time",
     "between_time",
     "equals",
-    "first",
-    "last",
     "reindex",
     "reindex_like",
     "rename_axis",

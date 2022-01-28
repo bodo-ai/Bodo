@@ -1536,6 +1536,12 @@ class DistributedPass:
         ):
             self._set_last_arg_to_true(assign.value)
             return [assign]
+        
+        if fdef == ("get_valid_entries_from_date_offset", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
+            rhs.args[0].name
+        ):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
 
         if fdef == ("pivot_impl", "bodo.hiframes.pd_dataframe_ext") and (self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)):
             self._set_last_arg_to_true(assign.value)

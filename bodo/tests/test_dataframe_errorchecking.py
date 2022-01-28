@@ -1636,3 +1636,25 @@ def test_df_error_message_truncates():
         impl(large_df)
     # 500 insignifigant, expected message should have 453 (without truncation 10,000+)
     assert len(bodo_err.value.msg) < 500
+
+
+def test_df_first_last_invalid_offset():
+    def test_impl1(df, off):
+        return df.first(off)
+
+    def test_impl2(df, off):
+        return df.last(off)
+
+    i = pd.date_range("2018-04-09", periods=10, freq="2D")
+    df = pd.DataFrame({"A": pd.Series(np.arange(10))}, index=i)
+    off = 2
+    with pytest.raises(
+        BodoError,
+        match=re.escape("DataFrame.first(): 'offset' must be an string or DateOffset"),
+    ):
+        bodo.jit(test_impl1)(df, off)
+    with pytest.raises(
+        BodoError,
+        match=re.escape("DataFrame.last(): 'offset' must be an string or DateOffset"),
+    ):
+        bodo.jit(test_impl2)(df, off)

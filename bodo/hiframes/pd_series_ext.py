@@ -1324,8 +1324,6 @@ series_unsupported_methods = (
     "drop",
     "droplevel",
     "duplicated",
-    "first",
-    "last",
     "reindex",
     "reindex_like",
     "rename_axis",

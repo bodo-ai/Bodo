@@ -312,6 +312,28 @@ def test_series_groupby_max_min_cat_unordered(memory_leak_check):
         bodo.jit(test_impl2)(S)
 
 
+def test_series_first_last_invalid_offset():
+    def test_impl1(S, off):
+        return S.first(off)
+
+    def test_impl2(S, off):
+        return S.last(off)
+
+    i = pd.date_range("2018-04-09", periods=10, freq="2D")
+    ts = pd.Series(np.arange(10), index=i)
+    off = 2
+    with pytest.raises(
+        BodoError,
+        match=re.escape("Series.first(): 'offset' must be a string or a DateOffset"),
+    ):
+        bodo.jit(test_impl1)(ts, off)
+    with pytest.raises(
+        BodoError,
+        match=re.escape("Series.last(): 'offset' must be a string or a DateOffset"),
+    ):
+        bodo.jit(test_impl2)(ts, off)
+
+
 @pytest.mark.slow
 def test_cmp_errors(memory_leak_check):
     def test_impl1(S, val):

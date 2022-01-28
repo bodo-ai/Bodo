@@ -1206,6 +1206,10 @@ class DistributedAnalysis:
             array_dists[lhs] = new_dist
             return
 
+        if fdef == ("get_valid_entries_from_date_offset", "bodo.libs.array_kernels"):
+            # doesn't affect distribution of either input or output
+            return
+
         if fdef == ("array_isin", "bodo.libs.array"):
             # out_arr and in_arr should have the same distribution
             new_dist = self._meet_array_dists(
