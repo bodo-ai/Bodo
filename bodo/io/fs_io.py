@@ -98,8 +98,8 @@ def get_s3_subtree_fs(bucket_name, region=None, storage_options=None):
     from a S3 URL, but to pass custom endpoint and use anonymous
     option we need to do this manually.
     """
-    from pyarrow._s3fs import S3FileSystem
     from pyarrow._fs import SubTreeFileSystem
+    from pyarrow._s3fs import S3FileSystem
 
     custom_endpoint = os.environ.get("AWS_S3_ENDPOINT", None)
     if not region:
@@ -496,7 +496,9 @@ def find_file_name_or_handler(path, ftype):
         is_handler = False
 
         if os.path.isdir(path):
-            files = filter(filter_func, glob.glob(os.path.join(path, "*")))
+            files = filter(
+                filter_func, glob.glob(os.path.join(os.path.abspath(path), "*"))
+            )
             all_csv_files = [f for f in sorted(files) if os.path.getsize(f) > 0]
             if len(all_csv_files) == 0:  # pragma: no cover
                 # TODO: test
