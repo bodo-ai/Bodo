@@ -3111,6 +3111,28 @@ def test_file_not_found(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_csv_relative_path(datapath, memory_leak_check):
+    """Test pd.read_csv with relative path """
+
+    # File
+    filename = os.path.join(".", "bodo", "tests", "data", "example.csv")
+
+    def impl1():
+        return pd.read_csv(filename)
+
+    check_func(impl1, (), check_dtype=False)
+
+    # Folder
+    foldername = os.path.join(".", "bodo", "tests", "data", "example_multi.csv")
+    py_output = pd.read_csv(datapath("example.csv"))
+
+    def impl1():
+        return pd.read_csv(foldername)
+
+    check_func(impl1, (), check_dtype=False, py_output=py_output)
+
+
+@pytest.mark.slow
 def test_csv_nrows(memory_leak_check):
     """Test pd.read_csv with nrows argument """
     fname = os.path.join("bodo", "tests", "data", "example.csv")
