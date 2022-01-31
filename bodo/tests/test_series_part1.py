@@ -1416,9 +1416,7 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
         with pytest.raises(
             BodoError, match="setitem for Binary Array only supported with bytes value"
         ):
-            check_func(
-                test_impl2, (series_val, idx, val), copy_input=True, dist_test=False
-            )
+            bodo.jit(test_impl2)(series_val, idx, val)
 
     # not supported for list(string) and array(item)
     elif isinstance(series_val.values[0], list):

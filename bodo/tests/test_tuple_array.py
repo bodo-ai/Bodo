@@ -164,7 +164,7 @@ def test_nested_str_tuples(memory_leak_check):
     def impl():
         return bodo.utils.conversion.coerce_to_array((("AA", "B"), ("C", "ABC")))
 
-    check_func(impl, ())
+    check_func(impl, (), dist_test=False)
 
 
 @pytest.mark.slow
