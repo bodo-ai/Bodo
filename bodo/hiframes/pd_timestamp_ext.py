@@ -288,8 +288,8 @@ def zero_if_none(value):
 
 @lower_constant(PandasTimestampType)
 def constant_timestamp(context, builder, ty, pyval):
-    # Extracting constants. Inspired from @lower_constant(types.Complex)
-    # in numba/numba/targets/numbers.py
+    """Constant lowering for PandasTimestampType"""
+
     year = context.get_constant(types.int64, pyval.year)
     month = context.get_constant(types.int64, pyval.month)
     day = context.get_constant(types.int64, pyval.day)
@@ -299,17 +299,10 @@ def constant_timestamp(context, builder, ty, pyval):
     microsecond = context.get_constant(types.int64, pyval.microsecond)
     nanosecond = context.get_constant(types.int64, pyval.nanosecond)
     value = context.get_constant(types.int64, pyval.value)
-    pd_timestamp = cgutils.create_struct_proxy(ty)(context, builder)
-    pd_timestamp.year = year
-    pd_timestamp.month = month
-    pd_timestamp.day = day
-    pd_timestamp.hour = hour
-    pd_timestamp.minute = minute
-    pd_timestamp.second = second
-    pd_timestamp.microsecond = microsecond
-    pd_timestamp.nanosecond = nanosecond
-    pd_timestamp.value = value
-    return pd_timestamp._getvalue()
+
+    return lir.Constant.literal_struct(
+        (year, month, day, hour, minute, second, microsecond, nanosecond, value)
+    )
 
 
 # -------------------------------------------------------------------------------
@@ -2080,7 +2073,7 @@ def now_impl():  # pragma: no cover
 
 
 class CompDT64(ConcreteTemplate):
-    cases = signature(types.boolean, types.NPDatetime("ns"), types.NPDatetime("ns"))
+    cases = [signature(types.boolean, types.NPDatetime("ns"), types.NPDatetime("ns"))]
 
 
 @infer_global(operator.lt)

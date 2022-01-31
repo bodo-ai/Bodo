@@ -1685,6 +1685,14 @@ def maybe_literal(value):
     # overloads
     if isinstance(value, (list, dict, pytypes.FunctionType)):
         return
+    # Bodo change: support tuples of literal values (typeof_global handles tuples but
+    # others like typeof_const go through resolve_value_type that calls maybe_literal)
+    # see test_pd_categorical_compile_time
+    if isinstance(value, tuple):
+        try:
+            return types.Tuple([literal(x) for x in value])
+        except LiteralTypingError:
+            return
     try:
         return literal(value)
     except LiteralTypingError:
@@ -3018,7 +3026,8 @@ def _created_inlined_var_name(function_name, var_name):
     illegal in python variable names as there are occasions when function
     generation needs valid python name tokens."""
     # Bodo change: add mk_unique_var() to make sure inlined variable names are unique
-    inlined_name = mk_unique_var(f"{function_name}.{var_name}")
+    # Bodo change: remove function_name to avoid very long variable names
+    inlined_name = mk_unique_var(f"{var_name}")
     # Replace angle brackets, e.g. "<locals>" is replaced with "_locals_"
     new_name = inlined_name.replace("<", "_").replace(">", "_")
     # The version "version" of the closure function e.g. foo$2 (id 2) is
@@ -4063,6 +4072,9 @@ def make_constant_array(self, builder, typ, ary):
         # Handle data: reify the flattened array in "C" or "F" order as a
         # global array of bytes.
         flat = ary.flatten(order=typ.layout)
+        # Bodo change: dt64/td64 fail in bytearray so cast to int64
+        if isinstance(typ.dtype, (types.NPDatetime, types.NPTimedelta)):
+            flat = flat.view("int64")
         # Note: we use `bytearray(flat.data)` instead of `bytearray(flat)` to
         #       workaround issue #1850 which is due to numpy issue #3147
         consts = Constant.array(Type.int(8), bytearray(flat.data))

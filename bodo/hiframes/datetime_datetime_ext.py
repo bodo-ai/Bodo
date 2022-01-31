@@ -1,6 +1,7 @@
 import datetime
 
 import numba
+from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
 from numba.extending import (
@@ -134,15 +135,10 @@ def constant_datetime(context, builder, ty, pyval):
     minute = context.get_constant(types.int64, pyval.minute)
     second = context.get_constant(types.int64, pyval.second)
     microsecond = context.get_constant(types.int64, pyval.microsecond)
-    py_datetime = cgutils.create_struct_proxy(ty)(context, builder)
-    py_datetime.year = year
-    py_datetime.month = month
-    py_datetime.day = day
-    py_datetime.hour = hour
-    py_datetime.minute = minute
-    py_datetime.second = second
-    py_datetime.microsecond = microsecond
-    return py_datetime._getvalue()
+
+    return lir.Constant.literal_struct(
+        [year, month, day, hour, minute, second, microsecond]
+    )
 
 
 @overload(datetime.datetime, no_unliteral=True)

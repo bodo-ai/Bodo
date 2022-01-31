@@ -338,10 +338,7 @@ make_attribute_wrapper(MonthEndType, "normalize", "normalize")
 def lower_constant_month_end(context, builder, ty, pyval):
     n = context.get_constant(types.int64, pyval.n)
     normalize = context.get_constant(types.boolean, pyval.normalize)
-    month_end = cgutils.create_struct_proxy(ty)(context, builder)
-    month_end.n = n
-    month_end.normalize = normalize
-    return month_end._getvalue()
+    return lir.Constant.literal_struct([n, normalize])
 
 
 # Code is generalized and split across multiple functions in Pandas
@@ -720,27 +717,22 @@ def lower_constant_date_offset(context, builder, ty, pyval):
     """
     n = context.get_constant(types.int64, pyval.n)
     normalize = context.get_constant(types.boolean, pyval.normalize)
-    date_offset = cgutils.create_struct_proxy(ty)(context, builder)
-    date_offset.n = n
-    date_offset.normalize = normalize
+    fields = [n, normalize]
     has_kws = False
     # Default value if the value doesn't exist
     default_values = [0] * 9 + [-1] * 9
     for i, field in enumerate(date_offset_fields):
         if hasattr(pyval, field):
-            setattr(
-                date_offset,
-                field,
-                context.get_constant(types.int64, getattr(pyval, field)),
-            )
+            f = context.get_constant(types.int64, getattr(pyval, field))
             if field != "nanoseconds" and field != "nanosecond":
                 has_kws = True
         else:
-            setattr(
-                date_offset, field, context.get_constant(types.int64, default_values[i])
-            )
-    date_offset.has_kws = context.get_constant(types.boolean, has_kws)
-    return date_offset._getvalue()
+            f = context.get_constant(types.int64, default_values[i])
+        fields.append(f)
+
+    has_kws = context.get_constant(types.boolean, has_kws)
+    fields.append(has_kws)
+    return lir.Constant.literal_struct(fields)
 
 
 @overload(pd.tseries.offsets.DateOffset, no_unliteral=True)
@@ -1244,15 +1236,14 @@ def init_week(typingctx, n, normalize, weekday):
 # Implement the constant creation for Numba 'typespec'
 @lower_constant(WeekType)
 def lower_constant_week(context, builder, ty, pyval):  # pragma: no cover
-    week = cgutils.create_struct_proxy(ty)(context, builder)
-    week.n = context.get_constant(types.int64, pyval.n)
-    week.normalize = context.get_constant(types.boolean, pyval.normalize)
+    n = context.get_constant(types.int64, pyval.n)
+    normalize = context.get_constant(types.boolean, pyval.normalize)
 
     if pyval.weekday is not None:
-        week.weekday = context.get_constant(types.int64, pyval.weekday)
+        weekday = context.get_constant(types.int64, pyval.weekday)
     else:
-        week.weekday = context.get_constant(types.int64, -1)
-    return week._getvalue()
+        weekday = context.get_constant(types.int64, -1)
+    return lir.Constant.literal_struct([n, normalize, weekday])
 
 
 # Boxing and Unboxing

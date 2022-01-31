@@ -2203,7 +2203,7 @@ def overload_cut(
     func_text += "    arr = get_bin_inds(bins, arr, False, include_lowest)\n"
 
     func_text += "    label_index = get_bin_labels(bins, right, include_lowest)\n"
-    func_text += "    cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(label_index, ordered, None)\n"
+    func_text += "    cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(label_index, ordered, None, None)\n"
     func_text += "    out_arr = bodo.hiframes.pd_categorical_ext.init_categorical_array(arr, cat_dtype)\n"
 
     # Series case requires wrapping output into Series with same Index and name

@@ -2494,15 +2494,23 @@ def test_df_type_unify_error():
     numba.core.config.DEVELOPER_MODE = default_mode
 
 
-# TODO: fix memory leak and add memory_leak_check
 @pytest.mark.slow
-def test_dataframe_constant_lowering():
+def test_dataframe_constant_lowering(memory_leak_check):
     df = pd.DataFrame({"A": [2, 1], "B": [1.2, 3.3]})
 
     def impl():
         return df
 
     pd.testing.assert_frame_equal(bodo.jit(impl)(), df)
+
+    df2 = pd.DataFrame({"A": [2, 1], "B": [1.2, 3.3]})
+    for i in range(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD):
+        df[f"F{i}"] = "ABC"
+
+    def impl():
+        return df2
+
+    pd.testing.assert_frame_equal(bodo.jit(impl)(), df2)
 
 
 def test_dataframe_columns_const_passing(memory_leak_check):

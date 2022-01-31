@@ -433,7 +433,7 @@ def test_pq_array_item(datapath):
         check_func(test_impl, ("test_pq_list_item.pq",))
 
 
-def test_pq_categorical_read():
+def test_pq_categorical_read(memory_leak_check):
     """test reading categorical data from Parquet files"""
 
     def impl():
@@ -755,6 +755,7 @@ def test_to_csv_chunksize_kwd_arg(memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_to_csv_date_format_kwd_arg(memory_leak_check):
     """tests the date_format keyword argument to to_csv."""
 
@@ -800,6 +801,7 @@ def test_to_csv_doublequote_escapechar_kwd_args(memory_leak_check):
     check_CSV_write(impl, df, read_impl=read_impl)
 
 
+@pytest.mark.slow
 def test_to_csv_decimal_kwd_arg(memory_leak_check):
     """tests the decimal keyword argument to to_csv"""
 
@@ -818,6 +820,7 @@ def test_to_csv_decimal_kwd_arg(memory_leak_check):
     check_CSV_write(impl, df, read_impl=read_impl)
 
 
+@pytest.mark.slow
 def test_read_csv_bad_dtype_column(datapath, memory_leak_check):
     """Checks calling read_csv() with columns in the dtype that
     aren't in the DataFrame. This raises a warning so the code
@@ -833,6 +836,7 @@ def test_read_csv_bad_dtype_column(datapath, memory_leak_check):
     check_func(test_impl, (fname,), check_dtype=False)
 
 
+@pytest.mark.slow
 def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
     """read_csv() handling code uses the first column for creating RangeIndex of the
     output dataframe. In cases where the first column array is dead, it should be
@@ -861,6 +865,7 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
         check_func(impl2, (), only_seq=True)
 
 
+@pytest.mark.slow
 def test_h5_remove_dead(datapath, memory_leak_check):
     """make sure dead hdf5 read calls are removed properly"""
     fname = datapath("lr.hdf5")
@@ -881,6 +886,7 @@ def test_h5_remove_dead(datapath, memory_leak_check):
         )
 
 
+@pytest.mark.slow
 def test_read_parquet_list_files(datapath, memory_leak_check):
     """test read_parquet passing a list of files"""
 
@@ -900,7 +906,8 @@ def test_read_parquet_list_files(datapath, memory_leak_check):
     check_func(test_impl2, (fpaths,), py_output=py_output)
 
 
-def test_pq_cache_print(datapath, capsys):
+@pytest.mark.slow
+def test_pq_cache_print(datapath, capsys, memory_leak_check):
     """Make sure FilenameType behaves like a regular value and not a literal when loaded
     from cache. This allows the file name value to be set correctly and not baked in.
     """
@@ -934,10 +941,8 @@ def clean_pq_files(mode, pandas_pq_path, bodo_pq_path):
         shutil.rmtree(bodo_pq_path, ignore_errors=True)
 
 
-# Memory leak check is disabled because to_parquet lowers a
-# constant, which has a leak
-# TODO: Readd memory_leak_check
-def test_read_write_parquet():
+@pytest.mark.slow
+def test_read_write_parquet(memory_leak_check):
     def write(df, filename):
         df.to_parquet(filename)
 
@@ -1170,10 +1175,8 @@ def test_read_write_parquet():
         bodo.jit(error_check3)(df)
 
 
-# Memory leak check is disabled because to_parquet lowers a
-# constant, which has a leak
-# TODO: Readd memory_leak_check
-def test_partition_cols():
+@pytest.mark.slow
+def test_partition_cols(memory_leak_check):
 
     TEST_DIR = "test_part_tmp"
 
@@ -1254,7 +1257,8 @@ def test_partition_cols():
         bodo.barrier()
 
 
-def test_read_dask_parquet(datapath):
+@pytest.mark.slow
+def test_read_dask_parquet(datapath, memory_leak_check):
     def test_impl(filename):
         df = pd.read_parquet(filename)
         return df
@@ -1263,7 +1267,8 @@ def test_read_dask_parquet(datapath):
     check_func(test_impl, (filename,))
 
 
-def test_read_partitions():
+@pytest.mark.slow
+def test_read_partitions(memory_leak_check):
     """test reading and filtering partitioned parquet data"""
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -1345,7 +1350,8 @@ def test_read_partitions():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-def test_read_partitions2():
+@pytest.mark.slow
+def test_read_partitions2(memory_leak_check):
     """test reading and filtering partitioned parquet data in more complex cases"""
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -1379,7 +1385,8 @@ def test_read_partitions2():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-def test_read_partitions_predicate_dead_column():
+@pytest.mark.slow
+def test_read_partitions_predicate_dead_column(memory_leak_check):
     """test reading and filtering predicate + partition columns
     doesn't load the columns if they are unused."""
     import pyarrow as pa
@@ -1415,7 +1422,8 @@ def test_read_partitions_predicate_dead_column():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-def test_read_partitions_cat_ordering():
+@pytest.mark.slow
+def test_read_partitions_cat_ordering(memory_leak_check):
     """test reading and filtering multi-level partitioned parquet data with many
     directories, to make sure order of partition values in categorical dtype
     of partition columns is consistent (same at compile time and runtime)
@@ -1459,7 +1467,8 @@ def test_read_partitions_cat_ordering():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-def test_read_partitions_two_level():
+@pytest.mark.slow
+def test_read_partitions_two_level(memory_leak_check):
     """test reading and filtering partitioned parquet data for two levels partitions"""
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -1493,7 +1502,8 @@ def test_read_partitions_two_level():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-def test_read_partitions_string_int():
+@pytest.mark.slow
+def test_read_partitions_string_int(memory_leak_check):
     """test reading from a file where the partition column could have
     a mix of strings and ints
     """
@@ -1529,8 +1539,8 @@ def test_read_partitions_string_int():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-# TODO: Add memory leak check. Seems to have some leak.
-def test_read_partitions_implicit_and_simple():
+@pytest.mark.slow
+def test_read_partitions_implicit_and_simple(memory_leak_check):
     """test reading and filtering partitioned parquet data with multiple levels
     of partitions and an implicit and"""
     import pyarrow as pa
@@ -1576,8 +1586,8 @@ def test_read_partitions_implicit_and_simple():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-# TODO: Add memory leak check. Seems to have some leak.
-def test_read_partitions_implicit_and_detailed():
+@pytest.mark.slow
+def test_read_partitions_implicit_and_detailed(memory_leak_check):
     """test reading and filtering partitioned parquet data with multiple levels
     of partitions and a complex implicit and"""
     import pyarrow as pa
@@ -1614,7 +1624,8 @@ def test_read_partitions_implicit_and_detailed():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-def test_read_partitions_datetime():
+@pytest.mark.slow
+def test_read_partitions_datetime(memory_leak_check):
     """test reading and filtering partitioned parquet data for datetime data"""
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -1657,7 +1668,8 @@ def test_read_partitions_datetime():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-def test_read_partitions_to_datetime_format():
+@pytest.mark.slow
+def test_read_partitions_to_datetime_format(memory_leak_check):
     """test that we don't incorrectly perform filter pushdown when to_datetime includes
     a format string."""
     import pyarrow as pa
@@ -1709,7 +1721,8 @@ def test_read_partitions_to_datetime_format():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-def test_read_predicates_pushdown_pandas_metadata():
+@pytest.mark.slow
+def test_read_predicates_pushdown_pandas_metadata(memory_leak_check):
     """test that predicate pushdown executes when there is Pandas range metadata."""
 
     try:
@@ -1744,7 +1757,8 @@ def test_read_predicates_pushdown_pandas_metadata():
             os.remove("pq_data")
 
 
-def test_read_predicates_isnull():
+@pytest.mark.slow
+def test_read_predicates_isnull(memory_leak_check):
     """test that predicate pushdown with isnull in the binops."""
 
     try:
@@ -1777,7 +1791,8 @@ def test_read_predicates_isnull():
             os.remove("pq_data")
 
 
-def test_read_predicates_and_or():
+@pytest.mark.slow
+def test_read_predicates_and_or(memory_leak_check):
     """test that predicate pushdown with and/or in the expression."""
 
     try:
@@ -1813,7 +1828,8 @@ def test_read_predicates_and_or():
             os.remove("pq_data")
 
 
-def test_read_partitions_large():
+@pytest.mark.slow
+def test_read_partitions_large(memory_leak_check):
     """
     test reading and filtering partitioned parquet data with large number of partitions
     """
@@ -1845,7 +1861,8 @@ def test_read_partitions_large():
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-def test_read_pq_head_only(datapath):
+@pytest.mark.slow
+def test_read_pq_head_only(datapath, memory_leak_check):
     """
     test reading only shape and/or head from Parquet file if possible
     (limit pushdown)
@@ -1910,10 +1927,8 @@ def _check_for_pq_read_head_only(bodo_func, has_read=True):
     assert not has_read or fir.meta_head_only_info[0] is not None
 
 
-# Memory leak check is disabled because to_parquet lowers a
-# constant, which has a leak
-# TODO: Readd memory_leak_check
-def test_write_parquet_empty_chunks():
+@pytest.mark.slow
+def test_write_parquet_empty_chunks(memory_leak_check):
     """Here we check that our to_parquet output in distributed mode
     (directory of parquet files) can be read by pandas even when some
     processes have empty chunks"""
@@ -1934,10 +1949,8 @@ def test_write_parquet_empty_chunks():
             shutil.rmtree(write_filename)
 
 
-# Memory leak check is disabled because to_parquet lowers a
-# constant, which has a leak
-# TODO: Readd memory_leak_check
-def test_write_parquet_decimal(datapath):
+@pytest.mark.slow
+def test_write_parquet_decimal(datapath, memory_leak_check):
     """Here we check that we can write the data read from decimal1.pq directory
     (has columns that use a precision and scale different from our default).
     See test_write_parquet above for main parquet write decimal test"""
@@ -1959,10 +1972,7 @@ def test_write_parquet_decimal(datapath):
             shutil.rmtree(write_filename)
 
 
-def test_write_parquet_params():
-    # Memory leak check is disabled because to_parquet lowers a
-    # constant, which has a leak
-    # TODO: Readd memory_leak_check
+def test_write_parquet_params(memory_leak_check):
     def write1(df, filename):
         df.to_parquet(compression="snappy", fname=filename)
 

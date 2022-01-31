@@ -39,7 +39,8 @@ from bodo.libs.str_arr_ext import (
     string_array_type,
 )
 from bodo.libs.str_ext import string_type
-from bodo.utils.typing import NOT_CONSTANT, BodoError, BodoWarning
+from bodo.utils.cg_helpers import is_ll_eq
+from bodo.utils.typing import NOT_CONSTANT, BodoError, BodoWarning, MetaType
 
 int128_type = types.Integer("int128", 128)
 
@@ -777,9 +778,24 @@ def overload_alloc_type(n, t, s=None):
                 raise BodoError(
                     "UDFs or Groupbys that return Categorical values must have categories known at compile time."
                 )
-            _cat_dtype = pd.CategoricalDtype(typ.dtype.categories, typ.dtype.ordered)
+            # create the new categorical dtype inside the function instead of passing as
+            # constant. This avoids constant lowered Index inside the dtype, which can
+            # be slow since it cannot have a dictionary.
+            # see https://github.com/Bodo-inc/Bodo/pull/3563
+            is_ordered = typ.dtype.ordered
+            int_type = typ.dtype.int_type
+            new_cats_arr = pd.CategoricalDtype(
+                typ.dtype.categories, is_ordered
+            ).categories.values
+            new_cats_tup = MetaType(tuple(new_cats_arr))
             return lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
-                n, _cat_dtype
+                n,
+                bodo.hiframes.pd_categorical_ext.init_cat_dtype(
+                    bodo.utils.conversion.index_from_array(new_cats_arr),
+                    is_ordered,
+                    int_type,
+                    new_cats_tup,
+                ),
             )  # pragma: no cover
         else:
             return lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
@@ -919,6 +935,21 @@ def is_null_pointer(typingctx, ptr_typ=None):
         return builder.icmp_unsigned("==", ptr, null)
 
     return types.bool_(ptr_typ), codegen
+
+
+@intrinsic
+def is_null_value(typingctx, val_typ=None):
+    """check whether a value is NULL or not"""
+
+    def codegen(context, builder, signature, args):
+        (val,) = args
+        arr_struct_ptr = cgutils.alloca_once_value(builder, val)
+        null_struct_ptr = cgutils.alloca_once_value(
+            builder, context.get_constant_null(val_typ)
+        )
+        return is_ll_eq(builder, arr_struct_ptr, null_struct_ptr)
+
+    return types.bool_(val_typ), codegen
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)

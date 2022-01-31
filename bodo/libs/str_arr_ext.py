@@ -2375,13 +2375,11 @@ def lower_constant_str_arr(context, builder, typ, pyval):
         cgutils.voidptr_t
     )
 
-    array_item_array = context.make_helper(builder, ArrayItemArrayType(char_arr_type))
-    array_item_array.meminfo = meminfo
-    data_arr = array_item_array._getvalue()
-
-    string_array = context.make_helper(builder, typ)
-    string_array.data = data_arr
-    return string_array._getvalue()
+    # literal struct with the same model as ArrayItemArrayType
+    data_arr = lir.Constant.literal_struct([meminfo])
+    # literal struct with the same model as StringArrayType
+    string_array = lir.Constant.literal_struct([data_arr])
+    return string_array
 
 
 # TODO: array analysis and remove call for other functions

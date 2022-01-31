@@ -20,6 +20,7 @@ from bodo.utils.typing import (
     get_overload_const_list,
     get_overload_const_str,
     is_heterogeneous_tuple_type,
+    is_np_arr_typ,
     is_overload_constant_list,
     is_overload_constant_str,
     is_overload_none,
@@ -784,7 +785,7 @@ def overload_fix_arr_dtype(
             cats = bodo.allgatherv(cats, False)
 
             cat_dtype = bodo.hiframes.pd_categorical_ext.init_cat_dtype(
-                bodo.utils.conversion.index_from_array(cats, None), False, None
+                bodo.utils.conversion.index_from_array(cats, None), False, None, None
             )
 
             n = len(data)
@@ -1082,12 +1083,12 @@ def overload_convert_to_dt64ns(data):
             )  # pragma: no cover
         )
 
-    if data == types.Array(types.int64, 1, "C"):
+    if is_np_arr_typ(data, types.int64):
         return lambda data: data.view(
             bodo.utils.conversion.NS_DTYPE
         )  # pragma: no cover
 
-    if data == types.Array(types.NPDatetime("ns"), 1, "C"):
+    if is_np_arr_typ(data, types.NPDatetime("ns")):
         return lambda data: data  # pragma: no cover
 
     if data == bodo.string_array_type:
@@ -1109,19 +1110,19 @@ def overload_convert_to_td64ns(data):
     # TODO: array of strings
     # see pd.core.arrays.timedeltas.sequence_to_td64ns for constructor types
     # TODO: support datetime.timedelta
-    if data == types.Array(types.int64, 1, "C"):
+    if is_np_arr_typ(data, types.int64):
         return lambda data: data.view(
             bodo.utils.conversion.TD_DTYPE
         )  # pragma: no cover
 
-    if data == types.Array(types.NPTimedelta("ns"), 1, "C"):
+    if is_np_arr_typ(data, types.NPTimedelta("ns")):
         return lambda data: data  # pragma: no cover
 
     if data == bodo.string_array_type:
         # TODO: support
         raise BodoError("conversion to timedelta from string not supported yet")
 
-    raise BodoError(f"invalid data type {data} for dt64 conversion")
+    raise BodoError(f"invalid data type {data} for timedelta64 conversion")
 
 
 def convert_to_index(data, name=None):  # pragma: no cover

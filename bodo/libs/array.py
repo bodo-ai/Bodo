@@ -51,7 +51,7 @@ from bodo.libs.struct_arr_ext import (
     define_struct_arr_dtor,
 )
 from bodo.libs.tuple_arr_ext import TupleArrayType
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, MetaType
 from bodo.utils.utils import (
     CTypeEnum,
     check_and_propagate_cpp_exception,
@@ -1154,18 +1154,37 @@ def info_to_array(typingctx, info_type, array_type):
                 assert (
                     arr_type.dtype.categories is not None
                 ), "info_to_array: unknown categories"
-                cat_dtype_const = pd.CategoricalDtype(
-                    arr_type.dtype.categories, arr_type.dtype.ordered
+                # create the new categorical dtype inside the function instead of passing as
+                # constant. This avoids constant lowered Index inside the dtype, which can
+                # be slow since it cannot have a dictionary.
+                # see https://github.com/Bodo-inc/Bodo/pull/3563
+                is_ordered = arr_type.dtype.ordered
+                new_cats_arr = pd.CategoricalDtype(
+                    arr_type.dtype.categories, is_ordered
+                ).categories.values
+                new_cats_tup = MetaType(tuple(new_cats_arr))
+                int_type = arr_type.dtype.int_type
+                cats_arr_type = bodo.typeof(new_cats_arr)
+                cats_arr = context.get_constant_generic(
+                    builder, cats_arr_type, new_cats_arr
                 )
-                dtype = context.get_constant_generic(
-                    builder, arr_type.dtype, cat_dtype_const
-                )
+                dtype = context.compile_internal(
+                    builder,
+                    lambda c_arr: bodo.hiframes.pd_categorical_ext.init_cat_dtype(
+                        bodo.utils.conversion.index_from_array(c_arr),
+                        is_ordered,
+                        int_type,
+                        new_cats_tup,
+                    ),
+                    arr_type.dtype(cats_arr_type),
+                    [cats_arr],
+                )  # pragma: no cover
             else:
                 dtype = cgutils.create_struct_proxy(arr_type)(
                     context, builder, args[1]
                 ).dtype
+                context.nrt.incref(builder, arr_type.dtype, dtype)
             out_arr.dtype = dtype
-            context.nrt.incref(builder, arr_type.dtype, dtype)
             return out_arr._getvalue()
 
         # Numpy

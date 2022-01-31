@@ -669,6 +669,8 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_table_get_table_data = get_table_da
 def lower_constant_table(context, builder, table_type, pyval):
     """embed constant Table value by getting constant values for data arrays."""
 
+    # TODO[BE-2128]: create a proper constant LLVM literal when list constant lowering
+    # is supported [BE-1739].
     table = cgutils.create_struct_proxy(table_type)(context, builder)
     table.parent = cgutils.get_null_value(table.parent.type)
 

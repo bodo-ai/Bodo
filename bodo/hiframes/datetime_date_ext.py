@@ -743,10 +743,8 @@ def lower_constant_datetime_date_arr(context, builder, typ, pyval):
     data_const_arr = context.get_constant_generic(builder, data_type, data_arr)
     nulls_const_arr = context.get_constant_generic(builder, nulls_type, nulls_arr)
 
-    datetime_data_arr = context.make_helper(builder, typ)
-    datetime_data_arr.data = data_const_arr
-    datetime_data_arr.null_bitmap = nulls_const_arr
-    return datetime_data_arr._getvalue()
+    # create datetime arr struct
+    return lir.Constant.literal_struct([data_const_arr, nulls_const_arr])
 
 
 @numba.njit(no_cpython_wrapper=True)
