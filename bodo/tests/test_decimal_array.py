@@ -191,8 +191,7 @@ def test_series_astype_str(decimal_arr_value, memory_leak_check):
         Decimal("4.5"),
     ],
 )
-# TODO: Add memory_leak_check when bug is resolved.
-def test_decimal_constant_lowering(decimal_value):
+def test_decimal_constant_lowering(decimal_value, memory_leak_check):
     def f():
         return decimal_value
 

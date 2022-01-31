@@ -100,6 +100,7 @@ from bodo.utils.transform import (
 )
 from bodo.utils.typing import (
     BodoError,
+    MetaType,
     get_literal_value,
     get_overload_const_func,
     get_overload_const_int,
@@ -2153,9 +2154,31 @@ class SeriesPass:
                         raise BodoError(
                             "UDFs that return Categorical values must have categories known at compile time."
                         )
-                    dtype = pd.CategoricalDtype(typ.dtype.categories, typ.dtype.ordered)
+                    # create the new categorical dtype inside the function instead of passing as
+                    # constant. This avoids constant lowered Index inside the dtype, which can
+                    # be slow since it cannot have a dictionary.
+                    # see https://github.com/Bodo-inc/Bodo/pull/3563
+                    is_ordered = typ.dtype.ordered
+                    int_type = typ.dtype.int_type
+                    new_cats_arr = pd.CategoricalDtype(
+                        typ.dtype.categories, is_ordered
+                    ).categories.values
+                    new_cats_tup = MetaType(tuple(new_cats_arr))
+                    dtype = "bodo.hiframes.pd_categorical_ext.init_cat_dtype(bodo.utils.conversion.index_from_array(new_cats_arr), is_ordered, int_type, new_cats_tup)"
                     impl = eval(
-                        "lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, _dtype)"
+                        f"lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(n, {dtype})"
+                    )
+                    return compile_func_single_block(
+                        impl,
+                        rhs.args,
+                        assign.target,
+                        self,
+                        extra_globals={
+                            "is_ordered": is_ordered,
+                            "new_cats_arr": new_cats_arr,
+                            "new_cats_tup": new_cats_tup,
+                            "int_type": int_type,
+                        },
                     )
                 else:
                     # TODO: Fix the infrastructure so types will match when input-type == output-type

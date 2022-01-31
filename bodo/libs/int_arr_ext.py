@@ -380,10 +380,8 @@ def lower_constant_int_arr(context, builder, typ, pyval):
         builder, types.Array(types.uint8, 1, "C"), nulls_arr
     )
 
-    int_array = context.make_helper(builder, typ)
-    int_array.data = data_const_arr
-    int_array.null_bitmap = nulls_const_arr
-    return int_array._getvalue()
+    # create int arr struct
+    return lir.Constant.literal_struct([data_const_arr, nulls_const_arr])
 
 
 # using a function for getting data to enable extending various analysis

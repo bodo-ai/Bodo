@@ -144,9 +144,7 @@ def unbox_pd_timedelta(typ, val, c):
 @lower_constant(PDTimeDeltaType)
 def lower_constant_pd_timedelta(context, builder, ty, pyval):
     value = context.get_constant(types.int64, pyval.value)
-    pd_timedelta = cgutils.create_struct_proxy(ty)(context, builder)
-    pd_timedelta.value = value
-    return pd_timedelta._getvalue()
+    return lir.Constant.literal_struct([value])
 
 
 # 6. Implement the constructor
@@ -847,11 +845,7 @@ def lower_constant_datetime_timedelta(context, builder, ty, pyval):
     days = context.get_constant(types.int64, pyval.days)
     seconds = context.get_constant(types.int64, pyval.seconds)
     microseconds = context.get_constant(types.int64, pyval.microseconds)
-    datetime_timedelta = cgutils.create_struct_proxy(ty)(context, builder)
-    datetime_timedelta.days = days
-    datetime_timedelta.seconds = seconds
-    datetime_timedelta.microseconds = microseconds
-    return datetime_timedelta._getvalue()
+    return lir.Constant.literal_struct([days, seconds, microseconds])
 
 
 # 6. Implement the constructor
@@ -1340,12 +1334,14 @@ def lower_constant_datetime_timedelta_arr(context, builder, typ, pyval):
     )
     nulls_const_arr = context.get_constant_generic(builder, nulls_type, nulls_arr)
 
-    datetime_data_arr = context.make_helper(builder, typ)
-    datetime_data_arr.days_data = days_data_const_arr
-    datetime_data_arr.seconds_data = seconds_data_const_arr
-    datetime_data_arr.microseconds_data = microseconds_data_const_arr
-    datetime_data_arr.null_bitmap = nulls_const_arr
-    return datetime_data_arr._getvalue()
+    return lir.Constant.literal_struct(
+        [
+            days_data_const_arr,
+            seconds_data_const_arr,
+            microseconds_data_const_arr,
+            nulls_const_arr,
+        ]
+    )
 
 
 @numba.njit(no_cpython_wrapper=True)
@@ -1619,7 +1615,7 @@ def overload_len_datetime_timedelta_arr(A):
 
 @overload_attribute(DatetimeTimeDeltaArrayType, "shape")
 def overload_datetime_timedelta_arr_shape(A):
-    return lambda A: (len(A._days_data),)
+    return lambda A: (len(A._days_data),)  # pragma: no cover
 
 
 @overload_attribute(DatetimeTimeDeltaArrayType, "nbytes")

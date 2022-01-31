@@ -485,7 +485,7 @@ def test_datetime_sub(dti_val, memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(dti_val, t), impl2(dti_val, t))
 
 
-def test_datetimeindex_constant_lowering():
+def test_datetimeindex_constant_lowering(memory_leak_check):
     dti = pd.to_datetime(
         ["1/1/2018", np.datetime64("2018-01-01"), datetime.datetime(2018, 1, 1)]
     )
@@ -497,27 +497,47 @@ def test_datetimeindex_constant_lowering():
     pd.testing.assert_index_equal(bodo_func(), impl())
 
 
-def test_string_index_constant_lowering():
+def test_string_index_constant_lowering(memory_leak_check):
     si = pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"])
 
     def impl():
         return si
 
-    bodo_func = bodo.jit(impl)
+    bodo_func = bodo.jit(distributed=False)(impl)
     pd.testing.assert_index_equal(bodo_func(), impl())
 
 
-def test_binary_index_constant_lowering():
+def test_string_index_constant_get_loc(memory_leak_check):
+    """make sure get_loc works for constant lowered Index since it doesn't have a dict"""
+    si = pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"])
+
+    def impl():
+        return si.get_loc("ABC")
+
+    check_func(impl, (), only_seq=True)
+
+
+def test_string_index_constant_contains(memory_leak_check):
+    """make sure contains works for constant lowered Index since it doesn't have a dict"""
+    si = pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"])
+
+    def impl():
+        return "ABC" in si
+
+    check_func(impl, (), only_seq=True)
+
+
+def test_binary_index_constant_lowering(memory_leak_check):
     si = pd.Index([b"asfd", b"bjkhj", bytes(12), b"", b"KG", b"khs", b"asdfkh"])
 
     def impl():
         return si
 
-    bodo_func = bodo.jit(impl)
+    bodo_func = bodo.jit(distributed=False)(impl)
     pd.testing.assert_index_equal(bodo_func(), impl())
 
 
-def test_int64_index_constant_lowering():
+def test_int64_index_constant_lowering(memory_leak_check):
     idx = pd.Int64Index([-1, 43, 54, 65, 123])
 
     def impl():
@@ -527,7 +547,7 @@ def test_int64_index_constant_lowering():
     pd.testing.assert_index_equal(bodo_func(), impl())
 
 
-def test_uint64_index_constant_lowering():
+def test_uint64_index_constant_lowering(memory_leak_check):
     idx = pd.UInt64Index([1, 43, 54, 65, 123])
 
     def impl():
@@ -537,7 +557,7 @@ def test_uint64_index_constant_lowering():
     pd.testing.assert_index_equal(bodo_func(), impl())
 
 
-def test_float64_index_constant_lowering():
+def test_float64_index_constant_lowering(memory_leak_check):
     idx = pd.Float64Index([1.2, 43.4, 54.7, 65, 123])
 
     def impl():
@@ -731,7 +751,7 @@ def test_timedelta_index_max(tdi_data, memory_leak_check):
     assert bodo_func(tdi_data) == test_impl(tdi_data)
 
 
-def test_timedelta_index_constant_lowering():
+def test_timedelta_index_constant_lowering(memory_leak_check):
     tdi = pd.TimedeltaIndex(np.arange(10))
 
     def impl():
@@ -817,7 +837,7 @@ def test_period_index_box(period_index, memory_leak_check):
     pd.testing.assert_index_equal(bodo.jit(impl)(period_index), impl(period_index))
 
 
-def test_periodindex_constant_lowering():
+def test_periodindex_constant_lowering(memory_leak_check):
     pi = pd.PeriodIndex(year=[2015, 2016, 2018], quarter=[1, 2, 3])
 
     def impl():

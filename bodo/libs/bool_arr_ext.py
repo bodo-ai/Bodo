@@ -369,10 +369,8 @@ def lower_constant_bool_arr(context, builder, typ, pyval):
 
     nulls_const_arr = context.get_constant_generic(builder, nulls_type, nulls_arr)
 
-    bool_array = context.make_helper(builder, typ)
-    bool_array.data = data_const_arr
-    bool_array.null_bitmap = nulls_const_arr
-    return bool_array._getvalue()
+    # create bool arr struct
+    return lir.Constant.literal_struct([data_const_arr, nulls_const_arr])
 
 
 def lower_init_bool_array(context, builder, signature, args):

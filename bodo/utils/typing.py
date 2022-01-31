@@ -1611,6 +1611,13 @@ def get_nullable_and_non_nullable_types(array_of_types):
     return all_types
 
 
+def is_np_arr_typ(t, dtype, ndim=1):
+    """return True if t is a Numpy array type with the given dtype and ndim. Ignores
+    other types.Array flags like 'mutable'
+    """
+    return isinstance(t, types.Array) and t.dtype == dtype and t.ndim == ndim
+
+
 def _gen_objmode_overload(
     func, output_type, attr_name=None, is_function=True, single_rank=False
 ):
@@ -2129,3 +2136,6 @@ def _check_objmode_type(val, typ):
         )
 
     return val
+
+
+gen_objmode_func_overload(warnings.warn, "none")

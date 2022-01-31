@@ -1671,23 +1671,39 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
         table = context.get_constant_generic(
             builder, df_type.table_type, Table(data_arrs)
         )
-        data_tup = context.make_tuple(
-            builder, types.Tuple([df_type.table_type]), [table]
-        )
+        data_tup = lir.Constant.literal_struct([table])
     else:
-        data_tup = context.get_constant_generic(
-            builder,
-            types.Tuple(df_type.data),
-            data_arrs,
+        # not using get_constant_generic for tuple directly since Numba's tuple lowering
+        # doesn't return a proper constant
+        data_tup = lir.Constant.literal_struct(
+            [
+                context.get_constant_generic(builder, df_type.data[i], v)
+                for i, v in enumerate(data_arrs)
+            ]
         )
 
     index_val = context.get_constant_generic(builder, df_type.index, pyval.index)
 
-    dataframe_val = construct_dataframe(
-        context, builder, df_type, data_tup, index_val, None
+    # create a constant payload with the same data model as DataFramePayloadType
+    # "data", "index", "parent"
+    parent_null = context.get_constant_null(types.pyobject)
+    payload = lir.Constant.literal_struct([data_tup, index_val, parent_null])
+    payload = cgutils.global_constant(builder, ".const.payload", payload).bitcast(
+        cgutils.voidptr_t
     )
 
-    return dataframe_val
+    # create a constant meminfo with the same data model as Numba
+    minus_one = context.get_constant(types.int64, -1)
+    null_ptr = context.get_constant_null(types.voidptr)
+    meminfo = lir.Constant.literal_struct(
+        [minus_one, null_ptr, null_ptr, payload, minus_one]
+    )
+    meminfo = cgutils.global_constant(builder, ".const.meminfo", meminfo).bitcast(
+        cgutils.voidptr_t
+    )
+
+    # create the dataframe
+    return lir.Constant.literal_struct([meminfo, parent_null])
 
 
 @lower_cast(DataFrameType, DataFrameType)
@@ -3717,6 +3733,11 @@ def get_dummies(
         func_text += "          data_arr_{0}[i] = codes[i] == {0}\n".format(k)
     data_args = ", ".join(f"data_arr_{i}" for i in range(n_cols))
     index = "bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)"
+
+    # convert datetime64 categories to Timestamp to avoid codegen errors
+    # TODO(Ehsan): pass column names as dataframe type to avoid these issues
+    if isinstance(categories[0], np.datetime64):
+        categories = tuple(pd.Timestamp(c) for c in categories)
 
     # TODO(Nick): Replace categories with categorical index type
     return bodo.hiframes.dataframe_impl._gen_init_df(

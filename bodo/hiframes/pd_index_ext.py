@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import datetime
 import operator
+import warnings
 
 import llvmlite.llvmpy.core as lc
 import numba
@@ -61,6 +62,7 @@ from bodo.utils.typing import (
     parse_dtype,
     raise_bodo_error,
 )
+from bodo.utils.utils import is_null_value
 
 _dt_index_data_typ = types.Array(types.NPDatetime("ns"), 1, "C")
 _timedelta_index_data_typ = types.Array(types.NPTimedelta("ns"), 1, "C")
@@ -129,14 +131,15 @@ def typeof_pd_index(val, c):
 class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
     """type class for DatetimeIndex objects."""
 
-    def __init__(self, name_typ=None):
+    def __init__(self, name_typ=None, data=None):
         name_typ = types.none if name_typ is None else name_typ
         # TODO: support other properties like freq/tz/dtype/yearfirst?
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
-        self.data = types.Array(bodo.datetime64ns, 1, "C")
+        # NOTE: data array can have flags like readonly
+        self.data = types.Array(bodo.datetime64ns, 1, "C") if data is None else data
         super(DatetimeIndexType, self).__init__(
-            name="DatetimeIndex(name = {})".format(name_typ)
+            name=f"DatetimeIndex({name_typ}, {self.data})"
         )
 
     ndim = 1
@@ -156,7 +159,7 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
     @property
     def key(self):
         # needed?
-        return self.name_typ
+        return self.name_typ, self.data
 
     @property
     def iterator_type(self):
@@ -1113,14 +1116,15 @@ def overload_pd_timestamp_isocalendar(idx):
 class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
     """Temporary type class for TimedeltaIndex objects."""
 
-    def __init__(self, name_typ=None):
+    def __init__(self, name_typ=None, data=None):
         name_typ = types.none if name_typ is None else name_typ
         # TODO: support other properties like unit/freq?
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
-        self.data = types.Array(bodo.timedelta64ns, 1, "C")
+        # NOTE: data array can have flags like readonly
+        self.data = types.Array(bodo.timedelta64ns, 1, "C") if data is None else data
         super(TimedeltaIndexType, self).__init__(
-            name="TimedeltaIndexType(named = {})".format(name_typ)
+            name=f"TimedeltaIndexType({name_typ}, {self.data})"
         )
 
     ndim = 1
@@ -1140,7 +1144,7 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
     @property
     def key(self):
         # needed?
-        return self.name_typ
+        return self.name_typ, self.data
 
     @property
     def iterator_type(self):
@@ -3118,9 +3122,25 @@ def index_contains(I, val):
         )  # pragma: no cover
 
     def impl(I, val):  # pragma: no cover
+        key = bodo.utils.conversion.unbox_if_timestamp(val)
         # build the index dict if not initialized yet
-        _init_engine(I)
-        return bodo.utils.conversion.unbox_if_timestamp(val) in I._dict
+        if not is_null_value(I._dict):
+            _init_engine(I)
+            return key in I._dict
+        else:
+            # TODO(ehsan): support raising a proper BodoWarning object
+            msg = "Global Index objects can be slow (pass as argument to JIT function for better performance)."
+            warnings.warn(msg)
+            arr = bodo.utils.conversion.coerce_to_array(I)
+            ind = -1
+            for i in range(len(arr)):
+                if arr[i] == key:
+                    if ind != -1:
+                        raise ValueError(
+                            "Index.get_loc(): non-unique Index not supported yet"
+                        )
+                    ind = i
+        return ind != -1
 
     return impl
 
@@ -3183,11 +3203,25 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
         return impl_range
 
     def impl(I, key, method=None, tolerance=None):  # pragma: no cover
-        # build the index dict if not initialized yet
-        _init_engine(I)
 
         key = bodo.utils.conversion.unbox_if_timestamp(key)
-        ind = I._dict.get(key, -1)
+        # build the index dict if not initialized yet
+        if not is_null_value(I._dict):
+            _init_engine(I)
+            ind = I._dict.get(key, -1)
+        else:
+            # TODO(ehsan): support raising a proper BodoWarning object
+            msg = "Index.get_loc() can be slow for global Index objects (pass as argument to JIT function for better performance)."
+            warnings.warn(msg)
+            arr = bodo.utils.conversion.coerce_to_array(I)
+            ind = -1
+            for i in range(len(arr)):
+                if arr[i] == key:
+                    if ind != -1:
+                        raise ValueError(
+                            "Index.get_loc(): non-unique Index not supported yet"
+                        )
+                    ind = i
 
         if ind == -1:
             raise KeyError("Index.get_loc(): key not found")
@@ -3999,20 +4033,10 @@ def lower_constant_time_index(context, builder, ty, pyval):
     )
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
-    dt_val = cgutils.create_struct_proxy(ty)(context, builder)
-    dt_val.data = data
-    dt_val.name = name
-
-    # create empty dict for get_loc hashmap
+    # set the dictionary to null since we can't create it without memory leak (BE-2114)
     dtype = ty.dtype
-    dt_val.dict = context.compile_internal(
-        builder,
-        lambda: numba.typed.Dict.empty(dtype, types.int64),
-        types.DictType(dtype, types.int64)(),
-        [],
-    )  # pragma: no cover
-
-    return dt_val._getvalue()
+    dict_null = context.get_constant_null(types.DictType(dtype, types.int64))
+    return lir.Constant.literal_struct([data, name, dict_null])
 
 
 @lower_constant(PeriodIndexType)
@@ -4025,18 +4049,9 @@ def lower_constant_period_index(context, builder, ty, pyval):
     )
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
-    index_val = cgutils.create_struct_proxy(ty)(context, builder)
-    index_val.data = data
-    index_val.name = name
-    # create empty dict for get_loc hashmap
-    index_val.dict = context.compile_internal(
-        builder,
-        lambda: numba.typed.Dict.empty(types.int64, types.int64),
-        types.DictType(types.int64, types.int64)(),
-        [],
-    )  # pragma: no cover
-
-    return index_val._getvalue()
+    # set the dictionary to null since we can't create it without memory leak (BE-2114)
+    dict_null = context.get_constant_null(types.DictType(types.int64, types.int64))
+    return lir.Constant.literal_struct([data, name, dict_null])
 
 
 @lower_constant(NumericIndexType)
@@ -4052,19 +4067,10 @@ def lower_constant_numeric_index(context, builder, ty, pyval):
     )
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
-    index_val = cgutils.create_struct_proxy(ty)(context, builder)
-    index_val.data = data
-    index_val.name = name
-    # create empty dict for get_loc hashmap
     dtype = ty.dtype
-    index_val.dict = context.compile_internal(
-        builder,
-        lambda: numba.typed.Dict.empty(dtype, types.int64),
-        types.DictType(dtype, types.int64)(),
-        [],
-    )  # pragma: no cover
-
-    return index_val._getvalue()
+    # set the dictionary to null since we can't create it without memory leak (BE-2114)
+    dict_null = context.get_constant_null(types.DictType(dtype, types.int64))
+    return lir.Constant.literal_struct([data, name, dict_null])
 
 
 @lower_constant(StringIndexType)
@@ -4077,18 +4083,9 @@ def lower_constant_binary_string_index(context, builder, ty, pyval):
     data = context.get_constant_generic(builder, array_type, pyval.values)
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
-    index_val = cgutils.create_struct_proxy(ty)(context, builder)
-    index_val.data = data
-    index_val.name = name
-    # create empty dict for get_loc hashmap
-    index_val.dict = context.compile_internal(
-        builder,
-        lambda: numba.typed.Dict.empty(scalar_type, types.int64),
-        types.DictType(scalar_type, types.int64)(),
-        [],
-    )  # pragma: no cover
-
-    return index_val._getvalue()
+    # set the dictionary to null since we can't create it without memory leak (BE-2114)
+    dict_null = context.get_constant_null(types.DictType(scalar_type, types.int64))
+    return lir.Constant.literal_struct([data, name, dict_null])
 
 
 @lower_builtin("getiter", RangeIndexType)
