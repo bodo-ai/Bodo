@@ -3,6 +3,8 @@
 Release Notes
 =============
 
+- :ref:`Bodo.ai 2022.1 Release <January_2022>`
+
 - :ref:`Bodo.ai 2021.12 Release <December_2021>`
 
 - :ref:`Bodo.ai 2021.11 Release <November_2021>`
