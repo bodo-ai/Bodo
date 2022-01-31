@@ -1086,3 +1086,157 @@ def test_pivot_multiple_values(df):
         sort_output=True,
         reorder_columns=True,
     )
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # (string, int64)
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "D": [str(i) for i in range(2000, 3000)],
+                "B": [str(i) for i in range(10)] * 100,
+                "C": np.arange(1000, 2000),
+            }
+        ),
+        # (int64, float64)
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "D": np.arange(2000, 3000),
+                "B": [str(i) for i in range(10)] * 100,
+                "C": np.arange(1000, 2000).astype(np.float64),
+            }
+        ),
+    ],
+)
+def test_pivot_diff_value_types(df, memory_leak_check):
+    """
+    Test running DataFrame.pivot() with multiple values
+    of differing types.
+    """
+
+    def impl(df):
+        return df.pivot(index="A", columns="B", values=["C", "D"])
+
+    # Pivot may produce different nullable data, so we set check_dtype=False.
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # (string, int64)
+        pd.DataFrame(
+            {
+                "A": [
+                    "foo",
+                    "foo",
+                    "foo",
+                    "foo",
+                    "foo",
+                    "bar",
+                    "bar",
+                    "bar",
+                    "bar",
+                    "f",
+                    "g",
+                ],
+                "B": [
+                    "one",
+                    "one",
+                    "one",
+                    "two",
+                    "two",
+                    "one",
+                    "one",
+                    "two",
+                    "two",
+                    "three",
+                    "seven",
+                ],
+                "C": [
+                    "small",
+                    "large",
+                    "large",
+                    "small",
+                    "small",
+                    "large",
+                    "small",
+                    "small",
+                    "large",
+                    "medium",
+                    "medium",
+                ],
+                "D": [1, 2, 2, 6, 3, 4, 5, 6, 9, 6, 5],
+            }
+        ),
+        # (int64, float64)
+        pd.DataFrame(
+            {
+                "A": [
+                    "foo",
+                    "foo",
+                    "foo",
+                    "foo",
+                    "foo",
+                    "bar",
+                    "bar",
+                    "bar",
+                    "bar",
+                    "f",
+                    "g",
+                ],
+                "B": [1, 1, 1, 2, 2, 1, 1, 2, 2, 3, 7],
+                "C": [
+                    "small",
+                    "large",
+                    "large",
+                    "small",
+                    "small",
+                    "large",
+                    "small",
+                    "small",
+                    "large",
+                    "medium",
+                    "medium",
+                ],
+                "D": [1.6, 2, 2, 6, 3, 4, 5, 6, 9, 6, 5],
+            }
+        ),
+    ],
+)
+def test_pivot_table_diff_value_types(df, memory_leak_check):
+    """
+    Test running DataFrame.pivot_table() with multiple values
+    of differing types.
+    """
+
+    def impl(df):
+        return df.pivot_table(
+            index="A", columns="C", values=["D", "B"], aggfunc="first"
+        )
+
+    # Pivot may produce different nullable data, so we set check_dtype=False.
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
