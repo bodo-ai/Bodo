@@ -221,8 +221,7 @@ def overload_dataframe_size(df):
         # compile time constant.
         def impl(df):  # pragma: no cover
             t = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
-            # TODO: Add an abstraction for num blocks?
-            num_cols = len(t.block_0)
+            num_cols = bodo.hiframes.table.compute_num_runtime_columns(t)
             return num_cols * len(t)
 
         return impl
@@ -238,8 +237,7 @@ def overload_dataframe_shape(df):
         # compile time constant.
         def impl(df):  # pragma: no cover
             t = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
-            # TODO: Add an abstraction for num blocks?
-            num_cols = len(t.block_0)
+            num_cols = bodo.hiframes.table.compute_num_runtime_columns(t)
             return (len(t), num_cols)
 
         return impl

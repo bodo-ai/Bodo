@@ -134,12 +134,6 @@ class TableType(types.ArrayCompatible):
                 block_offsets.append(blk_curr_ind[blk])
                 blk_curr_ind[blk] += 1
                 block_to_arr_ind[blk].append(i)
-        else:
-            # Verify that with runtime columns arr_types is just a tuple
-            # with a single type.
-            assert (
-                isinstance(arr_types, tuple) and len(arr_types) == 1
-            ), "Mixing columns known at compile time with number of columns determined at runtime is not yet supported"
 
         self.block_nums = block_nums
         self.block_offsets = block_offsets
@@ -179,7 +173,9 @@ class TableTypeModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         # store a list of arrays for each block of same type column arrays
         if fe_type.has_runtime_cols:
-            members = [("block_0", types.List(fe_type.arr_types[0]))]
+            members = [
+                (f"block_{i}", types.List(t)) for i, t in enumerate(fe_type.arr_types)
+            ]
         else:
             members = [
                 (f"block_{blk}", types.List(t))
@@ -286,11 +282,31 @@ def box_table(typ, val, c, ensure_unboxed=None):
     # variable number of columns case
     # NOTE: assuming there are no null arrays
     if typ.has_runtime_cols:
-        list_arr_typ = types.List(typ.arr_types[0])
-        c.context.nrt.incref(c.builder, list_arr_typ, table.block_0)
-        table_arr_list_obj = c.pyapi.from_native_value(
-            list_arr_typ, table.block_0, c.env_manager
-        )
+        # Compute the size of the output list
+        list_size = c.context.get_constant(types.int64, 0)
+        for i, t in enumerate(typ.arr_types):
+            arr_list = getattr(table, f"block_{i}")
+            arr_list_inst = ListInstance(c.context, c.builder, types.List(t), arr_list)
+            list_size = c.builder.add(list_size, arr_list_inst.size)
+        table_arr_list_obj = c.pyapi.list_new(list_size)
+        # Store the list elements
+        curr_idx = c.context.get_constant(types.int64, 0)
+        for i, t in enumerate(typ.arr_types):
+            arr_list = getattr(table, f"block_{i}")
+            arr_list_inst = ListInstance(c.context, c.builder, types.List(t), arr_list)
+            with cgutils.for_range(c.builder, arr_list_inst.size) as loop:
+                i = loop.index
+                arr = arr_list_inst.getitem(i)
+                c.context.nrt.incref(c.builder, t, arr)
+                idx = c.builder.add(curr_idx, i)
+                c.pyapi.list_setitem(
+                    table_arr_list_obj,
+                    idx,
+                    c.pyapi.from_native_value(t, arr, c.env_manager),
+                )
+            curr_idx = c.builder.add(curr_idx, arr_list_inst.size)
+
+        # Compute the output table
         cls_obj = c.pyapi.unserialize(c.pyapi.serialize_object(Table))
         out_table_obj = c.pyapi.call_function_objargs(cls_obj, (table_arr_list_obj,))
         c.pyapi.decref(cls_obj)
@@ -395,13 +411,35 @@ def table_shape_overload(T):
         # If the number of columns is determined at runtime we can't
         # use compile time values
         def impl(T):  # pragma: no cover
-            return (T._len, len(T.block_0))
+            return (T._len, compute_num_runtime_columns(T))
 
         return impl
 
     ncols = len(T.arr_types)
     # using types.int64 due to lowering error (a Numba tuple handling bug)
     return lambda T: (T._len, types.int64(ncols))  # pragma: no cover
+
+
+@intrinsic
+def compute_num_runtime_columns(typingctx, table_type):
+    """
+    Compute the number of columns generated for a table
+    with columns at runtime.
+    """
+    assert isinstance(table_type, TableType)
+
+    def codegen(context, builder, sig, args):
+        (table_arg,) = args
+        table = cgutils.create_struct_proxy(table_type)(context, builder, table_arg)
+        num_cols = context.get_constant(types.int64, 0)
+        for i, t in enumerate(table_type.arr_types):
+            arr_list = getattr(table, f"block_{i}")
+            arr_list_inst = ListInstance(context, builder, types.List(t), arr_list)
+            num_cols = builder.add(num_cols, arr_list_inst.size)
+        return num_cols
+
+    sig = types.int64(table_type)
+    return sig, codegen
 
 
 def get_table_data_codegen(context, builder, table_arg, col_ind, table_type):
@@ -925,7 +963,7 @@ def table_getitem(T, idx):
 
 
 @intrinsic
-def init_runtime_table_from_list(typingctx, arr_list_typ, nrows_typ=None):
+def init_runtime_table_from_lists(typingctx, arr_list_tup_typ, nrows_typ=None):
     """
     Takes a list of arrays and the length of each array and creates a Python
     Table from this list (without making a copy).
@@ -933,22 +971,37 @@ def init_runtime_table_from_list(typingctx, arr_list_typ, nrows_typ=None):
     The number of arrays in this table is NOT known at compile time.
     """
     assert isinstance(
-        arr_list_typ, types.List
-    ), "init_runtime_table_from_list requires a list of arrays"
+        arr_list_tup_typ, types.BaseTuple
+    ), "init_runtime_table_from_lists requires a tuple of list of arrays"
+    if isinstance(arr_list_tup_typ, types.UniTuple):
+        # When running type inference, we may require further transformations
+        # to determine the types of the lists. As a result we return None
+        # when the type is undefined to trigger another pass.
+        if arr_list_tup_typ.dtype.dtype == types.undefined:
+            return
+        arr_list_typs = [arr_list_tup_typ.dtype.dtype] * len(arr_list_tup_typ)
+    else:
+        arr_list_typs = []
+        for typ in arr_list_tup_typ:
+            if typ.dtype == types.undefined:
+                return
+            arr_list_typs.append(typ.dtype)
     assert isinstance(
         nrows_typ, types.Integer
-    ), "init_runtime_table_from_list requires an integer length"
+    ), "init_runtime_table_from_lists requires an integer length"
 
     def codegen(context, builder, sig, args):
-        (arr_list, nrows) = args
+        (arr_list_tup, nrows) = args
         table = cgutils.create_struct_proxy(table_type)(context, builder)
         # Update the table length. This is assume to be 0 if the arr_list is empty
         table.len = nrows
-        # Store the array list in the table and increment its refcount.
-        table.block_0 = arr_list
-        context.nrt.incref(builder, arr_list_typ, arr_list)
+        # Store each array list in the table and increment its refcount.
+        arr_lists = cgutils.unpack_tuple(builder, arr_list_tup)
+        for i, arr_list in enumerate(arr_lists):
+            setattr(table, f"block_{i}", arr_list)
+            context.nrt.incref(builder, types.List(arr_list_typs[i]), arr_list)
         return table._getvalue()
 
-    table_type = TableType((arr_list_typ.dtype,), True)
-    sig = table_type(arr_list_typ, nrows_typ)
+    table_type = TableType(tuple(arr_list_typs), True)
+    sig = table_type(arr_list_tup_typ, nrows_typ)
     return sig, codegen
