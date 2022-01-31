@@ -29,7 +29,7 @@ fi
 
 # build Bodo wheels
 for PYBIN in /opt/python/cp*/bin; do
-    "${PYBIN}/pip" install "mpi4py_mpich>3.0.3"
+    "${PYBIN}/pip" install "mpi4py_mpich==3.1.2"
     PYARROW_PATH=`"${PYBIN}/python" -c "import pyarrow; print('/'.join(pyarrow.__file__.split('/')[:-1]))"`
     CONDA_PREFIX='' CFLAGS='-I/mpich/include -I'$PYARROW_PATH'/include -L/mpich/lib -L'$PYARROW_PATH' -Wl,-rpath,/mpich/lib -Wl,-rpath,'$PYARROW_PATH'' "${PYBIN}/python" setup.py bdist_wheel
 done
