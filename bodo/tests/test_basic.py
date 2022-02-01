@@ -97,6 +97,19 @@ def test_list_constant_lowering(memory_leak_check):
     check_func(impl, (), only_seq=True)
 
 
+l2 = [1, "A", "B"]
+
+
+def test_list_constant_lowering_error_checking(memory_leak_check):
+    """make sure value types are checked to be the same in list constant lowering"""
+
+    def impl():
+        return l2[-1]
+
+    with pytest.raises(BodoError, match="Values in list must have the same data type"):
+        bodo.jit(impl)()
+
+
 s1 = {1, 4, 5, 11, 3}
 
 
@@ -108,6 +121,19 @@ def test_set_constant_lowering():
         return s1
 
     check_func(impl, (), only_seq=True)
+
+
+s2 = {1, "A", "B"}
+
+
+def test_set_constant_lowering_error_checking(memory_leak_check):
+    """make sure value types are checked to be the same in set constant lowering"""
+
+    def impl():
+        return s2
+
+    with pytest.raises(BodoError, match="Values in set must have the same data type"):
+        bodo.jit(impl)()
 
 
 @pytest.mark.smoke

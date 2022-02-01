@@ -1257,7 +1257,14 @@ def lower_constant_list(context, builder, typ, pyval):
             )
         )
 
-    value_consts = [context.get_constant_generic(builder, typ.dtype, a) for a in pyval]
+    value_consts = []
+    for a in pyval:
+        if bodo.typeof(a) != typ.dtype:
+            raise BodoError(
+                f"Values in list must have the same data type for type stability. Expected: {typ.dtype}, Actual: {bodo.typeof(a)}"
+            )
+        value_consts.append(context.get_constant_generic(builder, typ.dtype, a))
+
     size = context.get_constant_generic(builder, types.int64, len(pyval))
     dirty = context.get_constant_generic(builder, types.bool_, False)
 
@@ -1291,6 +1298,12 @@ def lower_constant_set(context, builder, typ, pyval):
     # reusing list constant lowering instead of creating a proper constant set due to
     # the complexities of set internals. This leads to potential memory leaks.
     # TODO [BE-2140]: create a proper constant set
+
+    for a in pyval:
+        if bodo.typeof(a) != typ.dtype:
+            raise BodoError(
+                f"Values in set must have the same data type for type stability. Expected: {typ.dtype}, Actual: {bodo.typeof(a)}"
+            )
 
     list_typ = types.List(typ.dtype)
     list_const = context.get_constant_generic(builder, list_typ, list(pyval))
