@@ -1250,7 +1250,7 @@ def lower_constant_list(context, builder, typ, pyval):
     """Support constant lowering of lists"""
 
     # Throw warning for large lists
-    if len(pyval) > CONST_LIST_SLOW_WARN_THRESHOLD:
+    if len(pyval) > CONST_LIST_SLOW_WARN_THRESHOLD:  # pragma: no cover
         warnings.warn(
             BodoWarning(
                 "Using large global lists can result in long compilation times. Please pass large lists as arguments to JIT functions or use arrays."
@@ -1282,6 +1282,28 @@ def lower_constant_list(context, builder, typ, pyval):
 
     # create the list
     return lir.Constant.literal_struct([meminfo, parent_null])
+
+
+@lower_constant(types.Set)
+def lower_constant_set(context, builder, typ, pyval):
+    """Support constant lowering of sets"""
+
+    # reusing list constant lowering instead of creating a proper constant set due to
+    # the complexities of set internals. This leads to potential memory leaks.
+    # TODO [BE-2140]: create a proper constant set
+
+    list_typ = types.List(typ.dtype)
+    list_const = context.get_constant_generic(builder, list_typ, list(pyval))
+
+    set_val = context.compile_internal(
+        builder,
+        lambda l: set(l),
+        # creating a new set type since 'typ' has the reflected flag
+        types.Set(typ.dtype)(list_typ),
+        [list_const],
+    )  # pragma: no cover
+
+    return set_val
 
 
 def lower_const_dict_fast_path(context, builder, typ, pyval):

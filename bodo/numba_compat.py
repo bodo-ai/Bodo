@@ -4682,7 +4682,7 @@ def raise_on_unsupported_feature(func_ir, typemap):  # pragma: no cover
                     "compile a %s type as a constant."
                 )
                 # Bodo change: remove types.DictType, types.List
-                if isinstance(ty, (types.ListType, types.Set)):
+                if isinstance(ty, types.ListType):
                     raise TypingError(msg % (ty, stmt.value.name, ty), loc=stmt.loc)
 
             # checks for generator expressions (yield in use when func_ir has
