@@ -3769,10 +3769,13 @@ def get_dummies(
     data_args = ", ".join(f"data_arr_{i}" for i in range(n_cols))
     index = "bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)"
 
-    # convert datetime64 categories to Timestamp to avoid codegen errors
+    # convert datetime64 categories to Timestamp and timedelta64 to Timedelta
+    # to avoid codegen errors
     # TODO(Ehsan): pass column names as dataframe type to avoid these issues
     if isinstance(categories[0], np.datetime64):
         categories = tuple(pd.Timestamp(c) for c in categories)
+    elif isinstance(categories[0], np.timedelta64):
+        categories = tuple(pd.Timedelta(c) for c in categories)
 
     # TODO(Nick): Replace categories with categorical index type
     return bodo.hiframes.dataframe_impl._gen_init_df(
