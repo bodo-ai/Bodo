@@ -97,6 +97,19 @@ def test_list_constant_lowering(memory_leak_check):
     check_func(impl, (), only_seq=True)
 
 
+s1 = {1, 4, 5, 11, 3}
+
+
+# TODO [BE-2140]: add memory_leak_check when memory leak is resolved
+def test_set_constant_lowering():
+    """test constant lowering for lists"""
+
+    def impl():
+        return s1
+
+    check_func(impl, (), only_seq=True)
+
+
 @pytest.mark.smoke
 def test_getitem(memory_leak_check):
     def test_impl(N):
