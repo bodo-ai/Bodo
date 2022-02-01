@@ -222,7 +222,7 @@ class CategoricalArrayType(types.ArrayCompatible):
     def __init__(self, dtype):
         self.dtype = dtype
         super(CategoricalArrayType, self).__init__(
-            name="CategoricalArrayType({})".format(dtype)
+            name=f"CategoricalArrayType({dtype})"
         )
 
     @property
@@ -357,6 +357,18 @@ def _to_readonly(t):
 
     # TODO(ehsan): add support for other index/array types
 
+    if isinstance(t, CategoricalArrayType):
+        return CategoricalArrayType(_to_readonly(t.dtype))
+
+    if isinstance(t, PDCategoricalDtype):
+        return PDCategoricalDtype(
+            t.categories,
+            t.elem_type,
+            t.ordered,
+            _to_readonly(t.data),
+            t.int_type,
+        )
+
     if isinstance(t, types.Array):
         return types.Array(t.dtype, t.ndim, "C", True)
 
@@ -377,15 +389,7 @@ def cast_cat_arr(context, builder, fromty, toty, val):
     see test_groupby.py::test_first_last[categorical_value_df]
     """
 
-    out_dtype = toty.dtype
-    out_dtype_readonly = PDCategoricalDtype(
-        out_dtype.categories,
-        out_dtype.elem_type,
-        out_dtype.ordered,
-        _to_readonly(out_dtype.data),
-        out_dtype.int_type,
-    )
-    if out_dtype_readonly == fromty.dtype:
+    if _to_readonly(toty) == fromty:
         return val
 
     raise BodoError(f"Cannot cast from {fromty} to {toty}")
