@@ -1061,6 +1061,23 @@ def overload_get(arr, ind):
         return get_arr_item
 
 
+def _is_same_categorical_array_type(arr_types):
+    """return True if 'arr_types' is a BaseTuple and all elements are the same
+    CategoricalArrayType irrespective of read-only flags.
+    """
+    from bodo.hiframes.pd_categorical_ext import _to_readonly
+
+    if not isinstance(arr_types, types.BaseTuple) or len(arr_types) == 0:
+        return False
+
+    arr_type = _to_readonly(arr_types.types[0])
+
+    return all(
+        isinstance(t, CategoricalArrayType) and _to_readonly(t) == arr_type
+        for t in arr_types.types
+    )
+
+
 def concat(arr_list):  # pragma: no cover
     return pd.concat(arr_list)
 
@@ -1376,6 +1393,21 @@ def concat_overload(arr_list):
 
         return cat_array_concat_impl
 
+    # categorical arrays may have read-only flag set in alloc_type() leading to type
+    # missmatch issues. see test_dataframe_concat[series_val19]
+    if _is_same_categorical_array_type(arr_list):
+        code_arrs = ", ".join(f"arr_list[{i}].codes" for i in range(len(arr_list)))
+        func_text = "def impl(arr_list):\n"
+        func_text += f"    return init_categorical_array(bodo.libs.array_kernels.concat(({code_arrs},)), arr_list[0].dtype)\n"
+
+        locs = {}
+        exec(
+            func_text,
+            {"bodo": bodo, "init_categorical_array": init_categorical_array},
+            locs,
+        )
+        return locs["impl"]
+
     # list of 1D np arrays
     if (
         isinstance(arr_list, types.List)
@@ -1430,8 +1462,8 @@ def concat_overload(arr_list):
         return impl_map_arr_list
 
     for typ in arr_list:
-        if not isinstance(typ, types.Array):
-            raise_bodo_error("concat of array types {} not supported".format(arr_list))
+        if not isinstance(typ, types.Array):  # pragma: no cover
+            raise_bodo_error(f"concat of array types {arr_list} not supported")
 
     # numpy array input
     return lambda arr_list: np.concatenate(arr_list)  # pragma: no cover
