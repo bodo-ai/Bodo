@@ -85,6 +85,18 @@ def test_dict_constant_lowering():
     check_func(impl2, (), only_seq=True)
 
 
+l1 = ["A", "ABC", "D2", "E4", "F53"]
+
+
+def test_list_constant_lowering(memory_leak_check):
+    """test constant lowering for lists"""
+
+    def impl():
+        return l1[-2]
+
+    check_func(impl, (), only_seq=True)
+
+
 @pytest.mark.smoke
 def test_getitem(memory_leak_check):
     def test_impl(N):

@@ -109,6 +109,10 @@ np_alloc_callnames = ("empty", "zeros", "ones", "full")
 CONST_DICT_SLOW_WARN_THRESHOLD = 100
 
 
+# size threshold for throwing warning for const list lowering
+CONST_LIST_SLOW_WARN_THRESHOLD = 100000
+
+
 def unliteral_all(args):
     return tuple(types.unliteral(a) for a in args)
 
@@ -1239,6 +1243,45 @@ dt_err = """
         If you are trying to set NULL values for timedelta64 in regular Python, \n
         consider using np.timedelta64('nat') instead of None
         """
+
+
+@lower_constant(types.List)
+def lower_constant_list(context, builder, typ, pyval):
+    """Support constant lowering of lists"""
+
+    # Throw warning for large lists
+    if len(pyval) > CONST_LIST_SLOW_WARN_THRESHOLD:
+        warnings.warn(
+            BodoWarning(
+                "Using large global lists can result in long compilation times. Please pass large lists as arguments to JIT functions or use arrays."
+            )
+        )
+
+    value_consts = [context.get_constant_generic(builder, typ.dtype, a) for a in pyval]
+    size = context.get_constant_generic(builder, types.int64, len(pyval))
+    dirty = context.get_constant_generic(builder, types.bool_, False)
+
+    # create a constant payload with the same data model as ListPayload
+    # "size", "allocated", "dirty", "data"
+    # NOTE: payload and data are packed together in a single buffer
+    parent_null = context.get_constant_null(types.pyobject)
+    payload = lir.Constant.literal_struct([size, size, dirty] + value_consts)
+    payload = cgutils.global_constant(builder, ".const.payload", payload).bitcast(
+        cgutils.voidptr_t
+    )
+
+    # create a constant meminfo with the same data model as Numba
+    minus_one = context.get_constant(types.int64, -1)
+    null_ptr = context.get_constant_null(types.voidptr)
+    meminfo = lir.Constant.literal_struct(
+        [minus_one, null_ptr, null_ptr, payload, minus_one]
+    )
+    meminfo = cgutils.global_constant(builder, ".const.meminfo", meminfo).bitcast(
+        cgutils.voidptr_t
+    )
+
+    # create the list
+    return lir.Constant.literal_struct([meminfo, parent_null])
 
 
 def lower_const_dict_fast_path(context, builder, typ, pyval):
