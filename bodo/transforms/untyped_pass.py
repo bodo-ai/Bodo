@@ -2627,15 +2627,19 @@ def _get_json_df_type_from_file(
                 read_chunk_size = 500  # max number of bytes read at a time
                 rows_read = 0  # rows seen
                 size_read = 0  # number of bytes seen
-                buff = ""  # bytes read
+                buff = b""  # bytes read
                 # keep reading until we read at least rows_to_read number of rows
                 while size_read < f_size and rows_read < rows_to_read:
                     read_size = min(read_chunk_size, f_size - size_read)
-                    tmp_buff = file_name_or_handler.read(read_size).decode("utf-8")
-                    rows_read += tmp_buff.count("\n")
+                    tmp_buff = file_name_or_handler.read(read_size)
+                    rows_read += tmp_buff.count(b"\n")
                     buff += tmp_buff
                     size_read += read_size
-                file_name_or_buff = buff
+
+                # NOTE: Since data is read in chunks, `buff` may include
+                # extra data from row rows_to_read+1.
+                # rsplit: Include data add upto last \n in the buff.
+                file_name_or_buff = buff.rsplit(b"\n", 1)[0]
 
             df = pd.read_json(
                 file_name_or_buff,

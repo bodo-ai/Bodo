@@ -229,7 +229,9 @@ def test_s3_pq_list_files(minio_server, s3_bucket, datapath, memory_leak_check):
     """
 
     def test_impl():
-        return pd.read_parquet(["s3://bodo-test/example.parquet", "s3://bodo-test/example2.parquet"])
+        return pd.read_parquet(
+            ["s3://bodo-test/example.parquet", "s3://bodo-test/example2.parquet"]
+        )
 
     def test_impl2(fpaths):
         return pd.read_parquet(fpaths)
@@ -824,6 +826,19 @@ def test_s3_json_read_recoreds_lines_1D_var(minio_server, s3_bucket, test_df):
 
     check_func(test_read, (), py_output=test_df)
     check_func(test_read_infer_dtype, (), py_output=test_df)
+
+
+@pytest.mark.slow
+def test_s3_json_data_has_path(minio_server, s3_bucket, datapath, memory_leak_check):
+    """
+    test s3 read_json where data includes ://path
+    """
+
+    def test_impl():
+        return pd.read_json("s3://bodo-test/path_example.json", lines=True)
+
+    py_output = pd.read_json(datapath("path_example.json"), lines=True)
+    check_func(test_impl, (), py_output=py_output)
 
 
 @pytest.mark.skip("DeltaTable doesn't seem to support custom S3 endpoints")
