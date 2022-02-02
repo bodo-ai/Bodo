@@ -1791,6 +1791,39 @@ def test_read_predicates_isnull(memory_leak_check):
             os.remove("pq_data")
 
 
+def test_read_predicates_isnull_alone(memory_leak_check):
+    """test that predicate pushdown with isnull as the sole filter."""
+
+    try:
+        if bodo.get_rank() == 0:
+            df = pd.DataFrame(
+                {
+                    "A": pd.Series([0, 1, 2, None] * 10, dtype="Int64"),
+                    "B": [1, 2] * 20,
+                }
+            )
+            df.to_parquet("pq_data")
+        bodo.barrier()
+
+        def impl(path):
+            df = pd.read_parquet("pq_data")
+            df = df[df["A"].notna()]
+            return df
+
+        # TODO: Fix index
+        check_func(impl, ("pq_data",), reset_index=True)
+        # make sure the ParquetReader node has filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+        bodo_func(
+            "pq_data",
+        )
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+        bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove("pq_data")
+
+
 @pytest.mark.slow
 def test_read_predicates_and_or(memory_leak_check):
     """test that predicate pushdown with and/or in the expression."""
