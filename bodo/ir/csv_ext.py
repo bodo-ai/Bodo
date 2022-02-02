@@ -52,6 +52,7 @@ class CsvReader(ir.Stmt):
         chunksize,
         is_skiprows_list,
         low_memory,
+        escapechar,
         index_column_index=None,
         index_column_typ=types.none,
     ):
@@ -74,6 +75,7 @@ class CsvReader(ir.Stmt):
         # skiprows list
         self.is_skiprows_list = is_skiprows_list
         self.pd_low_memory = low_memory
+        self.escapechar = escapechar
         self.index_column_index = index_column_index
         self.index_column_typ = index_column_typ
         # Columns within the output table type that are actually used.
@@ -364,6 +366,7 @@ def csv_distributed_run(
         csv_node.compression,
         csv_node.is_skiprows_list,
         csv_node.pd_low_memory,
+        csv_node.escapechar,
         idx_col_index=csv_node.index_column_index,
         idx_col_typ=csv_node.index_column_typ,
     )
@@ -699,6 +702,7 @@ def _gen_read_csv_objmode(
     usecols,
     type_usecol_offset,
     sep,
+    escapechar,
     call_id,
     glbs,
     parallel,
@@ -839,9 +843,8 @@ def _gen_read_csv_objmode(
     # only some types here directly
     func_text += f"        dtype={{i:str for i in str_col_nums_{call_id}_2}},\n"
     # NOTE: using repr() for sep to support cases like "\n" properly
-    func_text += (
-        f"        usecols=usecols_arr_{call_id}_2, sep={sep!r}, low_memory=False)\n"
-    )
+    # and escapechar to support `\\` properly.
+    func_text += f"        usecols=usecols_arr_{call_id}_2, sep={sep!r}, low_memory=False, escapechar={escapechar!r})\n"
     # _gen_read_csv_objmode() may be called from iternext_impl which doesn't
     # have access to the parallel flag in the CSVNode so we retrieve it from
     # the file reader.
@@ -896,6 +899,7 @@ def _gen_csv_reader_py(
     compression,
     is_skiprows_list,
     pd_low_memory,
+    escapechar,
     idx_col_index=None,
     idx_col_typ=types.none,
 ):
@@ -939,6 +943,7 @@ def _gen_csv_reader_py(
         usecols,
         type_usecol_offset,
         sep,
+        escapechar,
         call_id,
         glbls,
         parallel=parallel,

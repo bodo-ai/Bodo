@@ -3830,6 +3830,18 @@ def test_csv_np_gt_rows(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_csv_escapechar(datapath, memory_leak_check):
+    """Test pd.read_csv with escapechar argument """
+
+    fname = datapath("escapechar_data.csv")
+
+    def impl():
+        return pd.read_csv(fname, escapechar="\\")
+
+    check_func(impl, (), check_dtype=False)
+
+
+@pytest.mark.slow
 def test_csv_unsupported_arg_match(memory_leak_check):
     """
     Test read_csv(): Test that passing an unsupported arg that matches

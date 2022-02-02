@@ -1336,6 +1336,35 @@ class UntypedPass:
                 loc=rhs.loc,
             )
 
+        # TODO: [BE-2146] support passing as a variable.
+        escapechar = self._get_const_arg(
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            39,
+            "escapechar",
+            rhs.loc,
+            default=None,
+            use_default=True,
+            typ="str",
+        )
+        if escapechar is not None and (
+            not isinstance(escapechar, str) or len(escapechar) != 1
+        ):
+            raise BodoError(
+                "pd.read_csv(): 'escapechar' must be a one-character string.",
+                loc=rhs.loc,
+            )
+        if escapechar == sep:
+            raise BodoError(
+                f"pd.read_csv(): 'escapechar'={escapechar} must not be equal to 'sep'={sep}.",
+                loc=rhs.loc,
+            )
+        if escapechar == "\n":
+            raise BodoError(
+                f"pd.read_csv(): newline as 'escapechar' is not supported.", loc=rhs.loc
+            )
+
         # Pandas default is True but Bodo is False
         pd_low_memory = self._get_const_arg(
             "pd.read_csv",
@@ -1443,6 +1472,7 @@ class UntypedPass:
                 "compression",
                 "low_memory",
                 "_bodo_upcast_to_float64",
+                "escapechar",
             )
         )
         # Iterate through the provided args. If an argument is in the supported_args,
@@ -1520,7 +1550,12 @@ class UntypedPass:
                 msg,
                 arg_types=self.args,
                 file_info=CSVFileInfo(
-                    sep, skiprows_val, header, compression, pd_low_memory
+                    sep,
+                    skiprows_val,
+                    header,
+                    compression,
+                    pd_low_memory,
+                    escapechar,
                 ),
             )
             if not isinstance(fname_const, str):
@@ -1539,7 +1574,13 @@ class UntypedPass:
                     got_schema = True
             if not got_schema:
                 df_type = _get_csv_df_type_from_file(
-                    fname_const, sep, skiprows_val, header, compression, pd_low_memory
+                    fname_const,
+                    sep,
+                    skiprows_val,
+                    header,
+                    compression,
+                    pd_low_memory,
+                    escapechar,
                 )
             dtypes = df_type.data
             if usecols is None:
@@ -1703,6 +1744,7 @@ class UntypedPass:
                 chunksize,
                 is_skiprows_list,
                 pd_low_memory,
+                escapechar,
                 index_ind,
                 # CsvReader expects the type of the read column
                 # not the index type itself
@@ -2833,12 +2875,13 @@ class CSVFileInfo(FileInfo):
     """FileInfo object passed to ForceLiteralArg for
     file name arguments that refer to a CSV dataset"""
 
-    def __init__(self, sep, skiprows, header, compression, low_memory):
+    def __init__(self, sep, skiprows, header, compression, low_memory, escapechar):
         self.sep = sep
         self.skiprows = skiprows
         self.header = header
         self.compression = compression
         self.low_memory = low_memory
+        self.escapechar = escapechar
         super().__init__()
 
     def _get_schema(self, fname):
@@ -2849,11 +2892,12 @@ class CSVFileInfo(FileInfo):
             self.header,
             self.compression,
             self.low_memory,
+            self.escapechar,
         )
 
 
 def _get_csv_df_type_from_file(
-    fname_const, sep, skiprows, header, compression, low_memory
+    fname_const, sep, skiprows, header, compression, low_memory, escapechar
 ):
     """get dataframe type for read_csv() using file path constant or raise error if not
     possible (e.g. file doesn't exist).
@@ -2902,6 +2946,7 @@ def _get_csv_df_type_from_file(
                 compression=compression,
                 # Copy low memory value from runtime.
                 low_memory=low_memory,
+                escapechar=escapechar,
             )
 
             # TODO: categorical, etc.
