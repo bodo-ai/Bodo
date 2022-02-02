@@ -360,7 +360,8 @@ def pq_distributed_run(
     expr_filter_str = "None"
 
     filter_map, filter_vars = bodo.ir.connector.generate_filter_map(pq_node.filters)
-    if filter_map:
+    # If no filters use variables (i.e. all isna, then we still need to take this path)
+    if pq_node.filters:
         # Create two formats for parquet. One using the old DNF format
         # which contains just the partition columns (partition pushdown)
         # and one using the more verbose expression format and all expressions

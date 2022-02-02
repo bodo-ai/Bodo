@@ -592,8 +592,21 @@ class TypingTransforms:
         # e.g. df = pd.read_parquet(...); df = df[df.A > 3]
         index_def = guard(get_definition, self.func_ir, rhs.index)
         value_def = guard(get_definition, self.func_ir, rhs.value)
+        index_call_name = None
+        # Check call expresions for isna, isnull, notna, and notnull.
+        if is_call(index_def):
+            index_call_name = guard(find_callname, self.func_ir, index_def)
         if (
-            is_expr(index_def, "binop")
+            (
+                is_expr(index_def, "binop")
+                or (
+                    is_call(index_def)
+                    and index_call_name[0] in ("isna", "isnull", "notna", "notnull")
+                    and isinstance(
+                        self.typemap.get(index_call_name[1].name, None), SeriesType
+                    )
+                )
+            )
             and is_call(value_def)
             and guard(find_callname, self.func_ir, value_def)
             == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext")
@@ -678,8 +691,15 @@ class TypingTransforms:
                     )
 
         # make sure all filters have the right form
-        lhs_def = get_definition(func_ir, index_def.lhs)
-        rhs_def = get_definition(func_ir, index_def.rhs)
+        # If we have a call expression, then we just pass
+        # the single def as the index_def and set the lhs_def
+        # and rhs_def to none.
+        if is_call(index_def):
+            lhs_def = None
+            rhs_def = None
+        else:
+            lhs_def = get_definition(func_ir, index_def.lhs)
+            rhs_def = get_definition(func_ir, index_def.rhs)
         df_var = assign.value.value
         filters = self._get_partition_filters(
             index_def,
@@ -851,6 +871,25 @@ class TypingTransforms:
             return {index_def} | left_nodes | right_nodes
         return {index_def}
 
+    def _get_null_filter(self, call_def, func_ir, df_var):
+        """
+        Function used by _get_partition_filters to extract null related
+        filters from series method calls.
+        """
+        require(is_expr(call_def, "call"))
+        call_list = find_callname(func_ir, call_def)
+        require(
+            len(call_list) == 2
+            and call_list[0] in ("notna", "isna", "notnull", "isnull")
+            and isinstance(call_list[1], ir.Var)
+        )
+        colname = self._get_col_name(call_list[1], df_var, func_ir)
+        if call_list[0] in ("notna", "notnull"):
+            op = "is not"
+        else:
+            op = "is"
+        return (colname, op, "NULL")
+
     def _get_partition_filters(
         self, index_def, df_var, lhs_def, rhs_def, func_ir, read_node, from_bodosql
     ):
@@ -859,175 +898,128 @@ class TypingTransforms:
         https://arrow.apache.org/docs/python/generated/pyarrow.parquet.ParquetDataset.html#pyarrow.parquet.ParquetDataset
         Throws GuardException if not possible.
         """
-        require(is_expr(index_def, "binop"))
+        require(is_expr(index_def, "binop") or is_call(index_def))
         # similar to DNF normalization in Sympy:
         # https://github.com/sympy/sympy/blob/da5cd290017814e6100859e5a3f289b3eda4ca6c/sympy/logic/boolalg.py#L1565
         # Or case: call recursively on arguments and concatenate
         # e.g. A or B
-        if index_def.fn == operator.or_:
-            if is_expr(lhs_def, "binop"):
-                l_def = get_definition(func_ir, lhs_def.lhs)
-                r_def = get_definition(func_ir, lhs_def.rhs)
-                left_or = self._get_partition_filters(
-                    lhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
-                )
-            else:
-                require(is_expr(lhs_def, "call"))
-                call_list = find_callname(func_ir, lhs_def)
-                require(
-                    len(call_list) == 2
-                    and call_list[0] in ("notna", "isna", "notnull", "isnull")
-                    and isinstance(call_list[1], ir.Var)
-                )
-                colname = self._get_col_name(call_list[1], df_var, func_ir)
-                if call_list[0] in ("notna", "notnull"):
-                    op = "is not"
+        if is_expr(index_def, "binop"):
+            if index_def.fn == operator.or_:
+                if is_expr(lhs_def, "binop"):
+                    l_def = get_definition(func_ir, lhs_def.lhs)
+                    r_def = get_definition(func_ir, lhs_def.rhs)
+                    left_or = self._get_partition_filters(
+                        lhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
+                    )
                 else:
-                    op = "is"
-                left_or = [[(colname, op, "NULL")]]
-            if is_expr(rhs_def, "binop"):
-                l_def = get_definition(func_ir, rhs_def.lhs)
-                r_def = get_definition(func_ir, rhs_def.rhs)
-                right_or = self._get_partition_filters(
-                    rhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
-                )
-            else:
-                require(is_expr(rhs_def, "call"))
-                call_list = find_callname(func_ir, rhs_def)
-                require(
-                    len(call_list) == 2
-                    and call_list[0] in ("notna", "isna", "notnull", "isnull")
-                    and isinstance(call_list[1], ir.Var)
-                )
-                colname = self._get_col_name(call_list[1], df_var, func_ir)
-                if call_list[0] in ("notna", "notnull"):
-                    op = "is not"
+                    left_or = [[self._get_null_filter(lhs_def, func_ir, df_var)]]
+                if is_expr(rhs_def, "binop"):
+                    l_def = get_definition(func_ir, rhs_def.lhs)
+                    r_def = get_definition(func_ir, rhs_def.rhs)
+                    right_or = self._get_partition_filters(
+                        rhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
+                    )
                 else:
-                    op = "is"
-                right_or = [[(colname, op, "NULL")]]
-            return left_or + right_or
-
-        # And case: distribute Or over And to normalize if needed
-        if index_def.fn == operator.and_:
-
-            # rhs is Or
-            # e.g. "A And (B Or C)" -> "(A And B) Or (A And C)"
-            if is_expr(rhs_def, "binop") and rhs_def.fn == operator.or_:
-                # lhs And rhs.lhs (A And B)
-                new_lhs = ir.Expr.binop(
-                    operator.and_, index_def.lhs, rhs_def.lhs, index_def.loc
-                )
-                new_lhs_rdef = get_definition(func_ir, rhs_def.lhs)
-                left_or = self._get_partition_filters(
-                    new_lhs,
-                    df_var,
-                    lhs_def,
-                    new_lhs_rdef,
-                    func_ir,
-                    read_node,
-                    from_bodosql,
-                )
-                # lhs And rhs.rhs (A And C)
-                new_rhs = ir.Expr.binop(
-                    operator.and_, index_def.lhs, rhs_def.rhs, index_def.loc
-                )
-                new_rhs_rdef = get_definition(func_ir, rhs_def.rhs)
-                right_or = self._get_partition_filters(
-                    new_rhs,
-                    df_var,
-                    lhs_def,
-                    new_rhs_rdef,
-                    func_ir,
-                    read_node,
-                    from_bodosql,
-                )
+                    right_or = [[self._get_null_filter(rhs_def, func_ir, df_var)]]
                 return left_or + right_or
 
-            # lhs is Or
-            # e.g. "(B Or C) And A" -> "(B And A) Or (C And A)"
-            if is_expr(lhs_def, "binop") and lhs_def.fn == operator.or_:
-                # lhs.lhs And rhs (B And A)
-                new_lhs = ir.Expr.binop(
-                    operator.and_, lhs_def.lhs, index_def.rhs, index_def.loc
-                )
-                new_lhs_ldef = get_definition(func_ir, lhs_def.lhs)
-                left_or = self._get_partition_filters(
-                    new_lhs,
-                    df_var,
-                    new_lhs_ldef,
-                    rhs_def,
-                    func_ir,
-                    read_node,
-                    from_bodosql,
-                )
-                # lhs.rhs And rhs (C And A)
-                new_rhs = ir.Expr.binop(
-                    operator.and_, lhs_def.rhs, index_def.rhs, index_def.loc
-                )
-                new_rhs_ldef = get_definition(func_ir, lhs_def.rhs)
-                right_or = self._get_partition_filters(
-                    new_rhs,
-                    df_var,
-                    new_rhs_ldef,
-                    rhs_def,
-                    func_ir,
-                    read_node,
-                    from_bodosql,
-                )
-                return left_or + right_or
+            # And case: distribute Or over And to normalize if needed
+            if index_def.fn == operator.and_:
 
-            # both lhs and rhs are And/literal expressions.
-            if is_expr(lhs_def, "binop"):
-                l_def = get_definition(func_ir, lhs_def.lhs)
-                r_def = get_definition(func_ir, lhs_def.rhs)
-                left_or = self._get_partition_filters(
-                    lhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
-                )
-            else:
-                require(is_expr(lhs_def, "call"))
-                call_list = find_callname(func_ir, lhs_def)
-                require(
-                    len(call_list) == 2
-                    and call_list[0] in ("notna", "isna", "notnull", "isnull")
-                    and isinstance(call_list[1], ir.Var)
-                )
-                colname = self._get_col_name(call_list[1], df_var, func_ir)
-                if call_list[0] in ("notna", "notnull"):
-                    op = "is not"
-                else:
-                    op = "is"
-                left_or = [[(colname, op, "NULL")]]
-            if is_expr(rhs_def, "binop"):
-                l_def = get_definition(func_ir, rhs_def.lhs)
-                r_def = get_definition(func_ir, rhs_def.rhs)
-                right_or = self._get_partition_filters(
-                    rhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
-                )
-            else:
-                require(is_expr(rhs_def, "call"))
-                call_list = find_callname(func_ir, rhs_def)
-                require(
-                    len(call_list) == 2
-                    and call_list[0] in ("notna", "isna", "notnull", "isnull")
-                    and isinstance(call_list[1], ir.Var)
-                )
-                colname = self._get_col_name(call_list[1], df_var, func_ir)
-                if call_list[0] in ("notna", "notnull"):
-                    op = "is not"
-                else:
-                    op = "is"
-                right_or = [[(colname, op, "NULL")]]
+                # rhs is Or
+                # e.g. "A And (B Or C)" -> "(A And B) Or (A And C)"
+                if is_expr(rhs_def, "binop") and rhs_def.fn == operator.or_:
+                    # lhs And rhs.lhs (A And B)
+                    new_lhs = ir.Expr.binop(
+                        operator.and_, index_def.lhs, rhs_def.lhs, index_def.loc
+                    )
+                    new_lhs_rdef = get_definition(func_ir, rhs_def.lhs)
+                    left_or = self._get_partition_filters(
+                        new_lhs,
+                        df_var,
+                        lhs_def,
+                        new_lhs_rdef,
+                        func_ir,
+                        read_node,
+                        from_bodosql,
+                    )
+                    # lhs And rhs.rhs (A And C)
+                    new_rhs = ir.Expr.binop(
+                        operator.and_, index_def.lhs, rhs_def.rhs, index_def.loc
+                    )
+                    new_rhs_rdef = get_definition(func_ir, rhs_def.rhs)
+                    right_or = self._get_partition_filters(
+                        new_rhs,
+                        df_var,
+                        lhs_def,
+                        new_rhs_rdef,
+                        func_ir,
+                        read_node,
+                        from_bodosql,
+                    )
+                    return left_or + right_or
 
-            # If either expression is an AND, we may still have ORs inside
-            # the AND. As a result, distributed ANDs across all ORs.
-            # For example
-            # ((A | B) & C) & D -> (AC | BC) & D (via the recursion)
-            # Now we need to produce (AC | BC) & D -> (ACD | BCD)
-            filters = []
-            for left_or_cond in left_or:
-                for right_or_cond in right_or:
-                    filters.append(left_or_cond + right_or_cond)
-            return filters
+                # lhs is Or
+                # e.g. "(B Or C) And A" -> "(B And A) Or (C And A)"
+                if is_expr(lhs_def, "binop") and lhs_def.fn == operator.or_:
+                    # lhs.lhs And rhs (B And A)
+                    new_lhs = ir.Expr.binop(
+                        operator.and_, lhs_def.lhs, index_def.rhs, index_def.loc
+                    )
+                    new_lhs_ldef = get_definition(func_ir, lhs_def.lhs)
+                    left_or = self._get_partition_filters(
+                        new_lhs,
+                        df_var,
+                        new_lhs_ldef,
+                        rhs_def,
+                        func_ir,
+                        read_node,
+                        from_bodosql,
+                    )
+                    # lhs.rhs And rhs (C And A)
+                    new_rhs = ir.Expr.binop(
+                        operator.and_, lhs_def.rhs, index_def.rhs, index_def.loc
+                    )
+                    new_rhs_ldef = get_definition(func_ir, lhs_def.rhs)
+                    right_or = self._get_partition_filters(
+                        new_rhs,
+                        df_var,
+                        new_rhs_ldef,
+                        rhs_def,
+                        func_ir,
+                        read_node,
+                        from_bodosql,
+                    )
+                    return left_or + right_or
+
+                # both lhs and rhs are And/literal expressions.
+                if is_expr(lhs_def, "binop"):
+                    l_def = get_definition(func_ir, lhs_def.lhs)
+                    r_def = get_definition(func_ir, lhs_def.rhs)
+                    left_or = self._get_partition_filters(
+                        lhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
+                    )
+                else:
+                    left_or = [[self._get_null_filter(lhs_def, func_ir, df_var)]]
+                if is_expr(rhs_def, "binop"):
+                    l_def = get_definition(func_ir, rhs_def.lhs)
+                    r_def = get_definition(func_ir, rhs_def.rhs)
+                    right_or = self._get_partition_filters(
+                        rhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
+                    )
+                else:
+                    right_or = [[self._get_null_filter(rhs_def, func_ir, df_var)]]
+
+                # If either expression is an AND, we may still have ORs inside
+                # the AND. As a result, distributed ANDs across all ORs.
+                # For example
+                # ((A | B) & C) & D -> (AC | BC) & D (via the recursion)
+                # Now we need to produce (AC | BC) & D -> (ACD | BCD)
+                filters = []
+                for left_or_cond in left_or:
+                    for right_or_cond in right_or:
+                        filters.append(left_or_cond + right_or_cond)
+                return filters
 
         # literal case
         # TODO(ehsan): support 'in' and 'not in'
@@ -1054,22 +1046,32 @@ class TypingTransforms:
             operator.ge: "<=",
         }
 
-        require(index_def.fn in op_map)
-        left_colname = guard(self._get_col_name, index_def.lhs, df_var, func_ir)
-        right_colname = guard(self._get_col_name, index_def.rhs, df_var, func_ir)
+        if is_expr(index_def, "binop"):
+            require(index_def.fn in op_map)
+            left_colname = guard(self._get_col_name, index_def.lhs, df_var, func_ir)
+            right_colname = guard(self._get_col_name, index_def.rhs, df_var, func_ir)
 
-        require(
-            (left_colname and not right_colname) or (right_colname and not left_colname)
-        )
-        if right_colname:
-            cond = (right_colname, right_colname_op_map[index_def.fn], index_def.lhs)
+            require(
+                (left_colname and not right_colname)
+                or (right_colname and not left_colname)
+            )
+            if right_colname:
+                cond = (
+                    right_colname,
+                    right_colname_op_map[index_def.fn],
+                    index_def.lhs,
+                )
+            else:
+                cond = (left_colname, op_map[index_def.fn], index_def.rhs)
         else:
-            cond = (left_colname, op_map[index_def.fn], index_def.rhs)
+            cond = self._get_null_filter(index_def, func_ir, df_var)
 
         # If this is parquet we need to verify this is a filter we can process.
+        # We don't do this check if there is a call expression because isnull
+        # is always supported.
         # TODO(Nick): Support for BodoSQL, which we can't yet because we don't
         # have typemap information (requires refactoring filter pushdown in BodoSQL).
-        if not is_sql and not from_bodosql:
+        if not is_sql and not is_call(index_def) and not from_bodosql:
             lhs_arr_typ = read_node.original_out_types[
                 read_node.original_df_colnames.index(cond[0])
             ]
@@ -2571,6 +2573,8 @@ class TypingTransforms:
 
         rhs = inst.value
         index_def = get_definition(func_ir, rhs.index)
+        # TODO: Support just isna/notna filter pushdown (requires
+        # typemap info).
         if is_expr(index_def, "binop"):
             value_def = get_definition(func_ir, rhs.value)
 

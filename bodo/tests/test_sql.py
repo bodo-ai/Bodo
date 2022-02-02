@@ -464,6 +464,11 @@ def test_sql_snowflake_na_pushdown(memory_leak_check):
         df = df[(df["l_orderkey"] > 10) & (df["l_linenumber"].notnull())]
         return df["l_suppkey"]
 
+    def impl_just_nona(query, conn):
+        df = pd.read_sql(query, conn)
+        df = df[(df["l_linenumber"].notna())]
+        return df["l_suppkey"]
+
     db = "SNOWFLAKE_SAMPLE_DATA"
     schema = "TPCH_SF1"
     conn = get_snowflake_connection_string(db, schema)
@@ -490,6 +495,12 @@ def test_sql_snowflake_na_pushdown(memory_leak_check):
 
     check_func(impl_and_notnull, (query, conn), check_dtype=False, reset_index=True)
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_and_notnull)
+    bodo_func(query, conn)
+    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
+    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+
+    check_func(impl_just_nona, (query, conn), check_dtype=False, reset_index=True)
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_just_nona)
     bodo_func(query, conn)
     _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
     _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
