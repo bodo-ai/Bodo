@@ -130,7 +130,17 @@ def sql_distributed_run(
                 # If p[2] is a constant that isn't in the IR (i.e. NULL)
                 # just load the value directly, otherwise load the variable
                 # at runtime.
-                " ".join(["(", p[0], p[1], ("{" + filter_map[p[2].name] + "}") if isinstance(p[2], ir.Var) else p[2], ")"])
+                " ".join(
+                    [
+                        "(",
+                        p[0],
+                        p[1],
+                        ("{" + filter_map[p[2].name] + "}")
+                        if isinstance(p[2], ir.Var)
+                        else p[2],
+                        ")",
+                    ]
+                )
                 for p in and_list
             ]
             or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")
@@ -152,6 +162,7 @@ def sql_distributed_run(
         targetctx,
         sql_node.db_type,
         sql_node.limit,
+        sql_node.converted_colnames,
         parallel,
     )
 
@@ -174,25 +185,9 @@ def sql_distributed_run(
     # Update the SQL request to remove any unused columns. This is both
     # an optimization (the SQL engine loads less data) and is needed for
     # correctness. See test_sql_snowflake_single_column
-    #
-    # Extra consideration needs to be taken for unaliased functions. For example
-    # count(*) may produce a column named count(*). If this is rerun in the query,
-    # an invalid query will result. To resolve this, we will wrap column names in quotes.
-    # In Snowflake this makes the name case sensitive, so we avoid this by undoing any
-    # conversions in the output as needed.
-    if sql_node.db_type == "snowflake":
-        # Snowflake needs to convert all lower case strings back to uppercase
-        used_colnames = [
-            x.upper() if x in sql_node.converted_colnames else x
-            for x in sql_node.df_colnames
-        ]
-        col_str = ", ".join([f'"{x}"' for x in used_colnames])
-    else:
-        # TODO: Determine safe quoting options for other schemas
-        # TODO: Handle possible functions (i.e. count(*)). This is already
-        # an issue in the parallel implementation.
-        # https://bodo.atlassian.net/browse/BE-1502
-        col_str = ", ".join(sql_node.df_colnames)
+    col_str = escape_column_names(
+        sql_node.df_colnames, sql_node.db_type, sql_node.converted_colnames
+    )
 
     updated_sql_request = (
         "SELECT " + col_str + " FROM (" + sql_node.sql_request + ") as TEMP"
@@ -210,6 +205,46 @@ def sql_distributed_run(
         nodes[-len(sql_node.out_vars) + i].target = sql_node.out_vars[i]
 
     return nodes
+
+
+def escape_column_names(col_names, db_type, converted_colnames):
+    """
+    Function that escapes column names when updating the SQL queries.
+    Some outputs (i.e. count(*)) map to both functions and the output
+    column names in certain dialects. If these are readded to the query,
+    it may modify the results by rerunning the function, so we must
+    escape the column names
+
+    See: test_read_sql_column_function and test_sql_snowflake_count
+    """
+    # In snowflake we avoid functions by wrapping column names in quotes.
+    # This makes the name case sensitive, so we avoid this by undoing any
+    # conversions in the output as needed.
+    if db_type == "snowflake":
+        # Snowflake needs to convert all lower case strings back to uppercase
+        used_colnames = [x.upper() if x in converted_colnames else x for x in col_names]
+        col_str = ", ".join([f'"{x}"' for x in used_colnames])
+
+    # MySQL uses tilda as an escape character by default, not quotations
+    # However, MySQL does support using quotations in ASCII_MODE. Tilda is always allowed though
+    # MySQL names are case-insensitive
+    elif db_type == "mysql" or db_type == "mysql+pymysql":
+        col_str = ", ".join([f"`{x}`" for x in col_names])
+
+    # By the SQL 1997 standard, wrapping with quotations should be the default
+    # SQLite is the only DB tested with this functionality. SQLite column names are case-insensitive
+    # MSSQL is good with or without quotes because it forces aliased subqueries to assign names to computed columns
+    # For example, this is not allowed: SELECT * FROM (SELECT COUNT(*) from ___ GROUP BY ___)
+    # But this is:                      SELECT * FROM (SELECT COUNT(*) as C from ___ GROUP BY ___)
+
+    # PostgreSQL uses just the lowercased name of the function as the column name by default
+    # E.x. SELECT COUNT(*) ... => Column Name is "count"
+    # However columns can also always be escaped with quotes.
+    # https://stackoverflow.com/questions/7651417/escaping-keyword-like-column-names-in-postgres
+    else:
+        col_str = ", ".join([f'"{x}"' for x in col_names])
+
+    return col_str
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
@@ -332,7 +367,14 @@ def req_limit(sql_request):
 
 
 def _gen_sql_reader_py(
-    col_names, col_typs, typingctx, targetctx, db_type, limit, parallel
+    col_names,
+    col_typs,
+    typingctx,
+    targetctx,
+    db_type,
+    limit,
+    converted_colnames,
+    parallel,
 ):
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
     typ_strs = [
@@ -430,9 +472,12 @@ def _gen_sql_reader_py(
                     func_text += "  nb_row = bcast_scalar(nb_row)\n"
                 func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
                 func_text += "    offset, limit = bodo.libs.distributed_api.get_start_count(nb_row)\n"
-                # TODO: Determine how to escape column names in quotes in case we have columns like count(*)
-                # https://bodo.atlassian.net/browse/BE-1502
-                func_text += f"    sql_cons = 'select {', '.join(col_names)} from (' + sql_request + ') x LIMIT ' + str(limit) + ' OFFSET ' + str(offset)\n"
+                # Update the SQL request to remove any unused columns. This is both
+                # an optimization (the SQL engine loads less data) and is needed for
+                # correctness. See test_read_sql_column_function
+                col_str = escape_column_names(col_names, db_type, converted_colnames)
+                func_text += f"    sql_cons = 'select {col_str} from (' + sql_request + ') x LIMIT ' + str(limit) + ' OFFSET ' + str(offset)\n"
+
                 func_text += "    df_ret = pd.read_sql(sql_cons, conn)\n"
             else:
                 func_text += "  with objmode({}):\n".format(", ".join(typ_strs))

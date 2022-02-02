@@ -18,6 +18,7 @@ from bodo.tests.utils import (
     get_start_end,
 )
 
+# TODO: Include testing DBs for other systems: PostgreSQL, MSSQL, SQLite, ...
 sql_user_pass_and_hostname = (
     "user:pass@localhost"
 )
@@ -234,6 +235,32 @@ def test_sql_argument_passing(memory_leak_check):
     sql_request = "select * from employees"
     conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
     check_func(test_impl_arg_passing, (sql_request, conn))
+
+
+def test_read_sql_column_function(memory_leak_check):
+    """
+    Test a SQL query that uses an unaliased function.
+    """
+
+    def write_sql(df, table_name, conn):
+        df.to_sql(table_name, conn, if_exists="replace")
+
+    conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+    table_name = "test_small_table"
+
+    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+    # Create the table once.
+    if bodo.get_rank() == 0:
+        write_sql(df, table_name, conn)
+    bodo.barrier()
+
+    def test_impl():
+        sql_request = "select B, count(*) from test_small_table group by B"
+        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(test_impl, (), check_dtype=False)
 
 
 # We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
