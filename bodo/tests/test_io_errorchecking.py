@@ -999,3 +999,36 @@ def test_to_pq_multiIdx_errcheck(memory_leak_check):
 
     with pytest.raises(BodoError, match="to_parquet: MultiIndex not supported yet"):
         bodo.jit(impl)(df)
+
+
+@pytest.mark.slow
+def test_csv_escapechar_value():
+    """
+    Test read_csv(): 'escapechar' wrong value or type
+    """
+    fname = os.path.join("bodo", "tests", "data", "example.csv")
+
+    # wrong datatype
+    def impl1():
+        return pd.read_csv(fname, escapechar=3)
+
+    # > 1-char
+    def impl2():
+        return pd.read_csv(fname, escapechar="wrong")
+
+    # same as sep
+    def impl3():
+        return pd.read_csv(fname, escapechar=",")
+
+    # newline
+    def impl4():
+        return pd.read_csv(fname, escapechar="\n")
+
+    with pytest.raises(BodoError, match="must be a one-character string"):
+        bodo.jit(impl1)()
+    with pytest.raises(BodoError, match="must be a one-character string"):
+        bodo.jit(impl2)()
+    with pytest.raises(BodoError, match="must not be equal to 'sep'"):
+        bodo.jit(impl3)()
+    with pytest.raises(BodoError, match="newline as 'escapechar' is not supported"):
+        bodo.jit(impl4)()
