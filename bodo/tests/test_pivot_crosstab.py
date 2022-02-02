@@ -155,6 +155,12 @@ def test_pivot_table_count_date_index(memory_leak_check):
         pt = df.pivot_table(index="date_only", columns="C", values="D", aggfunc="count")
         return pt
 
+    def f2(df):
+        pt = pd.pivot_table(
+            df, index="date_only", columns="C", values="D", aggfunc="count"
+        )
+        return pt
+
     random.seed(5)
     n = 20
     n_keyA = 10
@@ -169,6 +175,17 @@ def test_pivot_table_count_date_index(memory_leak_check):
     add_args = {"pivots": pivot_values}
     check_func(
         f1,
+        (df,),
+        additional_compiler_arguments=add_args,
+        sort_output=True,
+        check_dtype=False,
+        set_columns_name_to_none=True,
+        reorder_columns=True,
+        # TODO: Remove reset_index when exact index types match.
+        reset_index=True,
+    )
+    check_func(
+        f2,
         (df,),
         additional_compiler_arguments=add_args,
         sort_output=True,
@@ -393,6 +410,31 @@ def test_crosstab_invalid_types(memory_leak_check):
         BodoError, match=re.escape("'columns' argument only supported for Series types")
     ):
         impl(df.A, df)
+
+
+def test_pivot_invalid_types(memory_leak_check):
+    """
+    Tests that pd.pivot and pd.pivot_table produces a reasonable error message
+    when data is an unsupported types.
+    """
+
+    @bodo.jit
+    def impl1(S):
+        return pd.pivot(S, "A", "B", "C")
+
+    @bodo.jit
+    def impl2(S):
+        return pd.pivot_table(S, "A", "B", "C")
+
+    S = pd.Series([1, 2, 3, 4] * 3)
+    with pytest.raises(
+        BodoError, match=re.escape("'data' argument must be a DataFrame")
+    ):
+        impl1(S)
+    with pytest.raises(
+        BodoError, match=re.escape("'data' argument must be a DataFrame")
+    ):
+        impl2(S)
 
 
 @pytest.mark.parametrize(
@@ -1234,6 +1276,101 @@ def test_pivot_table_diff_value_types(df, memory_leak_check):
     # reorder_columns because the column order is consistent but not defined.
     check_func(
         impl,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+
+
+def test_pd_pivot_multi_values(memory_leak_check):
+    """
+    Test pivot and pivot_table with multiple values using the top
+    level pandas functions.
+    """
+
+    def impl1(df):
+        return pd.pivot_table(
+            df, index="A", columns="C", values=["D", "B"], aggfunc="first"
+        )
+
+    def impl2(df):
+        return pd.pivot(df, index="A", columns="B", values=["C", "D"])
+
+    df = pd.DataFrame(
+        {
+            "A": [
+                "foo",
+                "foo",
+                "foo",
+                "foo",
+                "foo",
+                "bar",
+                "bar",
+                "bar",
+                "bar",
+                "f",
+                "g",
+            ],
+            "B": [
+                "one",
+                "one",
+                "one",
+                "two",
+                "two",
+                "one",
+                "one",
+                "two",
+                "two",
+                "three",
+                "seven",
+            ],
+            "C": [
+                "small",
+                "large",
+                "large",
+                "small",
+                "small",
+                "large",
+                "small",
+                "small",
+                "large",
+                "medium",
+                "medium",
+            ],
+            "D": [1, 2, 2, 6, 3, 4, 5, 6, 9, 6, 5],
+        }
+    )
+
+    # Pivot may produce different nullable data, so we set check_dtype=False.
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl1,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+
+    df = pd.DataFrame(
+        {
+            "A": np.arange(1000),
+            "D": np.arange(2000, 3000),
+            "B": [str(i) for i in range(10)] * 100,
+            "C": np.arange(1000, 2000).astype(np.float64),
+        }
+    )
+
+    # Pivot may produce different nullable data, so we set check_dtype=False.
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl2,
         (df,),
         check_names=False,
         check_dtype=False,

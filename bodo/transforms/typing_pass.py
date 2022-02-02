@@ -1657,7 +1657,12 @@ class TypingTransforms:
             "insert": [(0, "loc"), (1, "column"), (3, "allow_duplicates")],
             "fillna": [(1, "method")],
             "pivot": [(0, "index"), (1, "columns"), (2, "values")],
-            "pivot_table": [(0, "values"), (1, "index"), (2, "columns"), (3, "aggfunc")],
+            "pivot_table": [
+                (0, "values"),
+                (1, "index"),
+                (2, "columns"),
+                (3, "aggfunc"),
+            ],
         }
 
         if func_name in df_call_const_args:
@@ -2149,6 +2154,13 @@ class TypingTransforms:
             # TODO: fix underlying issue in Numba
             "read_excel": [
                 (3, "names"),
+            ],
+            "pivot": [(1, "index"), (2, "columns"), (3, "values")],
+            "pivot_table": [
+                (1, "values"),
+                (2, "index"),
+                (3, "columns"),
+                (4, "aggfunc"),
             ],
         }
 
