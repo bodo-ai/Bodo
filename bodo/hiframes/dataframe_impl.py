@@ -3726,8 +3726,9 @@ def pivot_error_checking(df, index, columns, values, func_name):
     )
 
 
+@overload(pd.pivot, inline="always", no_unliteral=True)
 @overload_method(DataFrameType, "pivot", inline="always", no_unliteral=True)
-def overload_dataframe_pivot(df, index=None, columns=None, values=None):
+def overload_dataframe_pivot(data, index=None, columns=None, values=None):
     """
     This implementation verifies that we
     have a single column, which is distinct, for each argument and then
@@ -3736,7 +3737,9 @@ def overload_dataframe_pivot(df, index=None, columns=None, values=None):
     The infer_global function is used for constructing a DataFrame type
     with number of output columns determined at runtime.
     """
-    check_runtime_cols_unsupported(df, "DataFrame.pivot()")
+    check_runtime_cols_unsupported(data, "DataFrame.pivot()")
+    if not isinstance(data, DataFrameType):
+        raise BodoError("pandas.pivot(): 'data' argument must be a DataFrame")
 
     (
         index_lit,
@@ -3745,7 +3748,7 @@ def overload_dataframe_pivot(df, index=None, columns=None, values=None):
         index_idx,
         columns_idx,
         values_idx,
-    ) = pivot_error_checking(df, index, columns, values, "DataFrame.pivot")
+    ) = pivot_error_checking(data, index, columns, values, "DataFrame.pivot")
     # If len(values_lit) == 1, the names aren't needed because we create a
     # regular index instead of a multi-index. Since we lower an array, we pass
     # None if this case to make sure we can determine multi-index at compile
@@ -3758,17 +3761,17 @@ def overload_dataframe_pivot(df, index=None, columns=None, values=None):
     # TODO: Provide a Bodo specific optional argument for specifying pivot_values
     # without requiring communication. If this value is constant at compile time
     # we don't need table format.
-    func_text = "def impl(df, index=None, columns=None, values=None):\n"
+    func_text = "def impl(data, index=None, columns=None, values=None):\n"
     # Compute the pivot columns
-    func_text += f"    pivot_values = df.iloc[:, {columns_idx}].unique()\n"
+    func_text += f"    pivot_values = data.iloc[:, {columns_idx}].unique()\n"
     # Call the main pivot_impl
     func_text += "    return bodo.hiframes.pd_dataframe_ext.pivot_impl(\n"
     # Select all of the arrays. TODO: Support table format.
-    func_text += f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {index_idx}),),\n"
-    func_text += f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {columns_idx}),),\n"
+    func_text += f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {index_idx}),),\n"
+    func_text += f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {columns_idx}),),\n"
     func_text += "        (\n"
     for val_idx in values_idx:
-        func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {val_idx}),\n"
+        func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {val_idx}),\n"
     func_text += "        ),\n"
     func_text += "        pivot_values,\n"
     func_text += "        index_lit,\n"
@@ -3790,9 +3793,10 @@ def overload_dataframe_pivot(df, index=None, columns=None, values=None):
     return impl
 
 
+@overload(pd.pivot_table, inline="always", no_unliteral=True)
 @overload_method(DataFrameType, "pivot_table", inline="always", no_unliteral=True)
 def overload_dataframe_pivot_table(
-    df,
+    data,
     values=None,
     index=None,
     columns=None,
@@ -3805,7 +3809,7 @@ def overload_dataframe_pivot_table(
     sort=True,
     _pivot_values=None,  # bodo argument
 ):
-    check_runtime_cols_unsupported(df, "DataFrame.pivot_table()")
+    check_runtime_cols_unsupported(data, "DataFrame.pivot_table()")
     unsupported_args = dict(
         fill_value=fill_value,
         margins=margins,
@@ -3829,6 +3833,8 @@ def overload_dataframe_pivot_table(
         package_name="pandas",
         module_name="DataFrame",
     )
+    if not isinstance(data, DataFrameType):
+        raise BodoError("pandas.pivot_table(): 'data' argument must be a DataFrame")
 
     if _pivot_values is None:
         # If we don't know columns at compile time we reuse pivot.
@@ -3842,7 +3848,7 @@ def overload_dataframe_pivot_table(
             index_idx,
             columns_idx,
             values_idx,
-        ) = pivot_error_checking(df, index, columns, values, "DataFrame.pivot_table")
+        ) = pivot_error_checking(data, index, columns, values, "DataFrame.pivot_table")
         # If len(values_lit) == 1, the names aren't needed because we create a
         # regular index instead of a multi-index. Since we lower an array, we pass
         # None if this case to make sure we can determine multi-index at compile
@@ -3853,7 +3859,7 @@ def overload_dataframe_pivot_table(
             values_name_const = values_lit
 
         func_text = "def impl(\n"
-        func_text += "    df,\n"
+        func_text += "    data,\n"
         func_text += "    values=None,\n"
         func_text += "    index=None,\n"
         func_text += "    columns=None,\n"
@@ -3868,25 +3874,25 @@ def overload_dataframe_pivot_table(
         func_text += "):\n"
         # Truncate the dataframe to just the columns in question.
         total_idx = [index_idx, columns_idx] + values_idx
-        func_text += f"    df = df.iloc[:, {total_idx}]\n"
+        func_text += f"    data = data.iloc[:, {total_idx}]\n"
         # Perform the groupby with the agg function
-        func_text += "    df = df.groupby([index_lit, columns_lit], as_index=False).agg(aggfunc)\n"
+        func_text += "    data = data.groupby([index_lit, columns_lit], as_index=False).agg(aggfunc)\n"
         # Compute the unique columns. This is now always index 1, since we have done an
         # iloc on the DataFrame
-        func_text += "    pivot_values = df.iloc[:, 1].unique()\n"
+        func_text += "    pivot_values = data.iloc[:, 1].unique()\n"
         # Call the main pivot_impl
         func_text += "    return bodo.hiframes.pd_dataframe_ext.pivot_impl(\n"
         # Select all of the arrays. Since we have applied an iloc/groupby the new
         # locations are now always 0, 1, 2-n
         func_text += (
-            f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0),),\n"
+            f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, 0),),\n"
         )
         func_text += (
-            f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 1),),\n"
+            f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, 1),),\n"
         )
         func_text += "        (\n"
         for i in range(2, len(values_idx) + 2):
-            func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}),\n"
+            func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i}),\n"
         func_text += "        ),\n"
         func_text += "        pivot_values,\n"
         func_text += "        index_lit,\n"
@@ -3913,7 +3919,7 @@ def overload_dataframe_pivot_table(
     if aggfunc == "mean":
 
         def _impl(
-            df,
+            data,
             values=None,
             index=None,
             columns=None,
@@ -3928,13 +3934,13 @@ def overload_dataframe_pivot_table(
         ):  # pragma: no cover
 
             return bodo.hiframes.pd_groupby_ext.pivot_table_dummy(
-                df, values, index, columns, "mean", _pivot_values
+                data, values, index, columns, "mean", _pivot_values
             )
 
         return _impl
 
     def _impl(
-        df,
+        data,
         values=None,
         index=None,
         columns=None,
@@ -3949,7 +3955,7 @@ def overload_dataframe_pivot_table(
     ):  # pragma: no cover
 
         return bodo.hiframes.pd_groupby_ext.pivot_table_dummy(
-            df, values, index, columns, aggfunc, _pivot_values
+            data, values, index, columns, aggfunc, _pivot_values
         )
 
     return _impl

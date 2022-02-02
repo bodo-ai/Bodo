@@ -3835,8 +3835,6 @@ pd_unsupported = (
     # General functions
     ## Data manipulations
     pd.melt,
-    pd.pivot,
-    pd.pivot_table,  # TODO: Support. It's implemented as a method
     pd.merge_ordered,
     pd.factorize,
     pd.unique,
