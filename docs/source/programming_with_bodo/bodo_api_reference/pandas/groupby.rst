@@ -4,6 +4,9 @@
 GroupBy
 ~~~~~~~
 
+``pd.DataFrame.groupby``
+*************************
+
 * :meth:`pandas.DataFrame.groupby` ``(by=None, axis=0, level=None, as_index=True, sort=True, group_keys=True, squeeze=NoDefault.no_default, observed=False, dropna=True)``
 
     `Supported arguments`:
@@ -48,6 +51,8 @@ GroupBy
         1  f31   5  10
 
 
+``pd.Series.groupby``
+*************************
 
 * :meth:`pandas.Series.groupby` ``(by=None, axis=0, level=None, as_index=True, sort=True, group_keys=True, squeeze=NoDefault.no_default, observed=False, dropna=True)``
 
@@ -89,6 +94,9 @@ GroupBy
     .. note::
 
       ``Series.groupby`` doesn't currently keep the name of the original Series.
+
+``pd.core.groupby.Groupby.apply``
+***********************************
 
 * :meth:`pandas.core.groupby.GroupBy.apply` ``(func, *args, **kwargs)``
 
@@ -146,6 +154,8 @@ GroupBy
              19        16.210
         dtype: float64
 
+``pd.core.groupby.Groupby.agg``
+***********************************
 
 * :meth:`pandas.core.groupby.GroupBy.agg` ``(func, *args, **kwargs)``
 
@@ -190,6 +200,8 @@ GroupBy
         421  24.0
         f31   2.0
 
+``pd.core.groupby.DataFrameGroupby.aggregate``
+***********************************************
 
 * :meth:`pandas.core.groupby.DataFrameGroupBy.aggregate` ``(func, *args, **kwargs)``
 
@@ -235,6 +247,9 @@ GroupBy
         421  24.0
         f31   2.0
 
+
+``pd.core.groupby.DataFrameGroupby.transform``
+***********************************************
 
 * :meth:`pandas.core.groupby.DataFrameGroupBy.transform` ``(func, *args, engine=None, engine_kwargs=None, **kwargs)``
 
@@ -297,6 +312,9 @@ GroupBy
         19   2.0      12.21
 
 
+``pd.core.groupby.Groupby.pipe``
+*********************************
+
 * :meth:`pandas.core.groupby.GroupBy.pipe` ``(func, *args, **kwargs)``
 
     `Supported arguments`:
@@ -339,6 +357,8 @@ GroupBy
         f31    5.0       68.155
 
 
+``pd.core.groupby.Groupby.count``
+*********************************
 
 * :meth:`pandas.core.groupby.GroupBy.count` ``()``
 
@@ -362,6 +382,10 @@ GroupBy
         B
         421  10  10
         f31   5  10
+
+
+``pd.core.groupby.Groupby.cumsum``
+***********************************
 
 * :meth:`pandas.core.groupby.GroupBy.cumsum` ``(axis=0)``
 
@@ -405,7 +429,8 @@ GroupBy
         18  125.0  1166167.550
         19    NaN       73.155
 
-
+``pd.core.groupby.Groupby.first``
+*********************************
 
 * :meth:`pandas.core.groupby.GroupBy.first` ``(numeric_only=False, min_count=-1)``
 
@@ -433,6 +458,8 @@ GroupBy
         421  1.0  1.510
         f31  2.0  2.421
 
+``pd.core.groupby.Groupby.head``
+*********************************
 
 * :meth:`pandas.core.groupby.GroupBy.head` ``(n=5)``
 
@@ -479,6 +506,10 @@ GroupBy
         8   1.0  421       1.510
         9   2.0  f31       2.421
 
+
+``pd.core.groupby.Groupby.last``
+*********************************
+
 * :meth:`pandas.core.groupby.GroupBy.last` ``(numeric_only=False, min_count=-1)``
 
     .. note:: ``last`` is not supported on columns with nested array types
@@ -505,6 +536,9 @@ GroupBy
         421  24.0  233232.00
         f31   2.0      12.21
 
+
+``pd.core.groupby.Groupby.max``
+*********************************
 
 * :meth:`pandas.core.groupby.GroupBy.max` ``(numeric_only=False, min_count=-1)``
 
@@ -535,6 +569,8 @@ GroupBy
         421  24.0  233232.00
         f31   2.0      12.21
 
+``pd.core.groupby.Groupby.mean``
+*********************************
 
 * :meth:`pandas.core.groupby.GroupBy.mean` ``(numeric_only=NoDefault.no_default)``
 
@@ -562,6 +598,9 @@ GroupBy
         f31   2.0       7.3155
 
 
+``pd.core.groupby.Groupby.median``
+***********************************
+
 * :meth:`pandas.core.groupby.GroupBy.median` ``(numeric_only=NoDefault.no_default)``
 
     .. note:: ``median`` is only supported on numeric columns and is not supported on boolean column
@@ -588,6 +627,9 @@ GroupBy
         421  12.5  116616.7550
         f31   2.0       7.3155
 
+
+``pd.core.groupby.Groupby.min``
+*********************************
 
 * :meth:`pandas.core.groupby.GroupBy.min` ``(numeric_only=False, min_count=-1)``
 
@@ -617,6 +659,8 @@ GroupBy
         421  1.0  1.510
         f31  2.0  2.421
 
+``pd.core.groupby.Groupby.prod``
+*********************************
 
 * :meth:`pandas.core.groupby.GroupBy.prod` ``(numeric_only=NoDefault.no_default, min_count=0)``
 
@@ -644,6 +688,9 @@ GroupBy
         421  7962624.0  5.417831e+27
         f31       32.0  2.257108e+07
 
+
+``pd.core.groupby.Groupby.rolling``
+************************************
 
 * :meth:`pandas.core.groupby.GroupBy.rolling` ``(window, min_periods=None, center=False, win_type=None, on=None, axis=0, closed=None, method='single')``
 
@@ -722,6 +769,9 @@ GroupBy
             19   NaN       7.3155
 
 
+``pd.core.groupby.Groupby.size``
+*********************************
+
 * :meth:`pandas.core.groupby.GroupBy.size` ``()``
 
 
@@ -746,6 +796,9 @@ GroupBy
         f31    10
         dtype: int64
 
+
+``pd.core.groupby.Groupby.std``
+*********************************
 
 * :meth:`pandas.core.groupby.GroupBy.std` ``(ddof=1)``
 
@@ -773,6 +826,8 @@ GroupBy
         f31   0.000000       5.159256
 
 
+``pd.core.groupby.Groupby.sum``
+*********************************
 
 * :meth:`pandas.core.groupby.GroupBy.sum` ``(numeric_only=NoDefault.no_default, min_count=0)``
 
@@ -798,6 +853,10 @@ GroupBy
         B
         421  125.0  1166167.550
         f31   10.0       73.155
+
+
+``pd.core.groupby.Groupby.var``
+*********************************
 
 * :meth:`pandas.core.groupby.GroupBy.var` ``(ddof=1)``
 
@@ -825,6 +884,9 @@ GroupBy
         f31    0.000000  2.661792e+01
 
 
+``pd.core.groupby.DataFrameGroupby.idxmax``
+*********************************************
+
 * :meth:`pandas.core.groupby.DataFrameGroupBy.idxmax` ``(axis=0, skipna=True)``
 
     `Example Usage`:
@@ -848,6 +910,8 @@ GroupBy
         421  2  2
         f31  1  3
 
+``pd.core.groupby.DataFrameGroupby.idxmin``
+*********************************************
 
 * :meth:`pandas.core.groupby.DataFrameGroupBy.idxmin` ``(axis=0, skipna=True)``
 
@@ -871,6 +935,10 @@ GroupBy
         B
         421  0  0
         f31  1  1
+
+
+``pd.core.groupby.DataFrameGroupby.nunique``
+*********************************************
 
 * :meth:`pandas.core.groupby.DataFrameGroupBy.nunique` ``(dropna=True)``
 
@@ -909,6 +977,8 @@ GroupBy
         421  2  2
         f31  1  2
 
+``pd.core.groupby.DataFrameGroupby.shift``
+*********************************************
 * :meth:`pandas.core.groupby.DataFrameGroupBy.shift` ``(periods=1, freq=None, axis=0, fill_value=None)``
 
     .. note:: ``shift`` is not supported on columns with nested array types
@@ -950,6 +1020,9 @@ GroupBy
         17   NaN      12.210
         18   1.0       1.510
         19   2.0       2.421
+
+``pd.core.groupby.SeriesGroupBy.value_counts``
+***********************************************
 
 * :meth:`pandas.core.groupby.SeriesGroupBy.value_counts` ``(normalize=False, sort=True, ascending=False, bins=None, dropna=True)``
 

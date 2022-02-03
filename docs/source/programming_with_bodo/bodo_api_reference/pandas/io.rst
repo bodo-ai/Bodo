@@ -5,6 +5,9 @@ Input/Output
 
 See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requirements.
 
+``pd.read_csv``
+****************
+
 * :func:`pandas.read_csv`
 
   * :ref:`example usage and more system specific instructions <csv-section>`
@@ -22,6 +25,9 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
   * If you want to load data in chunks, use the ``chunksize`` argument.
   * When a CSV file is read in parallel (distributed mode) and each process reads only a portion of the file, reading columns that contain line breaks is not supported.
 
+``pd.read_excel``
+*******************
+
 * :func:`pandas.read_excel`
 
   * output dataframe cannot be parallelized automatically yet.
@@ -33,6 +39,9 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
   * ``names`` and ``parse_dates`` should be constant lists if provided.
   * ``dtype`` should be a constant dictionary of strings and types if provided.
 
+``pd.read_sql``
+*******************
+
 * :func:`pandas.read_sql`
 
   * :ref:`example usage and more system specific instructions <sql-section>`
@@ -40,6 +49,9 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
   * Argument ``con`` is supported but only as a string form. SQLalchemy `connectable` is not supported.
   * Argument ``index_col`` is supported.
   * Arguments ``chunksize``, ``column``, ``coerce_float``, ``params`` are not supported.
+
+``pd.read_parquet``
+*******************
 
 * :func:`pandas.read_parquet`
 
@@ -56,6 +68,10 @@ See more in :ref:`file_io`, such as :ref:`S3` and :ref:`HDFS` configuration requ
       def impl(f):
         df = pd.read_parquet(f)
         return df
+
+
+``pd.read_json``
+*******************
 
 * :func:`pandas.read_json`
 

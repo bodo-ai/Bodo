@@ -5,6 +5,9 @@ Window
 
 Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.rolling.html>`_.
 
+``pd.core.window.rolling.Rolling.count``
+******************************************
+
 * :meth:`pandas.core.window.rolling.Rolling.count` ``()``
 
   `Example Usage`:
@@ -24,6 +27,8 @@ Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas
       5  3.0  2.0
       6  3.0  3.0
 
+``pd.core.window.rolling.Rolling.sum``
+******************************************
 
 * :meth:`pandas.core.window.rolling.Rolling.sum` ``(engine=None, engine_kwargs=None)``
 
@@ -46,6 +51,9 @@ Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas
       5  15.0   NaN
       6  18.0  36.0
 
+``pd.core.window.rolling.Rolling.mean``
+******************************************
+
 * :meth:`pandas.core.window.rolling.Rolling.mean` ``(engine=None, engine_kwargs=None)``
 
   `Supported Arguments`: None
@@ -66,6 +74,9 @@ Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas
       4  4.0   NaN
       5  5.0   NaN
       6  6.0  12.0
+
+``pd.core.window.rolling.Rolling.median``
+******************************************
 
 * :meth:`pandas.core.window.rolling.Rolling.median` ``(engine=None, engine_kwargs=None)``
 
@@ -88,6 +99,9 @@ Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas
       5  5.0   NaN
       6  6.0  12.0
 
+``pd.core.window.rolling.Rolling.var``
+******************************************
+
 * :meth:`pandas.core.window.rolling.Rolling.var` ``(ddof=1)``
 
   `Supported Arguments`: None
@@ -108,6 +122,9 @@ Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas
       4  1.0  NaN
       5  1.0  NaN
       6  1.0  1.0
+
+``pd.core.window.rolling.Rolling.std``
+******************************************
 
 
 * :meth:`pandas.core.window.rolling.Rolling.std` ``(ddof=1)``
@@ -131,6 +148,9 @@ Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas
       5  1.0  NaN
       6  1.0  1.0
 
+``pd.core.window.rolling.Rolling.min``
+******************************************
+
 * :meth:`pandas.core.window.rolling.Rolling.min` ``(engine=None, engine_kwargs=None)``
 
   `Supported Arguments`: None
@@ -153,6 +173,8 @@ Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas
       6  5.0  11.0
 
 
+``pd.core.window.rolling.Rolling.max``
+******************************************
 
 * :meth:`pandas.core.window.rolling.Rolling.max` ``(engine=None, engine_kwargs=None)``
 
@@ -174,6 +196,9 @@ Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas
       4  5.0   NaN
       5  6.0   NaN
       6  7.0  13.0
+
+``pd.core.window.rolling.Rolling.corr``
+******************************************
 
 * :meth:`pandas.core.window.rolling.Rolling.corr` ``(other=None, pairwise=None, ddof=1)``
 
@@ -209,6 +234,10 @@ Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas
       5 -0.907841
       6 -1.000000
 
+
+``pd.core.window.rolling.Rolling.cov``
+******************************************
+
 * :meth:`pandas.core.window.rolling.Rolling.cov` ``(other=None, pairwise=None, ddof=1)``
 
   `Supported arguments`:
@@ -243,6 +272,9 @@ Rolling functionality is documented in `pandas.DataFrame.rolling <https://pandas
       5 -5.0
       6 -1.0
 
+
+``pd.core.window.rolling.Rolling.apply``
+******************************************
 
 * :meth:`pandas.core.window.rolling.Rolling.apply` ``(func, raw=False, engine=None, engine_kwargs=None, args=None, kwargs=None)``
 
