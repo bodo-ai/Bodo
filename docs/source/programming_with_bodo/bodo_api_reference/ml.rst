@@ -11,14 +11,14 @@ Scikit-learn
 Prerequisites
 #############
 
-Bodo supports ``scikit-learn`` versions ``0.24.2`` and below.
+Bodo supports ``scikit-learn`` versions ``1.0.*``.
 
 Installing scikit-learn
 #######################
 
 Install scikit-learn in your Bodo environment::
 
-   conda install scikit-learn=0.24.2 -c conda-forge
+   conda install scikit-learn='1.0.*' -c conda-forge
 
 JIT Supported
 #############
@@ -54,7 +54,7 @@ sklearn.cluster: Clustering
     * ``X``:  NumPy Array, Pandas Dataframes, or CSR sparse matrix.
     * ``sample_weight``: Numeric NumPy Array
 
-  * :any:`sklearn.cluster.KMeans.score` ``X, y=None, sample_weight=None)``
+  * :any:`sklearn.cluster.KMeans.score` ``(X, y=None, sample_weight=None)``
 
   Supported Arguments:
     * ``X``:  NumPy Array, Pandas Dataframes, or CSR sparse matrix.
@@ -102,7 +102,7 @@ sklearn.ensemble: Ensemble Methods
   Supported Arguments:
     * ``X``:  NumPy Array, Pandas Dataframes, or CSR sparse matrix.
     * ``y``: NumPy Array
-    * ``sample_weight``: Numeric NumPy Array
+    * ``sample_weight``: Numeric NumPy Array (only if data is not distributed)
 
   * :any:`sklearn.ensemble.RandomForestClassifier.predict` ``(X)``
 
@@ -157,7 +157,7 @@ Example Usage:
   Supported Arguments:
     * ``X``:  NumPy Array, Pandas Dataframes, or CSR sparse matrix.
     * ``y``: NumPy Array
-    * ``sample_weight``: Numeric NumPy Array
+    * ``sample_weight``: Numeric NumPy Array (only if data is not distributed)
 
   * :any:`sklearn.ensemble.RandomForestRegressor.predict` ``(X)``
 
@@ -197,6 +197,9 @@ From text
 
   This class provides CountVectorizer support to convert a collection of text documents to a matrix of token counts.
 
+  .. note::
+    Arguments ``max_df`` and ``min_df`` are not supported yet.
+
 **Methods:**
   * :any:`sklearn.feature_extraction.text.CountVectorizer.fit_transform` ``(raw_documents, y=None)``
 
@@ -206,7 +209,7 @@ From text
     .. note::
       Bodo ignores ``y``, which is consistent with scikit-learn.
 
-  * :any:`sklearn.feature_extraction.text.CountVectorizer.get_feature_names` ``()``
+  * :any:`sklearn.feature_extraction.text.CountVectorizer.get_feature_names_out` ``()``
 
 Example Usage:
     >>> import bodo
@@ -221,7 +224,7 @@ Example Usage:
     >>> def test_count_vectorizer(corpus):
     >>>   vectorizer = CountVectorizer()
     >>>   X = vectorizer.fit_transform(corpus)
-    >>>   print(vectorizer.get_feature_names())
+    >>>   print(vectorizer.get_feature_names_out())
     ... 
     >>> test_count_vectorizer(corpus)
     ['and' 'document' 'first' 'is' 'one' 'second' 'the' 'third' 'this']
@@ -275,6 +278,7 @@ Linear Classifiers
   Supported Arguments:
     * ``X``:  NumPy Array or Pandas Dataframes.
     * ``y``:  NumPy Array.
+    * ``sample_weight``: Numeric NumPy Array (only if data is not distributed)
 
   * :any:`sklearn.linear_model.LogisticRegression.predict` ``(X)``
 
@@ -345,6 +349,7 @@ Example Usage:
   Supported Arguments:
     * ``X``:  NumPy Array or Pandas Dataframes.
     * ``y``:  NumPy Array.
+    * ``sample_weight``: Numeric NumPy Array (only if data is not distributed)
 
   * :any:`sklearn.linear_model.SGDClassifier.predict` ``(X)``
 
@@ -410,6 +415,7 @@ Classical Linear Regressors
   Supported Arguments:
     * ``X``:  NumPy Array or Pandas Dataframes.
     * ``y``:  NumPy Array.
+    * ``sample_weight``: Numeric NumPy Array (only if data is not distributed)
 
   * :any:`sklearn.linear_model.LinearRegression.predict` ``(X)``
 
@@ -458,6 +464,7 @@ Example Usage:
   Supported Arguments:
     * ``X``:  NumPy Array or Pandas Dataframes.
     * ``y``:  NumPy Array.
+    * ``sample_weight``: Numeric NumPy Array (only if data is not distributed)
 
   * :any:`sklearn.linear_model.Ridge.predict` ``(X)``
 
@@ -502,13 +509,13 @@ Example Usage:
 
   This class provides linear regression models with SGD optimization which allows distributed large-scale learning.
 
-  ``SGDRegressor(loss='squared_loss', penalty='None')`` is equivalent to `linear regression <https://scikit-learn.org/0.24/modules/generated/sklearn.linear_model.LinearRegression.html#sklearn.linear_model.LinearRegression>`_. 
+  ``SGDRegressor(loss='squared_error', penalty='None')`` is equivalent to `linear regression <https://scikit-learn.org/0.24/modules/generated/sklearn.linear_model.LinearRegression.html#sklearn.linear_model.LinearRegression>`_. 
 
-  ``SGDRegressor(loss='squared_loss', penalty='l2')`` is equivalent to `Ridge regression <https://scikit-learn.org/0.24/modules/generated/sklearn.linear_model.Ridge.html#sklearn.linear_model.Ridge>`_. 
+  ``SGDRegressor(loss='squared_error', penalty='l2')`` is equivalent to `Ridge regression <https://scikit-learn.org/0.24/modules/generated/sklearn.linear_model.Ridge.html#sklearn.linear_model.Ridge>`_. 
 
-  ``SGDRegressor(loss='squared_loss', penalty='l1')`` is equivalent to `Lasso regression <https://scikit-learn.org/0.24/modules/generated/sklearn.linear_model.Lasso.html#sklearn.linear_model.Lasso>`_. 
+  ``SGDRegressor(loss='squared_error', penalty='l1')`` is equivalent to `Lasso regression <https://scikit-learn.org/0.24/modules/generated/sklearn.linear_model.Lasso.html#sklearn.linear_model.Lasso>`_. 
 
-    * Supported loss function is ``squared_loss``
+    * Supported loss function is ``squared_error``
     * ``early_stopping`` is not supported yet.
 
 **Methods:**
@@ -518,6 +525,7 @@ Example Usage:
   Supported Arguments:
     * ``X``:  NumPy Array or Pandas Dataframes.
     * ``y``:  NumPy Array.
+    * ``sample_weight``: Numeric NumPy Array (only if data is not distributed)
 
   * :any:`sklearn.linear_model.SGDRegressor.predict` ``(X)``
 
@@ -567,6 +575,7 @@ Regressors with variable selection
   Supported Arguments:
     * ``X``:  NumPy Array or Pandas Dataframes.
     * ``y``:  NumPy Array.
+    * ``sample_weight``: Numeric NumPy Array (only if data is not distributed)
 
   * :any:`sklearn.linear_model.Lasso.predict` ``(X)``
 
@@ -961,6 +970,7 @@ Example Usage:
   Supported Arguments:
     * ``X``:  NumPy Array or Pandas Dataframes.
     * ``y``:  NumPy Array.
+    * ``sample_weight``: Numeric NumPy Array (only if data is not distributed)
 
   * :any:`sklearn.preprocessing.StandardScaler.inverse_transform` ``(X, copy=None)``
 
@@ -1008,6 +1018,7 @@ Estimators
   Supported Arguments:
     * ``X``:  NumPy Array or Pandas Dataframes.
     * ``y``:  NumPy Array.
+    * ``sample_weight``: Numeric NumPy Array (only if data is not distributed)
 
   * :any:`sklearn.svm.LinearSVC.predict` ``(X)``
 
@@ -1041,6 +1052,7 @@ Example Usage:
     >>> test_linearsvc(X, y)
     [1]
 
+#
 
 XGBoost
 -------

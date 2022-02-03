@@ -57,8 +57,10 @@ from bodo.utils.typing import (
     BodoError,
     BodoWarning,
     check_unsupported_args,
+    get_overload_const,
     get_overload_const_int,
     get_overload_const_str,
+    is_overload_constant_number,
     is_overload_constant_str,
     is_overload_false,
     is_overload_none,
@@ -68,7 +70,7 @@ from bodo.utils.typing import (
 
 def check_sklearn_version():
     if not bodo.compiler._is_sklearn_supported_version:
-        msg = f" Bodo requires at most version {bodo.compiler._max_sklearn_ver_str} of scikit-learn.\n \
+        msg = f" Bodo supports scikit-learn version >= {bodo.compiler._min_sklearn_ver_str} and < {bodo.compiler._max_sklearn_ver_str}.\n \
             Installed version is {sklearn.__version__}.\n"
         raise BodoError(msg)
 
@@ -161,7 +163,7 @@ def random_forest_model_fit(m, X, y):
         m.estimators_ = estimators
     assert len(m.estimators_) == n_estimators_global
     m.n_estimators = n_estimators_global
-    m.n_features_ = X.shape[1]
+    m.n_features_in_ = X.shape[1]
 
 
 # -----------------------------------------------------------------------------
@@ -216,7 +218,6 @@ def sklearn_ensemble_RandomForestClassifier_overload(
     max_features="auto",
     max_leaf_nodes=None,
     min_impurity_decrease=0.0,
-    min_impurity_split=None,
     bootstrap=True,
     oob_score=False,
     n_jobs=None,
@@ -241,7 +242,6 @@ def sklearn_ensemble_RandomForestClassifier_overload(
         max_features="auto",
         max_leaf_nodes=None,
         min_impurity_decrease=0.0,
-        min_impurity_split=None,
         bootstrap=True,
         oob_score=False,
         n_jobs=None,
@@ -266,7 +266,6 @@ def sklearn_ensemble_RandomForestClassifier_overload(
                 max_features=max_features,
                 max_leaf_nodes=max_leaf_nodes,
                 min_impurity_decrease=min_impurity_decrease,
-                min_impurity_split=min_impurity_split,
                 bootstrap=bootstrap,
                 oob_score=oob_score,
                 n_jobs=1,
@@ -543,7 +542,14 @@ def precision_recall_fscore_parallel(
 
 @overload(sklearn.metrics.precision_score, no_unliteral=True)
 def overload_precision_score(
-    y_true, y_pred, average="binary", _is_data_distributed=False
+    y_true,
+    y_pred,
+    labels=None,
+    pos_label=1,
+    average="binary",
+    sample_weight=None,
+    zero_division="warn",
+    _is_data_distributed=False,
 ):
 
     check_sklearn_version()
@@ -552,7 +558,14 @@ def overload_precision_score(
         if is_overload_false(_is_data_distributed):
 
             def _precision_score_impl(
-                y_true, y_pred, average="binary", _is_data_distributed=False
+                y_true,
+                y_pred,
+                labels=None,
+                pos_label=1,
+                average="binary",
+                sample_weight=None,
+                zero_division="warn",
+                _is_data_distributed=False,
             ):
                 # user could pass lists and numba throws error if passing lists
                 # to object mode, so we convert to arrays
@@ -560,7 +573,13 @@ def overload_precision_score(
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 with numba.objmode(score="float64[:]"):
                     score = sklearn.metrics.precision_score(
-                        y_true, y_pred, average=average
+                        y_true,
+                        y_pred,
+                        labels=labels,
+                        pos_label=pos_label,
+                        average=average,
+                        sample_weight=sample_weight,
+                        zero_division=zero_division,
                     )
                 return score
 
@@ -568,7 +587,14 @@ def overload_precision_score(
         else:
 
             def _precision_score_impl(
-                y_true, y_pred, average="binary", _is_data_distributed=False
+                y_true,
+                y_pred,
+                labels=None,
+                pos_label=1,
+                average="binary",
+                sample_weight=None,
+                zero_division="warn",
+                _is_data_distributed=False,
             ):
                 return precision_recall_fscore_parallel(
                     y_true, y_pred, "precision", average=average
@@ -580,7 +606,14 @@ def overload_precision_score(
         if is_overload_false(_is_data_distributed):
 
             def _precision_score_impl(
-                y_true, y_pred, average="binary", _is_data_distributed=False
+                y_true,
+                y_pred,
+                labels=None,
+                pos_label=1,
+                average="binary",
+                sample_weight=None,
+                zero_division="warn",
+                _is_data_distributed=False,
             ):
                 # user could pass lists and numba throws error if passing lists
                 # to object mode, so we convert to arrays
@@ -588,7 +621,13 @@ def overload_precision_score(
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 with numba.objmode(score="float64"):
                     score = sklearn.metrics.precision_score(
-                        y_true, y_pred, average=average
+                        y_true,
+                        y_pred,
+                        labels=labels,
+                        pos_label=pos_label,
+                        average=average,
+                        sample_weight=sample_weight,
+                        zero_division=zero_division,
                     )
                 return score
 
@@ -596,7 +635,14 @@ def overload_precision_score(
         else:
 
             def _precision_score_impl(
-                y_true, y_pred, average="binary", _is_data_distributed=False
+                y_true,
+                y_pred,
+                labels=None,
+                pos_label=1,
+                average="binary",
+                sample_weight=None,
+                zero_division="warn",
+                _is_data_distributed=False,
             ):
                 score = precision_recall_fscore_parallel(
                     y_true, y_pred, "precision", average=average
@@ -607,7 +653,16 @@ def overload_precision_score(
 
 
 @overload(sklearn.metrics.recall_score, no_unliteral=True)
-def overload_recall_score(y_true, y_pred, average="binary", _is_data_distributed=False):
+def overload_recall_score(
+    y_true,
+    y_pred,
+    labels=None,
+    pos_label=1,
+    average="binary",
+    sample_weight=None,
+    zero_division="warn",
+    _is_data_distributed=False,
+):
 
     check_sklearn_version()
     if is_overload_none(average):
@@ -615,7 +670,14 @@ def overload_recall_score(y_true, y_pred, average="binary", _is_data_distributed
         if is_overload_false(_is_data_distributed):
 
             def _recall_score_impl(
-                y_true, y_pred, average="binary", _is_data_distributed=False
+                y_true,
+                y_pred,
+                labels=None,
+                pos_label=1,
+                average="binary",
+                sample_weight=None,
+                zero_division="warn",
+                _is_data_distributed=False,
             ):
                 # user could pass lists and numba throws error if passing lists
                 # to object mode, so we convert to arrays
@@ -623,7 +685,13 @@ def overload_recall_score(y_true, y_pred, average="binary", _is_data_distributed
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 with numba.objmode(score="float64[:]"):
                     score = sklearn.metrics.recall_score(
-                        y_true, y_pred, average=average
+                        y_true,
+                        y_pred,
+                        labels=labels,
+                        pos_label=pos_label,
+                        average=average,
+                        sample_weight=sample_weight,
+                        zero_division=zero_division,
                     )
                 return score
 
@@ -631,7 +699,14 @@ def overload_recall_score(y_true, y_pred, average="binary", _is_data_distributed
         else:
 
             def _recall_score_impl(
-                y_true, y_pred, average="binary", _is_data_distributed=False
+                y_true,
+                y_pred,
+                labels=None,
+                pos_label=1,
+                average="binary",
+                sample_weight=None,
+                zero_division="warn",
+                _is_data_distributed=False,
             ):
                 return precision_recall_fscore_parallel(
                     y_true, y_pred, "recall", average=average
@@ -643,7 +718,14 @@ def overload_recall_score(y_true, y_pred, average="binary", _is_data_distributed
         if is_overload_false(_is_data_distributed):
 
             def _recall_score_impl(
-                y_true, y_pred, average="binary", _is_data_distributed=False
+                y_true,
+                y_pred,
+                labels=None,
+                pos_label=1,
+                average="binary",
+                sample_weight=None,
+                zero_division="warn",
+                _is_data_distributed=False,
             ):
                 # user could pass lists and numba throws error if passing lists
                 # to object mode, so we convert to arrays
@@ -651,7 +733,13 @@ def overload_recall_score(y_true, y_pred, average="binary", _is_data_distributed
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 with numba.objmode(score="float64"):
                     score = sklearn.metrics.recall_score(
-                        y_true, y_pred, average=average
+                        y_true,
+                        y_pred,
+                        labels=labels,
+                        pos_label=pos_label,
+                        average=average,
+                        sample_weight=sample_weight,
+                        zero_division=zero_division,
                     )
                 return score
 
@@ -659,7 +747,14 @@ def overload_recall_score(y_true, y_pred, average="binary", _is_data_distributed
         else:
 
             def _recall_score_impl(
-                y_true, y_pred, average="binary", _is_data_distributed=False
+                y_true,
+                y_pred,
+                labels=None,
+                pos_label=1,
+                average="binary",
+                sample_weight=None,
+                zero_division="warn",
+                _is_data_distributed=False,
             ):
                 score = precision_recall_fscore_parallel(
                     y_true, y_pred, "recall", average=average
@@ -670,7 +765,16 @@ def overload_recall_score(y_true, y_pred, average="binary", _is_data_distributed
 
 
 @overload(sklearn.metrics.f1_score, no_unliteral=True)
-def overload_f1_score(y_true, y_pred, average="binary", _is_data_distributed=False):
+def overload_f1_score(
+    y_true,
+    y_pred,
+    labels=None,
+    pos_label=1,
+    average="binary",
+    sample_weight=None,
+    zero_division="warn",
+    _is_data_distributed=False,
+):
 
     check_sklearn_version()
     if is_overload_none(average):
@@ -678,21 +782,43 @@ def overload_f1_score(y_true, y_pred, average="binary", _is_data_distributed=Fal
         if is_overload_false(_is_data_distributed):
 
             def _f1_score_impl(
-                y_true, y_pred, average="binary", _is_data_distributed=False
+                y_true,
+                y_pred,
+                labels=None,
+                pos_label=1,
+                average="binary",
+                sample_weight=None,
+                zero_division="warn",
+                _is_data_distributed=False,
             ):
                 # user could pass lists and numba throws error if passing lists
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 with numba.objmode(score="float64[:]"):
-                    score = sklearn.metrics.f1_score(y_true, y_pred, average=average)
+                    score = sklearn.metrics.f1_score(
+                        y_true,
+                        y_pred,
+                        labels=labels,
+                        pos_label=pos_label,
+                        average=average,
+                        sample_weight=sample_weight,
+                        zero_division=zero_division,
+                    )
                 return score
 
             return _f1_score_impl
         else:
 
             def _f1_score_impl(
-                y_true, y_pred, average="binary", _is_data_distributed=False
+                y_true,
+                y_pred,
+                labels=None,
+                pos_label=1,
+                average="binary",
+                sample_weight=None,
+                zero_division="warn",
+                _is_data_distributed=False,
             ):
                 return precision_recall_fscore_parallel(
                     y_true, y_pred, "f1", average=average
@@ -704,21 +830,43 @@ def overload_f1_score(y_true, y_pred, average="binary", _is_data_distributed=Fal
         if is_overload_false(_is_data_distributed):
 
             def _f1_score_impl(
-                y_true, y_pred, average="binary", _is_data_distributed=False
+                y_true,
+                y_pred,
+                labels=None,
+                pos_label=1,
+                average="binary",
+                sample_weight=None,
+                zero_division="warn",
+                _is_data_distributed=False,
             ):
                 # user could pass lists and numba throws error if passing lists
                 # to object mode, so we convert to arrays
                 y_true = bodo.utils.conversion.coerce_to_array(y_true)
                 y_pred = bodo.utils.conversion.coerce_to_array(y_pred)
                 with numba.objmode(score="float64"):
-                    score = sklearn.metrics.f1_score(y_true, y_pred, average=average)
+                    score = sklearn.metrics.f1_score(
+                        y_true,
+                        y_pred,
+                        labels=labels,
+                        pos_label=pos_label,
+                        average=average,
+                        sample_weight=sample_weight,
+                        zero_division=zero_division,
+                    )
                 return score
 
             return _f1_score_impl
         else:
 
             def _f1_score_impl(
-                y_true, y_pred, average="binary", _is_data_distributed=False
+                y_true,
+                y_pred,
+                labels=None,
+                pos_label=1,
+                average="binary",
+                sample_weight=None,
+                zero_division="warn",
+                _is_data_distributed=False,
             ):
                 score = precision_recall_fscore_parallel(
                     y_true, y_pred, "f1", average=average
@@ -1697,9 +1845,9 @@ def overload_confusion_matrix(
 
 # -------------------------------------SGDRegressor----------------------------------------
 # Support sklearn.linear_model.SGDRegressorusing object mode of Numba
-# Linear regression: sklearn.linear_model.SGDRegressor(loss="squared_loss", penalty=None)
-# Ridge regression: sklearn.linear_model.SGDRegressor(loss="squared_loss", penalty='l2')
-# Lasso: sklearn.linear_model.SGDRegressor(loss="squared_loss", penalty='l1')
+# Linear regression: sklearn.linear_model.SGDRegressor(loss="squared_error", penalty=None)
+# Ridge regression: sklearn.linear_model.SGDRegressor(loss="squared_error", penalty='l2')
+# Lasso: sklearn.linear_model.SGDRegressor(loss="squared_error", penalty='l1')
 
 # -----------------------------------------------------------------------------
 # Typing and overloads to use SGDRegressor inside Bodo functions
@@ -1738,7 +1886,7 @@ def unbox_sgd_regressor(typ, obj, c):
 
 @overload(sklearn.linear_model.SGDRegressor, no_unliteral=True)
 def sklearn_linear_model_SGDRegressor_overload(
-    loss="squared_loss",
+    loss="squared_error",
     penalty="l2",
     alpha=0.0001,
     l1_ratio=0.15,
@@ -1761,7 +1909,7 @@ def sklearn_linear_model_SGDRegressor_overload(
     check_sklearn_version()
 
     def _sklearn_linear_model_SGDRegressor_impl(
-        loss="squared_loss",
+        loss="squared_error",
         penalty="l2",
         alpha=0.0001,
         l1_ratio=0.15,
@@ -1813,21 +1961,63 @@ def overload_sgdr_model_fit(
     m,
     X,
     y,
+    coef_init=None,
+    intercept_init=None,
+    sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     check_sklearn_version()
 
-    def _model_sgdr_fit_impl(m, X, y, _is_data_distributed=False):  # pragma: no cover
+    if is_overload_true(_is_data_distributed):
+        if not is_overload_none(sample_weight):
+            raise BodoError(
+                "sklearn.linear_model.SGDRegressor.fit() : 'sample_weight' is not supported for distributed data."
+            )
 
-        # TODO: Rebalance the data X and y to be the same size on every rank
-        with numba.objmode(m="sgd_regressor_type"):
-            m = fit_sgd(m, X, y, _is_data_distributed)
+        if not is_overload_none(coef_init):
+            raise BodoError(
+                "sklearn.linear_model.SGDRegressor.fit() : 'coef_init' is not supported for distributed data."
+            )
+        if not is_overload_none(intercept_init):
+            raise BodoError(
+                "sklearn.linear_model.SGDRegressor.fit() : 'intercept_init' is not supported for distributed data."
+            )
 
-        bodo.barrier()
+        def _model_sgdr_fit_impl(
+            m,
+            X,
+            y,
+            coef_init=None,
+            intercept_init=None,
+            sample_weight=None,
+            _is_data_distributed=False,
+        ):  # pragma: no cover
 
-        return m
+            # TODO: Rebalance the data X and y to be the same size on every rank
+            with numba.objmode(m="sgd_regressor_type"):
+                m = fit_sgd(m, X, y, _is_data_distributed)
 
-    return _model_sgdr_fit_impl
+            bodo.barrier()
+
+            return m
+
+        return _model_sgdr_fit_impl
+    else:
+        # If replicated, then just call sklearn
+        def _model_sgdr_fit_impl(
+            m,
+            X,
+            y,
+            coef_init=None,
+            intercept_init=None,
+            sample_weight=None,
+            _is_data_distributed=False,
+        ):  # pragma: no cover
+            with numba.objmode(m="sgd_regressor_type"):
+                m = m.fit(X, y, coef_init, intercept_init, sample_weight)
+            return m
+
+        return _model_sgdr_fit_impl
 
 
 @overload_method(BodoSGDRegressorType, "predict", no_unliteral=True)
@@ -1985,7 +2175,7 @@ def fit_sgd(m, X, y, y_classes=None, _is_data_distributed=False):
         loss_func = hinge_loss
     elif m.loss == "log":
         loss_func = log_loss
-    elif m.loss == "squared_loss":
+    elif m.loss == "squared_error":
         loss_func = mean_squared_error
     else:
         raise ValueError("loss {} not supported".format(m.loss))
@@ -2029,6 +2219,9 @@ def overload_sgdc_model_fit(
     m,
     X,
     y,
+    coef_init=None,
+    intercept_init=None,
+    sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     check_sklearn_version()
@@ -2038,9 +2231,28 @@ def overload_sgdc_model_fit(
     else we use partial_fit on each rank then use we re-compute the attributes using MPI operations.
     """
     if is_overload_true(_is_data_distributed):
+        if not is_overload_none(sample_weight):
+            raise BodoError(
+                "sklearn.linear_model.SGDClassifier.fit() : 'sample_weight' is not supported for distributed data."
+            )
+
+        if not is_overload_none(coef_init):
+            raise BodoError(
+                "sklearn.linear_model.SGDClassifier.fit() : 'coef_init' is not supported for distributed data."
+            )
+        if not is_overload_none(intercept_init):
+            raise BodoError(
+                "sklearn.linear_model.SGDClassifier.fit() : 'intercept_init' is not supported for distributed data."
+            )
 
         def _model_sgdc_fit_impl(
-            m, X, y, _is_data_distributed=False
+            m,
+            X,
+            y,
+            coef_init=None,
+            intercept_init=None,
+            sample_weight=None,
+            _is_data_distributed=False,
         ):  # pragma: no cover
 
             # TODO: Rebalance the data X and y to be the same size on every rank
@@ -2057,10 +2269,16 @@ def overload_sgdc_model_fit(
     else:
         # If replicated, then just call sklearn
         def _model_sgdc_fit_impl(
-            m, X, y, _is_data_distributed=False
+            m,
+            X,
+            y,
+            coef_init=None,
+            intercept_init=None,
+            sample_weight=None,
+            _is_data_distributed=False,
         ):  # pragma: no cover
             with numba.objmode(m="sgd_classifier_type"):
-                m = m.fit(X, y)
+                m = m.fit(X, y, coef_init, intercept_init, sample_weight)
             return m
 
         return _model_sgdc_fit_impl
@@ -2152,11 +2370,9 @@ def sklearn_cluster_kmeans_overload(
     n_init=10,
     max_iter=300,
     tol=1e-4,
-    precompute_distances="deprecated",
     verbose=0,
     random_state=None,
     copy_x=True,
-    n_jobs="deprecated",
     algorithm="auto",
 ):
     check_sklearn_version()
@@ -2167,11 +2383,9 @@ def sklearn_cluster_kmeans_overload(
         n_init=10,
         max_iter=300,
         tol=1e-4,
-        precompute_distances="deprecated",
         verbose=0,
         random_state=None,
         copy_x=True,
-        n_jobs="deprecated",
         algorithm="auto",
     ):  # pragma: no cover
 
@@ -2182,11 +2396,9 @@ def sklearn_cluster_kmeans_overload(
                 n_init=n_init,
                 max_iter=max_iter,
                 tol=tol,
-                precompute_distances=precompute_distances,
                 verbose=verbose,
                 random_state=random_state,
                 copy_x=copy_x,
-                n_jobs=n_jobs,
                 algorithm=algorithm,
             )
         return m
@@ -2212,7 +2424,7 @@ def kmeans_fit_helper(
     orig_nthreads = m._n_threads if hasattr(m, "_n_threads") else None
 
     # We run on only rank0, but we want that rank to use all the cores
-    m.n_jobs = len(nodename_ranks[hostname])
+    # _n_threads still used (https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/cluster/_kmeans.py#L1171)
     m._n_threads = len(nodename_ranks[hostname])
 
     # Call Sklearn's fit on the gathered data
@@ -2251,7 +2463,6 @@ def kmeans_fit_helper(
             m.labels_ = comm.bcast(None)
 
     # Restore
-    m.n_jobs = orig_njobs
     m._n_threads = orig_nthreads
 
     return m
@@ -2300,9 +2511,7 @@ def kmeans_predict_helper(m, X, sample_weight):
 
     # Get original n_threads value if it exists
     orig_nthreads = m._n_threads if hasattr(m, "_n_threads") else None
-    orig_njobs = m.n_jobs if hasattr(m, "n_jobs") else None
     m._n_threads = 1
-    m.n_jobs = 1
 
     if len(X) == 0:
         # TODO If X is replicated this should be an error (same as sklearn)
@@ -2312,7 +2521,6 @@ def kmeans_predict_helper(m, X, sample_weight):
 
     # Restore
     m._n_threads = orig_nthreads
-    m.n_jobs = orig_njobs
     return preds
 
 
@@ -2355,9 +2563,7 @@ def overload_kmeans_clustering_score(
             # (a) it isn't used, (b) OMP_NUM_THREADS is set to 1 by bodo init
             # But we're do it anyway in case sklearn changes its behavior later
             orig_nthreads = m._n_threads if hasattr(m, "_n_threads") else None
-            orig_njobs = m.n_jobs if hasattr(m, "n_jobs") else None
             m._n_threads = 1
-            m.n_jobs = 1
 
             if len(X) == 0:
                 # TODO If X is replicated this should be an error (same as sklearn)
@@ -2371,7 +2577,6 @@ def overload_kmeans_clustering_score(
 
             # Restore
             m._n_threads = orig_nthreads
-            m.n_jobs = orig_njobs
 
         return result
 
@@ -2389,11 +2594,9 @@ def overload_kmeans_clustering_transform(m, X):
     def _cluster_kmeans_transform(m, X):  # pragma: no cover
 
         with numba.objmode(X_new="float64[:,:]"):
-            # Doesn't parallelize automatically afaik. Set n_jobs and n_threads to 1 anyway.
+            # Doesn't parallelize automatically afaik. Set n_threads to 1 anyway.
             orig_nthreads = m._n_threads if hasattr(m, "_n_threads") else None
-            orig_njobs = m.n_jobs if hasattr(m, "n_jobs") else None
             m._n_threads = 1
-            m.n_jobs = 1
 
             if len(X) == 0:
                 # TODO If X is replicated this should be an error (same as sklearn)
@@ -2403,7 +2606,6 @@ def overload_kmeans_clustering_transform(m, X):
 
             # Restore
             m._n_threads = orig_nthreads
-            m.n_jobs = orig_njobs
 
         return X_new
 
@@ -2494,6 +2696,10 @@ def overload_multinomial_nb_model_fit(
         return _naive_bayes_multinomial_impl
     else:
         # TODO: sample_weight (future enhancement)
+        if not is_overload_none(sample_weight):
+            raise BodoError(
+                "sklearn.naive_bayes.MultinomialNB.fit() : 'sample_weight' not supported."
+            )
         func_text = "def _model_multinomial_nb_fit_impl(\n"
         func_text += "    m, X, y, sample_weight=None, _is_data_distributed=False\n"
         func_text += "):  # pragma: no cover\n"
@@ -2544,7 +2750,7 @@ def fit_multinomial_nb(
     # Taken as it's from sklearn https://github.com/scikit-learn/scikit-learn/blob/0fb307bf3/sklearn/naive_bayes.py#L596
     m._check_X_y(X_train, y_train)
     _, n_features = X_train.shape
-    m.n_features_ = n_features
+    m.n_features_in_ = n_features
     labelbin = LabelBinarizer()
     Y = labelbin.fit_transform(y_train)
     m.classes_ = labelbin.classes_
@@ -2605,7 +2811,7 @@ def fit_multinomial_nb(
     )
     # Retranspose to get final shape (n_classes, total_n_features)
     m.feature_log_prob_ = full_log_feature_T.T
-    m.n_features_ = m.feature_log_prob_.shape[1]
+    m.n_features_in_ = m.feature_log_prob_.shape[1]
 
     # Replicate feature_count. Not now. will see if users need it.
     # feature_count_T = (clf.feature_count_).T
@@ -2763,6 +2969,10 @@ def overload_logistic_regression_fit(
 
         return _logistic_regression_fit_impl
     else:
+        if not is_overload_none(sample_weight):
+            raise BodoError(
+                "sklearn.linear_model.LogisticRegression.fit() : 'sample_weight' is not supported for distributed data."
+            )
         # Create and run SGDClassifier(loss='log')
         def _sgdc_logistic_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
@@ -2879,27 +3089,28 @@ def unbox_linear_regression(typ, obj, c):
     return NativeValue(obj)
 
 
+# normalize was deprecated in version 1.0 and will be removed in 1.2.
 @overload(sklearn.linear_model.LinearRegression, no_unliteral=True)
 def sklearn_linear_model_linear_regression_overload(
     fit_intercept=True,
-    normalize=False,
     copy_X=True,
     n_jobs=None,
+    positive=False,
 ):
     check_sklearn_version()
 
     def _sklearn_linear_model_linear_regression_impl(
         fit_intercept=True,
-        normalize=False,
         copy_X=True,
         n_jobs=None,
+        positive=False,
     ):  # pragma: no cover
         with numba.objmode(m="linear_regression_type"):
             m = sklearn.linear_model.LinearRegression(
                 fit_intercept=fit_intercept,
-                normalize=normalize,
                 copy_X=copy_X,
                 n_jobs=n_jobs,
+                positive=positive,
             )
         return m
 
@@ -2927,7 +3138,11 @@ def overload_linear_regression_fit(
 
         return _linear_regression_fit_impl
     else:
-        # Create and run SGDRegressor(loss="squared_loss", penalty=None)
+        if not is_overload_none(sample_weight):
+            raise BodoError(
+                "sklearn.linear_model.LinearRegression.fit() : 'sample_weight' is not supported for distributed data."
+            )
+        # Create and run SGDRegressor(loss="squared_error", penalty=None)
         def _sgdc_linear_regression_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
@@ -2935,7 +3150,7 @@ def overload_linear_regression_fit(
                 _raise_SGD_warning("SGDRegressor")
             with numba.objmode(clf="sgd_regressor_type"):
                 clf = sklearn.linear_model.SGDRegressor(
-                    loss="squared_loss",
+                    loss="squared_error",
                     penalty=None,
                     fit_intercept=m.fit_intercept,
                 )
@@ -3019,7 +3234,6 @@ def unbox_lasso(typ, obj, c):
 def sklearn_linear_model_lasso_overload(
     alpha=1.0,
     fit_intercept=True,
-    normalize=False,
     precompute=False,
     copy_X=True,
     max_iter=1000,
@@ -3034,7 +3248,6 @@ def sklearn_linear_model_lasso_overload(
     def _sklearn_linear_model_lasso_impl(
         alpha=1.0,
         fit_intercept=True,
-        normalize=False,
         precompute=False,
         copy_X=True,
         max_iter=1000,
@@ -3048,7 +3261,6 @@ def sklearn_linear_model_lasso_overload(
             m = sklearn.linear_model.Lasso(
                 alpha=alpha,
                 fit_intercept=fit_intercept,
-                normalize=normalize,
                 precompute=precompute,
                 copy_X=copy_X,
                 max_iter=max_iter,
@@ -3085,7 +3297,15 @@ def overload_lasso_fit(
 
         return _lasso_fit_impl
     else:
-        # Create and run SGDRegressor(loss="squared_loss", penalty='l1')
+        if not is_overload_none(sample_weight):
+            raise BodoError(
+                "sklearn.linear_model.Lasso.fit() : 'sample_weight' is not supported for distributed data."
+            )
+        if not is_overload_true(check_input):
+            raise BodoError(
+                "sklearn.linear_model.Lasso.fit() : 'check_input' is not supported for distributed data."
+            )
+        # Create and run SGDRegressor(loss="squared_error", penalty='l1')
         def _sgdc_lasso_fit_impl(
             m, X, y, sample_weight=None, check_input=True, _is_data_distributed=False
         ):  # pragma: no cover
@@ -3093,7 +3313,7 @@ def overload_lasso_fit(
                 _raise_SGD_warning("SGDRegressor")
             with numba.objmode(clf="sgd_regressor_type"):
                 clf = sklearn.linear_model.SGDRegressor(
-                    loss="squared_loss",
+                    loss="squared_error",
                     penalty="l1",
                     alpha=m.alpha,
                     fit_intercept=m.fit_intercept,
@@ -3171,11 +3391,11 @@ def unbox_ridge(typ, obj, c):
 def sklearn_linear_model_ridge_overload(
     alpha=1.0,
     fit_intercept=True,
-    normalize=False,
     copy_X=True,
     max_iter=None,
     tol=0.001,
     solver="auto",
+    positive=False,
     random_state=None,
 ):
     check_sklearn_version()
@@ -3183,22 +3403,22 @@ def sklearn_linear_model_ridge_overload(
     def _sklearn_linear_model_ridge_impl(
         alpha=1.0,
         fit_intercept=True,
-        normalize=False,
         copy_X=True,
         max_iter=None,
         tol=0.001,
         solver="auto",
+        positive=False,
         random_state=None,
     ):  # pragma: no cover
         with numba.objmode(m="ridge_type"):
             m = sklearn.linear_model.Ridge(
                 alpha=alpha,
                 fit_intercept=fit_intercept,
-                normalize=normalize,
                 copy_X=copy_X,
                 max_iter=max_iter,
                 tol=tol,
                 solver=solver,
+                positive=positive,
                 random_state=random_state,
             )
         return m
@@ -3227,7 +3447,11 @@ def overload_ridge_fit(
 
         return _ridge_fit_impl
     else:
-        # Create and run SGDRegressor(loss="squared_loss", penalty='l2')
+        if not is_overload_none(sample_weight):
+            raise BodoError(
+                "sklearn.linear_model.Ridge.fit() : 'sample_weight' is not supported for distributed data."
+            )
+        # Create and run SGDRegressor(loss="squared_error", penalty='l2')
         def _ridge_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
         ):  # pragma: no cover
@@ -3239,7 +3463,7 @@ def overload_ridge_fit(
                 else:
                     max_iter = m.max_iter
                 clf = sklearn.linear_model.SGDRegressor(
-                    loss="squared_loss",
+                    loss="squared_error",
                     penalty="l2",
                     alpha=0.001,
                     fit_intercept=m.fit_intercept,
@@ -3397,6 +3621,10 @@ def overload_linear_svc_fit(
 
         return _svm_linear_svc_fit_impl
     else:
+        if not is_overload_none(sample_weight):
+            raise BodoError(
+                "sklearn.svm.LinearSVC.fit() : 'sample_weight' is not supported for distributed data."
+            )
         # Create and run SGDClassifier(loss='log')
         def _svm_linear_svc_fit_impl(
             m, X, y, sample_weight=None, _is_data_distributed=False
@@ -3609,6 +3837,7 @@ def overload_preprocessing_standard_scaler_fit(
     m,
     X,
     y=None,
+    sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position)
 ):
     """
@@ -3616,9 +3845,13 @@ def overload_preprocessing_standard_scaler_fit(
     In case input is replicated, we simply call sklearn,
     else we use our native implementation.
     """
+    if is_overload_true(_is_data_distributed) and not is_overload_none(sample_weight):
+        raise BodoError(
+            "sklearn.preprocessing.StandardScaler.fit() : 'sample_weight' is not supported for distributed data."
+        )
 
     def _preprocessing_standard_scaler_fit_impl(
-        m, X, y=None, _is_data_distributed=False
+        m, X, y=None, sample_weight=None, _is_data_distributed=False
     ):  # pragma: no cover
 
         with numba.objmode(m="preprocessing_standard_scaler_type"):
@@ -3627,7 +3860,7 @@ def overload_preprocessing_standard_scaler_fit(
                 m = sklearn_preprocessing_standard_scaler_fit_dist_helper(m, X)
             else:
                 # If replicated, then just call sklearn
-                m = m.fit(X, y)
+                m = m.fit(X, y, sample_weight)
 
         return m
 
@@ -4483,7 +4716,7 @@ def unbox_random_forest_regressor(typ, obj, c):
 @overload(sklearn.ensemble.RandomForestRegressor, no_unliteral=True)
 def overload_sklearn_rf_regressor(
     n_estimators=100,
-    criterion="mse",
+    criterion="squared_error",
     max_depth=None,
     min_samples_split=2,
     min_samples_leaf=1,
@@ -4491,7 +4724,6 @@ def overload_sklearn_rf_regressor(
     max_features="auto",
     max_leaf_nodes=None,
     min_impurity_decrease=0.0,
-    min_impurity_split=None,
     bootstrap=True,
     oob_score=False,
     n_jobs=None,
@@ -4512,7 +4744,7 @@ def overload_sklearn_rf_regressor(
 
     def _sklearn_ensemble_RandomForestRegressor_impl(
         n_estimators=100,
-        criterion="mse",
+        criterion="squared_error",
         max_depth=None,
         min_samples_split=2,
         min_samples_leaf=1,
@@ -4520,7 +4752,6 @@ def overload_sklearn_rf_regressor(
         max_features="auto",
         max_leaf_nodes=None,
         min_impurity_decrease=0.0,
-        min_impurity_split=None,
         bootstrap=True,
         oob_score=False,
         n_jobs=None,
@@ -4544,7 +4775,6 @@ def overload_sklearn_rf_regressor(
                 max_features=max_features,
                 max_leaf_nodes=max_leaf_nodes,
                 min_impurity_decrease=min_impurity_decrease,
-                min_impurity_split=min_impurity_split,
                 bootstrap=bootstrap,
                 oob_score=oob_score,
                 n_jobs=1,
@@ -4583,11 +4813,21 @@ def overload_rf_classifier_model_fit(
     m,
     X,
     y,
+    sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     """Distribute data to first rank in each node then call fit operation"""
+    classname = "RandomForestClassifier"
+    if isinstance(m, BodoRandomForestRegressorType):
+        classname = "RandomForestRegressor"
+    if not is_overload_none(sample_weight):
+        raise BodoError(
+            f"sklearn.ensemble.{classname}.fit() : 'sample_weight' is not supported for distributed data."
+        )
 
-    def _model_fit_impl(m, X, y, _is_data_distributed=False):  # pragma: no cover
+    def _model_fit_impl(
+        m, X, y, sample_weight=None, _is_data_distributed=False
+    ):  # pragma: no cover
 
         # Get lowest rank in each node
         with numba.objmode(first_rank_node="int32[:]"):
@@ -4617,7 +4857,7 @@ def overload_rf_classifier_model_fit(
 # ----------------------------------------------------------------------------------------
 # ----------------------------------- CountVectorizer------------------------------------
 # Support for sklearn.feature_extraction.text.CountVectorizer
-# Currently fit_transform & get_feature_names functions are supported.
+# Currently fit_transform & get_feature_names_out functions are supported.
 # ----------------------------------------------------------------------------------------
 
 
@@ -4667,6 +4907,7 @@ def sklearn_count_vectorizer_overload(
     ngram_range=(1, 1),
     analyzer="word",
     max_df=1.0,
+    min_df=1,
     max_features=None,
     vocabulary=None,
     binary=False,
@@ -4678,6 +4919,21 @@ def sklearn_count_vectorizer_overload(
     """
 
     check_sklearn_version()
+
+    # Per sklearn documentation, min_df: ignore terms that have a document
+    # frequency strictly lower than the given threshold.
+
+    if not is_overload_constant_number(min_df) or get_overload_const(min_df) != 1:
+        raise BodoError(
+            "sklearn.feature_extraction.text.CountVectorizer(): 'min_df' is not supported for distributed data.\n"
+        )
+
+    # Per sklearn documentation, max_df: ignore terms that have a document
+    # frequency strictly higher than the given threshold.
+    if not is_overload_constant_number(max_df) or get_overload_const(min_df) != 1:
+        raise BodoError(
+            "sklearn.feature_extraction.text.CountVectorizer(): 'max_df' is not supported for distributed data.\n"
+        )
 
     def _sklearn_count_vectorizer_impl(
         input="content",
@@ -4692,6 +4948,7 @@ def sklearn_count_vectorizer_overload(
         ngram_range=(1, 1),
         analyzer="word",
         max_df=1.0,
+        min_df=1,
         max_features=None,
         vocabulary=None,
         binary=False,
@@ -4712,6 +4969,7 @@ def sklearn_count_vectorizer_overload(
                 ngram_range=ngram_range,
                 analyzer=analyzer,
                 max_df=max_df,
+                min_df=min_df,
                 max_features=max_features,
                 vocabulary=vocabulary,
                 binary=binary,
@@ -4818,17 +5076,19 @@ def overload_count_vectorizer_fit_transform(
         return _count_vectorizer_fit_transform_impl
 
 
+# NOTE: changed get_feature_names as it will be removed in 1.2
+# and will be replaced by get_feature_names_out
 @overload_method(
-    BodoFExtractCountVectorizerType, "get_feature_names", no_unliteral=True
+    BodoFExtractCountVectorizerType, "get_feature_names_out", no_unliteral=True
 )
-def overload_count_vectorizer_get_feature_names(m):
+def overload_count_vectorizer_get_feature_names_out(m):
     """Array mapping from feature integer indices to feature name."""
 
     check_sklearn_version()
 
     def impl(m):  # pragma: no cover
         with numba.objmode(result=bodo.string_array_type):
-            result = m.get_feature_names()
+            result = m.get_feature_names_out()
         return result
 
     return impl

@@ -41,7 +41,7 @@ RUN conda install -n BODODEV python hdf5=*=*mpich* -c conda-forge
 RUN conda install -n BODODEV python pyarrow=5.0.0 fsspec -c conda-forge
 RUN conda install -n BODODEV python numba=0.55.0 -c conda-forge
 RUN conda install -v BODODEV python nomkl numpy -c conda-forge
-RUN conda install -v BODODEV scikit-learn=0.24.2 -c conda-forge
+RUN conda install -v BODODEV scikit-learn='1.0.*' -c conda-forge
 RUN conda install -v BODODEV python pytest sqlalchemy mypysql xlrd openpyxl mpi4py cython -c conda-forge
 #
 # Creation of the .bashrc file

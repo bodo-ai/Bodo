@@ -1129,6 +1129,9 @@ def test_rf_regressor():
     assert np.allclose(sklearn_score, bodo_score, atol=0.1)
 
 
+# ---------------------- CountVectorizer tests ----------------------
+
+
 def test_count_vectorizer():
     """Test CountVectorizer's vocabulary and fit_transform"""
 
@@ -1144,10 +1147,10 @@ def test_count_vectorizer():
     def impl(df):
         v = CountVectorizer()
         v.fit_transform(df["A"])
-        ans = v.get_feature_names()
+        ans = v.get_feature_names_out()
         return ans
 
-    check_func(impl, (df,))
+    check_func(impl, (df,), is_out_distributed=False)
 
     # Test vocabulary_ and stop_words
     def impl2(df):
@@ -1155,7 +1158,7 @@ def test_count_vectorizer():
         v.fit_transform(df["A"])
         return sorted(v.vocabulary_)
 
-    check_func(impl2, (df,))
+    check_func(impl2, (df,), is_out_distributed=False)
 
     # Test user-defined vocabulary
     # https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/feature_extraction/tests/test_text.py#L315

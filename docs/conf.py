@@ -104,11 +104,11 @@ default_dark_mode = False
 # a list of builtin themes.
 #
 html_theme = "sphinx_material"
-html_title = 'Bodo Documentation'
+html_title = "Bodo Documentation"
 html_theme_path = [
     "_themes",
 ]
-html_css_files = ['custom_bodo.css']
+html_css_files = ["custom_bodo.css"]
 
 html_favicon = "source/favicon.png"
 
@@ -118,17 +118,17 @@ html_favicon = "source/favicon.png"
 #
 # html_theme_options = {}
 html_theme_options = {
-    'nav_title': ' ',
+    "nav_title": " ",
     "google_analytics_account": "UA-170687885-1",  #  Provided by Google in your dashboard
-    'color_primary': 'indigo',
-    'color_accent': 'green',
-    'globaltoc_depth': 3,
+    "color_primary": "indigo",
+    "color_accent": "green",
+    "globaltoc_depth": 3,
     # If False, expand all TOC entries
-    'globaltoc_collapse': True,
+    "globaltoc_collapse": True,
     # If True, show hidden TOC entries
-    'globaltoc_includehidden': False,
-    'html_minify': True,
-    'css_minify': True,
+    "globaltoc_includehidden": False,
+    "html_minify": True,
+    "css_minify": True,
     "nav_links": [
         {
             "href": "https://bodo.ai",
@@ -222,9 +222,7 @@ intersphinx_mapping = {
     "numba": ("http://numba.pydata.org/numba-doc/latest/", None),
     "pandas": ("https://pandas.pydata.org/pandas-docs/stable/", None),
     "pyspark": ("https://spark.apache.org/docs/latest/api/python/", None),
-    # new API, we don't support yet.
-    # "sklearn": ("https://scikit-learn.org/stable/", None),
-    "sklearn": ("https://scikit-learn.org/0.24/", None),
+    "sklearn": ("https://scikit-learn.org/stable/", None),
     "xgboost": ("http://xgboost.readthedocs.io/en/latest", None),
     "matplotlib": ("https://matplotlib.org/stable/", None),
 }
