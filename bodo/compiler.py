@@ -52,8 +52,10 @@ from bodo.transforms.untyped_pass import UntypedPass
 from bodo.utils.utils import is_assign, is_call_assign, is_expr
 
 _is_sklearn_supported_version = False
-_max_sklearn_version = (0, 24, 2)
-_max_sklearn_ver_str = ".".join(str(x) for x in _max_sklearn_version)
+_min_sklearn_version = (1, 0, 0)
+_min_sklearn_ver_str = ".".join(str(x) for x in _min_sklearn_version)
+_max_sklearn_version_exclusive = (1, 1, 0)
+_max_sklearn_ver_str = ".".join(str(x) for x in _max_sklearn_version_exclusive)
 try:
     # Create capturing group for major, minor, and bugfix version numbers.
     # last number could have string e.g. `dev0`
@@ -68,7 +70,7 @@ try:
     m = regex.match(sklearn_version)
     if m:
         ver = tuple(map(int, m.groups()))
-        if ver <= _max_sklearn_version:
+        if ver >= _min_sklearn_version and ver < _max_sklearn_version_exclusive:
             _is_sklearn_supported_version = True
 
 except ImportError:
