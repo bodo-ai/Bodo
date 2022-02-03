@@ -1718,6 +1718,7 @@ class UntypedPass:
                     index_ind,
                     index_arr_typ,
                     index_name,
+                    escapechar,
                 )
             ]
             # Create a new temp var so this is always exactly one variable.

@@ -45,9 +45,10 @@ class CSVIteratorType(types.SimpleIteratorType):
         index_ind,
         index_arr_typ,
         index_name,
+        escapechar,
     ):
         assert isinstance(df_type, DataFrameType), "CSVIterator must return a DataFrame"
-        name = f"CSVIteratorType({df_type}, {out_colnames}, {out_types}, {usecols}, {sep}, {index_ind}, {index_arr_typ}, {index_name})"
+        name = f"CSVIteratorType({df_type}, {out_colnames}, {out_types}, {usecols}, {sep}, {index_ind}, {index_arr_typ}, {index_name}, {escapechar})"
         super(types.SimpleIteratorType, self).__init__(name)
         self._yield_type = df_type
         # CSV info used to call pd.read_csv
@@ -60,6 +61,7 @@ class CSVIteratorType(types.SimpleIteratorType):
         self._index_ind = index_ind
         self._index_arr_typ = index_arr_typ
         self._index_name = index_name
+        self._escapechar = escapechar
 
     @property
     def mangling_args(self):
@@ -213,6 +215,7 @@ def gen_read_csv_objmode(csv_iterator_type):
         csv_iterator_type._usecols,
         type_usecol_offset,
         csv_iterator_type._sep,
+        csv_iterator_type._escapechar,
         call_id,
         glbls,
         parallel=False,
