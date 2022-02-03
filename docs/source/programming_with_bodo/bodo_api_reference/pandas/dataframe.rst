@@ -3,6 +3,8 @@ DataFrame
 
 Bodo provides extensive DataFrame support documented below.
 
+``pd.Dataframe``
+*****************
 
 * :class:`pandas.DataFrame` ``(data=None, index=None, columns=None, dtype=None, copy=None)``
 
@@ -41,6 +43,8 @@ Bodo provides extensive DataFrame support documented below.
 Attributes and underlying data
 ******************************
 
+``pd.Dataframe.columns``
+^^^^^^^^^^^^^^^^^^^^^^^^^
     * :attr:`pandas.DataFrame.columns`
 
         `Example Usage`:
@@ -53,6 +57,9 @@ Attributes and underlying data
             ...   return df.columns
             >>> f()
             Index(['A', 'B', 'C'], dtype='object')
+
+``pd.Dataframe.dtypes``
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :attr:`pandas.DataFrame.dtypes`
 
@@ -70,6 +77,8 @@ Attributes and underlying data
             C    timedelta64[ns]
             dtype: object
 
+``pd.Dataframe.empty``
+^^^^^^^^^^^^^^^^^^^^^^^^^
     * :attr:`pandas.DataFrame.empty`
 
         `Example Usage`:
@@ -84,6 +93,8 @@ Attributes and underlying data
             >>> f()
             (False, True)
 
+``pd.Dataframe.index``
+^^^^^^^^^^^^^^^^^^^^^^^^^
     * :attr:`pandas.DataFrame.index`
 
         `Example Usage`:
@@ -97,6 +108,8 @@ Attributes and underlying data
             >>> f()
             Index(['x', 'y', 'z'], dtype='object')
 
+``pd.Dataframe.ndim``
+^^^^^^^^^^^^^^^^^^^^^^^^^
     * :attr:`pandas.DataFrame.ndim`
 
         `Example Usage`:
@@ -110,7 +123,8 @@ Attributes and underlying data
             >>> f()
             2
 
-
+``pd.Dataframe.select_dtypes``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     * :meth:`pandas.DataFrame.select_dtypes` ``(include=None, exclude=None)``
 
         `Supported arguments`:
@@ -154,6 +168,8 @@ Attributes and underlying data
                   D
             0  True
 
+``pd.Dataframe.filter``
+^^^^^^^^^^^^^^^^^^^^^^^
     * :meth:`pandas.DataFrame.filter` ``(items=None, like=None, regex=None, axis=None)``
 
         `Supported arguments`:
@@ -195,6 +211,8 @@ Attributes and underlying data
               ababab
             0       1
 
+``pd.Dataframe.shape``
+^^^^^^^^^^^^^^^^^^^^^^^
     * :attr:`pandas.DataFrame.shape`
 
         `Example Usage`:
@@ -208,7 +226,8 @@ Attributes and underlying data
             >>> f()
             (3, 2)
 
-
+``pd.Dataframe.size``
+^^^^^^^^^^^^^^^^^^^^^^^
     * :attr:`pandas.DataFrame.size`
 
         `Example Usage`:
@@ -222,6 +241,8 @@ Attributes and underlying data
             >>> f()
             6
 
+``pd.Dataframe.to_numpy``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     * :meth:`pandas.DataFrame.to_numpy` ``(dtype=None, copy=False, na_value=NoDefault.no_default)``
 
         `Supported arguments`:
@@ -248,6 +269,8 @@ Attributes and underlying data
              [2.  4.2]
              [3.  5.3]]
 
+``pd.Dataframe.values``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     * :attr:`pandas.DataFrame.values` (only for numeric dataframes)
 
         `Example Usage`:
@@ -266,6 +289,9 @@ Attributes and underlying data
 Conversion
 ***********
 
+
+``pd.Dataframe.astype``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     * :meth:`pandas.DataFrame.astype` ``(dtype, copy=True, errors='raise')``
 
         `Supported arguments`:
@@ -299,6 +325,8 @@ Conversion
             1  2.0 1970-01-01 00:00:00.000000004
             2  3.0 1970-01-01 00:00:00.000000005
 
+``pd.Dataframe.copy``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     * :meth:`pandas.DataFrame.copy` ``(deep=True)``
 
         `Supported arguments`:
@@ -339,6 +367,10 @@ Conversion
             1  2
             2  3
 
+
+``pd.Dataframe.isna``
+^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.isna` ``()``
 
         `Example Usage`:
@@ -355,6 +387,9 @@ Conversion
             1   True
             2  False
 
+
+``pd.Dataframe.isnull``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     * :meth:`pandas.DataFrame.isnull` ``()``
 
         `Example Usage`:
@@ -372,6 +407,9 @@ Conversion
             2  False
 
 
+``pd.Dataframe.notna``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.notna` ``()``
 
         `Example Usage`:
@@ -388,6 +426,9 @@ Conversion
             1  False
             2   True
 
+``pd.Dataframe.notnull``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.notnull` ``()``
 
         `Example Usage`:
@@ -403,6 +444,10 @@ Conversion
             0   True
             1  False
             2   True
+
+
+``pd.Dataframe.info``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.info` ``(verbose=None, buf=None, max_cols=None, memory_usage=None, show_counts=None, null_counts=None)``
 
@@ -429,6 +474,8 @@ Conversion
         .. note::
           The exact output string may vary slightly from Pandas.
 
+``pd.Dataframe.infer_objects``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * :meth:`pandas.DataFrame.infer_objects` ``()``
 
@@ -448,6 +495,9 @@ Conversion
 
 Indexing, iteration
 ********************
+
+``pd.Dataframe.head``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.head` ``(n=5)``
 
@@ -474,6 +524,9 @@ Indexing, iteration
             1  1
             2  2
 
+``pd.Dataframe.iat``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :attr:`pandas.DataFrame.iat`
 
         We only support indexing using ``iat`` using a pair of integers. We require that the second int
@@ -495,6 +548,8 @@ Indexing, iteration
             1  2  5  8
             2  3  6  9
 
+``pd.Dataframe.iloc``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.iloc`
 
@@ -539,6 +594,9 @@ Indexing, iteration
             1  2  4  4  4
             2  3  6  9  9
 
+``pd.Dataframe.insert``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.insert` ``(loc, column, value, allow_duplicates=False)``
 
         `Supported arguments`:
@@ -578,6 +636,9 @@ Indexing, iteration
             1  2  5  8 -2
             2  3  6  9 -3
 
+
+``pd.Dataframe.isin``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.isin` ``(values)``
 
@@ -643,6 +704,9 @@ Indexing, iteration
                         2  False  False  False
 
 
+``pd.Dataframe.itertuples``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.itertuples` ``(index=True, name='Pandas')``
 
         `Supported arguments`: None
@@ -668,6 +732,9 @@ Indexing, iteration
             2
             (6, 9)
 
+
+``pd.Dataframe.query``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.query` ``(expr, inplace=False, **kwargs)``
 
@@ -702,6 +769,8 @@ Indexing, iteration
             * Query must be one line.
             * If using environment variables, they should be passed as arguments to the function.
 
+``pd.Dataframe.tail``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.tail` ``(n=5)``
 
@@ -732,6 +801,9 @@ Indexing, iteration
 
 Function application, GroupBy & Window
 ***************************************
+
+``pd.Dataframe.apply``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.apply` ``(func, axis=0, raw=False, result_type=None, args=(), _bodo_inline=False, **kwargs)``
 
@@ -778,6 +850,9 @@ Function application, GroupBy & Window
             Inlining user-defined functions (UDFs) can potentially improve performance at the expense of
             extra compilation time. Bodo uses heuristics to make a decision automatically if ``_bodo_inline`` is not provided.
 
+``pd.Dataframe.groupby``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.groupby` ``(by=None, axis=0, level=None, as_index=True, sort=True, group_keys=True, squeeze=NoDefault.no_default, observed=False, dropna=True)``
 
         `Supported arguments`:
@@ -818,6 +893,9 @@ Function application, GroupBy & Window
             1 -4
             2  4
 
+
+``pd.Dataframe.rolling``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.rolling` ``(window, min_periods=None, center=False, win_type=None, on=None, axis=0, closed=None, method='single')``
 
@@ -873,6 +951,9 @@ Function application, GroupBy & Window
 Computations / Descriptive Stats
 ********************************
 
+``pd.Dataframe.abs``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.abs` ``()``
 
         Only supported for dataframes containing numerical data and Timedeltas
@@ -889,6 +970,9 @@ Computations / Descriptive Stats
                A    B       C
             0  1  3.1 10 days
             1  2  4.2 10 days
+
+``pd.Dataframe.corr``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.corr` ``(method='pearson', min_periods=1)``
 
@@ -917,6 +1001,9 @@ Computations / Descriptive Stats
             B -0.904656  1.000000 -0.97714
             c  0.925820 -0.977140  1.00000
 
+``pd.Dataframe.count``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.count` ``(axis=0, level=None, numeric_only=False)``
 
         `Supported arguments`: None
@@ -932,6 +1019,10 @@ Computations / Descriptive Stats
             >>> f()
             A    2
             B    1
+
+
+``pd.Dataframe.cov``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.cov` ``(min_periods=None, ddof=1)``
 
@@ -960,6 +1051,9 @@ Computations / Descriptive Stats
             B -0.012346  0.012346 -0.047577
             C  0.047577 -0.047577  0.223293
 
+``pd.Dataframe.cumprod``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.cumprod` ``(axis=None, skipna=True)``
 
         `Supported arguments`: None
@@ -982,6 +1076,9 @@ Computations / Descriptive Stats
           Not supported for dataframe with nullable integer.
 
 
+``pd.Dataframe.cumsum``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.cumsum` ``(axis=None, skipna=True)``
 
         `Supported arguments`: None
@@ -1002,6 +1099,9 @@ Computations / Descriptive Stats
 
         .. note::
           Not supported for dataframe with nullable integer.
+
+``pd.Dataframe.describe``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.describe` ``(percentiles=None, include=None, exclude=None, datetime_is_numeric=False)``
 
@@ -1028,6 +1128,9 @@ Computations / Descriptive Stats
 
         .. note::
           Only supported for dataframes containing numeric data, and datetime data. Datetime_is_numeric defaults to True in JIT code.
+
+``pd.Dataframe.diff``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.diff` ``(periods=1, axis=0)``
 
@@ -1060,6 +1163,9 @@ Computations / Descriptive Stats
           Only supported for dataframes containing float, non-null int, and datetime64ns values
 
 
+``pd.Dataframe.max``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.max` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
         `Supported arguments`:
@@ -1090,6 +1196,10 @@ Computations / Descriptive Stats
 
         .. note::
           Only supported for dataframes containing float, non-null int, and datetime64ns values.
+
+
+``pd.Dataframe.mean``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.mean` ``axis=None, skipna=None, level=None, numeric_only=None)``
 
@@ -1124,6 +1234,9 @@ Computations / Descriptive Stats
           Only supported for dataframes containing float, non-null int, and datetime64ns values.
 
 
+``pd.Dataframe.median``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.median` ``axis=None, skipna=None, level=None, numeric_only=None)``
 
         `Supported arguments`:
@@ -1155,6 +1268,10 @@ Computations / Descriptive Stats
 
         .. note::
           Only supported for dataframes containing float, non-null int, and datetime64ns values.
+
+
+``pd.Dataframe.min``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.min` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
@@ -1188,6 +1305,9 @@ Computations / Descriptive Stats
         .. note::
           Only supported for dataframes containing float, non-null int, and datetime64ns values.
 
+``pd.Dataframe.nunique``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.nunique` ``(axis=0, dropna=True)``
 
         `Supported arguments`:
@@ -1213,6 +1333,9 @@ Computations / Descriptive Stats
             A    3
             B    1
             C    2
+
+``pd.Dataframe.pct_change``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.pct_change` ``(periods=1, fill_method='pad', limit=None, freq=None)``
 
@@ -1243,6 +1366,8 @@ Computations / Descriptive Stats
             2  9.0
             3  9.0
 
+``pd.Dataframe.pipe``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.pipe` ``(func, *args, **kwargs)``
 
@@ -1278,6 +1403,8 @@ Computations / Descriptive Stats
             A    10000
             dtype: int64
 
+``pd.Dataframe.prod``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.prod` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
@@ -1309,6 +1436,8 @@ Computations / Descriptive Stats
             C    504
             dtype: int64
 
+``pd.Dataframe.product``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.product` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
@@ -1339,6 +1468,9 @@ Computations / Descriptive Stats
             B    120
             C    504
             dtype: int64
+
+``pd.Dataframe.quantile``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.quantile` ``(q=0.5, axis=0, numeric_only=True, interpolation='linear')``
 
@@ -1374,6 +1506,9 @@ Computations / Descriptive Stats
             dtype: float64
             dtype: int64
 
+``pd.Dataframe.std``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.std` ``(axis=None, skipna=None, level=None, ddof=1, numeric_only=None)``
 
         `Supported arguments`:
@@ -1403,6 +1538,10 @@ Computations / Descriptive Stats
             1    3.0
             2    3.0
             dtype: float64
+
+
+``pd.Dataframe.sum``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.sum` ``(axis=None, skipna=None, level=None, numeric_only=None, min_count=0)``
 
@@ -1434,6 +1573,8 @@ Computations / Descriptive Stats
             2    18
             dtype: int64
 
+``pd.Dataframe.var``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.var` ``(axis=None, skipna=None, level=None, ddof=1, numeric_only=None)``
 
@@ -1465,6 +1606,8 @@ Computations / Descriptive Stats
             2    9.0
             dtype: float64
 
+``pd.Dataframe.memory_usage``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.memory_usage` ``(index=True, deep=False)``
 
@@ -1498,6 +1641,9 @@ Computations / Descriptive Stats
 Reindexing / Selection / Label manipulation
 *******************************************
 
+``pd.Dataframe.drop``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.drop` ``(labels=None, axis=0, index=None, columns=None, level=None, inplace=False, errors='raise')``
 
         *  Only dropping columns supported, either using ``columns`` argument or setting ``axis=1`` and using the ``labels`` argument
@@ -1520,6 +1666,8 @@ Reindexing / Selection / Label manipulation
             1  2
             2  3
 
+``pd.Dataframe.drop_duplicates``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.drop_duplicates` ``(subset=None, keep='first', inplace=False, ignore_index=False)``
 
@@ -1551,6 +1699,9 @@ Reindexing / Selection / Label manipulation
             2  3  3   9
             3  4  3  10
 
+``pd.Dataframe.duplicated``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.duplicated` ``(subset=None, keep='first')``
 
         `Supported arguments`: None
@@ -1571,6 +1722,9 @@ Reindexing / Selection / Label manipulation
             dtype: bool
 
 
+``pd.Dataframe.idxmax``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.idxmax` ``(axis=0, skipna=True)``
 
         `Supported arguments`: None
@@ -1589,6 +1743,10 @@ Reindexing / Selection / Label manipulation
             C    2
             dtype: int64
 
+
+``pd.Dataframe.idxmin``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.idxmin` ``(axis=0, skipna=True)``
 
         `Supported arguments`: None
@@ -1606,6 +1764,9 @@ Reindexing / Selection / Label manipulation
             B    0
             C    20
             dtype: int64
+
+``pd.Dataframe.rename``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.rename` ``(mapper=None, index=None, columns=None, axis=None, copy=True, inplace=False, level=None, errors='ignore')``
 
@@ -1648,6 +1809,9 @@ Reindexing / Selection / Label manipulation
             1  2  5  8
             2  3  6  9
 
+``pd.Dataframe.reset_index``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.reset_index` ``(level=None, drop=False, inplace=False, col_level=0, col_fill='')``
 
         `Supported arguments`:
@@ -1683,6 +1847,8 @@ Reindexing / Selection / Label manipulation
             1     Y  2  5  8
             2     Z  3  6  9
 
+``pd.Dataframe.set_index``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.set_index` ``(keys, drop=True, append=False, inplace=False, verify_integrity=False)``
 
@@ -1712,6 +1878,9 @@ Reindexing / Selection / Label manipulation
             8  2  5
             9  3  6
 
+
+``pd.Dataframe.take``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.take` ``(indices, axis=0, is_copy=None)``
 
@@ -1745,6 +1914,10 @@ Reindexing / Selection / Label manipulation
 
 Missing data handling
 *********************
+
+
+``pd.Dataframe.dropna``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.dropna` ``(axis=0, how='any', thresh=None, subset=None, inplace=False)``
 
@@ -1784,6 +1957,8 @@ Missing data handling
                A  B  C
             0  1  4  6
 
+``pd.Dataframe.fillna``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.fillna` ``(value=None, method=None, axis=None, inplace=False, limit=None, downcast=None)``
 
@@ -1816,6 +1991,9 @@ Missing data handling
             ...   df = pd.DataFrame({"A": [1,2,3,None], "B": [4, 5,None, None], "C": [6, None, None, None]})
             ...   return df.fillna(-1)
             >>> f()
+
+``pd.Dataframe.replace``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.replace` ``(to_replace=None, value=None, inplace=False, limit=None, regex=False, method='pad')``
 
@@ -1851,6 +2029,9 @@ Missing data handling
 
 Reshaping, sorting, transposing
 *******************************
+
+``pd.Dataframe.pivot_table``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.pivot_table` ``(values=None, index=None, columns=None, aggfunc='mean', fill_value=None, margins=False, dropna=True, margins_name='All', observed=False, sort=True)``
 
@@ -1896,6 +2077,9 @@ Reshaping, sorting, transposing
             6   NaN  22.0
 
 
+``pd.Dataframe.sample``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.sample` ``(n=None, frac=None, replace=False, weights=None, random_state=None, axis=None, ignore_index=False)``
 
         `Supported arguments`:
@@ -1926,6 +2110,8 @@ Reshaping, sorting, transposing
                A  B  C
             2  3  6  9
 
+``pd.Dataframe.sort_index``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.sort_index` ``(axis=0, level=None, ascending=True, inplace=False, kind='quicksort', na_position='last', sort_remaining=True, ignore_index=False, key=None)``
 
@@ -1958,6 +2144,8 @@ Reshaping, sorting, transposing
             1    1
             NaN  2
 
+``pd.Dataframe.sort_values``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.sort_values` ``(by, axis=0, ascending=True, inplace=False, kind='quicksort', na_position='last', ignore_index=False, key=None)``
 
@@ -2001,6 +2189,8 @@ Reshaping, sorting, transposing
             2     2     6
             1     2     5
 
+``pd.Dataframe.to_string``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     *  :meth:`pandas.DataFrame.to_string` ``(buf=None, columns=None, col_space=None, header=True, index=True, na_rep='NaN', formatters=None, float_format=None, sparsify=None, index_names=True, justify=None, max_rows=None, min_rows=None, max_cols=None, show_dimensions=False, decimal='.', line_width=None, max_colwidth=None, encoding=None)``
 
@@ -2049,6 +2239,9 @@ Reshaping, sorting, transposing
 Combining / joining / merging
 ******************************
 
+``pd.Dataframe.append``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.append` ``(other, ignore_index=False, verify_integrity=False, sort=False)``
 
         `Supported arguments`:
@@ -2082,6 +2275,8 @@ Combining / joining / merging
             1 -2  NaN  5.0
             2 -3  NaN  6.0
 
+``pd.Dataframe.assign``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.assign` ``(**kwargs)``
 
@@ -2103,6 +2298,10 @@ Combining / joining / merging
 
         .. note::
             arguments can be JIT functions, lambda functions, or values that can be used to initialize a Pandas Series.
+
+
+``pd.Dataframe.join``
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.join` ``(other, on=None, how='left', lsuffix='', rsuffix='', sort=False)``
 
@@ -2139,6 +2338,9 @@ Combining / joining / merging
            Joined dataframes cannot have common columns. The output dataframe is not sorted by default for better parallel performance
 
 
+``pd.Dataframe.merge``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.merge` ``(right, how='inner', on=None, left_on=None, right_on=None, left_index=False, right_index=False, sort=False, suffixes=('_x', '_y'), copy=True, indicator=False, validate=None)``
 
         See :ref:`pd.merge <pd_merge_fn>` for full list of support arguments, and more examples.
@@ -2160,6 +2362,9 @@ Combining / joining / merging
 
 Time series-related
 ********************
+
+``pd.Dataframe.shift``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.shift` ``(periods=1, freq=None, axis=0, fill_value=NoDefault.no_default)``
 
@@ -2200,6 +2405,9 @@ Serialization / IO / conversion
 
 Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`file_io`.
 
+``pd.Dataframe.to_csv``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     * :meth:`pandas.DataFrame.to_csv`
 
       * ``compression`` argument defaults to ``None`` in JIT code. This is the only supported value of this argument.
@@ -2217,6 +2425,9 @@ Also see :ref:`S3` and :ref:`HDFS` configuration requirements and more on :ref:`
 
 Plotting
 ********
+
+``pd.Dataframe.plot``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.plot` ``(x=None, y=None, kind="line", figsize=None, xlabel=None, ylabel=None, title=None, legend=True, fontsize=None, xticks=None, yticks=None, ax=None)``
 

@@ -3,6 +3,10 @@ Timedelta
 ~~~~~~~~~
 Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Timedelta.html>`_.
 
+
+``pd.Timedelta``
+****************
+
 * :class:`pandas.Timedelta` ``(value=<object object>, unit="ns", days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0)``
 
     `Supported arguments`:
@@ -48,6 +52,8 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         >>> f()
         (Timedelta('0 days 00:00:10'), Timedelta('70 days 00:00:00'), Timedelta('10 days 02:00:00.000023'))
 
+``pd.Timedelta.components``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * :attr:`pandas.Timedelta.components`
 
@@ -61,6 +67,9 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         >>> f()
         Components(days=10, hours=2, minutes=7, seconds=3, milliseconds=13, microseconds=23, nanoseconds=0)
 
+``pd.Timedelta.days``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 * :attr:`pandas.Timedelta.days`
 
     `Example Usage`:
@@ -72,6 +81,9 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         ...   return pd.Timedelta(days=10, hours=2, minutes=7, seconds=3, milliseconds=13, microseconds=23).days
         >>> f()
         10
+
+``pd.Timedelta.delta``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * :attr:`pandas.Timedelta.delta`
 
@@ -85,6 +97,9 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         >>> f()
         23000
 
+``pd.Timedelta.microseconds``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 * :attr:`pandas.Timedelta.microseconds`
 
     `Example Usage`:
@@ -96,6 +111,9 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         ...   return pd.Timedelta(days=10, hours=2, minutes=7, seconds=3, milliseconds=13, microseconds=23).microseconds
         >>> f()
         23
+
+``pd.Timedelta.nanoseconds``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * :attr:`pandas.Timedelta.nanoseconds`
 
@@ -109,6 +127,9 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         >>> f()
         0
 
+``pd.Timedelta.seconds``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 * :attr:`pandas.Timedelta.seconds`
 
     `Example Usage`:
@@ -121,6 +142,9 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         >>> f()
         10
 
+``pd.Timedelta.value``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 * :attr:`pandas.Timedelta.value`
 
     `Example Usage`:
@@ -132,6 +156,10 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         ...   return pd.Timedelta("13 nanoseconds").value
         >>> f()
         13
+
+
+``pd.Timedelta.ceil``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * :meth:`pandas.Timedelta.ceil` ``(freq)``
 
@@ -157,6 +185,10 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         >>> f()
         11 days 00:00:00
 
+
+``pd.Timedelta.floor``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 * :meth:`pandas.Timedelta.floor`
 
     `Supported arguments`:
@@ -179,6 +211,9 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         ...   return pd.Timedelta(days=10, hours=2, minutes=7, seconds=3, milliseconds=13, microseconds=23).floor("D")
         >>> f()
         10 days 00:00:00
+
+``pd.Timedelta.round``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * :meth:`pandas.Timedelta.round`
 
@@ -203,6 +238,9 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         >>> f()
         (Timedelta('10 days 00:00:00'), Timedelta('11 days 00:00:00'))
 
+``pd.Timedelta.to_numpy``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 * :meth:`pandas.Timedelta.to_numpy` ``()``
 
     `Example Usage`:
@@ -214,6 +252,9 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         ...   return pd.Timedelta(days=10, hours=2, minutes=7, seconds=3, milliseconds=13, microseconds=23).to_numpy()
         >>> f()
         871623013023000 nanoseconds
+
+``pd.Timedelta.to_pytimedelta``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * :meth:`pandas.Timedelta.to_pytimedelta` ``()``
 
@@ -227,6 +268,9 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         >>> f()
         10 days, 2:07:03.013023
 
+``pd.Timedelta.to_timedelta64``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 * :meth:`pandas.Timedelta.to_timedelta64` ``()``
 
     `Example Usage`:
@@ -238,6 +282,10 @@ Timedelta functionality is documented in `pandas.Timedelta <https://pandas.pydat
         ...   return pd.Timedelta(days=10, hours=2, minutes=7, seconds=3, milliseconds=13, microseconds=23).to_timedelta64()
         >>> f()
         871623013023000 nanoseconds
+
+``pd.Timedelta.total_seconds``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 
 * :meth:`pandas.Timedelta.total_seconds` ``()``
 

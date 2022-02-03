@@ -8,6 +8,8 @@ However, operations between Series (+, -, /, *, **) do not
 implicitly align values based on their
 associated index values yet.
 
+``pd.Series``
+**************
 
 * :class:`pandas.Series` ``(data=None, index=None, dtype=None, name=None, copy=False, fastpath=False)``
 
@@ -66,8 +68,11 @@ associated index values yet.
       Name: my_series, Length: 1000, dtype: float64
 
 
-Attributes:
-***********
+Attributes
+^^^^^^^^^^^^
+
+``pd.Series.index``
+""""""""""""""""""""""
 
 * :attr:`pandas.Series.index`
 
@@ -81,6 +86,10 @@ Attributes:
       >>> S = pd.Series(np.arange(1000))
       >>> f(S)
       RangeIndex(start=0, stop=1000, step=1)
+
+
+``pd.Series.values``
+""""""""""""""""""""""
 
 * :attr:`pandas.Series.values`
 
@@ -172,6 +181,9 @@ Attributes:
              988, 989, 990, 991, 992, 993, 994, 995, 996, 997, 998, 999])
 
 
+``pd.Series.dtype``
+""""""""""""""""""""""
+
 * :attr:`pandas.Series.dtype` (object data types such as dtype of
   string series not supported yet)
 
@@ -186,6 +198,9 @@ Attributes:
       >>> f(S)
       dtype('int64')
 
+``pd.Series.shape``
+""""""""""""""""""""""
+
 * :attr:`pandas.Series.shape`
 
   `Example Usage`:
@@ -199,6 +214,8 @@ Attributes:
       >>> f(S)
       (1000,)
 
+``pd.Series.nbytes``
+""""""""""""""""""""""
 * :attr:`pandas.Series.nbytes`
 
   .. note::
@@ -216,6 +233,10 @@ Attributes:
       >>> f(S)
       8000
 
+
+``pd.Series.ndim``
+""""""""""""""""""""""
+
 * :attr:`pandas.Series.ndim`
 
   `Example Usage`:
@@ -229,6 +250,9 @@ Attributes:
       >>> f(S)
       1
 
+``pd.Series.size``
+""""""""""""""""""""""
+
 * :attr:`pandas.Series.size`
 
   `Example Usage`:
@@ -241,6 +265,10 @@ Attributes:
       >>> S = pd.Series(np.arange(1000))
       >>> f(S)
       1000
+
+
+``pd.Series.T``
+""""""""""""""""""""""
 
 * :attr:`pandas.Series.T`
 
@@ -266,6 +294,8 @@ Attributes:
       999    999
       Length: 1000, dtype: int64
 
+``pd.Series.memory_usage``
+""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.memory_usage` ``(index=True, deep=False)``
 
@@ -298,6 +328,9 @@ Attributes:
       >>> f(S)
       8024
 
+``pd.Series.hasnans``
+""""""""""""""""""""""
+
 * :attr:`pandas.Series.hasnans`
 
   `Example Usage`:
@@ -310,6 +343,9 @@ Attributes:
       >>> S = pd.Series(np.arange(1000))
       >>> f(S)
       False
+
+``pd.Series.empty``
+""""""""""""""""""""""
 
 * :attr:`pandas.Series.empty`
 
@@ -324,6 +360,9 @@ Attributes:
       >>> f(S)
       False
 
+``pd.Series.dtypes``
+""""""""""""""""""""""
+
 * :attr:`pandas.Series.dtypes`
 
   `Example Usage`:
@@ -336,6 +375,10 @@ Attributes:
       >>> S = pd.Series(np.arange(1000))
       >>> f(S)
       dtype('int64')
+
+
+``pd.Series.name``
+""""""""""""""""""""""
 
 * :attr:`pandas.Series.name`
 
@@ -351,7 +394,10 @@ Attributes:
       'my_series'
 
 Conversion:
-***********
+^^^^^^^^^^^^
+
+``pd.Series.astype``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.astype` ``(dtype, copy=True, errors="raise", _bodo_nan_to_str=True)``
 
@@ -402,6 +448,9 @@ Conversion:
       999    999.0
       Length: 1000, dtype: float32
 
+``pd.Series.copy``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.copy` ``(deep=True)``
 
   `Supported Arguments`:
@@ -436,6 +485,9 @@ Conversion:
       998    998
       999    999
       Length: 1000, dtype: int64
+
+``pd.Series.to_numpy``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.to_numpy` ``(dtype=None, copy=False, na_value=None)``
 
@@ -528,6 +580,9 @@ Conversion:
              975, 976, 977, 978, 979, 980, 981, 982, 983, 984, 985, 986, 987,
              988, 989, 990, 991, 992, 993, 994, 995, 996, 997, 998, 999])
 
+``pd.Series.to_list``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.to_list` ``()``
 
   .. note::
@@ -595,6 +650,8 @@ Conversion:
        49]
 
 
+``pd.Series.tolist``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.tolist` ``()``
 
@@ -664,11 +721,14 @@ Conversion:
 
 
 Indexing, iteration:
-********************
+^^^^^^^^^^^^^^^^^^^^^
 
 Location based indexing using `[]`, `iat`, and `iloc` is supported.
 Changing values of existing string Series using these operators
 is not supported yet.
+
+``pd.Series.iat``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.iat`
 
@@ -684,6 +744,9 @@ We only support indexing using ``iat`` using a pair of integers
       >>> S = pd.Series(np.arange(1000))
       >>> f(S, 27)
       27
+
+``pd.Series.iloc``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.iloc`
 
@@ -714,6 +777,9 @@ We only support indexing using ``iat`` using a pair of integers
       29    29
       dtype: int64
 
+
+``pd.Series.loc``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.loc`
 
@@ -749,7 +815,10 @@ We only support indexing using ``iat`` using a pair of integers
       dtype: int64
 
 Binary operator functions:
-**************************
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``pd.Series.add``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.add` ``(other, level=None, fill_value=None, axis=0)``
 
@@ -795,6 +864,9 @@ Binary operator functions:
       Length: 1000, dtype: int64
 
 
+``pd.Series.sub``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.sub` ``(other, level=None, fill_value=None, axis=0)``
 
   `Supported arguments`:
@@ -837,6 +909,9 @@ Binary operator functions:
       998    997
       999    999
       Length: 1000, dtype: int64
+
+``pd.Series.mul``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.mul` ``(other, level=None, fill_value=None, axis=0)``
 
@@ -881,6 +956,9 @@ Binary operator functions:
       999    1000
       Length: 1000, dtype: int64
 
+``pd.Series.div``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.div` ``(other, level=None, fill_value=None, axis=0)``
 
   `Supported arguments`:
@@ -923,6 +1001,9 @@ Binary operator functions:
       998     499.500000
       999    1000.000000
       Length: 1000, dtype: float64
+
+``pd.Series.truediv``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.truediv` ``(other, level=None, fill_value=None, axis=0)``
 
@@ -967,6 +1048,9 @@ Binary operator functions:
       999    1000.000000
       Length: 1000, dtype: float64
 
+``pd.Series.floordiv``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.floordiv` ``(other, level=None, fill_value=None, axis=0)``
 
   `Supported arguments`:
@@ -1009,6 +1093,9 @@ Binary operator functions:
       998     499
       999    1000
       Length: 1000, dtype: int64
+
+``pd.Series.mod``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.mod` ``(other, level=None, fill_value=None, axis=0)``
 
@@ -1053,6 +1140,9 @@ Binary operator functions:
       999    0
       Length: 1000, dtype: int64
 
+``pd.Series.pow``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.pow` ``(other, level=None, fill_value=None, axis=0)``
 
   `Supported arguments`:
@@ -1095,6 +1185,9 @@ Binary operator functions:
       998                 998001
       999                   1000
       Length: 1000, dtype: int64
+
+``pd.Series.radd``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.radd` ``(other, level=None, fill_value=None, axis=0)``
 
@@ -1139,6 +1232,9 @@ Binary operator functions:
       999    1001
       Length: 1000, dtype: int64
 
+``pd.Series.rsub``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.rsub` ``(other, level=None, fill_value=None, axis=0)``
 
   `Supported arguments`:
@@ -1181,6 +1277,9 @@ Binary operator functions:
       998   -997
       999   -999
       Length: 1000, dtype: int64
+
+``pd.Series.rmul``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.rmul` ``(other, level=None, fill_value=None, axis=0)``
 
@@ -1225,6 +1324,9 @@ Binary operator functions:
       999    1000
       Length: 1000, dtype: int64
 
+``pd.Series.rdiv``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.rdiv` ``(other, level=None, fill_value=None, axis=0)``
 
   `Supported arguments`:
@@ -1267,6 +1369,9 @@ Binary operator functions:
       998       0.002002
       999       0.001000
       Length: 1000, dtype: float64
+
+``pd.Series.rtruediv``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.rtruediv` ``(other, level=None, fill_value=None, axis=0)``
 
@@ -1311,6 +1416,10 @@ Binary operator functions:
       999       0.001000
       Length: 1000, dtype: float64
 
+
+``pd.Series.rfloordiv``
+"""""""""""""""""""""""""
+
 * :meth:`pandas.Series.rfloordiv` ``(other, level=None, fill_value=None, axis=0)``
 
   `Supported arguments`:
@@ -1353,6 +1462,9 @@ Binary operator functions:
       998       0
       999       0
       Length: 1000, dtype: int64
+
+``pd.Series.rmod``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.rmod` ``(other, level=None, fill_value=None, axis=0)``
 
@@ -1397,6 +1509,9 @@ Binary operator functions:
       999    1
       Length: 1000, dtype: int64
 
+``pd.Series.rpow``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.rpow` ``(other, level=None, fill_value=None, axis=0)``
 
   `Supported arguments`:
@@ -1439,6 +1554,10 @@ Binary operator functions:
       998                      0
       999                      1
       Length: 1000, dtype: int64
+
+
+``pd.Series.combine``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.combine` ``(other, func, fill_value=None)``
 
@@ -1484,6 +1603,9 @@ Binary operator functions:
       998    2000
       999    2001
       Length: 1000, dtype: int64
+
+``pd.Series.round``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.round` ``(decimals=0)``
 
@@ -1562,6 +1684,9 @@ Binary operator functions:
       49    1000.00
       dtype: float64
 
+``pd.Series.lt``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.lt` ``(other, level=None, fill_value=None, axis=0)``
 
   `Supported arguments`:
@@ -1604,6 +1729,9 @@ Binary operator functions:
       998    False
       999    False
       Length: 1000, dtype: bool
+
+``pd.Series.gt``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.gt` ``(other, level=None, fill_value=None, axis=0)``
 
@@ -1648,6 +1776,10 @@ Binary operator functions:
       999     True
       Length: 1000, dtype: bool
 
+
+``pd.Series.le``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.le` ``(other, level=None, fill_value=None, axis=0)``
 
   `Supported arguments`:
@@ -1690,6 +1822,9 @@ Binary operator functions:
       998    False
       999    False
       Length: 1000, dtype: bool
+
+``pd.Series.ge``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.ge` ``(other, level=None, fill_value=None, axis=0)``
 
@@ -1734,6 +1869,10 @@ Binary operator functions:
       999     True
       Length: 1000, dtype: bool
 
+
+``pd.Series.ne``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.ne` ``(other, level=None, fill_value=None, axis=0)``
 
   `Supported arguments`:
@@ -1776,6 +1915,10 @@ Binary operator functions:
       998    True
       999    True
       Length: 1000, dtype: bool
+
+
+``pd.Series.eq``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.eq` ``(other, level=None, fill_value=None, axis=0)``
 
@@ -1820,6 +1963,9 @@ Binary operator functions:
       999    False
       Length: 1000, dtype: bool
 
+``pd.Series.dot``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.dot` ``(other)``
 
   `Supported arguments`:
@@ -1848,8 +1994,12 @@ Binary operator functions:
       >>> f(S, other)
       167167000
 
-Function application, GroupBy & Window:
-***************************************
+Function application, GroupBy & Window
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+``pd.Series.apply``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.apply` ``(func, convert_dtype=True, args=(), **kwargs)``
 
@@ -1891,6 +2041,8 @@ Function application, GroupBy & Window:
       99    31.385308
       Length: 100, dtype: float64
 
+``pd.Series.map``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.map` ``(arg, na_action=None)``
 
@@ -1929,6 +2081,9 @@ Function application, GroupBy & Window:
       98    31.147239
       99    31.385308
       Length: 100, dtype: float64
+
+``pd.Series.groupby``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.groupby` ``(by=None, axis=0, level=None, as_index=True, sort=True, group_keys=True, squeeze=NoDefault.no_default, observed=False, dropna=True)``
 
@@ -1974,6 +2129,9 @@ Function application, GroupBy & Window:
     ``Series.groupby`` doesn't currently keep the name of the original Series.
 
 
+``pd.Series.rolling``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.rolling` ``(window, min_periods=None, center=False, win_type=None, on=None, axis=0, closed=None, method='single')``
 
   (`window`, `min_periods` and `center` arguments supported)
@@ -2016,6 +2174,10 @@ Function application, GroupBy & Window:
       98    97.5
       99    98.5
       Length: 100, dtype: float64
+
+
+``pd.Series.pipe``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.pipe` ``(func, *args, **kwargs)``
 
@@ -2066,11 +2228,15 @@ Function application, GroupBy & Window:
       Length: 100, dtype: int64
 
 
-Computations / Descriptive Stats:
-*********************************
+Computations / Descriptive Stats
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Statistical functions below are supported without optional arguments
 unless support is explicitly mentioned.
+
+
+``pd.Series.abs``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.abs` ``()``
 
@@ -2096,6 +2262,10 @@ unless support is explicitly mentioned.
       99    1
       Length: 100, dtype: int64
 
+
+``pd.Series.all``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.all` ``(axis=0, bool_only=None, skipna=True, level=None)``
 
   `Supported Arguments`: None
@@ -2114,6 +2284,9 @@ unless support is explicitly mentioned.
       >>> f(S)
       False
 
+``pd.Series.any``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.any` ``(axis=0, bool_only=None, skipna=True, level=None)``
 
   `Supported Arguments`: None
@@ -2131,6 +2304,9 @@ unless support is explicitly mentioned.
       >>> S = pd.Series(np.arange(100)) % 7
       >>> f(S)
       True
+
+``pd.Series.autocorr``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.autocorr` ``(lag=1)``
 
@@ -2155,6 +2331,9 @@ unless support is explicitly mentioned.
       >>> S = pd.Series(np.arange(100)) % 7
       >>> f(S)
       -0.49872171657407155
+
+``pd.Series.between``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.between` ``(left, right, inclusive='both')``
 
@@ -2199,6 +2378,9 @@ unless support is explicitly mentioned.
       99    False
       Length: 100, dtype: bool
 
+``pd.Series.corr``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.corr` ``(other, method='pearson', min_periods=None)``
 
   `Supported arguments`:
@@ -2227,6 +2409,9 @@ unless support is explicitly mentioned.
       >>> f(S, other)
       0.004326329627279103
 
+``pd.Series.count``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.count` ``(level=None)``
 
   `Supported Arguments`: None
@@ -2241,6 +2426,9 @@ unless support is explicitly mentioned.
       >>> S = pd.Series(np.arange(100)) % 7
       >>> f(S)
       100
+
+``pd.Series.cov``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.cov` ``(other, min_periods=None, ddof=1)``
 
@@ -2272,6 +2460,8 @@ unless support is explicitly mentioned.
       >>> f(S, other)
       0.025252525252525252
 
+``pd.Series.cummin``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.cummin` ``(axis=None, skipna=True)``
 
@@ -2305,6 +2495,9 @@ unless support is explicitly mentioned.
       99    0
       Length: 100, dtype: int64
 
+``pd.Series.cummax``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.cummax` ``(axis=None, skipna=True)``
 
   `Supported Arguments`: None
@@ -2337,6 +2530,9 @@ unless support is explicitly mentioned.
       99    6
       Length: 100, dtype: int64
 
+``pd.Series.cumprod``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.cumprod` ``(axis=None, skipna=True)``
 
   `Supported Arguments`: None
@@ -2367,6 +2563,10 @@ unless support is explicitly mentioned.
       8    10080
       9    30240
       dtype: int64
+
+
+``pd.Series.cumsum``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.cumsum` ``(axis=None, skipna=True)``
 
@@ -2400,6 +2600,9 @@ unless support is explicitly mentioned.
       99    295
       Length: 100, dtype: int64
 
+``pd.Series.describe``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.describe` ``(percentiles=None, include=None, exclude=None, datetime_is_numeric=False)``
 
   `Supported Arguments`: None
@@ -2425,6 +2628,9 @@ unless support is explicitly mentioned.
       75%        5.000000
       max        6.000000
       dtype: float64
+
+``pd.Series.diff``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.diff` ``(periods=1)``
 
@@ -2464,6 +2670,9 @@ unless support is explicitly mentioned.
       99   -4.0
       Length: 100, dtype: float64
 
+``pd.Series.kurt``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.kurt` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
   `Supported arguments`:
@@ -2494,6 +2703,10 @@ unless support is explicitly mentioned.
       >>> f(S)
       -1.269562153611973
 
+
+``pd.Series.mad``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.mad` ``(axis=None, skipna=None, level=None)``
 
   `Supported arguments`:
@@ -2521,6 +2734,9 @@ unless support is explicitly mentioned.
       >>> f(S)
       1.736
 
+``pd.Series.max``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.max` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
   `Supported arguments`: None
@@ -2542,6 +2758,9 @@ unless support is explicitly mentioned.
       >>> f(S)
       6
 
+``pd.Series.mean``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.mean` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
   `Supported arguments`: None
@@ -2562,6 +2781,9 @@ unless support is explicitly mentioned.
       >>> S = pd.Series(np.arange(100)) % 7
       >>> f(S)
       2.95
+
+``pd.Series.median``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.median` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
@@ -2593,6 +2815,9 @@ unless support is explicitly mentioned.
       >>> f(S)
       3.0
 
+``pd.Series.min``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.min` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
   `Supported arguments`: None
@@ -2613,6 +2838,9 @@ unless support is explicitly mentioned.
       >>> S = pd.Series(np.arange(100)) % 7
       >>> f(S)
       0
+
+``pd.Series.nlargest``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.nlargest` ``(n=5, keep='first')``
 
@@ -2659,6 +2887,9 @@ unless support is explicitly mentioned.
       12    5
       68    5
       dtype: int64
+
+``pd.Series.nsmallest``
+""""""""""""""""""""""""
 
 * :meth:`pandas.Series.nsmallest` ``(n=5, keep='first')``
 
@@ -2707,6 +2938,9 @@ unless support is explicitly mentioned.
       36    1
       dtype: int64
 
+``pd.Series.pct_change``
+""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.pct_change` ``(periods=1, fill_method='pad', limit=None, freq=None)``
 
   `Supported arguments`:
@@ -2748,6 +2982,9 @@ unless support is explicitly mentioned.
       99   -0.666667
       Length: 100, dtype: float64
 
+``pd.Series.prod``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.prod` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
   `Supported arguments`:
@@ -2777,6 +3014,10 @@ unless support is explicitly mentioned.
       >>> S = (pd.Series(np.arange(20)) % 3) + 1
       >>> f(S)
       93312
+
+
+``pd.Series.product``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.product` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
@@ -2808,6 +3049,9 @@ unless support is explicitly mentioned.
       >>> f(S)
       93312
 
+``pd.Series.quantile``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.quantile` ``(q=0.5, interpolation='linear')``
 
   `Supported arguments`:
@@ -2835,6 +3079,9 @@ unless support is explicitly mentioned.
       0.50    3.0
       0.75    5.0
       dtype: float64
+
+``pd.Series.sem``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.sem` ``(axis=None, skipna=None, level=None, ddof=1, numeric_only=None)``
 
@@ -2868,6 +3115,9 @@ unless support is explicitly mentioned.
       >>> f(S)
       0.20219752318917852
 
+``pd.Series.skew``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.skew` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
   `Supported arguments`:
@@ -2897,6 +3147,9 @@ unless support is explicitly mentioned.
       >>> S = pd.Series(np.arange(100)) % 7
       >>> f(S)
       0.032074996591991714
+
+``pd.Series.std``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.std` ``(axis=None, skipna=None, level=None, ddof=1, numeric_only=None)``
 
@@ -2930,6 +3183,9 @@ unless support is explicitly mentioned.
       >>> f(S)
       2.021975231891785
 
+``pd.Series.sum``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.sum` ``(axis=None, skipna=None, level=None, numeric_only=None, min_count=0)``
 
   `Supported arguments`:
@@ -2961,6 +3217,9 @@ unless support is explicitly mentioned.
       >>> S = pd.Series(np.arange(100)) % 7
       >>> f(S)
       295
+
+``pd.Series.var``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.var` ``(axis=None, skipna=None, level=None, ddof=1, numeric_only=None)``
 
@@ -2994,6 +3253,9 @@ unless support is explicitly mentioned.
       >>> f(S)
       4.088383838383838
 
+``pd.Series.kurtosis``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.kurtosis` ``(axis=None, skipna=None, level=None, numeric_only=None)``
 
   `Supported arguments`:
@@ -3024,6 +3286,10 @@ unless support is explicitly mentioned.
       >>> f(S)
       -1.269562153611973
 
+
+``pd.Series.unique``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.unique` ``()``
 
   .. note::
@@ -3041,6 +3307,8 @@ unless support is explicitly mentioned.
       >>> f(S)
       [0 1 2 3 4 5 6]
 
+``pd.Series.nunique``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.nunique` ``(dropna=True)``
 
@@ -3066,6 +3334,9 @@ unless support is explicitly mentioned.
       >>> f(S)
       7
 
+``pd.Series.is_monotonic``
+"""""""""""""""""""""""""""
+
 * :attr:`pandas.Series.is_monotonic`
 
   `Example Usage`:
@@ -3078,6 +3349,9 @@ unless support is explicitly mentioned.
       >>> S = pd.Series(np.arange(100))
       >>> f(S)
       True
+
+``pd.Series.is_monotonic_increasing``
+"""""""""""""""""""""""""""""""""""""""
 
 * :attr:`pandas.Series.is_monotonic_increasing`
 
@@ -3092,6 +3366,9 @@ unless support is explicitly mentioned.
       >>> f(S)
       True
 
+``pd.Series.is_monotonic_decreasing``
+""""""""""""""""""""""""""""""""""""""
+
 * :attr:`pandas.Series.is_monotonic_decreasing`
 
   `Example Usage`:
@@ -3104,6 +3381,9 @@ unless support is explicitly mentioned.
       >>> S = pd.Series(np.arange(100))
       >>> f(S)
       False
+
+``pd.Series.value_counts``
+"""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.value_counts` ``(normalize=False, sort=True, ascending=False, bins=None, dropna=True)``
 
@@ -3150,9 +3430,11 @@ unless support is explicitly mentioned.
 
 
 
-Reindexing / Selection / Label manipulation:
-********************************************
+Reindexing / Selection / Label manipulation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+``pd.Series.drop_duplicates``
+"""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.drop_duplicates` ``(keep='first', inplace=False)``
 
@@ -3178,6 +3460,10 @@ Reindexing / Selection / Label manipulation:
       8    8
       9    9
       dtype: int64
+
+
+``pd.Series.equals``
+"""""""""""""""""""""""""""""""
 
 
 * :meth:`pandas.Series.equals` ``(other)``
@@ -3208,6 +3494,10 @@ Reindexing / Selection / Label manipulation:
       >>> other = pd.Series(np.arange(100)) % 5
       >>> f(S, other)
       False
+
+``pd.Series.head``
+"""""""""""""""""""""""""""""""
+
 
 * :meth:`pandas.Series.head` ``(n=5)``
 
@@ -3243,6 +3533,11 @@ Reindexing / Selection / Label manipulation:
       9    9
       dtype: int64
 
+
+``pd.Series.idxmax``
+"""""""""""""""""""""""""""""""
+
+
 * :meth:`pandas.Series.idxmax` ``(axis=0, skipna=True)``
 
   `Supported arguments`: None
@@ -3262,6 +3557,10 @@ Reindexing / Selection / Label manipulation:
       >>> f(S)
       0
 
+``pd.Series.idxmin``
+"""""""""""""""""""""""""""""""
+
+
 * :meth:`pandas.Series.idxmin` ``(axis=0, skipna=True)``
 
   `Supported arguments`: None
@@ -3280,6 +3579,10 @@ Reindexing / Selection / Label manipulation:
       >>> S[(S % 3 == 0)] = 100
       >>> f(S)
       1
+
+``pd.Series.isin``
+"""""""""""""""""""""""""""""""
+
 
 * :meth:`pandas.Series.isin` ``(values)``
 
@@ -3321,6 +3624,9 @@ Reindexing / Selection / Label manipulation:
       99    False
       Length: 100, dtype: bool
 
+``pd.Series.rename``
+"""""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.rename` ``(index=None, *, axis=None, copy=True, inplace=False, level=None, errors='ignore')``
 
     `Supported arguments`:
@@ -3357,6 +3663,9 @@ Reindexing / Selection / Label manipulation:
       98    98
       99    99
       Name: a, Length: 100, dtype: int64
+
+``pd.Series.reset_index``
+"""""""""""""""""""""""""""""""
 
 
 * :meth:`pandas.Series.reset_index` ``(level=None, drop=False, name=None, inplace=False)``
@@ -3406,6 +3715,9 @@ Reindexing / Selection / Label manipulation:
 
       [100 rows x 2 columns]
 
+``pd.Series.take``
+"""""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.take` ``(indices, axis=0, is_copy=None)``
 
   `Supported arguments`:
@@ -3440,6 +3752,10 @@ Reindexing / Selection / Label manipulation:
       19    19
       dtype: int64
 
+``pd.Series.tail``
+"""""""""""""""""""""""""""""""
+
+
 * :meth:`pandas.Series.tail` ``(n=5)``
 
   `Supported arguments`:
@@ -3473,6 +3789,10 @@ Reindexing / Selection / Label manipulation:
       98    98
       99    99
       dtype: int64
+
+``pd.Series.where``
+"""""""""""""""""""""""""""""""
+
 
 * :meth:`pandas.Series.where` ``(cond, other=nan, inplace=False, axis=None, level=None, errors='raise', try_cast=NoDefault.no_default)``
 
@@ -3516,6 +3836,9 @@ Reindexing / Selection / Label manipulation:
       99     0
       Length: 100, dtype: int64
 
+``pd.Series.mask``
+"""""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.mask` ``(cond, other=nan, inplace=False, axis=None, level=None, errors='raise', try_cast=NoDefault.no_default)``
 
   `Supported arguments`:
@@ -3558,8 +3881,12 @@ Reindexing / Selection / Label manipulation:
       99    99
       Length: 100, dtype: int64
 
-Missing data handling:
-**********************
+Missing data handling
+^^^^^^^^^^^^^^^^^^^^^^
+
+
+``pd.Series.backfill``
+"""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.backfill` ``(axis=None, inplace=False, limit=None, downcast=None)``
 
@@ -3583,6 +3910,9 @@ Missing data handling:
       6    <NA>
       dtype: Int64
 
+``pd.Series.bfill``
+"""""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.bfill` ``(axis=None, inplace=False, limit=None, downcast=None)``
 
   `Supported arguments`: None
@@ -3605,6 +3935,9 @@ Missing data handling:
       6    <NA>
       dtype: Int64
 
+``pd.Series.dropna``
+"""""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.dropna` ``(axis=0, inplace=False, how=None)``
 
   `Supported arguments`: None
@@ -3622,6 +3955,10 @@ Missing data handling:
       3    -2
       5     5
       dtype: Int64
+
+
+``pd.Series.ffill``
+"""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.ffill` ``(axis=None, inplace=False, limit=None, downcast=None)``
 
@@ -3644,6 +3981,11 @@ Missing data handling:
       5       5
       6       5
       dtype: Int64
+
+
+``pd.Series.fillna``
+"""""""""""""""""""""""""""""""
+
 
 * :meth:`pandas.Series.fillna` ``(value=None, method=None, axis=None, inplace=False, limit=None, downcast=None)``
 
@@ -3689,6 +4031,8 @@ Missing data handling:
       6    -1
       dtype: Int64
 
+``pd.Series.isna``
+""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.isna` ``()``
 
@@ -3710,6 +4054,10 @@ Missing data handling:
       6     True
       dtype: bool
 
+
+``pd.Series.isnull``
+"""""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.isnull` ``()``
 
   `Example Usage`:
@@ -3730,6 +4078,8 @@ Missing data handling:
       6     True
       dtype: bool
 
+``pd.Series.notna``
+"""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.notna` ``()``
 
@@ -3751,6 +4101,10 @@ Missing data handling:
       6    False
       dtype: bool
 
+
+``pd.Series.notnull``
+"""""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.notnull` ``()``
 
   `Example Usage`:
@@ -3770,6 +4124,10 @@ Missing data handling:
       5     True
       6    False
       dtype: bool
+
+
+``pd.Series.pad``
+"""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.pad` ``(axis=None, inplace=False, limit=None, downcast=None)``
 
@@ -3792,6 +4150,10 @@ Missing data handling:
       5       5
       6       5
       dtype: Int64
+
+
+``pd.Series.replace``
+"""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.replace` ``(to_replace=None, value=None, inplace=False, limit=None, regex=False, method='pad')``
 
@@ -3831,8 +4193,11 @@ Missing data handling:
       6    <NA>
       dtype: Int64
 
-Reshaping, sorting:
-*******************
+Reshaping, sorting
+^^^^^^^^^^^^^^^^^^^
+
+``pd.Series.argsort``
+"""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.argsort` ``(axis=0, kind='quicksort', order=None)``
 
@@ -3859,6 +4224,10 @@ Reshaping, sorting:
       98     1
       99     0
       Length: 100, dtype: int64
+
+
+``pd.Series.sort_values``
+"""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.sort_values` ``(axis=0, ascending=True, inplace=False, kind='quicksort', na_position='last', ignore_index=False, key=None)``
 
@@ -3901,6 +4270,9 @@ Reshaping, sorting:
       Length: 100, dtype: int64
 
 
+``pd.Series.sort_index``
+"""""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.sort_index` ``(axis=0, level=None, ascending=True, inplace=False, kind='quicksort', na_position='last', sort_remaining=True, ignore_index=False, key=None)``
 
   `Supported arguments`:
@@ -3940,6 +4312,9 @@ Reshaping, sorting:
       98     1
       99     0
       Length: 100, dtype: int64
+
+``pd.Series.explode``
+"""""""""""""""""""""""""
 
 * :meth:`pandas.Series.explode` ``(ignore_index=False)``
 
@@ -4006,6 +4381,9 @@ Reshaping, sorting:
       9       8
       dtype: Int64
 
+``pd.Series.repeat``
+"""""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.repeat` ``(repeats, axis=None)``
 
   `Supported arguments`:
@@ -4043,8 +4421,11 @@ Reshaping, sorting:
       99    99
       Length: 300, dtype: int64
 
-Combining / comparing / joining / merging:
-******************************************
+Combining / comparing / joining / merging
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``pd.Series.append``
+"""""""""""""""""""""
 
 * :meth:`pandas.Series.append` ``(to_append, ignore_index=False, verify_integrity=False)``
 
@@ -4066,8 +4447,7 @@ Combining / comparing / joining / merging:
       - - Boolean
       - **Must be constant at Compile Time**
 
-  .. note ::
-    Setting a name for the output Series is not supported yet
+  .. note:: Setting a name for the output Series is not supported yet
 
   .. important::
     Bodo currently concatenates local data chunks for distributed datasets, which does not preserve global order of concatenated objects in output.
@@ -4094,7 +4474,11 @@ Combining / comparing / joining / merging:
       99    99
       Length: 200, dtype: int64
 
-Time series-related:
+Time series-related
+^^^^^^^^^^^^^^^^^^^^
+
+``pd.Series.shift``
+"""""""""""""""""""""
 
 * :meth:`pandas.Series.shift` ``(periods=1, freq=None, axis=0, fill_value=None)``
 
@@ -4145,9 +4529,11 @@ Time series-related:
 
 
 
-Datetime properties:
-********************
+Datetime properties
+^^^^^^^^^^^^^^^^^^^
 
+``pd.Series.dt.date``
+"""""""""""""""""""""
 * :attr:`pandas.Series.dt.date`
 
   `Example Usage`:
@@ -4190,6 +4576,9 @@ Datetime properties:
       28    2022-01-09
       29    2022-01-10
       dtype: object
+
+``pd.Series.dt.year``
+"""""""""""""""""""""
 
 * :attr:`pandas.Series.dt.year`
 
@@ -4234,6 +4623,8 @@ Datetime properties:
       29    2025
       dtype: Int64
 
+``pd.Series.dt.month``
+"""""""""""""""""""""""
 
 * :attr:`pandas.Series.dt.month`
 
@@ -4278,6 +4669,9 @@ Datetime properties:
       29     1
       dtype: Int64
 
+``pd.Series.dt.day``
+"""""""""""""""""""""
+
 * :attr:`pandas.Series.dt.day`
 
   `Example Usage`:
@@ -4320,6 +4714,9 @@ Datetime properties:
       28     2
       29    10
       dtype: Int64
+
+``pd.Series.dt.hour``
+"""""""""""""""""""""
 
 * :attr:`pandas.Series.dt.hour`
 
@@ -4364,6 +4761,9 @@ Datetime properties:
       29     0
       dtype: Int64
 
+``pd.Series.dt.minute``
+""""""""""""""""""""""""
+
 * :attr:`pandas.Series.dt.minute`
 
   `Example Usage`:
@@ -4406,6 +4806,9 @@ Datetime properties:
       28    31
       29     0
       dtype: Int64
+
+``pd.Series.dt.second``
+""""""""""""""""""""""""
 
 * :attr:`pandas.Series.dt.second`
 
@@ -4450,6 +4853,9 @@ Datetime properties:
       29     0
       dtype: Int64
 
+``pd.Series.dt.microsecond``
+"""""""""""""""""""""""""""""
+
 * :attr:`pandas.Series.dt.microsecond`
 
   `Example Usage`:
@@ -4492,6 +4898,10 @@ Datetime properties:
       28     68965
       29         0
       dtype: Int64
+
+
+``pd.Series.dt.nanosecond``
+""""""""""""""""""""""""""""
 
 * :attr:`pandas.Series.dt.nanosecond`
 
@@ -4536,6 +4946,9 @@ Datetime properties:
       29      0
       dtype: Int64
 
+``pd.Series.dt.week``
+"""""""""""""""""""""
+
 * :attr:`pandas.Series.dt.week`
 
   `Example Usage`:
@@ -4578,6 +4991,10 @@ Datetime properties:
       28    49
       29     2
       dtype: Int64
+
+
+``pd.Series.dt.weekofyear``
+""""""""""""""""""""""""""""
 
 * :attr:`pandas.Series.dt.weekofyear`
 
@@ -4622,6 +5039,9 @@ Datetime properties:
       29     2
       dtype: Int64
 
+``pd.Series.dt.day_of_week``
+"""""""""""""""""""""""""""""
+
 * :attr:`pandas.Series.dt.day_of_week`
 
   `Example Usage`:
@@ -4664,6 +5084,10 @@ Datetime properties:
       28    0
       29    4
       dtype: Int64
+
+
+``pd.Series.dt.weekday``
+""""""""""""""""""""""""""
 
 * :attr:`pandas.Series.dt.weekday`
 
@@ -4708,6 +5132,10 @@ Datetime properties:
       29    4
       dtype: Int64
 
+
+``pd.Series.dt.dayofyear``
+"""""""""""""""""""""""""""""
+
 * :attr:`pandas.Series.dt.dayofyear`
 
   `Example Usage`:
@@ -4750,6 +5178,9 @@ Datetime properties:
       28    337
       29     10
       dtype: Int64
+
+``pd.Series.dt.day_of_year``
+"""""""""""""""""""""""""""""
 
 * :attr:`pandas.Series.dt.day_of_year`
 
@@ -4794,6 +5225,9 @@ Datetime properties:
       29     10
       dtype: Int64
 
+``pd.Series.dt.quarter``
+"""""""""""""""""""""""""
+
 * :attr:`pandas.Series.dt.quarter`
 
   `Example Usage`:
@@ -4836,6 +5270,9 @@ Datetime properties:
       28    4
       29    1
       dtype: Int64
+
+``pd.Series.dt.is_month_start``
+""""""""""""""""""""""""""""""""
 
 * :attr:`pandas.Series.dt.is_month_start`
 
@@ -4880,6 +5317,10 @@ Datetime properties:
       29    False
       dtype: bool
 
+
+``pd.Series.dt.is_month_end``
+""""""""""""""""""""""""""""""
+
 * :attr:`pandas.Series.dt.is_month_end`
 
   `Example Usage`:
@@ -4922,6 +5363,10 @@ Datetime properties:
       28    False
       29     True
       dtype: bool
+
+
+``pd.Series.dt.is_quarter_start``
+""""""""""""""""""""""""""""""""""
 
 * :attr:`pandas.Series.dt.is_quarter_start`
 
@@ -4966,6 +5411,10 @@ Datetime properties:
       29    False
       dtype: bool
 
+
+``pd.Series.dt.is_quarter_end``
+""""""""""""""""""""""""""""""""
+
 * :attr:`pandas.Series.dt.is_quarter_end`
 
   `Example Usage`:
@@ -5008,6 +5457,10 @@ Datetime properties:
       28    False
       29     True
       dtype: bool
+
+
+``pd.Series.dt.is_year_start``
+""""""""""""""""""""""""""""""""
 
 * :attr:`pandas.Series.dt.is_year_start`
 
@@ -5052,6 +5505,10 @@ Datetime properties:
       29    False
       dtype: bool
 
+
+``pd.Series.dt.is_year_end``
+""""""""""""""""""""""""""""
+
 * :attr:`pandas.Series.dt.is_year_end`
 
   `Example Usage`:
@@ -5094,6 +5551,9 @@ Datetime properties:
       28    False
       29     True
       dtype: bool
+
+``pd.Series.dt.daysinmonth``
+"""""""""""""""""""""""""""""
 
 * :attr:`pandas.Series.dt.daysinmonth`
 
@@ -5138,6 +5598,9 @@ Datetime properties:
       29    31
       dtype: Int64
 
+``pd.Series.dt.days_in_month``
+""""""""""""""""""""""""""""""""
+
 * :attr:`pandas.Series.dt.days_in_month`
 
   `Example Usage`:
@@ -5181,8 +5644,11 @@ Datetime properties:
       29    31
       dtype: Int64
 
-Datetime methods:
-*****************
+Datetime methods
+^^^^^^^^^^^^^^^^^^
+
+``pd.Series.dt.normalize``
+""""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.dt.normalize` ``()``
 
@@ -5226,6 +5692,9 @@ Datetime methods:
       28   2022-01-09
       29   2022-01-10
       dtype: datetime64[ns]
+
+``pd.Series.dt.strftime``
+""""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.dt.strftime` ``(date_format)``
 
@@ -5283,6 +5752,8 @@ Datetime methods:
       29    January 10, 2022, 12:00:00 AM
       dtype: object
 
+``pd.Series.dt.round``
+""""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.dt.round` ``(freq, ambiguous='raise', nonexistent='raise')``
 
@@ -5340,6 +5811,8 @@ Datetime methods:
       29   2022-01-10 00:00:00
       dtype: datetime64[ns]
 
+``pd.Series.dt.floor``
+""""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.dt.floor` ``(freq, ambiguous='raise', nonexistent='raise')``
 
@@ -5397,6 +5870,10 @@ Datetime methods:
       29   2022-01-10 00:00:00
       dtype: datetime64[ns]
 
+
+``pd.Series.dt.ceil``
+""""""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.dt.ceil` ``(freq, ambiguous='raise', nonexistent='raise')``
 
   `Supported arguments`:
@@ -5453,6 +5930,9 @@ Datetime methods:
       29   2022-01-10 00:00:00
       dtype: datetime64[ns]
 
+``pd.Series.dt.month_name``
+""""""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.dt.month_name` ``(locale=None)``
 
   `Supported arguments`: None
@@ -5497,6 +5977,10 @@ Datetime methods:
       28     December
       29      January
       dtype: object
+
+
+``pd.Series.dt.day_name``
+""""""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.dt.day_name` ``(locale=None)``
 
@@ -5543,8 +6027,11 @@ Datetime methods:
       29       Monday
       dtype: object
 
-String handling:
-****************
+String handling
+^^^^^^^^^^^^^^^^^
+
+``pd.Series.str.capitalize``
+"""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.capitalize` ``()``
 
@@ -5565,6 +6052,9 @@ String handling:
       5     A n
       6    ^ Ef
       dtype: object
+
+``pd.Series.str.center``
+"""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.center` ``(width, fillchar=' ')``
 
@@ -5599,6 +6089,9 @@ String handling:
       6    ^ Ef
       dtype: object
 
+
+``pd.Series.str.contains``
+"""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.contains` ``(pat, case=True, flags=0, na=None, regex=True)``
 
@@ -5640,6 +6133,9 @@ String handling:
       6    False
       dtype: boolean
 
+``pd.Series.str.count``
+"""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.count` ``(pat, flags=0)``
 
   `Supported arguments`:
@@ -5671,6 +6167,8 @@ String handling:
       6    2
       dtype: Int64
 
+``pd.Series.str.endswith``
+"""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.endswith` ``(pat, na=None)``
 
@@ -5701,6 +6199,8 @@ String handling:
       6    False
       dtype: boolean
 
+``pd.Series.str.extract``
+"""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.extract` ``(pat, flags=0, expand=True)``
 
@@ -5739,6 +6239,9 @@ String handling:
       5    a
       6  NaN
 
+``pd.Series.str.extractall``
+"""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.extractall` ``(pat, flags=0)``
 
   `Supported arguments`:
@@ -5771,6 +6274,8 @@ String handling:
       5 0      a
         1      n
 
+``pd.Series.str.find``
+""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.find` ``(sub, start=0, end=None)``
 
@@ -5805,6 +6310,10 @@ String handling:
       6     3
       dtype: Int64
 
+
+``pd.Series.str.get``
+""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.get` ``(i)``
 
   `Supported arguments`:
@@ -5834,6 +6343,10 @@ String handling:
       6
       dtype: object
 
+
+``pd.Series.str.join``
+"""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.join` ``(sep)``
 
   `Supported arguments`:
@@ -5860,6 +6373,10 @@ String handling:
       3           c
       dtype: object
 
+
+``pd.Series.str.len``
+"""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.len` ``()``
 
   .. code-block:: ipython3
@@ -5877,6 +6394,9 @@ String handling:
       5    3
       6    4
       dtype: Int64
+
+``pd.Series.str.ljust``
+"""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.ljust` ``(width, fillchar=' ')``
 
@@ -5909,6 +6429,10 @@ String handling:
       6    ^ Ef,
       dtype: object
 
+
+``pd.Series.str.lower``
+"""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.lower` ``()``
 
   .. code-block:: ipython3
@@ -5926,6 +6450,9 @@ String handling:
       5     a n
       6    ^ Ef
       dtype: object
+
+``pd.Series.str.lstrip``
+""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.lstrip` ``(to_strip=None)``
 
@@ -5955,6 +6482,10 @@ String handling:
       5     a n
       6    ^ Ef
       dtype: object
+
+
+``pd.Series.str.pad``
+"""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.pad` ``(width, side='left', fillchar=' ')``
 
@@ -5993,6 +6524,9 @@ String handling:
       6     ^ Ef
       dtype: object
 
+``pd.Series.str.repeat``
+"""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.repeat` ``(repeats)``
 
   `Supported arguments`:
@@ -6025,6 +6559,10 @@ String handling:
       6    ^ Ef^ Ef
       dtype: object
 
+
+``pd.Series.str.replace``
+""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.replace` ``(pat, repl, n=- 1, case=None, flags=0, regex=None)``
 
   `regex` argument supported.
@@ -6044,6 +6582,9 @@ String handling:
       5    yellow n
       6        ^ Ef
       dtype: object
+
+``pd.Series.str.rfind``
+""""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.rfind` ``(sub, start=0, end=None)``
 
@@ -6078,6 +6619,8 @@ String handling:
       6     3
       dtype: Int64
 
+``pd.Series.str.rjist``
+""""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.rjust` ``(width, fillchar=' ')``
 
@@ -6110,6 +6653,9 @@ String handling:
       6          ^ Ef
       dtype: object
 
+``pd.Series.str.restrip``
+""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.rstrip` ``(to_strip=None)``
 
   `Supported arguments`:
@@ -6138,6 +6684,9 @@ String handling:
       5      a
       6    ^ Ef
       dtype: object
+
+``pd.Series.str.slice``
+"""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.slice` ``(start=None, stop=None, step=None)``
 
@@ -6172,6 +6721,9 @@ String handling:
       6    #
       dtype: object
 
+``pd.Series.str.slice_replace``
+""""""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.slice_replace` ``(start=None, stop=None, repl=None)``
 
   `Supported arguments`:
@@ -6205,6 +6757,9 @@ String handling:
       6    #
       dtype: object
 
+``pd.Series.str.split``
+"""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.split` ``(pat=None, n=-1, expand=False)``
 
   `Supported arguments`:
@@ -6236,6 +6791,9 @@ String handling:
       6    [#, Ef]
       dtype: object
 
+``pd.Series.str.startswith``
+"""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.startswith` ``(pat, na=None)``
 
   `Supported arguments`:
@@ -6264,6 +6822,9 @@ String handling:
       5    False
       6    False
       dtype: boolean
+
+``pd.Series.str.strip``
+"""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.strip` ``(to_strip=None)``
 
@@ -6294,6 +6855,9 @@ String handling:
       6    ^ Ef
       dtype: object
 
+``pd.Series.str.swapcase``
+"""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.swapcase` ``()``
 
   .. code-block:: ipython3
@@ -6311,6 +6875,9 @@ String handling:
       5     A N
       6    ^ Ef
       dtype: object
+
+``pd.Series.str.title``
+"""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.title` ``()``
 
@@ -6330,6 +6897,10 @@ String handling:
       6    ^ Ef
       dtype: object
 
+
+``pd.Series.str.upper``
+"""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.upper` ``()``
 
   .. code-block:: ipython3
@@ -6347,6 +6918,10 @@ String handling:
       5     A N
       6    ^ Ef
       dtype: object
+
+
+``pd.Series.str.zfill``
+"""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.zfill` ``(width)``
 
@@ -6377,6 +6952,10 @@ String handling:
       6    0^ Ef
       dtype: object
 
+
+``pd.Series.str.isalnum``
+""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.isalnum` ``()``
 
   .. code-block:: ipython3
@@ -6394,6 +6973,9 @@ String handling:
       5    False
       6    False
       dtype: boolean
+
+``pd.Series.str.isalpha``
+""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.isalpha` ``()``
 
@@ -6413,6 +6995,9 @@ String handling:
       6    False
       dtype: boolean
 
+``pd.Series.str.isdigit``
+""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.isdigit` ``()``
 
   .. code-block:: ipython3
@@ -6430,6 +7015,9 @@ String handling:
       5    False
       6    False
       dtype: boolean
+
+``pd.Series.str.isspace``
+""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.isspace` ``()``
 
@@ -6449,6 +7037,9 @@ String handling:
       6    False
       dtype: boolean
 
+``pd.Series.str.islower``
+""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.islower` ``()``
 
   .. code-block:: ipython3
@@ -6466,6 +7057,9 @@ String handling:
       5     True
       6    False
       dtype: boolean
+
+``pd.Series.str.isupper``
+""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.isupper` ``()``
 
@@ -6485,6 +7079,9 @@ String handling:
       6    False
       dtype: boolean
 
+``pd.Series.str.istitle``
+""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.istitle` ``()``
 
   .. code-block:: ipython3
@@ -6503,6 +7100,9 @@ String handling:
       6     True
       dtype: boolean
 
+``pd.Series.str.isnumeric``
+""""""""""""""""""""""""""""
+
 * :meth:`pandas.Series.str.isnumeric` ``()``
 
   .. code-block:: ipython3
@@ -6520,6 +7120,9 @@ String handling:
       5    False
       6    False
       dtype: boolean
+
+``pd.Series.str.isdecimal``
+""""""""""""""""""""""""""""
 
 * :meth:`pandas.Series.str.isdecimal` ``()``
 
@@ -6540,9 +7143,11 @@ String handling:
       dtype: boolean
 
 
-Categorical accessor:
-*********************
+Categorical accessor
+^^^^^^^^^^^^^^^^^^^^^
 
+``pd.Series.cat.codes``
+"""""""""""""""""""""""
 
 * :attr:`pandas.Series.cat.codes`
 
@@ -6613,9 +7218,16 @@ Categorical accessor:
       dtype: int8
 
 Serialization / IO / Conversion
-*******************************
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``pd.Series.to_csv``
+"""""""""""""""""""""""
 
 * :meth:`pandas.Series.to_csv` ``(path_or_buf=None, sep=',', na_rep='', float_format=None, columns=None, header=True, index=True, index_label=None, mode='w', encoding=None, compression='infer', quoting=None, quotechar='"', line_terminator=None, chunksize=None, date_format=None, doublequote=True, escapechar=None, decimal='.', errors='strict', storage_options=None)``
+
+``pd.Series.to_dict``
+"""""""""""""""""""""""
+
 * :meth:`pandas.Series.to_dict` ``(into=<class 'dict'>)``
 
   `Supported arguments`: None
@@ -6637,6 +7249,9 @@ Serialization / IO / Conversion
       >>> dict(f(S))
       {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9}
 
+
+``pd.Series.to_frame``
+"""""""""""""""""""""""
 
 * :meth:`pandas.Series.to_frame` ``(name=None)``
 
@@ -6683,7 +7298,7 @@ Serialization / IO / Conversion
 .. _heterogeneous_series:
 
 Heterogeneous Series
-~~~~~~~~~~~~~~~~~~~~
+**********************
 
 Bodo's Series implementation requires all elements to share a common data type.
 However, in situations where the size and types of the elements are constant at
@@ -6699,8 +7314,11 @@ Heterogeneous Series operations are a subset of those supported for Series and
 the supported operations are listed below. Please refer to :ref:`series` for
 detailed usage.
 
-Attributes:
-***********
+Attributes
+^^^^^^^^^^^
+
+``pd.Series.index``
+"""""""""""""""""""""""
 
 * :attr:`pandas.Series.index`
 
@@ -6726,6 +7344,9 @@ Attributes:
       99    2
       Length: 100, dtype: int64
 
+``pd.Series.values``
+"""""""""""""""""""""""
+
 * :attr:`pandas.Series.values`
 
   `Example Usage`:
@@ -6749,6 +7370,9 @@ Attributes:
       98    (98, A)
       99    (99, b)
       Length: 100, dtype: object
+
+``pd.Series.shape``
+"""""""""""""""""""""""
 
 * :attr:`pandas.Series.shape`
 
@@ -6774,6 +7398,9 @@ Attributes:
       99    (2,)
       Length: 100, dtype: object
 
+``pd.Series.ndim``
+"""""""""""""""""""""""
+
 * :attr:`pandas.Series.ndim`
 
   `Example Usage`:
@@ -6797,6 +7424,9 @@ Attributes:
       98    1
       99    1
       Length: 100, dtype: int64
+
+``pd.Series.size``
+"""""""""""""""""""""""
 
 * :attr:`pandas.Series.size`
 
@@ -6822,6 +7452,9 @@ Attributes:
       99    2
       Length: 100, dtype: int64
 
+``pd.Series.T``
+"""""""""""""""""""""""
+
 * :attr:`pandas.Series.T`
 
   `Example Usage`:
@@ -6846,6 +7479,10 @@ Attributes:
       99    2
       Length: 100, dtype: int64
 
+
+``pd.Series.empty``
+"""""""""""""""""""""""
+
 * :attr:`pandas.Series.empty`
 
   `Example Usage`:
@@ -6869,6 +7506,9 @@ Attributes:
       98    False
       99    False
       Length: 100, dtype: boolean
+
+``pd.Series.name``
+"""""""""""""""""""""""
 
 * :attr:`pandas.Series.name`
 

@@ -8,6 +8,10 @@ Bodo supports a subset of the offset types in ``pandas.tseries.offsets``:
 DateOffset
 **********
 
+
+``pd.tseries.offsets.DateOffset``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 * :func:`pandas.tseries.offsets.DateOffset` ``(n=1, normalize=False, years=None, months=None, weeks=None, days=None, hours=None, minutes=None, seconds=None, microseconds=None, nanoseconds=None, year=None, month=None, day=None, weekday=None, hour=None, minute=None, second=None, microsecond=None, nanosecond=None)``
 
 `Supported arguments`:
@@ -92,11 +96,22 @@ DateOffset
 
 `Properties`:
 
+``pd.tseries.offsets.DateOffset.normalize``
+""""""""""""""""""""""""""""""""""""""""""""""
+
 * :attr:`pandas.tseries.offsets.DateOffset.normalize`
+
+``pd.tseries.offsets.DateOffset.n``
+""""""""""""""""""""""""""""""""""""
+
 * :attr:`pandas.tseries.offsets.DateOffset.n`
 
 MonthBegin
 **********
+
+``pd.tseries.offsets.MonthBegin``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 
 * :func:`pandas.tseries.offsets.MonthBegin` ``(n=1, normalize=False)``
 
@@ -126,8 +141,12 @@ MonthBegin
 
    Timestamp('2021-02-01 00:00:00')
 
+
 MonthEnd
 **********
+
+``pd.tseries.offsets.MonthEnd``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * :func:`pandas.tseries.offsets.MonthEnd` ``(n=1, normalize=False)``
 
@@ -160,6 +179,9 @@ MonthEnd
 
 Week
 ****
+
+``pd.tseries.offsets.Week``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * :func:`pandas.tseries.offsets.Week` ``(n=1, normalize=False, weekday=None)``
 

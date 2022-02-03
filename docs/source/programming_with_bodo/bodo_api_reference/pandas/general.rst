@@ -5,6 +5,9 @@ General functions
 Data manipulations
 ******************
 
+``pd.crosstab``
+^^^^^^^^^^^^^^^
+
 * :func:`pandas.crosstab` ``(index, columns, values=None, rownames=None, colnames=None, aggfunc=None, margins=False, margins_name='All', dropna=True, normalize=False)``
 
     `Supported arguments`:
@@ -44,6 +47,10 @@ Data manipulations
         index
         foo        2      0
         bar        2      1
+
+
+``pd.cut``
+^^^^^^^^^^^^^^^
 
 * :func:`pandas.cut` ``(x, bins, right=True, labels=None, retbins=False, precision=3, include_lowest=False, duplicates="raise", ordered=True)``
 
@@ -91,6 +98,8 @@ Data manipulations
         Name: ABC, dtype: category
         Categories (4, interval[float64, right]): [(-2.025, 4.0] < (4.0, 10.0] < (10.0, 16.0] < (16.0, 22.0]]
 
+``pd.qcut``
+^^^^^^^^^^^^^^^
 
 * :func:`pandas.qcut` ``(x, q, labels=None, retbins=False, precision=3, duplicates="raise")``
 
@@ -137,6 +146,9 @@ Data manipulations
 
 
 .. _pd_merge_fn:
+
+``pd.merge``
+^^^^^^^^^^^^^^^
 
 * :func:`pandas.merge` ``(left, right, how="inner", on=None, left_on=None, right_on=None, left_index=False, right_index=False, sort=False, suffixes=("_x", "_y"), copy=True, indicator=False, validate=None, _bodo_na_equal=True)``
 
@@ -188,7 +200,7 @@ Data manipulations
 .. _merge_notes:
 
 Merge Notes
-^^^^^^^^^^^
+""""""""""""
 
         * `Output Ordering`:
 
@@ -260,6 +272,9 @@ Merge Notes
          5    2  9.0  5.0
 
 
+``pd.merge_asof``
+^^^^^^^^^^^^^^^^^^
+
 * :func:`pandas.merge_asof` ``(left, right, on=None, left_on=None, right_on=None, left_index=False, right_index=False, by=None, left_by=None, right_by=None, suffixes=("_x", "_y"), tolerance=None, allow_exact_matches=True, direction="backward")``
 
     `Supported arguments`:
@@ -326,6 +341,9 @@ Merge Notes
          1 2017-01-06  5  7
          2 2017-02-21  6  7
 
+``pd.concat``
+^^^^^^^^^^^^^^^
+
 * :func:`pandas.concat` ``(objs, axis=0, join="outer", join_axes=None, ignore_index=False, keys=None, levels=None, names=None, verify_integrity=False, sort=None, copy=True)``
 
     `Supported arguments`:
@@ -370,6 +388,9 @@ Merge Notes
          4  7 -24
 
 
+``pd.get_dummies``
+^^^^^^^^^^^^^^^^^^
+
 * :func:`pandas.get_dummies` ``(data, prefix=None, prefix_sep="_", dummy_na=False, columns=None, sparse=False, drop_first=False, dtype=None)``
 
     `Supported arguments`:
@@ -409,6 +430,10 @@ Merge Notes
 Top-level missing data
 ***********************
 
+
+``pd.isna``
+^^^^^^^^^^^^^^^
+
 * :func:`pandas.isna` ``(obj)``
 
     `Supported arguments`:
@@ -442,6 +467,9 @@ Top-level missing data
           7.1  False  False
           0.1  False  False
           3.1  False  False
+
+``pd.isnull``
+^^^^^^^^^^^^^^^
 
 * :func:`pandas.isnull` ``(obj)``
 
@@ -477,6 +505,9 @@ Top-level missing data
           0.1  False  False
           3.1  False  False
 
+``pd.notna``
+^^^^^^^^^^^^^^^
+
 * :func:`pandas.notna` ``(obj)``
 
     `Supported arguments`:
@@ -510,6 +541,9 @@ Top-level missing data
           7.1   True  True
           0.1   True  True
           3.1   True  True
+
+``pd.notnull``
+^^^^^^^^^^^^^^^
 
 * :func:`pandas.notnull` ``(obj)``
 
@@ -548,6 +582,9 @@ Top-level missing data
 
 Top-level conversions
 *********************
+
+``pd.to_numeric``
+^^^^^^^^^^^^^^^^^^
 
 * :func:`pandas.to_numeric` ``(arg, errors="raise", downcast=None)``
 
@@ -595,6 +632,9 @@ Top-level conversions
 
 Top-level dealing with datetime and timedelta like
 **************************************************
+
+``pd.to_datetime``
+^^^^^^^^^^^^^^^^^^^
 
 * :func:`pandas.to_datetime` ``(arg, errors='raise', dayfirst=False, yearfirst=False, utc=None, format=None, exact=True, unit=None, infer_datetime_format=False, origin='unix', cache=True)``
 
@@ -660,6 +700,9 @@ Top-level dealing with datetime and timedelta like
          Timestamp('2016-06-01 00:00:00')
 
 
+``pd.to_timedelta``
+^^^^^^^^^^^^^^^^^^^^
+
 * :func:`pandas.to_timedelta` ``(arg, unit=None, errors='raise')``
 
     `Supported arguments`:
@@ -697,6 +740,9 @@ Top-level dealing with datetime and timedelta like
          -2   4 days 04:48:00
          Name: AA, dtype: timedelta64[ns]
 
+
+``pd.date_range``
+^^^^^^^^^^^^^^^^^^
 
 * :func:`pandas.date_range` ``(start=None, end=None, periods=None, freq=None, tz=None, normalize=False, name=None, closed=None, **kwargs)``
 
@@ -749,6 +795,9 @@ Top-level dealing with datetime and timedelta like
                           '2018-04-27 00:00:00'],
                          dtype='datetime64[ns]', freq=None)
 
+
+``pd.timedelta_range``
+^^^^^^^^^^^^^^^^^^^^^^^
 
 * :func:`pandas.timedelta_range` ``(start=None, end=None, periods=None, freq=None, name=None, closed=None)``
 
