@@ -3876,8 +3876,6 @@ dataframe_unsupported = [
     "pop",
     "xs",
     "get",
-    "where",
-    "mask",
     # Binary operator functions
     "add",
     "sub",

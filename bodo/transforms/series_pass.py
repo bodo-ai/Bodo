@@ -2930,6 +2930,8 @@ class SeriesPass:
             "ffill",
             "pad",
             "backfill",
+            "mask",
+            "where",
         ):
             rhs.args.insert(0, series_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
@@ -2937,6 +2939,12 @@ class SeriesPass:
             if func_name in ("bfill", "ffill", "pad", "backfill"):
                 overload_func = (
                     bodo.hiframes.series_impl.create_fillna_specific_method_overload(
+                        func_name
+                    )
+                )
+            elif func_name in ("mask", "where"):
+                overload_func = (
+                    bodo.hiframes.series_impl.create_series_mask_where_overload(
                         func_name
                     )
                 )
