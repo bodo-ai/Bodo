@@ -1,5 +1,5 @@
-Getting Started
-===============
+Quick Start
+===========
 
 This section provides a quick start guide to Bodo
 and explains its important concepts briefly.
@@ -28,7 +28,7 @@ Data Transform Example with Bodo
 --------------------------------
 
 We use a simple data transformation example to
-discuss some key Bodo concepts.
+discuss some of the key Bodo concepts.
 
 Generate data
 ~~~~~~~~~~~~~
@@ -143,7 +143,7 @@ Now let's run the code on 8 CPU cores using ``mpiexec`` in command line:
     $ mpiexec -n 8 python bodo_data_transform.py
     Total time: 0.38
 
-Using 8 cores gets an additional ~2x speedup.
+Using 8 cores gets an additional ~5x speedup.
 The same program can be scaled to larger datasets and as many cores as necessary
 in compute clusters and cloud environments (e.g. ``mpiexec -n 10000 python bodo_data_transform.py``).
 
@@ -226,7 +226,7 @@ Save this code in ``data_transform_cache.py`` and run in command line twice:
 
 In this case, Bodo saves the compiled version of the function to a file
 and reuses it in the second run since the code has not changed.
-We plan to make caching default in future releases.
+We plan to make caching default in the future.
 See :ref:`caching` for more information.
 
 

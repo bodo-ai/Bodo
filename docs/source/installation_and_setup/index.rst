@@ -59,11 +59,3 @@ Installation and Setup
        :maxdepth: 1
 
        bodo_platform
-
-
-   ---
-
-    .. toctree::
-       :maxdepth: 1
-
-       misc

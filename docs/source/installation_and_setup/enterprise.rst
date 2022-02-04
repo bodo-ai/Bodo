@@ -34,7 +34,7 @@ the environment variable contains the key verbatim. Note that some shells might
 append extra characters when displaying the file contents. A valid way to export
 the key is this::
 
-    export BODO_LICENSE=`cat bodo.lic
+    export BODO_LICENSE=`cat bodo.lic`
 
 
 Automated ``BODO_LICENSE`` environment variable Setup
@@ -47,7 +47,7 @@ You can automate setting of the ``BODO_LICENSE`` environment variable in your ``
 
 For more fine grained control and usage with the Bodo ``conda`` environment as created during :ref:`install`, we recommend the following steps to automate setting the ``BODO_LICENSE`` environment variable (closely follows `these <https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#macos-and-linux>`_ steps):
 
-1. Ensure that you're in the correct conda environment.
+1. Ensure that you are in the correct conda environment.
 
 2. Navigate to the ``$CONDA_PREFIX`` directory and create some additional conda environment activation and deactivation steps::
 
@@ -80,7 +80,8 @@ Using MPI in Clusters with Bodo Enterprise Edition
 MPI can be configured on clusters easily.
 The cluster nodes need to have passwordless SSH enabled between them,
 and there should be a host file listing their addresses
-(example tutorial `here <https://mpitutorial.com/tutorials/running-an-mpi-cluster-within-a-lan/>`_).For best performance, MPI usually needs to be configured to launch one process per physical core.
+(example tutorial `here <https://mpitutorial.com/tutorials/running-an-mpi-cluster-within-a-lan/>`_).
+For best performance, MPI usually needs to be configured to launch one process per physical core.
 This avoids potential resource contention between processes (due to high efficiency of MPI).
 For example, a cluster of four nodes, each with 16 physical cores, would use 64 MPI processes::
 
@@ -90,3 +91,26 @@ For cloud instances, one physical core usually corresponds to two vCPUs.
 For example, an instance with 32 vCPUs has 16 physical cores.
 
 .. seealso:: :ref:`ipyparallelsetup`
+
+
+.. _passwordless_ssh:
+
+Setting up passwordless SSH on your multi-node cluster
+------------------------------------------------------
+
+Using MPI on a multi-node cluster requires setting up passwordless SSH
+between the hosts. There are multiple ways to do this. Here is one way:
+
+1. Generate an SSH key pair using a tool like ``ssh-keygen``, for instance::
+
+    ssh-keygen -b 2048 -f cluster_ssh_key -N ""
+
+2. Copy over the generated private key (``cluster_ssh_key``) and public key (``cluster_ssh_key.pub``) to all the hosts and 
+   store them in ``~/.ssh/id_rsa`` and ``~/.ssh/id_rsa.pub`` respectively.
+
+3. Add the public key to ``~/.ssh/authorized_keys`` on all hosts.
+
+4. To disable host key checking, add the following to ``~/.ssh/config`` on each host::
+   
+    Host *
+        StrictHostKeyChecking no

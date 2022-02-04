@@ -76,7 +76,7 @@ Recommended AWS Network Interface
 
 To enable EFA with Intel-MPI on your cluster, follow instructions `here <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html>`_.
 
-Some things to note in addition to the referenced instructions:
+Some points to note in addition to the referenced instructions:
     
 1. All instances must be in the same subnet. For more information, see the "EFA Limitations" section `here <https://www.hpcworkshops.com/07-efa/00-efa-basics.html>`_.
 

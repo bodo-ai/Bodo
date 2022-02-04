@@ -48,7 +48,7 @@ On Windows::
 
     start /wait "" Miniconda3-latest-Windows-x86_64.exe /InstallationType=JustMe /RegisterPython=0 /S /D=%UserProfile%\Miniconda3
 
-Open the Anaconda Prompt (click Start, select Anaconda Prompt). You may use other Terminals if you have already added Anaconda to your PATH.
+Open the Anaconda Prompt to use Bodo (click Start, select Anaconda Prompt). You may use other terminals if you have already added Anaconda to your PATH.
 
 .. _optionaldep:
 
@@ -57,7 +57,7 @@ Optional Dependencies
 
 Some Bodo functionality may require other dependencies, as summarized in the table below.
 All optional dependencies except Hadoop can be
-installed using the commands ``conda install gcsfs sqlalchemy
+installed using the commands ``conda install gcsfs sqlalchemy snowflake-connector-python
 hdf5='*=*mpich*' openjdk -c conda-forge`` and ``pip install
 deltalake``.
 
@@ -68,14 +68,16 @@ deltalake``.
      - Dependency
    * - ``pd.read_sql / df.to_sql``
      - ``sqlalchemy``
-   * - ``HDF5``
-     - ``hdf5 (MPI version)``
+   * - ``Snowflake I/O``
+     - ``snowflake-connector-python``
    * - ``GCS I/O``
      - ``gcsfs``
    * - ``Delta Lake``
      - ``deltalake``
    * - ``HDFS or ADLS Gen2``
      - `hadoop <http://hadoop.apache.org/docs/stable/>`_ (only the Hadoop client is needed)
+   * - ``HDF5``
+     - ``hdf5 (MPI version)``
 
 .. _testinstall :
 
