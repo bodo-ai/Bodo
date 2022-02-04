@@ -138,11 +138,11 @@ html_theme_options = {
         {
             "href": "https://bodo.ai/blog",
             "internal": False,
-            "title": "Blog",
+            "title": "Bodo Blog",
         },
     ],
     "heroes": {
-        "index": "Parallel computing for extreme-performance Python data analytics",
+        "index": "Parallel Computing for Extreme-Performance Python Data Analytics",
     },
 }
 

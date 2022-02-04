@@ -9,8 +9,8 @@ About Bodo
 Bodo is a new just-in-time (JIT) inferential compiler that
 brings supercomputing-style performance
 and scalability to native Python analytics code automatically.
-Bodo has several advantages over other big data analytics systems
-(which are usually distributed scheduler libraries):
+Bodo has several advantages over other big data analytics systems such as Apache Spark,
+which are usually distributed scheduler libraries:
 
 - Simple programming with native Python APIs such as Pandas and Numpy (no "Pandas-like" API layers)
 - Extreme performance and scalability using true parallelism and advanced compiler technology
@@ -24,7 +24,7 @@ Bodo has several advantages over other big data analytics systems
 
 
 This documentation covers the basics of using Bodo and provides a reference
-of supported Python features and APIs.
+of the supported Python features and APIs.
 In a nutshell, Bodo provides a JIT compilation workflow
 using the :ref:`@bodo.jit decorator <jit>`.
 It replaces the decorated Python functions
@@ -34,10 +34,8 @@ For example, the program below can perform data transformation on large datasets
     @bodo.jit
     def data_transform(file_name):
         df = pd.read_parquet(file_name)
-        df = df[df.C.dt.month == 1]
-        df2 = df.groupby("A")["B", "D"].agg(
-            lambda S: (S == "ABC").sum()
-        )
+        df["B"] = df.apply(lambda r: "P1" if r.A.month < 5 else "P2", axis=1)
+        df["C"] = df.A.dt.month
         df2.to_parquet("output.pq")
 
 

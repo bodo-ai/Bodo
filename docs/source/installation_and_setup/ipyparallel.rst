@@ -34,7 +34,7 @@ Start a new notebook and run the following code in a cell to start an IPyParalle
     rc = ipp.Cluster(engines='mpi', n=n).start_and_connect_sync(activate=True)
 
 
-This starts a local N-core MPI cluster on your machine, where N is the minimum of the number of cores on your machine,
+This starts a local N-core MPI cluster on your machine, where N is the lower of the number of cores on your machine
 and 8. You can now start using the ``%%px`` cell magic to parallelize your code execution, or use ``%autopx`` to
 run all cells on the IPyParallel cluster by default.
 Read more `here <https://ipyparallel.readthedocs.io/en/latest/tutorial/magics.html#parallel-magic-commands>`_.
@@ -47,29 +47,28 @@ Verifying your setup
 Run the following code to verify that your IPyParallel cluster is set up correctly::
 
     %%px
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    print(f"Hello World from rank {comm.Get_rank()}. total ranks={comm.Get_size()}")
+    import bodo
+    print(f"Hello World from rank {bodo.get_rank()}. Total ranks={bodo.get_size()}")
 
 The correct output is::
 
-    Hello World from rank 0. total ranks=N
-    Hello World from rank 1. total ranks=N
+    Hello World from rank 0. Total ranks=N
+    Hello World from rank 1. Total ranks=N
     ...
-    Hello World from rank N-1. total ranks=N
+    Hello World from rank N-1. Total ranks=N
 
-Where N is the minimum of the number of cores on your machine, and 8.
+Where N is the minimum of the number of cores on your machine and 8.
 
 .. _quickstart_multiple_hosts:
 
 Running on multiple hosts
 -------------------------
 
-To start an IPyParallel cluster across multiple hosts, you need to do the following:
+To start an IPyParallel cluster across multiple hosts:
 
 - Install IPyParallel and Bodo on all hosts::
 
-    conda install bodo ipyparallel=8 -c bodo.ai -c conda-forge
+    conda install bodo ipyparallel=8.1 -c bodo.ai -c conda-forge
 
 - Install JupyterLab on one of the hosts. Let's call it the controller node::
 
@@ -95,11 +94,9 @@ To start an IPyParallel cluster across multiple hosts, you need to do the follow
   It is important to note that other MPI systems and launchers (such as QSUB/PBS)
   may use a different user interface for the allocation of computational nodes.
 
-- Create the default IPython profile on all nodes by executing::
+- Create the default IPython profile on all nodes by executing the following from the controller node::
   
     mpiexec -ppn 1 -f <PATH_TO_HOSTFILE> ipython profile create
-
-  from the controller node.
 
 Start a JupyterLab server on the controller node::
 
@@ -127,43 +124,39 @@ Verifying your setup
 Run the following code to verify that your IPyParallel cluster is set up correctly::
 
     %%px
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    print(f"Hello World from rank {comm.Get_rank()} on host {MPI.Get_processor_name()}. total ranks={comm.Get_size()}")
+    import bodo
+    import socket
+    print(f"Hello World from rank {bodo.get_rank()} on host {socket.gethostname()}. Total ranks={bodo.get_size()}")
 
 On a cluster with two hosts running 4 engines, the correct output is::
 
-    Hello World from rank 0 on host A. total ranks=4
-    Hello World from rank 1 on host A. total ranks=4
-    Hello World from rank 2 on host B. total ranks=4
-    Hello World from rank 3 on host B. total ranks=4
+    Hello World from rank 0 on host A. Total ranks=4
+    Hello World from rank 1 on host A. Total ranks=4
+    Hello World from rank 2 on host B. Total ranks=4
+    Hello World from rank 3 on host B. Total ranks=4
 
 .. _run_bodo_ipyparallel:
 
 Running Bodo on your IPyParallel Cluster
 ----------------------------------------
 
-You are now ready to run your Bodo code. Here's an example of Monte Carlo Pi calculation with Bodo::
+You are now ready to run your Bodo code. Here is an example function with Bodo::
 
     %%px
-    import numpy as np
-    import time
+    import bodo
 
     @bodo.jit
-    def calc_pi(n):
-        t1 = time.time()
-        x = 2 * np.random.ranf(n) - 1
-        y = 2 * np.random.ranf(n) - 1
-        pi = 4 * np.sum(x ** 2 + y ** 2 < 1) / n
-        print("Execution time:", time.time() - t1, "\nresult:", pi)
-        return pi
+    def process_data(n):
+        df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n)**2})
+        df["C"] = df.apply(lambda r: 2* r.A + r.B if r.A > 10 else 0, axis=1)
+        return df["C"].sum()
 
-    calc_pi(10000000)
+    process_data(100000000)
 
 
 .. _run_from_python_script:
 
-Running from a python script
+Running from a Python Script
 ----------------------------
 
 You can run code on an IPyParallel cluster from a python script instead of IPython or JupyterLab as follows:
@@ -178,25 +171,24 @@ You can run code on an IPyParallel cluster from a python script instead of IPyth
         import bodo
 
         @bodo.jit
-        def calc_pi(n):
-            t1 = time.time()
-            x = 2 * np.random.ranf(n) - 1
-            y = 2 * np.random.ranf(n) - 1
-            pi = 4 * np.sum(x ** 2 + y ** 2 < 1) / n
-            print("Execution time:", time.time() - t1, "\nresult:", pi)
-            return pi
+        def process_data(n):
+            df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n)**2})
+            df["C"] = df.apply(lambda r: 2* r.A + r.B if r.A > 10 else 0, axis=1)
+            return df["C"].sum()
+
+        process_data(100000000)
 
 
-- We define a Python wrapper for ``calc_pi`` called ``bodo_exec`` which will be sent to the engines to compute. This wrapper will call the Bodo function on the engines, collect the result and send it back to the client.
+- We define a Python wrapper for ``process_data`` called ``bodo_exec`` which will be sent to the engines to compute. This wrapper will call the Bodo function on the engines, collect the result and send it back to the client.
 
     .. code-block:: python
 
 
         def bodo_exec(points):
-            return calc_pi(points)
+            return process_data(points)
 
 - We can send the source code to be executed at the engines, using the ``execute`` method of ipyparallel's ``DirectView`` object.
-  After the imports and code definitions are sent to the engines, the computation is started by actually calling the ``calc_pi`` function (now defined on the engines) and returning the result to the client.
+  After the imports and code definitions are sent to the engines, the computation is started by actually calling the ``process_data`` function (now defined on the engines) and returning the result to the client.
 
 
      .. code-block:: python
@@ -204,12 +196,13 @@ You can run code on an IPyParallel cluster from a python script instead of IPyth
         def main():
 
             # remote code execution: import required modules on engines
+            view.execute("import pandas as pd")
             view.execute("import numpy as np")
             view.execute("import bodo")
             view.execute("import time")
 
             # send code of Bodo functions to engines
-            bodo_funcs = [calc_pi]
+            bodo_funcs = [process_data]
             for f in bodo_funcs:
                 # get source code of Bodo function
                 f_src = inspect.getsource(f)
