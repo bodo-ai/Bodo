@@ -111,22 +111,25 @@ def box_multi_index(typ, val, c):
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     # incref since boxing functions steal a reference
     c.context.nrt.incref(c.builder, types.Tuple(typ.array_types), index_val.data)
-    data = c.pyapi.from_native_value(
+    data_obj = c.pyapi.from_native_value(
         types.Tuple(typ.array_types), index_val.data, c.env_manager
     )
     c.context.nrt.incref(c.builder, types.Tuple(typ.names_typ), index_val.names)
-    names = c.pyapi.from_native_value(
+    names_obj = c.pyapi.from_native_value(
         types.Tuple(typ.names_typ), index_val.names, c.env_manager
     )
     c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
-    name = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
+    name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
 
-    sortorder = c.pyapi.make_none()
+    sortorder_obj = c.pyapi.borrow_none()
     index_obj = c.pyapi.call_method(
-        multi_index_class_obj, "from_arrays", (data, sortorder, names)
+        multi_index_class_obj, "from_arrays", (data_obj, sortorder_obj, names_obj)
     )
-    c.pyapi.object_setattr_string(index_obj, "name", name)
+    c.pyapi.object_setattr_string(index_obj, "name", name_obj)
 
+    c.pyapi.decref(data_obj)
+    c.pyapi.decref(names_obj)
+    c.pyapi.decref(name_obj)
     c.pyapi.decref(class_obj)
     c.pyapi.decref(multi_index_class_obj)
     c.context.nrt.decref(c.builder, typ, val)

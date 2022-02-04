@@ -1705,8 +1705,7 @@ class DataFramePass:
 
         func_text = f"def _bodo_groupby_apply_impl(keys, in_df, {extra_arg_names}_is_parallel=False):\n"
         func_text += "  ev_apply = bodo.utils.tracing.Event('gb.apply', _is_parallel)\n"
-        func_text += f"  if _is_parallel:\n"
-        func_text += f"    in_df, keys, shuffle_info = shuffle_dataframe(in_df, keys, _is_parallel)\n"
+        func_text += f"  in_df, keys, shuffle_info = shuffle_dataframe(in_df, keys, _is_parallel)\n"
 
         # get groupby info
         func_text += "  ev_gp_indices_data = bodo.utils.tracing.Event('group_indices_data_key', _is_parallel)\n"

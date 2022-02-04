@@ -39,6 +39,7 @@ from bodo.libs.array import (
     delete_table,
     delete_table_decref_arrays,
     get_groupby_labels,
+    get_null_shuffle_info,
     get_shuffle_info,
     info_from_table,
     info_to_array,
@@ -78,6 +79,7 @@ from bodo.utils.typing import (
     is_overload_constant_dict,
     is_overload_constant_list,
     is_overload_constant_str,
+    is_overload_false,
     is_overload_none,
     is_overload_true,
     list_cumulative,
@@ -1722,14 +1724,33 @@ def shuffle_dataframe(df, keys, _is_parallel):  # pragma: no cover
     return df, keys, _is_parallel
 
 
-@overload(shuffle_dataframe)
+@overload(shuffle_dataframe, prefer_literal=True)
 def overload_shuffle_dataframe(df, keys, _is_parallel):
     """shuffle a dataframe using a tuple of key arrays."""
     n_cols = len(df.columns)
     n_keys = len(keys.types)
-    data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
+    assert is_overload_constant_bool(
+        _is_parallel
+    ), "shuffle_dataframe: _is_parallel is not a constant"
 
     func_text = "def impl(df, keys, _is_parallel):\n"
+
+    # generating code based on _is_parallel flag statically instead of runtime 'if'
+    # check to avoid Numba's refcount pruning bugs.
+    # See https://bodo.atlassian.net/browse/BE-974
+    if is_overload_false(_is_parallel):
+        func_text += "  return df, keys, get_null_shuffle_info()\n"
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "get_null_shuffle_info": get_null_shuffle_info,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
+
     # create C++ table from input arrays
     for i in range(n_cols):
         func_text += f"  in_arr{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
