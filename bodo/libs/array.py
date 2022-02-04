@@ -1750,6 +1750,16 @@ reverse_shuffle_table = types.ExternalFunction(
 
 
 @intrinsic
+def get_null_shuffle_info(typingctx):
+    """return a null shuffle info object"""
+
+    def codegen(context, builder, sig, args):
+        return context.get_constant_null(sig.return_type)
+
+    return shuffle_info_type(), codegen
+
+
+@intrinsic
 def hash_join_table(
     typingctx,
     left_table_t,

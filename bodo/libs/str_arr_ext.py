@@ -1259,8 +1259,10 @@ def set_string_array_range(
     """
     assert (out_typ == string_array_type and in_typ == string_array_type) or (
         out_typ == binary_array_type and in_typ == binary_array_type
-    )
-    assert curr_str_typ == types.intp and curr_chars_typ == types.intp
+    ), "set_string_array_range requires string or binary arrays"
+    assert isinstance(curr_str_typ, types.Integer) and isinstance(
+        curr_chars_typ, types.Integer
+    ), "set_string_array_range requires integer indices"
 
     def codegen(context, builder, sig, args):
         out_arr, in_arr, curr_str_ind, curr_chars_ind = args

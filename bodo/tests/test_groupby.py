@@ -2347,8 +2347,7 @@ def test_named_agg(memory_leak_check):
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
-# TODO(ehsan): add memory_leak_check when memory leaks are resolved
-def test_groupby_apply(is_slow_run):
+def test_groupby_apply(is_slow_run, memory_leak_check):
     """
     Test Groupby.apply() for UDFs that return a dataframes
     """
@@ -2560,7 +2559,7 @@ def test_groupby_apply_objmode():
     assert not has_udf_call(fir)
 
 
-def test_groupby_apply_arg_dist():
+def test_groupby_apply_arg_dist(memory_leak_check):
     """
     Make sure extra arguments to Groupby.apply() are replicated
     """
@@ -2579,7 +2578,7 @@ def test_groupby_apply_arg_dist():
     check_func(impl1, (df, 10), sort_output=True, reset_index=True)
 
 
-def test_groupby_multiindex():
+def test_groupby_multiindex(memory_leak_check):
     """ Test groupby with a multiindex having more than one col. """
     df = pd.DataFrame(
         {
@@ -2596,7 +2595,7 @@ def test_groupby_multiindex():
     check_func(impl, (df,), sort_output=True, check_dtype=False, reset_index=True)
 
 
-def test_groupby_pipe():
+def test_groupby_pipe(memory_leak_check):
     """
     Test Groupby.pipe()
     """
@@ -3370,8 +3369,7 @@ def test_min_datetime(memory_leak_check):
     check_func(impl2, (df,), sort_output=True, reset_index=True)
 
 
-# TODO: Add a memory leak check.
-def test_optional_heterogenous_series_apply():
+def test_optional_heterogenous_series_apply(memory_leak_check):
     """
     Test groupby.apply works when heterogenous series requires an optional type
     """
@@ -3402,8 +3400,7 @@ def test_optional_heterogenous_series_apply():
     check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
 
 
-# TODO: Add a memory leak check.
-def test_optional_homogenous_series_apply():
+def test_optional_homogenous_series_apply(memory_leak_check):
     """
     Test groupby.apply works when a homogenous series requires an optional type
     """
@@ -4023,9 +4020,8 @@ def test_agg_nested_tup_colnames(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True, check_names=False)
 
 
-# TODO: add memory leak check when issues addressed
 @pytest.mark.slow
-def test_groupby_multi_intlabels_sum():
+def test_groupby_multi_intlabels_sum(memory_leak_check):
     """
     Test df.groupby() multiple labels of string columns
     and Groupy.sum() on integer column
@@ -4046,7 +4042,7 @@ def test_groupby_multi_intlabels_sum():
 
 
 # TODO: add memory leak check when issues addressed
-def test_groupby_multi_key_to_index():
+def test_groupby_multi_key_to_index(memory_leak_check):
     """
     Make sure df.groupby() with multiple keys creates a MultiIndex index in output
     """
@@ -4404,8 +4400,7 @@ def test_groupby_as_index_var(memory_leak_check):
     check_func(impl2, (11,), sort_output=True, check_dtype=False, reset_index=True)
 
 
-# TODO: add memory leak check when issues addressed
-def test_const_list_inference():
+def test_const_list_inference(memory_leak_check):
     """
     Test passing non-const list that can be inferred as constant to groupby()
     """
@@ -4491,7 +4486,7 @@ def test_global_list():
 df_global = pd.DataFrame({"A": [1, 2, 1], "B": [1.1, 2.2, 3.3]})
 
 
-def test_global_df():
+def test_global_df(memory_leak_check):
     """test groupby on a global dataframe object"""
 
     def impl():
@@ -4500,8 +4495,7 @@ def test_global_df():
     check_func(impl, (), sort_output=True, only_seq=True)
 
 
-# TODO: add memory leak check when issues addressed
-def test_literal_args():
+def test_literal_args(memory_leak_check):
     """
     Test forcing groupby() key list and as_index to be literals if jit arguments
     """
@@ -4649,7 +4643,7 @@ def test_groupby_dead_col_multifunc(memory_leak_check):
     assert impl6(df) == bodo.jit(impl6)(df)
 
 
-def test_groupby_shift_cat():
+def test_groupby_shift_cat(memory_leak_check):
     """Checks that groupby.shift is supported
     when the target column is categorical."""
 
@@ -4669,7 +4663,7 @@ def test_groupby_shift_cat():
     check_func(test_impl, (df,))
 
 
-def test_groupby_shift_unknown_cats():
+def test_groupby_shift_unknown_cats(memory_leak_check):
     """Checks that groupby.shift is supported
     when the target column is categorical."""
 
@@ -5447,10 +5441,9 @@ def test_groupby_transform_nullable(memory_leak_check):
     check_func(impl_min, (df,))
 
 
-# TODO: [BE-974] Fix memory_leak_check issue
 @pytest.mark.slow
 @pytest.mark.parametrize("dropna", [True, False])
-def test_groupby_apply_na_key(dropna):
+def test_groupby_apply_na_key(dropna, memory_leak_check):
     """Test groupby.apply with NA keys"""
 
     def impl_apply(df):

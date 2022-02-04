@@ -979,9 +979,7 @@ def test_pivot_repeat_value(df):
         ),
     ],
 )
-def test_pivot_table_multiple_values_numeric(df):
-    # TODO: Add memory_leak_check. Fails with integer array inside
-    # the multi-index.
+def test_pivot_table_multiple_values_numeric(df, memory_leak_check):
     """
     Test for using > 1 value column with pivot_table where each column
     holds numeric data. Each value passed has the same exact data and
@@ -1106,13 +1104,12 @@ def test_pivot_table_multiple_values_string(memory_leak_check):
         ),
     ],
 )
-def test_pivot_multiple_values(df):
+def test_pivot_multiple_values(df, memory_leak_check):
     """
     Test running DataFrame.pivot() with multiple values
     of various types.
     """
-    # TODO: Add memory_leak_check. Fails with integer array inside
-    # the multi-index.
+
     def impl(df):
         return df.pivot(index="A", columns="B", values=["C", "D"])
 
