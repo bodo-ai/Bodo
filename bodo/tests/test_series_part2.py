@@ -2316,7 +2316,7 @@ def test_series_where_series(series_val, memory_leak_check):
 
 
 def test_series_mask_np_array(series_val, memory_leak_check):
-    """Tests that all types can be used in Series.where(cond, ndarray)"""
+    """Tests that all types can be used in Series.mask(cond, ndarray)"""
     np.random.seed(42)
 
     cond = np.random.randint(2, size=len(series_val)).astype(bool)
@@ -2350,7 +2350,7 @@ def test_series_mask_np_array(series_val, memory_leak_check):
 
 
 def test_series_mask_series(series_val, memory_leak_check):
-    """Tests that all supported types can be used in Series.where(cond, Series)."""
+    """Tests that all supported types can be used in Series.mask(cond, Series)."""
     np.random.seed(42)
 
     cond = np.random.randint(2, size=len(series_val)).astype(bool)

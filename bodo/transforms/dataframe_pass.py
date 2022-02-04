@@ -488,6 +488,25 @@ class DataFramePass:
                 kws=dict(rhs.kws),
             )
 
+        if func_name in ("mask", "where"):
+            rhs.args.insert(0, df_var)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            overload_impl = (
+                bodo.hiframes.dataframe_impl.create_dataframe_mask_where_overload(
+                    func_name
+                )
+            )
+            impl = overload_impl(*arg_typs, **kw_typs)
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
         if func_name == "sort_values":
             rhs.args.insert(0, df_var)
             arg_typs = tuple(self.typemap[v.name] for v in rhs.args)

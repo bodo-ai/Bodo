@@ -399,6 +399,8 @@ _series_no_inline_methods = {
     "ffill",
     "pad",
     "backfill",
+    "mask",
+    "where",
 }
 # Series methods that are just aliases of another method
 _series_method_alias = {
@@ -422,6 +424,8 @@ _dataframe_no_inline_methods = {
     "to_string",
     "query",
     "rolling",
+    "mask",
+    "where",
 }
 
 TypingInfo = namedtuple(

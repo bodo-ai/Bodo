@@ -51,7 +51,7 @@ from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
@@ -2043,6 +2043,170 @@ def overload_dataframe_drop_duplicates(
     )
     func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
     return _gen_init_df(func_text, df.columns, data_args, "index")
+
+
+def create_dataframe_mask_where_overload(func_name):
+    def overload_dataframe_mask_where(
+        df,
+        cond,
+        other=np.nan,
+        inplace=False,
+        axis=None,
+        level=None,
+        errors="raise",
+        try_cast=False,
+    ):
+        """
+        Overload DataFrame.mask or DataFrame.where. It replaces element with other depending on cond
+        (if DataFrame.where, will replace iff cond is False; if DataFrame.mask, will replace iff cond is True).
+        """
+        _validate_arguments_mask_where(
+            f"DataFrame.{func_name}",
+            df,
+            cond,
+            other,
+            inplace,
+            axis,
+            level,
+            errors,
+            try_cast,
+        )
+
+        header = "def impl(df, cond, other=np.nan, inplace=False, axis=None, level=None, errors='raise', try_cast=False):\n"
+        if func_name == "mask":
+            header += "  cond = ~cond\n"
+        gen_all_false = False
+
+        if cond.ndim == 1:
+            cond_str = lambda i: "cond"
+        elif cond.ndim == 2:
+            if isinstance(cond, DataFrameType):
+                cond_map = {c: i for i, c in enumerate(cond.columns)}
+
+                def cond_str(i):
+                    if df.columns[i] in cond_map:
+                        return f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(cond, {cond_map[df.columns[i]]})"
+                    else:
+                        nonlocal gen_all_false
+                        gen_all_false = True
+                        return "all_false"
+
+            elif isinstance(cond, types.Array):
+                cond_str = lambda i: f"cond[:,{i}]"
+
+        if not hasattr(other, "ndim") or other.ndim == 1:
+            other_str = lambda i: "other"
+        elif other.ndim == 2:
+            if isinstance(other, DataFrameType):
+                other_map = {c: i for i, c in enumerate(other.columns)}
+                other_str = (
+                    lambda i: f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(other, {other_map[df.columns[i]]})"
+                    if df.columns[i] in other_map
+                    else "None"
+                )
+            elif isinstance(other, types.Array):
+                other_str = lambda i: f"other[:,{i}]"
+
+        n_cols = len(df.columns)
+        data_args = ", ".join(
+            f"bodo.hiframes.series_impl.where_impl({cond_str(i)}, bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {other_str(i)})"
+            for i in range(n_cols)
+        )
+
+        if gen_all_false:
+            header += "  all_false = np.zeros(len(df), dtype=bool)\n"
+
+        return _gen_init_df(header, df.columns, data_args)
+
+    return overload_dataframe_mask_where
+
+
+def _install_dataframe_mask_where_overload():
+    for func_name in ("mask", "where"):
+        overload_impl = create_dataframe_mask_where_overload(func_name)
+        overload_method(DataFrameType, func_name, no_unliteral=True)(overload_impl)
+
+
+_install_dataframe_mask_where_overload()
+
+
+def _validate_arguments_mask_where(
+    func_name,
+    df,
+    cond,
+    other,
+    inplace,
+    axis,
+    level,
+    errors,
+    try_cast,
+):
+    """
+    Helper function to perform the necessary error checking for
+    Series.where() and Series.mask().
+    """
+    unsupported_args = dict(
+        inplace=inplace, level=level, errors=errors, try_cast=try_cast
+    )
+    arg_defaults = dict(inplace=False, level=None, errors="raise", try_cast=False)
+    check_unsupported_args(
+        f"{func_name}",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
+    if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
+        raise_bodo_error(f"{func_name}(): axis argument not supported")
+
+    if not (
+        isinstance(cond, (SeriesType, types.Array, BooleanArrayType))
+        and (cond.ndim == 1 or cond.ndim == 2)
+        and cond.dtype == types.bool_
+    ) and not (
+        isinstance(cond, DataFrameType)
+        and cond.ndim == 2
+        and all(cond.data[i].dtype == types.bool_ for i in range(len(df.columns)))
+    ):
+        raise BodoError(
+            f"{func_name}(): 'cond' argument must be a DataFrame, Series, 1- or 2-dimensional array of booleans"
+        )
+
+    n_cols = len(df.columns)
+
+    if hasattr(other, "ndim") and (other.ndim != 1 or other.ndim != 2):
+        if other.ndim == 2:
+            if not isinstance(other, (DataFrameType, types.Array)):
+                raise BodoError(
+                    f"{func_name}(): 'other', if 2-dimensional, must be a DataFrame or array."
+                )
+        elif other.ndim != 1:
+            # breakpoint()
+            raise BodoError(f"{func_name}(): 'other' must be either 1 or 2-dimensional")
+    if isinstance(other, DataFrameType):
+        other_map = {c: i for i, c in enumerate(other.columns)}
+        for i in range(n_cols):
+            if df.columns[i] in other_map:
+                bodo.hiframes.series_impl._validate_self_other_mask_where(
+                    func_name,
+                    df.data[i],
+                    other.data[other_map[df.columns[i]]],
+                )
+            else:
+                # Essentially only validates df.data[i]
+                bodo.hiframes.series_impl._validate_self_other_mask_where(
+                    func_name, df.data[i], None, is_default=True
+                )
+    elif isinstance(other, SeriesType):
+        for i in range(n_cols):
+            bodo.hiframes.series_impl._validate_self_other_mask_where(
+                func_name, df.data[i], other.data
+            )
+    else:
+        for i in range(n_cols):
+            bodo.hiframes.series_impl._validate_self_other_mask_where(
+                func_name, df.data[i], other, max_ndim=2
+            )
 
 
 def _gen_init_df(

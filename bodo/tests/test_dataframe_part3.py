@@ -8,6 +8,7 @@ from mpi4py import MPI
 from numba import types
 
 import bodo
+from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.utils import (
     SeriesOptTestPipeline,
     _ensure_func_calls_optimized_out,
@@ -901,6 +902,154 @@ def test_df_iloc_col_slice_assign():
 
     check_func(impl1, (df,), copy_input=True)
     check_func(impl2, (df,), copy_input=True)
+
+
+def test_df_mask_where_df(df_value):
+    def test_where(df, cond, val):
+        return df.where(cond, val)
+
+    def test_mask(df, cond, val):
+        return df.mask(cond, val)
+
+    np.random.seed(42)
+    cond = np.random.ranf(df_value.shape) < 0.5
+    assert len(cond[:, 0]) == len(df_value)
+
+    new_cols = {c: str(c) + "_" for c in df_value.columns}
+    df_renamed = df_value.rename(columns=new_cols)
+    df_flipped = pd.DataFrame(
+        {c: df_value[::-1].get(c) for c in df_value.columns}, index=df_value.index
+    )
+    assert set(df_value.columns).isdisjoint(df_renamed.columns)
+
+    # TODO: support series.where with two categorical inputs
+    # `str` equivalent of `lambda dtype: dtype.name`
+    if "category" in df_value.dtypes.apply(str).values:
+        with pytest.raises(
+            BodoError,
+            match=f"DataFrame.where.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series.",
+        ):
+            bodo.jit(test_where)(df_value, cond, df_value)
+        with pytest.raises(
+            BodoError,
+            match=f"DataFrame.mask.* 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series.",
+        ):
+            bodo.jit(test_mask)(df_value, cond, df_value)
+        return
+
+    check_func(
+        test_where,
+        (
+            df_value,
+            cond,
+            df_flipped,
+        ),
+        copy_input=True,
+    )
+    check_func(
+        test_mask,
+        (
+            df_value,
+            cond,
+            df_flipped,
+        ),
+        copy_input=True,
+    )
+    check_func(
+        test_where,
+        (
+            df_value,
+            cond,
+            df_renamed,
+        ),
+        copy_input=True,
+    )
+    check_func(
+        test_mask,
+        (
+            df_value,
+            cond,
+            df_renamed,
+        ),
+        copy_input=True,
+    )
+
+
+def test_df_mask_where_series_other():
+    """
+    Test df.mask and df.where with pd.Series `other`.
+    """
+
+    def test_mask(df, cond, val):
+        return df.mask(cond, val)
+
+    def test_where(df, cond, val):
+        return df.where(cond, val)
+
+    np.random.seed(42)
+    df = pd.DataFrame(
+        {
+            "A": [1, 8, 4, 11, -3],
+            "B": [1.1, np.nan, 4.2, 3.1, -1.3],
+            "C": [True, False, False, True, True],
+        }
+    )
+    df2 = df.copy()
+    df2.B = ["a", "b", "c", "d", "e"]
+    cond = np.random.ranf(df.shape) < 0.5
+
+    check_func(
+        test_mask,
+        (df, cond, df.iloc[:, 0]),
+        copy_input=True,
+        py_output=df.mask(cond, df.iloc[:, 0], axis=0),
+    )
+    check_func(
+        test_where,
+        (df, cond, df.iloc[:, 0]),
+        copy_input=True,
+        py_output=df.where(cond, df.iloc[:, 0], axis=0),
+    )
+    with pytest.raises(
+        BodoError,
+        match=f"DataFrame.where.* series and 'other' must share a common type.",
+    ):
+        check_func(
+            test_where,
+            (df2, cond, df2.iloc[:, 0]),
+            copy_input=True,
+            py_output=df2.where(cond, df2.iloc[:, 0], axis=0),
+        )
+    with pytest.raises(
+        BodoError,
+        match=f"DataFrame.mask.* series and 'other' must share a common type.",
+    ):
+        check_func(
+            test_mask,
+            (df2, cond, df2.iloc[:, 0]),
+            copy_input=True,
+            py_output=df2.where(cond, df2.iloc[:, 0], axis=0),
+        )
+
+
+def test_df_mask_where_scalar_other():
+    """
+    Test df.where and df.mask with a scalar value for `other`.
+    """
+
+    def test_mask(df, cond, val):
+        return df.mask(cond, val)
+
+    def test_where(df, cond, val):
+        return df.where(cond, val)
+
+    np.random.seed(42)
+    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10)})
+    cond = np.random.ranf(df.shape) < 0.5
+    other = 5
+
+    check_func(test_mask, (df, cond, other))
+    check_func(test_where, (df, cond, other))
 
 
 @pytest.mark.parametrize("offset", ("15D", pd.DateOffset(days=15), "0D"))

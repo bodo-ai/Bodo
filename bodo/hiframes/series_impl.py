@@ -3646,36 +3646,8 @@ def overload_series_pct_change(S, periods=1, fill_method="pad", limit=None, freq
     return impl
 
 
-@overload_method(SeriesType, "where", inline="always", no_unliteral=True)
-def overload_series_where(
-    S,
-    cond,
-    other=np.nan,
-    inplace=False,
-    axis=None,
-    level=None,
-    errors="raise",
-    try_cast=False,
-):
-    """Overload Series.where. It replaces element with other if cond is False.
-    It's the opposite of Series.mask
-    """
-
-    # Validate the inputs
-    _validate_arguments_mask_where(
-        "Series.where",
-        S,
-        cond,
-        other,
-        inplace,
-        axis,
-        level,
-        errors,
-        try_cast,
-    )
-
-    # TODO: handle other cases
-    def impl(
+def create_series_mask_where_overload(func_name):
+    def overload_series_mask_where(
         S,
         cond,
         other=np.nan,
@@ -3684,62 +3656,58 @@ def overload_series_where(
         level=None,
         errors="raise",
         try_cast=False,
-    ):  # pragma: no cover
-        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        index = bodo.hiframes.pd_series_ext.get_series_index(S)
-        name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        out_arr = bodo.hiframes.series_impl.where_impl(cond, arr, other)
-        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+    ):
+        """
+        Overload Series.mask or Series.where. It replaces element with other depending on cond
+        (if Series.where, will replace iff cond is False; if Series.mask, will replace iff cond is True).
+        """
 
-    return impl
+        # Validate the inputs
+        _validate_arguments_mask_where(
+            f"Series.{func_name}",
+            S,
+            cond,
+            other,
+            inplace,
+            axis,
+            level,
+            errors,
+            try_cast,
+        )
+
+        # TODO: handle other cases
+        if is_overload_constant_nan(other):
+            other_str = "None"
+        else:
+            other_str = "other"
+
+        func_text = "def impl(S, cond, other=np.nan, inplace=False, axis=None, level=None, errors='raise',try_cast=False):\n"
+        if func_name == "mask":
+            # if Series.mask, same functionality as Series.where except condition is inverted.
+            func_text += "  cond = ~cond\n"
+        func_text += "  arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+        func_text += "  index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+        func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+        func_text += f"  out_arr = bodo.hiframes.series_impl.where_impl(cond, arr, {other_str})\n"
+        func_text += (
+            "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+        impl = loc_vars["impl"]
+
+        return impl
+
+    return overload_series_mask_where
 
 
-@overload_method(SeriesType, "mask", inline="always", no_unliteral=True)
-def overload_series_mask(
-    S,
-    cond,
-    other=np.nan,
-    inplace=False,
-    axis=None,
-    level=None,
-    errors="raise",
-    try_cast=False,
-):
-    """Overload Series.mask. It replaces element with other if cond is True.
-    It's the opposite of Series.where
-    """
+def _install_series_mask_where_overload():
+    for func_name in ("mask", "where"):
+        overload_impl = create_series_mask_where_overload(func_name)
+        overload_method(SeriesType, func_name, no_unliteral=True)(overload_impl)
 
-    # Validate the inputs
-    _validate_arguments_mask_where(
-        "Series.mask",
-        S,
-        cond,
-        other,
-        inplace,
-        axis,
-        level,
-        errors,
-        try_cast,
-    )
 
-    # TODO: handle other cases
-    def impl(
-        S,
-        cond,
-        other=np.nan,
-        inplace=False,
-        axis=None,
-        level=None,
-        errors="raise",
-        try_cast=False,
-    ):  # pragma: no cover
-        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        index = bodo.hiframes.pd_series_ext.get_series_index(S)
-        name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        out_arr = bodo.hiframes.series_impl.where_impl(~cond, arr, other)
-        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
-
-    return impl
+_install_series_mask_where_overload()
 
 
 def _validate_arguments_mask_where(
@@ -3753,8 +3721,10 @@ def _validate_arguments_mask_where(
     errors,
     try_cast,
 ):
-    """Helper function to perform the necessary error checking for
-    Series.where() and Series.mask()."""
+    """
+    Helper function to perform the necessary error checking for
+    Series.where() and Series.mask().
+    """
     unsupported_args = dict(
         inplace=inplace, level=level, errors=errors, try_cast=try_cast
     )
@@ -3769,32 +3739,13 @@ def _validate_arguments_mask_where(
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise_bodo_error(f"{func_name}(): axis argument not supported")
 
-    # Bodo Limitation. Where/Mask is only supported for string/binary arrays, categorical + scalar, and numpy arrays
-    if not (
-        isinstance(S.data, types.Array)
-        or isinstance(S.data, BooleanArrayType)
-        or isinstance(S.data, IntegerArrayType)
-        or (
-            bodo.utils.utils.is_array_typ(S.data, False)
-            and (S.dtype in [bodo.string_type, bodo.bytes_type])
-        )
-        # TODO: Support categorical of Timestamp/Timedelta
-        or (
-            isinstance(S.data, bodo.CategoricalArrayType)
-            and S.dtype.elem_type
-            not in [
-                bodo.datetime64ns,
-                bodo.timedelta64ns,
-                bodo.pd_timestamp_type,
-                bodo.pd_timedelta_type,
-            ]
-        )
-    ):
-        raise BodoError(
-            f"{func_name}() Series data with type {S.data} not yet supported"
-        )
+    # Validating S and other:
+    if isinstance(other, SeriesType):
+        _validate_self_other_mask_where(func_name, S.data, other.data)
+    else:
+        _validate_self_other_mask_where(func_name, S.data, other)
 
-    # TODO: Support multidimensional arrays for cond + Dataframes
+    # Validating cond:
     # Check that cond is a supported array of booleans
     if not (
         isinstance(cond, (SeriesType, types.Array, BooleanArrayType))
@@ -3804,6 +3755,36 @@ def _validate_arguments_mask_where(
         raise BodoError(
             f"{func_name}() 'cond' argument must be a Series or 1-dim array of booleans"
         )
+
+
+def _validate_self_other_mask_where(
+    func_name, arr, other, max_ndim=1, is_default=False
+):  # should be arr
+    """Helper function to perform the necessary error checking for
+    Series.where() and Series.mask()."""
+
+    # Bodo Limitation. Where/Mask is only supported for string/binary arrays, categorical + scalar, and numpy arrays
+    if not (
+        isinstance(arr, types.Array)
+        or isinstance(arr, BooleanArrayType)
+        or isinstance(arr, IntegerArrayType)
+        or (
+            bodo.utils.utils.is_array_typ(arr, False)
+            and (arr.dtype in [bodo.string_type, bodo.bytes_type])
+        )
+        # TODO: Support categorical of Timestamp/Timedelta
+        or (
+            isinstance(arr, bodo.CategoricalArrayType)
+            and arr.dtype.elem_type
+            not in [
+                bodo.datetime64ns,
+                bodo.timedelta64ns,
+                bodo.pd_timestamp_type,
+                bodo.pd_timedelta_type,
+            ]
+        )
+    ):
+        raise BodoError(f"{func_name}() Series data with type {arr} not yet supported")
 
     # Bodo Restriction: Strict typing limits the type of 'other'
     # Check that other is an accepted value and that its type matches.
@@ -3816,15 +3797,20 @@ def _validate_arguments_mask_where(
     # drop NaN values.
     val_is_nan = is_overload_constant_nan(other)
     if not (
+        is_default
         # Handle actual np.nan value if other is omitted
-        val_is_nan
+        or val_is_nan
         or is_scalar_type(other)
-        or (isinstance(other, types.Array) and other.ndim == 1)
+        or (
+            isinstance(other, types.Array)
+            and other.ndim >= 1
+            and other.ndim <= max_ndim
+        )
         or (
             isinstance(other, SeriesType)
             and (
-                isinstance(S.data, types.Array)
-                or (S.dtype in [bodo.string_type, bodo.bytes_type])
+                isinstance(arr, types.Array)
+                or (arr.dtype in [bodo.string_type, bodo.bytes_type])
             )
         )
         # support S.where(A) where A is a binary/string array.
@@ -3832,17 +3818,17 @@ def _validate_arguments_mask_where(
         or (
             isinstance(other, StringArrayType)
             and (
-                S.dtype == bodo.string_type
-                or isinstance(S.data, bodo.CategoricalArrayType)
-                and S.dtype.elem_type == bodo.string_type
+                arr.dtype == bodo.string_type
+                or isinstance(arr, bodo.CategoricalArrayType)
+                and arr.dtype.elem_type == bodo.string_type
             )
         )
         or (
             isinstance(other, BinaryArrayType)
             and (
-                S.dtype == bodo.bytes_type
-                or isinstance(S.data, bodo.CategoricalArrayType)
-                and S.dtype.elem_type == bodo.bytes_type
+                arr.dtype == bodo.bytes_type
+                or isinstance(arr, bodo.CategoricalArrayType)
+                and arr.dtype.elem_type == bodo.bytes_type
             )
         )
         or (
@@ -3851,7 +3837,7 @@ def _validate_arguments_mask_where(
                 # as str/bin_arr.data.dtype gives a pretty unintelligble error from the user perspective
                 not isinstance(other, (StringArrayType, BinaryArrayType))
                 and (
-                    isinstance(S.data.dtype, types.Integer)
+                    isinstance(arr.dtype, types.Integer)
                     # Handle case that other is Series with underlying data = Nullable Int array
                     and (
                         (
@@ -3860,43 +3846,40 @@ def _validate_arguments_mask_where(
                         )
                         or (
                             is_series_type(other)
-                            and isinstance(other.data.dtype, types.Integer)
+                            and isinstance(other.dtype, types.Integer)
                         )
                     )
                 )
                 or (
-                    (
-                        bodo.utils.utils.is_array_typ(other)
-                        and S.data.dtype == other.dtype
-                    )
-                    or (is_series_type(other) and S.data.dtype == other.data.dtype)
+                    (bodo.utils.utils.is_array_typ(other) and arr.dtype == other.dtype)
+                    or (is_series_type(other) and arr.dtype == other.dtype)
                 )
             )
-            and (
-                isinstance(S.data, BooleanArrayType)
-                or isinstance(S.data, IntegerArrayType)
-            )
+            and (isinstance(arr, BooleanArrayType) or isinstance(arr, IntegerArrayType))
         )
     ):
         raise BodoError(
             f"{func_name}() 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
         )
 
-    # Check that the types match
-    if isinstance(S.dtype, bodo.PDCategoricalDtype):
-        s_typ = S.dtype.elem_type
-    else:
-        s_typ = S.dtype
+    # Check that the types match if not replacing with default value
+    if not is_default:
+        if isinstance(arr.dtype, bodo.PDCategoricalDtype):
+            arr_typ = arr.dtype.elem_type
+        else:
+            arr_typ = arr.dtype
 
-    if is_iterable_type(other):
-        other_typ = other.dtype
-    elif val_is_nan:
-        other_typ = types.float64
-    else:
-        other_typ = types.unliteral(other)
+        if is_iterable_type(other):
+            other_typ = other.dtype
+        elif val_is_nan:
+            other_typ = types.float64
+        else:
+            other_typ = types.unliteral(other)
 
-    if not (is_common_scalar_dtype([s_typ, other_typ])):
-        raise BodoError(f"{func_name}() series and 'other' must share a common type.")
+        if not val_is_nan and not (is_common_scalar_dtype([arr_typ, other_typ])):
+            raise BodoError(
+                f"{func_name}() series and 'other' must share a common type."
+            )
 
 
 ############################ binary operators #############################
@@ -4635,7 +4618,10 @@ def overload_where_unsupported(condition, x, y):
 @overload(where_impl, no_unliteral=True)
 @overload(np.where, no_unliteral=True)
 def overload_np_where(condition, x, y):
-    """implement parallelizable np.where() for Series and 1D arrays"""
+    """
+    Implement parallelizable np.where() for Series and 1D arrays.
+    None may be passed in for `y`, in which case the appropriate NA is used as y.
+    """
     # this overload only supports 1D arrays
     if (
         not isinstance(condition, (SeriesType, types.Array, BooleanArrayType))
@@ -4679,7 +4665,15 @@ def overload_np_where(condition, x, y):
     x_data = get_data(x)
     y_data = get_data(y)
     is_nullable = any(bodo.utils.typing.is_nullable(data) for data in [x_data, y_data])
-    if x_data == y_data and not is_nullable:
+    if y_data == types.none:
+        # X is always an array if other input is None.
+        # TODO: add proper error checking for np.where
+        if isinstance(x_dtype, types.Number):
+            # Pandas converts integers to floats
+            out_dtype = types.Array(types.float64, 1, "C")
+        else:
+            out_dtype = to_nullable_type(x)
+    elif x_data == y_data and not is_nullable:
         out_dtype = dtype_to_array_type(x_dtype)
     # output is string if any input is string
     elif x_dtype == string_type or y_dtype == string_type:
@@ -4751,11 +4745,17 @@ def overload_np_where(condition, x, y):
         func_text += "      if bodo.libs.array_kernels.isna(y, j):\n"
         func_text += "        setna(out_arr, j)\n"
         func_text += "        continue\n"
-    func_text += (
-        "      out_arr[j] = bodo.utils.conversion.unbox_if_timestamp({})\n".format(
-            "y[j]" if is_y_arr else "y"
+    if y_data == types.none:
+        if isinstance(x_dtype, bodo.PDCategoricalDtype):
+            func_text += "      out_codes[j] = -1\n"
+        else:
+            func_text += "      setna(out_arr, j)\n"
+    else:
+        func_text += (
+            "      out_arr[j] = bodo.utils.conversion.unbox_if_timestamp({})\n".format(
+                "y[j]" if is_y_arr else "y"
+            )
         )
-    )
     func_text += "  return out_arr\n"
     loc_vars = {}
     exec(
