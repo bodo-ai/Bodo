@@ -1809,6 +1809,46 @@ Reindexing / Selection / Label manipulation
             dtype: bool
 
 
+``pd.Dataframe.first``
+^^^^^^^^^^^^^^^^^^^^^^
+
+    * :meth:`pandas.DataFrame.first` ``(offset)``
+
+      `Supported arguments`:
+
+      .. list-table::
+        :widths: 25 35 40
+        :header-rows: 1
+
+        * - argument
+          - datatypes
+          - other requirements
+        * - ``offset``
+          - - String or Offset type
+          - - String argument be a valid `frequency alias <https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases>`_
+
+      .. note::
+        DataFrame must have a valid DatetimeIndex and is assumed to already be sorted.
+        This function have undefined behavior if the DatetimeIndex is not sorted.
+
+      `Example Usage`:
+
+        .. code-block:: ipython3
+
+          >>> @bodo.jit
+          ... def f(df, offset):
+          ...     return df.first(offset)
+          >>> df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)}, index=pd.date_range(start='1/1/2022', end='12/31/2024', periods=100))
+          >>> f(df, "2M")
+                                         A    B
+          2022-01-01 00:00:00.000000000  0  100
+          2022-01-12 01:27:16.363636363  1  101
+          2022-01-23 02:54:32.727272727  2  102
+          2022-02-03 04:21:49.090909091  3  103
+          2022-02-14 05:49:05.454545454  4  104
+          2022-02-25 07:16:21.818181818  5  105
+
+
 ``pd.Dataframe.idxmax``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1851,6 +1891,47 @@ Reindexing / Selection / Label manipulation
             B    0
             C    20
             dtype: int64
+
+
+``pd.Dataframe.last``
+^^^^^^^^^^^^^^^^^^^^^
+
+    * :meth:`pandas.DataFrame.last` ``(offset)``
+
+      `Supported arguments`:
+
+      .. list-table::
+        :widths: 25 35 40
+        :header-rows: 1
+
+        * - argument
+          - datatypes
+          - other requirements
+        * - ``offset``
+          - - String or Offset type
+          - - String argument be a valid `frequency alias <https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases>`_
+
+      .. note::
+        DataFrame must have a valid DatetimeIndex and is assumed to already be sorted.
+        This function have undefined behavior if the DatetimeIndex is not sorted.
+
+      `Example Usage`:
+
+        .. code-block:: ipython3
+
+          >>> @bodo.jit
+          ... def f(df, offset):
+          ...     return df.last(offset)
+          >>> df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)}, index=pd.date_range(start='1/1/2022', end='12/31/2024', periods=100))
+          >>> f(df, "2M")
+                                          A    B
+          2024-11-05 16:43:38.181818176  94  194
+          2024-11-16 18:10:54.545454544  95  195
+          2024-11-27 19:38:10.909090912  96  196
+          2024-12-08 21:05:27.272727264  97  197
+          2024-12-19 22:32:43.636363632  98  198
+          2024-12-31 00:00:00.000000000  99  199
+
 
 ``pd.Dataframe.rename``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2116,8 +2197,57 @@ Missing data handling
 Reshaping, sorting, transposing
 *******************************
 
+
+``pd.Dataframe.pivot``
+^^^^^^^^^^^^^^^^^^^^^^
+
+
+    * :meth:`pandas.DataFrame.pivot` ``(values=None, index=None, columns=None)``
+
+
+        `Supported arguments`:
+
+        .. list-table::
+           :widths: 25 35
+           :header-rows: 1
+
+           * - argument
+             - datatypes
+           * - ``values``
+             - - Constant Column Label or list of labels
+           * - ``index``
+             - - Constant Column Label
+           * - ``columns``
+             - - Constant Column Label
+
+
+        .. note::
+          The the number of columns and names of the output DataFrame won't be known
+          at compile time. To update typing information on DataFrame you should pass it back to Python.
+
+
+        `Example Usage`:
+
+        .. code-block:: ipython3
+
+            >>> @bodo.jit
+            ... def f():
+            ...   df = pd.DataFrame({"A": ["X","X","X","X","Y","Y"], "B": [1,2,3,4,5,6], "C": [10,11,12,20,21,22]})
+            ...   pivoted_tbl = df.pivot(columns="A", index="B", values="C")
+            ...   return pivoted_tbl
+            >>> f()
+            A     X     Y
+            B
+            1  10.0   NaN
+            2  11.0   NaN
+            3  12.0   NaN
+            4  20.0   NaN
+            5   NaN  21.0
+            6   NaN  22.0
+
+
 ``pd.Dataframe.pivot_table``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     * :meth:`pandas.DataFrame.pivot_table` ``(values=None, index=None, columns=None, aggfunc='mean', fill_value=None, margins=False, dropna=True, margins_name='All', observed=False, sort=True)``
 
@@ -2131,17 +2261,24 @@ Reshaping, sorting, transposing
            * - argument
              - datatypes
            * - ``values``
-             - - String Constant (required)
+             - - Constant Column Label or list of labels
            * - ``index``
-             - - String Constant (required)
+             - - Constant Column Label
            * - ``columns``
-             - - String Constant (required)
+             - - Constant Column Label
            * - ``aggfunc``
              - - String Constant
 
 
         .. note::
-          Annotation of pivot values is required. For example, ``@bodo.jit(pivots={'pt': ['small', 'large']})`` declares the output pivot table `pt` will have columns called `small` and `large`.
+          This code takes two different paths depending on if pivot values are annotated. When
+          pivot values are annotated then output columns are set to the annotated values.
+          For example, ``@bodo.jit(pivots={'pt': ['small', 'large']})``
+          declares the output pivot table ``pt`` will have columns called ``small`` and ``large``.
+
+          If pivot values are not annotated, then the number of columns and names of the output DataFrame won't be known
+          at compile time. To update typing information on DataFrame you should pass it back to Python.
+
 
         `Example Usage`:
 
@@ -2150,7 +2287,7 @@ Reshaping, sorting, transposing
             >>> @bodo.jit(pivots={'pivoted_tbl': ['X', 'Y']})
             ... def f():
             ...   df = pd.DataFrame({"A": ["X","X","X","X","Y","Y"], "B": [1,2,3,4,5,6], "C": [10,11,12,20,21,22]})
-            ..    pivoted_tbl = df.pivot_table(columns="A", index="B", values="C", aggfunc="mean")
+            ...   pivoted_tbl = df.pivot_table(columns="A", index="B", values="C", aggfunc="mean")
             ...   return pivoted_tbl
             >>> f()
                   X     Y

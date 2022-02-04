@@ -3495,6 +3495,50 @@ Reindexing / Selection / Label manipulation
       >>> f(S, other)
       False
 
+
+
+``pd.Series.first``
+"""""""""""""""""""
+
+
+* :meth:`pandas.Series.first` ``(offset)``
+
+
+  `Supported arguments`:
+
+  .. list-table::
+    :widths: 25 35 40
+    :header-rows: 1
+
+    * - argument
+      - datatypes
+      - other requirements
+    * - ``offset``
+      - - String or Offset type
+      - - String argument be a valid `frequency alias <https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases>`_
+
+  .. note::
+    Series must have a valid DatetimeIndex and is assumed to already be sorted.
+    This function have undefined behavior if the DatetimeIndex is not sorted.
+
+  `Example Usage`:
+
+    .. code-block:: ipython3
+
+      >>> @bodo.jit
+      ... def f(S, offset):
+      ...     return S.first(offset)
+      >>> S = pd.Series(np.arange(100), index=pd.date_range(start='1/1/2022', end='12/31/2024', periods=100))
+      >>> f(S, "2M")
+      2022-01-01 00:00:00.000000000    0
+      2022-01-12 01:27:16.363636363    1
+      2022-01-23 02:54:32.727272727    2
+      2022-02-03 04:21:49.090909091    3
+      2022-02-14 05:49:05.454545454    4
+      2022-02-25 07:16:21.818181818    5
+      dtype: int64
+
+
 ``pd.Series.head``
 """""""""""""""""""""""""""""""
 
@@ -3623,6 +3667,49 @@ Reindexing / Selection / Label manipulation
       98     True
       99    False
       Length: 100, dtype: bool
+
+
+``pd.Series.last``
+""""""""""""""""""
+
+
+* :meth:`pandas.Series.last` ``(offset)``
+
+
+  `Supported arguments`:
+
+  .. list-table::
+    :widths: 25 35 40
+    :header-rows: 1
+
+    * - argument
+      - datatypes
+      - other requirements
+    * - ``offset``
+      - - String or Offset type
+      - - String argument be a valid `frequency alias <https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases>`_
+
+  .. note::
+    Series must have a valid DatetimeIndex and is assumed to already be sorted.
+    This function have undefined behavior if the DatetimeIndex is not sorted.
+
+  `Example Usage`:
+
+    .. code-block:: ipython3
+
+      >>> @bodo.jit
+      ... def f(S, offset):
+      ...     return S.last(offset)
+      >>> S = pd.Series(np.arange(100), index=pd.date_range(start='1/1/2022', end='12/31/2024', periods=100))
+      >>> f(S, "2M")
+      2024-11-05 16:43:38.181818176    94
+      2024-11-16 18:10:54.545454544    95
+      2024-11-27 19:38:10.909090912    96
+      2024-12-08 21:05:27.272727264    97
+      2024-12-19 22:32:43.636363632    98
+      2024-12-31 00:00:00.000000000    99
+      dtype: int64
+
 
 ``pd.Series.rename``
 """""""""""""""""""""""""""""""
