@@ -710,7 +710,8 @@ nature of the computation that produces them. Let’s see an example:
 
 Save code in mean_power_speed.py and run it with **mpiexec** as follows:
 
-.. code::
+.. code:: console
+
     mpiexec -n 4 python mean_power_speed.py
 
 .. parsed-literal::
@@ -747,11 +748,11 @@ environment variable ``BODO_DISTRIBUTED_DIAGNOSTICS=1`` or calling
 ``distributed_diagnostics()`` on the compiled function. Let’s examine
 the previous example’s distributions by adding following line to `mean_power_speed` script:
 
-.. code::
+.. code::console
 
     mean_power_speed.distributed_diagnostics()
 
-.. code::
+.. code::console
     python mean_power_speed.py
 
 
