@@ -102,7 +102,8 @@ Bodo can detect filters used by the code and optimize the ``read_parquet`` call 
 down to the storage layer, so that only the rows required by the program are read. This can significantly
 speed up I/O in many cases and will reduce the program's memory footprint, sometimes substantially.
 
-.. comment:: Should we mention removal of unused columns somewhere? That is not filter pushdown but it's similar.
+..
+    Should we mention removal of unused columns somewhere? That is not filter pushdown but it's similar.
 
 For example, suppose we have a large dataset that spans many years and we only need to read data
 for a particular year.
@@ -120,7 +121,8 @@ will have already been filtered after reading, Bodo removes the filter operation
 Note that this requires code transformation and optimization and is something
 that pandas cannot do. Bodo automatically infers which filters can be pushed down.
 
-.. comment:: A reference for hive-partitioning below might be good, but I didn't see a good one.
+..
+    A reference for hive-partitioning below might be good, but I didn't see a good one.
 
 If your dataset is *hive-partitioned* and partition columns appear in filter expressions,
 only the files that contain relevant data are read, and the rest are discarded based on their
