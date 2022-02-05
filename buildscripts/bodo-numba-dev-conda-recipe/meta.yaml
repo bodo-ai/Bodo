@@ -28,9 +28,12 @@ requirements:
     - fsspec
     - pyarrow =5.0.0
     - boost-cpp =1.74.0
-    - hdf5 * mpi_mpich_* # [not win]
+    # The hdf5 API changes between 1.10 and 1.12. Since
+    # both are compatible with mpich =3.4.*=h*, we need
+    # to force hdf5 to use the older version.
+    - hdf5 =1.10.*=*mpi_mpich_* # [not win]
     - h5py
-    - mpich =3.3.2=h* # [not win]
+    - mpich >=3.3,<4.0.0a0=h* # [not win]
     - msmpi # [win]
     - mpi4py
     - vc # [win]
@@ -46,7 +49,7 @@ requirements:
     - numba
     - openjdk =8
     - sqlalchemy
-    - mpich =3.3.2=h* # [not win]
+    - mpich >=3.3,<4.0.0a0=h* # [not win]
     - msmpi # [win]
     - mpi4py
     - vs2015_runtime # [win]
