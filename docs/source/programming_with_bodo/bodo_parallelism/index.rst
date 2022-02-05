@@ -29,10 +29,3 @@ Understanding Parallelism with Bodo
        :maxdepth: 1
 
        not_supported
-   
-    ---
-
-    .. toctree::
-       :maxdepth: 1
-
-       misc

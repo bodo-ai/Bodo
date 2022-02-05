@@ -7,13 +7,6 @@ Integrating Bodo into your Pipeline
     .. toctree::
        :maxdepth: 1
 
-       file_io
-
-    ---
-
-    .. toctree::
-       :maxdepth: 1
-
        Databricks_integration
 
     ---
@@ -28,13 +21,6 @@ Integrating Bodo into your Pipeline
     .. toctree::
        :maxdepth: 1
 
-       objmode
-
-    ---
-
-    .. toctree::
-       :maxdepth: 1
-
        front_end
 
     ---
@@ -42,7 +28,11 @@ Integrating Bodo into your Pipeline
     .. toctree::
        :maxdepth: 1
 
+       dl
+
+   ---
+
+    .. toctree::
+       :maxdepth: 1
+
        data_visualization
-
-
-
