@@ -1,11 +1,10 @@
 .. _file_io:
 
-Bodo Data Sources and Connectors
-==================================
+Scalable Data I/O
+=================
 
-.. comment:: I think the title of this section should be something more high-level or abstract, like Connectors or Loading and Storing Data
-
-.. comment:: I think it's better if below paragraph says "Bodo provides parallel IO for all of its supported formats"
+..
+    I think it's better if below paragraph says "Bodo provides parallel IO for all of its supported formats"
 
 Efficient parallel data processing requires data I/O to be parallelized
 effectively as well. Bodo provides parallel file I/O for many different
@@ -14,9 +13,10 @@ Numpy binaries, `HDF5 <http://www.h5py.org>`__ and SQL databases. This
 diagram demonstrates how chunks of data are partitioned among parallel
 execution engines by Bodo.
 
-.. comment:: Figure should say dataset instead of file (dataset can consist of multiple files,
-and is the common case with big data). Also I think we could have a better figure, maybe showing the MPI
-ranks/workers
+..
+    Figure should say dataset instead of file (dataset can consist of multiple files,
+    and is the common case with big data). Also I think we could have a better figure, maybe showing the MPI
+    ranks/workers
 
 .. figure:: ../img/file-read.jpg
    :align: center

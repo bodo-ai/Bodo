@@ -1,16 +1,9 @@
 .. _apireference:
 
-Bodo API Reference
-==================
+Bodo JIT API Reference
+======================
 
 .. panels::
-
-    .. toctree::
-       :maxdepth: 1
-
-       udfs
-
-   ---
 
     .. toctree::
        :maxdepth: 1
@@ -29,14 +22,14 @@ Bodo API Reference
     .. toctree::
        :maxdepth: 1
 
-       ml
+       udfs
 
    ---
 
     .. toctree::
        :maxdepth: 1
 
-       dl
+       ml
 
    ---
 

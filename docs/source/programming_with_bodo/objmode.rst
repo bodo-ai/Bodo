@@ -61,7 +61,7 @@ Object Mode Type Annotations
 ----------------------------
 
 There are various ways to specify the data types in ``objmode``.
-Basic data types such as ``float64``, ``int64`` can be specified as string
+Basic data types such as ``float64`` and ``int64`` can be specified as string
 values (as in the previous example).
 For more complex data types like dataframes, ``bodo.typeof()`` can be used on sample data
 that has the same type as expected outputs. For example:
