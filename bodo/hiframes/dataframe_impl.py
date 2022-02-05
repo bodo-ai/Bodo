@@ -2075,24 +2075,23 @@ def create_dataframe_mask_where_overload(func_name):
         header = "def impl(df, cond, other=np.nan, inplace=False, axis=None, level=None, errors='raise', try_cast=False):\n"
         if func_name == "mask":
             header += "  cond = ~cond\n"
-        gen_all_false = False
+        gen_all_false = [False]
 
         if cond.ndim == 1:
-            cond_str = lambda i: "cond"
+            cond_str = lambda i, _: "cond"
         elif cond.ndim == 2:
             if isinstance(cond, DataFrameType):
                 cond_map = {c: i for i, c in enumerate(cond.columns)}
 
-                def cond_str(i):
+                def cond_str(i, gen_all_false):
                     if df.columns[i] in cond_map:
                         return f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(cond, {cond_map[df.columns[i]]})"
                     else:
-                        nonlocal gen_all_false
-                        gen_all_false = True
+                        gen_all_false[0] = True
                         return "all_false"
 
             elif isinstance(cond, types.Array):
-                cond_str = lambda i: f"cond[:,{i}]"
+                cond_str = lambda i, _: f"cond[:,{i}]"
 
         if not hasattr(other, "ndim") or other.ndim == 1:
             other_str = lambda i: "other"
@@ -2109,11 +2108,11 @@ def create_dataframe_mask_where_overload(func_name):
 
         n_cols = len(df.columns)
         data_args = ", ".join(
-            f"bodo.hiframes.series_impl.where_impl({cond_str(i)}, bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {other_str(i)})"
+            f"bodo.hiframes.series_impl.where_impl({cond_str(i,gen_all_false)}, bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {other_str(i)})"
             for i in range(n_cols)
         )
 
-        if gen_all_false:
+        if gen_all_false[0]:
             header += "  all_false = np.zeros(len(df), dtype=bool)\n"
 
         return _gen_init_df(header, df.columns, data_args)
