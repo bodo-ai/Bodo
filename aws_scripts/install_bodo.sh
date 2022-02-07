@@ -12,4 +12,4 @@ conda create -n Bodo python
 cd /home/ubuntu
 eval "$(conda shell.bash hook)"
 conda activate Bodo
-conda install -y bodo h5py=2.10 scipy hdf5=1.10.*=*mpich* -c file://home/ubuntu/bodo-inc/ -c bodo.ai -c conda-forge
+conda install -y bodo h5py=2.10 scipy hdf5='1.10=*mpich*' -c file://home/ubuntu/bodo-inc/ -c bodo.ai -c conda-forge

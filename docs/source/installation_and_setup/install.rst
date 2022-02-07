@@ -58,7 +58,7 @@ Optional Dependencies
 Some Bodo functionality may require other dependencies, as summarized in the table below.
 All optional dependencies except Hadoop can be
 installed using the commands ``conda install gcsfs sqlalchemy snowflake-connector-python
-hdf5='1.10.*=*mpich*' openjdk -c conda-forge`` and ``pip install
+hdf5='1.10=*mpich*' openjdk -c conda-forge`` and ``pip install
 deltalake``.
 
 .. list-table::
