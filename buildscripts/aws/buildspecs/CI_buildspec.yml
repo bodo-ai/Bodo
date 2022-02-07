@@ -10,11 +10,14 @@ env:
     shell: /bin/bash
     variables:
       CONDA_ENV: BodoCodeBuild
+      RUN_NIGHTLY: "no"
+      RUNTIME: "yes"
 
 phases:
     install:
         commands:
         - echo Entered the install phase...
+        - ./buildscripts/aws/CI_if_changes.sh buildscripts/setup_conda.sh
         - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/test_installs.sh
         - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/merge_with_master.sh
     build:
