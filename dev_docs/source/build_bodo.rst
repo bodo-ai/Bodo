@@ -34,7 +34,7 @@ such as Numba on Ubuntu Linux::
     python setup.py develop
     cd ..
     # END OF BUILD NUMBA FROM SOURCE
-    conda install -c conda-forge hdf5='1.10=*mpich*' pyarrow=5.0.0 pymysql sqlalchemy
+    conda install -c conda-forge hdf5='1.10.*=*mpich*' pyarrow=5.0.0 pymysql sqlalchemy
     # Highly recommended to speed up compilation times
     conda install ccache -c conda-forge
     # Highly recommended for enforcing style requirements (see dev_process.rst)
