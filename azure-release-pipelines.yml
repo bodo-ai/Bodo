@@ -61,6 +61,12 @@ stages:
       vmImage: windows-2019
       useNumbaDev: false
       platformBuild: false
+  - template: buildscripts/azure/azure-build-binary-macos-x86-pip.yml
+    parameters:
+      name: macOS_x86_pip
+      vmImage: macOS-latest
+      useNumbaDev: false
+      platformBuild: false
 
 - stage: Test_Bodo_Binary
   displayName: Test Bodo Binary
