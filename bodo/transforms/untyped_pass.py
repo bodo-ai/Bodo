@@ -2767,13 +2767,6 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
     if db_type == "snowflake":
         try:
             import snowflake.connector
-
-            # snowflake.connector.errors.DatabaseError: snowflake access credentials error
-            # snowflake.connector.errors.ProgrammingError: SQL has an error
-            except_classes = (
-                snowflake.connector.errors.DatabaseError,
-                snowflake.connector.errors.ProgrammingError,
-            )
         except ImportError:
             message = (
                 "Snowflake Python connector not found."
@@ -2785,13 +2778,6 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
     else:
         try:
             import sqlalchemy  # noqa
-
-            # sqlalchemy.exc.ProgrammingError: SQL has an error
-            # sqlalchemy.exc.OperationalError: DB access credentials error
-            except_classes = (
-                sqlalchemy.exc.ProgrammingError,
-                sqlalchemy.exc.OperationalError,
-            )
         except ImportError:  # pragma: no cover
             message = (
                 "Using URI string without sqlalchemy installed."
@@ -2851,7 +2837,7 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
             # Q: Is this needed for snowflake?
             df_type = to_nullable_type(df_type)
             df_info = (df_type, converted_colnames)
-        except except_classes as e:
+        except Exception as e:
             message = f"{type(e).__name__}:'{e}'"
 
     raise_error = bool(message)
