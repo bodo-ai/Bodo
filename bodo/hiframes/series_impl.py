@@ -2671,29 +2671,31 @@ def binary_str_fillna_inplace_series_impl(is_binary=False):
     else:
         alloc_fn = "bodo.libs.str_arr_ext.pre_alloc_string_array"
 
-    func_text = "def impl(\n"
-    func_text += "    S,\n"
-    func_text += "    value=None,\n"
-    func_text += "    method=None,\n"
-    func_text += "    axis=None,\n"
-    func_text += "    inplace=False,\n"
-    func_text += "    limit=None,\n"
-    func_text += "    downcast=None,\n"
-    func_text += "):  # pragma: no cover\n"
-    func_text += "    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
-    func_text += "    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)\n"
-    func_text += "    n = len(in_arr)\n"
-    func_text += f"    out_arr = {alloc_fn}(n, -1)\n"
-    func_text += "    for j in numba.parfors.parfor.internal_prange(n):\n"
-    func_text += "        s = in_arr[j]\n"
-    func_text += "        if bodo.libs.array_kernels.isna(in_arr, j) and not bodo.libs.array_kernels.isna(\n"
-    func_text += "            fill_arr, j\n"
-    func_text += "        ):\n"
-    func_text += "            s = fill_arr[j]\n"
-    func_text += "        out_arr[j] = s\n"
-    func_text += (
-        "    bodo.libs.str_arr_ext.move_str_binary_arr_payload(in_arr, out_arr)\n"
-    )
+    func_text = "\n".join((
+      "def impl(",
+      "    S,",
+      "    value=None,",
+      "    method=None,",
+      "    axis=None,",
+      "    inplace=False,",
+      "    limit=None,",
+      "    downcast=None,",
+      "):  # pragma: no cover",
+      "    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)",
+      "    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)",
+      "    n = len(in_arr)",
+      "    nf = len(fill_arr)",
+      "    assert n == nf, 'fillna() requires same length arrays'",
+      f"    out_arr = {alloc_fn}(n, -1)",
+      "    for j in numba.parfors.parfor.internal_prange(n):",
+      "        s = in_arr[j]",
+      "        if bodo.libs.array_kernels.isna(in_arr, j) and not bodo.libs.array_kernels.isna(",
+      "            fill_arr, j",
+      "        ):",
+      "            s = fill_arr[j]",
+      "        out_arr[j] = s",
+      "    bodo.libs.str_arr_ext.move_str_binary_arr_payload(in_arr, out_arr)",
+    ))
 
     locs = dict()
     exec(
