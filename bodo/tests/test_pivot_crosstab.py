@@ -31,6 +31,31 @@ _pivot_df1 = pd.DataFrame(
 )
 
 
+def test_pivot_distributed_metadata(memory_leak_check):
+    """
+    Test that the DataFrame returned by df.pivot
+    has its distribution information appended.
+    """
+
+    @bodo.jit
+    def test_pivot():
+        df = pd.DataFrame(
+            {"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)}
+        )
+        return df.pivot(index="A", columns="C", values="B")
+
+    @bodo.jit
+    def test_gatherv(df):
+        return bodo.gatherv(df)
+
+    df = test_pivot()
+    # df should have distirbuted metadata. If not, gatherv will raise a warning
+    # that df is not distributed.
+    with pytest.warns(None) as record:
+        test_gatherv(df)
+    assert len(record) == 0
+
+
 @pytest.mark.parametrize(
     "add_args",
     [

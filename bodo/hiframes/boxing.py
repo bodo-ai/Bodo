@@ -1023,12 +1023,7 @@ def box_dataframe(typ, val, c):
     pyapi.object_setattr_string(df_obj, "columns", columns_obj)
     pyapi.decref(columns_obj)
 
-    # TODO[BE-1538]: reduce overhead and enable for table format
-    # TODO: support for dataframes with variable number of columns
-    if not typ.has_runtime_cols and (
-        not typ.is_table_format or len(typ.columns) < TABLE_FORMAT_THRESHOLD
-    ):
-        _set_bodo_meta_dataframe(c, df_obj, typ)
+    _set_bodo_meta_dataframe(c, df_obj, typ)
 
     # decref() should be called on native value
     # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
@@ -1260,51 +1255,66 @@ def _set_bodo_meta_dataframe(c, obj, typ):
     context = c.context
     builder = c.builder
 
-    # Setting meta for the array types contained within the dataframe and index type,
-    # So that we can infer the dtypes if an empty dataframe is passed from bodo
-    # to pandas, and then back to a bodo fn.
-
-    index_typ_list = _dtype_to_type_enum_list(typ.index)
-
-    if index_typ_list != None:
-        index_type_metadata_obj = type_enum_list_to_py_list_obj(
-            pyapi, context, builder, c.env_manager, index_typ_list
-        )
-    else:
-        index_type_metadata_obj = pyapi.make_none()
-
-    col_typs = []
-    for dtype in typ.data:
-        typ_list = _dtype_to_type_enum_list(dtype)
-        if typ_list != None:
-            array_type_metadata_obj = type_enum_list_to_py_list_obj(
-                pyapi, context, builder, c.env_manager, typ_list
-            )
-        else:
-            array_type_metadata_obj = pyapi.make_none()
-
-        col_typs.append(array_type_metadata_obj)
-
-    meta_dict_obj = pyapi.dict_new(2)
-
-    col_types_metadata_obj = pyapi.list_pack(col_typs)
-    df_type_metadata_obj = pyapi.list_pack(
-        [index_type_metadata_obj, col_types_metadata_obj]
+    # Only provide typing information when DataFrames have a small number of columns.
+    # TODO[BE-1538]: reduce overhead and enable for table format
+    # TODO: support for dataframes with variable number of columns
+    append_typing = not typ.has_runtime_cols and (
+        not typ.is_table_format or len(typ.columns) < TABLE_FORMAT_THRESHOLD
     )
 
-    for val in col_typs:
-        pyapi.decref(val)
+    dict_len = 2 if append_typing else 1
 
+    meta_dict_obj = pyapi.dict_new(dict_len)
+
+    # Set the distribution metadata (possible for all array types)
     # using the distribution number since easier to handle
     dist_val_obj = pyapi.long_from_longlong(
         lir.Constant(lir.IntType(64), typ.dist.value)
     )
 
     pyapi.dict_setitem_string(meta_dict_obj, "dist", dist_val_obj)
-    pyapi.dict_setitem_string(meta_dict_obj, "type_metadata", df_type_metadata_obj)
-    pyapi.object_setattr_string(obj, "_bodo_meta", meta_dict_obj)
-    pyapi.decref(meta_dict_obj)
+
     pyapi.decref(dist_val_obj)
+
+    if append_typing:
+        # Setting meta for the array types contained within the dataframe and index type,
+        # So that we can infer the dtypes if an empty dataframe is passed from bodo
+        # to pandas, and then back to a bodo fn.
+
+        index_typ_list = _dtype_to_type_enum_list(typ.index)
+
+        if index_typ_list != None:
+            index_type_metadata_obj = type_enum_list_to_py_list_obj(
+                pyapi, context, builder, c.env_manager, index_typ_list
+            )
+        else:
+            index_type_metadata_obj = pyapi.make_none()
+
+        col_typs = []
+        for dtype in typ.data:
+            typ_list = _dtype_to_type_enum_list(dtype)
+            if typ_list != None:
+                array_type_metadata_obj = type_enum_list_to_py_list_obj(
+                    pyapi, context, builder, c.env_manager, typ_list
+                )
+            else:
+                array_type_metadata_obj = pyapi.make_none()
+
+            col_typs.append(array_type_metadata_obj)
+
+        col_types_metadata_obj = pyapi.list_pack(col_typs)
+        df_type_metadata_obj = pyapi.list_pack(
+            [index_type_metadata_obj, col_types_metadata_obj]
+        )
+
+        for val in col_typs:
+            pyapi.decref(val)
+
+        pyapi.dict_setitem_string(meta_dict_obj, "type_metadata", df_type_metadata_obj)
+
+    pyapi.object_setattr_string(obj, "_bodo_meta", meta_dict_obj)
+    # Decref metadata object
+    pyapi.decref(meta_dict_obj)
 
 
 def get_series_dtype_handle_null_int_and_hetrogenous(series_typ):
