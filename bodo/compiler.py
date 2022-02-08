@@ -646,8 +646,8 @@ class BodoDistributedPass(FunctionPass):
             state.func_ir,
             state.typingctx,
             state.targetctx,
-            state.type_annotation.typemap,
-            state.type_annotation.calltypes,
+            state.typemap,
+            state.calltypes,
             state.return_type,
             state.metadata,
             state.flags,
@@ -655,12 +655,6 @@ class BodoDistributedPass(FunctionPass):
         # update in distributed analysis if distribution hint of return type changed
         # (results in lowering error otherwise)
         state.return_type = dist_pass.run()
-        # Update the type annotation object for this function since the IR has changed
-        # in our passes. Numba initializes the object after type inference so the
-        # 'blocks' attribute is outdated. This can cause problems for caching during
-        # serialization of type annotation object.
-        # TODO: fix Numba to avoid this issue
-        state.type_annotation.blocks = state.func_ir.blocks
         return True
 
 
@@ -687,8 +681,8 @@ class BodoSeriesPass(FunctionPass):
             state.func_ir,
             state.typingctx,
             state.targetctx,
-            state.type_annotation.typemap,
-            state.type_annotation.calltypes,
+            state.typemap,
+            state.calltypes,
             state.locals,
         )
         # run multiple times to make sure transformations are fully applied
@@ -815,12 +809,6 @@ class LowerBodoIRExtSeq(FunctionPass):
 
             block.body = new_body
 
-        # Update the type annotation object for this function since the IR has changed
-        # in our passes. Numba initializes the object after type inference so the
-        # 'blocks' attribute is outdated. This can cause problems for caching during
-        # serialization of type annotation object.
-        # TODO: fix Numba to avoid this issue
-        state.type_annotation.blocks = state.func_ir.blocks
         return True
 
 
@@ -839,8 +827,8 @@ class BodoTableColumnDelPass(AnalysisPass):
             state.func_ir,
             state.typingctx,
             state.targetctx,
-            state.type_annotation.typemap,
-            state.type_annotation.calltypes,
+            state.typemap,
+            state.calltypes,
         )
         return table_decref_pass.run()
 
