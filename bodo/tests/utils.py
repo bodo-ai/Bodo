@@ -1086,8 +1086,8 @@ class ArrayAnalysisPass(FunctionPass):
         array_analysis = numba.parfors.array_analysis.ArrayAnalysis(
             state.typingctx,
             state.func_ir,
-            state.type_annotation.typemap,
-            state.type_annotation.calltypes,
+            state.typemap,
+            state.calltypes,
         )
         array_analysis.run(state.func_ir.blocks)
         state.func_ir._definitions = numba.core.ir_utils.build_definitions(

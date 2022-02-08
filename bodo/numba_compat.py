@@ -4691,12 +4691,26 @@ def raise_on_unsupported_feature(func_ir, typemap):  # pragma: no cover
                 msg = "The use of generator expressions is unsupported."
                 raise errors.UnsupportedError(msg, loc=stmt.loc)
 
+    # There is more than one call to function gdb/gdb_init
+    if len(gdb_calls) > 1:
+        msg = (
+            "Calling either numba.gdb() or numba.gdb_init() more than once "
+            "in a function is unsupported (strange things happen!), use "
+            "numba.gdb_breakpoint() to create additional breakpoints "
+            "instead.\n\nRelevant documentation is available here:\n"
+            "https://numba.pydata.org/numba-doc/latest/user/troubleshoot.html"
+            "/troubleshoot.html#using-numba-s-direct-gdb-bindings-in-"
+            "nopython-mode\n\nConflicting calls found at:\n %s"
+        )
+        buf = "\n".join([x.strformat() for x in gdb_calls])
+        raise errors.UnsupportedError(msg % buf)
+
 
 if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.ir_utils.raise_on_unsupported_feature)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
-        != "eca43ce27128a243039d2b20d5da0cb8823403911814135b9b74f2b6549daf3d"
+        != "237a4fe8395a40899279c718bc3754102cd2577463ef2f48daceea78d79b2d5e"
     ):  # pragma: no cover
         warnings.warn("numba.core.ir_utils.raise_on_unsupported_feature has changed")
 
