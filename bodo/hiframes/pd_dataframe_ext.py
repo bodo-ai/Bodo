@@ -2663,7 +2663,7 @@ def pivot_impl(
     columns_tup,
     values_tup,
     pivot_values,
-    index_name,
+    index_names,
     columns_name,
     value_names,
     check_duplicates=True,
@@ -2689,7 +2689,7 @@ def pivot_impl(
     pivot_values - Replicated arrays of unique column names. Each entry
                    represents a unique output column. These values are already sorted
                    in ascending order on each rank.
-    index_name - Name of the index column.
+    index_names - Tuple of names of the index columns.
     check_duplicates - Do we need to add error checking for duplicates. This is a compile
                        time check to generate the bitmaps and can be skipped if we have
                        already done a reduction or removed duplicates (i.e. pivot_table).
@@ -2713,7 +2713,7 @@ def pivot_impl(
         data_arr_typs = [to_nullable_type(typ) for typ in values_tup]
 
     func_text = "def impl(\n"
-    func_text += "    index_tup, columns_tup, values_tup, pivot_values, index_name, columns_name, value_names, check_duplicates=True, parallel=False\n"
+    func_text += "    index_tup, columns_tup, values_tup, pivot_values, index_names, columns_name, value_names, check_duplicates=True, parallel=False\n"
     func_text += "):\n"
     # If the data is parallel we need to shuffle to get all values
     # in a row on the same rank.
@@ -2727,7 +2727,7 @@ def pivot_impl(
     )
     func_text += f"        info_list = [{array_to_infos}]\n"
     func_text += "        cpp_table = arr_info_list_to_table(info_list)\n"
-    func_text += "        out_cpp_table = shuffle_table(cpp_table, 1, parallel, 0)\n"
+    func_text += f"        out_cpp_table = shuffle_table(cpp_table, {len(index_tup)}, parallel, 0)\n"
     index_info_to_arrays = ", ".join(
         [
             f"info_to_array(info_from_table(out_cpp_table, {i}), index_tup[{i}])"
@@ -2754,16 +2754,15 @@ def pivot_impl(
     func_text += "        delete_table(out_cpp_table)\n"
     # Load the index and column arrays. Move value arrays to a
     # list since access won't be known at compile time.
-    func_text += "    index_arr = index_tup[0]\n"
     func_text += "    columns_arr = columns_tup[0]\n"
     # If the values_tup is a unituple we can generate code as a list
     if use_single_list:
         func_text += "    values_arrs = [arr for arr in values_tup]\n"
     # Create a map on each rank for the index values.
-    func_text += "    unique_index_arr, row_vector = bodo.libs.array_ops.array_unique_vector_map(\n"
-    func_text += "        index_arr\n"
+    func_text += "    unique_index_arr_tup, row_vector = bodo.libs.array_ops.array_unique_vector_map(\n"
+    func_text += "        index_tup\n"
     func_text += "    )\n"
-    func_text += "    n_rows = len(unique_index_arr)\n"
+    func_text += "    n_rows = len(unique_index_arr_tup[0])\n"
     # Create a map for columns using the unique values
     func_text += "    num_values_arrays = len(values_tup)\n"
     func_text += "    n_unique_pivots = len(pivot_values)\n"
@@ -2883,7 +2882,10 @@ def pivot_impl(
             func_text += f"        else:\n"
             func_text += f"            col_arr_{i}[row_idx] = values_tup[{i}][i]\n"
     # Convert the index array to a proper index.
-    func_text += "    index = bodo.utils.conversion.index_from_array(unique_index_arr, index_name)\n"
+    if len(index_tup) == 1:
+        func_text += "    index = bodo.utils.conversion.index_from_array(unique_index_arr_tup[0], index_names[0])\n"
+    else:
+        func_text += "    index = bodo.hiframes.pd_multi_index_ext.init_multi_index(unique_index_arr_tup, index_names, None)\n"
     # Convert the columns to a proper index.
     if use_multi_index:
         # If we have a multi-index we have to update value_names and pivot_values for each entry.

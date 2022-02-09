@@ -7,6 +7,7 @@ Series values used in df.apply
 
 import operator
 
+import numba
 from numba.core import cgutils, types
 from numba.extending import (
     box,
@@ -15,6 +16,7 @@ from numba.extending import (
     make_attribute_wrapper,
     models,
     overload,
+    overload_method,
     register_model,
 )
 
@@ -94,6 +96,11 @@ def build_nullable_tuple(typingctx, data_tuple, null_values):
     assert isinstance(
         null_values, types.BaseTuple
     ), "build_nullable_tuple 'null_values' argument must be a tuple"
+
+    # Unliteral to prevent mismatch when Null value may or may not be
+    # known at compile time. This occurs when typing with dummy values.
+    data_tuple = types.unliteral(data_tuple)
+    null_values = types.unliteral(null_values)
 
     def codegen(context, builder, signature, args):
         data_tuple, null_values = args
@@ -198,3 +205,117 @@ def nullable_tuple_getiter(context, builder, sig, args):
     )
     impl = context.get_function("getiter", sig.return_type(sig.args[0].tuple_typ))
     return impl(builder, (nullable_tuple.data,))
+
+
+@overload(operator.eq)
+def nullable_tuple_eq(val1, val2):
+    """
+    Implementation for equality between 2 nullable
+    tuples. If two tuples aren't exactly the same type
+    they are considered unequal.
+    """
+    if not isinstance(val1, NullableTupleType) or not isinstance(
+        val2, NullableTupleType
+    ):
+        # Only support equality between two nullable tuples
+        return
+    # Only compare equality if the types are considered the same.
+    # In build_nullable_tuple (the only valid nullable tuple
+    # constructor), we unliteral all types in the signature. As
+    # a result, we never have to worry about types not matching
+    # because of literals.
+    if val1 != val2:
+        return lambda val1, val2: False  # pragma: no cover
+
+    func_text = "def impl(val1, val2):\n"
+    func_text += "    data_tup1 = val1._data\n"
+    func_text += "    null_tup1 = val1._null_values\n"
+    func_text += "    data_tup2 = val2._data\n"
+    func_text += "    null_tup2 = val2._null_values\n"
+    tup_typ = val1._tuple_typ
+    for i in range(len(tup_typ)):
+        func_text += f"    null1_{i} = null_tup1[{i}]\n"
+        func_text += f"    null2_{i} = null_tup2[{i}]\n"
+        func_text += f"    data1_{i} = data_tup1[{i}]\n"
+        func_text += f"    data2_{i} = data_tup2[{i}]\n"
+        func_text += f"    if null1_{i} != null2_{i}:\n"
+        func_text += "        return False\n"
+        func_text += f"    if null1_{i} and (data1_{i} != data2_{i}):\n"
+        func_text += f"        return False\n"
+    func_text += f"    return True\n"
+    local_vars = {}
+    exec(func_text, {}, local_vars)
+    impl = local_vars["impl"]
+    return impl
+
+
+@overload_method(NullableTupleType, "__hash__")
+def nullable_tuple_hash(val):
+    """
+    Implementation of hash for nullable tuples.
+    This implementation chooses to hash only the entries
+    that are valid (since NULL values have undefined
+    values).
+
+    Note this heavily reuses the existing numba implementation
+    """
+
+    def impl(val):  # pragma: no cover
+        return _nullable_tuple_hash(val)
+
+    return impl
+
+
+_PyHASH_XXPRIME_1 = numba.cpython.hashing._PyHASH_XXPRIME_1
+_PyHASH_XXPRIME_2 = numba.cpython.hashing._PyHASH_XXPRIME_1
+_PyHASH_XXPRIME_5 = numba.cpython.hashing._PyHASH_XXPRIME_1
+
+
+@numba.generated_jit(nopython=True)
+def _nullable_tuple_hash(nullable_tup):  # pragma: no cover
+    """
+    Copies the Numba base tuple implementation
+    but skips any the data for any values
+    that are null.
+
+    Since we use multiple tuples it is necessary to generate code
+    that iterates over the tuple elements.
+    """
+    func_text = "def impl(nullable_tup):\n"
+    func_text += "    data_tup = nullable_tup._data\n"
+    func_text += "    null_tup = nullable_tup._null_values\n"
+    func_text += "    tl = numba.cpython.hashing._Py_uhash_t(len(data_tup))\n"
+    func_text += "    acc = _PyHASH_XXPRIME_5\n"
+    tup_typ = nullable_tup._tuple_typ
+    for i in range(len(tup_typ)):
+        func_text += f"    null_val_{i} = null_tup[{i}]\n"
+        func_text += f"    null_lane_{i} = hash(null_val_{i})\n"
+        func_text += f"    if null_lane_{i} == numba.cpython.hashing._Py_uhash_t(-1):\n"
+        func_text += "        return -1\n"
+        func_text += f"    acc += null_lane_{i} * _PyHASH_XXPRIME_2\n"
+        func_text += "    acc = numba.cpython.hashing._PyHASH_XXROTATE(acc)\n"
+        func_text += "    acc *= _PyHASH_XXPRIME_1\n"
+        func_text += f"    if not null_val_{i}:\n"
+        func_text += f"        lane_{i} = hash(data_tup[{i}])\n"
+        func_text += f"        if lane_{i} == numba.cpython.hashing._Py_uhash_t(-1):\n"
+        func_text += f"            return -1\n"
+        func_text += f"        acc += lane_{i} * _PyHASH_XXPRIME_2\n"
+        func_text += "        acc = numba.cpython.hashing._PyHASH_XXROTATE(acc)\n"
+        func_text += "        acc *= _PyHASH_XXPRIME_1\n"
+    func_text += "    acc += tl ^ (_PyHASH_XXPRIME_5 ^ numba.cpython.hashing._Py_uhash_t(3527539))\n"
+    func_text += "    if acc == numba.cpython.hashing._Py_uhash_t(-1):\n"
+    func_text += "        return numba.cpython.hashing.process_return(1546275796)\n"
+    func_text += "    return numba.cpython.hashing.process_return(acc)\n"
+    local_vars = {}
+    exec(
+        func_text,
+        {
+            "numba": numba,
+            "_PyHASH_XXPRIME_1": _PyHASH_XXPRIME_1,
+            "_PyHASH_XXPRIME_2": _PyHASH_XXPRIME_2,
+            "_PyHASH_XXPRIME_5": _PyHASH_XXPRIME_5,
+        },
+        local_vars,
+    )
+    impl = local_vars["impl"]
+    return impl
