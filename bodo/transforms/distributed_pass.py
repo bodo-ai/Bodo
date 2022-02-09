@@ -1536,7 +1536,7 @@ class DistributedPass:
         ):
             self._set_last_arg_to_true(assign.value)
             return [assign]
-        
+
         if fdef == ("get_valid_entries_from_date_offset", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
         ):
@@ -3567,7 +3567,6 @@ class DistributedPass:
             "    c = len(A)\n"
             "    res = bodo.libs.distributed_api.dist_reduce(c, op)\n"
         )
-
         loc_vars = {}
         exec(func_text, globals(), loc_vars)
         f_block = compile_to_numba_ir(

@@ -223,16 +223,18 @@ class ParquetHandler:
                 )
         else:
             col_names_total = list(table_types.keys())
+            # Create a map for efficient index lookup
+            col_names_total_map = {c: i for i, c in enumerate(col_names_total)}
             col_types_total = [t for t in table_types.values()]
-            index_col = "index" if "index" in col_names_total else None
+            index_col = "index" if "index" in col_names_total_map else None
             # TODO: allow specifying types of only selected columns
             if columns is None:
                 selected_columns = col_names_total
             else:
                 selected_columns = columns
-            col_indices = [col_names_total.index(c) for c in selected_columns]
+            col_indices = [col_names_total_map[c] for c in selected_columns]
             col_types = [
-                col_types_total[col_names_total.index(c)] for c in selected_columns
+                col_types_total[col_names_total_map[c]] for c in selected_columns
             ]
             col_names = selected_columns
             index_col = index_col if index_col in col_names else None
@@ -282,7 +284,7 @@ class ParquetHandler:
         return col_names, data_arrs, index_col, nodes, col_types, index_column_type
 
 
-def determine_filter_cast(pq_node, typemap, filter_val):
+def determine_filter_cast(pq_node, typemap, filter_val, orig_colname_map):
     """
     Function that generates text for casts that need to be included
     in the filter when not automatically handled by Arrow. For example
@@ -302,9 +304,7 @@ def determine_filter_cast(pq_node, typemap, filter_val):
     is a scalar Var that is found in the typemap.
     """
     colname = filter_val[0]
-    lhs_arr_typ = pq_node.original_out_types[
-        pq_node.original_df_colnames.index(colname)
-    ]
+    lhs_arr_typ = pq_node.original_out_types[orig_colname_map[colname]]
     lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
     if colname in pq_node.partition_names:
         # Always cast partitions to protect again multiple types
@@ -384,6 +384,8 @@ def pq_distributed_run(
         # across all possible or statements. Initialize this set to
         # None so we don't intersect with an empty set in the first OR.
         shared_expr_set = None
+        # Create a mapping for faster column indexing
+        orig_colname_map = {c: i for i, c in enumerate(pq_node.original_df_colnames)}
         for predicate in pq_node.filters:
             dnf_and_conds = []
             expr_and_conds = []
@@ -398,7 +400,7 @@ def pq_distributed_run(
                     # For known cases where we need to cast we generate the cast. For simpler code we return two strings,
                     # column_cast and scalar_cast.
                     column_cast, scalar_cast = determine_filter_cast(
-                        pq_node, typemap, v
+                        pq_node, typemap, v, orig_colname_map
                     )
                     expr_and_conds.append(
                         f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_map[v[2].name]}){scalar_cast})"
@@ -630,6 +632,10 @@ def _gen_pq_reader_py(
     sanitized_col_names = [sanitize_varname(c) for c in col_names]
     partition_names = [sanitize_varname(c) for c in partition_names]
 
+    # Create maps for efficient index lookups.
+    col_indices_map = {c: i for i, c in enumerate(col_indices)}
+    sanitized_col_names_map = {c: i for i, c in enumerate(sanitized_col_names)}
+
     # Get list of selected columns to pass to C++ (not including partition
     # columns, since they are not in the parquet files).
     # C++ doesn't need to know the order of output columns, and to simplify
@@ -638,9 +644,12 @@ def _gen_pq_reader_py(
     # Here because columns may have been eliminated by 'pq_remove_dead_column',
     # we only load the indices in type_usecol_offset.
     selected_cols = []
+    # Create a map for efficient index lookups.
+    selected_cols_map = {}
     parititon_indices = set()
     for i in type_usecol_offset:
         if sanitized_col_names[i] not in partition_names:
+            selected_cols_map[col_indices[i]] = len(selected_cols)
             selected_cols.append(col_indices[i])
         else:
             # Track which partitions are valid to simplify filtering later
@@ -664,7 +673,7 @@ def _gen_pq_reader_py(
     # this, we first need to determine the index of each selected column in the original
     # type and check if that type is nullable.
     nullable_cols = [
-        int(is_nullable(out_types[col_indices.index(col_in_idx)]))
+        int(is_nullable(out_types[col_indices_map[col_in_idx]]))
         if col_in_idx != index_column_index
         else int(is_nullable(index_column_type))
         for col_in_idx in selected_cols
@@ -676,20 +685,23 @@ def _gen_pq_reader_py(
     # by pyarrow.parquet.ParquetDataset (e.g. 0 is the first partition col)
     # We also pass the dtype of categorical codes
     sel_partition_names = []
+    # Create a map for efficient index lookup
+    sel_partition_names_map = {}
     selected_partition_cols = []
     partition_col_cat_dtypes = []
     for i, part_name in enumerate(partition_names):
         try:
-            col_out_idx = sanitized_col_names.index(part_name)
+            col_out_idx = sanitized_col_names_map[part_name]
             # Only load part_name values that are selected
             # This occurs if we can prune these columns.
             if col_indices[col_out_idx] not in parititon_indices:
                 # this partition column has not been selected for read
                 continue
-        except ValueError:
+        except (KeyError, ValueError):
             # this partition column has not been selected for read
             # This occurs when the user provides columns
             continue
+        sel_partition_names_map[part_name] = len(sel_partition_names)
         sel_partition_names.append(part_name)
         selected_partition_cols.append(i)
         part_col_type = out_types[col_out_idx].dtype
@@ -734,10 +746,10 @@ def _gen_pq_reader_py(
                 if col_idx in parititon_indices:
                     c_name = sanitized_col_names[i]
                     table_idx.append(
-                        len(selected_cols) + sel_partition_names.index(c_name)
+                        len(selected_cols) + sel_partition_names_map[c_name]
                     )
                 else:
-                    table_idx.append(selected_cols.index(col_num))
+                    table_idx.append(selected_cols_map[col_num])
                 j += 1
             else:
                 table_idx.append(-1)
@@ -780,9 +792,42 @@ def _gen_pq_reader_py(
     return jit_func
 
 
+import pyarrow as pa
+
+_pa_numba_typ_map = {
+    # boolean
+    pa.bool_(): types.bool_,
+    # signed int types
+    pa.int8(): types.int8,
+    pa.int16(): types.int16,
+    pa.int32(): types.int32,
+    pa.int64(): types.int64,
+    # unsigned int types
+    pa.uint8(): types.uint8,
+    pa.uint16(): types.uint16,
+    pa.uint32(): types.uint32,
+    pa.uint64(): types.uint64,
+    # float types (TODO: float16?)
+    pa.float32(): types.float32,
+    pa.float64(): types.float64,
+    # String
+    pa.string(): string_type,
+    pa.binary(): bytes_type,
+    # date
+    pa.date32(): datetime_date_type,
+    pa.date64(): types.NPDatetime("ns"),
+    # time (TODO: time32, time64, ...)
+    pa.timestamp("ns"): types.NPDatetime("ns"),
+    pa.timestamp("us"): types.NPDatetime("ns"),
+    pa.timestamp("ms"): types.NPDatetime("ns"),
+    pa.timestamp("s"): types.NPDatetime("ns"),
+    # all null column
+    null(): string_type,  # map it to string_type, handle differently at runtime
+}
+
+
 def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, category_info):
     """return Bodo array type from pyarrow Field (column type)"""
-    import pyarrow as pa
 
     if isinstance(pa_typ.type, pa.ListType):
         return ArrayItemArrayType(
@@ -808,37 +853,6 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, categor
     if isinstance(pa_typ.type, pa.Decimal128Type):
         return DecimalArrayType(pa_typ.type.precision, pa_typ.type.scale)
 
-    _typ_map = {
-        # boolean
-        pa.bool_(): types.bool_,
-        # signed int types
-        pa.int8(): types.int8,
-        pa.int16(): types.int16,
-        pa.int32(): types.int32,
-        pa.int64(): types.int64,
-        # unsigned int types
-        pa.uint8(): types.uint8,
-        pa.uint16(): types.uint16,
-        pa.uint32(): types.uint32,
-        pa.uint64(): types.uint64,
-        # float types (TODO: float16?)
-        pa.float32(): types.float32,
-        pa.float64(): types.float64,
-        # String
-        pa.string(): string_type,
-        pa.binary(): bytes_type,
-        # date
-        pa.date32(): datetime_date_type,
-        pa.date64(): types.NPDatetime("ns"),
-        # time (TODO: time32, time64, ...)
-        pa.timestamp("ns"): types.NPDatetime("ns"),
-        pa.timestamp("us"): types.NPDatetime("ns"),
-        pa.timestamp("ms"): types.NPDatetime("ns"),
-        pa.timestamp("s"): types.NPDatetime("ns"),
-        # all null column
-        null(): string_type,  # map it to string_type, handle differently at runtime
-    }
-
     # Categorical data type
     if isinstance(pa_typ.type, pa.DictionaryType):
         # NOTE: non-string categories seems not possible as of Arrow 4.0
@@ -847,7 +861,7 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, categor
                 f"Parquet Categorical data type should be string, not {pa_typ.type.value_type}"
             )
         # data type for storing codes
-        int_type = _typ_map[pa_typ.type.index_type]
+        int_type = _pa_numba_typ_map[pa_typ.type.index_type]
         cat_dtype = PDCategoricalDtype(
             category_info[pa_typ.name],
             bodo.string_type,
@@ -856,9 +870,9 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, categor
         )
         return CategoricalArrayType(cat_dtype)
 
-    if pa_typ.type not in _typ_map:
+    if pa_typ.type not in _pa_numba_typ_map:
         raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
-    dtype = _typ_map[pa_typ.type]
+    dtype = _pa_numba_typ_map[pa_typ.type]
 
     if dtype == datetime_date_type:
         return datetime_date_array_type
@@ -1489,6 +1503,8 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
     # index's name if there is one, otherwise "__index__level_0"
     # If there is no index at all, col_names will not include anything.
     col_names = pa_schema.names
+    # Map column names to index to allow efficient search
+    col_names_map = {c: i for i, c in enumerate(col_names)}
     index_col, nullable_from_metadata = get_pandas_metadata(pa_schema, num_pieces)
     col_types_total = [
         _get_numba_typ_from_pa_typ(
@@ -1514,7 +1530,7 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
 
     # make sure selected columns are in the schema
     for c in selected_columns:
-        if c not in col_names:
+        if c not in col_names_map:
             raise BodoError("Selected column {} not in Parquet file schema".format(c))
     if (
         index_col
@@ -1526,8 +1542,8 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
         # should still be included.
         selected_columns.append(index_col)
 
-    col_indices = [col_names.index(c) for c in selected_columns]
-    col_types = [col_types_total[col_names.index(c)] for c in selected_columns]
+    col_indices = [col_names_map[c] for c in selected_columns]
+    col_types = [col_types_total[col_names_map[c]] for c in selected_columns]
     col_names = selected_columns
     # TODO: close file?
     return (

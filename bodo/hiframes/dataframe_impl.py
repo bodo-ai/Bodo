@@ -24,6 +24,7 @@ from numba.core.ir_utils import mk_unique_var, next_label
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import (
+    lower_getattr,
     models,
     overload,
     overload_attribute,
@@ -230,7 +231,18 @@ def overload_dataframe_size(df):
     return lambda df: ncols * len(df)  # pragma: no cover
 
 
-@overload_attribute(DataFrameType, "shape")
+@lower_getattr(DataFrameType, "shape")
+def lower_dataframe_shape(context, builder, typ, val):
+    """
+    Lowering call for df.shape. Used to separate typing
+    from lowering.
+    """
+    impl = overload_dataframe_shape(typ)
+    return context.compile_internal(
+        builder, impl, types.Tuple([types.int64, types.int64])(typ), (val,)
+    )
+
+
 def overload_dataframe_shape(df):
     if df.has_runtime_cols:
         # If we have determine columns at runtime it can't be a

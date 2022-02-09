@@ -439,6 +439,9 @@ make_attribute_wrapper(DataFrameType, "meminfo", "_meminfo")
 class DataFrameAttribute(OverloadedKeyAttributeTemplate):
     key = DataFrameType
 
+    def resolve_shape(self, df):
+        return types.Tuple([types.int64, types.int64])
+
     @bound_function("df.head")
     def resolve_head(self, df, args, kws):
         func_name = "DataFrame.head"
@@ -2047,7 +2050,30 @@ def _fill_null_arrays(data_dict, col_names, df_len, dtype):
             data_dict[c] = null_arr
 
 
-@overload(len)  # TODO: avoid lowering?
+@infer_global(len)
+class LenTemplate(AbstractTemplate):
+    """
+    Split len into separate
+    Typing and Lowering to Reduce Compilation Time
+    """
+
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 1
+        # TODO: Fuse more templates
+        if isinstance(args[0], (DataFrameType, bodo.TableType)):
+            return types.int64(*args)
+
+
+@lower_builtin(len, DataFrameType)
+def table_len_lower(context, builder, sig, args):
+    """
+    Implementation for lowering len for DataFrames.
+    """
+    impl = df_len_overload(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
 def df_len_overload(df):
     if not isinstance(df, DataFrameType):
         return

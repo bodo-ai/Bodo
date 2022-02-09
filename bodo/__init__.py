@@ -15,6 +15,7 @@ import platform
 # preload them into memory to make sure the dynamic linker finds them
 import pyarrow
 import pyarrow.parquet
+
 if platform.system() == "Windows":
     # importing our modified mpi4py (see buildscripts/mpi4py-pip/patch-3.1.2.diff)
     # guarantees that msmpi.dll is loaded, and therefore found when MPI calls are made
@@ -123,6 +124,7 @@ from bodo.hiframes.pd_categorical_ext import (
 )
 from bodo.utils.typing import register_type
 from bodo.libs.logging_ext import LoggingLoggerType
+from bodo.hiframes.table import TableType
 
 
 import bodo.compiler  # isort:skip
