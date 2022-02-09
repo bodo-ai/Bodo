@@ -3777,21 +3777,21 @@ class HeterogeneousIndexType(types.Type):
 
     ndim = 1
 
-    def __init__(self, data=None, name_type=None):
+    def __init__(self, data=None, name_typ=None):
 
         self.data = data
-        name_type = types.none if name_type is None else name_type
-        self.name_type = name_type
+        name_typ = types.none if name_typ is None else name_typ
+        self.name_typ = name_typ
         super(HeterogeneousIndexType, self).__init__(
-            name=f"heter_index({data}, {name_type})"
+            name=f"heter_index({data}, {name_typ})"
         )
 
     def copy(self):
-        return HeterogeneousIndexType(self.data, self.name_type)
+        return HeterogeneousIndexType(self.data, self.name_typ)
 
     @property
     def key(self):
-        return self.data, self.name_type
+        return self.data, self.name_typ
 
     @property
     def mangling_args(self):
@@ -3817,7 +3817,7 @@ class HeterogeneousIndexType(types.Type):
 @register_model(HeterogeneousIndexType)
 class HeterogeneousIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
-        members = [("data", fe_type.data), ("name", fe_type.name_type)]
+        members = [("data", fe_type.data), ("name", fe_type.name_typ)]
         super(HeterogeneousIndexModel, self).__init__(dmm, fe_type, members)
 
 
@@ -3863,8 +3863,8 @@ def box_heter_index(typ, val, c):  # pragma: no cover
     index_val = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
     c.context.nrt.incref(c.builder, typ.data, index_val.data)
     data_obj = c.pyapi.from_native_value(typ.data, index_val.data, c.env_manager)
-    c.context.nrt.incref(c.builder, typ.name_type, index_val.name)
-    name_obj = c.pyapi.from_native_value(typ.name_type, index_val.name, c.env_manager)
+    c.context.nrt.incref(c.builder, typ.name_typ, index_val.name)
+    name_obj = c.pyapi.from_native_value(typ.name_typ, index_val.name, c.env_manager)
 
     dtype_obj = c.pyapi.make_none()
     copy_obj = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
@@ -3896,7 +3896,7 @@ def init_heter_index(typingctx, data, name=None):
         index_val.name = args[1]
         # increase refcount of stored values
         context.nrt.incref(builder, index_typ.data, args[0])
-        context.nrt.incref(builder, index_typ.name_type, args[1])
+        context.nrt.incref(builder, index_typ.name_typ, args[1])
         return index_val._getvalue()
 
     return HeterogeneousIndexType(data, name)(data, name), codegen

@@ -636,57 +636,124 @@ def overload_array_op_isin(arr, values):
 
 
 @generated_jit(nopython=True)
-def array_unique_vector_map(in_arr):
+def array_unique_vector_map(in_arr_tup):
     """
-    Computes the unique values of an array on a given
+    Computes the unique values of a tuple of arrays on a given
     rank. This returns two values:
-        - An array with the unique values, out_arr
+        - An tuple of arrays with the unique values, out_arr_tup
         - An array that maps each value in the original
-          in_arr to its location in out_array
+          in_arr_tup to its row in out_arr_tup
     """
-    func_text = "def impl(in_arr):\n"
-    func_text += "  n = len(in_arr)\n"
-    # Use a dummy dictionary comprehension to type the
-    # dictionary. See the list example in:
-    # https://numba.pydata.org/numba-doc/latest/user/troubleshoot.html#my-code-has-an-untyped-list-problem
-    func_text += "  arr_map = {in_arr[0]: 0 for _ in range(0)}\n"
-    func_text += "  in_lst = []\n"
-    func_text += "  map_vector = np.empty(n, np.int64)\n"
-    func_text += "  is_na = 0\n"
-    # If the array is a string type, compute the output size while computing unique
-    if in_arr == bodo.string_array_type:
-        func_text += "  total_len = 0\n"
-    func_text += "  for i in range(n):\n"
-    func_text += "    if bodo.libs.array_kernels.isna(in_arr, i):\n"
-    func_text += "      is_na = 1\n"
-    func_text += "      # Always put NA in the last location. We can safely use\n"
-    func_text += "      # -1 because in_arr[-1] == in_arr[len(in_arr) - 1]\n"
-    func_text += "      set_val = -1\n"
-    func_text += "    else:\n"
-    func_text += "      data_val = in_arr[i]\n"
-    func_text += "      if data_val not in arr_map:\n"
-    func_text += "        set_val = len(arr_map)\n"
-    func_text += "        # Add the data to index info\n"
-    func_text += "        in_lst.append(data_val)\n"
-    func_text += "        arr_map[data_val] = len(arr_map)\n"
-    if in_arr == bodo.string_array_type:
-        func_text += "        total_len += len(data_val)\n"
-    func_text += "      else:\n"
-    func_text += "        set_val = arr_map[data_val]\n"
-    func_text += "    map_vector[i] = set_val\n"
-
-    # Determine the number of rows on each rank
-    func_text += "  n_rows = len(arr_map) + is_na\n"
-    # Compute the output array for the index.
-    if in_arr == bodo.string_array_type:
-        func_text += "  out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n_rows, total_len)\n"
+    # Avoid using tuple when you have 1 element to avoid nullable tuples.
+    use_tuple = len(in_arr_tup) != 1
+    arr_typ_list = list(in_arr_tup.types)
+    func_text = "def impl(in_arr_tup):\n"
+    func_text += "  n = len(in_arr_tup[0])\n"
+    if use_tuple:
+        # If we use a tuple then we generate code per element in the tuple.
+        elem_list = ", ".join(
+            [f"in_arr_tup[{i}][unused]" for i in range(len(in_arr_tup))]
+        )
+        null_bitmap = ", ".join(["False" for _ in range(len(in_arr_tup))])
+        func_text += f"  arr_map = {{bodo.libs.nullable_tuple_ext.build_nullable_tuple(({elem_list},), ({null_bitmap},)): 0 for unused in range(0)}}\n"
+        # Use a dummy dictionary comprehension to type the
+        # dictionary. See the list example in:
+        # https://numba.pydata.org/numba-doc/latest/user/troubleshoot.html#my-code-has-an-untyped-list-problem
+        func_text += "  map_vector = np.empty(n, np.int64)\n"
+        for i, in_arr in enumerate(arr_typ_list):
+            func_text += f"  in_lst_{i} = []\n"
+            # If the array is a string type, compute the output size while computing unique
+            if in_arr == bodo.string_array_type:
+                func_text += f"  total_len_{i} = 0\n"
+            func_text += f"  null_in_lst_{i} = []\n"
+        func_text += "  for i in range(n):\n"
+        # If we have a tuple create a nullable tuple
+        data_code = ", ".join([f"in_arr_tup[{i}][i]" for i in range(len(arr_typ_list))])
+        null_code = ", ".join(
+            [
+                f"bodo.libs.array_kernels.isna(in_arr_tup[{i}], i)"
+                for i in range(len(arr_typ_list))
+            ]
+        )
+        func_text += f"    data_val = bodo.libs.nullable_tuple_ext.build_nullable_tuple(({data_code},), ({null_code},))\n"
+        func_text += "    if data_val not in arr_map:\n"
+        func_text += "      set_val = len(arr_map)\n"
+        # Add the data to index info
+        func_text += "      values_tup = data_val._data\n"
+        func_text += "      nulls_tup = data_val._null_values\n"
+        for i, in_arr in enumerate(arr_typ_list):
+            func_text += f"      in_lst_{i}.append(values_tup[{i}])\n"
+            func_text += f"      null_in_lst_{i}.append(nulls_tup[{i}])\n"
+            if in_arr == bodo.string_array_type:
+                # If the data is null nulls_tup[i] == 0, so we multiply here
+                func_text += (
+                    f"      total_len_{i}  += nulls_tup[{i}] * len(values_tup[{i}])\n"
+                )
+        func_text += "      arr_map[data_val] = len(arr_map)\n"
+        func_text += "    else:\n"
+        func_text += "      set_val = arr_map[data_val]\n"
+        func_text += "    map_vector[i] = set_val\n"
+        # Compute the output arrays for the index.
+        func_text += "  n_rows = len(arr_map)\n"
+        for i, in_arr in enumerate(arr_typ_list):
+            if in_arr == bodo.string_array_type:
+                func_text += f"  out_arr_{i} = bodo.libs.str_arr_ext.pre_alloc_string_array(n_rows, total_len_{i})\n"
+            else:
+                func_text += f"  out_arr_{i} = bodo.utils.utils.alloc_type(n_rows, in_arr_tup[{i}], (-1,))\n"
+        # Convert the lists to arrays
+        func_text += "  for j in range(len(arr_map)):\n"
+        for i in range(len(arr_typ_list)):
+            func_text += f"    if null_in_lst_{i}[j]:\n"
+            func_text += f"      bodo.libs.array_kernels.setna(out_arr_{i}, j)\n"
+            func_text += "    else:\n"
+            func_text += f"      out_arr_{i}[j] = in_lst_{i}[j]\n"
+        ret_arrs = ", ".join([f"out_arr_{i}" for i in range(len(arr_typ_list))])
+        func_text += f"  return ({ret_arrs},), map_vector\n"
     else:
-        func_text += "  out_arr = bodo.utils.utils.alloc_type(n_rows, in_arr, (-1,))\n"
-    func_text += "  for j in range(len(arr_map)):\n"
-    func_text += "    out_arr[j] = in_lst[j]\n"
-    func_text += "  if is_na:\n"
-    func_text += "    bodo.libs.array_kernels.setna(out_arr, n_rows - 1)\n"
-    func_text += "  return out_arr, map_vector\n"
+        # If we have a single array, extract it and generate code for 1 array.
+        func_text += "  in_arr = in_arr_tup[0]\n"
+        # Use a dummy dictionary comprehension to type the
+        # dictionary. See the list example in:
+        # https://numba.pydata.org/numba-doc/latest/user/troubleshoot.html#my-code-has-an-untyped-list-problem
+        func_text += f"  arr_map = {{in_arr[unused]: 0 for unused in range(0)}}\n"
+        func_text += "  map_vector = np.empty(n, np.int64)\n"
+        func_text += "  is_na = 0\n"
+        func_text += "  in_lst = []\n"
+        if arr_typ_list[0] == bodo.string_array_type:
+            func_text += "  total_len = 0\n"
+        func_text += "  for i in range(n):\n"
+        func_text += "    if bodo.libs.array_kernels.isna(in_arr, i):\n"
+        func_text += "      is_na = 1\n"
+        func_text += "      # Always put NA in the last location. We can safely use\n"
+        func_text += "      # -1 because in_arr[-1] == in_arr[len(in_arr) - 1]\n"
+        func_text += "      set_val = -1\n"
+        func_text += "    else:\n"
+        func_text += "      data_val = in_arr[i]\n"
+        func_text += "      if data_val not in arr_map:\n"
+        func_text += "        set_val = len(arr_map)\n"
+        # Add the data to index info
+        func_text += "        in_lst.append(data_val)\n"
+        if arr_typ_list[0] == bodo.string_array_type:
+            func_text += "        total_len += len(data_val)\n"
+        func_text += "        arr_map[data_val] = len(arr_map)\n"
+        func_text += "      else:\n"
+        func_text += "        set_val = arr_map[data_val]\n"
+        func_text += "    map_vector[i] = set_val\n"
+        # Compute the output arrays for the index.
+        func_text += "  n_rows = len(arr_map) + is_na\n"
+        if arr_typ_list[0] == bodo.string_array_type:
+            func_text += "  out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n_rows, total_len)\n"
+        else:
+            func_text += (
+                "  out_arr = bodo.utils.utils.alloc_type(n_rows, in_arr, (-1,))\n"
+            )
+        # Convert the list to an array
+        func_text += "  for j in range(len(arr_map)):\n"
+        func_text += "    out_arr[j] = in_lst[j]\n"
+        func_text += "  if is_na:\n"
+        func_text += "    bodo.libs.array_kernels.setna(out_arr, n_rows - 1)\n"
+        func_text += f"  return (out_arr,), map_vector\n"
+
     loc_vars = {}
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
     impl = loc_vars["impl"]

@@ -45,7 +45,11 @@ from bodo.hiframes.pd_dataframe_ext import (
     check_runtime_cols_unsupported,
     handle_inplace_df_type_change,
 )
-from bodo.hiframes.pd_index_ext import StringIndexType, is_pd_index_type
+from bodo.hiframes.pd_index_ext import (
+    RangeIndexType,
+    StringIndexType,
+    is_pd_index_type,
+)
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
@@ -3742,27 +3746,30 @@ def pivot_error_checking(df, index, columns, values, func_name):
     Returns the literals string for the column names and their index
     in the columns.
     """
-    # All arguments are required.
-    if is_overload_none(index) or not is_literal_type(index):
-        raise BodoError(
-            f"{func_name}(): 'index' argument is required and must be a constant column label"
-        )
+    # Certain differences arise when doing pivot vs pivot_table. For
+    # example, what needs to be checked/supported for index=None
+    is_pivot_table = func_name == "DataFrame.pivot_table"
+    if is_pivot_table:
+        if is_overload_none(index) or not is_literal_type(index):
+            # Failing to provide the index requires just transposing the table into n columns,
+            # where n is the length(values). As a result, at this time we don't support it.
+            raise BodoError(
+                f"DataFrame.pivot_table(): 'index' argument is required and must be constant column labels"
+            )
+    else:
+        # pivot supports index=None
+        if not is_overload_none(index) and not is_literal_type(index):
+            raise BodoError(
+                f"{func_name}(): if 'index' argument is provided it must be constant column labels"
+            )
     if is_overload_none(columns) or not is_literal_type(columns):
         raise BodoError(
             f"{func_name}(): 'columns' argument is required and must be a constant column label"
         )
     if not is_overload_none(values) and not is_literal_type(values):
         raise BodoError(
-            f"{func_name}(): if 'values' argument is provided it must be a constant column label"
+            f"{func_name}(): if 'values' argument is provided it must be constant column labels"
         )
-    # Column labels can be a variety of types, so we just check for constants.
-    index_lit = get_literal_value(index)
-    if isinstance(index_lit, (list, tuple)):
-        if len(index_lit) > 1:
-            raise BodoError(
-                f"{func_name}(): 'index' argument must be a constant column label not a {index_lit}"
-            )
-        index_lit = index_lit[0]
 
     columns_lit = get_literal_value(columns)
     # Only lists/tuples with 1 element are supported.
@@ -3774,11 +3781,6 @@ def pivot_error_checking(df, index, columns, values, func_name):
         columns_lit = columns_lit[0]
 
     # Verify that each column can be found in the DataFrame
-    if index_lit not in df.columns:
-        raise BodoError(
-            f"{func_name}(): 'index' column {index_lit} not found in DataFrame {df}."
-        )
-
     if columns_lit not in df.columns:
         raise BodoError(
             f"{func_name}(): 'columns' column {columns_lit} not found in DataFrame {df}."
@@ -3786,8 +3788,35 @@ def pivot_error_checking(df, index, columns, values, func_name):
     columns_idx_map = {c: i for i, c in enumerate(df.columns)}
 
     # Get the column numbers
-    index_idx = columns_idx_map[index_lit]
     columns_idx = columns_idx_map[columns_lit]
+
+    # Handle index
+    if is_overload_none(index):
+        # If index isn't provided then we use the existing index
+        index_idxs = []
+        index_lit = []
+    else:
+        index_lit = get_literal_value(index)
+        if not isinstance(index_lit, (list, tuple)):
+            index_lit = [index_lit]
+        index_idxs = []
+        for index in index_lit:
+            if index not in columns_idx_map:
+                raise BodoError(
+                    f"{func_name}(): 'index' column {index} not found in DataFrame {df}."
+                )
+            index_idxs.append(columns_idx_map[index])
+
+    # Validate that the index values can be lowered as a list (for groupby).
+    # Note if the list is empty (which means use the index),
+    # then the array won't be used at runtime.
+    if not (
+        all(isinstance(c, int) for c in index_lit)
+        or all(isinstance(c, str) for c in index_lit)
+    ):
+        raise BodoError(
+            f"{func_name}(): column names selected for 'index' must all share a common int or string type. Please convert your names to a common type using DataFrame.rename()"
+        )
 
     # Handle values
     if is_overload_none(values):
@@ -3795,8 +3824,9 @@ def pivot_error_checking(df, index, columns, values, func_name):
         # columns are used.
         values_idxs = []
         values_lit = []
+        seen_columns = index_idxs + [columns_idx]
         for i, c in enumerate(df.columns):
-            if i not in (index_idx, columns_idx):
+            if i not in seen_columns:
                 values_idxs.append(i)
                 values_lit.append(c)
     else:
@@ -3822,33 +3852,52 @@ def pivot_error_checking(df, index, columns, values, func_name):
         )
 
     # Verify that none of the columns are the same.
-    index_set = set(values_idxs) | {index_idx, columns_idx}
-    if len(index_set) != (len(values_idxs) + 2):
+    index_set = set(values_idxs) | set(index_idxs) | {columns_idx}
+    if len(index_set) != (len(values_idxs) + len(index_idxs) + 1):
         raise BodoError(
             f"{func_name}(): 'index', 'columns', and 'values' must all refer to different columns"
         )
 
     # Verify that the allowed column types.
-    index_column = df.data[index_idx]
-    if isinstance(
-        index_column,
-        (
-            bodo.ArrayItemArrayType,
-            bodo.MapArrayType,
-            bodo.StructArrayType,
-            bodo.TupleArrayType,
-            bodo.IntervalArrayType,
-        ),
-    ):
-        raise BodoError(
-            f"{func_name}(): 'index' DataFrame column must have scalar rows"
-        )
+    def check_valid_index_typ(index_column):
+        if isinstance(
+            index_column,
+            (
+                bodo.ArrayItemArrayType,
+                bodo.MapArrayType,
+                bodo.StructArrayType,
+                bodo.TupleArrayType,
+                bodo.IntervalArrayType,
+            ),
+        ):
+            raise BodoError(
+                f"{func_name}(): 'index' DataFrame column must have scalar rows"
+            )
 
-    # TODO: Support
-    if isinstance(index_column, bodo.CategoricalArrayType):
-        raise BodoError(
-            f"{func_name}(): 'index' DataFrame column does not support categorical data"
-        )
+        # TODO: Support
+        if isinstance(index_column, bodo.CategoricalArrayType):
+            raise BodoError(
+                f"{func_name}(): 'index' DataFrame column does not support categorical data"
+            )
+
+    # If no index is specified we must check the actual index.
+    if len(index_idxs) == 0:
+        index = df.index
+        if isinstance(index, MultiIndexType):
+            raise BodoError(
+                f"{func_name}(): 'index' cannot be None with a DataFrame with a multi-index"
+            )
+        if not isinstance(index, RangeIndexType):
+            # Range Index doesn't have a data field, but it should be supported.
+            check_valid_index_typ(index.data)
+        if not is_literal_type(df.index.name_typ):
+            raise BodoError(
+                f"{func_name}(): If 'index' is None, the name of the DataFrame's Index must be constant at compile-time"
+            )
+    else:
+        for index_idx in index_idxs:
+            index_column = df.data[index_idx]
+            check_valid_index_typ(index_column)
 
     columns_column = df.data[columns_idx]
     if isinstance(
@@ -3895,7 +3944,7 @@ def pivot_error_checking(df, index, columns, values, func_name):
         index_lit,
         columns_lit,
         values_lit,
-        index_idx,
+        index_idxs,
         columns_idx,
         values_idxs,
     )
@@ -3924,6 +3973,12 @@ def overload_dataframe_pivot(data, index=None, columns=None, values=None):
         columns_idx,
         values_idx,
     ) = pivot_error_checking(data, index, columns, values, "DataFrame.pivot")
+    if len(index_lit) == 0:
+        if is_overload_none(data.index.name_typ):
+            index_lit = [None]
+        else:
+            # Checking for literal type is done in pivot_error_checking
+            index_lit = [get_literal_value(data.index.name_typ)]
     # If len(values_lit) == 1, the names aren't needed because we create a
     # regular index instead of a multi-index. Since we lower an array, we pass
     # None if this case to make sure we can determine multi-index at compile
@@ -3942,14 +3997,22 @@ def overload_dataframe_pivot(data, index=None, columns=None, values=None):
     # Call the main pivot_impl
     func_text += "    return bodo.hiframes.pd_dataframe_ext.pivot_impl(\n"
     # Select all of the arrays. TODO: Support table format.
-    func_text += f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {index_idx}),),\n"
+
+    if len(index_idx) == 0:
+        # If we use the index just get the index data
+        func_text += f"        (bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)),),\n"
+    else:
+        func_text += "        (\n"
+        for ind_idx in index_idx:
+            func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {ind_idx}),\n"
+        func_text += "        ),\n"
     func_text += f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {columns_idx}),),\n"
     func_text += "        (\n"
     for val_idx in values_idx:
         func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {val_idx}),\n"
     func_text += "        ),\n"
     func_text += "        pivot_values,\n"
-    func_text += "        index_lit,\n"
+    func_text += "        index_lit_tup,\n"
     func_text += "        columns_lit,\n"
     func_text += "        values_name_const,\n"
     func_text += "    )\n"
@@ -3958,7 +4021,7 @@ def overload_dataframe_pivot(data, index=None, columns=None, values=None):
         func_text,
         {
             "bodo": bodo,
-            "index_lit": index_lit,
+            "index_lit_tup": tuple(index_lit),
             "columns_lit": columns_lit,
             "values_name_const": values_name_const,
         },
@@ -4024,6 +4087,7 @@ def overload_dataframe_pivot_table(
             columns_idx,
             values_idx,
         ) = pivot_error_checking(data, index, columns, values, "DataFrame.pivot_table")
+
         # If len(values_lit) == 1, the names aren't needed because we create a
         # regular index instead of a multi-index. Since we lower an array, we pass
         # None if this case to make sure we can determine multi-index at compile
@@ -4048,29 +4112,31 @@ def overload_dataframe_pivot_table(
         func_text += "    _pivot_values=None,\n"
         func_text += "):\n"
         # Truncate the dataframe to just the columns in question.
-        total_idx = [index_idx, columns_idx] + values_idx
+        total_idx = index_idx + [columns_idx] + values_idx
         func_text += f"    data = data.iloc[:, {total_idx}]\n"
+        groupby_lit = index_lit + [columns_lit]
         # Perform the groupby with the agg function
-        func_text += "    data = data.groupby([index_lit, columns_lit], as_index=False).agg(aggfunc)\n"
+        func_text += (
+            f"    data = data.groupby({groupby_lit!r}, as_index=False).agg(aggfunc)\n"
+        )
         # Compute the unique columns. This is now always index 1, since we have done an
         # iloc on the DataFrame
-        func_text += "    pivot_values = data.iloc[:, 1].unique()\n"
+        func_text += f"    pivot_values = data.iloc[:, {len(index_idx)}].unique()\n"
         # Call the main pivot_impl
         func_text += "    return bodo.hiframes.pd_dataframe_ext.pivot_impl(\n"
         # Select all of the arrays. Since we have applied an iloc/groupby the new
-        # locations are now always 0, 1, 2-n
-        func_text += (
-            f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, 0),),\n"
-        )
-        func_text += (
-            f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, 1),),\n"
-        )
+        # locations are now always [0-m), m, [m+1, n)
         func_text += "        (\n"
-        for i in range(2, len(values_idx) + 2):
+        for i in range(0, len(index_idx)):
+            func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i}),\n"
+        func_text += "        ),\n"
+        func_text += f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {len(index_idx)}),),\n"
+        func_text += "        (\n"
+        for i in range(len(index_idx) + 1, len(values_idx) + len(index_idx) + 1):
             func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i}),\n"
         func_text += "        ),\n"
         func_text += "        pivot_values,\n"
-        func_text += "        index_lit,\n"
+        func_text += "        index_lit_tup,\n"
         func_text += "        columns_lit,\n"
         func_text += "        values_name_const,\n"
         # We don't need to check for duplicates because we have already
@@ -4082,7 +4148,8 @@ def overload_dataframe_pivot_table(
             func_text,
             {
                 "bodo": bodo,
-                "index_lit": index_lit,
+                "numba": numba,
+                "index_lit_tup": tuple(index_lit),
                 "columns_lit": columns_lit,
                 "values_name_const": values_name_const,
             },

@@ -1399,3 +1399,171 @@ def test_pd_pivot_multi_values(memory_leak_check):
         sort_output=True,
         reorder_columns=True,
     )
+
+
+@pytest.fixture(
+    params=[
+        pd.DataFrame(
+            {
+                "C": np.arange(1000),
+                "B": [str(i) for i in range(2000, 3000)],
+                "D": [i for i in range(10)] * 100,
+                "A": [str(i) for i in range(1000, 2000)],
+            }
+        ),
+        # Numeric values
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "D": np.arange(2000, 3000),
+                "B": [i for i in range(10)] * 100,
+                "C": np.arange(1000, 2000),
+            }
+        ),
+        # (string, int64)
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "D": [str(i) for i in range(2000, 3000)],
+                "B": [str(i) for i in range(10)] * 100,
+                "C": np.arange(1000, 2000),
+            }
+        ),
+        # (int64, float64)
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "D": np.arange(2000, 3000),
+                "B": [str(i) for i in range(10)] * 100,
+                "C": np.arange(1000, 2000).astype(np.float64),
+            }
+        ),
+    ]
+)
+def pivot_dataframes(request):
+    return request.param
+
+
+def test_pivot_multiple_index(pivot_dataframes, memory_leak_check):
+    """
+    Test running DataFrame.pivot() with multiple index
+    values.
+    """
+
+    def impl(df):
+        return df.pivot(index=["A", "B"], columns="D", values="C")
+
+    # Pivot may produce different nullable data, so we set check_dtype=False.
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl,
+        (pivot_dataframes,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+
+
+def test_pivot_table_multiple_index(pivot_dataframes, memory_leak_check):
+    """
+    Test running DataFrame.pivot() with multiple index
+    values.
+    """
+
+    def impl(df):
+        return df.pivot_table(
+            index=["A", "B"], columns="D", values="C", aggfunc="first"
+        )
+
+    # Pivot may produce different nullable data, so we set check_dtype=False.
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl,
+        (pivot_dataframes,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # Range index handling
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "D": [str(i) for i in range(2000, 3000)],
+                "B": [str(i) for i in range(10)] * 100,
+                "C": np.arange(1000, 2000),
+            }
+        ),
+        # Index with a name
+        pd.DataFrame(
+            {
+                "A": np.arange(1000),
+                "D": [str(i) for i in range(2000, 3000)],
+                "B": [str(i) for i in range(10)] * 100,
+                "C": np.arange(1000, 2000),
+            },
+            index=pd.Index([i for i in range(500)] * 2, name="my_index_name"),
+        ),
+    ],
+)
+def test_pivot_index_none(df, memory_leak_check):
+    """
+    Test running DataFrame.pivot() with index=None and values=None.
+    """
+
+    def impl(df):
+        return df.pivot(index=None, columns="D", values=None)
+
+    # Pivot Table may produce different nullable data, so we set check_dtype=False.
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+
+
+@pytest.mark.skip
+def test_pivot_table_index_none(memory_leak_check):
+    """
+    Test running DataFrame.pivot_table() with index=None and values=None.
+    """
+
+    def impl(df):
+        return df.pivot_table(index=None, columns="D", values=None, aggfunc="first")
+
+    # Pivot Table may produce different nullable data, so we set check_dtype=False.
+    df = pd.DataFrame(
+        {
+            "A": np.arange(1000),
+            "D": [str(i) for i in range(2000, 3000)],
+            "B": [str(i) for i in range(10)] * 100,
+            "C": np.arange(1000, 2000),
+        }
+    )
+
+    # sort_output becuase row order isn't maintained by pivot.
+    # reorder_columns because the column order is consistent but not defined.
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )

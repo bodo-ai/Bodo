@@ -810,9 +810,9 @@ Indexing, iteration
              - datatypes
              - notes
            * - ``cond``
-             - - Boolean DataFrame 
+             - - Boolean DataFrame
                - Boolean Series
-               - Boolean Array 
+               - Boolean Array
              - - If 1-dimensional array or Series is provided, equivalent to Pandas ``df.where`` with ``axis=1``.
            * - ``other``
              - - Scalar
@@ -822,7 +822,7 @@ Indexing, iteration
                - ``None``
              - - Data types in ``other`` must match corresponding entries in DataFrame.
                - ``None`` or omitting argument defaults to the respective ``NA`` value for each type.
-        
+
         .. note::
             DataFrame can contain categorical data if ``other`` is a scalar.
 
@@ -854,9 +854,9 @@ Indexing, iteration
              - datatypes
              - notes
            * - ``cond``
-             - - Boolean DataFrame 
+             - - Boolean DataFrame
                - Boolean Series
-               - Boolean Array 
+               - Boolean Array
              - - If 1-dimensional array or Series is provided, equivalent to Pandas ``df.mask`` with ``axis=1``.
            * - ``other``
              - - Scalar
@@ -865,8 +865,8 @@ Indexing, iteration
                - 1 or 2-D Array
                - ``None``
              - - Data types in ``other`` must match corresponding entries in DataFrame.
-               - ``None`` or omitting argument defaults to the respective ``NA`` value for each type. 
-        
+               - ``None`` or omitting argument defaults to the respective ``NA`` value for each type.
+
         .. note::
             DataFrame can contain categorical data if ``other`` is a scalar.
 
@@ -2216,7 +2216,7 @@ Reshaping, sorting, transposing
            * - ``values``
              - - Constant Column Label or list of labels
            * - ``index``
-             - - Constant Column Label
+             - - Constant Column Label or list of labels
            * - ``columns``
              - - Constant Column Label
 
@@ -2263,7 +2263,7 @@ Reshaping, sorting, transposing
            * - ``values``
              - - Constant Column Label or list of labels
            * - ``index``
-             - - Constant Column Label
+             - - Constant Column Label or list of labels
            * - ``columns``
              - - Constant Column Label
            * - ``aggfunc``

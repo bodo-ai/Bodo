@@ -25,7 +25,7 @@ Data manipulations
         * - ``values``
           - - Constant Column Label or list of labels
         * - ``index``
-          - - Constant Column Label
+          - - Constant Column Label or list of labels
         * - ``columns``
           - - Constant Column Label
 
@@ -75,7 +75,7 @@ Data manipulations
         * - ``values``
           - - Constant Column Label or list of labels
         * - ``index``
-          - - Constant Column Label
+          - - Constant Column Label or list of labels
         * - ``columns``
           - - Constant Column Label
         * - ``aggfunc``

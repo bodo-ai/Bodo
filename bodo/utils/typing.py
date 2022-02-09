@@ -1180,14 +1180,14 @@ def is_overload_constant_index(t):
     return (
         isinstance(t, HeterogeneousIndexType)
         and is_literal_type(t.data)
-        and is_literal_type(t.name_type)
+        and is_literal_type(t.name_typ)
     )
 
 
 def get_overload_constant_index(t):
     """return compile time constant value for Index type 't' (assuming it is a literal)"""
     assert is_overload_constant_index(t)
-    return pd.Index(get_literal_value(t.data), name=get_literal_value(t.name_type))
+    return pd.Index(get_literal_value(t.data), name=get_literal_value(t.name_typ))
 
 
 def is_overload_constant_series(t):
