@@ -14,11 +14,13 @@ from numba.cpython.listobj import ListInstance
 from numba.extending import (
     NativeValue,
     box,
+    infer_getattr,
     intrinsic,
+    lower_builtin,
+    lower_getattr,
     make_attribute_wrapper,
     models,
     overload,
-    overload_attribute,
     register_model,
     typeof_impl,
     unbox,
@@ -27,6 +29,7 @@ from numba.np.arrayobj import _getitem_array_single_int
 from numba.parfors.array_analysis import ArrayAnalysis
 
 from bodo.utils.cg_helpers import is_ll_eq
+from bodo.utils.templates import OverloadedKeyAttributeTemplate
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_int,
@@ -194,6 +197,20 @@ class TableTypeModel(models.StructModel):
 # for debugging purposes (a table may not have a block)
 make_attribute_wrapper(TableType, "block_0", "block_0")
 make_attribute_wrapper(TableType, "len", "_len")
+
+
+@infer_getattr
+class TableTypeAttribute(OverloadedKeyAttributeTemplate):
+    """
+    Attribute template for Table. This is used to
+    avoid lowering operations whose typing can have
+    a large impact on compilation.
+    """
+
+    key = TableType
+
+    def resolve_shape(self, df):
+        return types.Tuple([types.int64, types.int64])
 
 
 @unbox(TableType)
@@ -394,8 +411,21 @@ def box_table(typ, val, c, ensure_unboxed=None):
     return out_table_obj
 
 
-@overload(len)  # TODO: avoid lowering?
+@lower_builtin(len, TableType)
+def table_len_lower(context, builder, sig, args):
+    """
+    Implementation for lowering len. The typing is
+    done in a shared template for many different types.
+    See LenTemplate.
+    """
+    impl = table_len_overload(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
 def table_len_overload(T):
+    """
+    Implementation to compile for len(TableType)
+    """
     if not isinstance(T, TableType):
         return
 
@@ -405,8 +435,22 @@ def table_len_overload(T):
     return impl
 
 
-@overload_attribute(TableType, "shape")
+@lower_getattr(TableType, "shape")
+def lower_table_shape(context, builder, typ, val):
+    """
+    Lowering for TableType.shape. This compile and calls
+    an implementation with overload style.
+    """
+    impl = table_shape_overload(typ)
+    return context.compile_internal(
+        builder, impl, types.Tuple([types.int64, types.int64])(typ), (val,)
+    )
+
+
 def table_shape_overload(T):
+    """
+    Actual implementation used to implement TableType.shpae.
+    """
     if T.has_runtime_cols:
         # If the number of columns is determined at runtime we can't
         # use compile time values
