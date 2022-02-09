@@ -644,12 +644,9 @@ def _gen_pq_reader_py(
     # Here because columns may have been eliminated by 'pq_remove_dead_column',
     # we only load the indices in type_usecol_offset.
     selected_cols = []
-    # Create a map for efficient index lookups.
-    selected_cols_map = {}
     parititon_indices = set()
     for i in type_usecol_offset:
         if sanitized_col_names[i] not in partition_names:
-            selected_cols_map[col_indices[i]] = len(selected_cols)
             selected_cols.append(col_indices[i])
         else:
             # Track which partitions are valid to simplify filtering later
@@ -658,6 +655,7 @@ def _gen_pq_reader_py(
     if index_column_index is not None:
         selected_cols.append(index_column_index)
     selected_cols = sorted(selected_cols)
+    selected_cols_map = {c: i for i, c in enumerate(selected_cols)}
 
     # Tell C++ which columns in the parquet file are nullable, since there
     # are some types like integer which Arrow always considers to be nullable
@@ -727,7 +725,7 @@ def _gen_pq_reader_py(
         py_table_type = types.none
 
     if index_column_index is not None:
-        index_arr_ind = selected_cols.index(index_column_index)
+        index_arr_ind = selected_cols_map[index_column_index]
         index_arr = f"info_to_array(info_from_table(out_table, {index_arr_ind}), index_arr_type)"
     func_text += f"    index_arr = {index_arr}\n"
 
@@ -1503,8 +1501,6 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
     # index's name if there is one, otherwise "__index__level_0"
     # If there is no index at all, col_names will not include anything.
     col_names = pa_schema.names
-    # Map column names to index to allow efficient search
-    col_names_map = {c: i for i, c in enumerate(col_names)}
     index_col, nullable_from_metadata = get_pandas_metadata(pa_schema, num_pieces)
     col_types_total = [
         _get_numba_typ_from_pa_typ(
@@ -1523,6 +1519,8 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
             _get_partition_cat_dtype(pq_dataset.partitions.levels[i])
             for i in range(len(partition_names))
         ]
+    # Map column names to index to allow efficient search
+    col_names_map = {c: i for i, c in enumerate(col_names)}
 
     # if no selected columns, set it to all of them.
     if selected_columns is None:
@@ -1531,7 +1529,7 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
     # make sure selected columns are in the schema
     for c in selected_columns:
         if c not in col_names_map:
-            raise BodoError("Selected column {} not in Parquet file schema".format(c))
+            raise BodoError(f"Selected column {c} not in Parquet file schema")
     if (
         index_col
         and not isinstance(index_col, dict)
