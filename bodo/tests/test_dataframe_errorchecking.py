@@ -1496,10 +1496,10 @@ def test_df_values_to_numpy_err():
     """Tests that df.values and df.to_numpy() throw a reasonable error message"""
 
     def impl_1():
-        foo = pd.DataFrame({"A": ["hi"]}).to_numpy()
+        return pd.DataFrame({"A": ["hi"]}).to_numpy()
 
     def impl_2():
-        foo = pd.DataFrame({"A": ["hi"]}).values
+        return pd.DataFrame({"A": ["hi"]}).values
 
     err_msg1 = re.escape(
         "DataFrame.to_numpy(): only supported for dataframes containing numeric values"

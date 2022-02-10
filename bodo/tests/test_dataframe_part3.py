@@ -1116,3 +1116,15 @@ def test_empty_df_first_last():
     check_func(impl_first, (empty_df,))
     check_func(impl_last, (empty_df,))
     check_func(one_empty_rank, (df2,))
+
+
+def test_empty_dataframe_creation():
+    """
+    Test empty dataframe.
+    """
+
+    def impl():
+        df = pd.DataFrame({})
+        return df
+
+    check_func(impl, (), check_dtype=False)

@@ -407,56 +407,66 @@ def mini_dce(func_ir, typemap=None, alias_map=None, arg_aliases=None):
     usedefs = compute_use_defs(func_ir.blocks)
     live_map = compute_live_map(cfg, func_ir.blocks, usedefs.usemap, usedefs.defmap)
 
-    for label, block in func_ir.blocks.items():
-        # find live variables at each statement to delete dead assignment
-        lives = {v.name for v in block.terminator.list_vars()}
-        # find live variables at the end of block
-        for out_blk, _data in cfg.successors(label):
-            lives |= live_map[out_blk]
+    # repeat until convergence
+    changed = True
 
-        new_body = [block.terminator]
-        # for each statement in reverse order, excluding terminator
-        for stmt in reversed(block.body[:-1]):
+    while changed:
+        changed = False
+        for label, block in func_ir.blocks.items():
+            # find live variables at each statement to delete dead assignment
+            lives = {v.name for v in block.terminator.list_vars()}
+            # find live variables at the end of block
+            for out_blk, _data in cfg.successors(label):
+                lives |= live_map[out_blk]
 
-            # ignore assignments that their lhs is not live or lhs==rhs
-            if isinstance(stmt, ir.Assign):
-                lhs = stmt.target
-                rhs = stmt.value
-                if lhs.name not in lives:
-                    # make_function nodes are always safe to remove since they don't
-                    # introduce any aliases and have no side effects
-                    if isinstance(rhs, ir.Expr) and rhs.op == "make_function":
-                        continue
-                    # getattr doesn't have any side effects
-                    if isinstance(rhs, ir.Expr) and rhs.op == "getattr":
-                        continue
-                    # Const values are safe to remove since alias is not possible
-                    if isinstance(rhs, ir.Const):
-                        continue
-                    # Function values are safe to remove since aliasing not possible
-                    if typemap and isinstance(typemap.get(lhs, None), types.Function):
-                        continue
-                if isinstance(rhs, ir.Var) and lhs.name == rhs.name:
-                    continue
+            new_body = [block.terminator]
+            # for each statement in reverse order, excluding terminator
+            for stmt in reversed(block.body[:-1]):
 
-            # Del nodes are safe to remove since there is no side effect
-            if isinstance(stmt, ir.Del):
-                if stmt.value not in lives:
-                    continue
-
-            if type(stmt) in analysis.ir_extension_usedefs:
-                def_func = analysis.ir_extension_usedefs[type(stmt)]
-                uses, defs = def_func(stmt)
-                lives -= defs
-                lives |= uses
-            else:
-                lives |= {v.name for v in stmt.list_vars()}
+                # ignore assignments that their lhs is not live or lhs==rhs
                 if isinstance(stmt, ir.Assign):
-                    lives.remove(lhs.name)
+                    lhs = stmt.target
+                    rhs = stmt.value
+                    if lhs.name not in lives:
+                        # make_function nodes are always safe to remove since they don't
+                        # introduce any aliases and have no side effects
+                        if isinstance(rhs, ir.Expr) and rhs.op == "make_function":
+                            continue
+                        # getattr doesn't have any side effects
+                        if isinstance(rhs, ir.Expr) and rhs.op == "getattr":
+                            continue
+                        # Const values are safe to remove since alias is not possible
+                        if isinstance(rhs, ir.Const):
+                            continue
+                        # Function values are safe to remove since aliasing not possible
+                        if typemap and isinstance(typemap.get(lhs, None), types.Function):
+                            continue
+                        # build_map doesn't have any side effects
+                        if isinstance(rhs, ir.Expr) and rhs.op == "build_map":
+                            continue
+                    if isinstance(rhs, ir.Var) and lhs.name == rhs.name:
+                        continue
 
-            new_body.append(stmt)
-        new_body.reverse()
-        block.body = new_body
+                # Del nodes are safe to remove since there is no side effect
+                if isinstance(stmt, ir.Del):
+                    if stmt.value not in lives:
+                        continue
+
+                if type(stmt) in analysis.ir_extension_usedefs:
+                    def_func = analysis.ir_extension_usedefs[type(stmt)]
+                    uses, defs = def_func(stmt)
+                    lives -= defs
+                    lives |= uses
+                else:
+                    lives |= {v.name for v in stmt.list_vars()}
+                    if isinstance(stmt, ir.Assign):
+                        lives.remove(lhs.name)
+
+                new_body.append(stmt)
+            new_body.reverse()
+            if len(block.body) != len(new_body):
+                changed = True
+            block.body = new_body
 
 
 ir_utils.dead_code_elimination = mini_dce
