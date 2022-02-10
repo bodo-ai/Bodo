@@ -193,7 +193,7 @@ def test_logging_logger_lowering():
 def test_logging_logger_unsupported():
     @bodo.jit
     def test_unsupp_attr(l):
-        l.handlers
+        return l.handlers
 
     @bodo.jit
     def test_unsupp_method(l):

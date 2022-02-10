@@ -70,6 +70,8 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import check_java_installation
 
+from bodo.numba_compat import mini_dce
+
 
 # dummy sentinel singleton to designate constant value not found for variable
 class ConstNotFound:
@@ -145,6 +147,9 @@ class UntypedPass:
         self.func_ir._definitions = build_definitions(blocks)
         # return {"A": 1, "B": 2.3} -> return struct((1, 2.3), ("A", "B"))
         fix_struct_return(self.func_ir)
+        # remove variables that are now dead due to transformations that could cause typing issues
+        # (see test_empty_dataframe_creation)
+        mini_dce(self.func_ir)
         dprint_func_ir(self.func_ir, "after untyped pass")
 
         # raise a warning if a variable that is not an argument or return value has a
@@ -772,10 +777,7 @@ class UntypedPass:
                 rhs.args[0] = tup_var
 
             nodes = new_nodes + nodes
-            # HACK replace build_map to avoid inference errors
-            # TODO: don't replace if used in other places
-            arg_def.op = "build_list"
-            arg_def.items = [v[0] for v in arg_def.items]
+            # arg_def will be removed if not used anywhere else
 
         # replace range() with pd.RangeIndex() for index argument
         arg_def = guard(get_definition, self.func_ir, index_arg)
