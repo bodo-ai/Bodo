@@ -3301,7 +3301,7 @@ def to_sql_exception_guard(
             dtype,
             method,
         )
-    except ValueError as e:
+    except Exception as e:
         err_msg = e.args[0]
     return err_msg
 
