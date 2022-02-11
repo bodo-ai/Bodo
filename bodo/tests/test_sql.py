@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import random
+import re
 import urllib
 
 import numpy as np
@@ -533,3 +534,22 @@ def test_sql_snowflake_json_url(memory_leak_check):
     pandas_conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?{urllib.parse.urlencode(connection_params)}"
     query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
     check_func(impl, (query, conn), py_output=impl(query, pandas_conn))
+
+
+def test_to_sql_invalid_password(memory_leak_check):
+    """
+    Tests df.to_sql when writing with an invalid password
+    and thus triggering an exception. This checks that a
+    hang won't occur if df.to_sql raises an exception.
+    """
+
+    @bodo.jit
+    def impl(df):
+        return df.to_sql(
+            "mytable",
+            "mysql+pymysql://admin:GARBAGEPASSWORD@bodo-engine-ci.copjdp5mkwpk.us-east-2.rds.amazonaws.com",
+        )
+
+    df = pd.DataFrame({"A": np.arange(100)})
+    with pytest.raises(ValueError, match=re.escape("error in to_sql() operation")):
+        impl(df)
