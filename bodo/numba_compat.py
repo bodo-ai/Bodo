@@ -439,7 +439,9 @@ def mini_dce(func_ir, typemap=None, alias_map=None, arg_aliases=None):
                         if isinstance(rhs, ir.Const):
                             continue
                         # Function values are safe to remove since aliasing not possible
-                        if typemap and isinstance(typemap.get(lhs, None), types.Function):
+                        if typemap and isinstance(
+                            typemap.get(lhs, None), types.Function
+                        ):
                             continue
                         # build_map doesn't have any side effects
                         if isinstance(rhs, ir.Expr) and rhs.op == "build_map":
@@ -1850,6 +1852,19 @@ if _check_numba_change:  # pragma: no cover
         )
 
 numba.parfors.array_analysis.ArrayAnalysis._analyze_broadcast = _analyze_broadcast
+
+
+def slice_size(self, index, dsize, equiv_set, scope, stmts):
+    return None, None
+
+
+# avoid slice analysis of Numba since it generates slice size variables but forgets the
+# equivalence in subsequent runs and generates new variables.
+# Disabling it may disallow parfor fusion for sliced arrays but this isn't common for
+# Bodo workloads.
+# See https://bodo.atlassian.net/browse/BE-2230
+# TODO: fix slice analysis in Numba
+numba.parfors.array_analysis.ArrayAnalysis.slice_size = slice_size
 
 
 # support handling nested UDFs inside and outside the jit functions
@@ -4066,7 +4081,7 @@ def make_constant_array(self, builder, typ, ary):
     datatype = self.get_data_type(typ.dtype)
     # Bodo change: change size limit to 10MB
     # don't freeze ary of non-contig or bigger than 10MB
-    size_limit = 10 ** 7
+    size_limit = 10**7
 
     if self.allow_dynamic_globals and (
         typ.layout not in "FC" or ary.nbytes > size_limit
