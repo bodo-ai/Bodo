@@ -749,6 +749,36 @@ def test_func_non_jit_error(memory_leak_check):
         bodo.jit(test_impl)()
 
 
+# TODO: fix leak and add memory_leak_check
+def test_udf_nest_jit_convert():
+    """make sure nested JIT calls inside UDFs are converted to sequential properly.
+    See [BE-2225].
+    """
+
+    @bodo.jit
+    def f2(df):
+        return df.last("2D")
+
+    @bodo.jit
+    def f1(df):
+        df = df.set_index("B")
+        return f2(df)
+
+    @bodo.jit(distributed=["df", "df2"])
+    def g(df):
+        df2 = df.groupby("A").apply(f1)
+        return df2
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 1, 3, 4, 1],
+            "B": pd.date_range("2020-01-01", periods=5),
+            "C": [1, 2, 3, 4, 5],
+        }
+    )
+    g(df)
+
+
 def test_updated_container_binop(memory_leak_check):
     """make sure binop of updated containers is detected and raises proper error"""
 
