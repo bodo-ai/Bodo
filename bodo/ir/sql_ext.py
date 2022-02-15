@@ -189,9 +189,15 @@ def sql_distributed_run(
         sql_node.df_colnames, sql_node.db_type, sql_node.converted_colnames
     )
 
-    updated_sql_request = (
-        "SELECT " + col_str + " FROM (" + sql_node.sql_request + ") as TEMP"
-    )
+    # https://stackoverflow.com/questions/33643163/in-oracle-as-alias-not-working
+    if sql_node.db_type == "oracle":
+        updated_sql_request = (
+            "SELECT " + col_str + " FROM (" + sql_node.sql_request + ") TEMP"
+        )
+    else:
+        updated_sql_request = (
+            "SELECT " + col_str + " FROM (" + sql_node.sql_request + ") as TEMP"
+        )
     replace_arg_nodes(
         f_block,
         [
@@ -217,11 +223,11 @@ def escape_column_names(col_names, db_type, converted_colnames):
 
     See: test_read_sql_column_function and test_sql_snowflake_count
     """
-    # In snowflake we avoid functions by wrapping column names in quotes.
+    # In Snowflake/Oracle we avoid functions by wrapping column names in quotes.
     # This makes the name case sensitive, so we avoid this by undoing any
     # conversions in the output as needed.
-    if db_type == "snowflake":
-        # Snowflake needs to convert all lower case strings back to uppercase
+    if db_type in ("snowflake", "oracle"):
+        # Snowflake/Oracle needs to convert all lower case strings back to uppercase
         used_colnames = [x.upper() if x in converted_colnames else x for x in col_names]
         col_str = ", ".join([f'"{x}"' for x in used_colnames])
 
@@ -402,7 +408,11 @@ def _gen_sql_reader_py(
         func_text += "    iter = 0\n"
         func_text += "    while(True):\n"
         func_text += "      offset = (iter * n_pes + rank) * block_size\n"
-        func_text += "      sql_cons = 'select * from (' + sql_request + ') x LIMIT ' + str(block_size) + ' OFFSET ' + str(offset)\n"
+        # https://docs.oracle.com/javadb/10.8.3.0/ref/rrefsqljoffsetfetch.html
+        if db_type == "oracle":
+            func_text += "      sql_cons = 'select * from (' + sql_request + ') OFFSET ' + str(offset) + ' ROWS FETCH NEXT ' + str(block_size) + ' ROWS ONLY'\n"
+        else:
+            func_text += "      sql_cons = 'select * from (' + sql_request + ') x LIMIT ' + str(block_size) + ' OFFSET ' + str(offset)\n"
         func_text += "      df_block = pd.read_sql(sql_cons, conn)\n"
         func_text += "      if df_block.size == 0:\n"
         func_text += "        break\n"
@@ -476,7 +486,11 @@ def _gen_sql_reader_py(
                 # an optimization (the SQL engine loads less data) and is needed for
                 # correctness. See test_read_sql_column_function
                 col_str = escape_column_names(col_names, db_type, converted_colnames)
-                func_text += f"    sql_cons = 'select {col_str} from (' + sql_request + ') x LIMIT ' + str(limit) + ' OFFSET ' + str(offset)\n"
+                # https://docs.oracle.com/javadb/10.8.3.0/ref/rrefsqljoffsetfetch.html
+                if db_type == "oracle":
+                    func_text += f"    sql_cons = 'select {col_str} from (' + sql_request + ') OFFSET ' + str(offset) + ' ROWS FETCH NEXT ' + str(limit) + ' ROWS ONLY'\n"
+                else:
+                    func_text += f"    sql_cons = 'select {col_str} from (' + sql_request + ') x LIMIT ' + str(limit) + ' OFFSET ' + str(offset)\n"
 
                 func_text += "    df_ret = pd.read_sql(sql_cons, conn)\n"
             else:

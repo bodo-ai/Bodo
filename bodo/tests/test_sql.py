@@ -43,21 +43,31 @@ def test_write_sql_aws(memory_leak_check):
             df_input = df_in
         bodo_impl(df_input, table_name, conn)
         bodo.barrier()
+        passed = 1
+        npes = bodo.get_size()
         if bodo.get_rank() == 0:
-            df_load = pd.read_sql("select * from " + table_name, conn)
-            # The writing does not preserve the order a priori
-            l_cols = df_in.columns.to_list()
-            df_in_sort = df_in.sort_values(l_cols).reset_index(drop=True)
-            df_load_sort = df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
-            pd.testing.assert_frame_equal(df_load_sort, df_in_sort)
+            try:
+                df_load = pd.read_sql("select * from " + table_name, conn)
+                # The writing does not preserve the order a priori
+                l_cols = df_in.columns.to_list()
+                df_in_sort = df_in.sort_values(l_cols).reset_index(drop=True)
+                df_load_sort = (
+                    df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
+                )
+                pd.testing.assert_frame_equal(df_load_sort, df_in_sort)
+            except Exception as e:
+                print(e)
+                passed = 0
+        n_passed = reduce_sum(passed)
+        n_pes = bodo.get_size()
+        assert n_passed == n_pes, "test_write_sql_aws failed"
+        bodo.barrier()
 
     np.random.seed(5)
     random.seed(5)
     len_list = 20
-    list_int = list(np.random.randint(1, 10, len_list))
-    list_double = [
-        4.0 if random.randint(1, 3) == 1 else np.nan for _ in range(len_list)
-    ]
+    list_int = list(np.random.choice(10, len_list))
+    list_double = list(np.random.choice([4.0, np.nan], len_list))
     list_datetime = pd.date_range("2001-01-01", periods=len_list)
     df1 = pd.DataFrame({"A": list_int, "B": list_double, "C": list_datetime})
     test_specific_dataframe(test_impl_write_sql, False, df1)
@@ -535,6 +545,158 @@ def test_sql_snowflake_json_url(memory_leak_check):
     pandas_conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?{urllib.parse.urlencode(connection_params)}"
     query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
     check_func(impl, (query, conn), py_output=impl(query, pandas_conn))
+
+
+# ---------------------Oracle Database------------------------#
+# Queries used from
+# https://www.oracle.com/news/connect/run-sql-data-queries-with-pandas.html
+
+oracle_user_pass_and_hostname = "user:pass@localhost"
+
+
+@pytest.mark.slow
+def test_oracle_read_sql_basic(memory_leak_check):
+    """ Test simple SQL query with Oracle DB"""
+
+    def impl():
+        sql_request = "select * from orders"
+        conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl, ())
+
+    def impl2():
+        sql_request = "select pono, ordate from orders"
+        conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl2, ())
+
+    def impl3():
+        sql_request = "select pono from orders"
+        conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    # [left]:  Int64  vs. [right]: int64
+    check_func(impl3, (), check_dtype=False)
+
+
+@pytest.mark.slow
+def test_oracle_read_sql_count(memory_leak_check):
+    """ Test SQL query count(*) and a single column Oracle DB"""
+
+    conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
+
+    def write_sql(df, table_name, conn):
+        df.to_sql(table_name, conn, if_exists="replace")
+
+    table_name = "test_small_table"
+
+    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+    # Create the table once.
+    if bodo.get_rank() == 0:
+        write_sql(df, table_name, conn)
+    bodo.barrier()
+
+    def test_impl(conn):
+        sql_request = "select B, count(*) from test_small_table group by B"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(test_impl, (conn,), check_dtype=False)
+
+
+@pytest.mark.slow
+def test_oracle_read_sql_join(memory_leak_check):
+    """ Test SQL query join Oracle DB"""
+
+    def impl():
+        sql_request = """
+        SELECT 
+            ordate,
+            empl,
+            price*quantity*(1-discount/100) AS total,
+            price*quantity*(discount/100) AS off
+            FROM orders INNER JOIN details
+            ON orders.pono = details.pono
+            ORDER BY ordate
+        """
+        conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl, ())
+
+
+@pytest.mark.slow
+def test_oracle_read_sql_gb(memory_leak_check):
+    """ Test SQL query group by, column alias, and round Oracle DB"""
+
+    def impl():
+        sql_request = """
+        SELECT 
+            brand,
+            ROUND(AVG(price),2) AS MEAN 
+            FROM details
+            GROUP BY brand 
+        """
+        conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl, ())
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("is_distributed", [True, False])
+def test_write_sql_oracle(is_distributed, memory_leak_check):
+    """Test to_sql with Oracle database
+    Data is compared vs. original DF
+    """
+
+    def test_impl_write_sql(df, table_name, conn):
+        df.to_sql(table_name, conn, if_exists="replace")
+
+    np.random.seed(5)
+    random.seed(5)
+    len_list = 20
+    list_int = list(np.random.choice(10, len_list))
+    list_double = list(np.random.choice([4.0, np.nan], len_list))
+    list_datetime = pd.date_range("2001-01-01", periods=len_list)
+    df_in = pd.DataFrame({"a": list_int, "b": list_double, "c": list_datetime})
+    table_name = "to_sql_table"
+    if is_distributed:
+        start, end = get_start_end(len(df_in))
+        df_input = df_in.iloc[start:end]
+    else:
+        df_input = df_in
+    conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
+    bodo.jit(all_args_distributed_block=is_distributed)(test_impl_write_sql)(
+        df_input, table_name, conn
+    )
+    bodo.barrier()
+    passed = 1
+    if bodo.get_rank() == 0:
+        try:
+            # to_sql adds index column by default. Setting it here explicitly.
+            df_load = pd.read_sql(
+                "select * from " + table_name, conn, index_col="index"
+            )
+            # The writing does not preserve the order a priori
+            l_cols = df_in.columns.to_list()
+            df_in_sort = df_in.sort_values(l_cols).reset_index(drop=True)
+            df_load_sort = df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
+            pd.testing.assert_frame_equal(df_load_sort, df_in_sort)
+        except Exception as e:
+            print(e)
+            passed = 0
+    n_passed = reduce_sum(passed)
+    n_pes = bodo.get_size()
+    assert n_passed == n_pes, "test_write_sql_oracle failed"
+    bodo.barrier()
 
 
 def test_to_sql_invalid_password(memory_leak_check):

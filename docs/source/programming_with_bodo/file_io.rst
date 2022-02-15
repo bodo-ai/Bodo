@@ -374,11 +374,13 @@ See :ref:`read_json() <pandas-f-in>`, :ref:`to_json() <pandas-f-out>` for suppor
 SQL
 ~~~
 
+See :ref:`Databases <db>` for list of supported Relational Database Management Systems (RDBMS) with Bodo.
+
 For SQL, the syntax is also the same as pandas. For reading::
 
     @bodo.jit
     def example_read_sql():
-        df = pd.read_sql('select * from employees', 'mysql+pymysql://admin:server')
+        df = pd.read_sql('select * from employees', 'mysql+pymysql://<username>:<password>@<host>/<db_name>')
 
 See :ref:`read_sql() <pandas-f-in>` for supported arguments.
 
@@ -386,13 +388,14 @@ For writing::
 
     @bodo.jit
     def example_write_sql(df):
-        df.to_sql('table_name', 'mysql+pymysql://admin:server')
+        df.to_sql('table_name', 'mysql+pymysql://<username>:<password>@<host>/<db_name>')
 
 See :ref:`to_sql() <pandas-f-in>` for supported arguments.
 
-.. note::
+ .. note::
 
-  ``sqlalchemy`` must be installed in order to use ``pandas.read_sql``.
+  ``sqlalchemy`` must be installed in order to use SQL with Pandas.
+
 
 .. _deltalake-section:
 
@@ -602,14 +605,14 @@ Currently, Bodo supports most RDBMS that work with SQLAlchemy, with a correspond
 .. _snowflake-section:
 
 Snowflake
-----------
+~~~~~~~~~
 
 To read a dataframe from a Snowflake database, users can use ``pd.read_sql`` with their Snowflake username and password:
 ``pd.read_sql(query,snowflake://<username>:<password>@url)``.
 
 
 Prerequisites
-~~~~~~~~~~~~~~
+*************
 
 In order to be able to query Snowflake from Bodo, you will have to install the Snowflake connector. If you're using
 Bodo in a conda environment:
@@ -627,7 +630,7 @@ If you've installed Bodo using pip, then you can install the Snowflake connector
 
 
 Usage
-~~~~~~
+******
 
 Bodo requires the Snowflake connection string to be passed as an argument to the ``pd.read_sql`` function.
 The complete code looks as follows:
@@ -655,3 +658,147 @@ We can use the ``pd.to_sql`` method to persist a dataframe to a Snowflake table:
 .. note::
     - ``index=False`` is required as Snowflake does not support indexes.
     - ``if_exists=append`` is needed if the table already exists in snowflake.
+
+
+MySQL
+~~~~~
+
+Prerequisites
+*************
+
+In addition to ``sqlalchemy``, install ``pymysql``.
+If you're using Bodo in a conda environment:
+
+.. code-block:: console
+
+    $ conda install pymysql -c conda-forge
+
+If you've installed Bodo using pip:
+
+.. code-block:: console
+
+    $ pip install PyMySQL
+
+Usage
+******
+
+Reading result of a SQL query in a dataframe:
+
+.. code-block:: python3
+
+    import bodo
+    import pandas as pd
+
+    @bodo.jit(distributed=['df'])
+    def read_mysql(table_name, conn):
+        df = pd.read_sql(
+                f"SELECT * FROM {table_name}",
+                conn
+            )
+        return df
+
+    table_name = "test_table"
+    conn = f"mysql+pymysql://{username}:{password}@{host}/{db_name}"
+    df = read_mysql(table_name, conn)
+
+
+Writing dataframe as a table in the database:
+
+.. code-block:: python3
+
+    import bodo
+    import pandas as pd
+
+    @bodo.jit(distributed=['df'])
+    def write_mysql(df, table_name, conn):
+        df.to_sql(table, conn)
+
+    table_name = "test_table"
+    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+    conn = f"mysql+pymysql://{username}:{password}@{host}/{db_name}"
+    write_mysql(df, table_name, conn)
+
+Oracle Database
+~~~~~~~~~~~~~~~
+
+Prerequisites
+*************
+
+In addition to ``sqlalchemy``, install ``cx_oracle`` and Oracle instant client driver.
+If you're using Bodo in a conda environment:
+
+.. code-block:: console
+
+    $ conda install cx_oracle -c conda-forge
+
+If you've installed Bodo using pip:
+
+.. code-block:: console
+
+    $ pip install cx-Oracle
+
+- Then, Download "Basic" or "Basic light" package matching your operating system from `here <https://www.oracle.com/database/technologies/instant-client/downloads.html>`_.
+
+- Unzip package and add it to ``LD_LIBRARY_PATH`` environment variable.
+
+ .. note::
+    For linux ``libaio`` package is required as well.
+
+    conda: ``conda install libaio -c conda-forge``
+
+    pip: ``pip install libaio``
+
+
+See `cx_oracle <https://cx-oracle.readthedocs.io/en/latest/user_guide/installation.html#cx-oracle-8-installation>`_ for more information.
+
+Alternatively, Oracle instant driver can be automatically downloaded using ``wget`` or ``curl`` commands.
+
+Here's an example of automatic installation on a Linux OS machine.
+
+.. code-block::
+
+    conda install cx_oracle libaio -c conda-forge
+    mkdir -p /opt/oracle
+    cd /opt/oracle
+    wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip 
+    unzip instantclient-basic-linux.x64-21.5.0.0.0dbru.zip 
+    export LD_LIBRARY_PATH=/opt/oracle/instantclient_21_5:$LD_LIBRARY_PATH
+
+
+Usage
+******
+
+Reading result of a SQL query in a dataframe:
+
+.. code-block:: python3
+
+    import bodo
+    import pandas as pd
+
+    @bodo.jit(distributed=['df'])
+    def read_oracle(table_name, conn):
+        df = pd.read_sql(
+                f"SELECT * FROM {table_name}",
+                conn
+            )
+        return df
+
+    table_name = "test_table"
+    conn = f"oracle+cx_oracle://{username}:{password}@{host}/{db_name}"
+    df = read_oracle(table_name, conn)
+
+Writing dataframe as a table in the database:
+
+.. code-block:: python3
+
+    import bodo
+    import pandas as pd
+
+    @bodo.jit(distributed=['df'])
+    def write_mysql(df, table_name, conn):
+        df.to_sql(table, conn)
+
+    table_name = "test_table"
+    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+    conn = f"oracle+cx_oracle://{username}:{password}@{host}/{db_name}"
+    write_mysql(df, table_name, conn)
