@@ -4,6 +4,7 @@ transforms the IR to remove features that Numba's type inference cannot support
 such as non-uniform dictionary input of `pd.DataFrame({})`.
 """
 import types as pytypes
+import sys
 import warnings
 import itertools
 import datetime
@@ -104,7 +105,6 @@ class UntypedPass:
         # save names of arguments and return values to catch invalid dist annotation
         self._arg_names = set()
         self._return_varnames = set()
-        self._has_h5py = bodo.utils.utils.has_supported_h5py()
 
     def run(self):
         """run untyped pass transform"""
@@ -197,10 +197,10 @@ class UntypedPass:
         # TODO(ehsan): the code may not use "h5py" directly ("from h5py import File")
         # but that's rare and not high priority at this time
         if (
-            not self._has_h5py
-            and isinstance(rhs, (ir.Const, ir.Global, ir.FreeVar))
+            isinstance(rhs, (ir.Const, ir.Global, ir.FreeVar))
             and isinstance(rhs.value, pytypes.ModuleType)
             and rhs.value.__name__ == "h5py"
+            and not bodo.utils.utils.has_supported_h5py()
         ):  # pragma: no cover
             raise BodoError("Bodo requires HDF5 1.10 for h5py support", rhs.loc)
 
@@ -489,7 +489,7 @@ class UntypedPass:
 
         # replace SparkSession.builder since class attributes are not supported in Numba
         if (
-            bodo.compiler._pyspark_installed
+            "pyspark" in sys.modules
             and rhs.attr == "builder"
             and isinstance(val_def, ir.Global)
         ):
@@ -520,7 +520,7 @@ class UntypedPass:
 
     def _run_getitem(self, assign, rhs, label):
         # fix type for f['A'][:] dset reads
-        if self._has_h5py:
+        if "h5py" in sys.modules and bodo.utils.utils.has_supported_h5py():
             lhs = assign.target.name
             h5_nodes = self.h5_handler.handle_possible_h5_read(assign, lhs, rhs)
             if h5_nodes is not None:
@@ -630,7 +630,7 @@ class UntypedPass:
 
         # add distributed flag input to SparkDataFrame.toPandas() if specified by user
         if (
-            bodo.compiler._pyspark_installed
+            "pyspark" in sys.modules
             and func_name == "toPandas"
             and isinstance(func_mod, ir.Var)
             and lhs.name in self.metadata["distributed"]

@@ -67,10 +67,36 @@ from bodo.utils.typing import (
     is_overload_true,
 )
 
+_is_sklearn_supported_version = False
+_min_sklearn_version = (1, 0, 0)
+_min_sklearn_ver_str = ".".join(str(x) for x in _min_sklearn_version)
+_max_sklearn_version_exclusive = (1, 1, 0)
+_max_sklearn_ver_str = ".".join(str(x) for x in _max_sklearn_version_exclusive)
+try:
+    # Create capturing group for major, minor, and bugfix version numbers.
+    # last number could have string e.g. `dev0`
+    import re
+
+    import sklearn  # noqa
+
+    regex = re.compile(r"(\d+)\.(\d+)\..*(\d+)")
+    sklearn_version = sklearn.__version__
+    m = regex.match(sklearn_version)
+    if m:
+        ver = tuple(map(int, m.groups()))
+        if ver >= _min_sklearn_version and ver < _max_sklearn_version_exclusive:
+            _is_sklearn_supported_version = True
+
+except ImportError:
+    # TODO if sklearn is not installed, trying to use sklearn inside
+    # bodo functions should give more meaningful errors than:
+    # Untyped global name 'RandomForestClassifier': cannot determine Numba type of <class 'abc.ABCMeta'>
+    pass
+
 
 def check_sklearn_version():
-    if not bodo.compiler._is_sklearn_supported_version:
-        msg = f" Bodo supports scikit-learn version >= {bodo.compiler._min_sklearn_ver_str} and < {bodo.compiler._max_sklearn_ver_str}.\n \
+    if not _is_sklearn_supported_version:
+        msg = f" Bodo supports scikit-learn version >= {_min_sklearn_ver_str} and < {_max_sklearn_ver_str}.\n \
             Installed version is {sklearn.__version__}.\n"
         raise BodoError(msg)
 
@@ -2316,7 +2342,7 @@ def overload_sgdc_model_score(
 
 @overload_attribute(BodoSGDClassifierType, "coef_")
 def get_sgdc_coef(m):
-    """ Overload coef_ attribute to be accessible inside bodo.jit """
+    """Overload coef_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
         with numba.objmode(result="float64[:,:]"):
@@ -2682,7 +2708,7 @@ def overload_multinomial_nb_model_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    """ MultinomialNB fit overload """
+    """MultinomialNB fit overload"""
     # If data is replicated, run scikit-learn directly
     if is_overload_false(_is_data_distributed):
 
@@ -2956,7 +2982,7 @@ def overload_logistic_regression_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    """ Logistic Regression fit overload """
+    """Logistic Regression fit overload"""
     # If data is replicated, run scikit-learn directly
     if is_overload_false(_is_data_distributed):
 
@@ -3041,7 +3067,7 @@ def overload_logistic_regression_score(
 
 @overload_attribute(BodoLogisticRegressionType, "coef_")
 def get_logisticR_coef(m):
-    """ Overload coef_ attribute to be accessible inside bodo.jit """
+    """Overload coef_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
         with numba.objmode(result="float64[:,:]"):
@@ -3125,7 +3151,7 @@ def overload_linear_regression_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    """ Linear Regression fit overload """
+    """Linear Regression fit overload"""
     # If data is replicated, run scikit-learn directly
     if is_overload_false(_is_data_distributed):
 
@@ -3183,7 +3209,7 @@ def overload_linear_regression_score(
 
 @overload_attribute(BodoLinearRegressionType, "coef_")
 def get_lr_coef(m):
-    """ Overload coef_ attribute to be accessible inside bodo.jit """
+    """Overload coef_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
         with numba.objmode(result="float64[:]"):
@@ -3284,7 +3310,7 @@ def overload_lasso_fit(
     check_input=True,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    """ Lasso fit overload """
+    """Lasso fit overload"""
     # If data is replicated, run scikit-learn directly
     if is_overload_false(_is_data_distributed):
 
@@ -3434,7 +3460,7 @@ def overload_ridge_fit(
     sample_weight=None,
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    """ Ridge Regression fit overload """
+    """Ridge Regression fit overload"""
     # If data is replicated, run scikit-learn directly
     if is_overload_false(_is_data_distributed):
 
@@ -3501,7 +3527,7 @@ def overload_linear_regression_score(
 
 @overload_attribute(BodoRidgeType, "coef_")
 def get_ridge_coef(m):
-    """ Overload coef_ attribute to be accessible inside bodo.jit """
+    """Overload coef_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
         with numba.objmode(result="float64[:]"):
@@ -3608,7 +3634,7 @@ def overload_linear_svc_fit(
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
 
-    """ Linear SVC fit overload """
+    """Linear SVC fit overload"""
     # If data is replicated, run scikit-learn directly
     if is_overload_false(_is_data_distributed):
 
@@ -3992,7 +4018,7 @@ def reset_labels_type(labels, label_type):  # pragma: no cover
 
 @overload(reset_labels_type, no_unliteral=True)
 def overload_reset_labels_type(labels, label_type):
-    """ Reset labels to its original type if changed"""
+    """Reset labels to its original type if changed"""
     if get_overload_const_int(label_type) == 1:
 
         def _reset_labels(labels, label_type):  # pragma: no cover
@@ -4592,7 +4618,7 @@ def sklearn_hashing_vectorizer_overload(
     token_pattern=r"(?u)\b\w\w+\b",
     ngram_range=(1, 1),
     analyzer="word",
-    n_features=(2 ** 20),
+    n_features=(2**20),
     binary=False,
     norm="l2",
     alternate_sign=True,
@@ -4617,7 +4643,7 @@ def sklearn_hashing_vectorizer_overload(
         token_pattern=r"(?u)\b\w\w+\b",
         ngram_range=(1, 1),
         analyzer="word",
-        n_features=(2 ** 20),
+        n_features=(2**20),
         binary=False,
         norm="l2",
         alternate_sign=True,
@@ -4982,7 +5008,7 @@ def sklearn_count_vectorizer_overload(
 
 @overload_attribute(BodoFExtractCountVectorizerType, "vocabulary_")
 def get_cv_vocabulary_(m):
-    """ Overload vocabulary_ attribute to be accessible inside bodo.jit """
+    """Overload vocabulary_ attribute to be accessible inside bodo.jit"""
 
     types.dict_string_int = types.DictType(types.unicode_type, types.int64)
 
@@ -4995,7 +5021,7 @@ def get_cv_vocabulary_(m):
 
 
 def _cv_fit_transform_helper(m, X):
-    """ Initial fit computation to get vocabulary if user didn't provide it"""
+    """Initial fit computation to get vocabulary if user didn't provide it"""
     change_voc = False
     local_vocabulary = m.vocabulary
     if m.vocabulary is None:

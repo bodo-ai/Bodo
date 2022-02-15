@@ -37,6 +37,10 @@ from numba.core.untyped_passes import (
 )
 
 import bodo
+import bodo.hiframes.dataframe_indexing  # noqa # side effect: initialize Numba extensions
+import bodo.hiframes.datetime_datetime_ext  # noqa # side effect: initialize Numba extensions
+import bodo.hiframes.datetime_timedelta_ext  # noqa # side effect: initialize Numba extensions
+import bodo.io
 import bodo.libs
 import bodo.libs.array_kernels  # noqa # side effect: install Numba functions
 import bodo.libs.int_arr_ext  # noqa # side effect
@@ -45,94 +49,13 @@ import bodo.libs.spark_extra
 import bodo.transforms
 import bodo.transforms.series_pass
 import bodo.transforms.untyped_pass
+import bodo.utils
+import bodo.utils.typing
 from bodo.transforms.series_pass import SeriesPass
 from bodo.transforms.table_column_del_pass import TableColumnDelPass
 from bodo.transforms.typing_pass import BodoTypeInference
 from bodo.transforms.untyped_pass import UntypedPass
 from bodo.utils.utils import is_assign, is_call_assign, is_expr
-
-_is_sklearn_supported_version = False
-_min_sklearn_version = (1, 0, 0)
-_min_sklearn_ver_str = ".".join(str(x) for x in _min_sklearn_version)
-_max_sklearn_version_exclusive = (1, 1, 0)
-_max_sklearn_ver_str = ".".join(str(x) for x in _max_sklearn_version_exclusive)
-try:
-    # Create capturing group for major, minor, and bugfix version numbers.
-    # last number could have string e.g. `dev0`
-    import re
-
-    import sklearn  # noqa
-
-    import bodo.libs.sklearn_ext  # noqa  # side effect: initialize Numba extensions
-
-    regex = re.compile(r"(\d+)\.(\d+)\..*(\d+)")
-    sklearn_version = sklearn.__version__
-    m = regex.match(sklearn_version)
-    if m:
-        ver = tuple(map(int, m.groups()))
-        if ver >= _min_sklearn_version and ver < _max_sklearn_version_exclusive:
-            _is_sklearn_supported_version = True
-
-except ImportError:
-    # TODO if sklearn is not installed, trying to use sklearn inside
-    # bodo functions should give more meaningful errors than:
-    # Untyped global name 'RandomForestClassifier': cannot determine Numba type of <class 'abc.ABCMeta'>
-    pass
-
-# Flag to determine if matplotlib is installed for Series pass.
-# TODO: Try use this flg to get meaningful errors if someone tries
-# to reference matplotlib without having installed matplotlib
-_matplotlib_installed = False
-try:
-    import matplotlib  # noqa
-
-    import bodo.libs.matplotlib_ext  # noqa
-
-    _matplotlib_installed = True
-except ImportError:
-    pass
-
-
-# Flag to determine if pyspark is installed (used in untyped pass)
-_pyspark_installed = False
-try:
-    import pyspark  # noqa
-    import pyspark.sql.functions  # noqa
-
-    import bodo.libs.pyspark_ext  # noqa
-
-    bodo.utils.transform.no_side_effect_call_tuples.update(
-        {
-            ("col", pyspark.sql.functions),
-            (pyspark.sql.functions.col,),
-            ("sum", pyspark.sql.functions),
-            (pyspark.sql.functions.sum,),
-        }
-    )
-
-    _pyspark_installed = True
-except ImportError:
-    pass
-
-
-import bodo.hiframes.dataframe_indexing  # noqa # side effect: initialize Numba extensions
-import bodo.hiframes.datetime_datetime_ext  # noqa # side effect: initialize Numba extensions
-import bodo.hiframes.datetime_timedelta_ext  # noqa # side effect: initialize Numba extensions
-
-try:  # pragma: no cover
-    import xgboost  # noqa
-
-    import bodo.libs.xgb_ext  # side effect: initialize Numba extensions
-except ImportError:
-    pass
-
-import bodo.io
-import bodo.utils
-import bodo.utils.typing
-
-if bodo.utils.utils.has_supported_h5py():
-    from bodo.io import h5  # noqa
-
 
 # avoid Numba warning when there is no Parfor in the IR
 numba.core.config.DISABLE_PERFORMANCE_WARNINGS = 1

@@ -4,6 +4,7 @@ converts Series operations to array operations as much as possible
 to provide implementation and enable optimization.
 """
 import operator
+import sys
 import warnings
 
 import numba
@@ -74,7 +75,6 @@ from bodo.hiframes.series_str_impl import (
     SeriesStrMethodType,
 )
 from bodo.hiframes.split_impl import StringArraySplitViewType
-from bodo.io.h5_api import h5dataset_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import (
     boolean_array,
@@ -667,7 +667,7 @@ class SeriesPass:
                     + [inst]
                 )
 
-        if target_typ == h5dataset_type:
+        if "h5py" in sys.modules and target_typ == bodo.io.h5_api.h5dataset_type:
             return self._handle_h5_write(inst.target, inst.index, inst.value)
 
         nodes.append(inst)
@@ -928,7 +928,7 @@ class SeriesPass:
 
         # optimize out spark_df._df if possible
         if (
-            bodo.compiler._pyspark_installed
+            "pyspark" in sys.modules
             and isinstance(rhs_type, bodo.libs.pyspark_ext.SparkDataFrameType)
             and rhs.attr == "_df"
         ):
@@ -1419,7 +1419,7 @@ class SeriesPass:
             return self._handle_ufuncs_bool_arr(func_name, rhs.args)
 
         # support matplot lib calls
-        if bodo.compiler._matplotlib_installed:
+        if "matplotlib" in sys.modules:
             # matplotlib.pyplot functions
             if (
                 func_mod == "matplotlib.pyplot"
@@ -2491,7 +2491,7 @@ class SeriesPass:
         # inline SparkDataFrame.select() here since inline_closurecall() cannot handle
         # stararg yet. TODO: support
         if (
-            bodo.compiler._pyspark_installed
+            "pyspark" in sys.modules
             and isinstance(func_mod, ir.Var)
             and isinstance(
                 self.typemap[func_mod.name], bodo.libs.pyspark_ext.SparkDataFrameType
