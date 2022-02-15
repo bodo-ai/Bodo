@@ -17,6 +17,7 @@ from bodo.tests.utils import (
     _check_for_io_reader_filters,
     check_func,
     get_start_end,
+    reduce_sum,
 )
 
 # TODO: Include testing DBs for other systems: PostgreSQL, MSSQL, SQLite, ...
@@ -553,3 +554,57 @@ def test_to_sql_invalid_password(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(100)})
     with pytest.raises(ValueError, match=re.escape("error in to_sql() operation")):
         impl(df)
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_to_sql_snowflake(memory_leak_check):
+    """
+    Tests that df.to_sql works as expected. Since Snowflake has a limit of ~16k
+    per insert, we insert 17k rows per rank to emulate a "large" insert.
+    """
+    # Only test this in parallel to save time/simplify the snowflake tables.
+    if bodo.get_size() != 3:
+        return
+    import platform
+
+    # This test runs on both Mac and Linux, so give each table a different
+    # name for the highly unlikely but possible case the tests run concurrently.
+    if platform.system() == "Darwin":
+        name = "tosqllargemac"
+    else:
+        name = "tosqllargelinux"
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+
+    @bodo.jit
+    def test_write(name, conn, schema):
+        df = pd.DataFrame(
+            {
+                "a": np.arange(17000 * 3),
+                "b": np.arange(17000 * 3),
+            }
+        )
+        df.to_sql(name, conn, if_exists="replace", index=False, schema=schema)
+        bodo.barrier()
+
+    test_write(name, conn, schema)
+
+    passed = 1
+    if bodo.get_rank() == 0:
+        try:
+            py_output = pd.DataFrame(
+                {
+                    "a": np.arange(17000 * 3),
+                    "b": np.arange(17000 * 3),
+                }
+            )
+            output_df = pd.read_sql(f"select * from {name}", conn)
+            # Row order isn't defined, so sort the data.
+            output_df = output_df.sort_values(by=["a", "b"]).reset_index(drop=True)
+            pd.testing.assert_frame_equal(output_df, py_output, check_dtype=False)
+        except Exception:
+            passed = 0
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size()
+    bodo.barrier()

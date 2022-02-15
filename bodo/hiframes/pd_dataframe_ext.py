@@ -4,6 +4,7 @@ Implement pd.DataFrame typing and data model handling.
 """
 import json
 import operator
+from urllib.parse import urlparse
 
 import llvmlite.binding as ll
 import numba
@@ -3286,9 +3287,69 @@ def to_sql_exception_guard(
     chunksize=None,
     dtype=None,
     method=None,
+    _is_table_create=False,
+    _is_parallel=False,
 ):  # pragma: no cover
     """Call of to_sql and guard the exception and return it as string if error happens"""
     err_msg = "all_ok"
+    # Find the db_type to determine if we are using Snowflake
+    db_type = urlparse(con).scheme
+    if _is_parallel and bodo.get_rank() == 0:
+        # Default number of rows to write to create the table. This is done in case
+        # rank 0 has a large number of rows because that delays writing on other ranks.
+        # TODO: Determine a reasonable threshold.
+        default_chunksize = 100
+        if chunksize is None:
+            create_chunksize = default_chunksize
+        else:
+            # If the user provides a chunksize we then take the min of
+            # the chunksize and our small default.
+            # TODO: Should users be able to configure this???
+            create_chunksize = min(chunksize, default_chunksize)
+
+        # We may be creating a table. Truncate the DataFrame
+        # the first default_chunksize rows
+        if _is_table_create:
+            df = df.iloc[:create_chunksize, :]
+        # If have already created the DataFrame, only append the rows after the initial
+        # creation
+        else:
+            df = df.iloc[create_chunksize:, :]
+            # If there is no more data to write just return
+            if len(df) == 0:
+                return err_msg
+
+    if db_type == "snowflake":
+        try:
+            # Using the Pandas APIs of the snowflake connector to write the data in batches
+            # https://docs.snowflake.com/en/user-guide/python-connector-api.html#pd_writer
+            from snowflake.connector.pandas_tools import pd_writer
+
+            from bodo import snowflake_sqlalchemy_compat  # noqa
+
+            if method is not None and _is_table_create and bodo.get_rank() == 0:
+                import warnings
+
+                from bodo.utils.typing import BodoWarning
+
+                warnings.warn(
+                    BodoWarning(
+                        "DataFrame.to_sql(): method argument is not supported with Snowflake. Bodo always uses snowflake.connector.pandas_tools.pd_writer to write data."
+                    )
+                )
+            method = pd_writer
+            # Snowflake connector assumes the columns names have already had their cases converted.
+            # Convert all fully lower case names to upper case.
+            # See the snowflake section of read_sql for more information.
+            df.columns = [c.upper() if c.islower() else c for c in df.columns]
+        except ImportError:
+            err_msg = (
+                "Snowflake Python connector not found."
+                " It can be installed by calling"
+                " 'conda install -c conda-forge snowflake-connector-python' or"
+                " 'pip install snowflake-connector-python'."
+            )
+            return err_msg
     try:
         df.to_sql(
             name,
@@ -3318,6 +3379,8 @@ def to_sql_exception_guard_encaps(
     chunksize=None,
     dtype=None,
     method=None,
+    _is_table_create=False,
+    _is_parallel=False,
 ):  # pragma: no cover
     with numba.objmode(out="unicode_type"):
         out = to_sql_exception_guard(
@@ -3331,6 +3394,8 @@ def to_sql_exception_guard_encaps(
             chunksize,
             dtype,
             method,
+            _is_table_create,
+            _is_parallel,
         )
     return out
 
@@ -3380,11 +3445,14 @@ def to_sql_overload(
         """
         rank = bodo.libs.distributed_api.get_rank()
         err_msg = "unset"
+        # Rank 0 writes first and we wait for a response. If this is done in parallel,
+        # rank 0 may need to create the table, otherwise if this is replicated only
+        # rank 0 writes and the other ranks wait to propagate any error message.
         if rank != 0:
-            if_exists = "append"  # For other nodes, we append to the existing data set.
             err_msg = bcast_scalar(err_msg)
-        # The writing of the data.
-        if rank == 0 or (_is_parallel and err_msg == "all_ok"):
+        # Rank 0 creates the table. This only writes a chunk of the data
+        # to enable futher parallelism if data isn't replicated.
+        elif rank == 0:
             err_msg = to_sql_exception_guard_encaps(
                 df,
                 name,
@@ -3396,9 +3464,31 @@ def to_sql_overload(
                 chunksize,
                 dtype,
                 method,
+                True,
+                _is_parallel,
             )
-        if rank == 0:
             err_msg = bcast_scalar(err_msg)
+
+        # For all nodes we append to existing table after rank 0 creates the table.
+        if_exists = "append"
+
+        # The writing of the rest of the data. If data isn't parallel, then
+        # rank 0 has already written all of the data in the previous call.
+        if _is_parallel and err_msg == "all_ok":
+            err_msg = to_sql_exception_guard_encaps(
+                df,
+                name,
+                con,
+                schema,
+                if_exists,
+                index,
+                index_label,
+                chunksize,
+                dtype,
+                method,
+                False,
+                _is_parallel,
+            )
         if err_msg != "all_ok":
             # TODO: We cannot do a simple raise ValueError(err_msg).
             print("err_msg=", err_msg)
