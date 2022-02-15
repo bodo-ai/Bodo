@@ -4013,7 +4013,9 @@ class DistributedPass:
                             == ("slice", "builtins")
                         )
                         require(len(index_def.args) == 2)
-                        require(find_const(self.func_ir, index_def.args[0]) == 0)
+                        require(
+                            find_const(self.func_ir, index_def.args[0]) in (None, 0)
+                        )
                         slice_size = find_const(self.func_ir, index_def.args[1])
                         if read_size is None:
                             read_size = slice_size
