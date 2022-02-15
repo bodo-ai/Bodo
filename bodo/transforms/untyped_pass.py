@@ -889,7 +889,13 @@ class UntypedPass:
             )
 
         # find db type
-        db_type = urlparse(con_const).scheme
+        # urlparse skips oracle since its handle has _
+        # which is not in `scheme_chars`
+        # oracle+cx_oracle
+        if con_const.startswith("oracle+cx_oracle://"):
+            db_type = "oracle"
+        else:
+            db_type = urlparse(con_const).scheme
         # find df type
         df_type, converted_colnames = _get_sql_df_type_from_db(
             sql_const, con_const, db_type
@@ -2796,7 +2802,11 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
             # in any dead column elimination
             converted_colnames = set()
             rows_to_read = 100  # TODO: tune this
-            sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
+            # oracle does not support LIMIT. Use ROWNUM instead
+            if db_type == "oracle":
+                sql_call = f"select * from ({sql_const}) WHERE ROWNUM <= {rows_to_read}"
+            else:
+                sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
             if db_type == "snowflake":  # pragma: no cover
                 from bodo.io.snowflake import get_connection_params
 
@@ -2833,6 +2843,19 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
                 )
             else:
                 df = pd.read_sql(sql_call, con_const)
+                # https://docs.sqlalchemy.org/en/14/dialects/oracle.html#identifier-casing
+                # Oracle stores column names in UPPER CASE unless it's quoted
+                # pd.read_sql() returns the name with all lower case unless it was quoted
+                # NOTE: BE-2217 this "colnamealllowercase" will fail with this.
+                # If column is lowercase, then it was either converted or all upper with quotes
+                # In both cases, we add it to converted_colnames list that is needed later.
+                # See escape_column_names
+                if db_type == "oracle":
+                    new_colnames = []
+                    for x in df.columns:
+                        if x.islower():
+                            converted_colnames.add(x)
+                        new_colnames.append(x)
                 df_type = numba.typeof(df)
             # always convert to nullable type since initial rows of a column could be all
             # int for example, but later rows could have NAs
