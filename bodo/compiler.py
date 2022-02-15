@@ -315,6 +315,10 @@ def _convert_bodo_dispatcher_to_udf(rhs, func_ir):
         and func_val._compiler.pipeline_class != BodoCompilerUDF
     ):
         func_val._compiler.pipeline_class = BodoCompilerUDF
+        # the function may have been compiled in typing of outer functions before
+        # getting here so need to recompile to make it sequential.
+        # See [BE-2225].
+        func_val.recompile()
 
 
 @register_pass(mutates_CFG=True, analysis_only=False)
