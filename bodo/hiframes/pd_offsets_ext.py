@@ -1095,17 +1095,17 @@ def overload_neg(lhs):
         def impl(lhs):  # pragma: no cover
             return pd.tseries.offsets.MonthBegin(-lhs.n, lhs.normalize)
 
-    if lhs == month_end_type:
+    elif lhs == month_end_type:
 
         def impl(lhs):  # pragma: no cover
             return pd.tseries.offsets.MonthEnd(-lhs.n, lhs.normalize)
 
-    if lhs == week_type:
+    elif lhs == week_type:
 
         def impl(lhs):  # pragma: no cover
             return pd.tseries.offsets.Week(-lhs.n, lhs.normalize, lhs.weekday)
 
-    if lhs == date_offset_type:
+    elif lhs == date_offset_type:
 
         def impl(lhs):  # pragma: no cover
             # Negate only n
@@ -1157,6 +1157,10 @@ def overload_neg(lhs):
                 return pd.tseries.offsets.DateOffset(
                     n, normalize, nanoseconds=nanoseconds, nanosecond=nanosecond
                 )
+
+    else:
+        # not an offset value, should be handled elsewhere
+        return
 
     return impl
 

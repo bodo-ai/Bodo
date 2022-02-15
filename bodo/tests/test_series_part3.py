@@ -240,6 +240,18 @@ def test_and_null(memory_leak_check):
     check_func(test_impl, (S1, S2))
 
 
+def test_neg(memory_leak_check):
+    """
+    make sure we can negate a series
+    """
+
+    def test_impl(S):
+        return -S
+
+    S = pd.Series(np.arange(10))
+    check_func(test_impl, (S,))
+
+
 @pytest.mark.slow
 def test_and_numpy(memory_leak_check):
     """
