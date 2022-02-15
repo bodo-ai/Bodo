@@ -1650,7 +1650,7 @@ def overload_dataframe_cumsum(df, axis=None, skipna=True):
 
 
 def _is_describe_type(data):
-    """ Check if df.data has supported datatype for describe"""
+    """Check if df.data has supported datatype for describe"""
     return (
         isinstance(data, IntegerArrayType)
         or (isinstance(data, types.Array) and isinstance(data.dtype, (types.Number)))
@@ -3489,7 +3489,7 @@ def validate_unicity_output_column_names(
     right_columns,
     indicator_val,
 ):
-    """Raise a BodoError if the column in output of the join operation collide """
+    """Raise a BodoError if the column in output of the join operation collide"""
     comm_keys = set(left_keys) & set(right_keys)
     comm_data = set(left_columns) & set(right_columns)
     add_suffix = comm_data - comm_keys
@@ -5198,9 +5198,9 @@ def overload_dataframe_plot(
     yticks=None,
     ax=None,
 ):
-    if bodo.compiler._matplotlib_installed:
+    try:
         import matplotlib.pyplot as plt
-    else:
+    except ImportError:
         raise BodoError("df.plot needs matplotllib which is not installed.")
     # Pandas behavior
     # This is based on testing. Nothing clear in the source code to indicate this.

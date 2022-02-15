@@ -11,16 +11,8 @@ import types as pytypes  # avoid confusion with numba.core.types
 import warnings
 from collections import defaultdict
 
-import numba
-import numpy as np
-
-from bodo.libs.bool_arr_ext import boolean_array
-
-try:
-    import sklearn
-except:
-    pass
 import llvmlite.binding as ll
+import numba
 import numpy as np
 from numba.core import ir, ir_utils, types
 from numba.core.ir_utils import (
@@ -64,7 +56,7 @@ from bodo.hiframes.pd_index_ext import (
 )
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.io import csv_cpp
-from bodo.io.h5_api import h5file_type, h5group_type
+from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import (
@@ -563,6 +555,8 @@ class DistributedPass:
             and func_name == "precision_score"
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                import sklearn
+
                 rhs = assign.value
                 kws = dict(rhs.kws)
                 nodes = []
@@ -607,6 +601,8 @@ class DistributedPass:
             and func_name == "recall_score"
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                import sklearn
+
                 rhs = assign.value
                 kws = dict(rhs.kws)
                 nodes = []
@@ -649,6 +645,8 @@ class DistributedPass:
             and func_name == "f1_score"
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                import sklearn
+
                 rhs = assign.value
                 kws = dict(rhs.kws)
                 nodes = []
@@ -691,6 +689,8 @@ class DistributedPass:
             and func_name == "accuracy_score"
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                import sklearn
+
                 rhs = assign.value
                 kws = dict(rhs.kws)
                 nodes = []
@@ -757,6 +757,8 @@ class DistributedPass:
             and func_name == "confusion_matrix"
         ):
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                import sklearn
+
                 rhs = assign.value
                 kws = dict(rhs.kws)
                 nodes = []
@@ -845,6 +847,8 @@ class DistributedPass:
         ):
 
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                import sklearn
+
                 rhs = assign.value
                 kws = dict(rhs.kws)
                 nodes = []
@@ -934,6 +938,8 @@ class DistributedPass:
         ):
 
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                import sklearn
+
                 rhs = assign.value
                 kws = dict(rhs.kws)
                 nodes = []
@@ -1009,6 +1015,8 @@ class DistributedPass:
         ):
 
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                import sklearn
+
                 rhs = assign.value
                 kws = dict(rhs.kws)
                 nodes = []
@@ -1090,6 +1098,8 @@ class DistributedPass:
         ):
 
             if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                import sklearn
+
                 rhs = assign.value
                 kws = dict(rhs.kws)
                 nodes = []
@@ -1339,14 +1349,10 @@ class DistributedPass:
             self._file_open_set_parallel(file_varname)
             return nodes
 
-        if (
-            fdef
-            == (
-                "get_split_view_index",
-                "bodo.hiframes.split_impl",
-            )
-            and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name)
-        ):
+        if fdef == (
+            "get_split_view_index",
+            "bodo.hiframes.split_impl",
+        ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
             start_var, nodes = self._get_parallel_access_start_var(
@@ -1358,14 +1364,10 @@ class DistributedPass:
             out.append(assign)
             return out
 
-        if (
-            fdef
-            == (
-                "setitem_str_arr_ptr",
-                "bodo.libs.str_arr_ext",
-            )
-            and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name)
-        ):
+        if fdef == (
+            "setitem_str_arr_ptr",
+            "bodo.libs.str_arr_ext",
+        ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
             start_var, nodes = self._get_parallel_access_start_var(
@@ -1378,19 +1380,15 @@ class DistributedPass:
             return out
 
         # adjust array index variable to be within current processor's data chunk
-        if (
-            fdef
-            in (
-                (
-                    "inplace_eq",
-                    "bodo.libs.str_arr_ext",
-                ),
-                ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
-                ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
-                ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),
-            )
-            and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name)
-        ):
+        if fdef in (
+            (
+                "inplace_eq",
+                "bodo.libs.str_arr_ext",
+            ),
+            ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
+            ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
+            ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),
+        ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
             start_var, nodes = self._get_parallel_access_start_var(
@@ -1402,14 +1400,10 @@ class DistributedPass:
             out.append(assign)
             return out
 
-        if (
-            fdef
-            == (
-                "str_arr_item_to_numeric",
-                "bodo.libs.str_arr_ext",
-            )
-            and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name)
-        ):
+        if fdef == (
+            "str_arr_item_to_numeric",
+            "bodo.libs.str_arr_ext",
+        ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             arr = rhs.args[0]
             index_var = self._fix_index_var(rhs.args[1])
             start_var, nodes = self._get_parallel_access_start_var(
@@ -1444,16 +1438,12 @@ class DistributedPass:
             out.append(assign)
             return out
 
-        if (
-            fdef
-            in (
-                ("isna", "bodo.libs.array_kernels"),
-                ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
-                ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
-                ("get_str_arr_item_length", "bodo.libs.str_arr_ext"),
-            )
-            and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name)
-        ):
+        if fdef in (
+            ("isna", "bodo.libs.array_kernels"),
+            ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
+            ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
+            ("get_str_arr_item_length", "bodo.libs.str_arr_ext"),
+        ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             # fix index in call to isna
             arr = rhs.args[0]
             ind = self._fix_index_var(rhs.args[1])
@@ -1464,20 +1454,16 @@ class DistributedPass:
             rhs.args[1] = out[-1].target
             out.append(assign)
 
-        if (
-            fdef
-            in (
-                (
-                    "rolling_fixed",
-                    "bodo.hiframes.rolling",
-                ),
-                (
-                    "rolling_variable",
-                    "bodo.hiframes.rolling",
-                ),
-            )
-            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
-        ):
+        if fdef in (
+            (
+                "rolling_fixed",
+                "bodo.hiframes.rolling",
+            ),
+            (
+                "rolling_variable",
+                "bodo.hiframes.rolling",
+            ),
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
@@ -1503,14 +1489,10 @@ class DistributedPass:
             )
             return compile_func_single_block(f, rhs.args, assign.target, self)
 
-        if (
-            fdef
-            == (
-                "quantile",
-                "bodo.libs.array_kernels",
-            )
-            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
-        ):
+        if fdef == (
+            "quantile",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             arr = rhs.args[0]
             nodes = []
             size_var = self._get_dist_var_len(arr, nodes, equiv_set, avail_vars)
@@ -1537,24 +1519,23 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
-        if fdef == ("get_valid_entries_from_date_offset", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
-            rhs.args[0].name
+        if fdef == (
+            "get_valid_entries_from_date_offset",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
+        if fdef == ("pivot_impl", "bodo.hiframes.pd_dataframe_ext") and (
+            self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
-        if fdef == ("pivot_impl", "bodo.hiframes.pd_dataframe_ext") and (self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)):
-            self._set_last_arg_to_true(assign.value)
-            return [assign]
-
-        if (
-            fdef
-            == (
-                "ffill_bfill_arr",
-                "bodo.libs.array_kernels",
-            )
-            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
-        ):
+        if fdef == (
+            "ffill_bfill_arr",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
@@ -1564,14 +1545,10 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
-        if (
-            fdef
-            == (
-                "nlargest",
-                "bodo.libs.array_kernels",
-            )
-            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
-        ):
+        if fdef == (
+            "nlargest",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             f = eval(
                 "lambda arr, I, k, i, f: bodo.libs.array_kernels.nlargest_parallel("
                 "    arr, I, k, i, f"
@@ -1633,7 +1610,10 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
-        if fdef == ("drop_duplicates_array", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+        if fdef == (
+            "drop_duplicates_array",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
@@ -1661,14 +1641,10 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
-        if (
-            fdef
-            == (
-                "init_range_index",
-                "bodo.hiframes.pd_index_ext",
-            )
-            and self._is_1D_or_1D_Var_arr(lhs)
-        ):
+        if fdef == (
+            "init_range_index",
+            "bodo.hiframes.pd_index_ext",
+        ) and self._is_1D_or_1D_Var_arr(lhs):
             return self._run_call_init_range_index(
                 lhs, assign, rhs.args, avail_vars, equiv_set
             )
@@ -3703,6 +3679,8 @@ class DistributedPass:
 
     def _file_open_set_parallel(self, file_varname):
         """Finds file open call (h5py.File) for file_varname and sets the parallel flag."""
+        from bodo.io.h5_api import h5file_type, h5group_type
+
         # TODO: find and handle corner cases
         var = file_varname
         while True:

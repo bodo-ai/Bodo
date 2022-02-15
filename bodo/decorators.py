@@ -278,6 +278,8 @@ def is_jit_execution_overload():
 
 
 def jit(signature_or_function=None, pipeline_class=None, **options):
+    _init_extensions()
+
     # set nopython by default
     if "nopython" not in options:
         options["nopython"] = True
@@ -328,3 +330,61 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
             return master_mode_wrapper(numba_jit)
     else:
         return numba_jit
+
+
+def _init_extensions():
+    """initialize Numba extensions for supported packages that are imported.
+    This reduces Bodo import time since we don't have to try to import unused packages.
+    This is done in as soon as possible since values types in typeof() are needed for
+    starting the compilation.
+    """
+    import sys
+
+    need_refresh = False
+
+    if "sklearn" in sys.modules and "bodo.libs.sklearn_ext" not in sys.modules:
+        # side effect: initialize Numba extensions
+        import bodo.libs.sklearn_ext  # noqa
+
+        need_refresh = True
+
+    if "matplotlib" in sys.modules and "bodo.libs.matplotlib_ext" not in sys.modules:
+        # side effect: initialize Numba extensions
+        import bodo.libs.matplotlib_ext  # noqa
+
+        need_refresh = True
+
+    if "xgboost" in sys.modules and "bodo.libs.xgb_ext" not in sys.modules:
+        # side effect: initialize Numba extensions
+        import bodo.libs.xgb_ext  # noqa
+
+        need_refresh = True
+
+    if "h5py" in sys.modules and "bodo.io.h5_api" not in sys.modules:
+        # side effect: initialize Numba extensions
+        import bodo.io.h5_api  # noqa
+
+        if bodo.utils.utils.has_supported_h5py():
+            from bodo.io import h5  # noqa
+
+        need_refresh = True
+
+    if "pyspark" in sys.modules and "bodo.libs.pyspark_ext" not in sys.modules:
+        # side effect: initialize Numba extensions
+        import pyspark.sql.functions  # noqa
+
+        import bodo.libs.pyspark_ext  # noqa
+
+        bodo.utils.transform.no_side_effect_call_tuples.update(
+            {
+                ("col", pyspark.sql.functions),
+                (pyspark.sql.functions.col,),
+                ("sum", pyspark.sql.functions),
+                (pyspark.sql.functions.sum,),
+            }
+        )
+
+        need_refresh = True
+
+    if need_refresh:
+        numba.core.registry.cpu_target.target_context.refresh()
