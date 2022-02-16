@@ -80,6 +80,8 @@ from urllib.parse import urlparse
 
 import bodo.io.pa_parquet
 
+REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
+
 
 class ParquetPredicateType(types.Type):
     """Type for predicate list for Parquet filtering (e.g. [["a", "==", 2]]).
@@ -1007,6 +1009,7 @@ def get_parquet_dataset(
     fs = []
 
     def getfs(parallel=False):
+        # NOTE: add remote filesystems to REMOTE_FILESYSTEMS
         if len(fs) == 1:
             return fs[0]
         if protocol == "s3":
@@ -1139,6 +1142,7 @@ def get_parquet_dataset(
         end = get_end(num_pieces, bodo.get_size(), bodo.get_rank())
         total_rows_chunk = 0
         total_row_groups_chunk = 0
+        total_row_groups_size_chunk = 0
         valid = True  # True if schema of all parquet files match
         dataset._metadata.fs = getfs()
         if expr_filters is not None:
@@ -1239,6 +1243,9 @@ def get_parquet_dataset(
                 piece._bodo_num_rows = row_count
                 total_rows_chunk += row_count
                 total_row_groups_chunk += frag.num_row_groups
+                total_row_groups_size_chunk += sum(
+                    rg.total_byte_size for rg in frag.row_groups
+                )
                 if validate_schema:
                     file_schema = frag.metadata.schema.to_arrow_schema()
                     if dataset_schema != file_schema:  # pragma: no cover
@@ -1259,6 +1266,9 @@ def get_parquet_dataset(
         if get_row_counts:
             dataset._bodo_total_rows = comm.allreduce(total_rows_chunk, op=MPI.SUM)
             total_num_row_groups = comm.allreduce(total_row_groups_chunk, op=MPI.SUM)
+            total_row_groups_size = comm.allreduce(
+                total_row_groups_size_chunk, op=MPI.SUM
+            )
             pieces_rows = np.array([p._bodo_num_rows for p in dataset.pieces])
             # communicate row counts to everyone
             pieces_rows = comm.allreduce(pieces_rows, op=MPI.SUM)
@@ -1274,6 +1284,19 @@ def get_parquet_dataset(
                         f"""Total number of row groups in parquet dataset {fpath} ({total_num_row_groups}) is too small for effective IO parallelization.
 For best performance the number of row groups should be greater than the number of workers ({bodo.get_size()})
 """
+                    )
+                )
+            # print a warning if average row group size < 1 MB and reading from remote filesystem
+            avg_row_group_size_bytes = total_row_groups_size // total_num_row_groups
+            if (
+                bodo.get_rank() == 0
+                and total_row_groups_size >= 20 * 1048576
+                and avg_row_group_size_bytes < 1048576
+                and protocol in REMOTE_FILESYSTEMS
+            ):
+                warnings.warn(
+                    BodoWarning(
+                        f"""Parquet average row group size is small ({avg_row_group_size_bytes} bytes) and can have negative impact on performance when reading from remote sources"""
                     )
                 )
             if tracing.is_tracing():
