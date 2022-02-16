@@ -658,6 +658,8 @@ We can use the ``pd.to_sql`` method to persist a dataframe to a Snowflake table:
 .. note::
     - ``index=False`` is required as Snowflake does not support indexes.
     - ``if_exists=append`` is needed if the table already exists in snowflake.
+    - ``schema`` is recommended to avoid object permission issues.
+
 
 
 MySQL
