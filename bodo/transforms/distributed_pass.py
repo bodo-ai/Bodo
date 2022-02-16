@@ -45,18 +45,8 @@ from numba.parfors.parfor import (
 import bodo
 import bodo.utils.utils
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.hiframes.pd_index_ext import (
-    BinaryIndexType,
-    CategoricalIndexType,
-    DatetimeIndexType,
-    NumericIndexType,
-    PeriodIndexType,
-    StringIndexType,
-    TimedeltaIndexType,
-)
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.io import csv_cpp
-from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import (
@@ -367,38 +357,11 @@ class DistributedPass:
             return self._run_array_size(inst.target, rhs.value, equiv_set, avail_vars)
 
         # index.nbytes,
-        # bodo_arrays.nbytes (BooleanArrayType, DecimalArrayType, IntegerArrayType, CategoricalArrayType)
+        # bodo_arrays.nbytes
+        # (BooleanArrayType, DecimalArrayType, IntegerArrayType, ...)
         if (
             rhs.op == "getattr"
             and rhs.attr == "nbytes"
-            and (
-                isinstance(
-                    self.typemap[rhs.value.name],
-                    (
-                        NumericIndexType,
-                        StringIndexType,
-                        BinaryIndexType,
-                        CategoricalIndexType,
-                        DatetimeIndexType,
-                        TimedeltaIndexType,
-                        PeriodIndexType,
-                        bodo.IntegerArrayType,
-                        bodo.DecimalArrayType,
-                        bodo.CategoricalArrayType,
-                        bodo.libs.interval_arr_ext.IntervalArrayType,
-                        bodo.libs.struct_arr_ext.StructArrayType,
-                        bodo.libs.map_arr_ext.MapArrayType,
-                        bodo.libs.tuple_arr_ext.TupleArrayType,
-                    ),
-                )
-                or self.typemap[rhs.value.name]
-                in (
-                    boolean_array,
-                    bodo.datetime_date_array_type,
-                    bodo.datetime_timedelta_array_type,
-                    bodo.binary_array_type,
-                )
-            )
             and self._is_1D_or_1D_Var_arr(rhs.value.name)
         ):
             return [inst] + compile_func_single_block(

@@ -427,6 +427,18 @@ def test_dtype(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_nbytes(memory_leak_check):
+    """Test nbytes for string arrays"""
+
+    def impl(arr):
+        return arr.nbytes
+
+    A = np.array(["AA", "B"] * 4, object)
+    py_output = 8 * (8 + bodo.get_size()) + 12 + bodo.get_size()
+    check_func(impl, (A,), py_output=py_output)
+
+
+@pytest.mark.slow
 def test_ndim(memory_leak_check):
     def test_impl(A):
         return A.ndim
