@@ -83,6 +83,7 @@ from bodo.utils.transform import (
 )
 from bodo.utils.typing import (
     BodoError,
+    BodoWarning,
     check_unsupported_args,
     create_unsupported_overload,
     dtype_to_array_type,
@@ -3425,6 +3426,16 @@ def to_sql_overload(
         package_name="pandas",
         module_name="IO",
     )
+
+    if is_overload_none(schema):
+        if bodo.get_rank() == 0:
+            import warnings
+
+            warnings.warn(
+                BodoWarning(
+                    f"DataFrame.to_sql(): schema argument is recommended to avoid permission issues for writing to table {name}."
+                )
+            )
 
     def _impl(
         df,
