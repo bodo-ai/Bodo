@@ -629,6 +629,11 @@ def overload_datetime_date_arr_copy(A):
     )  # pragma: no cover
 
 
+@overload_attribute(DatetimeDateArrayType, "dtype")
+def overload_datetime_date_arr_dtype(A):
+    return lambda A: np.object_  # pragma: no cover
+
+
 @unbox(DatetimeDateArrayType)
 def unbox_datetime_date_array(typ, val, c):
     n = bodo.utils.utils.object_length(c, val)

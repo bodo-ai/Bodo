@@ -1194,6 +1194,19 @@ def test_td64_min(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+def test_datetime_date_array_dtype(memory_leak_check):
+    """
+    Test using a datetime_data_array type as the type for a
+    DataFrame.astype.
+    """
+
+    def test_impl(arr):
+        return arr.dtype
+
+    arr = pd.date_range(start="1998-04-24", end="1998-04-29", periods=5).date
+    check_func(test_impl, (arr,))
+
+
 @pytest.mark.slow
 def test_dt64_astype_int64(memory_leak_check):
     """
