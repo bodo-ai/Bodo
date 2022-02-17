@@ -665,9 +665,10 @@ def overload_series_sem(
             second_moment += val * val
             count += count_val
 
-        s = second_moment - first_moment * first_moment / count
-        res = bodo.hiframes.series_kernels._handle_nan_count_ddof(s, count, ddof)
-        res_out = (res / count) ** 0.5
+        res = bodo.hiframes.series_kernels._compute_var_nan_count_ddof(
+            first_moment, second_moment, count, ddof
+        )
+        res_out = bodo.hiframes.series_kernels._sem_handle_nan(res, count)
         return res_out
 
     return impl
@@ -2671,31 +2672,33 @@ def binary_str_fillna_inplace_series_impl(is_binary=False):
     else:
         alloc_fn = "bodo.libs.str_arr_ext.pre_alloc_string_array"
 
-    func_text = "\n".join((
-      "def impl(",
-      "    S,",
-      "    value=None,",
-      "    method=None,",
-      "    axis=None,",
-      "    inplace=False,",
-      "    limit=None,",
-      "    downcast=None,",
-      "):  # pragma: no cover",
-      "    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)",
-      "    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)",
-      "    n = len(in_arr)",
-      "    nf = len(fill_arr)",
-      "    assert n == nf, 'fillna() requires same length arrays'",
-      f"    out_arr = {alloc_fn}(n, -1)",
-      "    for j in numba.parfors.parfor.internal_prange(n):",
-      "        s = in_arr[j]",
-      "        if bodo.libs.array_kernels.isna(in_arr, j) and not bodo.libs.array_kernels.isna(",
-      "            fill_arr, j",
-      "        ):",
-      "            s = fill_arr[j]",
-      "        out_arr[j] = s",
-      "    bodo.libs.str_arr_ext.move_str_binary_arr_payload(in_arr, out_arr)",
-    ))
+    func_text = "\n".join(
+        (
+            "def impl(",
+            "    S,",
+            "    value=None,",
+            "    method=None,",
+            "    axis=None,",
+            "    inplace=False,",
+            "    limit=None,",
+            "    downcast=None,",
+            "):",
+            "    in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)",
+            "    fill_arr = bodo.hiframes.pd_series_ext.get_series_data(value)",
+            "    n = len(in_arr)",
+            "    nf = len(fill_arr)",
+            "    assert n == nf, 'fillna() requires same length arrays'",
+            f"    out_arr = {alloc_fn}(n, -1)",
+            "    for j in numba.parfors.parfor.internal_prange(n):",
+            "        s = in_arr[j]",
+            "        if bodo.libs.array_kernels.isna(in_arr, j) and not bodo.libs.array_kernels.isna(",
+            "            fill_arr, j",
+            "        ):",
+            "            s = fill_arr[j]",
+            "        out_arr[j] = s",
+            "    bodo.libs.str_arr_ext.move_str_binary_arr_payload(in_arr, out_arr)",
+        )
+    )
 
     locs = dict()
     exec(

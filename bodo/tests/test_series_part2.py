@@ -2842,9 +2842,14 @@ def test_series_var(memory_leak_check):
     check_func(f, (S,))
     check_func(f_skipna, (S,))
     check_func(f_ddof, (S,))
+    # Empty Series
+    S_empty = pd.Series()
+    check_func(f, (S_empty,))
 
 
 def test_series_sem(memory_leak_check):
+    """ Test Series.sem """
+
     def f(S):
         return S.sem()
 
@@ -2858,6 +2863,9 @@ def test_series_sem(memory_leak_check):
     check_func(f, (S,))
     check_func(f_skipna, (S,))
     check_func(f_ddof, (S,))
+    # Empty Series
+    S_empty = pd.Series()
+    check_func(f, (S_empty,))
 
 
 def test_np_pd_timedelta_truediv(memory_leak_check):
@@ -2908,6 +2916,9 @@ def test_series_std(memory_leak_check):
     check_func(f, (S,))
     check_func(f_skipna, (S,))
     check_func(f_ddof, (S,))
+    # Empty Series
+    S_empty = pd.Series()
+    check_func(f, (S_empty,))
 
 
 def test_series_std_dt64(memory_leak_check):

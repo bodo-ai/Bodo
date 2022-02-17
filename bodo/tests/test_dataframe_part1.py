@@ -1623,6 +1623,21 @@ def test_df_var(numeric_df_value, memory_leak_check):
     check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
+@pytest.mark.slow
+def test_empty_df_var_std(memory_leak_check):
+    """ Test var/std operation on empty dataframe"""
+
+    def impl(df):
+        return df.var()
+
+    def impl2(df):
+        return df.std()
+
+    df = pd.DataFrame({"A": []})
+    check_func(impl, (df,), is_out_distributed=False)
+    check_func(impl2, (df,), is_out_distributed=False)
+
+
 def test_df_std(numeric_df_value, memory_leak_check):
     # empty dataframe output not supported yet
     if len(numeric_df_value._get_numeric_data().columns) == 0:
