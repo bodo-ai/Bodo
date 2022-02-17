@@ -1666,7 +1666,6 @@ class TypingTransforms:
                 (3, "aggfunc"),
             ],
         }
-
         if func_name in df_call_const_args:
             func_args = df_call_const_args[func_name]
             # function arguments are typed as pyobject initially, literalize if possible
@@ -1674,6 +1673,8 @@ class TypingTransforms:
             nodes += self._replace_arg_with_literal(
                 func_name, rhs, func_args, label, pyobject_to_literal
             )
+        if func_name == "astype":
+            return nodes + self._handle_df_astype(assign.target, rhs, df_var, assign)
 
         # transform df.assign() here since (**kwargs) is not supported in overload
         if func_name == "assign":
@@ -1767,6 +1768,74 @@ class TypingTransforms:
 
         self.changed = True
         return compile_func_single_block(impl, [df_var] + kws_val_list, lhs)
+
+    def _handle_df_astype(self, lhs, rhs, df_var, assign):
+        """Handle special optimizations in Bodo to enable converting types that
+        are not possible in generic Pandas because they map to "object" type.
+
+        This function checks if the rhs is generating the dtype by looking at the
+        Bodo type of an object and if so appends/updates an additional argument
+        that is a typeref to that object's type.
+        """
+        nodes = []
+        kws_dict = dict(rhs.kws)
+        dtypes_arg = get_call_expr_arg(
+            "DataFrame.astype", rhs.args, kws_dict, 0, "dtype"
+        )
+        dtypes_source = guard(get_definition, self.func_ir, dtypes_arg)
+        # Currently this is only implemented for DataFrame.dtypes.
+        # TODO: Handle additional sources (i.e. S.dtype or arr.dtype).
+        if is_expr(dtypes_source, "getattr") and dtypes_source.attr == "dtypes":
+            source_obj = self.typemap.get(dtypes_source.value.name, None)
+            if isinstance(source_obj, DataFrameType):
+                # Check if there is already a schema. typeref_arg will be None if it doesn't exist.
+                typeref_arg = get_call_expr_arg(
+                    "DataFrame.astype",
+                    rhs.args,
+                    kws_dict,
+                    5,
+                    "_bodo_object_typeref",
+                    use_default=True,
+                )
+                # Add a new argument if either the schema doesn't exist or has changed.
+                if typeref_arg is None or self.typemap.get(
+                    typeref_arg.name, None
+                ) != types.TypeRef(source_obj):
+                    # Create a new variable for the typeref
+                    var_name = mk_unique_var("bodo_object_typeref")
+                    typeref_var = ir.Var(assign.target.scope, var_name, rhs.loc)
+                    new_var_assign = ir.Assign(
+                        ir.Const(source_obj, assign.loc), typeref_var, assign.loc
+                    )
+                    nodes.append(new_var_assign)
+                    self.typemap[var_name] = types.TypeRef(source_obj)
+                    # Create a copy of the rhs.
+                    new_rhs = ir.Expr.call(
+                        rhs.func,
+                        rhs.args,
+                        # Note: We use a dict for set_call_expr_arg only then convert
+                        # back to a list of tuples.
+                        kws_dict,
+                        rhs.loc,
+                        vararg=rhs.vararg,
+                        target=rhs.target,
+                    )
+                    # Update the kws
+                    set_call_expr_arg(
+                        typeref_var,
+                        new_rhs.args,
+                        new_rhs.kws,
+                        5,
+                        "_bodo_object_typeref",
+                        add_if_missing=True,
+                    )
+                    # Convert kws back to list of tuples for consistency
+                    new_rhs.kws = [(x, y) for x, y in new_rhs.kws.items()]
+                    # Create a new assign to avoid mutating the IR
+                    assign = ir.Assign(new_rhs, assign.target, assign.loc)
+                    self.changed = True
+
+        return nodes + [assign]
 
     def _handle_df_assign(self, lhs, rhs, df_var, assign):
         """replace df.assign() with its implementation to avoid overload errors with

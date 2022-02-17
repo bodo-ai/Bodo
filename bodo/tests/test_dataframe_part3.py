@@ -785,6 +785,44 @@ def test_df_merge_col_key_bodo_only(key):
     assert df_act.equals(df_exp)
 
 
+def test_astype_dtypes_optimization(memory_leak_check):
+    """
+    Tests that doing df1.astype(df2.dtypes) is optimized
+    to use the Bodo type information and perform the necessary
+    type conversions. To test this, we check converting datetime64
+    to dates, which will otherwise show up as objects in regular
+    Pandas.
+    """
+
+    def test_impl(df1, df2):
+        return df1.astype(dtype=df2.dtypes)
+
+    df1 = pd.DataFrame(
+        {
+            # timestamp to cast to date
+            "A": pd.date_range("2018-04-09", periods=5, freq="2D1H"),
+            # Column that shouldn't be converted
+            "B": ["a", "b", "c", "d", "e"],
+            # Int to cast to string
+            "C": [1, 2, 3, 4, 5],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "C": ["A", "B", "C", "D", "E"],
+            "A": pd.date_range("2018-04-09", periods=5, freq="2D").date,
+        }
+    )
+    # Pandas can't change types with an object, so we use a py_output
+    py_output = df1.apply(
+        lambda x: pd.Series(
+            [x["A"].date(), x["B"], str(x["C"])], index=["A", "B", "C"]
+        ),
+        axis=1,
+    )
+    check_func(test_impl, (df1, df2), py_output=py_output)
+
+
 def test_df_getitem_columname_func(memory_leak_check):
     """
     Tests using a string literal in df[] after passing the
@@ -852,7 +890,7 @@ def test_df_iloc_getitem_slice_func(memory_leak_check):
     check_func(impl, (df, slice(0, 1)), py_output=py_output)
 
 
-def test_df_loc_col_slice_assign():
+def test_df_loc_col_slice_assign(memory_leak_check):
     """
     Test assignment to a columns slice of a dataframe using df.loc
     """
@@ -878,7 +916,7 @@ def test_df_loc_col_slice_assign():
     check_func(impl2, (df,), copy_input=True)
 
 
-def test_df_iloc_col_slice_assign():
+def test_df_iloc_col_slice_assign(memory_leak_check):
     """
     Test assignment to a columns slice of a dataframe using df.iloc
     """
@@ -904,7 +942,7 @@ def test_df_iloc_col_slice_assign():
     check_func(impl2, (df,), copy_input=True)
 
 
-def test_df_mask_where_df(df_value):
+def test_df_mask_where_df(df_value, memory_leak_check):
     def test_where(df, cond, val):
         return df.where(cond, val)
 
@@ -975,7 +1013,7 @@ def test_df_mask_where_df(df_value):
     )
 
 
-def test_df_mask_where_series_other():
+def test_df_mask_where_series_other(memory_leak_check):
     """
     Test df.mask and df.where with pd.Series `other`.
     """
@@ -1030,24 +1068,6 @@ def test_df_mask_where_series_other():
             copy_input=True,
             py_output=df2.where(cond, df2.iloc[:, 0], axis=0),
         )
-
-
-def test_astype_object(memory_leak_check):
-    """
-    Test df.astype with an object dtype. This maps to a no-op in Bodo.
-    """
-
-    def impl(df, new_types):
-        return df.astype(new_types)
-
-    df = pd.DataFrame(
-        {
-            "A": pd.date_range(start="1998-04-24", end="1998-04-29", periods=5).date,
-            "B": ["A", "Ce", "Erfe", "2r1", "r3r2"],
-        }
-    )
-    new_types = dict(df.dtypes)
-    check_func(impl, (df, new_types))
 
 
 def test_df_mask_where_scalar_other(memory_leak_check):

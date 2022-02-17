@@ -56,7 +56,11 @@ from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
-from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
+from bodo.libs.bool_arr_ext import (
+    BooleanArrayType,
+    boolean_array,
+    boolean_dtype,
+)
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
@@ -339,10 +343,10 @@ def _get_dtype_str(dtype):
     if isinstance(dtype, types.functions.NumberClass):
         return f"'{dtype.key}'"
 
-    # Object. Place before string to avoid issues
+    # Object dtype. Place before string to avoid issues
     # with np.object_. For some reason this produces
     # TypeError: Cannot interpret 'StringDtype' as a data type
-    if dtype in (object, "object"):
+    if isinstance(dtype, types.PyObject) or dtype in (object, "object"):
         return "'object'"
 
     # pd.StringDtype
@@ -354,8 +358,20 @@ def _get_dtype_str(dtype):
 
 @overload_method(DataFrameType, "astype", inline="always", no_unliteral=True)
 def overload_dataframe_astype(
-    df, dtype, copy=True, errors="raise", _bodo_nan_to_str=True
+    df,
+    dtype,
+    copy=True,
+    errors="raise",
+    _bodo_nan_to_str=True,
+    _bodo_object_typeref=None,
 ):
+    # _bodo_nan_to_str is a bodo specific argument that indicate is string should be converted
+    # to "NaN" or NA
+
+    # _bodo_object_typeref is a bodo internal argument used for optimizations of calls that
+    # generate the dtype or dtypes inside Bodo code (i.e. `df1.astype(df2.dtypes)`)
+    # This is used to get coverage parity with Spark's cast because some types are too generic
+    # to do any actual cast in Pandas (i.e. object for datetime.date).
     check_runtime_cols_unsupported(df, "DataFrame.astype()")
     # check unsupported arguments
     args_dict = {
@@ -379,7 +395,38 @@ def overload_dataframe_astype(
 
     # just call astype() on all column arrays
     # TODO: support categorical, dt64, etc.
-    if is_overload_constant_dict(dtype) or is_overload_constant_series(dtype):
+    extra_globals = None
+    if _bodo_object_typeref is not None:
+        # If _bodo_object_typeref is provided then we have a typeref that should be used to generate the appropriate
+        # schema
+        assert isinstance(
+            _bodo_object_typeref, types.TypeRef
+        ), "Bodo schema used in DataFrame.astype should be a TypeRef"
+        schema_type = _bodo_object_typeref.instance_type
+        assert isinstance(
+            schema_type, DataFrameType
+        ), "Bodo schema used in DataFrame.astype is only supported for DataFrame schemas"
+        extra_globals = {}
+        name_map = {}
+        # Generate the global variables for the types. To match the existing astype
+        # implementation we convert each to a valid scalar type.
+        for i, name in enumerate(schema_type.columns):
+            arr_typ = schema_type.data[i]
+            if isinstance(arr_typ, IntegerArrayType):
+                scalar_type = bodo.libs.int_arr_ext.IntDtype(arr_typ.dtype)
+            elif arr_typ == boolean_array:
+                scalar_type = boolean_dtype
+            else:
+                scalar_type = arr_typ.dtype
+            extra_globals[f"_bodo_schema{i}"] = scalar_type
+            name_map[name] = f"_bodo_schema{i}"
+        data_args = ", ".join(
+            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {name_map[c]}, copy, nan_to_str=_bodo_nan_to_str, from_series=True)"
+            if c in name_map
+            else f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
+            for i, c in enumerate(df.columns)
+        )
+    elif is_overload_constant_dict(dtype) or is_overload_constant_series(dtype):
         dtype_const = (
             get_overload_constant_dict(dtype)
             if is_overload_constant_dict(dtype)
@@ -397,8 +444,8 @@ def overload_dataframe_astype(
             for i in range(len(df.columns))
         )
 
-    header = "def impl(df, dtype, copy=True, errors='raise', _bodo_nan_to_str=True):\n"
-    return _gen_init_df(header, df.columns, data_args)
+    header = "def impl(df, dtype, copy=True, errors='raise', _bodo_nan_to_str=True, _bodo_object_typeref=None):\n"
+    return _gen_init_df(header, df.columns, data_args, extra_globals=extra_globals)
 
 
 @overload_method(DataFrameType, "copy", inline="always", no_unliteral=True)

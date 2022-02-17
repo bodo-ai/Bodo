@@ -599,6 +599,10 @@ def _is_str_dtype(dtype):
         isinstance(dtype, bodo.libs.str_arr_ext.StringDtype)
         or (isinstance(dtype, types.Function) and dtype.key[0] == str)
         or (is_overload_constant_str(dtype) and get_overload_const_str(dtype) == "str")
+        or (
+            isinstance(dtype, types.TypeRef)
+            and dtype.instance_type == types.unicode_type
+        )
     )
 
 
@@ -907,6 +911,27 @@ def overload_fix_arr_dtype(
             return B
 
         return impl_bool
+
+    # Note astype(datetime.date) isn't possible in Pandas because its treated
+    # as an object type. We support it to maintain parity with Spark's cast.
+    if nb_dtype == bodo.datetime_date_type:
+        # This operation isn't defined in Pandas, so we opt to implement it as
+        # truncating to the date, which best resembles a cast.
+        if data.dtype == bodo.datetime64ns:
+
+            def impl_date(
+                data, new_dtype, copy=None, nan_to_str=True, from_series=False
+            ):  # pragma: no cover
+                n = len(data)
+                out_arr = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(data, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = bodo.utils.conversion.box_if_dt64(data[i]).date()
+                return out_arr
+
+            return impl_date
 
     # Datetime64 case
     if nb_dtype == bodo.datetime64ns:
