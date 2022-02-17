@@ -1670,6 +1670,29 @@ class DistributedAnalysis:
             array_dists[rhs.args[1].name] = in_dist
             return
 
+        # explode_no_index(): both args have same dist, output is a 1D_Var array
+        if fdef == ("explode_no_index", "bodo.libs.array_kernels"):
+            # output of explode is variable-length even if input is 1D
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            in_dist = self._meet_array_dists(
+                rhs.args[1].name, rhs.args[0].name, array_dists
+            )
+            out_dist = Distribution(min(array_dists[lhs].value, in_dist.value))
+            self._set_var_dist(lhs, array_dists, out_dist)
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                in_dist = out_dist
+
+            array_dists[rhs.args[0].name] = in_dist
+            array_dists[rhs.args[1].name] = in_dist
+            return
+
+        if fdef == ("get_arr_lens", "bodo.libs.array_kernels"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("str_split", "bodo.libs.str_ext"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return

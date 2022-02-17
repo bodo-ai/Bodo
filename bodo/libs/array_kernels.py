@@ -1696,6 +1696,110 @@ def overload_explode(arr, index_arr):
     return impl
 
 
+def explode_no_index(arr):  # pragma: no cover
+    return pd.Series(arr).explode()
+
+
+@overload(explode_no_index, no_unliteral=True)
+def overload_explode_no_index(arr, counts):
+    """
+    Internal kernel for Series.explode(). Transforms each item in array(item) array into
+    its own row, replicating the index values. Each empty array will have an NA in
+    output.
+    """
+    assert isinstance(arr, ArrayItemArrayType) or arr == string_array_split_view_type
+    data_arr_type = bodo.utils.typing.to_nullable_type(arr.dtype)
+
+    def impl(arr, counts):  # pragma: no cover
+        n = len(arr)
+        nested_counts = init_nested_counts(data_arr_type)
+        for i in range(n):
+            if isna(arr, i):
+                nested_counts = (nested_counts[0] + 1,) + nested_counts[1:]
+                expected_count = 1
+            else:
+                arr_item = arr[i]
+                len_ = len(arr_item)
+                if len_ == 0:
+                    nested_counts = (nested_counts[0] + 1,) + nested_counts[1:]
+                    expected_count = 1
+                    continue
+                else:
+                    nested_counts = add_nested_counts(nested_counts, arr_item)
+                    expected_count = len_
+            if counts[i] != expected_count:
+                raise ValueError(
+                    "DataFrame.explode(): columns must have matching element counts"
+                )
+        out_arr = bodo.utils.utils.alloc_type(
+            nested_counts[0], data_arr_type, nested_counts[1:]
+        )
+
+        curr_item = 0
+        for i in range(n):
+            if isna(arr, i):
+                setna(out_arr, curr_item)
+                curr_item += 1
+                continue
+            arr_item = arr[i]
+            n_items = len(arr_item)
+            if n_items == 0:
+                setna(out_arr, curr_item)
+                curr_item += 1
+                continue
+            out_arr[curr_item : curr_item + n_items] = arr_item
+            curr_item += n_items
+
+        return out_arr
+
+    return impl
+
+
+def get_arr_lens(arr, na_empty_as_one=True):  # pragma: no cover
+    return [len(e) for e in arr]
+
+
+@overload(get_arr_lens, inline="always", no_unliteral=True)
+def overload_get_arr_lens(arr, na_empty_as_one=True):
+    """
+    For arrays of arrays, returns length of each entry, setting empty lists and NAs to 1.
+    (see overload_str_method_len). If na_empty_as_one=True then NA elements and elements
+    of length 0 are set to 1.
+    """
+    na_empty_as_one = get_overload_const_bool(na_empty_as_one)
+    assert (
+        isinstance(arr, ArrayItemArrayType)
+        or arr == string_array_split_view_type
+        or (arr == string_array_type and not na_empty_as_one)
+    )
+    if na_empty_as_one:
+        init_str = "np.empty(n, np.int64)"
+        if_na_str = "out_arr[i] = 1"
+        else_str = "max(len(arr[i]), 1)"
+    else:
+        init_str = "bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)"
+        if_na_str = "bodo.libs.array_kernels.setna(out_arr, i)"
+        else_str = "len(arr[i])"
+
+    # TODO: optimize str len on string array (count unicode chars inplace)
+    func_text = f"""def impl(arr, na_empty_as_one=True):
+    numba.parfors.parfor.init_prange()
+    n = len(arr)
+    out_arr = {init_str}
+    for i in numba.parfors.parfor.internal_prange(n):
+        if bodo.libs.array_kernels.isna(arr, i):
+            {if_na_str}
+        else:
+            out_arr[i] = {else_str}
+    return out_arr
+    """
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, loc_vars)
+    impl = loc_vars["impl"]
+
+    return impl
+
+
 def explode_str_split(arr, pat, n, index_arr):  # pragma: no cover
     return pd.Series(arr, index_arr).str.split(pat, n).explode()
 

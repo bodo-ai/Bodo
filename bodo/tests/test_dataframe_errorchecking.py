@@ -1628,3 +1628,37 @@ def test_df_first_last_invalid_offset():
         match=re.escape("DataFrame.last(): 'offset' must be an string or DateOffset"),
     ):
         bodo.jit(test_impl2)(df, off)
+
+
+def test_df_explode_invalid_cols():
+    @bodo.jit
+    def test_impl(df):
+        return df.explode(["A", "B"])
+
+    df = pd.DataFrame(
+        {
+            "A": [[0, 1, 2], [5], [], [3, 4]] * 3,
+            "B": [1, 7, 2, 4] * 3,
+            "C": [[1, 2, 3], np.nan, [], [1, 2]] * 3,
+        }
+    )
+    with pytest.raises(
+        BodoError,
+        match=re.escape("DataFrame.explode(): columns must have array-like entries"),
+    ):
+        test_impl(df)
+
+    df2 = pd.DataFrame(
+        {
+            "A": [[0, 1, 2], [5], [], [3, 4]] * 3,
+            "B": [[1, 2], [3], [], [1, 2]] * 3,
+            "C": [[1, 2, 3], np.nan, [], [1, 2]] * 3,
+        }
+    )
+    with pytest.raises(
+        ValueError,
+        match=re.escape(
+            "DataFrame.explode(): columns must have matching element counts"
+        ),
+    ):
+        test_impl(df2)

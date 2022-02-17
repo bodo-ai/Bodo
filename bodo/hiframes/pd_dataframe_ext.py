@@ -4086,7 +4086,6 @@ dataframe_unsupported = [
     "unstack",
     "swapaxes",
     "melt",
-    "explode",
     "squeeze",
     "to_xarray",
     "T",
