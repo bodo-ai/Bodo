@@ -380,8 +380,9 @@ def overload_array_op_var(arr, skipna, ddof):
             second_moment += val * val
             count += count_val
 
-        s = second_moment - first_moment * first_moment / count
-        res = bodo.hiframes.series_kernels._handle_nan_count_ddof(s, count, ddof)
+        res = bodo.hiframes.series_kernels._compute_var_nan_count_ddof(
+            first_moment, second_moment, count, ddof
+        )
         return res
 
     return impl

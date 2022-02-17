@@ -247,12 +247,24 @@ def _var_handle_mincount(s, count, min_count):  # pragma: no cover
 
 
 @numba.njit
-def _handle_nan_count_ddof(s, count, ddof):  # pragma: no cover
-    if count <= ddof:
+def _compute_var_nan_count_ddof(
+    first_moment, second_moment, count, ddof
+):  # pragma: no cover
+    if count == 0 or count <= ddof:
         s = np.nan
     else:
+        s = second_moment - first_moment * first_moment / count
         s = s / (count - ddof)
     return s
+
+
+@numba.njit
+def _sem_handle_nan(res, count):  # pragma: no cover
+    if count < 1:
+        res_out = np.nan
+    else:
+        res_out = (res / count) ** 0.5
+    return res_out
 
 
 @numba.njit
