@@ -1032,7 +1032,25 @@ def test_df_mask_where_series_other():
         )
 
 
-def test_df_mask_where_scalar_other():
+def test_astype_object(memory_leak_check):
+    """
+    Test df.astype with an object dtype. This maps to a no-op in Bodo.
+    """
+
+    def impl(df, new_types):
+        return df.astype(new_types)
+
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(start="1998-04-24", end="1998-04-29", periods=5).date,
+            "B": ["A", "Ce", "Erfe", "2r1", "r3r2"],
+        }
+    )
+    new_types = dict(df.dtypes)
+    check_func(impl, (df, new_types))
+
+
+def test_df_mask_where_scalar_other(memory_leak_check):
     """
     Test df.where and df.mask with a scalar value for `other`.
     """
@@ -1053,7 +1071,7 @@ def test_df_mask_where_scalar_other():
 
 
 @pytest.mark.parametrize("offset", ("15D", pd.DateOffset(days=15), "0D"))
-def test_df_first_last(offset):
+def test_df_first_last(memory_leak_check, offset):
     """
     Test df.first() and last() with string and DateOffset offsets (for DataFrames with DateTimeIndex)
     """
@@ -1085,7 +1103,7 @@ def test_df_first_last(offset):
     check_func(impl_last, (df,))
 
 
-def test_empty_df_first_last():
+def test_empty_df_first_last(memory_leak_check):
     """
     Test Series.first() and Series.last() with an empty dataframe.
     """
@@ -1118,7 +1136,7 @@ def test_empty_df_first_last():
     check_func(one_empty_rank, (df2,))
 
 
-def test_empty_dataframe_creation():
+def test_empty_dataframe_creation(memory_leak_check):
     """
     Test empty dataframe.
     """
