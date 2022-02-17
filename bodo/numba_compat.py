@@ -22,6 +22,7 @@ from contextlib import ExitStack
 import numba
 import numba.core.boxing
 import numba.core.inline_closurecall
+import numba.core.typing.listdecl
 import numba.np.linalg
 from numba.core import analysis, cgutils, errors, ir, ir_utils, types
 from numba.core.compiler import Compiler
@@ -4870,3 +4871,61 @@ if _check_numba_change:  # pragma: no cover  # pragma: no cover
     ):  # pragma: no cover
         warnings.warn("unbox_dicttype has changed")
 numba.core.pythonapi._unboxers.functions[types.DictType] = unbox_dicttype
+
+
+#### BEGIN MONKEY PATCH FOR INT * LIST SUPPORT ####
+# TODO: Remove once https://github.com/numba/numba/pull/7848 is merged
+
+
+def mul_list_generic(self, args, kws):
+    a, b = args
+    if isinstance(a, types.List) and isinstance(b, types.Integer):
+        return signature(a, a, types.intp)
+    # Bodo Change: Add typing for Int * List
+    elif isinstance(a, types.Integer) and isinstance(b, types.List):
+        return signature(b, types.intp, b)
+
+
+if _check_numba_change:  # pragma: no cover  # pragma: no cover
+    lines = inspect.getsource(numba.core.typing.listdecl.MulList.generic)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "95882385a8ffa67aa576e8169b9ee6b3197e0ad3d5def4b47fa65ce8cd0f1575"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.typing.listdecl.MulList.generic has changed")
+numba.core.typing.listdecl.MulList.generic = mul_list_generic
+
+# Bodo Change: Reimplement with indices flipped.
+@lower_builtin(operator.mul, types.Integer, types.List)
+def list_mul(context, builder, sig, args):
+    from llvmlite import ir as lir
+    from numba.core.imputils import impl_ret_new_ref
+    from numba.cpython.listobj import ListInstance
+
+    if isinstance(sig.args[0], types.List):
+        list_idx, int_idx = 0, 1
+    else:
+        list_idx, int_idx = 1, 0
+    src = ListInstance(context, builder, sig.args[list_idx], args[list_idx])
+    src_size = src.size
+
+    mult = args[int_idx]
+    zero = lir.Constant(mult.type, 0)
+    mult = builder.select(cgutils.is_neg_int(builder, mult), zero, mult)
+    nitems = builder.mul(mult, src_size)
+
+    dest = ListInstance.allocate(context, builder, sig.return_type, nitems)
+    dest.size = nitems
+
+    with cgutils.for_range_slice(builder, zero, nitems, src_size, inc=True) as (
+        dest_offset,
+        _,
+    ):
+        with cgutils.for_range(builder, src_size) as loop:
+            value = src.getitem(loop.index)
+            dest.setitem(builder.add(loop.index, dest_offset), value, incref=True)
+
+    return impl_ret_new_ref(context, builder, sig.return_type, dest.value)
+
+
+#### END MONKEY PATCH FOR INT * LIST SUPPORT   ####

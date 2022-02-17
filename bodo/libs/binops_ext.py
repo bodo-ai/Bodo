@@ -821,7 +821,7 @@ def arith_op_supported_by_numba(op, lhs, rhs):
         numbers = ints or reals or cmplx
 
         # Lists
-        lists = isinstance(lhs, types.List) and isinstance(rhs, types.Integer)
+        lists = (isinstance(lhs, types.List) and isinstance(rhs, types.Integer)) or (isinstance(lhs, types.Integer) and isinstance(rhs, types.List))
 
         # char seq
         tys = (types.UnicodeCharSeq, types.CharSeq, types.Bytes)

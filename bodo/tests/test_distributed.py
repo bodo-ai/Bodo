@@ -692,6 +692,29 @@ def test_str_alloc_equiv1(memory_leak_check):
     assert not dist_IR_contains(f_ir, "dist_reduce")
 
 
+def test_dist_list_mul_concat(memory_leak_check):
+    """
+    Test that [df] * n can return a distributed output via pd.concat
+    """
+
+    def impl1(df, n):
+        return pd.concat([df] * n)
+
+    def impl2(df, n):
+        return pd.concat(n * [df])
+
+    df = pd.DataFrame(
+        {
+            "A": np.arange(1000),
+            "B": np.arange(1000, 2000),
+        }
+    )
+    # pd.concat concatenates locally on each rank, so reset the index
+    # and sort.
+    check_func(impl1, (df, 5), sort_output=True, reset_index=True)
+    check_func(impl2, (df, 5), sort_output=True, reset_index=True)
+
+
 def test_series_alloc_equiv1(memory_leak_check):
     def impl(n):
         if n < 10:

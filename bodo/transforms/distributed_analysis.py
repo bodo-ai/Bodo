@@ -512,6 +512,27 @@ class DistributedAnalysis:
                         warning_msg = f"User code checks if a {obj_name} {code_expr} at {arg1.loc}. This checks that the {obj_name} object {code_expr}, not the contents, and is a common bug. To check the contents, please use '{obj_name}.{pandas_fn}()'."
                         warnings.warn(BodoWarning(warning_msg))
                     return
+            # Handle [df] * n
+            elif is_expr(rhs, "binop") and rhs.fn == operator.mul:
+                if (
+                    isinstance(rhs.lhs, ir.Var)
+                    and rhs.lhs.name in self.typemap
+                    and isinstance(self.typemap[rhs.lhs.name], types.List)
+                ):
+                    # If expanding a list set the distributions equal.
+                    if rhs.lhs.name in array_dists:
+                        self._meet_array_dists(lhs, rhs.lhs.name, array_dists)
+                        return
+                elif (
+                    isinstance(rhs.rhs, ir.Var)
+                    and rhs.rhs.name in self.typemap
+                    and isinstance(self.typemap[rhs.rhs.name], types.List)
+                ):
+                    # If expanding a list set the distributions equal.
+                    if rhs.rhs.name in array_dists:
+                        self._meet_array_dists(lhs, rhs.rhs.name, array_dists)
+                        return
+
             msg = "unsupported expression in distributed analysis"
             if isinstance(rhs, (ir.FreeVar, ir.Global)):
                 msg = "constant global values are replicated"
