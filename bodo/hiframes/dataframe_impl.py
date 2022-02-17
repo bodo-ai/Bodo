@@ -54,6 +54,7 @@ from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.hiframes.rolling import is_supported_shift_array_type
+from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import (
@@ -1889,6 +1890,57 @@ def overload_dataframe_diff(df, periods=1, axis=0):
         for i in range(len(df.columns))
     )
     return _gen_init_df(header, df.columns, data_args)
+
+
+@overload_method(DataFrameType, "explode", inline="always", no_unliteral=True)
+def overload_dataframe_explode(df, column, ignore_index=False):
+    """
+    DataFrame.explode support: explodes columns specified, asserting all desired columns be array-like and have equal
+    length per entry while all other columns undergo repeat() with counts equal to the entry-lengths of exploded columns.
+    NOTE: Differs from Pandas in that [], scalars, and NA are all length 1 when error checking
+    counts against all columns. I.e. pd.DataFrame({'A':[[1,2], [], [1]], 'B': [[1], np.nan, [1]]}) will
+    fail in Pandas, but works with Bodo.
+    """
+
+    err_msg = "DataFrame.explode(): 'column' must a constant label or list of labels"
+    if not is_literal_type(column):
+        raise_bodo_error(err_msg)
+    if is_overload_constant_list(column) or is_overload_constant_tuple(column):
+        explode_cols = get_overload_const_list(column)
+    else:
+        explode_cols = [get_literal_value(column)]
+
+    column_map = {c: i for i, c in enumerate(df.columns)}
+    explode_inds = [column_map[c] for c in explode_cols]
+    for i in explode_inds:
+        if (
+            not isinstance(df.data[i], ArrayItemArrayType)
+            and df.data[i].dtype != string_array_split_view_type
+        ):
+            raise BodoError(
+                f"DataFrame.explode(): columns must have array-like entries"
+            )
+    n = len(df.columns)
+    header = "def impl(df, column, ignore_index=False):\n"
+    header += "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
+    header += "  index_arr = bodo.utils.conversion.index_to_array(index)\n"
+    for i in range(n):
+        header += (
+            f"  data{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})\n"
+        )
+    header += (
+        f"  counts = bodo.libs.array_kernels.get_arr_lens(data{explode_inds[0]})\n"
+    )
+    for i in range(n):
+        if i in explode_inds:
+            header += f"  out_data{i} = bodo.libs.array_kernels.explode_no_index(data{i}, counts)\n"
+        else:
+            header += f"  out_data{i} = bodo.libs.array_kernels.repeat_kernel(data{i}, counts)\n"
+    header += "  new_index = bodo.libs.array_kernels.repeat_kernel(index_arr, counts)\n"
+    data_args = ", ".join(f"out_data{i}" for i in range(n))
+    index = "bodo.utils.conversion.convert_to_index(new_index)"
+
+    return _gen_init_df(header, df.columns, data_args, index)
 
 
 @overload_method(DataFrameType, "set_index", inline="always", no_unliteral=True)

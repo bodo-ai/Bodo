@@ -1665,6 +1665,9 @@ class TypingTransforms:
                 (2, "columns"),
                 (3, "aggfunc"),
             ],
+            "explode": [
+                (0, "column"),
+            ],
         }
         if func_name in df_call_const_args:
             func_args = df_call_const_args[func_name]

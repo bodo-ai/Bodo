@@ -176,15 +176,7 @@ def overload_str_method_len(S_str):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        numba.parfors.parfor.init_prange()
-        n = len(arr)
-        out_arr = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
-        for i in numba.parfors.parfor.internal_prange(n):
-            if bodo.libs.array_kernels.isna(arr, i):
-                bodo.libs.array_kernels.setna(out_arr, i)
-            else:
-                # TODO: optimize str len on string array (count unicode chars inplace)
-                out_arr[i] = len(arr[i])
+        out_arr = bodo.libs.array_kernels.get_arr_lens(arr, False)
 
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 

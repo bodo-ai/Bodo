@@ -6,6 +6,7 @@ import pyarrow as pa
 import pytest
 from mpi4py import MPI
 from numba import types
+from pandas.core.dtypes.common import is_list_like
 
 import bodo
 from bodo.tests.dataframe_common import df_value  # noqa
@@ -1154,6 +1155,76 @@ def test_empty_df_first_last(memory_leak_check):
     check_func(impl_first, (empty_df,))
     check_func(impl_last, (empty_df,))
     check_func(one_empty_rank, (df2,))
+
+
+def test_dataframe_explode():
+    """
+    Tests for df.explode() on single and multiple columns.
+    """
+    # NOTE: a helper is necessary as Pandas df.explode() will fail for the tests below
+    # because the `mylen` function used by Pandas internally marks scalars/NAs as having
+    # length -1 and takes empty arrays as 0 despite each of the aforementioned taking up
+    # one entry in the exploded result.
+    def _explode_helper(df, cols):
+        mylen = lambda x: max(1, len(x)) if is_list_like(x) else 1
+        counts = df[cols[0]].apply(mylen)
+        assert all(all(counts == df[c].apply(mylen)) for c in cols)
+        res = pd.DataFrame(
+            {
+                c: df[c].explode() if c in cols else df[c].repeat(counts)
+                for c in df.columns
+            },
+            index=df[cols[0]].explode().index,
+        )
+        return res
+
+    def test_impl(df, col):
+        return df.explode(col)
+
+    def test_impl_single(df):
+        return df.explode("A")
+
+    def test_impl_list(df):
+        return df.explode(["A", "C"])
+
+    def test_impl_tuple(df):
+        return df.explode(("A", "C"))
+
+    def test_str_split_explode(S):
+        df = pd.DataFrame({"A": S.str.split()})
+        return df.explode("A")
+
+    df = pd.DataFrame(
+        {
+            "A": [[0, 1, 2], [5], [], [3, 4]] * 3,
+            "B": [1, 7, 2, 4] * 3,
+            "C": [[1, 2, 3], np.nan, [], [1, 2]] * 3,
+        }
+    )
+    S = pd.Series(["a b c", "d e", "f", "g h"] * 3)
+
+    check_func(
+        test_impl,
+        (
+            df,
+            "A",
+        ),
+        py_output=_explode_helper(df, "A"),
+    )
+    check_func(
+        test_impl,
+        (
+            df,
+            ["A", "C"],
+        ),
+        py_output=_explode_helper(df, ["A", "C"]),
+    )
+    # TODO: tuple passed in as argument
+    # check_func(test_impl, (df, ("A", "C")), py_output=_explode_helper(df, ("A", "C")))
+    check_func(test_impl_single, (df,), py_output=_explode_helper(df, "A"))
+    check_func(test_impl_list, (df,), py_output=_explode_helper(df, ["A", "C"]))
+    check_func(test_impl_tuple, (df,), py_output=_explode_helper(df, ("A", "C")))
+    check_func(test_str_split_explode, (S,))
 
 
 def test_empty_dataframe_creation(memory_leak_check):
