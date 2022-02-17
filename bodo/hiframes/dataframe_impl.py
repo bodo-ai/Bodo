@@ -339,6 +339,12 @@ def _get_dtype_str(dtype):
     if isinstance(dtype, types.functions.NumberClass):
         return f"'{dtype.key}'"
 
+    # Object. Place before string to avoid issues
+    # with np.object_. For some reason this produces
+    # TypeError: Cannot interpret 'StringDtype' as a data type
+    if dtype in (object, "object"):
+        return "'object'"
+
     # pd.StringDtype
     if dtype in (bodo.libs.str_arr_ext.string_dtype, pd.StringDtype()):
         return "str"

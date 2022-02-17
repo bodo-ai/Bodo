@@ -623,7 +623,12 @@ def overload_fix_arr_dtype(
     """
     do_copy = is_overload_true(copy)
 
-    if is_overload_none(new_dtype):
+    # If the new dtype is "object", we treat it as a no-op.
+    is_object = (
+        is_overload_constant_str(new_dtype)
+        and get_overload_const_str(new_dtype) == "object"
+    )
+    if is_overload_none(new_dtype) or is_object:
         if do_copy:
             return (
                 lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data.copy()
