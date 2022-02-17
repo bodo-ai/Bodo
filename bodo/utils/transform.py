@@ -1409,13 +1409,14 @@ def get_call_expr_arg(
     return arg
 
 
-def set_call_expr_arg(var, args, kws, arg_no, arg_name):
+def set_call_expr_arg(var, args, kws, arg_no, arg_name, add_if_missing=False):
     """replaces call argument with a new variable.
-    Raises an error if argument was not specified.
+    The add_if_missing flag appends the argument to the kws if it doesn't
+    already exist. Otherwise this raises an error if argument was not specified.
     """
     if len(args) > arg_no:
         args[arg_no] = var
-    elif arg_name in kws:
+    elif add_if_missing or arg_name in kws:
         kws[arg_name] = var
     else:
         raise BodoError(
