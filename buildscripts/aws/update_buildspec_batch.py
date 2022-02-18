@@ -118,7 +118,7 @@ def get_compute_type(env_var_dict, image_path, buildspec):
 # Function to generate the batch portion for the CI build
 def generate_CI_buildspec(num_groups):
     images = {
-        "linux": "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.11"
+        "linux": "427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.12"
     }
     pytest_starting_marker = "not slow"
     pytest_options = [
@@ -136,7 +136,7 @@ def generate_CI_buildspec(num_groups):
 def create_new_buildspec(buildtype, num_groups):
     if buildtype == "CI":
         with open(CI_BUILDSPEC_FILENAME, "r") as f:
-            existing_yaml = yaml.load(f)
+            existing_yaml = yaml.load(f, Loader=yaml.Loader)
         existing_yaml["batch"] = generate_CI_buildspec(num_groups)
         with open(CI_BUILDSPEC_FILENAME, "w") as f:
             # Add the necessary comments at the top.

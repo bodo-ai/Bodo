@@ -34,7 +34,8 @@ then
   then
       conda create -n $CONDA_ENV -q -y -c conda-forge python numpy scipy boost-cpp=1.74.0 cmake h5py=2.10 mpich mpi
   else
-      conda create -n $CONDA_ENV -q -y -c conda-forge python cmake make
+      # pytorch (installed below) doesn't support Python 3.10 yet
+      conda create -n $CONDA_ENV -q -y -c conda-forge 'python<3.10' cmake make
   fi
 fi
 source activate $CONDA_ENV
@@ -53,10 +54,8 @@ fi
 # ---- Conda installs for source build ----
 if [ "$RUN_NIGHTLY" != "yes" ];
 then
-   $CONDA_INSTALL -c conda-forge pyarrow=5.0.0
-   # We lock fsspec at version 0.8 because in 0.9 it
-   # caused us import errors with s3fs for Pandas tests.
-   $CONDA_INSTALL fsspec=0.8 -c conda-forge
+   $CONDA_INSTALL -c conda-forge pyarrow=7.0.0
+   $CONDA_INSTALL fsspec>=2021.09 -c conda-forge
    $CONDA_INSTALL pandas='1.3.3' -c conda-forge
    $CONDA_INSTALL numba=0.55.1 -c conda-forge
    $CONDA_INSTALL cython -c conda-forge
@@ -71,17 +70,19 @@ else
    if [ "$RUNTIME" != "yes" ];
     then
        conda clean -a -y
-       $CONDA_INSTALL pytorch=1.9 pyarrow=5.0.0 -c pytorch -c conda-forge -c defaults
+       #$CONDA_INSTALL pytorch=1.9 pyarrow=7.0.0 -c pytorch -c conda-forge -c defaults
+       $CONDA_INSTALL pyarrow=7.0.0 -c conda-forge
        conda clean -a -y
-       $CONDA_INSTALL bokeh=2.3 -c pytorch -c conda-forge -c defaults
-       conda clean -a -y
-       $CONDA_INSTALL torchvision=0.10 -c pytorch -c conda-forge -c defaults
-       conda clean -a -y
+       #$CONDA_INSTALL bokeh=2.3 -c pytorch -c conda-forge -c defaults
+       #conda clean -a -y
+       #$CONDA_INSTALL torchvision=0.10 -c pytorch -c conda-forge -c defaults
+       #conda clean -a -y
        # Install h5py and hd5f directly because otherwise tensorflow
        # installs a non-mpi version.
-       $CONDA_INSTALL tensorflow h5py hdf5='1.10.*=*mpich*' -c conda-forge
+       #$CONDA_INSTALL tensorflow h5py hdf5='1.10.*=*mpich*' -c conda-forge
+       $CONDA_INSTALL h5py hdf5='1.10.*=*mpich*' -c conda-forge
        conda clean -a -y
-       pip install horovod;
+       #pip install horovod;
     fi
    pip install credstash
 fi

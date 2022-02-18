@@ -280,9 +280,9 @@ void unbox_datetime_date_array(PyObject* obj, int64_t n, int64_t* data,
         }
         data[i] = value_data;
         if (value_bitmap) {
-            ::arrow::BitUtil::SetBit(null_bitmap, i);
+            ::arrow::bit_util::SetBit(null_bitmap, i);
         } else {
-            ::arrow::BitUtil::ClearBit(null_bitmap, i);
+            ::arrow::bit_util::ClearBit(null_bitmap, i);
         }
         Py_DECREF(s);
     }
@@ -442,9 +442,9 @@ void unbox_datetime_timedelta_array(PyObject* obj, int64_t n,
         seconds_data[i] = seconds_val;
         microseconds_data[i] = microseconds_val;
         if (value_bitmap) {
-            ::arrow::BitUtil::SetBit(null_bitmap, i);
+            ::arrow::bit_util::SetBit(null_bitmap, i);
         } else {
-            ::arrow::BitUtil::ClearBit(null_bitmap, i);
+            ::arrow::bit_util::ClearBit(null_bitmap, i);
         }
         Py_DECREF(s);
     }

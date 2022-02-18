@@ -1042,6 +1042,17 @@ def get_parquet_dataset(
             fs.append(None)
         return fs[0]
 
+    def get_legacy_fs():
+        """return filesystem with legacy interface that ParquetDataset with use_legacy_dataset=True can understand"""
+
+        if protocol == "s3":
+            from fsspec.implementations.arrow import ArrowFSWrapper
+
+            # fsspec wrapper makes it legacy API compatible
+            return ArrowFSWrapper(getfs())
+        else:
+            return getfs()
+
     validate_schema = False
     if get_row_counts:
         # Getting row counts and schema validation is going to be
@@ -1049,11 +1060,10 @@ def get_parquet_dataset(
         # object to query the metadata of their assigned pieces.
         # There are issues with broadcasting the s3 filesystem object
         # as part of the ParquetDataset, so instead we initialize
-        # the filesystem before the broadcast. One of the issues is that
-        # our PyArrowS3FS is not correctly pickled (instead what is
-        # sent is the underlying pyarrow S3FileSystem). The other issue
-        # is that for some reason unpickling seems like it can cause
-        # incorrect credential handling state in Arrow or AWS client.
+        # the filesystem before the broadcast. The issues seem related
+        # to pickling the filesystem. For example, for some reason
+        # unpickling seems like it can cause incorrect credential handling
+        # state in Arrow or AWS client.
         _ = getfs(parallel=True)
         validate_schema = bodo.parquet_validate_schema
 
@@ -1071,9 +1081,23 @@ def get_parquet_dataset(
                     ev_pq_ds.add_attribute("dnf_filter", str(dnf_filters))
             pa_default_io_thread_count = pa.io_thread_count()
             pa.set_io_thread_count(nthreads)
+
+            if protocol == "s3":
+                # If there are issues accessing the s3 path (like wrong credentials)
+                # fsspec will suppress the error and ParquetDataset() will ultimately
+                # raise an exception claiming invalid path, which is not accurate.
+                # To get the actual error, we directly query path info before calling
+                # ParquetDataset().
+                # NOTE: the result of fs.info(path) is cached the first time,
+                # so subsequent calls (done inside ParquetDataset()) will not
+                # have additional overhead
+                if isinstance(fpath, list):
+                    get_legacy_fs().info(fpath[0])
+                else:
+                    get_legacy_fs().info(fpath)
             dataset = pq.ParquetDataset(
                 fpath,
-                filesystem=getfs(),
+                filesystem=get_legacy_fs(),  # need fs that works with use_legacy_dataset=True
                 filters=None,
                 use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
                 validate_schema=False,  # we do validation below if needed

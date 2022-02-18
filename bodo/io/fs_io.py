@@ -20,6 +20,29 @@ from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
 from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import check_java_installation
 
+
+from fsspec.implementations.arrow import ArrowFSWrapper, ArrowFile, wrap_exceptions
+
+# ----- monkey-patch fsspec.implementations.arrow.ArrowFSWrapper._open --------
+def fsspec_arrowfswrapper__open(self, path, mode="rb", block_size=None, **kwargs):
+    if mode == "rb":
+        try:  # Bodo change: try to open the file for random access first
+            # We need random access to read parquet file metadata
+            stream = self.fs.open_input_file(path)
+        except:  #pragma: no cover
+            stream = self.fs.open_input_stream(path)
+    elif mode == "wb":  #pragma: no cover
+        stream = self.fs.open_output_stream(path)
+    else:
+        raise ValueError(f"unsupported mode for Arrow filesystem: {mode!r}")
+
+    return ArrowFile(self, stream, path, mode, block_size, **kwargs)
+
+
+ArrowFSWrapper._open = wrap_exceptions(fsspec_arrowfswrapper__open)
+# -----------------------------------------------------------------------------
+
+
 _csv_write = types.ExternalFunction(
     "csv_write",
     types.void(
@@ -66,7 +89,7 @@ def get_s3_fs(region=None, storage_options=None):
     """
     initialize S3FileSystem with credentials
     """
-    from bodo.io.pyarrow_s3fs_fsspec_wrapper import PyArrowS3FS
+    from pyarrow.fs import S3FileSystem
 
     custom_endpoint = os.environ.get("AWS_S3_ENDPOINT", None)
     if not region:
@@ -77,15 +100,12 @@ def get_s3_fs(region=None, storage_options=None):
     if storage_options:
         anon = storage_options.get("anon", False)
 
-    PyArrowS3FS.clear_instance_cache()
-    fs = PyArrowS3FS(
+    return S3FileSystem(
+        anonymous=anon,
         region=region,
         endpoint_override=custom_endpoint,
-        anonymous=anon,
         proxy_options=proxy_options,
     )
-
-    return fs
 
 
 def get_s3_subtree_fs(bucket_name, region=None, storage_options=None):
