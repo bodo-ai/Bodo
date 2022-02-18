@@ -534,6 +534,82 @@ def test_dist_flag_no_warn(memory_leak_check):
     bodo.jit(impl)()
 
 
+def test_dist_arg_diag1(memory_leak_check):
+    """Make sure parallelism warning includes diagnostics info about replicated
+    arguments
+    """
+
+    @bodo.jit
+    def impl1(df):
+        return df.A.sum()
+
+    df = pd.DataFrame({"A": [1, 2, 3]})
+
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(
+            BodoWarning, match="Distributed analysis replicated argument 'df'"
+        ):
+            impl1(df)
+    else:
+        impl1(df)
+    assert count_array_REPs() > 0
+
+
+def test_dist_global_diag1(memory_leak_check):
+    """Make sure parallelism warning includes diagnostics info about replicated
+    global values
+    """
+
+    df = pd.DataFrame({"A": [1, 2, 3]})
+
+    @bodo.jit
+    def impl1():
+        return df.A.sum()
+
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(
+            BodoWarning, match="Distributed analysis replicated global value 'df'"
+        ):
+            impl1()
+    else:
+        impl1()
+    assert count_array_REPs() > 0
+
+
+def test_dist_global_meta1(memory_leak_check):
+    """Make sure Bodo parallelizes global value with Bodo distributed metadata"""
+
+    @bodo.jit
+    def f(n):
+        return pd.DataFrame({"A": np.arange(n)})
+
+    n = 12
+    df = f(n)
+
+    @bodo.jit
+    def impl1():
+        return df.A.sum()
+
+    assert impl1() == np.arange(n).sum()
+    assert count_array_REPs() == 0
+
+
+def test_dist_global_flag1(memory_leak_check):
+    """Make sure Bodo parallelizes global value with distributed flag"""
+
+    n = 12
+    df = pd.DataFrame({"A": np.arange(n)})
+    df = bodo.scatterv(df if bodo.get_rank() == 0 else None)
+    del df._bodo_meta
+
+    @bodo.jit(distributed=["df"])
+    def impl1():
+        return df.A.sum()
+
+    assert impl1() == np.arange(n).sum()
+    assert count_array_REPs() == 0
+
+
 def test_bodo_func_rep(memory_leak_check):
     """test calling other bodo functions without distributed flag"""
 
@@ -2025,7 +2101,7 @@ def test_scatterv_gatherv_allgatherv_df_jit(df_value, memory_leak_check):
 
 
 def test_scatterv_None_warning(df_value):
-    """ Test that scatterv returns warning if value is not None on ranks != 0 """
+    """Test that scatterv returns warning if value is not None on ranks != 0"""
 
     if bodo.get_rank() == 0:
         df_proper = df_value
