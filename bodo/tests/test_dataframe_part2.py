@@ -981,7 +981,7 @@ def test_df_apply_udf_inline(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_apply_supported_types(df_value, memory_leak_check):
-    """ Test DataFrame.apply with all Bodo supported Types """
+    """Test DataFrame.apply with all Bodo supported Types"""
 
     def test_impl(df):
         return df.apply(lambda r: None if pd.isna(r.A) else r.A, axis=1)
@@ -1122,7 +1122,7 @@ def test_dataframe_pipe():
 )
 # memory_leak_check doesn't work with Categorical
 def test_df_groupby_supported_types(data):
-    """ Test DataFrame.groupby with all Bodo supported Types """
+    """Test DataFrame.groupby with all Bodo supported Types"""
 
     # Testing different type of columns for max operation
     def test_impl(df):
@@ -2282,7 +2282,7 @@ def test_iat_setitem():
     """test df.iat[] setitem (single value)"""
 
     def impl(df, n):
-        df.iat[n - 1, 1] = n ** 2
+        df.iat[n - 1, 1] = n**2
         return df
 
     n = 11
@@ -2505,7 +2505,7 @@ def test_dataframe_constant_lowering(memory_leak_check):
 
     df2 = pd.DataFrame({"A": [2, 1], "B": [1.2, 3.3]})
     for i in range(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD):
-        df[f"F{i}"] = "ABC"
+        df2[f"F{i}"] = "ABC"
 
     def impl():
         return df2
@@ -2769,7 +2769,7 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
 
 @pytest.mark.slow
 def test_unsupported_df_method():
-    """ Raise Bodo error for unsupported df methods"""
+    """Raise Bodo error for unsupported df methods"""
 
     def test_impl():
         df = pd.DataFrame({"A": [1, 2, 3], "B": [2, 3, 4]})
@@ -2849,7 +2849,7 @@ def test_df_info(df):
 
 @pytest.mark.slow
 def test_df_mem_usage(memory_leak_check):
-    """ Test DataFrame.memory_usage() with and w/o index"""
+    """Test DataFrame.memory_usage() with and w/o index"""
 
     def impl1(df):
         return df.memory_usage()
