@@ -1459,6 +1459,10 @@ class DistributedAnalysis:
             self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
             return
 
+        if fdef == ("duplicated_array", "bodo.libs.array_kernels"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("dropna", "bodo.libs.array_kernels"):
             # output of dropna is variable-length even if input is 1D
             if lhs not in array_dists:

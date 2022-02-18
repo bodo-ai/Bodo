@@ -1323,7 +1323,6 @@ series_unsupported_methods = (
     "align",
     "drop",
     "droplevel",
-    "duplicated",
     "reindex",
     "reindex_like",
     "rename_axis",

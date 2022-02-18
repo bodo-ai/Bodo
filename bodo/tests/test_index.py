@@ -1186,12 +1186,6 @@ def test_index_unsupported(data):
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_dropna)(idx=pd.Index(data))
 
-    def test_duplicated(idx):
-        return idx.duplicated()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_duplicated)(idx=pd.Index(data))
-
     def test_equals(idx):
         return idx.equals()
 
@@ -1601,7 +1595,7 @@ def test_index_cmp_ops(op, memory_leak_check):
     ],
 )
 def test_index_nbytes(index, memory_leak_check):
-    """ Test nbytes computation with different Index types"""
+    """Test nbytes computation with different Index types"""
 
     def impl(idx):
         return idx.nbytes
@@ -1920,3 +1914,93 @@ def test_index_drop_duplicates(idx):
         return I.drop_duplicates()
 
     check_func(impl, (idx,), sort_output=True)
+
+
+@pytest.mark.parametrize(
+    "idx",
+    [
+        pytest.param(pd.RangeIndex(start=0, stop=5), id="RangeIndexType"),
+        pytest.param(
+            pd.Index([5, 1, 1, 2, 2, 3, 4] * 2),
+            id="NumericIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Index(["e", "a", "a", "b", "b", "c", "d"] * 2),
+            id="StringIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Index([b"e", b"a", b"a", b"b", b"b", b"c", b"d"] * 2),
+            id="BinaryIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex(["e", "a", "a", "b", "b", "c", "d"] * 2),
+            id="CategoricalIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.PeriodIndex(
+                [
+                    pd.Period("2001-01", freq="M"),
+                    pd.Period("2001-01", freq="M"),
+                    pd.Period("2002-01", freq="M"),
+                    pd.Period("2002-01", freq="M"),
+                    pd.Period("2003-01", freq="M"),
+                    pd.Period("2004-01", freq="M"),
+                    pd.Period("2005-01", freq="M"),
+                ]
+                * 2,
+            ),
+            id="PeriodIndexType",
+        ),
+        pytest.param(
+            pd.DatetimeIndex(
+                [
+                    "2000-01-01",
+                    "2000-01-01",
+                    "2001-01-01",
+                    "2001-01-01",
+                    "2002-01-01",
+                    "2003-01-01",
+                    "2004-01-01",
+                ]
+                * 2
+            ),
+            id="DatetimeIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.TimedeltaIndex(
+                ["4 days", "1 days", "1 days", "2 days", "2 days", "3 days", "5 days"]
+            ),
+            id="TimedeltaIndexType",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Index([1, 2, np.nan, 1, 4, np.nan, 5, 2, 6]),
+            id="NumericNAIndex",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Index(["a", "b", None, "a", "d", None, "e", "b", "f"] * 10),
+            id="StringNAIndex",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Index([b"e", b"a", pd.NA, b"b", b"b", pd.NA, b"d"] * 2),
+            id="BinaryNAIndex",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_index_duplicated(idx, memory_leak_check):
+    """
+    Tests Index.duplicated() for all types of supported indices
+    """
+
+    def test_impl(I):
+        return I.duplicated()
+
+    check_func(test_impl, (idx,))

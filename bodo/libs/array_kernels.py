@@ -812,6 +812,46 @@ def duplicated(data, ind_arr, parallel=False):  # pragma: no cover
     return out, ind_arr
 
 
+@numba.njit(no_cpython_wrapper=True)
+def duplicated_array(data, parallel=False):  # pragma: no cover
+    # TODO: inline for optimization?
+
+    if parallel:
+        cpp_table = arr_info_list_to_table([array_to_info(data)])
+        out_cpp_table = bodo.libs.array.shuffle_table(cpp_table, 1, parallel, 1)
+        data = info_to_array(info_from_table(out_cpp_table, 0), data)
+        shuffle_info = bodo.libs.array.get_shuffle_info(out_cpp_table)
+        bodo.libs.array.delete_table(out_cpp_table)
+        bodo.libs.array.delete_table(cpp_table)
+
+    # XXX: convert StringArray/BinaryArray to list of strings due to strange error with set
+    # TODO: debug StringArray issue on test_df_duplicated with multiple pes
+    data = bodo.libs.str_arr_ext.to_list_if_immutable_arr(data)
+
+    n = len(data)
+    out = np.empty(n, np.bool_)
+    # uniqs = set()
+    uniqs = dict()
+    hasna = False
+    for i in range(n):
+        if bodo.libs.array_kernels.isna(data, i):
+            out[i] = hasna
+            hasna = True
+        else:
+            val = (data[i],)
+            if val in uniqs:
+                out[i] = True
+            else:
+                out[i] = False
+                # uniqs.add(val)
+                uniqs[val] = 0
+
+    if parallel:
+        out = bodo.hiframes.pd_groupby_ext.reverse_shuffle(out, shuffle_info)
+
+    return out
+
+
 def sample_table_operation(data, ind_arr, n, frac, replace, parallel=False):
     return data, ind_arr
 

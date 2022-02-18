@@ -1567,6 +1567,13 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
+        if fdef == (
+            "duplicated_array",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels") and (
             self._is_1D_tup(rhs.args[0].name) or self._is_1D_Var_tup(rhs.args[0].name)
         ):
