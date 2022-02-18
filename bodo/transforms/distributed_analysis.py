@@ -533,9 +533,15 @@ class DistributedAnalysis:
                         self._meet_array_dists(lhs, rhs.rhs.name, array_dists)
                         return
 
+            # treat global values similar to arguments
+            if isinstance(rhs, (ir.FreeVar, ir.Global, ir.Const)):
+                # add name to ir.Const to handle it similar to Global/FreeVar nodes
+                if isinstance(rhs, ir.Const):
+                    rhs.name = lhs
+                self._analyze_arg(lhs, rhs, array_dists)
+                return
+
             msg = "unsupported expression in distributed analysis"
-            if isinstance(rhs, (ir.FreeVar, ir.Global)):
-                msg = "constant global values are replicated"
             self._set_REP(inst.list_vars(), array_dists, msg, rhs.loc)
 
     def _analyze_getattr(self, lhs, rhs, array_dists):
@@ -3042,11 +3048,12 @@ class DistributedAnalysis:
         )
 
     def _analyze_arg(self, lhs, rhs, array_dists):
-        """analyze ir.Arg nodes for distribution. Checks for user flags; sets to REP if
-        no user flag found"""
-        if (
-            rhs.name in self.metadata["distributed_block"]
-            or self.flags.all_args_distributed_block
+        """analyze ir.Arg/Global/FreeVar/Const nodes for distribution.
+        Checks for user flags; sets to REP if no user flag found
+        """
+        is_arg = isinstance(rhs, ir.Arg)
+        if rhs.name in self.metadata["distributed_block"] or (
+            is_arg and self.flags.all_args_distributed_block
         ):
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD)
@@ -3054,9 +3061,8 @@ class DistributedAnalysis:
             # but transitions to REP. Fixed point iteration dictates that we will
             # eventually fail this check if an argument is ever changed to REP.
             self._check_user_distributed_args(array_dists, lhs, rhs.loc)
-        elif (
-            rhs.name in self.metadata["distributed"]
-            or self.flags.all_args_distributed_varlength
+        elif rhs.name in self.metadata["distributed"] or (
+            is_arg and self.flags.all_args_distributed_varlength
         ):
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
@@ -3071,19 +3077,22 @@ class DistributedAnalysis:
             typ = self.typemap[lhs]
             # get distribution info from data type if available
             # argument handling sets distribution from Bodo metadata in df/... objects
-            if self.flags.args_maybe_distributed and hasattr(typ, "dist"):
+            if (
+                self.flags.args_maybe_distributed
+                and hasattr(typ, "dist")
+                and typ.dist != Distribution.REP
+            ):
                 array_dists[lhs] = typ.dist
-                if typ.dist != Distribution.REP:
-                    self._check_user_distributed_args(array_dists, lhs, rhs.loc)
-                    return
+                self._check_user_distributed_args(array_dists, lhs, rhs.loc)
+                return
 
             if is_distributable_typ(typ) or is_distributable_tuple_typ(typ):
                 dprint("replicated input ", rhs.name, lhs)
                 info = (
-                    "Distributed analysis replicated argument '{0}' (variable "
+                    "Distributed analysis replicated {2} '{0}' (variable "
                     "'{1}'). Set distributed flag for '{0}' if distributed partitions "
                     "are passed (e.g. @bodo.jit(distributed=['{0}']))."
-                ).format(rhs.name, lhs)
+                ).format(rhs.name, lhs, "argument" if is_arg else "global value")
                 self._set_REP(lhs, array_dists, info, rhs.loc)
 
     def _analyze_setattr(self, target, attr, value, array_dists, loc):
