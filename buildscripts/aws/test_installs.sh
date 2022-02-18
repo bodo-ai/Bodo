@@ -10,9 +10,7 @@ export PATH=$HOME/miniconda3/bin:$PATH
 source activate $CONDA_ENV
 
 # s3fs is required by pandas for S3 IO.
-# We lock fsspec at version 0.8 because in 0.9 it
-# caused us import errors with s3fs for nightly.
-conda install -y -c conda-forge boto3 botocore fsspec=0.8 s3fs
+conda install -y -c conda-forge boto3 botocore fsspec>=2021.09 s3fs
 conda install -y -c conda-forge pymysql sqlalchemy
 conda install -y -c conda-forge scikit-learn='1.0.*' gcsfs
 conda install -y -c conda-forge matplotlib

@@ -22,7 +22,7 @@ such as Numba on Ubuntu Linux::
     # Linux: conda install 'gcc_linux-64>=9' 'gxx_linux-64>=9' -c conda-forge
     # Intel Mac: conda install clang_osx-64 clangxx_osx-64 -c conda-forge
     # M1 Mac: conda install clang_osx-arm64 clangxx_osx-arm64 -c conda-forge
-    # If you don't want to install Numba from source: conda install numba=0.55.0 -c conda-forge
+    # If you don't want to install Numba from source: conda install numba=0.55.1 -c conda-forge
     # For development/debugging purposes, it's best to install Numba from source instead
     # START OF BUILD NUMBA FROM SOURCE
     conda install llvmlite -c conda-forge
@@ -34,13 +34,13 @@ such as Numba on Ubuntu Linux::
     python setup.py develop
     cd ..
     # END OF BUILD NUMBA FROM SOURCE
-    conda install -c conda-forge hdf5='1.10.*=*mpich*' pyarrow=5.0.0 pymysql sqlalchemy
+    conda install -c conda-forge hdf5='1.10.*=*mpich*' pyarrow=7.0.0 pymysql sqlalchemy
     # Highly recommended to speed up compilation times
     conda install ccache -c conda-forge
     # Highly recommended for enforcing style requirements (see dev_process.rst)
     conda install pre-commit -c conda-forge
     # Required for IO with S3
-    conda install -c conda-forge fsspec
+    conda install -c conda-forge fsspec>=2021.09
     # The following is required for s3 related development and tests
     # conda install -c conda-forge boto3 botocore
     # The following is required for IO with gcs
@@ -108,9 +108,9 @@ On Windows
     conda activate DEV
     conda install numba=0.55.1 -c conda-forge
     conda install mpi4py msmpi cython -c conda-forge
-    conda install -c conda-forge pyarrow=5.0.0
+    conda install -c conda-forge pyarrow=7.0.0
     # Required for IO with S3
-    conda install -c conda-forge fsspec
+    conda install -c conda-forge fsspec>=2021.09
     # The following is required for s3 related development and tests
     # conda install -c conda-forge boto3 botocore
     # The following is required for IO with gcs

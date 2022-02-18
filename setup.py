@@ -573,13 +573,15 @@ setup(
     # When doing `python setup.py develop`, setuptools will try to install whatever is
     # in `install_requires` after building, so we set it to empty (we don't want to
     # install mpi4py_mpich in development mode, and it will also break CI)
+    # fsspec >= 2021.09 because it includes Arrow filesystem wrappers (useful for fs.glob() for example)
     install_requires=[]
     if development_mode
     else [
-        "numba==0.55.0",
-        "pyarrow==5.0.0",
+        "numba==0.55.1",
+        "pyarrow==7.0.0",
         "pandas==1.3.*",
         "numpy>=1.18,<1.21",
+        "fsspec>=2021.09",
         "mpi4py_mpich==3.1.2",
     ],
     extras_require={"HDF5": ["h5py"], "Parquet": ["pyarrow"]},

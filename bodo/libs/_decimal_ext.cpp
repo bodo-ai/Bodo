@@ -290,11 +290,11 @@ void unbox_decimal_array(PyObject* obj, int64_t n, uint8_t* data,
             (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
             s == C_NA) {
             // null bit
-            ::arrow::BitUtil::ClearBit(null_bitmap, i);
+            ::arrow::bit_util::ClearBit(null_bitmap, i);
             memset(data + i * BYTES_PER_DECIMAL, 0, BYTES_PER_DECIMAL);
         } else {
             // set not null
-            ::arrow::BitUtil::SetBit(null_bitmap, i);
+            ::arrow::bit_util::SetBit(null_bitmap, i);
             // construct Decimal128 from str(decimal)
             PyObject* s_str_obj = PyObject_Str(s);
             CHECK(s_str_obj, "str(decimal) failed");
