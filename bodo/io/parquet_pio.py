@@ -1286,6 +1286,7 @@ def get_parquet_dataset(
                 is_parallel
                 and bodo.get_rank() == 0
                 and total_num_row_groups < bodo.get_size()
+                and total_num_row_groups != 0
             ):
                 warnings.warn(
                     BodoWarning(
@@ -1295,7 +1296,10 @@ For best performance the number of row groups should be greater than the number 
                     )
                 )
             # print a warning if average row group size < 1 MB and reading from remote filesystem
-            avg_row_group_size_bytes = total_row_groups_size // total_num_row_groups
+            if total_num_row_groups == 0:
+                avg_row_group_size_bytes = 0
+            else:
+                avg_row_group_size_bytes = total_row_groups_size // total_num_row_groups
             if (
                 bodo.get_rank() == 0
                 and total_row_groups_size >= 20 * 1048576
