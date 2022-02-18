@@ -39,3 +39,12 @@ def test_unbox(table_value, memory_leak_check):
 
     check_func(impl, (table_value,), only_seq=True)
     check_func(impl2, (table_value,), only_seq=True)
+
+
+def test_constant_lowering(table_value, memory_leak_check):
+    """Test constant lowering for TableType"""
+
+    def test_impl():
+        return table_value
+
+    check_func(test_impl, (), only_seq=True)

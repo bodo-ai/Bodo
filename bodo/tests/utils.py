@@ -567,6 +567,21 @@ def _test_equal_guard(
     atol=1e-08,
     rtol=1e-05,
 ):
+    # no need to avoid exceptions if running with a single process and hang is not
+    # possible. TODO: remove _test_equal_guard in general when [BE-2223] is resolved
+    if bodo.get_size() == 1:
+        _test_equal(
+            bodo_out,
+            py_out,
+            sort_output,
+            check_names,
+            check_dtype,
+            reset_index,
+            check_categorical,
+            atol,
+            rtol,
+        )
+        return 1
     passed = 1
     try:
         _test_equal(

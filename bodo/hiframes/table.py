@@ -8,6 +8,7 @@ from collections import defaultdict
 import numba
 import numpy as np
 import pandas as pd
+from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed, lower_constant
 from numba.cpython.listobj import ListInstance
@@ -92,7 +93,11 @@ class Table:
         self.block_0 = arrs
 
     def __eq__(self, other):
-        return isinstance(other, Table) and other.arrays == self.arrays
+        return (
+            isinstance(other, Table)
+            and len(self.arrays) == len(other.arrays)
+            and all((a == b).all() for a, b in zip(self.arrays, other.arrays))
+        )
 
     def __str__(self) -> str:
         return str(self.arrays)
@@ -751,31 +756,24 @@ ArrayAnalysis._analyze_op_call_bodo_hiframes_table_get_table_data = get_table_da
 def lower_constant_table(context, builder, table_type, pyval):
     """embed constant Table value by getting constant values for data arrays."""
 
-    # TODO[BE-2128]: create a proper constant LLVM literal when list constant lowering
-    # is supported [BE-1739].
-    table = cgutils.create_struct_proxy(table_type)(context, builder)
-    table.parent = cgutils.get_null_value(table.parent.type)
-
+    arr_lists = []
     # create each array type block
     for t, blk in table_type.type_to_blk.items():
         blk_n_arrs = len(table_type.block_to_arr_ind[blk])
-        n_arrs = context.get_constant(types.int64, blk_n_arrs)
-        _, out_arr_list = ListInstance.allocate_ex(
-            context, builder, types.List(t), n_arrs
-        )
-        out_arr_list.size = n_arrs
-
+        t_arr_list = []
         for i in range(blk_n_arrs):
             arr_ind = table_type.block_to_arr_ind[blk][i]
-            arr = context.get_constant_generic(
-                builder, table_type.arr_types[arr_ind], pyval.arrays[arr_ind]
-            )
-            list_ind = context.get_constant(types.int64, i)
-            out_arr_list.inititem(list_ind, arr, incref=False)
+            t_arr_list.append(pyval.arrays[arr_ind])
 
-        setattr(table, f"block_{blk}", out_arr_list.value)
+        arr_lists.append(
+            context.get_constant_generic(builder, types.List(t), t_arr_list)
+        )
 
-    return table._getvalue()
+    parent = context.get_constant_null(types.pyobject)
+    t_len = context.get_constant(
+        types.int64, 0 if len(pyval.arrays) == 0 else len(pyval.arrays[0])
+    )
+    return lir.Constant.literal_struct(arr_lists + [parent, t_len])
 
 
 @intrinsic
