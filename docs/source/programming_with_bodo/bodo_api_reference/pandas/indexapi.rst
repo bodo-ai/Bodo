@@ -328,6 +328,26 @@ Modifying and computations
   Index(['a', 'b', 'c'], dtype='object', name='new_name')
 
 
+``pd.Index.duplicated``
+"""""""""""""""""""""""
+
+  * :meth:`pandas.Index.duplicated` ``(keep='first')``
+
+  `Supported arguments`: None
+
+  `Example Usage`: 
+
+    .. code-block:: ipython3
+      
+      >>> @bodo.jit
+      ... def f(I):
+      ...   return I.duplicated()
+      
+      >>> idx = pd.Index(['a', 'b', None, 'a', 'c', None, 'd', 'b'])
+      >>> f(idx)
+      array([False, False, False,  True, False,  True, False,  True])
+
+
 ``pd.Index.drop_duplicates``
 """""""""""""""""""""""""""""
 

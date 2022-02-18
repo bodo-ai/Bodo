@@ -3412,6 +3412,34 @@ def overload_index_is_montonic_decreasing(I):
         return impl
 
 
+@overload_method(NumericIndexType, "duplicated", inline="always", no_unliteral=True)
+@overload_method(DatetimeIndexType, "duplicated", inline="always", no_unliteral=True)
+@overload_method(TimedeltaIndexType, "duplicated", inline="always", no_unliteral=True)
+@overload_method(StringIndexType, "duplicated", inline="always", no_unliteral=True)
+@overload_method(PeriodIndexType, "duplicated", inline="always", no_unliteral=True)
+@overload_method(CategoricalIndexType, "duplicated", inline="always", no_unliteral=True)
+@overload_method(BinaryIndexType, "duplicated", inline="always", no_unliteral=True)
+@overload_method(RangeIndexType, "duplicated", inline="always", no_unliteral=True)
+def overload_index_duplicated(I, keep="first"):
+    """
+    Implementation of Index.duplicated() for all supported index types.
+    """
+
+    if isinstance(I, RangeIndexType):
+
+        def impl(I, keep="first"):  # pragma: no cover
+            return np.zeros(len(I), np.bool_)
+
+        return impl
+
+    def impl(I, keep="first"):  # pragma: no cover
+        arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+        out_arr = bodo.libs.array_kernels.duplicated_array(arr)
+        return out_arr
+
+    return impl
+
+
 @overload_method(RangeIndexType, "drop_duplicates", no_unliteral=True, inline="always")
 @overload_method(
     NumericIndexType, "drop_duplicates", no_unliteral=True, inline="always"
@@ -3919,7 +3947,7 @@ def heter_index_get_name(i):
 @overload_attribute(CategoricalIndexType, "nbytes")
 @overload_attribute(PeriodIndexType, "nbytes")
 def overload_nbytes(I):
-    """ Add support for Index.nbytes by computing underlying arrays nbytes """
+    """Add support for Index.nbytes by computing underlying arrays nbytes"""
     # Note: Pandas have a different underlying data structure
     # Hence, we get different number from Pandas RangeIndex.nbytes
     if isinstance(I, RangeIndexType):
@@ -4027,7 +4055,7 @@ def overload_heter_index_getitem(I, ind):  # pragma: no cover
 @lower_constant(DatetimeIndexType)
 @lower_constant(TimedeltaIndexType)
 def lower_constant_time_index(context, builder, ty, pyval):
-    """ Constant lowering for DatetimeIndexType and TimedeltaIndexType. """
+    """Constant lowering for DatetimeIndexType and TimedeltaIndexType."""
     data = context.get_constant_generic(
         builder, types.Array(types.int64, 1, "C"), pyval.values.view(np.int64)
     )
@@ -4041,7 +4069,7 @@ def lower_constant_time_index(context, builder, ty, pyval):
 
 @lower_constant(PeriodIndexType)
 def lower_constant_period_index(context, builder, ty, pyval):
-    """ Constant lowering for PeriodIndexType. """
+    """Constant lowering for PeriodIndexType."""
     data = context.get_constant_generic(
         builder,
         bodo.IntegerArrayType(types.int64),
@@ -4056,7 +4084,7 @@ def lower_constant_period_index(context, builder, ty, pyval):
 
 @lower_constant(NumericIndexType)
 def lower_constant_numeric_index(context, builder, ty, pyval):
-    """ Constant lowering for NumericIndexType. """
+    """Constant lowering for NumericIndexType."""
 
     # make sure the type is one of the numeric ones
     assert isinstance(ty.dtype, (types.Integer, types.Float, types.Boolean))

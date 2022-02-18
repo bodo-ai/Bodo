@@ -793,3 +793,26 @@ def test_empty_series_first_last():
 
     check_func(impl_first, (empty_ts,))
     check_func(impl_last, (empty_ts,))
+
+
+@pytest.mark.parametrize(
+    "S_val",
+    [
+        pd.Series([1, 2, 1, 3, 6, 4, 2, 3, 5, 1, 9]),
+        pd.Series(["a", "b", "c", "a", "b", "d", "e", "c"]),
+        pd.Series(
+            ["4 h", "1 h", "1 h", "2 h", "2 h", "3 h", "5 h"], dtype="timedelta64[ns]"
+        ),
+        pd.Series(["a", None, "c", "a", None, "d", None, "c"]),
+    ],
+)
+# TODO[BE-266]: add memory_leak_check
+def test_series_duplicated(S_val):
+    """
+    Tests for Series.duplicated()
+    """
+
+    def test_impl(S):
+        return S.duplicated()
+
+    check_func(test_impl, (S_val,), sort_output=True, reset_index=True)

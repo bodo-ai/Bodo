@@ -714,9 +714,9 @@ def overload_series_kurt(S, axis=None, skipna=True, level=None, numeric_only=Non
                 val = np.float64(A[i])
                 count_val = 1
             first_moment += val
-            second_moment += val ** 2
-            third_moment += val ** 3
-            fourth_moment += val ** 4
+            second_moment += val**2
+            third_moment += val**3
+            fourth_moment += val**4
             count += count_val
         res = bodo.hiframes.series_kernels.compute_kurt(
             first_moment, second_moment, third_moment, fourth_moment, count
@@ -764,8 +764,8 @@ def overload_series_skew(S, axis=None, skipna=True, level=None, numeric_only=Non
                 val = np.float64(A[i])
                 count_val = 1
             first_moment += val
-            second_moment += val ** 2
-            third_moment += val ** 3
+            second_moment += val**2
+            third_moment += val**3
             count += count_val
         res = bodo.hiframes.series_kernels.compute_skew(
             first_moment, second_moment, third_moment, count
@@ -1060,8 +1060,8 @@ def overload_series_corr(S, other, method="pearson", min_periods=None):
         mb = other.sum()
         # TODO: check aligned nans, (S.notna() != other.notna()).any()
         a = n * ((S * other).sum()) - ma * mb
-        b1 = n * (S ** 2).sum() - ma ** 2
-        b2 = n * (other ** 2).sum() - mb ** 2
+        b1 = n * (S**2).sum() - ma**2
+        b2 = n * (other**2).sum() - mb**2
         # TODO: np.clip
         # TODO: np.true_divide?
         return a / np.sqrt(b1 * b2)
@@ -1340,7 +1340,7 @@ def overload_series_is_monotonic_decreasing(S):
 
 @overload_attribute(SeriesType, "nbytes", inline="always")
 def overload_series_nbytes(S):
-    """ Support Series.nbytes. It returns nbytes for data only (without index) """
+    """Support Series.nbytes. It returns nbytes for data only (without index)"""
     return lambda S: bodo.hiframes.pd_series_ext.get_series_data(
         S
     ).nbytes  # pragma: no cover
@@ -5003,6 +5003,24 @@ def overload_np_select(condlist, choicelist, default=0):
     return impl
 
 
+@overload_method(SeriesType, "duplicated", inline="always", no_unliteral=True)
+def overload_series_duplicated(S, keep="first"):
+    """
+    Support for Series.duplicated()
+    """
+
+    def impl(S, keep="first"):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        index_arr = bodo.utils.conversion.index_to_array(index)
+        out_arr, out_index_arr = bodo.libs.array_kernels.duplicated((arr,), index_arr)
+        out_index = bodo.utils.conversion.index_from_array(out_index_arr)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
+
+    return impl
+
+
 @overload_method(SeriesType, "drop_duplicates", inline="always", no_unliteral=True)
 def overload_series_drop_duplicates(S, subset=None, keep="first", inplace=False):
     # TODO: support inplace
@@ -5138,7 +5156,7 @@ def overload_series_repeat(S, repeats, axis=None):
 
 @overload_method(SeriesType, "to_dict", no_unliteral=True)
 def overload_to_dict(S, into=None):
-    """ Support Series.to_dict(). """
+    """Support Series.to_dict()."""
 
     def impl(S, into=None):  # pragma: no cover
         # default case, use a regular dict:
