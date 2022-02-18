@@ -932,6 +932,7 @@ def get_parquet_dataset(
     storage_options=None,
     read_categories=False,
     is_parallel=False,  # only used with get_row_counts=True
+    tot_rows_to_read=None,
 ):
     """get ParquetDataset object for 'fpath' and set the number of total rows as an
     attribute. Also, sets the number of rows per file as an attribute of
@@ -942,6 +943,9 @@ def get_parquet_dataset(
     'get_row_counts': This is only true at runtime, and indicates that we need
     to get the number of rows of each piece in the parquet dataset.
     'is_parallel' : True if reading in parallel
+    'tot_rows_to_read' : total number of rows to read from dataset. Used at runtime
+    for example if doing df.head(tot_rows_to_read) where df is the output of
+    read_parquet()
     """
 
     # NOTE: This function obtains the metadata for a parquet dataset and works
@@ -1128,6 +1132,10 @@ def get_parquet_dataset(
         ev_bcast.finalize()
 
     dataset._bodo_total_rows = 0
+    if get_row_counts and tot_rows_to_read == 0:
+        get_row_counts = validate_schema = False
+        for p in dataset.pieces:
+            p._bodo_num_rows = 0
     if get_row_counts or validate_schema:
         # getting row counts and validating schema requires reading
         # the file metadata from the parquet files and is very expensive

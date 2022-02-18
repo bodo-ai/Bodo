@@ -192,9 +192,9 @@ class ParquetReader : public ArrowDataframeReader {
         // ds = bodo.io.parquet_pio.get_parquet_dataset(path, true, filters,
         // storage_options)
         PyObject* ds = PyObject_CallMethod(
-            pq_mod, "get_parquet_dataset", "OOOOOOO", path, Py_True,
+            pq_mod, "get_parquet_dataset", "OOOOOOOL", path, Py_True,
             dnf_filters, expr_filters, storage_options, Py_False,
-            PyBool_FromLong(parallel));
+            PyBool_FromLong(parallel), tot_rows_to_read);
         Py_DECREF(path);
         Py_DECREF(dnf_filters);
         Py_DECREF(pq_mod);
