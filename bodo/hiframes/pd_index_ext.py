@@ -4208,7 +4208,6 @@ index_unsupported_methods = [
     "drop",
     "droplevel",
     "dropna",
-    "duplicated",
     "equals",
     "factorize",
     "fillna",
