@@ -200,6 +200,13 @@ def unbox_dataframe(typ, val, c):
             out_arr_list.size = n_arrs
             setattr(table, f"block_{blk}", out_arr_list.value)
 
+        # Set the length of the table. This should be valid even
+        # with 0 columns.
+        n_obj = c.pyapi.call_method(val, "__len__", ())
+        length = c.pyapi.long_as_longlong(n_obj)
+        c.pyapi.decref(n_obj)
+
+        table.len = length
         data_tup = c.context.make_tuple(
             c.builder, types.Tuple([typ.table_type]), [table._getvalue()]
         )
