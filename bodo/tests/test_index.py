@@ -1600,10 +1600,12 @@ def test_index_nbytes(index, memory_leak_check):
     def impl(idx):
         return idx.nbytes
 
-    # RangeIndexType has three int64 values, so the total is 24
+    # RangeIndexType has three int64 values, so the total is 24 bytes on
+    # each rank.
     if isinstance(index, pd.RangeIndex):
         py_out = 24
-        check_func(impl, (index,), py_output=py_out)
+        check_func(impl, (index,), py_output=py_out, dist_test=False)
+        check_func(impl, (index,), py_output=py_out * bodo.get_size(), only_1D=True)
     # String/BinaryIndex has three 3 underlying arrays (data, offsets, null_bit_map)
 
     # In the String example: 15 characters,
