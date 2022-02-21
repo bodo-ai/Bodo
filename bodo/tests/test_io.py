@@ -1257,6 +1257,20 @@ def test_partition_cols(memory_leak_check):
         bodo.barrier()
 
 
+def test_read_parquet_glob(datapath, memory_leak_check):
+    def test_impl(filename):
+        df = pd.read_parquet(filename)
+        return df
+
+    filename = datapath("int_nulls_multi.pq")
+    pyout = pd.read_parquet(filename)
+    # add glob patterns (only for Bodo, pandas doesn't support it)
+    glob_pattern_1 = filename + "/part*.parquet"
+    check_func(test_impl, (glob_pattern_1,), py_output=pyout, check_dtype=False)
+    glob_pattern_2 = filename + "/part*-3af07a60-*ab59*.parquet"
+    check_func(test_impl, (glob_pattern_2,), py_output=pyout, check_dtype=False)
+
+
 @pytest.mark.slow
 def test_read_dask_parquet(datapath, memory_leak_check):
     def test_impl(filename):

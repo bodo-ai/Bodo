@@ -147,6 +147,15 @@ def test_read_parquet_invalid_path():
         bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
 
 
+def test_read_parquet_invalid_path_glob():
+    def test_impl():
+        df = pd.read_parquet("I*dont*exist")
+        return df
+
+    with pytest.raises(BodoError, match="No files found matching glob pattern"):
+        bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
+
+
 def test_read_csv_incorrect_s3_credentials(memory_leak_check):
     """test error raise when AWS credentials are incorrect for csv
     file path passed by another bodo.jit function"""
