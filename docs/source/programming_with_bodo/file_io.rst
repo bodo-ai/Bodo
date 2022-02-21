@@ -45,8 +45,8 @@ Parquet
 
 Parquet is a commonly used file format in analytics due to its efficient
 columnar storage. Bodo supports the standard pandas API for reading
-Parquet: ``pd.read_parquet(path)``, where path can be a parquet file or a directory with multiple parquet files
-(all are part of the same dataframe)::
+Parquet: ``pd.read_parquet(path)``, where path can be a parquet file, a list of files,
+a directory with multiple parquet files (all are part of the same dataframe), or a glob pattern::
 
     import pandas as pd
     import bodo

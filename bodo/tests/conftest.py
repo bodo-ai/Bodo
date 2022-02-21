@@ -212,21 +212,18 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
                 os.remove(file_name + ".gz")
                 os.remove(file_name + ".bz2")
 
-        prefix = datapath("example_single.json")
-        pat = prefix + "/*.json"
-        example_single_parts = glob.glob(pat)
-        for path in example_single_parts:
-            fname = path[len(prefix) + 1 :]
-            fname = "example_single.json/{}".format(fname)
-            s3.meta.client.upload_file(path, bucket_name, fname)
+        def upload_dir(prefix, dst_dirname, extension):
+            """ upload all files with same given extension in a directory to s3 """
+            pat = prefix + f"/*.{extension}"
+            for path in glob.glob(pat):
+                fname = path[len(prefix) + 1 :]
+                fname = f"{dst_dirname}/{fname}"
+                s3.meta.client.upload_file(path, bucket_name, fname)
 
-        prefix = datapath("example_multi.json")
-        pat = prefix + "/*.json"
-        example_multi_parts = glob.glob(pat)
-        for path in example_multi_parts:
-            fname = path[len(prefix) + 1 :]
-            fname = "example_multi.json/{}".format(fname)
-            s3.meta.client.upload_file(path, bucket_name, fname)
+        upload_dir(datapath("example_single.json"), "example_single.json", "json")
+        upload_dir(datapath("example_multi.json"), "example_multi.json", "json")
+        upload_dir(datapath("int_nulls_multi.pq"), "int_nulls_multi.pq", "parquet")
+        upload_dir(datapath("example multi.csv"), "example multi.csv", "csv")
 
         path = datapath("example_deltalake")
         for root, dirs, files in os.walk(path):
@@ -236,14 +233,6 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
                     "example_deltalake", os.path.relpath(full_path, path)
                 )
                 s3.meta.client.upload_file(full_path, bucket_name, rel_path)
-
-        prefix = datapath("example multi.csv")
-        pat = prefix + "/*.csv"
-        example_multi_parts_csv = glob.glob(pat)
-        for path in example_multi_parts_csv:
-            fname = path[len(prefix) + 1 :]
-            fname = "example multi.csv/{}".format(fname)
-            s3.meta.client.upload_file(path, bucket_name, fname)
 
     bodo.barrier()
     return bucket_name

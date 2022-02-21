@@ -1053,6 +1053,28 @@ def get_parquet_dataset(
         else:
             return getfs()
 
+    def glob(protocol, fs, path):
+        """ Return a possibly-empty list of path names that match glob pattern
+        given by path """
+        if not protocol and fs is None:
+            from fsspec.implementations.local import LocalFileSystem
+
+            fs = LocalFileSystem()
+        if isinstance(fs, pyarrow.fs.FileSystem):
+            from fsspec.implementations.arrow import ArrowFSWrapper
+
+            fs = ArrowFSWrapper(fs)
+        try:
+            files = fs.glob(path)
+            if protocol == "s3":
+                # we need the s3:// prefix for later code to work correctly
+                files = ["s3://" + f for f in files if not f.startswith("s3://")]
+        except:  # pragma: no cover
+            raise BodoError(f"glob pattern expansion not supported for {protocol}")
+        if len(files) == 0:
+            raise BodoError("No files found matching glob pattern")
+        return files
+
     validate_schema = False
     if get_row_counts:
         # Getting row counts and schema validation is going to be
@@ -1082,6 +1104,8 @@ def get_parquet_dataset(
             pa_default_io_thread_count = pa.io_thread_count()
             pa.set_io_thread_count(nthreads)
 
+            if "*" in fpath:
+                fpath = glob(protocol, getfs(), fpath)
             if protocol == "s3":
                 # If there are issues accessing the s3 path (like wrong credentials)
                 # fsspec will suppress the error and ParquetDataset() will ultimately

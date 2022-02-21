@@ -169,7 +169,8 @@ def get_hdfs_fs(path):  # pragma: no cover
     # need this for pq.ParquetDataset
     # because the new HadoopFileSystem is not a subclass of
     # pyarrow.filesystem.FileSystem which causes an error
-    from pyarrow.hdfs import HadoopFileSystem as HdFS
+    # use fsspec's wrapper over pyarrow.hdfs.HadoopFileSystem for glob() support
+    from fsspec.implementations.hdfs import PyArrowHDFS as HdFS
 
     options = urlparse(path)
     if options.scheme in ("abfs", "abfss"):

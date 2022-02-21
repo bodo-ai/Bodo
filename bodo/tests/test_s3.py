@@ -887,3 +887,17 @@ def test_read_parquet_from_s3_deltalake(minio_server, s3_bucket):
 
     py_output = pd.DataFrame({"value": [1, 1, 2, 3, 2, 3]})
     check_func(impl, (), py_output=py_output, check_dtype=False)
+
+
+def test_read_parquet_glob_s3(minio_server, s3_bucket, datapath, memory_leak_check):
+    def test_impl(filename):
+        df = pd.read_parquet(filename)
+        return df
+
+    filename = "s3://bodo-test/int_nulls_multi.pq"
+    pyout = pd.read_parquet(datapath("int_nulls_multi.pq"))
+    # add glob patterns (only for Bodo, pandas doesn't support it)
+    glob_pattern_1 = filename + "/part*.parquet"
+    check_func(test_impl, (glob_pattern_1,), py_output=pyout, check_dtype=False)
+    glob_pattern_2 = filename + "/part*-3af07a60-*ab59*.parquet"
+    check_func(test_impl, (glob_pattern_2,), py_output=pyout, check_dtype=False)
