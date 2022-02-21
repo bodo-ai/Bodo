@@ -295,9 +295,27 @@ const char* get_c_str(std::string* s) {
     return s->c_str();
 }
 
-double str_to_float64(std::string* str) { return std::stod(*str); }
+double str_to_float64(std::string* str) {
+    try {
+        return std::stod(*str);
+    } catch(const std::invalid_argument&) {
+        PyErr_SetString(PyExc_RuntimeError, "invalid string to float conversion");
+    } catch(const std::out_of_range&) {
+        PyErr_SetString(PyExc_RuntimeError, "out of range string to float conversion");
+    }
+    return nan("");
+}
 
-float str_to_float32(std::string* str) { return std::stof(*str); }
+float str_to_float32(std::string* str) {
+    try {
+        return std::stof(*str);
+    } catch(const std::invalid_argument&) {
+        PyErr_SetString(PyExc_RuntimeError, "invalid string to float conversion");
+    } catch(const std::out_of_range&) {
+        PyErr_SetString(PyExc_RuntimeError, "out of range string to float conversion");
+    }
+    return nanf("");
+}
 
 int64_t get_str_len(std::string* str) {
     // std::cout << "str len called: " << *str << " " <<
@@ -411,20 +429,18 @@ int64_t str_to_int64(char* data, int64_t length) {
     try {
         return boost::lexical_cast<int64_t>(data, (std::size_t)length);
     } catch (const boost::bad_lexical_cast&) {
-        std::cerr << "invalid string to int conversion" << std::endl;
+        PyErr_SetString(PyExc_RuntimeError, "invalid string to int conversion");
         return -1;
     }
-    return -1;
 }
 
 uint64_t str_to_uint64(char* data, int64_t length) {
     try {
         return boost::lexical_cast<uint64_t>(data, (std::size_t)length);
     } catch (const boost::bad_lexical_cast&) {
-        std::cerr << "invalid string to int conversion" << std::endl;
+        PyErr_SetString(PyExc_RuntimeError, "invalid string to int conversion");
         return -1;
     }
-    return -1;
 }
 
 int64_t str_to_int64_base(char* data, int64_t length, int64_t base) {
@@ -438,8 +454,7 @@ int64_t str_to_int64_base(char* data, int64_t length, int64_t base) {
     errno = 0;
     char* buffer = (char*)malloc(length + 1);
     if (!buffer) {
-        std::cerr << "Failed to allocate space for string to int conversion"
-                  << std::endl;
+        PyErr_SetString(PyExc_RuntimeError, "Failed to allocate space for string to int conversion");
         return -1;
     }
     buffer[length] = '\0';
@@ -448,7 +463,7 @@ int64_t str_to_int64_base(char* data, int64_t length, int64_t base) {
     l = strtol(buffer, &end, base);
     if (errno || *buffer == '\0' || *end != '\0') {
         free(buffer);
-        std::cerr << "invalid string to int conversion" << std::endl;
+        PyErr_SetString(PyExc_RuntimeError, "invalid string to int conversion");
         return -1;
     }
     free(buffer);

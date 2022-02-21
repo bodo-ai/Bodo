@@ -571,14 +571,20 @@ def overload_format(value, format_spec=""):
 def cast_str_to_float64(context, builder, fromty, toty, val):
     fnty = lir.FunctionType(lir.DoubleType(), [lir.IntType(8).as_pointer()])
     fn = cgutils.get_or_insert_function(builder.module, fnty, name="str_to_float64")
-    return builder.call(fn, (val,))
+    res = builder.call(fn, (val,))
+    # Check if there was an error in the C++ code. If so, raise it.
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return res
 
 
 @lower_cast(StdStringType, types.float32)
 def cast_str_to_float32(context, builder, fromty, toty, val):
     fnty = lir.FunctionType(lir.FloatType(), [lir.IntType(8).as_pointer()])
     fn = cgutils.get_or_insert_function(builder.module, fnty, name="str_to_float32")
-    return builder.call(fn, (val,))
+    res = builder.call(fn, (val,))
+    # Check if there was an error in the C++ code. If so, raise it.
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return res
 
 
 # XXX handle unicode until Numba supports float(str)
@@ -606,7 +612,10 @@ def cast_unicode_str_to_int64(context, builder, fromty, toty, val):
         lir.IntType(toty.bitwidth), [lir.IntType(8).as_pointer(), lir.IntType(64)]
     )
     fn = cgutils.get_or_insert_function(builder.module, fnty, name="str_to_int64")
-    return builder.call(fn, (uni_str.data, uni_str.length))
+    res = builder.call(fn, (uni_str.data, uni_str.length))
+    # Check if there was an error in the C++ code. If so, raise it.
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return res
 
 
 @lower_cast(string_type, types.uint64)
@@ -620,7 +629,10 @@ def cast_unicode_str_to_uint64(context, builder, fromty, toty, val):
         lir.IntType(toty.bitwidth), [lir.IntType(8).as_pointer(), lir.IntType(64)]
     )
     fn = cgutils.get_or_insert_function(builder.module, fnty, name="str_to_uint64")
-    return builder.call(fn, (uni_str.data, uni_str.length))
+    res = builder.call(fn, (uni_str.data, uni_str.length))
+    # Check if there was an error in the C++ code. If so, raise it.
+    bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+    return res
 
 
 @infer_getattr
