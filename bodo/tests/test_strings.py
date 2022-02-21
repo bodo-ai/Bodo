@@ -844,6 +844,22 @@ def test_format_args_kwargs(memory_leak_check):
     check_func(test_impl, ())
 
 
+@pytest.mark.parametrize(
+    "impl",
+    [
+        lambda x: np.int64(x),
+        lambda x: np.uint32(x),
+        lambda x: np.float32(x),
+        lambda x: np.float64(x),
+    ],
+)
+def test_invalid_runtime_conversion(impl, memory_leak_check):
+    str_val = "a"
+    error_msg = "invalid string to .* conversion"
+    with pytest.raises(RuntimeError, match=error_msg):
+        bodo.jit(impl)(str_val)
+
+
 @pytest.mark.slow
 class TestString(unittest.TestCase):
     def test_pass_return(self):
