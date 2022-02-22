@@ -1231,7 +1231,7 @@ def get_parquet_dataset(
                                 p.path, partitioning=ds.partitioning(flavor="hive")
                             )
                             .scanner(
-                                filter=expr_filters, use_threads=True, use_async=True
+                                filter=expr_filters, use_threads=True
                             )
                             .count_rows()
                         )
@@ -1293,7 +1293,6 @@ def get_parquet_dataset(
                     schema=dataset_.schema,
                     filter=expr_filters,
                     use_threads=True,
-                    use_async=True,
                 ).count_rows()
                 ds_scan_time += time.time() - t0
                 piece._bodo_num_rows = row_count
@@ -1461,10 +1460,9 @@ def get_scanner_batches(
     )
     col_names = dataset.schema.names
     selected_names = [col_names[field_num] for field_num in selected_fields]
-    # TODO: use threads and async only for s3?
-    # XXX impact of async=True seems minimal, even for s3
+    # TODO: use threads only for s3?
     return dataset.scanner(
-        columns=selected_names, filter=expr_filters, use_threads=True, use_async=True
+        columns=selected_names, filter=expr_filters, use_threads=True
     ).to_reader()
 
 
