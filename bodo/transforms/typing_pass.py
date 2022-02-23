@@ -232,6 +232,19 @@ class BodoTypeInference(PartialTypeInference):
             or return_type is None
             or state.func_ir.generator_info
         ):
+            # clear _failed_cache of Bodo JIT calls to make them recompile and capture
+            # the errors accurately.
+            # If a JIT call fails during partial typing, the error is raised as a
+            # BodoException to allow type inference iteration. But we need BodoError to
+            # be raised for clear error messages.
+            # see test_func_nested_jit_error
+            # https://bodo.atlassian.net/browse/BE-2213
+            for typ in state.typemap.values():
+                if isinstance(typ, types.Dispatcher) and issubclass(
+                    typ.dispatcher._compiler.pipeline_class, bodo.compiler.BodoCompiler
+                ):
+                    typ.dispatcher._compiler._failed_cache.clear()
+
             # run regular type inference again with _raise_errors=True to raise errors
             NopythonTypeInference().run_pass(state)
         else:
