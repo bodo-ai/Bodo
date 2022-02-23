@@ -3022,8 +3022,9 @@ def _parse_merge_cond(on_str, left_columns, left_data, right_columns, right_data
         for col in col_list:
             clean_col = clean_func(col)
             escape_key = (name, clean_col)
+            # TODO: test this error handling
             if escape_key in col_map:
-                raise BodoException(
+                raise_bodo_error(
                     f"pd.merge(): {name} table contains two columns that are escaped to the same Python identifier '{col}' and '{col_map[clean_col]}' Please rename one of these columns. To avoid this issue, please use names that are valid Python identifiers."
                 )
             col_map[escape_key] = col

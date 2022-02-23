@@ -749,6 +749,22 @@ def test_func_non_jit_error(memory_leak_check):
         bodo.jit(test_impl)()
 
 
+def test_func_nested_jit_error(memory_leak_check):
+    """make sure proper error is thrown when calling a JIT function with errors"""
+
+    @bodo.jit
+    def f(df):
+        return df["C"].min()
+
+    @bodo.jit
+    def g():
+        df = pd.DataFrame({"A": [1, 2, 3]})
+        return f(df)
+
+    with pytest.raises(BodoError, match=r"does not include column C"):
+        g()
+
+
 # TODO: fix leak and add memory_leak_check
 def test_udf_nest_jit_convert():
     """make sure nested JIT calls inside UDFs are converted to sequential properly.
