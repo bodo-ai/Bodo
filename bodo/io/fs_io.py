@@ -29,9 +29,9 @@ def fsspec_arrowfswrapper__open(self, path, mode="rb", block_size=None, **kwargs
         try:  # Bodo change: try to open the file for random access first
             # We need random access to read parquet file metadata
             stream = self.fs.open_input_file(path)
-        except:  #pragma: no cover
+        except:  # pragma: no cover
             stream = self.fs.open_input_stream(path)
-    elif mode == "wb":  #pragma: no cover
+    elif mode == "wb":  # pragma: no cover
         stream = self.fs.open_output_stream(path)
     else:
         raise ValueError(f"unsupported mode for Arrow filesystem: {mode!r}")
@@ -158,19 +158,10 @@ def get_s3_fs_from_path(path, parallel=False, storage_options=None):
 # coverage once hdfs tests are included in CI
 def get_hdfs_fs(path):  # pragma: no cover
     """
-    initialize pyarrow.hdfs.HadoopFileSystem from path
-    This function can be removed once arrow's new HadoopFileSystem is a subclass
-    of pyarrow.filesystem.FileSystem, and use the hdfs returned from
-    hdfs_list_dir_fnames.
-    https://issues.apache.org/jira/browse/ARROW-7957
+    initialize pyarrow.fs.HadoopFileSystem from path
     """
 
-    # this HadoopFileSystem is the deprecated file system of pyarrow
-    # need this for pq.ParquetDataset
-    # because the new HadoopFileSystem is not a subclass of
-    # pyarrow.filesystem.FileSystem which causes an error
-    # use fsspec's wrapper over pyarrow.hdfs.HadoopFileSystem for glob() support
-    from fsspec.implementations.hdfs import PyArrowHDFS as HdFS
+    from pyarrow.fs import HadoopFileSystem as HdFS
 
     options = urlparse(path)
     if options.scheme in ("abfs", "abfss"):

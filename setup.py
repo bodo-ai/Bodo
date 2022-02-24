@@ -481,6 +481,23 @@ ext_pyfs = Extension(
 pyx_builtins += [os.path.join("bodo", "io", "pyfs.pyx")]
 
 
+ext_hdfs_pyarrow = Extension(
+    name="bodo.io._hdfs",
+    sources=[
+        "bodo/io/_hdfs.pyx",
+    ],
+    libraries=["arrow", "arrow_python"],
+    include_dirs=np_compile_args["include_dirs"] + ind,
+    define_macros=[],
+    extra_compile_args=eca,
+    extra_link_args=ela,
+    library_dirs=lid,
+    language="c++",
+)
+# the bodo/io/_hdfs.pyx file is always part of Bodo (not generated during build)
+pyx_builtins += [os.path.join("bodo", "io", "_hdfs.pyx")]
+
+
 ext_tracing = Extension(
     name="bodo.utils.tracing",
     sources=[
@@ -588,7 +605,7 @@ setup(
     cmdclass=versioneer.get_cmdclass(),
     ext_modules=_ext_mods
     + cythonize(
-        _cython_ext_mods + [ext_pyfs, ext_tracing],
+        _cython_ext_mods + [ext_pyfs, ext_hdfs_pyarrow, ext_tracing],
         compiler_directives={"language_level": "3"},
         compile_time_env=dict(BODO_DEV_BUILD=development_mode),
     ),

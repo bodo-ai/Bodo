@@ -23,9 +23,7 @@ def test_read_parquet_gcs():
 
 def test_read_parquet_gcs_filters():
     """
-    Verify that filters work correctly with gcs. Filter pushdown
-    doesn't work yet and we need to ensure the code doesn't eliminate
-    the filters from the code.
+    Verify that filters work correctly with gcs.
     """
 
     def impl(pq_file):
