@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -816,3 +818,36 @@ def test_series_duplicated(S_val):
         return S.duplicated()
 
     check_func(test_impl, (S_val,), sort_output=True, reset_index=True)
+
+
+def test_series_rename_axis():
+    """
+    Tests Series.rename_axis() support.
+    """
+
+    def test_impl(S, name):
+        return S.rename_axis(name)
+
+    s = pd.Series(np.arange(100))
+    check_func(
+        test_impl,
+        (
+            s,
+            "name",
+        ),
+    )
+    check_func(
+        test_impl,
+        (
+            s,
+            10,
+        ),
+    )
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "Series.rename_axis(): 'mapper' is required and must be a scalar type."
+        ),
+    ):
+        bodo.jit(test_impl)(s, ["a", "b"])

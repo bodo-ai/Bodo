@@ -3779,6 +3779,45 @@ Reindexing / Selection / Label manipulation
       99    99
       Name: a, Length: 100, dtype: int64
 
+``pd.Series.rename_axis``
+"""""""""""""""""""""""""
+
+* :meth:`pandas.Series.rename_axis` ``(mapper=None, index=None, columns=None, axis=None, copy=True, inplace=False)``
+
+    `Supported arguments`:
+
+  .. list-table::
+    :widths: 25 35
+    :header-rows: 1
+
+    * - argument
+      - datatypes
+    * - ``mapper``
+      - - scalar
+
+  `Example Usage`:
+
+    .. code-block:: ipython3
+
+      >>> @bodo.jit
+      ... def f(S):
+      ...     return S.rename_axis("a")
+      >>> S = pd.Series(np.arange(100))
+      >>> f(S)
+      a
+      0      0
+      1      1
+      2      2
+      3      3
+      4      4
+            ..
+      95    95
+      96    96
+      97    97
+      98    98
+      99    99
+      Length: 100, dtype: int64
+
 ``pd.Series.reset_index``
 """""""""""""""""""""""""""""""
 

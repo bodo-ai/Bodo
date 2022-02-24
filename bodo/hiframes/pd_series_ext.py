@@ -1325,7 +1325,6 @@ series_unsupported_methods = (
     "droplevel",
     "reindex",
     "reindex_like",
-    "rename_axis",
     "sample",
     "set_axis",
     "truncate",
