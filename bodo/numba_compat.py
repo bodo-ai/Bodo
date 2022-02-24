@@ -2267,6 +2267,7 @@ def get_stmt_writes(stmt, func_ir):
             ),
             ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
             ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),
+            ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"),
             ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
         ):
             writes.add(stmt.value.args[0].name)

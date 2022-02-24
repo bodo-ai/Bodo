@@ -1366,24 +1366,58 @@ class DistributedPass:
         if fdef == (
             "str_arr_item_to_numeric",
             "bodo.libs.str_arr_ext",
-        ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
-            arr = rhs.args[0]
-            index_var = self._fix_index_var(rhs.args[1])
-            start_var, nodes = self._get_parallel_access_start_var(
-                arr, equiv_set, index_var, avail_vars
-            )
-            sub_nodes = self._get_ind_sub(index_var, start_var)
-            out = nodes + sub_nodes
-            rhs.args[1] = sub_nodes[-1].target
+        ):
+            out = []
+            # output array
+            if self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
+                arr = rhs.args[0]
+                index_var = self._fix_index_var(rhs.args[1])
+                start_var, nodes = self._get_parallel_access_start_var(
+                    arr, equiv_set, index_var, avail_vars
+                )
+                sub_nodes = self._get_ind_sub(index_var, start_var)
+                out += nodes + sub_nodes
+                rhs.args[1] = sub_nodes[-1].target
             # input string array
-            arr = rhs.args[2]
-            index_var = self._fix_index_var(rhs.args[3])
-            start_var, nodes = self._get_parallel_access_start_var(
-                arr, equiv_set, index_var, avail_vars
-            )
-            sub_nodes = self._get_ind_sub(index_var, start_var)
-            out += nodes + sub_nodes
-            rhs.args[3] = sub_nodes[-1].target
+            if self._dist_arr_needs_adjust(rhs.args[2].name, rhs.args[3].name):
+                arr = rhs.args[2]
+                index_var = self._fix_index_var(rhs.args[3])
+                start_var, nodes = self._get_parallel_access_start_var(
+                    arr, equiv_set, index_var, avail_vars
+                )
+                sub_nodes = self._get_ind_sub(index_var, start_var)
+                out += nodes + sub_nodes
+                rhs.args[3] = sub_nodes[-1].target
+            out.append(assign)
+            return out
+
+        if fdef == (
+            "get_str_arr_item_copy",
+            "bodo.libs.str_arr_ext",
+        ):
+            out = []
+            # output string array
+            if self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
+                arr = rhs.args[0]
+                index_var = self._fix_index_var(rhs.args[1])
+                start_var, nodes = self._get_parallel_access_start_var(
+                    arr, equiv_set, index_var, avail_vars
+                )
+                sub_nodes = self._get_ind_sub(index_var, start_var)
+                out += nodes + sub_nodes
+                rhs.args[1] = sub_nodes[-1].target
+
+            # input string array
+            if self._dist_arr_needs_adjust(rhs.args[2].name, rhs.args[3].name):
+                arr = rhs.args[2]
+                index_var = self._fix_index_var(rhs.args[3])
+                start_var, nodes = self._get_parallel_access_start_var(
+                    arr, equiv_set, index_var, avail_vars
+                )
+                sub_nodes = self._get_ind_sub(index_var, start_var)
+                out += nodes + sub_nodes
+                rhs.args[3] = sub_nodes[-1].target
+
             out.append(assign)
             return out
 
@@ -3863,6 +3897,7 @@ class DistributedPass:
                 ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"),
                 ("get_str_arr_item_length", "bodo.libs.str_arr_ext"),
                 ("inplace_eq", "bodo.libs.str_arr_ext"),
+                ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"),
                 ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
                 ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
                 ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),

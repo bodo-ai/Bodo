@@ -563,9 +563,11 @@ def getitem_str_offset(typingctx, in_arr_typ, ind_t=None):
     return offset_type(in_arr_typ, ind_t), codegen
 
 
-# TODO: fix this for join
 @intrinsic
 def setitem_str_offset(typingctx, str_arr_typ, ind_t, val_t=None):
+    """set offset value of string array.
+    Equivalent to: get_offsets(str_arr._data)[ind] = val
+    """
     assert str_arr_typ == string_array_type
 
     def codegen(context, builder, sig, args):
@@ -782,6 +784,48 @@ def get_str_arr_item_length(A, i):  # pragma: no cover
 @numba.njit(no_cpython_wrapper=True)
 def get_str_arr_item_ptr(A, i):  # pragma: no cover
     return get_data_ptr_ind(A, getitem_str_offset(A, i))
+
+
+@numba.njit(no_cpython_wrapper=True)
+def get_str_arr_item_copy(B, j, A, i):  # pragma: no cover
+    """copy string from A[i] to B[j] without creating intermediate string value"""
+
+    if j == 0:
+        setitem_str_offset(B, 0, 0)
+
+    # get input array offsets
+    in_start_offset = getitem_str_offset(A, i)
+    in_end_offset = getitem_str_offset(A, i + 1)
+    val_len = in_end_offset - in_start_offset
+
+    # set output offset
+    out_start_offset = getitem_str_offset(B, j)
+    out_end_offset = out_start_offset + val_len
+    setitem_str_offset(B, j + 1, out_end_offset)
+
+    # set NA
+    if str_arr_is_na(A, i):
+        str_arr_set_na(B, j)
+    else:
+        str_arr_set_not_na(B, j)
+
+    # copy data
+    if val_len != 0:
+        # ensure required space in output array
+        data_arr = B._data
+        bodo.libs.array_item_arr_ext.ensure_data_capacity(
+            data_arr, np.int64(out_start_offset), np.int64(out_end_offset)
+        )
+        out_data_ptr = get_data_ptr(B).data
+        in_data_ptr = get_data_ptr(A).data
+        memcpy_region(
+            out_data_ptr,
+            out_start_offset,
+            in_data_ptr,
+            in_start_offset,
+            val_len,
+            1,
+        )
 
 
 @numba.njit(no_cpython_wrapper=True)
@@ -2046,7 +2090,7 @@ def str_arr_setitem(A, idx, val):
                             out_arr[i] = ""
                             str_arr_set_na(out_arr, i)
                         else:
-                            out_arr[i] = A[i]  # TODO(ehsan): copy inplace
+                            get_str_arr_item_copy(out_arr, i, A, i)
 
                 move_str_binary_arr_payload(A, out_arr)
 
@@ -2078,7 +2122,7 @@ def str_arr_setitem(A, idx, val):
                             out_arr[i] = ""
                             str_arr_set_na(out_arr, i)
                         else:
-                            out_arr[i] = A[i]  # TODO(ehsan): copy inplace
+                            get_str_arr_item_copy(out_arr, i, A, i)
 
                 move_str_binary_arr_payload(A, out_arr)
 
