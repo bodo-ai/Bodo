@@ -198,6 +198,7 @@ no_side_effect_call_tuples = {
     ("explode_no_index", "array_kernels", "libs", bodo),
     ("get_arr_lens", "array_kernels", "libs", bodo),
     ("str_arr_from_sequence", "str_arr_ext", "libs", bodo),
+    ("get_str_arr_item_length", "str_arr_ext", "libs", bodo),
     ("parse_datetime_str", "pd_timestamp_ext", "hiframes", bodo),
     ("integer_to_dt64", "pd_timestamp_ext", "hiframes", bodo),
     ("dt64_to_integer", "pd_timestamp_ext", "hiframes", bodo),

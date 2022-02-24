@@ -1,12 +1,13 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Test Bodo's string array data type
 """
+import numba
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import SeqTestPipeline, check_func, dist_IR_contains
 from bodo.utils.typing import BodoError
 
 
@@ -462,6 +463,86 @@ def test_astype_str(memory_leak_check):
         return A.astype(str)
 
     check_func(test_impl, (pd.array(["AA", "B"] * 4),))
+
+
+def test_str_copy_inplace(memory_leak_check):
+    """Test inplace string copy optimization across arrays in series pass"""
+
+    # scalar case
+    def impl1(A):
+        B = bodo.libs.str_arr_ext.pre_alloc_string_array(1, -1)
+        B[0] = A[1]
+        return B
+
+    A = np.array(["AA", "B"] * 4, object)
+    j_func = numba.njit(pipeline_class=SeqTestPipeline, parallel=True)(impl1)
+    assert j_func(A) == A[1]
+    fir = j_func.overloads[j_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(fir, "get_str_arr_item_copy")
+
+    # both parallel case
+    def impl2(A):
+        n = len(A)
+        B = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
+        for i in bodo.prange(n):
+            B[i] = A[i]
+        return B
+
+    check_func(impl2, (A,), py_output=A, only_1D=True)
+
+    # output parallel case
+    def impl3(s, n):
+        A = bodo.libs.str_arr_ext.str_arr_from_sequence([s])
+        B = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
+        for i in bodo.prange(n):
+            B[i] = A[0]
+
+        return B
+
+    s = "ABC"
+    n = 6
+    py_out = np.array([s] * n, object)
+    check_func(impl3, (s, n), py_output=py_out, only_1D=True)
+
+    # TODO[BE-2275]: handle sequential access to distributed arrays through internal
+    # functuons properly
+    # # input parallel case
+    # def impl4(A):
+    #     B = bodo.libs.str_arr_ext.pre_alloc_string_array(1, -1)
+    #     B[0] = A[0]
+    #     return B
+
+    # A = np.array([f"A{bodo.get_rank()}", "B"] * 4, object)
+    # assert bodo.jit(distributed=["A"])(impl4)(A)[0] == "A0"
+
+
+def _check_str_item_length(impl):
+    """make sure 'impl' is optimized to use str_item_length"""
+    A = np.array(["AA", "B"] * 4, object)
+    j_func = numba.njit(pipeline_class=SeqTestPipeline, parallel=True)(impl)
+    assert j_func(A) == impl(A)
+    fir = j_func.overloads[j_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(fir, "get_str_arr_item_length")
+
+
+def test_str_length_inplace(memory_leak_check):
+    """Test optimizing len(A[i]) with inplace item length in series pass"""
+
+    def impl1(A):
+        return len(A[0])
+
+    def impl2(A):
+        s = 0
+        for i in range(len(A)):
+            s += len(A[i])
+        return s
+
+    def impl3(A):
+        return pd.Series(A).str.len().sum()
+
+    _check_str_item_length(impl1)
+    _check_str_item_length(impl2)
+    _check_str_item_length(impl3)
 
 
 @pytest.mark.slow

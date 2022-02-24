@@ -655,7 +655,8 @@ class SeriesPass:
                     self.func_ir, val_def, inst.loc, inst.target.scope, self.typemap
                 )
                 return (
-                    [val_tup_assign, key_tup_assign]
+                    nodes
+                    + [val_tup_assign, key_tup_assign]
                     + compile_func_single_block(
                         eval(
                             "lambda vals, keys: bodo.utils.conversion.struct_if_heter_dict(vals, keys)"
@@ -669,6 +670,23 @@ class SeriesPass:
 
         if "h5py" in sys.modules and target_typ == bodo.io.h5_api.h5dataset_type:
             return self._handle_h5_write(inst.target, inst.index, inst.value)
+
+        # optimize simple string value copy across arrays to avoid string allocation
+        # B[j] = A[i] -> get_str_arr_item_copy(B, j, A, i)
+        if target_typ == string_array_type and isinstance(index_typ, types.Integer):
+            val_def = guard(get_definition, self.func_ir, inst.value)
+            if (
+                is_expr(val_def, "getitem") or is_expr(val_def, "static_getitem")
+            ) and self.typemap[val_def.value.name] == string_array_type:
+                val_idx = get_getsetitem_index_var(val_def, self.typemap, nodes)
+                return nodes + compile_func_single_block(
+                    eval(
+                        "lambda B, j, A, i: bodo.libs.str_arr_ext.get_str_arr_item_copy(B, j, A, i)"
+                    ),
+                    (inst.target, index_var, val_def.value, val_idx),
+                    inst.value,
+                    self,
+                )
 
         nodes.append(inst)
         return nodes
@@ -2284,6 +2302,26 @@ class SeriesPass:
                 eval("lambda S: len(bodo.hiframes.pd_series_ext.get_series_data(S))"),
                 rhs.args,
             )
+
+        # optimize len(A[i]) -> get_str_arr_item_length(A, i)
+        if (
+            fdef == ("len", "builtins")
+            and self.typemap[rhs.args[0].name] == string_type
+        ):
+            val_def = guard(get_definition, self.func_ir, rhs.args[0])
+            if (
+                is_expr(val_def, "getitem") or is_expr(val_def, "static_getitem")
+            ) and self.typemap[val_def.value.name] == string_array_type:
+                nodes = []
+                val_idx = get_getsetitem_index_var(val_def, self.typemap, nodes)
+                return nodes + compile_func_single_block(
+                    eval(
+                        "lambda A, i: bodo.libs.str_arr_ext.get_str_arr_item_length(A, i)"
+                    ),
+                    (val_def.value, val_idx),
+                    assign.target,
+                    self,
+                )
 
         # inline conversion functions to enable optimization
         if func_mod == "bodo.utils.conversion" and func_name != "flatten_array":
