@@ -161,11 +161,7 @@ class ParquetReader : public ArrowDataframeReader {
         part_cols_offset.resize(num_partition_cols, 0);
     }
 
-    virtual ~ParquetReader() {
-        Py_DECREF(expr_filters);
-        Py_DECREF(selected_fields_py);
-        Py_DECREF(storage_options);
-    }
+    virtual ~ParquetReader() {}
 
     /// a piece is a single parquet file in the context of parquet
     virtual size_t get_num_pieces() const { return file_paths.size(); }
@@ -234,152 +230,90 @@ class ParquetReader : public ArrowDataframeReader {
     virtual void read_all(TableBuilder& builder) {
         if (get_num_pieces() == 0) return;
 
-        std::string f_name = prefix + file_paths[0];
-        size_t colon = f_name.find_first_of(':');
-        std::string protocol = f_name.substr(0, colon);
-        // TODO use new path for every filesystem
-        // Filter pushdown is only supported in new path
-        bool old_path = f_name.find("hdfs://") == 0 ||
-                        f_name.find("abfs://") == 0 ||
-                        f_name.find("abfss://") == 0 || protocol == "gcs" || protocol == "gs" ||
-                        pyfs.count(protocol);
-        if (!old_path) {
-            size_t cur_piece = 0;
-            int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
+        size_t cur_piece = 0;
+        int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
 
-            PyObject* fnames_list_py = PyList_New(file_paths.size());
-            size_t i = 0;
-            for (auto p : file_paths) {
-                const std::string fpath = prefix + p;
-                PyList_SetItem(fnames_list_py, i++,
-                               PyUnicode_FromString(fpath.c_str()));
-            }
-
-            int64_t rows_to_skip = start_row_first_piece;
-            PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
-            // This only loads record batches that match the filter
-            PyObject* batches_it = PyObject_CallMethod(
-                pq_mod, "get_scanner_batches", "OOOdiOs", fnames_list_py,
-                expr_filters, selected_fields_py, avg_num_pieces,
-                int(parallel), storage_options, bucket_region.c_str());
-            Py_DECREF(pq_mod);
-            // TODO free expr_filters, selected_fields_py and storage_options here
-            // once the read paths are merged
-            Py_DECREF(fnames_list_py);
-            PyObject* batch_py = NULL;
-            //while ((batch_py = PyIter_Next(batches_it))) {  // XXX Fails with batch reader returned by scanner
-            while ((batch_py = PyObject_CallMethod(batches_it,
-                                                   "read_next_batch", NULL))) {
-                auto batch = arrow::py::unwrap_batch(batch_py).ValueOrDie();
-                int64_t batch_offset =
-                    std::min(rows_to_skip, batch->num_rows());
-                int64_t length =
-                    std::min(rows_left, batch->num_rows() - batch_offset);
-                if (length > 0) {
-                    // this is zero-copy slice
-                    auto table = arrow::Table::Make(
-                        schema, batch->Slice(batch_offset, length)->columns());
-                    builder.append(table);
-                    rows_left -= length;
-
-                    if (part_cols.size() > 0) {  // handle partition columns
-                        while (length > 0) {
-                            int64_t rows_read_from_piece =
-                                std::min(rows_left_cur_piece, length);
-                            rows_left_cur_piece -= rows_read_from_piece;
-                            length -= rows_read_from_piece;
-                            // fill partition cols
-                            for (auto i = 0; i < part_cols.size(); i++) {
-                                int64_t part_val =
-                                    part_vals[cur_piece][selected_part_cols[i]];
-                                fill_partition_column(
-                                    part_val, part_cols[i]->data1,
-                                    part_cols_offset[i], rows_read_from_piece,
-                                    part_cols[i]->dtype);
-                                part_cols_offset[i] += rows_read_from_piece;
-                            }
-                            if (rows_left_cur_piece == 0 &&
-                                cur_piece < get_num_pieces() - 1) {
-                                rows_left_cur_piece = pieces_nrows[++cur_piece];
-                            }
-                        }
-                    }
-                }
-                rows_to_skip -= batch_offset;
-                Py_DECREF(batch_py);
-            }
-            if (batch_py == NULL && PyErr_Occurred() &&
-                PyErr_ExceptionMatches(PyExc_StopIteration))
-                // StopIteration is raised at the end of iteration.
-                // An iterator would clear this automatically, but we are
-                // not using an interator, so we have to clear it manually
-                PyErr_Clear();
-            Py_DECREF(batches_it);
-        } else {
-            for (size_t piece_idx = 0; piece_idx < get_num_pieces();
-                 piece_idx++) {
-                int64_t rows_read_from_piece = 0;
-                std::string fpath = prefix + file_paths[piece_idx];
-                std::shared_ptr<parquet::arrow::FileReader> arrow_reader;
-                pq_init_reader(fpath.c_str(), &arrow_reader,
-                               bucket_region.c_str(), s3fs_anon);
-
-                // get number of row groups in this file
-                auto pq_metadata = arrow_reader->parquet_reader()->metadata();
-                int64_t n_row_groups = pq_metadata->num_row_groups();
-
-                // skip row groups if necessary based on start_row_first_piece
-                int64_t rg_index = 0;  // current row group index
-                int64_t rg_rows_to_skip = 0;
-                if (piece_idx == 0 && start_row_first_piece > 0) {
-                    int64_t skipped_rows =
-                        0;  // total number of rows I have skipped of this piece
-                    while (skipped_rows < start_row_first_piece) {
-                        auto rg_metadata = pq_metadata->RowGroup(rg_index);
-                        rg_rows_to_skip =
-                            std::min(start_row_first_piece - skipped_rows,
-                                     rg_metadata->num_rows());
-                        skipped_rows += rg_rows_to_skip;
-                        if (rg_rows_to_skip == rg_metadata->num_rows()) {
-                            rg_index++;
-                            rg_rows_to_skip = 0;
-                        }
-                    }
-                    if (rg_index >= n_row_groups)
-                        throw std::runtime_error("parquet read error");
-                }
-
-                // read data
-                while (rg_index < n_row_groups && rows_left > 0) {
-                    std::shared_ptr<::arrow::Table> table;
-                    // read row group into Arrow table. We can't pass Arrow
-                    // field selection to ReadRowGroup, have to pass column
-                    // selection
-                    arrow::Status status = arrow_reader->ReadRowGroup(
-                        rg_index, selected_columns, &table);
-                    auto rg_metadata = pq_metadata->RowGroup(rg_index);
-                    int64_t length = std::min(
-                        rows_left, rg_metadata->num_rows() - rg_rows_to_skip);
-                    // pass zero-copy slice to TableBuilder to append to read
-                    // data
-                    builder.append(table->Slice(rg_rows_to_skip, length));
-                    rows_left -= length;
-                    rows_read_from_piece += length;
-                    // all of the next row groups start at 0
-                    rg_rows_to_skip = 0;
-                    rg_index++;
-                }
-                // fill partition cols
-                for (auto i = 0; i < part_cols.size(); i++) {
-                    int64_t part_val =
-                        part_vals[piece_idx][selected_part_cols[i]];
-                    fill_partition_column(
-                        part_val, part_cols[i]->data1, part_cols_offset[i],
-                        rows_read_from_piece, part_cols[i]->dtype);
-                    part_cols_offset[i] += rows_read_from_piece;
-                }
-            }
+        PyObject* fnames_list_py = PyList_New(file_paths.size());
+        size_t i = 0;
+        for (auto p : file_paths) {
+            PyList_SetItem(fnames_list_py, i++,
+                           PyUnicode_FromString(p.c_str()));
         }
+
+        int64_t rows_to_skip = start_row_first_piece;
+        PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
+        // This only loads record batches that match the filter.
+        // get_scanner_batches returns a tuple with the dataset object
+        // and the record batch reader. We really just need the batch reader,
+        // but hdfs has an issue in the order in which objects are garbage
+        // collected, where Java will print error on trying to close a file
+        // saying that the filesystem is already closed. This happens when done
+        // reading.
+        // Keeping a reference to the dataset and deleting it in the last place
+        // seems to help, but the problem can still occur, so this needs
+        // further investigation,
+        PyObject* dataset_batches_tup = PyObject_CallMethod(
+            pq_mod, "get_scanner_batches", "OOOdiOss", fnames_list_py,
+            expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
+            storage_options, bucket_region.c_str(), prefix.c_str());
+        // PyTuple_GetItem returns a borrowed reference
+        PyObject* dataset = PyTuple_GetItem(dataset_batches_tup, 0);
+        Py_INCREF(dataset);  // call incref to keep the reference
+        PyObject* batches_it = PyTuple_GetItem(dataset_batches_tup, 1);
+        Py_DECREF(pq_mod);
+        Py_DECREF(expr_filters);
+        Py_DECREF(selected_fields_py);
+        Py_DECREF(storage_options);
+        Py_DECREF(fnames_list_py);
+        PyObject* batch_py = NULL;
+        //while ((batch_py = PyIter_Next(batches_it))) {  // XXX Fails with batch reader returned by scanner
+        while ((batch_py =
+                    PyObject_CallMethod(batches_it, "read_next_batch", NULL))) {
+            auto batch = arrow::py::unwrap_batch(batch_py).ValueOrDie();
+            int64_t batch_offset = std::min(rows_to_skip, batch->num_rows());
+            int64_t length =
+                std::min(rows_left, batch->num_rows() - batch_offset);
+            if (length > 0) {
+                // this is zero-copy slice
+                auto table = arrow::Table::Make(
+                    schema, batch->Slice(batch_offset, length)->columns());
+                builder.append(table);
+                rows_left -= length;
+
+                if (part_cols.size() > 0) {  // handle partition columns
+                    while (length > 0) {
+                        int64_t rows_read_from_piece =
+                            std::min(rows_left_cur_piece, length);
+                        rows_left_cur_piece -= rows_read_from_piece;
+                        length -= rows_read_from_piece;
+                        // fill partition cols
+                        for (auto i = 0; i < part_cols.size(); i++) {
+                            int64_t part_val =
+                                part_vals[cur_piece][selected_part_cols[i]];
+                            fill_partition_column(part_val, part_cols[i]->data1,
+                                                  part_cols_offset[i],
+                                                  rows_read_from_piece,
+                                                  part_cols[i]->dtype);
+                            part_cols_offset[i] += rows_read_from_piece;
+                        }
+                        if (rows_left_cur_piece == 0 &&
+                            cur_piece < get_num_pieces() - 1) {
+                            rows_left_cur_piece = pieces_nrows[++cur_piece];
+                        }
+                    }
+                }
+            }
+            rows_to_skip -= batch_offset;
+            Py_DECREF(batch_py);
+        }
+        if (batch_py == NULL && PyErr_Occurred() &&
+            PyErr_ExceptionMatches(PyExc_StopIteration))
+            // StopIteration is raised at the end of iteration.
+            // An iterator would clear this automatically, but we are
+            // not using an interator, so we have to clear it manually
+            PyErr_Clear();
+        Py_DECREF(dataset_batches_tup);
+        Py_DECREF(dataset);  // delete dataset last
     }
 
    private:

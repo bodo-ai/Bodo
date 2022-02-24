@@ -698,10 +698,6 @@ class TypingTransforms:
                     # This path is currently untested.
                     # TODO: Test
                     fname = filename_typ.fname
-                if fname:
-                    require(
-                        not bodo.io.parquet_pio.is_filter_pushdown_disabled_fpath(fname)
-                    )
 
         # make sure all filters have the right form
         # If we have a call expression, then we just pass

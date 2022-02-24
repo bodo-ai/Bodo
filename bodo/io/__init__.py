@@ -1,1 +1,13 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
+
+import pyarrow.fs
+import pyarrow._hdfs
+from ._hdfs import HadoopFileSystem
+
+# HadoopFileSystem is a class defined by Arrow in a Cython file (_hdfs.pyx).
+# We need to monkey-patch it for now because it doesn't recognize "abfs://" and
+# "abfss://" prefixes and incorrectly modifies URIs with those prefixes. The
+# implementation of HadoopFileSystem where this change is required needs to be
+# in Cython, so we have a modified copy of Arrow's _hdfs.pyx in bodo/io
+pyarrow._hdfs.HadoopFileSystem = HadoopFileSystem
+pyarrow.fs.HadoopFileSystem = HadoopFileSystem

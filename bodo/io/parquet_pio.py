@@ -903,27 +903,6 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, categor
     return arr_typ
 
 
-def is_filter_pushdown_disabled_fpath(fpath):
-    """
-    Given a fpath, which is a string that is the
-    start of a file name or whole filename
-    passed by a user (not modified by Bodo yet),
-    determine if the file system should have filter
-    pushdown disabled.
-
-    This is used in typing pass but kept in this function
-    to be close to the existing filesystem support.
-    """
-    # Currently gcsfs and hdfs aren't supported
-    return (
-        fpath.startswith("gs://")
-        or fpath.startswith("gcs://")
-        or fpath.startswith("hdfs://")
-        or fpath.startswith("abfs://")
-        or fpath.startswith("abfss://")
-    )
-
-
 def get_parquet_dataset(
     fpath,
     get_row_counts=True,
@@ -1044,8 +1023,7 @@ def get_parquet_dataset(
 
     def get_legacy_fs():
         """return filesystem with legacy interface that ParquetDataset with use_legacy_dataset=True can understand"""
-
-        if protocol == "s3":
+        if protocol in {"s3", "hdfs", "abfs", "abfss"}:
             from fsspec.implementations.arrow import ArrowFSWrapper
 
             # fsspec wrapper makes it legacy API compatible
@@ -1054,8 +1032,8 @@ def get_parquet_dataset(
             return getfs()
 
     def glob(protocol, fs, path):
-        """ Return a possibly-empty list of path names that match glob pattern
-        given by path """
+        """Return a possibly-empty list of path names that match glob pattern
+        given by path"""
         if not protocol and fs is None:
             from fsspec.implementations.local import LocalFileSystem
 
@@ -1065,10 +1043,20 @@ def get_parquet_dataset(
 
             fs = ArrowFSWrapper(fs)
         try:
+            if protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
+                # HDFS filesystem is initialized with host:port info. Once
+                # initialized, the filesystem needs the <protocol>://<host><port>
+                # prefix removed to query and access files
+                prefix = f"{protocol}://{parsed_url.netloc}"
+                path = path[len(prefix) :]
             files = fs.glob(path)
             if protocol == "s3":
                 # we need the s3:// prefix for later code to work correctly
                 files = ["s3://" + f for f in files if not f.startswith("s3://")]
+            elif protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
+                # We add the prefix again because later code still expects it
+                # TODO: we can maybe rewrite the code to avoid this
+                files = [prefix + f for f in files]
         except:  # pragma: no cover
             raise BodoError(f"glob pattern expansion not supported for {protocol}")
         if len(files) == 0:
@@ -1119,8 +1107,19 @@ def get_parquet_dataset(
                     get_legacy_fs().info(fpath[0])
                 else:
                     get_legacy_fs().info(fpath)
+            if protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
+                # HDFS filesystem is initialized with host:port info. Once
+                # initialized, the filesystem needs the <protocol>://<host><port>
+                # prefix removed to query and access files
+                prefix = f"{protocol}://{parsed_url.netloc}"
+                if isinstance(fpath, list):
+                    fpath_arg = [f[len(prefix) :] for f in fpath]
+                else:
+                    fpath_arg = fpath[len(prefix) :]
+            else:
+                fpath_arg = fpath
             dataset = pq.ParquetDataset(
-                fpath,
+                fpath_arg,
                 filesystem=get_legacy_fs(),  # need fs that works with use_legacy_dataset=True
                 filters=None,
                 use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
@@ -1211,107 +1210,62 @@ def get_parquet_dataset(
         for p in pieces:
             p._bodo_num_rows = 0
 
-        if protocol in {"gcs", "gs", "hdfs", "abfs", "abfss"}:
-            for p in pieces[start:end]:
-                file_metadata = p.get_metadata()
-                if get_row_counts:
-                    if expr_filters is not None:
-                        # XXX This won't work with gcs, hdfs, abfs, if only because
-                        # parquet_reader doesn't call get_scanner_batches().
-                        # Use dataset scanner API to get exact row counts when
-                        # filter is applied. Arrow will try to calculate this by
-                        # by reading only the file's metadata, and if it needs to
-                        # access data it will read as less as possible (only the
-                        # required columns and only subset of row groups if possible)
-                        pa.set_io_thread_count(2)
-                        pa.set_cpu_count(2)
-                        t0 = time.time()
-                        row_count = (
-                            ds.dataset(
-                                p.path, partitioning=ds.partitioning(flavor="hive")
-                            )
-                            .scanner(
-                                filter=expr_filters, use_threads=True
-                            )
-                            .count_rows()
-                        )
-                        ds_scan_time += time.time() - t0
-                    else:
-                        row_count = file_metadata.num_rows
-                    p._bodo_num_rows = row_count
-                    total_rows_chunk += row_count
-                    total_row_groups_chunk += file_metadata.num_row_groups
-                if validate_schema:
-                    file_schema = file_metadata.schema.to_arrow_schema()
-                    if dataset_schema != file_schema:  # pragma: no cover
-                        # this is the same error message that pyarrow shows
-                        print(
-                            "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
-                                p, file_schema, dataset_schema
-                            )
-                        )
-                        valid = False
-                        break
-        else:
-            # TODO use this new path for every filesystem
-            fpaths = [p.path for p in pieces[start:end]]
-            if protocol == "s3":
-                # We can call the Arrow dataset API passing a list of s3 file paths in two ways:
-                # - Passing a s3 URL, removing the base path s3://my-bucket from the file paths, and calling ds.dataset
-                #   like this: ds.dataset(fpaths, filesystem="s3://my-bucket/", ...)
-                # - Passing a SubTreeFileSystem, with s3://my-bucket prefix removed from file paths.
-                #   We use this option to be able to pass proxy_options and anonymous options to Arrow.
-                #   The endpoint_override option could be passed via the s3 URL as a query option if we wanted
-                bucket_name = parsed_url.netloc
-                prefix = "s3://" + bucket_name + "/"
-                fpaths = [
-                    f[len(prefix) :] for f in fpaths
-                ]  # remove prefix from file paths
-                filesystem = get_s3_subtree_fs(
-                    bucket_name, region=getfs().region, storage_options=storage_options
-                )
-            else:
-                filesystem = None
-            # Presumably the work is partitioned more or less equally among ranks,
-            # and we are mostly (or just) reading metadata, so we assign two IO
-            # threads to every rank
-            pa.set_io_thread_count(4)
-            pa.set_cpu_count(4)
-            # Use dataset scanner API to get exact row counts when
-            # filter is applied. Arrow will try to calculate this by
-            # by reading only the file's metadata, and if it needs to
-            # access data it will read as less as possible (only the
-            # required columns and only subset of row groups if possible)
-            dataset_ = ds.dataset(
-                fpaths,
-                filesystem=filesystem,
-                partitioning=ds.partitioning(flavor="hive"),
+        fpaths = [p.path for p in pieces[start:end]]
+        if protocol == "s3":
+            # We can call the Arrow dataset API passing a list of s3 file paths in two ways:
+            # - Passing a s3 URL, removing the base path s3://my-bucket from the file paths, and calling ds.dataset
+            #   like this: ds.dataset(fpaths, filesystem="s3://my-bucket/", ...)
+            # - Passing a SubTreeFileSystem, with s3://my-bucket prefix removed from file paths.
+            #   We use this option to be able to pass proxy_options and anonymous options to Arrow.
+            #   The endpoint_override option could be passed via the s3 URL as a query option if we wanted
+            bucket_name = parsed_url.netloc
+            prefix = "s3://" + bucket_name + "/"
+            fpaths = [f[len(prefix) :] for f in fpaths]  # remove prefix from file paths
+            filesystem = get_s3_subtree_fs(
+                bucket_name, region=getfs().region, storage_options=storage_options
             )
-            for piece, frag in zip(pieces[start:end], dataset_.get_fragments()):
-                t0 = time.time()
-                row_count = frag.scanner(
-                    schema=dataset_.schema,
-                    filter=expr_filters,
-                    use_threads=True,
-                ).count_rows()
-                ds_scan_time += time.time() - t0
-                piece._bodo_num_rows = row_count
-                total_rows_chunk += row_count
-                total_row_groups_chunk += frag.num_row_groups
-                total_row_groups_size_chunk += sum(
-                    rg.total_byte_size for rg in frag.row_groups
-                )
-                if validate_schema:
-                    file_schema = frag.metadata.schema.to_arrow_schema()
-                    if dataset_schema != file_schema:  # pragma: no cover
-                        # this is the same error message that pyarrow shows
-                        print(
-                            "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
-                                piece, file_schema, dataset_schema
-                            )
+        else:
+            filesystem = getfs()
+        # Presumably the work is partitioned more or less equally among ranks,
+        # and we are mostly (or just) reading metadata, so we assign two IO
+        # threads to every rank
+        pa.set_io_thread_count(4)
+        pa.set_cpu_count(4)
+        # Use dataset scanner API to get exact row counts when
+        # filter is applied. Arrow will try to calculate this by
+        # by reading only the file's metadata, and if it needs to
+        # access data it will read as less as possible (only the
+        # required columns and only subset of row groups if possible)
+        dataset_ = ds.dataset(
+            fpaths,
+            filesystem=filesystem,
+            partitioning=ds.partitioning(flavor="hive"),
+        )
+        for piece, frag in zip(pieces[start:end], dataset_.get_fragments()):
+            t0 = time.time()
+            row_count = frag.scanner(
+                schema=dataset_.schema,
+                filter=expr_filters,
+                use_threads=True,
+            ).count_rows()
+            ds_scan_time += time.time() - t0
+            piece._bodo_num_rows = row_count
+            total_rows_chunk += row_count
+            total_row_groups_chunk += frag.num_row_groups
+            total_row_groups_size_chunk += sum(
+                rg.total_byte_size for rg in frag.row_groups
+            )
+            if validate_schema:
+                file_schema = frag.metadata.schema.to_arrow_schema()
+                if dataset_schema != file_schema:  # pragma: no cover
+                    # this is the same error message that pyarrow shows
+                    print(
+                        "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
+                            piece, file_schema, dataset_schema
                         )
-                        valid = False
-                        break
+                    )
+                    valid = False
+                    break
 
         if validate_schema:
             valid = comm.allreduce(valid, op=MPI.LAND)
@@ -1391,7 +1345,7 @@ For best performance the number of row groups should be greater than the number 
     # which is called in pq.ParquetDataset.__init__
     # https://github.com/apache/arrow/blob/ab307365198d5724a0b3331a05704d0fe4bcd710/python/pyarrow/parquet.py#L1235
     dataset._prefix = ""
-    if protocol == "hdfs":
+    if protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
         # Compute the prefix that is expected to be there in the
         # path of the pieces
         prefix = f"{protocol}://{parsed_url.netloc}"
@@ -1420,6 +1374,7 @@ def get_scanner_batches(
     is_parallel,
     storage_options,
     region,
+    prefix,  # examples: "hdfs://localhost:9000", "abfs://demo@bododemo.dfs.core.windows.net"
 ):
     """return RecordBatchReader for dataset of 'fpaths' that contain the rows
     that match expr_filters (or all rows if expr_filters is None). Only project the
@@ -1451,6 +1406,14 @@ def get_scanner_batches(
         filesystem = get_s3_subtree_fs(
             bucket_name, region=region, storage_options=storage_options
         )
+    elif prefix and prefix.startswith(("hdfs", "abfs", "abfss")):  # pragma: no cover
+        # unlike s3, hdfs file paths already have their prefix removed
+        filesystem = get_hdfs_fs(prefix + fpaths[0])
+    elif fpaths[0].startswith(("gcs", "gs")):
+        # TODO pass storage_options to GCSFileSystem
+        import gcsfs
+
+        filesystem = gcsfs.GCSFileSystem(token=None)
     else:
         filesystem = None
     # We only support hive partitioning right now and will need to change this
@@ -1461,9 +1424,10 @@ def get_scanner_batches(
     col_names = dataset.schema.names
     selected_names = [col_names[field_num] for field_num in selected_fields]
     # TODO: use threads only for s3?
-    return dataset.scanner(
+    reader = dataset.scanner(
         columns=selected_names, filter=expr_filters, use_threads=True
     ).to_reader()
+    return dataset, reader
 
 
 def _add_categories_to_pq_dataset(pq_dataset):
