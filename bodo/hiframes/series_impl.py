@@ -1008,6 +1008,39 @@ def overload_series_rename(
     return impl
 
 
+@overload_method(SeriesType, "rename_axis", inline="always", no_unliteral=True)
+def overload_series_rename_axis(
+    S, mapper=None, index=None, columns=None, axis=None, copy=True, inplace=False
+):
+    unsupported_args = dict(
+        index=index, columns=columns, axis=axis, copy=copy, inplace=inplace
+    )
+    arg_defaults = dict(index=None, columns=None, axis=None, copy=True, inplace=False)
+    check_unsupported_args(
+        "Series.rename_axis",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
+
+    if is_overload_none(mapper) or not is_scalar_type(mapper):
+        raise BodoError(
+            "Series.rename_axis(): 'mapper' is required and must be a scalar type."
+        )
+
+    def impl(
+        S, mapper=None, index=None, columns=None, axis=None, copy=True, inplace=False
+    ):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        index = index.rename(mapper)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        return bodo.hiframes.pd_series_ext.init_series(arr, index, name)
+
+    return impl
+
+
 @overload_method(SeriesType, "abs", inline="always", no_unliteral=True)
 def overload_series_abs(S):
     # TODO: timedelta
