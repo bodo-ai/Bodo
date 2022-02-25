@@ -1752,6 +1752,18 @@ def test_index_rename(idx, new_name):
     check_func(impl, (idx, new_name))
 
 
+def test_index_rename_dist_bug(memory_leak_check):
+    """tests index.rename() for distribution match between input and output [BE-2285]"""
+
+    @bodo.jit(distributed=["I"])
+    def f(I):
+        return I.rename("B")
+
+    I = pd.Index(["A", "B", "C", "D"], name="A")
+    with pytest.raises(BodoError, match=r"has distributed flag in function"):
+        f(I)
+
+
 def test_index_rename_heter():
     """tests the special case for heterogeneous indices"""
     df = pd.DataFrame(

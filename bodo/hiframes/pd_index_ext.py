@@ -4002,7 +4002,7 @@ def init_index(I, name):
     if type(I) in standard_init_map:
         init_func = standard_init_map[type(I)]
         return lambda I, name, inplace=False: init_func(
-            I._data.copy(), name
+            bodo.hiframes.pd_index_ext.get_index_data(I).copy(), name
         )  # pragma: no cover
 
     if isinstance(I, RangeIndexType):
@@ -4015,7 +4015,7 @@ def init_index(I, name):
         freq = I.freq
         return (
             lambda I, name, inplace=False: bodo.hiframes.pd_index_ext.init_period_index(
-                I._data.copy(),
+                bodo.hiframes.pd_index_ext.get_index_data(I).copy(),
                 name,
                 freq,
             )
@@ -4029,7 +4029,7 @@ def init_index(I, name):
             )
         )  # pragma: no cover
 
-    raise TypeError(f"init_index(): Unknown type {type(I)}")
+    raise_bodo_error(f"init_index(): Unknown type {type(I)}")
 
 
 # TODO(ehsan): test
