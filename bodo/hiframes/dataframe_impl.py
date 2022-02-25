@@ -46,6 +46,7 @@ from bodo.hiframes.pd_dataframe_ext import (
     handle_inplace_df_type_change,
 )
 from bodo.hiframes.pd_index_ext import (
+    DatetimeIndexType,
     RangeIndexType,
     StringIndexType,
     is_pd_index_type,
@@ -817,6 +818,8 @@ def overload_dataframe_first(df, offset):
         bodo.week_type,
         bodo.date_offset_type,
     )
+    if not isinstance(df.index, DatetimeIndexType):
+        raise BodoError("DataFrame.first(): only supports a DatetimeIndex index")
     if types.unliteral(offset) not in supp_types:
         raise BodoError("DataFrame.first(): 'offset' must be an string or DateOffset")
     # determine first() on underlying arrays
@@ -845,6 +848,8 @@ def overload_dataframe_last(df, offset):
         bodo.week_type,
         bodo.date_offset_type,
     )
+    if not isinstance(df.index, DatetimeIndexType):
+        raise BodoError("DataFrame.last(): only supports a DatetimeIndex index")
     if types.unliteral(offset) not in supp_types:
         raise BodoError("DataFrame.last(): 'offset' must be an string or DateOffset")
     # determine last() on underlying arrays
