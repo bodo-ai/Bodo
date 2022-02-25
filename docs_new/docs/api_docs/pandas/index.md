@@ -1,0 +1,15 @@
+#Pandas 
+
+- [Datatypes][pandas-dtype]
+- [General Functions][general]
+- [Dataframe API][dataframe]
+- [Groupby][pd_groupby_section]
+- [Series API][series]
+- [Window][pd_window_section]
+- [Date Offsets][date-offsets]
+- [Input/Output][pandas-f-in]
+- [Index Objects][index-objects]
+- [TimeDelta][timedelta]
+- [Timestamp][timestamp]
+- [Integer NA Issues][integer-na-issue-pandas]
+- [Type Inference for Object Data][type-inference-for-object-data]
