@@ -54,7 +54,7 @@ for PYTHON_VER in "3.8" "3.9"
 do
     conda create -n BUILDPIP python=$PYTHON_VER msmpi boost-cpp -c conda-forge -y
     conda activate BUILDPIP
-    python -m pip install Cython numpy==1.18.* wheel pyarrow==7.0.0 mpi4py_mpich==3.1.2
+    python -m pip install Cython numpy==1.18.* wheel pyarrow==5.0.0 mpi4py_mpich==3.1.2
     # copy SSL DLLs to bodo source directory to bundle them in package
     cp `cygpath -u $CONDA_PREFIX`/Library/bin/libssl-*-x64.dll bodo/libs
     cp `cygpath -u $CONDA_PREFIX`/Library/bin/libcrypto-*-x64.dll bodo/libs

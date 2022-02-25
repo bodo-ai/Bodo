@@ -53,7 +53,7 @@ void bodo_array_to_arrow(
     std::shared_ptr<arrow::ChunkedArray> *out) {
     // allocate null bitmap
     std::shared_ptr<arrow::ResizableBuffer> null_bitmap;
-    int64_t null_bytes = arrow::bit_util::BytesForBits(array->length);
+    int64_t null_bytes = arrow::BitUtil::BytesForBits(array->length);
     arrow::Result<std::unique_ptr<arrow::ResizableBuffer>> res =
         AllocateResizableBuffer(null_bytes, pool);
     CHECK_ARROW_AND_ASSIGN(res, "AllocateResizableBuffer", null_bitmap);
@@ -80,7 +80,7 @@ void bodo_array_to_arrow(
         if (array->dtype == Bodo_CTypes::_BOOL) {
             // special case: nullable bool column are bit vectors in Arrow
             schema_vector.push_back(arrow::field(col_name, arrow::boolean()));
-            int64_t nbytes = ::arrow::bit_util::BytesForBits(array->length);
+            int64_t nbytes = ::arrow::BitUtil::BytesForBits(array->length);
             std::shared_ptr<::arrow::Buffer> buffer;
             arrow::Result<std::unique_ptr<arrow::Buffer>> res =
                 AllocateBuffer(nbytes, pool);
