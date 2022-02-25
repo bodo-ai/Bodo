@@ -804,3 +804,61 @@ Writing dataframe as a table in the database:
     df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
     conn = f"oracle+cx_oracle://{username}:{password}@{host}/{db_name}"
     write_mysql(df, table_name, conn)
+
+PostgreSQL
+~~~~~~~~~~
+
+Prerequisites
+*************
+
+In addition to ``sqlalchemy``, install ``psycopg2``.
+If you're using Bodo in a conda environment:
+
+.. code-block:: console
+
+    $ conda install psycopg2 -c conda-forge
+
+If you've installed Bodo using pip:
+
+.. code-block:: console
+
+    $ pip install psycopg2
+
+Usage
+******
+
+Reading result of a SQL query in a dataframe:
+
+.. code-block:: python3
+
+    import bodo
+    import pandas as pd
+
+    @bodo.jit(distributed=['df'])
+    def read_postgresql(table_name, conn):
+        df = pd.read_sql(
+                f"SELECT * FROM {table_name}",
+                conn
+            )
+        return df
+
+    table_name = "test_table"
+    conn = f"postgresql+psycopg2://{username}:{password}@{host}/{db_name}"
+    df = read_postgresql(table_name, conn)
+
+
+Writing dataframe as a table in the database:
+
+.. code-block:: python3
+
+    import bodo
+    import pandas as pd
+
+    @bodo.jit(distributed=['df'])
+    def write_postgresql(df, table_name, conn):
+        df.to_sql(table, conn)
+
+    table_name = "test_table"
+    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+    conn = f"postgresql+psycopg2://{username}:{password}@{host}/{db_name}"
+    write_postgresql(df, table_name, conn)

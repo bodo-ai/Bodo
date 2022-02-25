@@ -16,8 +16,9 @@ conda install -y -c conda-forge scikit-learn='1.0.*' gcsfs
 conda install -y -c conda-forge matplotlib
 conda install -y -c conda-forge pyspark openjdk
 conda install -y flake8
-# required for Oracle Database
+# cx_oracle: Oracle Database
+# psycopg2: PostgreSQL
 if [ "$RUN_NIGHTLY" != "yes" ]; then
-    conda install -y -c conda-forge cx_oracle
+    conda install -y -c conda-forge cx_oracle psycopg2
 fi
 pip install pytest pytest-cov deltalake

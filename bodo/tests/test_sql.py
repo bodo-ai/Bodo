@@ -556,7 +556,7 @@ oracle_user_pass_and_hostname = "user:pass@localhost"
 
 @pytest.mark.slow
 def test_oracle_read_sql_basic(memory_leak_check):
-    """ Test simple SQL query with Oracle DB"""
+    """Test simple SQL query with Oracle DB"""
 
     def impl():
         sql_request = "select * from orders"
@@ -586,7 +586,7 @@ def test_oracle_read_sql_basic(memory_leak_check):
 
 @pytest.mark.slow
 def test_oracle_read_sql_count(memory_leak_check):
-    """ Test SQL query count(*) and a single column Oracle DB"""
+    """Test SQL query count(*) and a single column Oracle DB"""
 
     conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
 
@@ -611,7 +611,7 @@ def test_oracle_read_sql_count(memory_leak_check):
 
 @pytest.mark.slow
 def test_oracle_read_sql_join(memory_leak_check):
-    """ Test SQL query join Oracle DB"""
+    """Test SQL query join Oracle DB"""
 
     def impl():
         sql_request = """
@@ -633,7 +633,7 @@ def test_oracle_read_sql_join(memory_leak_check):
 
 @pytest.mark.slow
 def test_oracle_read_sql_gb(memory_leak_check):
-    """ Test SQL query group by, column alias, and round Oracle DB"""
+    """Test SQL query group by, column alias, and round Oracle DB"""
 
     def impl():
         sql_request = """
@@ -769,4 +769,233 @@ def test_to_sql_snowflake(memory_leak_check):
             passed = 0
     n_passed = reduce_sum(passed)
     assert n_passed == bodo.get_size()
+    bodo.barrier()
+
+
+# ---------------------PostgreSQL Database------------------------#
+# Queries used from
+# https://www.postgresqltutorial.com/postgresql-select/
+
+postgres_user_pass_and_hostname = "bodo:edJEh6RCUWMefuoZXTIy@bodo-postgre-test.copjdp5mkwpk.us-east-2.rds.amazonaws.com"
+
+
+@pytest.mark.slow
+def test_postgres_read_sql_basic(memory_leak_check):
+    """Test simple SQL query with PostgreSQL DBMS"""
+
+    conn = "postgresql+psycopg2://" + postgres_user_pass_and_hostname + "/TEST_DB"
+
+    def impl(conn):
+        sql_request = "select * from actor"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl, (conn,))
+
+    def impl2(conn):
+        sql_request = "SELECT first_name, last_name, email FROM customer"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl2, (conn,))
+
+    def impl3(conn):
+        sql_request = (
+            "SELECT first_name || ' ' || last_name AS full_name, email FROM customer"
+        )
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl3, (conn,))
+
+    def impl4(conn):
+        sql_request = "SELECT actor_id from actor"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    # [left]:  Int64  vs. [right]: int64
+    check_func(impl4, (conn,), check_dtype=False)
+
+
+@pytest.mark.slow
+def test_postgres_read_sql_count(memory_leak_check):
+    """Test SQL query count(*) and a single column PostgreSQL DB"""
+
+    conn = "postgresql+psycopg2://" + postgres_user_pass_and_hostname + "/TEST_DB"
+
+    def test_impl(conn):
+        sql_request = """
+        SELECT staff_id,
+	            COUNT(*)
+        FROM payment
+        GROUP BY staff_id
+        """
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(test_impl, (conn,), check_dtype=False)
+
+
+@pytest.mark.slow
+def test_postgres_read_sql_join(memory_leak_check):
+    """Test SQL query join PostgreSQL DB"""
+
+    conn = "postgresql+psycopg2://" + postgres_user_pass_and_hostname + "/TEST_DB"
+    # 1 and 2 Taken from
+    # https://github.com/YashMotwani/Sakila-DVD-Rental-database-Analysis/blob/master/Yash_Investigate_Relational_Database.txt
+    def impl(conn):
+        sql_request = """
+        SELECT f.title, c.name, COUNT(r.rental_id)
+        FROM film_category fc
+        JOIN category c
+        ON c.category_id = fc.category_id
+        JOIN film f
+        ON f.film_id = fc.film_id
+        JOIN inventory i
+        ON i.film_id = f.film_id
+        JOIN rental r 
+        ON r.inventory_id = i.inventory_id
+        WHERE c.name IN ('Animation', 'Children', 'Classics', 'Comedy', 'Family', 'Music')
+        GROUP BY 1, 2
+        ORDER BY 2, 1
+        """
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl, (conn,))
+
+    def impl2(conn):
+        sql_request = """
+        SELECT f.title, c.name, f.rental_duration, NTILE(4) OVER (ORDER BY f.rental_duration) AS standard_quartile
+        FROM film_category fc
+        JOIN category c
+        ON c.category_id = fc.category_id
+        JOIN film f
+        ON f.film_id = fc.film_id
+        WHERE c.name IN ('Animation', 'Children', 'Classics', 'Comedy', 'Family', 'Music')
+        ORDER BY 3
+        """
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl2, (conn,))
+
+    def impl3(conn):
+        sql_request = """
+        SELECT film.film_id, title, inventory_id
+        FROM film
+        LEFT JOIN inventory 
+        ON inventory.film_id = film.film_id
+        """
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl3, (conn,))
+
+
+@pytest.mark.slow
+def test_postgres_read_sql_gb(memory_leak_check):
+    """Test SQL query group by, column alias, and round PostgreSQL DB"""
+
+    conn = "postgresql+psycopg2://" + postgres_user_pass_and_hostname + "/TEST_DB"
+
+    def impl(conn):
+        sql_request = """
+        SELECT 
+	        customer_id, 
+            staff_id,
+	        ROUND(AVG(amount), 2) AS Average
+        FROM 
+	        payment
+        GROUP BY 
+        	customer_id, staff_id
+        """
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl, (conn,), check_dtype=False)
+
+    def impl2(conn):
+        sql_request = """
+        SELECT 
+	        DATE(payment_date) paid_date, 
+	        SUM(amount) sum
+        FROM 
+        	payment
+        GROUP BY
+        	DATE(payment_date)
+        ORDER BY paid_date
+        """
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl2, (conn,), check_dtype=False)
+
+
+@pytest.mark.slow
+def test_postgres_read_sql_having(memory_leak_check):
+    """Test SQL query HAVING PostgreSQL DB"""
+
+    conn = "postgresql+psycopg2://" + postgres_user_pass_and_hostname + "/TEST_DB"
+
+    def impl(conn):
+        sql_request = """
+        SELECT customer_id, SUM(amount)
+        FROM payment
+        GROUP BY customer_id
+        HAVING SUM (amount) > 200
+        ORDER BY customer_id
+        """
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl, (conn,), check_dtype=False)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("is_distributed", [True, False])
+def test_to_sql_postgres(is_distributed, memory_leak_check):
+    """Test to_sql with PostgreSQL database
+    Data is compared vs. original DF
+    """
+
+    def test_impl_write_sql(df, table_name, conn):
+        df.to_sql(table_name, conn, if_exists="replace")
+
+    np.random.seed(5)
+    random.seed(5)
+    len_list = 20
+    list_int = list(np.random.choice(10, len_list))
+    list_double = list(np.random.choice([4.0, np.nan], len_list))
+    list_datetime = pd.date_range("2001-01-01", periods=len_list)
+    df_in = pd.DataFrame({"a": list_int, "b": list_double, "c": list_datetime})
+    table_name = "to_sql_table"
+    if is_distributed:
+        start, end = get_start_end(len(df_in))
+        df_input = df_in.iloc[start:end]
+    else:
+        df_input = df_in
+    conn = "postgresql+psycopg2://" + postgres_user_pass_and_hostname + "/TEST_DB"
+    bodo.jit(all_args_distributed_block=is_distributed)(test_impl_write_sql)(
+        df_input, table_name, conn
+    )
+    bodo.barrier()
+    passed = 1
+    if bodo.get_rank() == 0:
+        try:
+            # to_sql adds index column by default. Setting it here explicitly.
+            df_load = pd.read_sql(
+                "select * from " + table_name, conn, index_col="index"
+            )
+            # The writing does not preserve the order a priori
+            l_cols = df_in.columns.to_list()
+            df_in_sort = df_in.sort_values(l_cols).reset_index(drop=True)
+            df_load_sort = df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
+            pd.testing.assert_frame_equal(df_load_sort, df_in_sort)
+        except Exception as e:
+            print(e)
+            passed = 0
+    n_passed = reduce_sum(passed)
+    n_pes = bodo.get_size()
+    assert n_passed == n_pes, "test_to_sql_postgres failed"
     bodo.barrier()
