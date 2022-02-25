@@ -1608,6 +1608,28 @@ def test_df_error_message_truncates():
     assert len(bodo_err.value.msg) < 500
 
 
+def test_df_first_last_invalid_index():
+    def test_impl1(df):
+        return df.first("15D")
+
+    def test_impl2(df):
+        return df.last("15D")
+
+    df = pd.DataFrame({"A": [1, 2, 3]}, index=pd.Index(["a", "b", "c"]))
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape("DataFrame.first(): only supports a DatetimeIndex index"),
+    ):
+        bodo.jit(test_impl1)(df)
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape("DataFrame.last(): only supports a DatetimeIndex index"),
+    ):
+        bodo.jit(test_impl2)(df)
+
+
 def test_df_first_last_invalid_offset():
     def test_impl1(df, off):
         return df.first(off)
