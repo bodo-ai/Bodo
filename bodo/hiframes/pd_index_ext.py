@@ -3434,7 +3434,7 @@ def overload_index_duplicated(I, keep="first"):
 
     def impl(I, keep="first"):  # pragma: no cover
         arr = bodo.hiframes.pd_index_ext.get_index_data(I)
-        out_arr = bodo.libs.array_kernels.duplicated_array(arr)
+        out_arr = bodo.libs.array_kernels.duplicated((arr,))
         return out_arr
 
     return impl

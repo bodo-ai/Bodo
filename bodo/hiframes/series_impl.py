@@ -5046,10 +5046,8 @@ def overload_series_duplicated(S, keep="first"):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        index_arr = bodo.utils.conversion.index_to_array(index)
-        out_arr, out_index_arr = bodo.libs.array_kernels.duplicated((arr,), index_arr)
-        out_index = bodo.utils.conversion.index_from_array(out_index_arr)
-        return bodo.hiframes.pd_series_ext.init_series(out_arr, out_index, name)
+        out_arr = bodo.libs.array_kernels.duplicated((arr,))
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
