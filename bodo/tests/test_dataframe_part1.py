@@ -1625,7 +1625,7 @@ def test_df_var(numeric_df_value, memory_leak_check):
 
 @pytest.mark.slow
 def test_empty_df_var_std(memory_leak_check):
-    """ Test var/std operation on empty dataframe"""
+    """Test var/std operation on empty dataframe"""
 
     def impl(df):
         return df.var()
@@ -1740,7 +1740,7 @@ def test_df_describe_mixed_dt(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_describe_mixed_types(memory_leak_check):
-    """ Test describe with numeric and not numeric columns. Default is to drop non-numeric ones"""
+    """Test describe with numeric and not numeric columns. Default is to drop non-numeric ones"""
 
     def impl(df):
         return df.describe()
@@ -1759,7 +1759,7 @@ def test_df_describe_mixed_types(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_stack_trace(memory_leak_check):
-    """Test that stack trace is suppressed in user mode and available in developer mode """
+    """Test that stack trace is suppressed in user mode and available in developer mode"""
 
     def test_impl(df):
         return df.pct_change()
@@ -1792,7 +1792,7 @@ def test_df_stack_trace(memory_leak_check):
 
 @pytest.mark.slow
 def test_df_stack_trace_numba(memory_leak_check):
-    """Test that stack trace from numba is suppressed in user mode and available in developer mode """
+    """Test that stack trace from numba is suppressed in user mode and available in developer mode"""
 
     def test_impl():
         ans = "xx" + 1
@@ -2350,8 +2350,7 @@ def test_df_reset_index_levels(memory_leak_check):
     check_func(impl2, (df,), only_seq=True)
 
 
-# TODO: add memory_leak_check
-def test_df_duplicated():
+def test_df_duplicated(memory_leak_check):
     def impl(df):
         return df.duplicated()
 

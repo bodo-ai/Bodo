@@ -808,8 +808,7 @@ def test_empty_series_first_last():
         pd.Series(["a", None, "c", "a", None, "d", None, "c"]),
     ],
 )
-# TODO[BE-266]: add memory_leak_check
-def test_series_duplicated(S_val):
+def test_series_duplicated(S_val, memory_leak_check):
     """
     Tests for Series.duplicated()
     """

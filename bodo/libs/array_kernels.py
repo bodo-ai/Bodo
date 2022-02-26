@@ -54,7 +54,6 @@ from bodo.libs.str_arr_ext import str_arr_set_na, string_array_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
-from bodo.utils.shuffle import getitem_arr_tup_single
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -782,74 +781,75 @@ def nancorr(mat, cov=0, minpv=1, parallel=False):  # pragma: no cover
     return result
 
 
-@numba.njit(no_cpython_wrapper=True)
-def duplicated(data, ind_arr, parallel=False):  # pragma: no cover
-    # TODO [BE-414]: Move to C++ and handle NA in each val
-    # TODO: inline for optimization?
-    # TODO: handle NAs better?
-
-    if parallel:
-        data, (ind_arr,) = bodo.ir.join.parallel_shuffle(data, (ind_arr,))
-
-    # XXX: convert StringArray/BinaryArray to list of strings due to strange error with set
-    # TODO: debug StringArray issue on test_df_duplicated with multiple pes
-    data = bodo.libs.str_arr_ext.to_list_if_immutable_arr(data)
-
-    n = len(data[0])
-    out = np.empty(n, np.bool_)
-    # uniqs = set()
-    uniqs = dict()
-
-    for i in range(n):
-        val = getitem_arr_tup_single(data, i)
-        if val in uniqs:
-            out[i] = True
-        else:
-            out[i] = False
-            # uniqs.add(val)
-            uniqs[val] = 0
-
-    return out, ind_arr
-
-
-@numba.njit(no_cpython_wrapper=True)
-def duplicated_array(data, parallel=False):  # pragma: no cover
-    # TODO: inline for optimization?
-
-    if parallel:
-        cpp_table = arr_info_list_to_table([array_to_info(data)])
-        out_cpp_table = bodo.libs.array.shuffle_table(cpp_table, 1, parallel, 1)
-        data = info_to_array(info_from_table(out_cpp_table, 0), data)
-        shuffle_info = bodo.libs.array.get_shuffle_info(out_cpp_table)
-        bodo.libs.array.delete_table(out_cpp_table)
-        bodo.libs.array.delete_table(cpp_table)
-
-    # XXX: convert StringArray/BinaryArray to list of strings due to strange error with set
-    # TODO: debug StringArray issue on test_df_duplicated with multiple pes
-    data = bodo.libs.str_arr_ext.to_list_if_immutable_arr(data)
-
+@numba.generated_jit(nopython=True)
+def duplicated(data, parallel=False):
     n = len(data)
-    out = np.empty(n, np.bool_)
-    # uniqs = set()
-    uniqs = dict()
-    hasna = False
-    for i in range(n):
-        if bodo.libs.array_kernels.isna(data, i):
-            out[i] = hasna
-            hasna = True
-        else:
-            val = (data[i],)
-            if val in uniqs:
-                out[i] = True
-            else:
-                out[i] = False
-                # uniqs.add(val)
-                uniqs[val] = 0
-
-    if parallel:
-        out = bodo.hiframes.pd_groupby_ext.reverse_shuffle(out, shuffle_info)
-
-    return out
+    # if is_tuple, we are processing a dataframe and will form nullable tuples from the rows
+    # otherwise we are processing a series
+    is_tuple = n != 1
+    func_text = "def impl(data, parallel=False):\n"
+    func_text += "  if parallel:\n"
+    array_info_str = ", ".join(f"array_to_info(data[{i}])" for i in range(n))
+    func_text += f"    cpp_table = arr_info_list_to_table([{array_info_str}])\n"
+    func_text += f"    out_cpp_table = bodo.libs.array.shuffle_table(cpp_table, {n}, parallel, 1)\n"
+    info_to_arr_str = ", ".join(
+        f"info_to_array(info_from_table(out_cpp_table, {i}), data[{i}])"
+        for i in range(n)
+    )
+    func_text += f"    data = ({info_to_arr_str},)\n"
+    func_text += "    shuffle_info = bodo.libs.array.get_shuffle_info(out_cpp_table)\n"
+    func_text += "    bodo.libs.array.delete_table(out_cpp_table)\n"
+    func_text += "    bodo.libs.array.delete_table(cpp_table)\n"
+    func_text += "  data = bodo.libs.str_arr_ext.to_list_if_immutable_arr(data)\n"
+    func_text += "  n = len(data[0])\n"
+    func_text += "  out = np.empty(n, np.bool_)\n"
+    func_text += "  uniqs = dict()\n"
+    if is_tuple:
+        func_text += "  for i in range(n):\n"
+        data_code = ", ".join(f"data[{i}][i]" for i in range(n))
+        null_code = ",  ".join(
+            f"bodo.libs.array_kernels.isna(data[{i}], i)" for i in range(n)
+        )
+        func_text += f"    val = bodo.libs.nullable_tuple_ext.build_nullable_tuple(({data_code},), ({null_code},))\n"
+        func_text += "    if val in uniqs:\n"
+        func_text += "      out[i] = True\n"
+        func_text += "    else:\n"
+        func_text += "      out[i] = False\n"
+        func_text += "      uniqs[val] = 0\n"
+    else:
+        func_text += "  data = data[0]\n"
+        func_text += "  hasna = False\n"
+        func_text += "  for i in range(n):\n"
+        func_text += "    if bodo.libs.array_kernels.isna(data, i):\n"
+        func_text += "      out[i] = hasna\n"
+        func_text += "      hasna = True\n"
+        func_text += "    else:\n"
+        func_text += "      val = data[i]\n"
+        func_text += "      if val in uniqs:\n"
+        func_text += "        out[i] = True\n"
+        func_text += "      else:\n"
+        func_text += "        out[i] = False\n"
+        func_text += "        uniqs[val] = 0\n"
+    func_text += "  if parallel:\n"
+    func_text += (
+        "    out = bodo.hiframes.pd_groupby_ext.reverse_shuffle(out, shuffle_info)\n"
+    )
+    func_text += "  return out\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "np": np,
+            "array_to_info": array_to_info,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "info_to_array": info_to_array,
+            "info_from_table": info_from_table,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
 
 
 def sample_table_operation(data, ind_arr, n, frac, replace, parallel=False):
