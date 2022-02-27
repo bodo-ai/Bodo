@@ -489,8 +489,7 @@ class SeriesPass:
         if (
             isinstance(target_typ, bodo.hiframes.pd_multi_index_ext.MultiIndexType)
             or bodo.hiframes.pd_index_ext.is_pd_index_type(target_typ)
-            and guard(is_whole_slice, self.typemap, self.func_ir, idx)
-        ):
+        ) and guard(is_whole_slice, self.typemap, self.func_ir, idx):
             return [ir.Assign(target, assign.target, assign.loc)]
 
         # inline index getitem, TODO: test

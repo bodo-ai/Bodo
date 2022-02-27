@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -64,3 +65,26 @@ def test_from_product_sortorder_defined():
     message = "sortorder parameter only supports default value None"
     with pytest.raises(BodoError, match=message):
         bodo.jit(impl, distributed=False)()
+
+
+def test_multi_index_head(memory_leak_check):
+    """
+    [BE-2273]. Test that df.head works as expected with multi-index
+    DataFrames.
+    """
+
+    def impl(df):
+        new_df = df.groupby(["A", "B"]).apply(lambda x: 1)
+        res = new_df.head(10)
+        return res
+
+    df = pd.DataFrame(
+        {
+            "A": [i for i in range(10)] * 70,
+            "B": [j for j in range(7)] * 100,
+            "C": np.arange(700),
+        }
+    )
+    # Reset the index because the groupby means order
+    # won't be maintained
+    check_func(impl, (df,), reset_index=True)
