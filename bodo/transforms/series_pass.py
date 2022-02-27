@@ -2302,7 +2302,7 @@ class SeriesPass:
                 rhs.args,
             )
 
-        # optimize len(A[i]) -> get_str_arr_item_length(A, i)
+        # optimize len(A[i]) -> get_str_arr_str_length(A, i)
         if (
             fdef == ("len", "builtins")
             and self.typemap[rhs.args[0].name] == string_type
@@ -2315,7 +2315,7 @@ class SeriesPass:
                 val_idx = get_getsetitem_index_var(val_def, self.typemap, nodes)
                 return nodes + compile_func_single_block(
                     eval(
-                        "lambda A, i: bodo.libs.str_arr_ext.get_str_arr_item_length(A, i)"
+                        "lambda A, i: bodo.libs.str_arr_ext.get_str_arr_str_length(A, i)"
                     ),
                     (val_def.value, val_idx),
                     assign.target,

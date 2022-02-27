@@ -1538,7 +1538,7 @@ class DistributedAnalysis:
         if fdef == ("isna", "bodo.libs.array_kernels"):
             return
 
-        if fdef == ("get_str_arr_item_length", "bodo.libs.str_arr_ext"):
+        if fdef == ("get_str_arr_str_length", "bodo.libs.str_arr_ext"):
             return
 
         if fdef == ("move_str_binary_arr_payload", "bodo.libs.str_arr_ext"):
@@ -3574,7 +3574,7 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                         if fdef == ("str_arr_item_to_numeric", "bodo.libs.str_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                             accesses.add((rhs.args[2].name, rhs.args[3].name, False))
-                        if fdef == ("get_str_arr_item_length", "bodo.libs.str_arr_ext"):
+                        if fdef == ("get_str_arr_str_length", "bodo.libs.str_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ("inplace_eq", "bodo.libs.str_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))

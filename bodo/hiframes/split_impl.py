@@ -379,6 +379,8 @@ def get_c_arr_ptr(typingctx, c_arr, ind_t=None):
 def getitem_c_arr(typingctx, c_arr, ind_t=None):
     def codegen(context, builder, sig, args):
         in_arr, ind = args
+        if isinstance(sig.args[0], types.ArrayCTypes):
+            in_arr = builder.extract_value(in_arr, 0)
         return builder.load(builder.gep(in_arr, [ind]))
 
     return c_arr.dtype(c_arr, ind_t), codegen

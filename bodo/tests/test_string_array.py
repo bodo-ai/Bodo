@@ -522,7 +522,7 @@ def _check_str_item_length(impl):
     j_func = numba.njit(pipeline_class=SeqTestPipeline, parallel=True)(impl)
     assert j_func(A) == impl(A)
     fir = j_func.overloads[j_func.signatures[0]].metadata["preserved_ir"]
-    assert dist_IR_contains(fir, "get_str_arr_item_length")
+    assert dist_IR_contains(fir, "get_str_arr_str_length")
 
 
 def test_str_length_inplace(memory_leak_check):

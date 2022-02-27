@@ -778,7 +778,28 @@ def str_copy_ptr(typingctx, ptr_typ, ind_typ, str_typ, len_typ=None):
 
 @numba.njit(no_cpython_wrapper=True)
 def get_str_arr_item_length(A, i):  # pragma: no cover
+    """return the number of bytes in the string at index i.
+    Note: may not be the same as the length of the string for non-ascii unicode.
+    """
     return np.int64(getitem_str_offset(A, i + 1) - getitem_str_offset(A, i))
+
+
+@numba.njit(no_cpython_wrapper=True)
+def get_str_arr_str_length(A, i):  # pragma: no cover
+    """return length of string at index i of string array A.
+    This avoids creating a new string object in the common case of ascii strings.
+    Note: non-ascii unicode characters may have multiple bytes per character.
+    """
+    start = np.int64(getitem_str_offset(A, i))
+    end = np.int64(getitem_str_offset(A, i + 1))
+    l = end - start
+    data_ptr = get_data_ptr_ind(A, start)
+    for j in range(l):
+        if bodo.hiframes.split_impl.getitem_c_arr(data_ptr, j) >= 128:
+            # non-ascii case
+            return len(A[i])
+
+    return l
 
 
 @numba.njit(no_cpython_wrapper=True)
