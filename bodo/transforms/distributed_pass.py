@@ -1439,7 +1439,7 @@ class DistributedPass:
             ("isna", "bodo.libs.array_kernels"),
             ("get_bit_bitmap_arr", "bodo.libs.int_arr_ext"),
             ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
-            ("get_str_arr_item_length", "bodo.libs.str_arr_ext"),
+            ("get_str_arr_str_length", "bodo.libs.str_arr_ext"),
         ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             # fix index in call to isna
             arr = rhs.args[0]
@@ -3888,7 +3888,7 @@ class DistributedPass:
                 ("setna", "bodo.libs.array_kernels"),
                 ("str_arr_item_to_numeric", "bodo.libs.str_arr_ext"),
                 ("setitem_str_arr_ptr", "bodo.libs.str_arr_ext"),
-                ("get_str_arr_item_length", "bodo.libs.str_arr_ext"),
+                ("get_str_arr_str_length", "bodo.libs.str_arr_ext"),
                 ("inplace_eq", "bodo.libs.str_arr_ext"),
                 ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"),
                 ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
