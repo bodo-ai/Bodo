@@ -19,6 +19,7 @@ from numba.extending import (
     unbox,
 )
 
+from bodo.utils.conversion import ensure_contig_if_np
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
@@ -282,15 +283,17 @@ def overload_multi_index_getitem(I, ind):
         n_fields = len(I.array_types)
         func_text = "def impl(I, ind):\n"
         func_text += "  data = I._data\n"
-        # TODO(ehsan): is ensure_contig_if_np needed?
+        # ensure_contig_if_np is need for distributed slices to prevent "A" vs
+        # "C" mismatch.
         func_text += "  return init_multi_index(({},), I._names, I._name)\n".format(
-            ", ".join(f"data[{i}][ind]" for i in range(n_fields))
+            ", ".join(f"ensure_contig_if_np(data[{i}][ind])" for i in range(n_fields))
         )
         loc_vars = {}
         exec(
             func_text,
             {
                 "init_multi_index": init_multi_index,
+                "ensure_contig_if_np": ensure_contig_if_np,
             },
             loc_vars,
         )
