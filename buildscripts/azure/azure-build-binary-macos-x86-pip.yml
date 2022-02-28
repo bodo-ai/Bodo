@@ -51,7 +51,7 @@ jobs:
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
       export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
       export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-10.15}
-      if [[ "$IS_MAJOR_RELEASE" == 1 ]]; then
+      if [[ "$IS_MAJOR_RELEASE" == 1 ]] && [[ $OBFUSCATE == 1 ]]; then
         # get secrets
         sudo cp $(pypi_secret_file.secureFilePath) $HOME/pypi_secret_file
         cd $(System.DefaultWorkingDirectory)
