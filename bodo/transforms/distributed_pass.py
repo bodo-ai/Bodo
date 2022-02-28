@@ -1647,8 +1647,44 @@ class DistributedPass:
             )
 
         if fdef == ("_bodo_groupby_apply_impl", "") and self._is_1D_or_1D_Var_arr(lhs):
-            self._set_last_arg_to_true(assign.value)
-            return [assign]
+            # inline shuffling of groupby apply data to make sure input arrays are
+            # deallocated during shuffle and there is less memory pressure.
+            # inlining causes dels to be generated earlier for variables than calling a
+            # the _bodo_groupby_apply_impl function
+            # see [BE-2079]
+            keys = rhs.args[0]
+            in_df = rhs.args[1]
+            keys_type = self.typemap[keys.name]
+            in_df_type = self.typemap[in_df.name]
+
+            # generate shuffle_dataframe(in_df, keys, True)
+            py_func, glbls = bodo.hiframes.pd_groupby_ext.gen_shuffle_dataframe(
+                in_df_type, keys_type, types.literal(True)
+            )
+            true_var = ir.Var(assign.target.scope, mk_unique_var("true"), rhs.loc)
+            self.typemap[true_var.name] = types.literal(True)
+            nodes = [ir.Assign(ir.Const(True, rhs.loc), true_var, rhs.loc)]
+            nodes += compile_func_single_block(
+                py_func, [in_df, keys, true_var], None, self, extra_globals=glbls
+            )
+            out_tup = nodes[-1].value
+            out_df = out_tup.items[0]
+            out_keys = out_tup.items[1]
+            shuffle_info = out_tup.items[2]
+
+            # update _bodo_groupby_apply_impl() call to use shuffled data
+            rhs.args[0] = out_keys
+            rhs.args[1] = out_df
+            # append in case there are other UDF inputs
+            rhs.args.append(shuffle_info)
+            rhs.args.append(true_var)
+            # update calltype since inputs are changed
+            self.calltypes.pop(rhs)
+            self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+                self.typingctx, tuple(self.typemap[v.name] for v in rhs.args), {}
+            )
+            nodes.append(assign)
+            return nodes
 
         # no need to gather if input data is replicated
         if (

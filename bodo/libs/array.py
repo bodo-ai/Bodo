@@ -195,7 +195,7 @@ def array_to_info_codegen(context, builder, sig, args):
                 return [numba_to_c_type(arr_typ)]
 
         def get_lengths(arr_typ, arr):
-            """ Get array of lengths of all arrays in nested structure """
+            """Get array of lengths of all arrays in nested structure"""
             length = context.compile_internal(
                 builder, lambda a: len(a), types.intp(arr_typ), [arr]
             )
@@ -245,7 +245,7 @@ def array_to_info_codegen(context, builder, sig, args):
             return lengths
 
         def get_buffers(arr_typ, arr):
-            """ Get array of buffers (offsets, nulls, data) of all arrays in nested structure """
+            """Get array of buffers (offsets, nulls, data) of all arrays in nested structure"""
             if isinstance(arr_typ, MapArrayType):
                 arr_struct = context.make_helper(builder, arr_typ, value=arr)
                 buffers = get_buffers(_get_map_arr_data_type(arr_typ), arr_struct.data)
@@ -755,7 +755,7 @@ def _lower_info_to_array_list_string_array(arr_type, context, builder, in_info):
 def nested_to_array(
     context, builder, arr_typ, lengths_ptr, array_infos_ptr, lengths_pos, infos_pos
 ):
-    """ LLVM codegen for info_to_array for nested types. Is called recursively """
+    """LLVM codegen for info_to_array for nested types. Is called recursively"""
 
     ll_array_info_type = context.get_data_type(array_info_type)
 
@@ -1011,7 +1011,7 @@ def info_to_array(typingctx, info_type, array_type):
             # a MapArray.
 
             def get_num_arrays(arr_typ):
-                """ get total number of arrays in nested array """
+                """get total number of arrays in nested array"""
                 if isinstance(arr_typ, ArrayItemArrayType):
                     return 1 + get_num_arrays(arr_typ.dtype)
                 elif isinstance(arr_typ, StructArrayType):
@@ -1737,16 +1737,41 @@ get_shuffle_info = types.ExternalFunction(
 )
 
 
-delete_shuffle_info = types.ExternalFunction(
-    "delete_shuffle_info",
-    types.void(shuffle_info_type),
-)
+@intrinsic
+def delete_shuffle_info(typingctx, shuffle_info_t=None):
+    """delete shuffle info data if not none"""
+
+    def codegen(context, builder, sig, args):
+        if sig.args[0] == types.none:
+            return
+
+        fnty = lir.FunctionType(lir.VoidType(), [lir.IntType(8).as_pointer()])
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="delete_shuffle_info"
+        )
+        return builder.call(fn_tp, args)
+
+    return types.void(shuffle_info_t), codegen
 
 
-reverse_shuffle_table = types.ExternalFunction(
-    "reverse_shuffle_table",
-    table_type(table_type, shuffle_info_type),
-)
+@intrinsic
+def reverse_shuffle_table(typingctx, table_t, shuffle_info_t=None):
+    """call reverse shuffle if shuffle info not none"""
+
+    def codegen(context, builder, sig, args):
+        if sig.args[-1] == types.none:
+            return context.get_constant_null(table_type)
+
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [lir.IntType(8).as_pointer(), lir.IntType(8).as_pointer()],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="reverse_shuffle_table"
+        )
+        return builder.call(fn_tp, args)
+
+    return table_type(table_type, shuffle_info_t), codegen
 
 
 @intrinsic

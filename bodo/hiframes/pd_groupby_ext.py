@@ -402,7 +402,7 @@ def get_pivot_output_dtype(arr_type, func_name, index_type=None):
 
 
 def check_args_kwargs(func_name, len_args, args, kws):
-    """ Check for extra incorrect arguments """
+    """Check for extra incorrect arguments"""
     if len(kws) > 0:
         bad_key = list(kws.keys())[0]
         raise BodoError(
@@ -1726,6 +1726,11 @@ def shuffle_dataframe(df, keys, _is_parallel):  # pragma: no cover
 
 @overload(shuffle_dataframe, prefer_literal=True)
 def overload_shuffle_dataframe(df, keys, _is_parallel):
+    impl, _ = gen_shuffle_dataframe(df, keys, _is_parallel)
+    return impl
+
+
+def gen_shuffle_dataframe(df, keys, _is_parallel):
     """shuffle a dataframe using a tuple of key arrays."""
     n_cols = len(df.columns)
     n_keys = len(keys.types)
@@ -1767,12 +1772,12 @@ def overload_shuffle_dataframe(df, keys, _is_parallel):
 
     # extract arrays from C++ table
     for i in range(n_keys):
-        func_text += f"  out_key{i} = info_to_array(info_from_table(out_table, {i}), keys[{i}])\n"
+        func_text += f"  out_key{i} = info_to_array(info_from_table(out_table, {i}), keys{i}_typ)\n"
 
     for i in range(n_cols):
-        func_text += f"  out_arr{i} = info_to_array(info_from_table(out_table, {i+n_keys}), in_arr{i})\n"
+        func_text += f"  out_arr{i} = info_to_array(info_from_table(out_table, {i+n_keys}), in_arr{i}_typ)\n"
 
-    func_text += f"  out_arr_index = info_to_array(info_from_table(out_table, {n_keys + n_cols}), in_index_arr)\n"
+    func_text += f"  out_arr_index = info_to_array(info_from_table(out_table, {n_keys + n_cols}), ind_arr_typ)\n"
 
     func_text += "  shuffle_info = get_shuffle_info(out_table)\n"
     func_text += "  delete_table(out_table)\n"
@@ -1786,23 +1791,30 @@ def overload_shuffle_dataframe(df, keys, _is_parallel):
         ", ".join(f"out_key{i}" for i in range(n_keys))
     )
 
+    glbls = {
+        "bodo": bodo,
+        "array_to_info": array_to_info,
+        "arr_info_list_to_table": arr_info_list_to_table,
+        "shuffle_table": shuffle_table,
+        "info_from_table": info_from_table,
+        "info_to_array": info_to_array,
+        "delete_table": delete_table,
+        "get_shuffle_info": get_shuffle_info,
+        "ind_arr_typ": types.Array(types.int64, 1, "C")
+        if isinstance(df.index, RangeIndexType)
+        else df.index.data,
+    }
+    glbls.update({f"keys{i}_typ": keys.types[i] for i in range(n_keys)})
+    glbls.update({f"in_arr{i}_typ": df.data[i] for i in range(n_cols)})
+
     loc_vars = {}
     exec(
         func_text,
-        {
-            "bodo": bodo,
-            "array_to_info": array_to_info,
-            "arr_info_list_to_table": arr_info_list_to_table,
-            "shuffle_table": shuffle_table,
-            "info_from_table": info_from_table,
-            "info_to_array": info_to_array,
-            "delete_table": delete_table,
-            "get_shuffle_info": get_shuffle_info,
-        },
+        glbls,
         loc_vars,
     )
     impl = loc_vars["impl"]
-    return impl
+    return impl, glbls
 
 
 def reverse_shuffle(data, shuffle_info):  # pragma: no cover
