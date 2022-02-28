@@ -42,7 +42,7 @@ jobs:
       set -eo pipefail
       export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
       export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
-      if [[ "$IS_MAJOR_RELEASE" == 1 ]]; then
+      if [[ "$IS_MAJOR_RELEASE" == 1 ]] && [[ $OBFUSCATE == 1 ]]; then
         # get secrets
         sudo chmod a+r $(ecr_secret_file.secureFilePath) $(pypi_secret_file.secureFilePath)
         sudo cp $(ecr_secret_file.secureFilePath) $HOME/ecr_secret_file
