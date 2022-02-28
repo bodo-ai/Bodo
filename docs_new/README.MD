@@ -7,7 +7,7 @@
 - `pip install mkdocs-material-extensions`
 - `pip install mike`
 
-**note** Any package you do not find can be pip installed. 
+**note** Any package you do not find can be pip installed.
 
 ## Building docs locally 
 
