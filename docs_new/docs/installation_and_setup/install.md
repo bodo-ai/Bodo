@@ -68,7 +68,7 @@ the table below. All optional dependencies except Hadoop can be
 installed using the commands
 
 ```console
-conda install gcsfs sqlalchemy snowflake-connector-python hdf5='*=*mpich*' openjdk -c conda-forge
+conda install gcsfs sqlalchemy snowflake-connector-python hdf5='1.10.*=*mpich*' openjdk -c conda-forge
 ```
 
 and 

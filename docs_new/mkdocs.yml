@@ -176,6 +176,9 @@ nav:
               - sklearn.preprocessing: api_docs/ml/sklearn/preprocessing.md
               - sklearn.svm: api_docs/ml/sklearn/svm.md
       - Miscellaneous Supported Python API: api_docs/miscellaneous.md
+      - BodoSQL(Beta):
+        - API: api_docs/BodoSQL.md
+        - Errors: api_docs/bodosqlerrors.md
   - Performance and Diagnostics:
       - Measuring Performance: performance/performance.md
       - Caching: performance/caching.md

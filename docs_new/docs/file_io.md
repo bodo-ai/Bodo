@@ -30,9 +30,9 @@ Also see [supported pandas Operations][pandas] for supported arguments of I/O fu
 
 Parquet is a commonly used file format in analytics due to its efficient
 columnar storage. Bodo supports the standard pandas API for reading
-Parquet: `pd.read_parquet(path)`, where path can be a parquet file or a
+Parquet: `pd.read_parquet(path)`, where path can be a parquet file, a
 directory with multiple parquet files (all are part of the same
-dataframe):
+dataframe) or a glob pattern:
 
 ```py
 import pandas as pd
@@ -403,12 +403,14 @@ def example_read_json_multi_lines():
 
 ### SQL {#sql-section}
 
+See [Databases][db] for the list of supported Relational Database Management Systems (RDBMS) with Bodo.
+
 For SQL, the syntax is also the same as pandas. For reading:
 
 ```py
 @bodo.jit
 def example_read_sql():
-    df = pd.read_sql('select * from employees', 'mysql+pymysql://admin:server')
+    df = pd.read_sql('select * from employees', 'mysql+pymysql://<username>:<password>@<host>/<db_name>')
 ```
 
 See [`read_sql()`][pandas-f-in] for supported arguments.
@@ -418,7 +420,7 @@ For writing:
 ```py
 @bodo.jit
 def example_write_sql(df):
-    df.to_sql('table_name', 'mysql+pymysql://admin:server')
+    df.to_sql('table_name', 'mysql+pymysql://<username>:<password>@<host>/<db_name>')
 ```
 
 See [`to_sql()`][pandas-f-in] for supported arguments.
@@ -694,7 +696,207 @@ df.to_sql('<table_name>',f"snowflake://<username>:<password>@url/<db_name>/publi
 !!! note
     - `index=False` is required as Snowflake does not support indexes. 
     - `if_exists=append` is needed if the table already exists in snowflake.
+    - `schema` is recommended to avoid object permission issues.
     
+MySQL
+-----
 
+
+
+### Prerequisites
+
+In addition to ``sqlalchemy``, install ``pymysql``.
+If you're using Bodo in a conda environment:
+
+```shell
+conda install pymysql -c conda-forge
+```
+
+If you've installed Bodo using pip:
+
+```shell
+pip install PyMySQL
+```
+
+### Usage
+
+Reading result of a SQL query in a dataframe:
+
+```py
+import bodo
+import pandas as pd
+
+
+@bodo.jit(distributed=['df'])
+def read_mysql(table_name, conn):
+    df = pd.read_sql(
+            f"SELECT * FROM {table_name}",
+            conn
+        )
+    return df
+
+
+table_name = "test_table"
+conn = f"mysql+pymysql://{username}:{password}@{host}/{db_name}"
+df = read_mysql(table_name, conn)
+```
+
+Writing dataframe as a table in the database:
+
+```py
+import bodo
+import pandas as pd
+
+
+@bodo.jit(distributed=['df'])
+def write_mysql(df, table_name, conn):
+    df.to_sql(table, conn)
+
+
+table_name = "test_table"
+df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+conn = f"mysql+pymysql://{username}:{password}@{host}/{db_name}"
+write_mysql(df, table_name, conn)
+```
+
+## Oracle Database
+
+### Prerequisites
+
+In addition to ``sqlalchemy``, install ``cx_oracle`` and Oracle instant client driver.
+If you're using Bodo in a conda environment:
+
+```shell
+conda install cx_oracle -c conda-forge
+```
+
+If you've installed Bodo using pip:
+
+```shell
+pip install cx-Oracle
+```
+
+- Then, Download "Basic" or "Basic light" package matching your operating system from [here](https://www.oracle.com/database/technologies/instant-client/downloads.html){target=blank}.
+- Unzip package and add it to ``LD_LIBRARY_PATH`` environment variable.
+
+!!! note
+    For linux ``libaio`` package is required as well.
+    
+    - conda: ``conda install libaio -c conda-forge``
+    - pip: ``pip install libaio``
+
+See [cx_oracle](https://cx-oracle.readthedocs.io/en/latest/user_guide/installation.html#cx-oracle-8-installation>){target=blank} for more information.
+Alternatively, Oracle instant driver can be automatically downloaded using ``wget`` or ``curl`` commands.
+Here's an example of automatic installation on a Linux OS machine.
+
+```shell
+conda install cx_oracle libaio -c conda-forge
+mkdir -p /opt/oracle
+cd /opt/oracle
+wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip 
+unzip instantclient-basic-linux.x64-21.5.0.0.0dbru.zip 
+export LD_LIBRARY_PATH=/opt/oracle/instantclient_21_5:$LD_LIBRARY_PATH
+```
+
+### Usage
+
+Reading result of a SQL query in a dataframe:
+
+```py
+import bodo
+import pandas as pd
+
+
+@bodo.jit(distributed=['df'])
+def read_oracle(table_name, conn):
+    df = pd.read_sql(
+            f"SELECT * FROM {table_name}",
+            conn
+        )
+    return df
+
+
+table_name = "test_table"
+conn = f"oracle+cx_oracle://{username}:{password}@{host}/{db_name}"
+df = read_oracle(table_name, conn)
+```
+
+
+
+Writing dataframe as a table in the database:
+
+```py
+import bodo
+import pandas as pd
+
+
+@bodo.jit(distributed=['df'])
+def write_mysql(df, table_name, conn):
+    df.to_sql(table, conn)
+
+
+table_name = "test_table"
+df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+conn = f"oracle+cx_oracle://{username}:{password}@{host}/{db_name}"
+write_mysql(df, table_name, conn)
+```
+
+## PostgreSQL
+
+### Prerequisites
+In addition to `sqlalchemy`, install `psycopg2`.
+
+If you're using Bodo in a conda environment:
+
+```shell
+conda install psycopg2 -c conda-forge
+```
+
+If you've installed Bodo using pip:
+
+```shell
+$ pip install psycopg2
+```
+
+### Usage
+
+Reading result of a SQL query in a dataframe:
+
+```py
+import bodo
+import pandas as pd
+
+
+@bodo.jit(distributed=['df'])
+def read_postgresql(table_name, conn):
+    df = pd.read_sql(
+            f"SELECT * FROM {table_name}",
+            conn
+        )
+    return df
+
+
+table_name = "test_table"
+conn = f"postgresql+psycopg2://{username}:{password}@{host}/{db_name}"
+df = read_postgresql(table_name, conn)
+```
+
+Writing dataframe as a table in the database:
+
+```py
+import bodo
+import pandas as pd
+
+
+@bodo.jit(distributed=['df'])
+def write_postgresql(df, table_name, conn):
+    df.to_sql(table, conn)
+
+
+table_name = "test_table"
+df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+conn = f"postgresql+psycopg2://{username}:{password}@{host}/{db_name}"
+write_postgresql(df, table_name, conn)
+```
 [comment]: <> (Autorefs in [pandas], [pandas-f-in], [serialization-io-conversion], [inlining] and [integer-na-issue-pandas] will populate as those sections are added.)
 [todo]: <> (Modify/remove the comment above as the [pandas], [pandas-f-in], [serialization-io-conversion], [inlining] and [integer-na-issue-pandas] sections are added.)
