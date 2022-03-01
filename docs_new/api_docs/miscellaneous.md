@@ -1,5 +1,5 @@
-# Miscellaneous Supported Python API
-
+Miscellaneous Supported Python API {#miscapi}
+==================================
 In this section, we will discuss some useful Bodo features.
 
 ## Nullable Integers in Pandas
