@@ -54,7 +54,7 @@ fi
 # ---- Conda installs for source build ----
 if [ "$RUN_NIGHTLY" != "yes" ];
 then
-   $CONDA_INSTALL -c conda-forge pyarrow=5.0.0
+   $CONDA_INSTALL -c conda-forge pyarrow=7.0.0
    $CONDA_INSTALL fsspec>=2021.09 -c conda-forge
    $CONDA_INSTALL pandas='1.3.3' -c conda-forge
    $CONDA_INSTALL numba=0.55.1 -c conda-forge
@@ -70,8 +70,8 @@ else
    if [ "$RUNTIME" != "yes" ];
     then
        conda clean -a -y
-       #$CONDA_INSTALL pytorch=1.9 pyarrow=5.0.0 -c pytorch -c conda-forge -c defaults
-       $CONDA_INSTALL pyarrow=5.0.0 -c conda-forge
+       #$CONDA_INSTALL pytorch=1.9 pyarrow=7.0.0 -c pytorch -c conda-forge -c defaults
+       $CONDA_INSTALL pyarrow=7.0.0 -c conda-forge
        conda clean -a -y
        #$CONDA_INSTALL bokeh=2.3 -c pytorch -c conda-forge -c defaults
        #conda clean -a -y
