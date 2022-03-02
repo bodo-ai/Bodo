@@ -939,9 +939,15 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
         n_cols = len(data.columns)
         # empty dataframe case
         if n_cols == 0:
-            return lambda data, allgather=False, warn_if_rep=True, root=MPI_ROOT: bodo.hiframes.pd_dataframe_ext.init_dataframe(
-                (), bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data), ()
-            )  # pragma: no cover
+
+            def impl(
+                data, allgather=False, warn_if_rep=True, root=MPI_ROOT
+            ):  # pragma: no cover
+                index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)
+                g_index = bodo.gatherv(index, allgather, warn_if_rep, root)
+                return bodo.hiframes.pd_dataframe_ext.init_dataframe((), g_index, ())
+
+            return impl
 
         data_args = ", ".join(f"g_data_{i}" for i in range(n_cols))
         col_var = bodo.utils.transform.gen_const_tup(data.columns)

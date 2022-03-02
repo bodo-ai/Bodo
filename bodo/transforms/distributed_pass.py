@@ -3385,8 +3385,11 @@ class DistributedPass:
             "bodo.hiframes.pd_dataframe_ext",
         ):
             arrs_tup = get_definition(self.func_ir, var_def.args[0])
-            assert is_expr(arrs_tup, "build_tuple"), "invalid init_dataframe"
-            arrs = list(arrs_tup.items) + [var_def.args[1]]
+            if isinstance(arrs_tup, ir.Const) and arrs_tup.value == ():
+                arrs = [var_def.args[1]]
+            else:
+                assert is_expr(arrs_tup, "build_tuple"), "invalid init_dataframe"
+                arrs = list(arrs_tup.items) + [var_def.args[1]]
             return all(self._is_dist_slice(v, equiv_set) for v in arrs)
 
         # Series case, check data array and index

@@ -2203,16 +2203,40 @@ def test_df_set_index(df_value, memory_leak_check):
     # # TODO(ehsan): test non-str columns using 'df_value.columns[0]' instead of 'A" when
     # # Numba can convert freevars to literals
 
-    # single column dfs become zero column which are not supported, TODO: fix
     if "A" not in df_value.columns:
         df = df_value.rename(columns={df_value.columns[0]: "A"})
     else:
         df = df_value.copy(deep=True)
-    # Pandas seems to error in our framework with an empty df
-    if len(df_value.columns) == 1:
-        df["B"] = df["A"]
 
     check_func(impl, (df,))
+
+
+@pytest.mark.slow
+def test_df_set_index_empty_dataframe(memory_leak_check):
+    """
+    Tests DataFrame.set_index that produces an empty DataFrame.
+    """
+
+    def test_impl(df):
+        return df.set_index("A")
+
+    np.random.seed(5)
+    df = pd.DataFrame({"A": np.random.randn(10)})
+    check_func(test_impl, (df,))
+
+
+@pytest.mark.slow
+def test_empty_df_len(memory_leak_check):
+    """
+    Tests that the length of a dataframe returns the length of the index.
+    """
+
+    def test_impl():
+        df = pd.DataFrame({"A": np.arange(10)})
+        df = df.set_index("A")
+        return len(df)
+
+    check_func(test_impl, ())
 
 
 def test_df_reset_index1(df_value, memory_leak_check):

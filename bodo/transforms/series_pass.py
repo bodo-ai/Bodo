@@ -2302,6 +2302,20 @@ class SeriesPass:
                 rhs.args,
             )
 
+        if (
+            fdef == ("len", "builtins")
+            and not isinstance(self.typemap[rhs.args[0].name], RangeIndexType)
+            and bodo.hiframes.pd_index_ext.is_pd_index_type(
+                self.typemap[rhs.args[0].name]
+            )
+        ):
+            nodes = []
+            arr = self._get_index_data(rhs.args[0], nodes)
+            func_text = """def f(df_arr):\n  return len(df_arr)\n"""
+            loc_vars = {}
+            exec(func_text, globals(), loc_vars)
+            return replace_func(self, loc_vars["f"], [arr], pre_nodes=nodes)
+
         # optimize len(A[i]) -> get_str_arr_str_length(A, i)
         if (
             fdef == ("len", "builtins")
