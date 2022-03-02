@@ -21,6 +21,7 @@ from numba.extending import (
     box,
     intrinsic,
     lower_cast,
+    lower_builtin,
     make_attribute_wrapper,
     models,
     overload,
@@ -606,6 +607,32 @@ def overload_pd_timestamp(
                 zero_if_none(nanosecond),
                 value,
             )
+
+        return impl_date
+
+    if isinstance(ts_input, numba.core.types.scalars.NPDatetime):
+        nanoseconds, precision = pd._libs.tslibs.conversion.precision_from_unit(
+            ts_input.unit
+        )
+
+        def impl_date(
+            ts_input=_no_input,
+            freq=None,
+            tz=None,
+            unit=None,
+            year=None,
+            month=None,
+            day=None,
+            hour=None,
+            minute=None,
+            second=None,
+            microsecond=None,
+            nanosecond=None,
+            tzinfo=None,
+        ):  # pragma: no cover
+
+            value = np.int64(ts_input) * nanoseconds
+            return convert_datetime64_to_timestamp(integer_to_dt64(value))
 
         return impl_date
 
@@ -2057,6 +2084,13 @@ def strftime(ts, format):
     return impl
 
 
+@overload_method(PandasTimestampType, "to_datetime64")
+def to_datetime64(ts):
+    def impl(ts):
+        return integer_to_dt64(ts.value)
+    return impl
+
+
 @register_jitable
 def now_impl():  # pragma: no cover
     """Internal call to support pd.Timestamp.now().
@@ -2146,7 +2180,6 @@ timestamp_unsupported_methods = [
     "timestamp",
     "timetuple",
     "timetz",
-    "to_datetime64",
     "to_julian_date",
     "to_numpy",
     "to_period",
@@ -2188,3 +2221,11 @@ def _install_pd_timestamp_unsupported():
 
 
 _install_pd_timestamp_unsupported()
+
+
+@lower_builtin(numba.core.types.functions.NumberClass, pd_timestamp_type, types.StringLiteral)
+def datetime64_constructor(context, builder, sig, args):
+    def datetime64_constructor_impl(a, b):
+        return integer_to_dt64(a.value)
+
+    return context.compile_internal(builder, datetime64_constructor_impl, sig, args)
