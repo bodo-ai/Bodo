@@ -1440,9 +1440,12 @@ class DistributedAnalysis:
             if lhs not in array_dists:
                 self._set_var_dist(lhs, array_dists, Distribution.OneD)
 
+            # input tuple may be empty, see test_df_duplicated
+            if len(self.typemap[rhs.args[0].name]) == 0:
+                return
+
             # arg0 is a tuple of arrays, arg1 is an array
             in_dist = Distribution(min(a.value for a in array_dists[rhs.args[0].name]))
-            # return is a tuple(array, array)
             out_dist = Distribution(min(array_dists[lhs].value, in_dist.value))
             self._set_var_dist(lhs, array_dists, out_dist)
 

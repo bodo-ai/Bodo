@@ -2364,6 +2364,9 @@ def test_df_duplicated(memory_leak_check):
         index=[3, 1, 2, 4, 6],
     )
     check_func(impl, (df,), sort_output=True)
+    # empty dataframe corner case
+    df = pd.DataFrame()
+    check_func(impl, (df,))
 
 
 def test_df_duplicated_binary_values():
