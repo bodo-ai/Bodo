@@ -64,7 +64,7 @@ from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import NativeValue, lower_builtin, typeof_impl
 from numba.parfors.parfor import get_expr_args
 
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, get_overload_const, is_overload_constant_str, get_overload_const_str, raise_bodo_error
 
 # flag for checking whether the functions we are replacing have changed in a later Numba
 # release. Needs to be checked for every new Numba release so we update our changes.
@@ -3091,41 +3091,55 @@ def resolve_number___call__(self, classty):
     Resolve a number class's constructor (e.g. calling int(...))
     """
     import numpy as np
+    import bodo
     from numba.core.typing.templates import make_callable_template
 
     ty = classty.instance_type
 
-    def typer(val):
-        if isinstance(val, (types.BaseTuple, types.Sequence)):
-            # Array constructor, e.g. np.int32([1, 2])
-            fnty = self.context.resolve_value_type(np.array)
-            sig = fnty.get_call_type(self.context, (val, types.DType(ty)), {})
-            return sig.return_type
-        elif isinstance(val, (types.Number, types.Boolean, types.IntEnumMember)):
-            # Scalar constructor, e.g. np.int32(42)
-            return ty
-        # Bodo Change: Support for unicode
-        elif val == types.unicode_type:
-            return ty
-        elif isinstance(val, (types.NPDatetime, types.NPTimedelta)):
-            # Constructor cast from datetime-like, e.g.
-            # > np.int64(np.datetime64("2000-01-01"))
-            if ty.bitwidth == 64:
+    if isinstance(ty, types.NPDatetime):
+
+        def typer(val1, val2):
+            if val1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
+                if not is_overload_constant_str(val2):
+                    raise_bodo_error("datetime64(): 'units' must be a 'str' specifying 'ns'")
+                units = get_overload_const_str(val2)
+                if units != "ns":
+                    raise BodoError("datetime64(): 'units' must be 'ns'")
+                return types.NPDatetime("ns")
+
+    else:
+
+        def typer(val):
+            if isinstance(val, (types.BaseTuple, types.Sequence)):
+                # Array constructor, e.g. np.int32([1, 2])
+                fnty = self.context.resolve_value_type(np.array)
+                sig = fnty.get_call_type(self.context, (val, types.DType(ty)), {})
+                return sig.return_type
+            elif isinstance(val, (types.Number, types.Boolean, types.IntEnumMember)):
+                # Scalar constructor, e.g. np.int32(42)
                 return ty
-            else:
-                msg = f"Cannot cast {val} to {ty} as {ty} is not 64 bits " "wide."
-                raise errors.TypingError(msg)
-        else:
-            if isinstance(val, types.Array) and val.ndim == 0 and val.dtype == ty:
-                # This is 0d array -> scalar degrading
+            # Bodo Change: Support for unicode
+            elif val == types.unicode_type:
                 return ty
+            elif isinstance(val, (types.NPDatetime, types.NPTimedelta)):
+                # Constructor cast from datetime-like, e.g.
+                # > np.int64(np.datetime64("2000-01-01"))
+                if ty.bitwidth == 64:
+                    return ty
+                else:
+                    msg = f"Cannot cast {val} to {ty} as {ty} is not 64 bits " "wide."
+                    raise errors.TypingError(msg)
             else:
-                # unsupported
-                msg = f"Casting {val} to {ty} directly is unsupported."
-                if isinstance(val, types.Array):
-                    # array casts are supported a different way.
-                    msg += f" Try doing '<array>.astype(np.{ty})' instead"
-                raise errors.TypingError(msg)
+                if isinstance(val, types.Array) and val.ndim == 0 and val.dtype == ty:
+                    # This is 0d array -> scalar degrading
+                    return ty
+                else:
+                    # unsupported
+                    msg = f"Casting {val} to {ty} directly is unsupported."
+                    if isinstance(val, types.Array):
+                        # array casts are supported a different way.
+                        msg += f" Try doing '<array>.astype(np.{ty})' instead"
+                    raise errors.TypingError(msg)
 
     return types.Function(make_callable_template(key=ty, typer=typer))
 

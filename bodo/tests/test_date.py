@@ -2392,3 +2392,55 @@ def test_datetime_index_isocalendar(dateindex, memory_leak_check):
         return I.isocalendar()
 
     check_func(test_impl, (dateindex,))
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        pd.Timestamp("2020-01-01"),
+        pd.Timestamp(42, unit="s"),
+    ],
+)
+def test_timestamp_datetime_conversion(timestamp, memory_leak_check):
+    def test_impl(ts):
+        return np.datetime64(ts, "ns")
+
+    check_func(test_impl, (timestamp,))
+
+
+def test_timestamp_datetime_conversion_error(memory_leak_check):
+    timestamp = pd.Timestamp(42, unit="s")
+
+    def test_impl(ts):
+        return np.datetime64(ts, "s")
+
+    with pytest.raises(BodoError, match="ns"):
+        bodo.jit(test_impl)(timestamp)
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        pd.Timestamp("2020-01-01"),
+        pd.Timestamp(42, unit="s"),
+    ],
+)
+def test_timestamp_to_datetime64(timestamp, memory_leak_check):
+    def test_impl(ts):
+        return ts.to_datetime64()
+
+    check_func(test_impl, (timestamp,))
+
+
+@pytest.mark.parametrize(
+    "datetime",
+    [
+        np.datetime64("2020-01-01"),
+        np.datetime64(42, "s"),
+    ],
+)
+def test_datetime_timestamp_conversion(datetime, memory_leak_check):
+    def test_impl(dt):
+        return pd.Timestamp(dt)
+
+    check_func(test_impl, (datetime,))
