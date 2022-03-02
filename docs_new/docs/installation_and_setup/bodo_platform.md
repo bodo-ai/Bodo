@@ -105,17 +105,17 @@ while the dropdown allows opening the notebook in a new tab.
 
 We recommend interacting with clusters primarily through Jupyter
 notebooks and Jobs. However, it may be necessary to connect directly to
-a cluster in some cases. You can either connect through a notebook
-terminal (recommended), or ssh directly from your machine. The latter
-requires providing your ssh public key during cluster creation.
+a cluster in some cases. In that case, you can connect through a notebook
+terminal.
 
 ### Connecting with a Notebook Terminal
 
 First, you need to [create a cluster][creating_clusters]
-and [attach a notebook to the cluster][attaching_notebook_to_cluster]. 
+and [attach a notebook to the cluster][attaching_notebook_to_cluster].
+This will create the ssh-key at ~/cluster_ssh_keys/id_rsa-{`CLUSTER-UUID`}. 
 
 Then, go the cluster tab and find your cluster. Click on `DETAILS` and
-copy the cluster `UUID`.
+copy the cluster `UUID` and `IP address` of the node you would like to connect to.
 
 ![Cluster-UUID-Info](../platform_onboarding_screenshots/cluster-ip-info.png#center)
 
@@ -124,36 +124,14 @@ Next, go to the notebooks tab and select `OPEN NOTEBOOK`. In the
 
 ![Notebook-Terminal](../platform_onboarding_screenshots/notebook-terminal.png#center)
 
+In the terminal you can connect to any of the cluster nodes by running
+```shell
+ssh -i ~/cluster_ssh_keys/id_rsa-<CLUSTER_UUID> <IP>
+```
+
 Through this terminal, you can interact with the `/shared` folder, which
 is shared by all the instances in the cluster and the Notebook instance.
 [Verify your connection][verify_your_connection] to interact directly with your cluster.
-
-### SSH From Your Machine
-
-First, navigate to the clusters tabs and select `Create a Cluster`.
-Click on `Show Advanced` and add your public key in **SSH Public Key**.
-Then, click on `Add your IP` in the **Access from IP address** section
-to enable accessing your cluster from your machine.
-
-![Cluster-Creation-Advanced-Settings](../platform_onboarding_screenshots/cluster-create-advanced-settings.png#center)
-
-Fill the rest of the form by following the steps to [create clusters][creating_clusters].
-
-In the clusters tab, select your cluster and click on `DETAILS` to find
-the list of IP addresses for your cluster nodes. Use any of the IP
-addresses as the ssh destination. In addition, also copy the cluster
-UUID which will be needed to execute commands across the cluster.
-
-![Cluster-IP-Info](../platform_onboarding_screenshots/cluster-ip-info.png#center)
-
-In any ssh agent, you can connect to one of your nodes with:
-
-```shell
-ssh -i <path_to_private_key> bodo@<IP_ADDRESS>
-```
-
-To add additional ssh options please refer to the documentation for your
-ssh agent.
 
 ### Verify your Connection {#verify_your_connection}
 
