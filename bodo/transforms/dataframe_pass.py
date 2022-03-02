@@ -1184,17 +1184,17 @@ class DataFramePass:
         if df_typ.has_runtime_cols:
             return [assign]
 
-        # empty dataframe has 0 len
-        if len(df_typ.columns) == 0:
-            return [ir.Assign(ir.Const(0, lhs.loc), lhs, lhs.loc)]
-
         # run len on one of the columns
         # FIXME: it could potentially avoid remove dead for the column if
         # array analysis doesn't replace len() with it's size
         nodes = []
-        arr = self._get_dataframe_data(df_var, df_typ.columns[0], nodes)
+        if len(df_typ.columns) == 0:
+            # 0 column DataFrame has the same length as the index
+            arr = self._get_dataframe_index(df_var, nodes)
+        else:
+            arr = self._get_dataframe_data(df_var, df_typ.columns[0], nodes)
 
-        func_text = "" "def f(df_arr):\n" "    return len(df_arr)\n"
+        func_text = """def f(df_arr):\n  return len(df_arr)\n"""
 
         loc_vars = {}
         exec(func_text, globals(), loc_vars)

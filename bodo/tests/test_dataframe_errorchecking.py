@@ -469,23 +469,6 @@ def test_df_set_index_errors(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_df_set_index_empty_dataframe(memory_leak_check):
-    """
-    Tests DataFrame.set_index that produces an empty DataFrame.
-    """
-
-    def test_impl():
-        df = pd.DataFrame({"A": np.random.randn(10)})
-        return df.set_index("A")
-
-    with pytest.raises(
-        BodoError,
-        match="DataFrame.set_index.*: Not supported on single column DataFrames.",
-    ):
-        bodo.jit(test_impl)()
-
-
-@pytest.mark.slow
 def test_df_reset_index_errors(memory_leak_check):
     """
     Tests BodoErrors from DataFrame.rename_index.

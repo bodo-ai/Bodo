@@ -1968,22 +1968,18 @@ def overload_dataframe_set_index(
         module_name="DataFrame",
     )
 
-    # Column name only supproted on constant string
+    # Column name only supported on constant string
     if not is_overload_constant_str(keys):
         raise_bodo_error("DataFrame.set_index(): 'keys' must be a constant string")
     col_name = get_overload_const_str(keys)
     col_ind = df.columns.index(col_name)
-    if len(df.columns) == 1:
-        raise BodoError(
-            "DataFrame.set_index(): Not supported on single column DataFrames."
-        )
 
+    header = "def impl(df, keys, drop=True, append=False, inplace=False, verify_integrity=False):\n"
     data_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})".format(i)
         for i in range(len(df.columns))
         if i != col_ind
     )
-    header = "def impl(df, keys, drop=True, append=False, inplace=False, verify_integrity=False):\n"
     columns = tuple(c for c in df.columns if c != col_name)
     index = (
         "bodo.utils.conversion.index_from_array("

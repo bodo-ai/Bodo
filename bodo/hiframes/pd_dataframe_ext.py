@@ -2084,13 +2084,24 @@ def df_len_overload(df):
         # If columns are determined at runtime we have determine
         # the length through the table.
         def impl(df):  # pragma: no cover
+            if is_null_pointer(df._meminfo):
+                return 0
             t = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)
             return len(t)
 
         return impl
 
-    if len(df.columns) == 0:  # empty df
-        return lambda df: 0  # pragma: no cover
+    # Note: The 0 column path is never taken because it gets optimized
+    # out in DataFrame pass. This implementation is included in case
+    # series pass is unable to run, but it is not tested.
+    if len(df.columns) == 0:  # pragma: no cover
+
+        def impl(df):  # pragma: no cover
+            if is_null_pointer(df._meminfo):
+                return 0
+            return len(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))
+
+        return impl
 
     def impl(df):  # pragma: no cover
         # If for some reason we have a null dataframe,
