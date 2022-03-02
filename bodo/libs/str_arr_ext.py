@@ -1279,11 +1279,15 @@ def gen_na_str_array_lens(n_strs, total_len, len_arr):
     offsets = bodo.libs.array_item_arr_ext.get_offsets(str_arr._data)
     # Compute the cumsum to set the offsets
     curr_total = 0
-    n_elems = len(len_arr)
-    for i in range(n_elems):
-        offsets[i] = curr_total
-        curr_total += len_arr[i]
-    offsets[n_elems] = curr_total
+    if total_len == 0:
+        for i in range(len(offsets)):
+            offsets[i] = 0
+    else:
+        n_elems = len(len_arr)
+        for i in range(n_elems):
+            offsets[i] = curr_total
+            curr_total += len_arr[i]
+        offsets[n_elems] = curr_total
     return str_arr
 
 
