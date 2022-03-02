@@ -784,6 +784,12 @@ def nancorr(mat, cov=0, minpv=1, parallel=False):  # pragma: no cover
 @numba.generated_jit(nopython=True)
 def duplicated(data, parallel=False):
     n = len(data)
+    # empty input tuple corner case
+    if n == 0:
+        return lambda data, parallel=False: np.empty(
+            0, dtype=np.bool_
+        )  # pragma: no cover
+
     # if is_tuple, we are processing a dataframe and will form nullable tuples from the rows
     # otherwise we are processing a series
     is_tuple = n != 1
