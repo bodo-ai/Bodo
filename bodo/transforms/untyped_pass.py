@@ -888,28 +888,14 @@ class UntypedPass:
                 "read_sql() arguments {} not supported yet".format(unsupported_args)
             )
 
-        # find db type
-        # urlparse skips oracle since its handle has _
-        # which is not in `scheme_chars`
-        # oracle+cx_oracle
-        if con_const.startswith("oracle+cx_oracle://"):
-            db_type = "oracle"
-        else:
-            db_type = urlparse(con_const).scheme
-        # find df type
-        df_type, converted_colnames = _get_sql_df_type_from_db(
-            sql_const, con_const, db_type
-        )
-        dtypes = df_type.data
-        dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
-        col_names = [c for c in df_type.columns]
-
-        # date columns
-        date_cols = []
-
-        columns, data_arrs, out_types = self._get_read_file_col_info(
-            dtype_map, date_cols, col_names, lhs
-        )
+        # Generate the type info.
+        (
+            db_type,
+            columns,
+            data_arrs,
+            out_types,
+            converted_colnames,
+        ) = _get_sql_types_arr_colnames(sql_const, con_const, lhs)
 
         nodes = [
             sql_ext.SqlReader(
@@ -1662,7 +1648,7 @@ class UntypedPass:
                     dtype_map_const, "pd.read_csv", rhs.loc
                 )
 
-        columns, _, out_types = self._get_read_file_col_info(
+        columns, _, out_types = _get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
         )
 
@@ -1935,7 +1921,7 @@ class UntypedPass:
                     dtype_map_const, "pd.read_json", rhs.loc
                 )
 
-        columns, data_arrs, out_types = self._get_read_file_col_info(
+        columns, data_arrs, out_types = _get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
         )
 
@@ -1980,30 +1966,6 @@ class UntypedPass:
 
         nodes += compile_func_single_block(_init_df, data_arrs, lhs)
         return nodes
-
-    def _get_read_file_col_info(self, dtype_map, date_cols, col_names, lhs):
-        """get column names, ir.Var objects, and data types for file read (csv/json)"""
-        # single dtype is provided instead of dictionary
-        if isinstance(dtype_map, types.Type):
-            typ = dtype_map
-            data_arrs = [
-                ir.Var(lhs.scope, mk_unique_var(cname), lhs.loc) for cname in col_names
-            ]
-            return col_names, data_arrs, [typ] * len(col_names)
-
-        columns = []
-        data_arrs = []
-        out_types = []
-        for i, (col_name, typ) in enumerate(dtype_map.items()):
-            columns.append(col_name)
-            # get array dtype
-            if i in date_cols or col_name in date_cols:
-                typ = types.Array(types.NPDatetime("ns"), 1, "C")
-            out_types.append(typ)
-            # output array variable
-            data_arrs.append(ir.Var(lhs.scope, mk_unique_var(col_name), lhs.loc))
-
-        return columns, data_arrs, out_types
 
     def _handle_pd_Series(self, assign, lhs, rhs):
         """transform pd.Series(A) call for flatmap case"""
@@ -2762,6 +2724,64 @@ def _get_excel_df_type_from_file(
         raise BodoError(df_type_or_e)
 
     return df_type_or_e
+
+
+def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
+    """get column names, ir.Var objects, and data types for file read (sql/csv/json)"""
+    # single dtype is provided instead of dictionary
+    if isinstance(dtype_map, types.Type):
+        typ = dtype_map
+        data_arrs = [
+            ir.Var(lhs.scope, mk_unique_var(cname), lhs.loc) for cname in col_names
+        ]
+        return col_names, data_arrs, [typ] * len(col_names)
+
+    columns = []
+    data_arrs = []
+    out_types = []
+    for i, (col_name, typ) in enumerate(dtype_map.items()):
+        columns.append(col_name)
+        # get array dtype
+        if i in date_cols or col_name in date_cols:
+            typ = types.Array(types.NPDatetime("ns"), 1, "C")
+        out_types.append(typ)
+        # output array variable
+        data_arrs.append(ir.Var(lhs.scope, mk_unique_var(col_name), lhs.loc))
+
+    return columns, data_arrs, out_types
+
+
+def _get_sql_types_arr_colnames(sql_const, con_const, lhs):
+    """
+    Wrapper function to determine the db_type, column names,
+    array variables, array types, and includes any column names
+    that were converted. This is written as a standalone
+    function because other packages (i.e. BodoSQL) may need
+    to type a SQL query.
+    """
+    # find db type
+    # urlparse skips oracle since its handle has _
+    # which is not in `scheme_chars`
+    # oracle+cx_oracle
+    if con_const.startswith("oracle+cx_oracle://"):
+        db_type = "oracle"
+    else:
+        db_type = urlparse(con_const).scheme
+    # find df type
+    df_type, converted_colnames = _get_sql_df_type_from_db(
+        sql_const, con_const, db_type
+    )
+    dtypes = df_type.data
+    dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
+    col_names = [c for c in df_type.columns]
+
+    # date columns
+    date_cols = []
+
+    columns, data_arrs, out_types = _get_read_file_col_info(
+        dtype_map, date_cols, col_names, lhs
+    )
+    return db_type, columns, data_arrs, out_types, converted_colnames
 
 
 def _get_sql_df_type_from_db(sql_const, con_const, db_type):
