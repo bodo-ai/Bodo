@@ -174,7 +174,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
 
         for (int64_t i = 0; i < rows_to_read; i++) {
             out_data[i] =
-                (uint8_t)::arrow::BitUtil::GetBit(buff, i + rows_to_skip);
+                (uint8_t)::arrow::bit_util::GetBit(buff, i + rows_to_skip);
         }
         return;
     }
@@ -192,7 +192,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
     if (null_bitmap_buff != nullptr && out_dtype == Bodo_CTypes::FLOAT64) {
         double* double_data = (double*)out_data;
         for (int64_t i = 0; i < rows_to_read; i++) {
-            if (!::arrow::BitUtil::GetBit(null_bitmap_buff, i + rows_to_skip)) {
+            if (!::arrow::bit_util::GetBit(null_bitmap_buff, i + rows_to_skip)) {
                 // TODO: use NPY_NAN
                 double_data[i] = std::nan("");
             }
@@ -202,7 +202,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
     if (null_bitmap_buff != nullptr && out_dtype == Bodo_CTypes::FLOAT32) {
         float* float_data = (float*)out_data;
         for (int64_t i = 0; i < rows_to_read; i++) {
-            if (!::arrow::BitUtil::GetBit(null_bitmap_buff, i + rows_to_skip)) {
+            if (!::arrow::bit_util::GetBit(null_bitmap_buff, i + rows_to_skip)) {
                 // TODO: use NPY_NAN
                 float_data[i] = std::nanf("");
             }
@@ -212,7 +212,7 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
     if (null_bitmap_buff != nullptr && out_dtype == Bodo_CTypes::DATETIME) {
         int64_t* data = (int64_t*)out_data;
         for (int64_t i = 0; i < rows_to_read; i++) {
-            if (!::arrow::BitUtil::GetBit(null_bitmap_buff, i + rows_to_skip)) {
+            if (!::arrow::bit_util::GetBit(null_bitmap_buff, i + rows_to_skip)) {
                 data[i] = std::numeric_limits<int64_t>::min();
             }
         }
@@ -226,11 +226,11 @@ inline void copy_nulls(uint8_t* out_nulls, const uint8_t* null_bitmap_buff,
         if (null_bitmap_buff == nullptr) {
             for (size_t i = 0; i < size_t(num_values); i++) {
                 // set all to not null
-                ::arrow::BitUtil::SetBit(out_nulls, null_offset + i);
+                ::arrow::bit_util::SetBit(out_nulls, null_offset + i);
             }
         } else {
             for (size_t i = 0; i < size_t(num_values); i++) {
-                auto bit = ::arrow::BitUtil::GetBit(null_bitmap_buff, skip + i);
+                auto bit = ::arrow::bit_util::GetBit(null_bitmap_buff, skip + i);
                 SetBitTo(out_nulls, null_offset + i, bit);
             }
         }
@@ -243,7 +243,7 @@ inline void copy_nulls_categorical_inner(uint8_t* out_data,
                                          int64_t skip, int64_t num_values) {
     T* data = (T*)out_data;
     for (size_t i = 0; i < size_t(num_values); i++) {
-        auto bit = ::arrow::BitUtil::GetBit(null_bitmap_buff, skip + i);
+        auto bit = ::arrow::bit_util::GetBit(null_bitmap_buff, skip + i);
         if (!bit) data[i] = -1;
     }
 }

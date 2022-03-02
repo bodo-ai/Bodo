@@ -4,8 +4,6 @@ Top-level init file for bodo package
 
 isort:skip_file
 """
-# set number of threads to 1 for Numpy to avoid interference with Bodo's parallelism
-# NOTE: has to be done before importing Numpy, and for all threading backends
 import os
 import platform
 
@@ -21,6 +19,8 @@ if platform.system() == "Windows":
     # guarantees that msmpi.dll is loaded, and therefore found when MPI calls are made
     import mpi4py
 
+# set number of threads to 1 for Numpy to avoid interference with Bodo's parallelism
+# NOTE: has to be done before importing Numpy, and for all threading backends
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -147,3 +147,8 @@ del get_versions
 
 import bodo.utils.tracing
 import bodo.utils.tracing_py
+
+# clear thread limit. We don't want to limit other libraries like Arrow
+os.environ.pop("OPENBLAS_NUM_THREADS", None)
+os.environ.pop("OMP_NUM_THREADS", None)
+os.environ.pop("MKL_NUM_THREADS", None)

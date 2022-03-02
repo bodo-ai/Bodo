@@ -34,7 +34,7 @@ such as Numba on Ubuntu Linux::
     python setup.py develop
     cd ..
     # END OF BUILD NUMBA FROM SOURCE
-    conda install -c conda-forge hdf5='1.10.*=*mpich*' pyarrow=5.0.0 pymysql sqlalchemy
+    conda install -c conda-forge hdf5='1.10.*=*mpich*' pyarrow=7.0.0 pymysql sqlalchemy
     # Highly recommended to speed up compilation times
     conda install ccache -c conda-forge
     # Highly recommended for enforcing style requirements (see dev_process.rst)
@@ -108,7 +108,7 @@ On Windows
     conda activate DEV
     conda install numba=0.55.1 -c conda-forge
     conda install mpi4py msmpi cython -c conda-forge
-    conda install -c conda-forge pyarrow=5.0.0
+    conda install -c conda-forge pyarrow=7.0.0
     # Required for IO with S3
     conda install -c conda-forge fsspec>=2021.09
     # The following is required for s3 related development and tests
