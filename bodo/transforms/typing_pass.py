@@ -1600,7 +1600,7 @@ class TypingTransforms:
 
     def _run_call_bodosql_table_path(self, assign, rhs, label):
         nodes = []
-        func_args = [(0, "file_path"), (1, "file_type")]
+        func_args = [(0, "file_path"), (1, "file_type"), (2, "conn_str")]
         nodes += self._replace_arg_with_literal(
             "bodosql.TablePath", rhs, func_args, label
         )
@@ -2585,7 +2585,13 @@ class TypingTransforms:
         )
         # Attempt to apply filter pushdown if there is parquet load
         if any(
-            [isinstance(stmt, bodo.ir.parquet_ext.ParquetReader) for stmt in block_body]
+            [
+                isinstance(
+                    stmt,
+                    (bodo.ir.parquet_ext.ParquetReader, bodo.ir.sql_ext.SqlReader),
+                )
+                for stmt in block_body
+            ]
         ):
             block_body = self._apply_bodosql_filter_pushdown(block_body)
         return block_body

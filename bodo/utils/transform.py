@@ -153,6 +153,8 @@ no_side_effect_call_tuples = {
     ("get_bool_arr_bitmap", "bool_arr_ext", "libs", bodo),
     ("init_bool_array", "bool_arr_ext", "libs", bodo),
     ("alloc_bool_array", "bool_arr_ext", "libs", bodo),
+    # Datetime array
+    ("datetime_date_arr_to_dt64_arr", "pd_timestamp_ext", "hiframes", bodo),
     # Both of these functions are set as global imports.
     (bodo.libs.bool_arr_ext.compute_or_body,),
     (bodo.libs.bool_arr_ext.compute_and_body,),
