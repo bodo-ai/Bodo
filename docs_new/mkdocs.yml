@@ -133,7 +133,7 @@ nav:
           - Advanced Parallelism Topics: bodo_parallelism/advanced.md
           - Compile Time Constants: bodo_parallelism/compile_time_constants.md
           - Unsupported Programs: bodo_parallelism/not_supported.md
-      - Scalable File I/O: file_io.md
+      - Scalable Data I/O: file_io.md
       - Using Regular Python inside Bodo (Object Mode): objmode.md
   - Bodo in your Pipeline:
       - Migration from Spark:
