@@ -2617,6 +2617,36 @@ def test_dataframe_sample_nested_datastructures():
 
 
 @pytest.mark.slow
+def test_dataframe_sample_frac_one_replace_false():
+    def test_impl1(df):
+        return df.sample(frac=1, replace=False)
+
+    def test_impl2(df):
+        return df.sample(frac=1.0)
+
+    def test_impl3(df, num):
+        return df.sample(n=num)
+
+    df = pd.DataFrame(
+        {"A": np.arange(10), "B": 1.5 + np.arange(10)},
+        index=[f"i{i}" for i in range(10)],
+    )
+    n = len(df)
+
+    check_func(test_impl1, (df,), sort_output=True, is_out_distributed=False)
+    check_func(test_impl2, (df,), sort_output=True, is_out_distributed=False)
+    check_func(
+        test_impl3,
+        (
+            df,
+            n,
+        ),
+        sort_output=True,
+        is_out_distributed=False,
+    )
+
+
+@pytest.mark.slow
 def test_dataframe_columns_name():
     """A little known feature of pandas dataframe is that one can attribute
     a name to the columns. As far as I know this shows up only in pivot_table
