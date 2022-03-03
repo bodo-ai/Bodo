@@ -42,6 +42,7 @@ class SqlReader(ir.Stmt):
         converted_colnames,
         db_type,
         loc,
+        is_select_query,
     ):
         self.connector_typ = "sql"
         self.sql_request = sql_request
@@ -60,6 +61,7 @@ class SqlReader(ir.Stmt):
         self.db_type = db_type
         # Support for filter pushdown. Currently only used with snowflake.
         self.filters = None
+        self.is_select_query = is_select_query
 
     def __repr__(self):  # pragma: no cover
         return "{} = ReadSql(sql_request={}, connection={}, col_names={}, types={}, vars={}, limit={})".format(
@@ -164,6 +166,7 @@ def sql_distributed_run(
         sql_node.limit,
         sql_node.converted_colnames,
         parallel,
+        sql_node.is_select_query,
     )
 
     f_block = compile_to_numba_ir(
@@ -182,22 +185,26 @@ def sql_distributed_run(
         calltypes=calltypes,
     ).blocks.popitem()[1]
 
-    # Update the SQL request to remove any unused columns. This is both
-    # an optimization (the SQL engine loads less data) and is needed for
-    # correctness. See test_sql_snowflake_single_column
-    col_str = escape_column_names(
-        sql_node.df_colnames, sql_node.db_type, sql_node.converted_colnames
-    )
+    if sql_node.is_select_query:
 
-    # https://stackoverflow.com/questions/33643163/in-oracle-as-alias-not-working
-    if sql_node.db_type == "oracle":
-        updated_sql_request = (
-            "SELECT " + col_str + " FROM (" + sql_node.sql_request + ") TEMP"
+        # Update the SQL request to remove any unused columns. This is both
+        # an optimization (the SQL engine loads less data) and is needed for
+        # correctness. See test_sql_snowflake_single_column
+        col_str = escape_column_names(
+            sql_node.df_colnames, sql_node.db_type, sql_node.converted_colnames
         )
+
+        # https://stackoverflow.com/questions/33643163/in-oracle-as-alias-not-working
+        if sql_node.db_type == "oracle":
+            updated_sql_request = (
+                "SELECT " + col_str + " FROM (" + sql_node.sql_request + ") TEMP"
+            )
+        else:
+            updated_sql_request = (
+                "SELECT " + col_str + " FROM (" + sql_node.sql_request + ") as TEMP"
+            )
     else:
-        updated_sql_request = (
-            "SELECT " + col_str + " FROM (" + sql_node.sql_request + ") as TEMP"
-        )
+        updated_sql_request = sql_node.sql_request
     replace_arg_nodes(
         f_block,
         [
@@ -381,6 +388,7 @@ def _gen_sql_reader_py(
     limit,
     converted_colnames,
     parallel,
+    is_select_query,
 ):
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
     typ_strs = [
@@ -467,7 +475,7 @@ def _gen_sql_reader_py(
             func_text += f"  ev.finalize()\n"
         else:
             func_text += "  sqlalchemy_check()\n"
-            if parallel:
+            if parallel and is_select_query:
                 func_text += "  rank = bodo.libs.distributed_api.get_rank()\n"
                 if limit is not None:
                     func_text += f"  nb_row = {limit}\n"

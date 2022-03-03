@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.utils.typing import BodoWarning
+from bodo.utils.typing import BodoError, BodoWarning
 
 from .test_sql import (
     get_snowflake_connection_string,
@@ -88,3 +88,18 @@ def test_to_sql_schema_warning(memory_leak_check):
             bodo.jit(impl)(df, tablename, conn)
     else:
         bodo.jit(impl)(df, tablename, conn)
+
+
+@pytest.mark.slow
+def test_unsupported_query(memory_leak_check):
+    """Test error checking for unsupported queries"""
+
+    conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+
+    def impl(conn):
+        sql_request = "CREATE TABLE test(id int, fname varchar(255))"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    with pytest.raises(BodoError, match="query is not supported"):
+        bodo.jit(impl)(conn)

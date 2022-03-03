@@ -3602,7 +3602,7 @@ def to_sql_overload(
 
             warnings.warn(
                 BodoWarning(
-                    f"DataFrame.to_sql(): schema argument is recommended to avoid permission issues for writing to table {name}."
+                    f"DataFrame.to_sql(): schema argument is recommended to avoid permission issues when writing the table."
                 )
             )
 

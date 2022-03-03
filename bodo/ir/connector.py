@@ -59,7 +59,9 @@ def connector_distributed_analysis(node, array_dists):
 
     # If we have a SQL node with an inferred limit, we may have a
     # 1D-Var distribution
-    if isinstance(node, SqlReader) and node.limit is not None:
+    if isinstance(node, SqlReader) and not node.is_select_query:
+        out_dist = Distribution.REP
+    elif isinstance(node, SqlReader) and node.limit is not None:
         out_dist = Distribution.OneD_Var
     else:
         out_dist = Distribution.OneD
