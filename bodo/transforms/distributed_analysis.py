@@ -1822,6 +1822,10 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("get_dataframe_column_names", "bodo.hiframes.table"):
+            self._set_REP(lhs, array_dists, "DataFrame column names is REP", rhs.loc)
+            return
+
         if fdef == ("compute_split_view", "bodo.hiframes.split_impl"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return

@@ -1,14 +1,21 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import datetime
+import os
 import random
 import re
+import shutil
 
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import (
+    _get_dist_arg,
+    _test_equal_guard,
+    check_func,
+    reduce_sum,
+)
 from bodo.utils.typing import BodoError
 
 _pivot_df1 = pd.DataFrame(
@@ -1567,3 +1574,106 @@ def test_pivot_table_index_none(memory_leak_check):
         sort_output=True,
         reorder_columns=True,
     )
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        # Integer values
+        pd.DataFrame(
+            {
+                "A": np.arange(10),
+                "B": ["teq", "b", "ce", "32", "re2"] * 2,
+                "C": np.arange(10),
+            }
+        ),
+        # String values
+        pd.DataFrame(
+            {
+                "A": np.arange(10),
+                "B": ["teq", "b", "ce", "32", "re2"] * 2,
+                "C": [str(i) for i in range(10)],
+            }
+        ),
+    ],
+)
+def test_pivot_to_parquet(df, memory_leak_check):
+    """
+    Tests calling to_parquet on the output of DataFrame.pivot()
+    without requiring an intermediate move to Python.
+    """
+    import pyarrow.parquet as pq
+
+    output_filename = "bodo_temp.pq"
+
+    def impl(df, fname):
+        new_df = df.pivot(index="A", columns="B", values="C")
+        new_df.to_parquet(fname)
+
+    py_output = df.pivot(index="A", columns="B", values="C")
+    # Test with replicated and distributed data
+    for distributed in (True, False):
+        if distributed:
+            df_in = _get_dist_arg(df)
+            compiler_kwargs = {"distributed": ["df"]}
+        else:
+            df_in = df
+            compiler_kwargs = {}
+        bodo.jit(**compiler_kwargs)(impl)(df_in, output_filename)
+        bodo.barrier()
+        # Read the data on rank 0 and compare
+        passed = 1
+        if bodo.get_rank() == 0:
+            try:
+                result = pd.read_parquet(output_filename)
+                # Reorder the columns since this can't be done in _test_equals_guard.
+                result.sort_index(axis=1, inplace=True)
+                passed = _test_equal_guard(
+                    result,
+                    py_output,
+                    sort_output=True,
+                    check_names=False,
+                    check_dtype=False,
+                )
+                bodo_table = pq.read_table(output_filename)
+                # Check the metadata
+                assert bodo_table.schema.pandas_metadata.get("index_columns") == [
+                    py_output.index.name
+                ]
+                cols_metadata = bodo_table.schema.pandas_metadata.get("columns")
+                # Generate expected typenames for float64 and string
+                pd_type = "float64" if py_output.b.dtype == np.float64 else "unicode"
+                np_type = "float64" if py_output.b.dtype == np.float64 else "object"
+                total_columns = py_output.columns.to_list() + [py_output.index.name]
+                for col_metadata in cols_metadata:
+                    assert col_metadata["name"] in total_columns, "Name doesn't match"
+                    assert (
+                        col_metadata["field_name"] in total_columns
+                    ), "field_name doesn't match"
+                    if col_metadata["name"] == py_output.index.name:
+                        # Index is always an Integer column.
+                        expected_pd_type = "int64"
+                        expected_np_type = "int64"
+                    else:
+                        expected_pd_type = pd_type
+                        expected_np_type = np_type
+                    assert (
+                        col_metadata["pandas_type"] == expected_pd_type
+                    ), "pandas_type doesn't match"
+                    assert (
+                        col_metadata["numpy_type"] == expected_np_type
+                    ), "numpy_type doesn't match"
+                    assert col_metadata["metadata"] is None, "metadata doesn't match"
+            except Exception:
+                passed = 0
+            finally:
+                if distributed:
+                    shutil.rmtree(output_filename)
+                else:
+                    os.remove(output_filename)
+        n_passed = reduce_sum(passed)
+        data_dist = "distributed" if distributed else "replicated"
+        assert (
+            n_passed == bodo.get_size()
+        ), f"Output doesn't match Pandas with {data_dist} data"
+        bodo.barrier()

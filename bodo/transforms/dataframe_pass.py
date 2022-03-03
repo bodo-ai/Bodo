@@ -188,8 +188,14 @@ class DataFramePass:
             return replace_func(self, impl, [rhs.value])
 
         # S = df.A (get dataframe column)
+        # Note we skip has_runtime_cols without error checking because this should
+        # have already been caught in DataFrameAttribute.
         # TODO: check invalid df.Attr?
-        if isinstance(rhs_type, DataFrameType) and rhs.attr in rhs_type.columns:
+        if (
+            isinstance(rhs_type, DataFrameType)
+            and not rhs_type.has_runtime_cols
+            and rhs.attr in rhs_type.columns
+        ):
             nodes = []
             col_name = rhs.attr
             arr = self._get_dataframe_data(rhs.value, col_name, nodes)
@@ -207,8 +213,11 @@ class DataFramePass:
             )
 
         # level selection in multi-level df
+        # Note we skip has_runtime_cols without error checking because this should
+        # have already been caught in DataFrameAttribute.
         if (
             isinstance(rhs_type, DataFrameType)
+            and not rhs_type.has_runtime_cols
             and len(rhs_type.columns) > 0
             and isinstance(rhs_type.columns[0], tuple)
             and any(v[0] == rhs.attr for v in rhs_type.columns)

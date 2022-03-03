@@ -1667,3 +1667,56 @@ def test_df_explode_invalid_cols():
         ),
     ):
         test_impl(df2)
+
+
+def test_to_parquet_int_colnames(memory_leak_check):
+    """
+    Test that non-string columns raises an error
+    as expected.
+    """
+
+    @bodo.jit
+    def test_impl(df):
+        df.to_parquet("dummy.pq")
+
+    df = pd.DataFrame(
+        {
+            1: np.arange(100),
+            2: np.range(100, 200),
+        }
+    )
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame.to_parquet(): parquet must have string column names"
+        ),
+    ):
+        test_impl(df)
+
+
+def test_to_parquet_int_colnames(memory_leak_check):
+    """
+    Test that non-string columns output from
+    pivot raises an error as expected.
+    """
+
+    @bodo.jit
+    def test_impl(df):
+        new_df = df.pivot(index="A", columns="B", values="C")
+        new_df.to_parquet("test.pq")
+
+    df = pd.DataFrame(
+        {
+            "A": np.arange(10),
+            "B": np.arange(10),
+            "C": np.arange(10),
+        }
+    )
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame.to_parquet(): parquet must have string column names"
+        ),
+    ):
+        test_impl(df)

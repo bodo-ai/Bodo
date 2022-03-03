@@ -1585,68 +1585,118 @@ def py_table_to_cpp_table(typingctx, py_table_t, py_table_type_t):
 
     def codegen(context, builder, sig, args):
         py_table, _ = args
+        # Table info.
+        table_struct = cgutils.create_struct_proxy(py_table_type)(
+            context, builder, py_table
+        )
 
+        if py_table_type.has_runtime_cols:
+            # For runtime columns compute the length of each list
+            n_total_arrs = lir.Constant(lir.IntType(64), 0)
+            for blk, t in enumerate(py_table_type.arr_types):
+                arr_list = getattr(table_struct, f"block_{blk}")
+                arr_list_inst = ListInstance(context, builder, types.List(t), arr_list)
+                n_total_arrs = builder.add(n_total_arrs, arr_list_inst.size)
+        else:
+            n_total_arrs = lir.Constant(lir.IntType(64), len(py_table_type.arr_types))
         # Allocate a list for arrays.
         # Note: This function assumes we don't have any dead
-        # columns and needs to be updated if this changes.
-        n_total_arrs = lir.Constant(lir.IntType(64), len(py_table_type.arr_types))
+        # columns and needs to be updated if this changes
         _, table_arr_list = ListInstance.allocate_ex(
             context, builder, types.List(array_info_type), n_total_arrs
         )
         table_arr_list.size = n_total_arrs
-
         # generate code for each block. This should call array_to_info
         # and insert into the list.
-        table_struct = cgutils.create_struct_proxy(py_table_type)(
-            context, builder, py_table
-        )
-        for t, blk in py_table_type.type_to_blk.items():
-            n_arrs = context.get_constant(
-                types.int64, len(py_table_type.block_to_arr_ind[blk])
-            )
-            arr_list = getattr(table_struct, f"block_{blk}")
-            arr_list_inst = ListInstance(context, builder, types.List(t), arr_list)
-            # lower array of array indices for block to use within the loop
-            # using array since list doesn't have constant lowering
-            arr_inds = context.make_constant_array(
-                builder,
-                types.Array(types.int64, 1, "C"),
-                np.array(py_table_type.block_to_arr_ind[blk], dtype=np.int64),
-            )
-            arr_inds_struct = context.make_array(types.Array(types.int64, 1, "C"))(
-                context, builder, arr_inds
-            )
-            with cgutils.for_range(builder, n_arrs) as loop:
-                i = loop.index
-                # get array index in total list
-                arr_ind = _getitem_array_single_int(
-                    context,
+        if py_table_type.has_runtime_cols:
+            # Runtime columns are assumed to have their actual and logical
+            # order match. This means that block_0 contains the first k columns,
+            # with array 0 being column 0, array 1, being column 1, ...,
+            # array k being column k. Then block_1 has column 0 as block k + 1,
+            # and so on.
+            #
+            # This works because we rely on operations that output runtime columns
+            # (such as pivot) to either define the output column order
+            # or operations that access a particular column number (i.e. getitem)
+            # should be forbidden.
+            cpp_table_idx = lir.Constant(lir.IntType(64), 0)
+            for blk, t in enumerate(py_table_type.arr_types):
+                arr_list = getattr(table_struct, f"block_{blk}")
+                arr_list_inst = ListInstance(context, builder, types.List(t), arr_list)
+                n_arrs = arr_list_inst.size
+                with cgutils.for_range(builder, n_arrs) as loop:
+                    i = loop.index
+                    # Note: We don't unbox here because runtime columns should never
+                    # require unboxing.
+                    # Get the array
+                    arr = arr_list_inst.getitem(i)
+                    # Call array to info
+                    array_to_info_sig = signature(array_info_type, t)
+                    array_to_info_args = (arr,)
+                    array_info_val = array_to_info_codegen(
+                        context, builder, array_to_info_sig, array_to_info_args
+                    )
+                    # We simply assign to the next location in the table. We simply
+                    # increment by 1 each time). The actually increment happens
+                    # at the end because there appear to be control flow issues
+                    # when reassigning inside the loop.
+                    table_arr_list.inititem(
+                        builder.add(cpp_table_idx, i), array_info_val, incref=False
+                    )
+                # Increment the cpp_table_idx
+                cpp_table_idx = builder.add(cpp_table_idx, n_arrs)
+        else:
+            for t, blk in py_table_type.type_to_blk.items():
+                n_arrs = context.get_constant(
+                    types.int64, len(py_table_type.block_to_arr_ind[blk])
+                )
+                arr_list = getattr(table_struct, f"block_{blk}")
+                arr_list_inst = ListInstance(context, builder, types.List(t), arr_list)
+                # lower array of array indices for block to use within the loop
+                # using array since list doesn't have constant lowering
+                arr_inds = context.make_constant_array(
                     builder,
-                    types.int64,
                     types.Array(types.int64, 1, "C"),
-                    arr_inds_struct,
-                    i,
+                    np.array(py_table_type.block_to_arr_ind[blk], dtype=np.int64),
                 )
-                # Ensure we don't need to unbox
-                ensure_column_unboxed_sig = signature(
-                    types.none, py_table_type, types.List(t), types.int64, types.int64
+                arr_inds_struct = context.make_array(types.Array(types.int64, 1, "C"))(
+                    context, builder, arr_inds
                 )
-                ensure_column_unboxed_args = (py_table, arr_list, i, arr_ind)
-                bodo.hiframes.table.ensure_column_unboxed_codegen(
-                    context,
-                    builder,
-                    ensure_column_unboxed_sig,
-                    ensure_column_unboxed_args,
-                )
-                # Get the array
-                arr = arr_list_inst.getitem(i)
-                # Call array to info
-                array_to_info_sig = signature(array_info_type, t)
-                array_to_info_args = (arr,)
-                array_info_val = array_to_info_codegen(
-                    context, builder, array_to_info_sig, array_to_info_args
-                )
-                table_arr_list.inititem(arr_ind, array_info_val, incref=False)
+                with cgutils.for_range(builder, n_arrs) as loop:
+                    i = loop.index
+                    # get array index in total list
+                    arr_ind = _getitem_array_single_int(
+                        context,
+                        builder,
+                        types.int64,
+                        types.Array(types.int64, 1, "C"),
+                        arr_inds_struct,
+                        i,
+                    )
+                    # Ensure we don't need to unbox
+                    ensure_column_unboxed_sig = signature(
+                        types.none,
+                        py_table_type,
+                        types.List(t),
+                        types.int64,
+                        types.int64,
+                    )
+                    ensure_column_unboxed_args = (py_table, arr_list, i, arr_ind)
+                    bodo.hiframes.table.ensure_column_unboxed_codegen(
+                        context,
+                        builder,
+                        ensure_column_unboxed_sig,
+                        ensure_column_unboxed_args,
+                    )
+                    # Get the array
+                    arr = arr_list_inst.getitem(i)
+                    # Call array to info
+                    array_to_info_sig = signature(array_info_type, t)
+                    array_to_info_args = (arr,)
+                    array_info_val = array_to_info_codegen(
+                        context, builder, array_to_info_sig, array_to_info_args
+                    )
+                    table_arr_list.inititem(arr_ind, array_info_val, incref=False)
 
         list_val = table_arr_list.value
         arr_info_list_to_table_sig = signature(table_type, types.List(array_info_type))
