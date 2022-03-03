@@ -186,6 +186,7 @@ no_side_effect_call_tuples = {
     ("init_dataframe", "pd_dataframe_ext", "hiframes", bodo),
     ("get_dataframe_data", "pd_dataframe_ext", "hiframes", bodo),
     ("get_dataframe_table", "pd_dataframe_ext", "hiframes", bodo),
+    ("get_dataframe_column_names", "pd_dataframe_ext", "hiframes", bodo),
     ("get_table_data", "table", "hiframes", bodo),
     ("get_dataframe_index", "pd_dataframe_ext", "hiframes", bodo),
     ("init_rolling", "pd_rolling_ext", "hiframes", bodo),

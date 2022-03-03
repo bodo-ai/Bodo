@@ -146,10 +146,16 @@ def generate_col_to_index_func_text(col_names: Tuple):
 
 @overload_attribute(DataFrameType, "columns", inline="always")
 def overload_dataframe_columns(df):
-    check_runtime_cols_unsupported(df, "DataFrame.columns")
     func_text = "def impl(df):\n"
-    col_index = bodo.hiframes.dataframe_impl.generate_col_to_index_func_text(df.columns)
-    func_text += f"  return {col_index}"
+    if df.has_runtime_cols:
+        func_text += (
+            "  return bodo.hiframes.pd_dataframe_ext.get_dataframe_column_names(df)\n"
+        )
+    else:
+        col_index = bodo.hiframes.dataframe_impl.generate_col_to_index_func_text(
+            df.columns
+        )
+        func_text += f"  return {col_index}"
     loc_vars = {}
     exec(func_text, {"bodo": bodo}, loc_vars)
     impl = loc_vars["impl"]

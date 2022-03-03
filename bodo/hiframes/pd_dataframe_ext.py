@@ -74,7 +74,7 @@ from bodo.libs.str_arr_ext import str_arr_from_sequence, string_array_type
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.cg_helpers import is_ll_eq
-from bodo.utils.conversion import index_to_array
+from bodo.utils.conversion import fix_arr_dtype, index_to_array
 from bodo.utils.templates import OverloadedKeyAttributeTemplate
 from bodo.utils.transform import (
     gen_const_tup,
@@ -234,6 +234,15 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         # If we have runtime columns the second element of the data tuple
         # is the column names array.
         return self.data[-1] if self.has_runtime_cols else None
+
+    @property
+    def runtime_data_types(self):
+        """
+        When the number of columns are determined at runtime then data
+        contains both the array types and the column name types. This
+        returns the tuple of column types.
+        """
+        return self.data[:-1] if self.has_runtime_cols else self.data
 
     @property
     def as_array(self):
@@ -1218,8 +1227,6 @@ def _get_dataframe_data(typingctx, df_typ=None):
 
 @intrinsic
 def get_dataframe_index(typingctx, df_typ=None):
-    check_runtime_cols_unsupported(df_typ, "get_dataframe_index")
-
     def codegen(context, builder, signature, args):
         dataframe_payload = get_dataframe_payload(
             context, builder, signature.args[0], args[0]
@@ -1291,6 +1298,24 @@ def get_dataframe_table(typingctx, df_typ=None):
         )
 
     return df_typ.table_type(df_typ), codegen
+
+
+@intrinsic
+def get_dataframe_column_names(typingctx, df_typ=None):
+    """return internal column names for dataframe with runtime columns"""
+    assert (
+        df_typ.has_runtime_cols
+    ), "get_dataframe_column_names() expects columns to be determined at runtime"
+
+    def codegen(context, builder, signature, args):
+        dataframe_payload = get_dataframe_payload(
+            context, builder, signature.args[0], args[0]
+        )
+        return impl_ret_borrowed(
+            context, builder, df_typ.runtime_colname_typ, dataframe_payload.columns
+        )
+
+    return df_typ.runtime_colname_typ(df_typ), codegen
 
 
 @lower_builtin(get_dataframe_data, DataFrameType, types.IntegerLiteral)
@@ -1425,6 +1450,23 @@ def get_dataframe_table_equiv(self, scope, equiv_set, loc, args, kws):
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_table = (
     get_dataframe_table_equiv
+)
+
+
+def get_dataframe_column_names_equiv(self, scope, equiv_set, loc, args, kws):
+    """array analysis for get_dataframe_column_names(). The output index's length
+    matches the input df's number of columns.
+    """
+    assert len(args) == 1 and not kws
+    var = args[0]
+
+    if equiv_set.has_shape(var):
+        return ArrayAnalysis.AnalyzeResult(shape=equiv_set.get_shape(var)[1], pre=[])
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_pd_dataframe_ext_get_dataframe_column_names = (
+    get_dataframe_column_names_equiv
 )
 
 
@@ -2958,10 +3000,13 @@ def pivot_impl(
 
 
 def gen_pandas_parquet_metadata(
-    df,
+    column_names,
+    data_types,
+    index,
     write_non_range_index_to_metadata,
     write_rangeindex_to_metadata,
     partition_cols=None,
+    is_runtime_columns=False,
 ):
     # returns dict with pandas dataframe metadata for parquet storage.
     # For more information, see:
@@ -2973,7 +3018,7 @@ def gen_pandas_parquet_metadata(
 
     if partition_cols is None:
         partition_cols = []
-    for col_name, col_type in zip(df.columns, df.data):
+    for col_name, col_type in zip(column_names, data_types):
         if col_name in partition_cols:
             # partition columns are not written to parquet files, and don't appear
             # in pandas metadata
@@ -2997,6 +3042,9 @@ def gen_pandas_parquet_metadata(
             elif dtype_name.startswith("uint"):
                 pandas_type = "UInt" + dtype_name[4:]
             else:  # pragma: no cover
+                if is_runtime_columns:
+                    # If columns are determined at runtime we don't have names
+                    col_name = "Runtime determined column of type"
                 raise BodoError(
                     "to_parquet(): unknown dtype in nullable Integer column {} {}".format(
                         col_name, col_type
@@ -3014,6 +3062,9 @@ def gen_pandas_parquet_metadata(
             numpy_type = "object"
         # TODO: metadata for categorical arrays
         else:  # pragma: no cover
+            if is_runtime_columns:
+                # If columns are determined at runtime we don't have names
+                col_name = "Runtime determined column of type"
             raise BodoError(
                 "to_parquet(): unsupported column type for metadata generation : {} {}".format(
                     col_name, col_type
@@ -3031,9 +3082,9 @@ def gen_pandas_parquet_metadata(
 
     if write_non_range_index_to_metadata:
         # TODO multi-level
-        if isinstance(df.index, MultiIndexType):
+        if isinstance(index, MultiIndexType):
             raise BodoError("to_parquet: MultiIndex not supported yet")
-        if "none" in df.index.name:
+        if "none" in index.name:
             _idxname = "__index_level_0__"
             _colidxname = None
         else:
@@ -3047,8 +3098,8 @@ def gen_pandas_parquet_metadata(
             {
                 "name": _colidxname,
                 "field_name": _idxname,
-                "pandas_type": df.index.pandas_type_name,
-                "numpy_type": df.index.numpy_type_name,
+                "pandas_type": index.pandas_type_name,
+                "numpy_type": index.numpy_type_name,
                 "metadata": None,
             }
         )
@@ -3076,7 +3127,6 @@ def to_parquet_overload(
     # TODO handle possible **kwargs options?
     _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
-    check_runtime_cols_unsupported(df, "DataFrame.to_parquet()")
     check_unsupported_args(
         "DataFrame.to_parquet",
         {
@@ -3088,6 +3138,13 @@ def to_parquet_overload(
         package_name="pandas",
         module_name="IO",
     )
+    # If a DataFrame has runtime columns then you cannot specify
+    # partition_cols since the column names aren't known at compile
+    # time.
+    if df.has_runtime_cols and not is_overload_none(partition_cols):
+        raise BodoError(
+            f"DataFrame.to_parquet(): Providing 'partition_cols' on DataFrames with columns determined at runtime is not yet supported. Please return the DataFrame to regular Python to update typing information."
+        )
 
     if not is_overload_none(engine) and get_overload_const_str(engine) not in (
         "auto",
@@ -3150,14 +3207,69 @@ def to_parquet_overload(
     )
 
     # write pandas metadata for the parquet file
-    pandas_metadata_str = json.dumps(
-        gen_pandas_parquet_metadata(
-            df,
+    if df.has_runtime_cols:
+        # Parquet can't support multi-index in general. Support Multi-Index
+        # columns once MultiIndex is supported.
+        if isinstance(df.runtime_colname_typ, MultiIndexType):
+            raise BodoError(
+                "DataFrame.to_parquet(): Not supported with MultiIndex runtime column names. Please return the DataFrame to regular Python to update typing information."
+            )
+        if not isinstance(
+            df.runtime_colname_typ, bodo.hiframes.pd_index_ext.StringIndexType
+        ):
+            # This is the Pandas error message.
+            raise BodoError(
+                "DataFrame.to_parquet(): parquet must have string column names. Please return the DataFrame with runtime column names to regular Python to modify column names."
+            )
+        # If our DataFrame has runtime columns. Then we can't generate
+        # metadata str at compile time. Instead, we generate format strings
+        # for each column type and fill them at runtime. We still generate
+        # surrounding metadata and information for the index at compile time.
+        data_columns = df.runtime_data_types
+        num_col_types = len(data_columns)
+        metadata = gen_pandas_parquet_metadata(
+            [""] * num_col_types,
+            data_columns,
+            df.index,
             write_non_range_index_to_metadata,
             write_rangeindex_to_metadata,
             partition_cols=partition_cols,
+            is_runtime_columns=True,
         )
-    )
+        # Extract the info for columns to create format strings.
+        format_strings = metadata["columns"][:num_col_types]
+        # Remove all runtime column types
+        metadata["columns"] = metadata["columns"][num_col_types:]
+        # Create the format strings to lower.
+        format_strings = [json.dumps(x).replace('""', "{0}") for x in format_strings]
+        pandas_metadata_str = json.dumps(metadata)
+        # Find the location to insert the format strings. This is used to split
+        # pandas_metadata_str into two parts.
+        split_str = '"columns": ['
+        start_index = pandas_metadata_str.find(split_str)
+        if start_index == -1:
+            raise BodoError(
+                "DataFrame.to_parquet(): Unexpected metadata string for runtime columns.  Please return the DataFrame to regular Python to update typing information."
+            )
+        split_index = start_index + len(split_str)
+        pandas_metadata_str_start = pandas_metadata_str[:split_index]
+        # Name the end the original name for the index name replacements.
+        pandas_metadata_str = pandas_metadata_str[split_index:]
+        # If there are any remaining columns in metadata we need a comma
+        # at the end.
+        trailing_comma = len(metadata["columns"])
+    else:
+        pandas_metadata_str = json.dumps(
+            gen_pandas_parquet_metadata(
+                df.columns,
+                df.data,
+                df.index,
+                write_non_range_index_to_metadata,
+                write_rangeindex_to_metadata,
+                partition_cols=partition_cols,
+                is_runtime_columns=False,
+            )
+        )
     if not is_overload_true(_is_parallel) and is_range_index:
         pandas_metadata_str = pandas_metadata_str.replace('"%d"', "%d")
         if df.index.name == "RangeIndexType(none)":
@@ -3167,30 +3279,61 @@ def to_parquet_overload(
             pandas_metadata_str = pandas_metadata_str.replace('"%s"', "%s")
 
     # convert dataframe columns to array_info
-    data_args = ", ".join(
-        "array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}))".format(
-            i
+    if not df.is_table_format:
+        data_args = ", ".join(
+            "array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}))".format(
+                i
+            )
+            for i in range(len(df.columns))
         )
-        for i in range(len(df.columns))
-    )
 
     func_text = "def df_to_parquet(df, fname, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, _is_parallel=False):\n"
     # put arrays in table_info
     if df.is_table_format:
-        func_text += (
-            "    table = py_table_to_cpp_table(get_dataframe_table(df), py_table_typ)\n"
-        )
+        func_text += "    py_table = get_dataframe_table(df)\n"
+        func_text += "    table = py_table_to_cpp_table(py_table, py_table_typ)\n"
     else:
         func_text += "    info_list = [{}]\n".format(data_args)
         func_text += "    table = arr_info_list_to_table(info_list)\n"
-    func_text += "    col_names = array_to_info(col_names_arr)\n"
+    if df.has_runtime_cols:
+        func_text += "    columns_index = get_dataframe_column_names(df)\n"
+        # Note: C++ assumes the array is always a string array.
+        func_text += "    names_arr = index_to_array(columns_index)\n"
+        func_text += "    col_names = array_to_info(names_arr)\n"
+    else:
+        func_text += "    col_names = array_to_info(col_names_arr)\n"
     if is_overload_true(index) or (is_overload_none(index) and write_non_rangeindex):
         func_text += "    index_col = array_to_info(index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)))\n"
         write_index = True
     else:
         func_text += "    index_col = array_to_info(np.empty(0))\n"
         write_index = False
-    func_text += '    metadata = """' + pandas_metadata_str + '"""\n'
+    if df.has_runtime_cols:
+        # Compute the metadata string at runtime.
+        func_text += "    columns_lst = []\n"
+        func_text += "    num_cols = 0\n"
+        for i in range(len(df.runtime_data_types)):
+            # For each column in the block (list of columns of the same type),
+            # we use the block's format string to generate the metadata string
+            # for each column.
+            func_text += f"    for _ in range(len(py_table.block_{i})):\n"
+            # Format strings don't work in pure Numba, so use replace.
+            func_text += f"        columns_lst.append({format_strings[i]!r}.replace('{{0}}', '\"' + names_arr[num_cols] + '\"'))\n"
+            func_text += "        num_cols += 1\n"
+        if trailing_comma:
+            # Append an empty string to join with a comma
+            func_text += "    columns_lst.append('')\n"
+        func_text += '    columns_str = ", ".join(columns_lst)\n'
+        # Create the full metadata string.
+        func_text += (
+            '    metadata = """'
+            + pandas_metadata_str_start
+            + '""" + columns_str + """'
+            + pandas_metadata_str
+            + '"""\n'
+        )
+    else:
+        func_text += '    metadata = """' + pandas_metadata_str + '"""\n'
     func_text += "    if compression is None:\n"
     func_text += "        compression = 'none'\n"
     func_text += "    if df.index.name is not None:\n"
@@ -3262,6 +3405,19 @@ def to_parquet_overload(
         func_text += "    delete_info_decref_array(col_names)\n"
 
     loc_vars = {}
+    if df.has_runtime_cols:
+        col_names_arr = None
+    else:
+        # Pandas raises a ValueError if columns aren't strings.
+        # Similarly if columns aren't strings we have an a segfault
+        # in C++.
+        for col in df.columns:
+            if not isinstance(col, str):
+                # This is the Pandas error message.
+                raise BodoError(
+                    "DataFrame.to_parquet(): parquet must have string column names"
+                )
+        col_names_arr = pd.array(df.columns)
     exec(
         func_text,
         {
@@ -3276,11 +3432,13 @@ def to_parquet_overload(
             "index_to_array": index_to_array,
             "delete_info_decref_array": delete_info_decref_array,
             "delete_table_decref_arrays": delete_table_decref_arrays,
-            "col_names_arr": pd.array(df.columns),
+            "col_names_arr": col_names_arr,
             "py_table_to_cpp_table": py_table_to_cpp_table,
             "py_table_typ": df.table_type,
             "get_dataframe_table": get_dataframe_table,
             "col_names_no_parts_arr": col_names_no_parts_arr,
+            "get_dataframe_column_names": get_dataframe_column_names,
+            "fix_arr_dtype": fix_arr_dtype,
         },
         loc_vars,
     )
