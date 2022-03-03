@@ -3656,25 +3656,59 @@ def create_binary_op_overload(op):
 
         # left arg is Index
         if is_index_type(lhs):
-
-            def impl(lhs, rhs):  # pragma: no cover
-                arr = bodo.utils.conversion.coerce_to_array(lhs)
-                rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)
-                out_arr = op(arr, rhs_arr)
-                return out_arr
-
+            func_text = (
+                "def impl(lhs, rhs):\n"
+                "  arr = bodo.utils.conversion.coerce_to_array(lhs)\n"
+            )
+            if rhs in [
+                bodo.hiframes.pd_timestamp_ext.pd_timestamp_type,
+                bodo.hiframes.pd_timestamp_ext.pd_timedelta_type,
+            ]:
+                func_text += (
+                    "  dt = bodo.utils.conversion.unbox_if_timestamp(rhs)\n"
+                    "  return op(arr, dt)\n"
+                )
+            else:
+                func_text += (
+                    "  rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)\n"
+                    "  return op(arr, rhs_arr)\n"
+                )
+            loc_vars = {}
+            exec(
+                func_text,
+                {"bodo": bodo, "op": op},
+                loc_vars,
+            )
+            impl = loc_vars["impl"]
             return impl
 
         # right arg is Index
         if is_index_type(rhs):
-
-            def impl2(lhs, rhs):  # pragma: no cover
-                arr = bodo.utils.conversion.coerce_to_array(rhs)
-                rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
-                out_arr = op(rhs_arr, arr)
-                return out_arr
-
-            return impl2
+            func_text = (
+                "def impl(lhs, rhs):\n"
+                "  arr = bodo.utils.conversion.coerce_to_array(rhs)\n"
+            )
+            if lhs in [
+                bodo.hiframes.pd_timestamp_ext.pd_timestamp_type,
+                bodo.hiframes.pd_timestamp_ext.pd_timedelta_type,
+            ]:
+                func_text += (
+                    "  dt = bodo.utils.conversion.unbox_if_timestamp(lhs)\n"
+                    "  return op(dt, arr)\n"
+                )
+            else:
+                func_text += (
+                    "  lhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)\n"
+                    "  return op(lhs_arr, arr)\n"
+                )
+            loc_vars = {}
+            exec(
+                func_text,
+                {"bodo": bodo, "op": op},
+                loc_vars,
+            )
+            impl = loc_vars["impl"]
+            return impl
 
         if isinstance(lhs, HeterogeneousIndexType):
             # handle as regular array data if not actually heterogeneous

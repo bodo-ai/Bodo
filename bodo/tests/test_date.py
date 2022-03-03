@@ -2444,3 +2444,35 @@ def test_datetime_timestamp_conversion(datetime, memory_leak_check):
         return pd.Timestamp(dt)
 
     check_func(test_impl, (datetime,))
+
+
+@pytest.mark.parametrize(
+    "datetime",
+    [
+        np.datetime64("2019-01-01", "ns"),
+        np.datetime64("2020-01-01", "ns"),
+        np.datetime64("2030-01-01", "ns"),
+    ],
+)
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        pd.Timestamp("2019-01-01"),
+        pd.Timestamp("2020-01-01"),
+        pd.Timestamp("2030-01-01"),
+    ],
+)
+@pytest.mark.parametrize(
+    "comparison_impl",
+    [
+        pytest.param(lambda a, b: a == b, id="eq"),
+        pytest.param(lambda a, b: a != b, id="ne"),
+        pytest.param(lambda a, b: a < b, id="lt"),
+        pytest.param(lambda a, b: a <= b, id="le"),
+        pytest.param(lambda a, b: a > b, id="gt"),
+        pytest.param(lambda a, b: a >= b, id="ge"),
+    ],
+)
+def test_datetime_compare_pd_timestamp(datetime, timestamp, comparison_impl, memory_leak_check):
+    check_func(comparison_impl, (datetime, timestamp))
+    check_func(comparison_impl, (timestamp, datetime))
