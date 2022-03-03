@@ -4951,10 +4951,13 @@ def overload_dataframe_sample(
 
     n_cols = len(df.columns)
     data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
+    rhs_data_args = ", ".join("rhs_data_{}".format(i) for i in range(n_cols))
 
     func_text = "def impl(df, n=None, frac=None, replace=False, weights=None, random_state=None, axis=None, ignore_index=False):\n"
+    func_text += "  if (frac == 1 or n == len(df)) and not replace:\n"
+    func_text += "    return bodo.allgatherv(bodo.random_shuffle(df), False)\n"
     for i in range(n_cols):
-        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
+        func_text += "  rhs_data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
             i
         )
     func_text += "  if frac is None:\n"
@@ -4966,9 +4969,7 @@ def overload_dataframe_sample(
     func_text += "  else:\n"
     func_text += "    n_i = n\n"
     index = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"
-    func_text += "  ({0},), index_arr = bodo.libs.array_kernels.sample_table_operation(({0},), {1}, n_i, frac_d, replace)\n".format(
-        data_args, index
-    )
+    func_text += f"  ({data_args},), index_arr = bodo.libs.array_kernels.sample_table_operation(({rhs_data_args},), {index}, n_i, frac_d, replace)\n"
     func_text += "  index = bodo.utils.conversion.index_from_array(index_arr)\n"
     return bodo.hiframes.dataframe_impl._gen_init_df(
         func_text, df.columns, data_args, "index"
