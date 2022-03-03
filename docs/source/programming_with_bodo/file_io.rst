@@ -610,6 +610,7 @@ Snowflake
 To read a dataframe from a Snowflake database, users can use ``pd.read_sql`` with their Snowflake username and password:
 ``pd.read_sql(query,snowflake://<username>:<password>@url)``.
 
+Only ``SELECT`` sql command is supported with ``pd.read_sql``
 
 Prerequisites
 *************
@@ -683,6 +684,8 @@ If you've installed Bodo using pip:
 
 Usage
 ******
+
+``SELECT``, ``SHOW``, and ``DESCRIBE``|``DESC`` sql command are supported with ``pd.read_sql``
 
 Reading result of a SQL query in a dataframe:
 
@@ -770,6 +773,8 @@ Here's an example of automatic installation on a Linux OS machine.
 Usage
 ******
 
+Only ``SELECT`` sql command is supported with ``pd.read_sql``
+
 Reading result of a SQL query in a dataframe:
 
 .. code-block:: python3
@@ -826,6 +831,8 @@ If you've installed Bodo using pip:
 
 Usage
 ******
+
+``SELECT`` and  ``SHOW`` sql command are supported with ``pd.read_sql``
 
 Reading result of a SQL query in a dataframe:
 

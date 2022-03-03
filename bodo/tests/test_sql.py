@@ -772,6 +772,53 @@ def test_to_sql_snowflake(memory_leak_check):
     bodo.barrier()
 
 
+@pytest.mark.slow
+def test_mysql_show(memory_leak_check):
+    """Test MySQL: SHOW query"""
+
+    def impl():
+        sql_request = "show databases"
+        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl, (), is_out_distributed=False)
+
+
+@pytest.mark.slow
+def test_mysql_describe(memory_leak_check):
+    """Test MySQL: DESCRIBE query"""
+
+    def impl():
+        sql_request = "DESCRIBE salaries"
+        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl, (), is_out_distributed=False)
+
+    def impl():
+        sql_request = "DESC salaries"
+        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl, (), is_out_distributed=False)
+
+
+@pytest.mark.slow
+def test_postgre_show(memory_leak_check):
+    """Test PostgreSQL: SHOW query"""
+
+    def impl():
+        sql_request = "show all"
+        conn = "postgresql+psycopg2://" + postgres_user_pass_and_hostname + "/TEST_DB"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_func(impl, (), is_out_distributed=False)
+
+
 # ---------------------PostgreSQL Database------------------------#
 # Queries used from
 # https://www.postgresqltutorial.com/postgresql-select/

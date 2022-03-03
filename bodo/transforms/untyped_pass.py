@@ -849,6 +849,7 @@ class UntypedPass:
             "argument to the JIT function currently"
         )
         sql_const = get_const_value(sql_var, self.func_ir, msg, arg_types=self.args)
+
         con_var = get_call_expr_arg("read_sql", rhs.args, kws, 1, "con", "")
         msg = (
             "pd.read_sql() requires 'con' argument to be a constant string or an "
@@ -895,6 +896,7 @@ class UntypedPass:
             data_arrs,
             out_types,
             converted_colnames,
+            is_select_query,
         ) = _get_sql_types_arr_colnames(sql_const, con_const, lhs)
 
         nodes = [
@@ -908,6 +910,7 @@ class UntypedPass:
                 converted_colnames,
                 db_type,
                 lhs.loc,
+                is_select_query,
             )
         ]
 
@@ -2767,9 +2770,35 @@ def _get_sql_types_arr_colnames(sql_const, con_const, lhs):
         db_type = "oracle"
     else:
         db_type = urlparse(con_const).scheme
+    # Whether SQL statement is SELECT query
+    is_select_query = False
+    # Operations that create or edit objects don't return data.
+    # They work with Pandas but then raises an exception
+    # and ends program. So we avoid them.
+    # sqlalchemy.exc.ResourceClosedError:
+    # This result object does not return rows. It has been closed automatically.
+    # Ex. : Create, insert, update, delete, drop, ...
+    # SELECT goes to full path of getting type, split across ranks, ...
+    # Other will be executed by all ranks as it's.
+    # Snowflake+Bodo only supports SELECT
+    # Snowflake: Show and Describe don't work with get_dataset
+    # Only supported by MySQL.
+    # Oracle: cx_oracle doesn't support them. Bodo displays same error as Pandas.
+    # Postgresql: SELECT and SHOW only.
+    # Declare what Bodo supports.  Users may run them to explore their database
+    supported_sql_queries = ("SELECT", "SHOW", "DESCRIBE", "DESC")
+    sql_word = sql_const.lstrip().split(maxsplit=1)[0]
+    if sql_word.upper() not in supported_sql_queries:
+        raise BodoError(f"{sql_word} query is not supported.\n")
+    elif sql_word.upper() == "SELECT":
+        is_select_query = True
+    elif db_type in ("snowflake", "oracle") or (
+        db_type == "postgresql" and sql_word in ("DESCRIBE", "DESC")
+    ):
+        raise BodoError(f"{sql_word} query is not supported with {db_type}.\n")
     # find df type
     df_type, converted_colnames = _get_sql_df_type_from_db(
-        sql_const, con_const, db_type
+        sql_const, con_const, db_type, is_select_query, sql_word
     )
     dtypes = df_type.data
     dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
@@ -2781,10 +2810,10 @@ def _get_sql_types_arr_colnames(sql_const, con_const, lhs):
     columns, data_arrs, out_types = _get_read_file_col_info(
         dtype_map, date_cols, col_names, lhs
     )
-    return db_type, columns, data_arrs, out_types, converted_colnames
+    return db_type, columns, data_arrs, out_types, converted_colnames, is_select_query
 
 
-def _get_sql_df_type_from_db(sql_const, con_const, db_type):
+def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql_word):
     """access the database to find df type for read_sql() output.
     Only rank zero accesses the database, then broadcasts.
     """
@@ -2822,11 +2851,15 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
             # in any dead column elimination
             converted_colnames = set()
             rows_to_read = 100  # TODO: tune this
+            # SHOW/DESCRIBE don't work with LIMIT.
+            if not is_select_query:
+                sql_call = f"{sql_const}"
             # oracle does not support LIMIT. Use ROWNUM instead
-            if db_type == "oracle":
+            elif db_type == "oracle":
                 sql_call = f"select * from ({sql_const}) WHERE ROWNUM <= {rows_to_read}"
             else:
                 sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
+
             if db_type == "snowflake":  # pragma: no cover
                 from bodo.io.snowflake import get_connection_params
 
@@ -2862,21 +2895,37 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type):
                     data=tuple(col_types), columns=tuple(new_colnames)
                 )
             else:
-                df = pd.read_sql(sql_call, con_const)
-                # https://docs.sqlalchemy.org/en/14/dialects/oracle.html#identifier-casing
-                # Oracle stores column names in UPPER CASE unless it's quoted
-                # pd.read_sql() returns the name with all lower case unless it was quoted
-                # NOTE: BE-2217 this "colnamealllowercase" will fail with this.
-                # If column is lowercase, then it was either converted or all upper with quotes
-                # In both cases, we add it to converted_colnames list that is needed later.
-                # See escape_column_names
-                if db_type == "oracle":
-                    new_colnames = []
-                    for x in df.columns:
-                        if x.islower():
-                            converted_colnames.add(x)
-                        new_colnames.append(x)
-                df_type = numba.typeof(df)
+                # MySQL+DESCRIBE: has fixed DataFrameType. Created upfront.
+                # SHOW has many variation depending on object to show
+                # so it will fall in the else-stmt
+                if db_type == "mysql" and sql_word("DESCRIBE", "DESC"):
+                    colnames = ("Field", "Type", "Null", "Key", "Default", "Extra")
+                    index_type = bodo.RangeIndexType(bodo.none)
+                    data_type = (
+                        bodo.string_type,
+                        bodo.string_type,
+                        bodo.string_type,
+                        bodo.string_type,
+                        bodo.string_type,
+                        bodo.string_type,
+                    )
+                    df_type = DataFrameType(data_type, index_type, colnames)
+                else:
+                    df = pd.read_sql(sql_call, con_const)
+                    # https://docs.sqlalchemy.org/en/14/dialects/oracle.html#identifier-casing
+                    # Oracle stores column names in UPPER CASE unless it's quoted
+                    # pd.read_sql() returns the name with all lower case unless it was quoted
+                    # NOTE: BE-2217 this "colnamealllowercase" will fail with this.
+                    # If column is lowercase, then it was either converted or all upper with quotes
+                    # In both cases, we add it to converted_colnames list that is needed later.
+                    # See escape_column_names
+                    if db_type == "oracle":
+                        new_colnames = []
+                        for x in df.columns:
+                            if x.islower():
+                                converted_colnames.add(x)
+                            new_colnames.append(x)
+                    df_type = numba.typeof(df)
             # always convert to nullable type since initial rows of a column could be all
             # int for example, but later rows could have NAs
             # Q: Is this needed for snowflake?
