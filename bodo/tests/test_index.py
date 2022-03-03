@@ -497,6 +497,25 @@ def test_datetimeindex_constant_lowering(memory_leak_check):
     pd.testing.assert_index_equal(bodo_func(), impl())
 
 
+@pytest.mark.parametrize(
+    "comparison_impl",
+    [
+        pytest.param(lambda a, b: a == b, id="eq"),
+        pytest.param(lambda a, b: a != b, id="ne"),
+        pytest.param(lambda a, b: a < b, id="lt"),
+        pytest.param(lambda a, b: a <= b, id="le"),
+        pytest.param(lambda a, b: a > b, id="gt"),
+        pytest.param(lambda a, b: a >= b, id="ge"),
+    ],
+)
+def test_datetime_compare(comparison_impl, dti_val, memory_leak_check):
+    t = dti_val.min()  # Timestamp object
+
+    check_func(comparison_impl, (dti_val, t))
+    check_func(comparison_impl, (t, dti_val))
+
+
+
 def test_string_index_constant_lowering(memory_leak_check):
     si = pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"])
 
@@ -789,6 +808,24 @@ def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
     impl = loc_vars["impl"]
 
     check_func(impl, (timedelta_index_val,))
+
+
+@pytest.mark.parametrize(
+    "comparison_impl",
+    [
+        pytest.param(lambda a, b: a == b, id="eq"),
+        pytest.param(lambda a, b: a != b, id="ne"),
+        pytest.param(lambda a, b: a < b, id="lt"),
+        pytest.param(lambda a, b: a <= b, id="le"),
+        pytest.param(lambda a, b: a > b, id="gt"),
+        pytest.param(lambda a, b: a >= b, id="ge"),
+    ],
+)
+def test_timedelta_compare(comparison_impl, timedelta_index_val, memory_leak_check):
+    t = timedelta_index_val.min()  # Timedelta object
+
+    check_func(comparison_impl, (timedelta_index_val, t))
+    check_func(comparison_impl, (t, timedelta_index_val))
 
 
 @pytest.mark.parametrize(

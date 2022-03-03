@@ -1099,9 +1099,8 @@ class SeriesPass:
 
         # inline overloaded
         # TODO: use overload inlining when available
-        if (
-            rhs.fn == operator.sub
-            and (
+        if rhs.fn == operator.sub and (
+            (
                 isinstance(typ1, DatetimeIndexType)
                 and typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
             )
