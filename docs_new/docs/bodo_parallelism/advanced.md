@@ -108,7 +108,10 @@ Sometimes explicit parallel loops are required since a program cannot be
 written in terms of data-parallel operators easily. In this case, one
 can use Bodo's `prange` in place of `range` to specify that a loop can
 be parallelized. The user is required to make sure the loop does not
-have cross iteration dependencies except for supported reductions.
+have cross-iteration dependencies except for supported reductions. Currently,
+reductions using `+=`, `*=`, `min`, and `max` operators are supported.
+Iterations are simply divided between processes and executed in parallel,
+but reductions are handled using data exchange.
 
 The example below demonstrates a parallel loop with a reduction:
 
@@ -158,9 +161,41 @@ rank 3
 13.077183553245497
 ```
 
-Currently, reductions using `+=`, `*=`, `min`, and `max` operators are
-supported. Iterations are simply divided between processes and executed
-in parallel, but reductions are handled using data exchange.
+The user is also responsible for ensuring that control flow doesn't prevent
+the loop from being reduced. This can occur when operations are potentially
+applied unevenly or when the order the operation occurs in matters. This means
+that mixing reductions and control flow breaks such as `break` or `raise` are
+not supported.
+
+The below example shows what happens when control flow prevents a reduction
+from being parallelized:
+
+``` py
+import bodo
+from bodo import prange
+import numpy as np
+
+@bodo.jit
+def prange_test(n):
+    A = np.random.ranf(n)
+    s = 0
+    for i in prange(len(A)):
+        if A[i] % 2 == 0:
+            s *= 2
+        else:
+            s += A[i]
+    return s
+
+res = prange_test(10)
+print(res)
+```
+
+Output: 
+
+```console
+numba.core.errors.UnsupportedRewriteError: Failed in bodo mode pipeline (step: convert to parfors)
+Reduction variable s has multiple conflicting reduction operators.
+```
 
 ## Integration with non-Bodo APIs
 
