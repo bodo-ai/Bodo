@@ -19,6 +19,7 @@ from bodo.tests.utils import (
     get_start_end,
     reduce_sum,
 )
+from bodo.utils.typing import BodoError
 
 # TODO: Include testing DBs for other systems: PostgreSQL, MSSQL, SQLite, ...
 sql_user_pass_and_hostname = (
@@ -547,6 +548,71 @@ def test_sql_snowflake_json_url(memory_leak_check):
     check_func(impl, (query, conn), py_output=impl(query, pandas_conn))
 
 
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_snowflake_unsupported_timezones(datapath, memory_leak_check):
+    """
+    Tests trying to read Arrow timestamp columns with
+    timezones using Bodo + Snowflake. Bodo doesn't support timezones,
+    so this verifies that if the column can be safely
+    removed as dead code, Bodo succeeds, but if the column
+    is still alive then Bodo throws a compile time error.
+
+    Note: tz_test was manually created in our snowflake account.
+    """
+
+    def test_impl1(query, conn_str):
+        """
+        read_sql that should succeed
+        because there are no tz columns.
+        """
+        df = pd.read_sql(query, conn_str)
+        return df.b
+
+    @bodo.jit
+    def test_impl2(query, conn_str):
+        """
+        Read parquet that should fail
+        because there are tz columns.
+        """
+        df = pd.read_sql(query, conn_str)
+        return df.a
+
+    @bodo.jit
+    def test_impl3(query, conn_str):
+        """
+        Read parquet that should fail
+        because there are tz columns.
+        """
+        df = pd.read_sql(query, conn_str)
+        return df
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+
+    full_query = f"select * from tz_test"
+    partial_query = f"select B, C from tz_test"
+    # Loading just the non-tz columns should suceed.
+    check_func(test_impl1, (full_query, conn), check_dtype=False)
+    check_func(test_impl1, (partial_query, conn), check_dtype=False)
+    # Loading the tz columns should fail
+    with pytest.raises(
+        BodoError,
+        match="1 or more columns found with Arrow types that are not supported",
+    ):
+        test_impl2(full_query, conn)
+    with pytest.raises(
+        BodoError,
+        match="1 or more columns found with Arrow types that are not supported",
+    ):
+        test_impl3(full_query, conn)
+    with pytest.raises(
+        BodoError,
+        match="1 or more columns found with Arrow types that are not supported",
+    ):
+        test_impl3(partial_query, conn)
+
+
 # ---------------------Oracle Database------------------------#
 # Queries used from
 # https://www.oracle.com/news/connect/run-sql-data-queries-with-pandas.html
@@ -615,7 +681,7 @@ def test_oracle_read_sql_join(memory_leak_check):
 
     def impl():
         sql_request = """
-        SELECT 
+        SELECT
             ordate,
             empl,
             price*quantity*(1-discount/100) AS total,
@@ -637,11 +703,11 @@ def test_oracle_read_sql_gb(memory_leak_check):
 
     def impl():
         sql_request = """
-        SELECT 
+        SELECT
             brand,
-            ROUND(AVG(price),2) AS MEAN 
+            ROUND(AVG(price),2) AS MEAN
             FROM details
-            GROUP BY brand 
+            GROUP BY brand
         """
         conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
         frame = pd.read_sql(sql_request, conn)
@@ -900,7 +966,7 @@ def test_postgres_read_sql_join(memory_leak_check):
         ON f.film_id = fc.film_id
         JOIN inventory i
         ON i.film_id = f.film_id
-        JOIN rental r 
+        JOIN rental r
         ON r.inventory_id = i.inventory_id
         WHERE c.name IN ('Animation', 'Children', 'Classics', 'Comedy', 'Family', 'Music')
         GROUP BY 1, 2
@@ -931,7 +997,7 @@ def test_postgres_read_sql_join(memory_leak_check):
         sql_request = """
         SELECT film.film_id, title, inventory_id
         FROM film
-        LEFT JOIN inventory 
+        LEFT JOIN inventory
         ON inventory.film_id = film.film_id
         """
         frame = pd.read_sql(sql_request, conn)
@@ -948,13 +1014,13 @@ def test_postgres_read_sql_gb(memory_leak_check):
 
     def impl(conn):
         sql_request = """
-        SELECT 
-	        customer_id, 
+        SELECT
+	        customer_id,
             staff_id,
 	        ROUND(AVG(amount), 2) AS Average
-        FROM 
+        FROM
 	        payment
-        GROUP BY 
+        GROUP BY
         	customer_id, staff_id
         """
         frame = pd.read_sql(sql_request, conn)
@@ -964,10 +1030,10 @@ def test_postgres_read_sql_gb(memory_leak_check):
 
     def impl2(conn):
         sql_request = """
-        SELECT 
-	        DATE(payment_date) paid_date, 
+        SELECT
+	        DATE(payment_date) paid_date,
 	        SUM(amount) sum
-        FROM 
+        FROM
         	payment
         GROUP BY
         	DATE(payment_date)

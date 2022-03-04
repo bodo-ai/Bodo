@@ -1080,7 +1080,7 @@ def test_read_write_parquet(memory_leak_check):
             ]
         elif write_index == "numeric":
             # set a numeric index (not range)
-            df.index = [v ** 2 for v in range(num_elements)]
+            df.index = [v**2 for v in range(num_elements)]
         return df
 
     n_pes = bodo.get_size()
@@ -2036,7 +2036,7 @@ def test_write_parquet_params(memory_leak_check):
     S2 = ["abc¡Y tú quién te crees?", "dd2🐍⚡", "22 大处着眼，小处着手。"] * 4
     df = pd.DataFrame({"A": S1, "B": S2})
     # set a numeric index (not range)
-    df.index = [v ** 2 for v in range(len(df))]
+    df.index = [v**2 for v in range(len(df))]
 
     for mode in ["sequential", "1d-distributed"]:
         pd_fname = "test_io___pandas.pq"
@@ -3169,7 +3169,7 @@ def test_file_not_found(memory_leak_check):
 
 @pytest.mark.slow
 def test_csv_relative_path(datapath, memory_leak_check):
-    """Test pd.read_csv with relative path """
+    """Test pd.read_csv with relative path"""
 
     # File
     filename = os.path.join(".", "bodo", "tests", "data", "example.csv")
@@ -3191,7 +3191,7 @@ def test_csv_relative_path(datapath, memory_leak_check):
 
 @pytest.mark.slow
 def test_csv_nrows(memory_leak_check):
-    """Test pd.read_csv with nrows argument """
+    """Test pd.read_csv with nrows argument"""
     fname = os.path.join("bodo", "tests", "data", "example.csv")
 
     def impl1():
@@ -3494,6 +3494,98 @@ def test_csv_chunksize_forloop_nested(datapath, memory_leak_check):
     check_func(impl1, (fname, 5))
     check_func(impl2, (fname, 5))
     check_func(impl3, (fname, 5))
+
+
+def test_unsupported_timezones(datapath, memory_leak_check):
+    """
+    Tests trying to read Arrow timestamp columns with
+    timezones using Bodo. Bodo doesn't support timezones,
+    so this verifies that if the column can be safely
+    removed as dead code, Bodo succeeds, but if the column
+    is still alive then Bodo throws a compile time error.
+    """
+
+    def test_impl1():
+        """
+        Read parquet that should succeed
+        because there are no tz columns.
+        """
+        df = pd.read_parquet("test_tz.pq")
+        return df.B
+
+    def test_impl2():
+        """
+        Read parquet that should succeed
+        because there are no tz columns.
+        """
+        df = pd.read_parquet("test_tz.pq", columns=["B", "C"])
+        return df.B
+
+    @bodo.jit
+    def test_impl3():
+        """
+        Read parquet that should fail
+        because there are tz columns.
+        """
+        df = pd.read_parquet("test_tz.pq")
+        return df.A
+
+    @bodo.jit
+    def test_impl4():
+        """
+        Read parquet that should fail
+        because there are tz columns.
+        """
+        df = pd.read_parquet("test_tz.pq")
+        return df
+
+    @bodo.jit
+    def test_impl5():
+        """
+        Read parquet that should fail
+        because there are tz columns.
+        """
+        df = pd.read_parquet("test_tz.pq", columns=["B", "C"])
+        return df
+
+    if bodo.get_rank() == 0:
+        df = pd.DataFrame(
+            {
+                "A": pd.date_range(
+                    "2018-04-09", periods=50, freq="2D1H", tz="America/Los_Angeles"
+                ),
+                "B": ["a", "b", "c", "d", "e"] * 10,
+                "C": pd.date_range(
+                    "2018-04-09", periods=50, freq="2D1H", tz="America/Los_Angeles"
+                ),
+            }
+        )
+        # Create a pq ex
+        df.to_parquet("test_tz.pq", index=False)
+    bodo.barrier()
+    try:
+        # Loading just the non-tz columns should suceed.
+        check_func(test_impl1, ())
+        check_func(test_impl2, ())
+        # Loading the tz columns should fail
+        with pytest.raises(
+            BodoError,
+            match="1 or more columns found with Arrow types that are not supported",
+        ):
+            test_impl3()
+        with pytest.raises(
+            BodoError,
+            match="1 or more columns found with Arrow types that are not supported",
+        ):
+            test_impl4()
+        with pytest.raises(
+            BodoError,
+            match="1 or more columns found with Arrow types that are not supported",
+        ):
+            test_impl5()
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove("test_tz.pq")
 
 
 @pytest.mark.slow
@@ -3878,7 +3970,7 @@ def test_csv_np_gt_rows(datapath, memory_leak_check):
 
 @pytest.mark.slow
 def test_csv_escapechar(datapath, memory_leak_check):
-    """Test pd.read_csv with escapechar argument """
+    """Test pd.read_csv with escapechar argument"""
 
     fname = datapath("escapechar_data.csv")
 

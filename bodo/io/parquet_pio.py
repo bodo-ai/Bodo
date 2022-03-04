@@ -211,6 +211,8 @@ class ParquetHandler:
                         index_col,
                         col_indices,
                         partition_names,
+                        unsupported_columns,
+                        unsupported_arrow_types,
                     ) = typ.schema
                     got_schema = True
             if not got_schema:
@@ -220,6 +222,8 @@ class ParquetHandler:
                     index_col,
                     col_indices,
                     partition_names,
+                    unsupported_columns,
+                    unsupported_arrow_types,
                 ) = parquet_file_schema(
                     file_name_str, columns, storage_options=storage_options
                 )
@@ -241,6 +245,9 @@ class ParquetHandler:
             col_names = selected_columns
             index_col = index_col if index_col in col_names else None
             partition_names = []
+            # If a user provides the schema, all types must be valid Bodo types.
+            unsupported_columns = []
+            unsupported_arrow_types = []
 
         index_colname = (
             None if (isinstance(index_col, dict) or index_col is None) else index_col
@@ -280,6 +287,8 @@ class ParquetHandler:
                 storage_options,
                 index_column_index,
                 index_column_type,
+                unsupported_columns,
+                unsupported_arrow_types,
             )
         ]
 
@@ -486,6 +495,31 @@ def pq_distributed_run(
                 distributed_pass.Distribution.OneD_Var,
             )
         ), "pq data/index parallelization does not match"
+
+    # Check for any unsupported columns still remaining
+    if pq_node.unsupported_columns:
+        used_cols_set = set(pq_node.type_usecol_offset)
+        unsupported_cols_set = set(pq_node.unsupported_columns)
+        remaining_unsupported = used_cols_set & unsupported_cols_set
+        if remaining_unsupported:
+            unsupported_list = sorted(remaining_unsupported)
+            msg_list = [
+                f"pandas.read_parquet(): 1 or more columns found with Arrow types that are not supported in Bodo and could not be eliminated. "
+                + "Please manually remove these columns from your read_parquet with the 'columns' argument. If these "
+                + "columns are needed, you will need to modify your dataset to use a supported type.",
+                "Unsupported Columns:",
+            ]
+            # Find the arrow types for the unsupported types
+            idx = 0
+            for col_num in unsupported_list:
+                while pq_node.unsupported_columns[idx] != col_num:
+                    idx += 1
+                msg_list.append(
+                    f"Column '{pq_node.df_colnames[col_num]}' with unsupported arrow type {pq_node.unsupported_arrow_types[idx]}"
+                )
+                idx += 1
+            total_msg = "\n".join(msg_list)
+            raise BodoError(total_msg, loc=pq_node.loc)
 
     pq_reader_py = _gen_pq_reader_py(
         pq_node.df_colnames,
@@ -827,31 +861,34 @@ _pa_numba_typ_map = {
 
 
 def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, category_info):
-    """return Bodo array type from pyarrow Field (column type)"""
+    """return Bodo array type from pyarrow Field (column type) and if the type is supported.
+    If a type is not support but can be adequately typed, we return that it isn't supported
+    and later in compilation we will check if dead code/column elimination has successfully
+    removed the column."""
 
     if isinstance(pa_typ.type, pa.ListType):
-        return ArrayItemArrayType(
-            # nullable_from_metadata is only used for non-nested Int arrays
-            _get_numba_typ_from_pa_typ(
-                pa_typ.type.value_field, is_index, nullable_from_metadata, category_info
-            )
+        # nullable_from_metadata is only used for non-nested Int arrays
+        arr_typ, supported = _get_numba_typ_from_pa_typ(
+            pa_typ.type.value_field, is_index, nullable_from_metadata, category_info
         )
+        return ArrayItemArrayType(arr_typ), supported
 
     if isinstance(pa_typ.type, pa.StructType):
         child_types = []
         field_names = []
+        supported = True
         for field in pa_typ.flatten():
             field_names.append(field.name.split(".")[-1])
-            child_types.append(
-                _get_numba_typ_from_pa_typ(
-                    field, is_index, nullable_from_metadata, category_info
-                )
+            child_arr, child_supported = _get_numba_typ_from_pa_typ(
+                field, is_index, nullable_from_metadata, category_info
             )
-        return StructArrayType(tuple(child_types), tuple(field_names))
+            child_types.append(child_arr)
+            supported = supported and child_supported
+        return StructArrayType(tuple(child_types), tuple(field_names)), supported
 
     # Decimal128Array type
     if isinstance(pa_typ.type, pa.Decimal128Type):
-        return DecimalArrayType(pa_typ.type.precision, pa_typ.type.scale)
+        return DecimalArrayType(pa_typ.type.precision, pa_typ.type.scale), True
 
     # Categorical data type
     if isinstance(pa_typ.type, pa.DictionaryType):
@@ -868,17 +905,27 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, categor
             pa_typ.type.ordered,
             int_type=int_type,
         )
-        return CategoricalArrayType(cat_dtype)
+        return CategoricalArrayType(cat_dtype), True
 
     if pa_typ.type not in _pa_numba_typ_map:
-        raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
-    dtype = _pa_numba_typ_map[pa_typ.type]
+        # Timestamps with Timezones aren't supported inside Bodo. However,
+        # they can be safely typed with regular Timestamps. Later in distributed_pass
+        # for SQLReader and ParquetReader we check if these column still exist and
+        # only then raise an exception.
+        if isinstance(pa_typ.type, pa.lib.TimestampType) and pa_typ.type.tz is not None:
+            dtype = types.NPDatetime("ns")
+            supported = False
+        else:
+            raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
+    else:
+        dtype = _pa_numba_typ_map[pa_typ.type]
+        supported = True
 
     if dtype == datetime_date_type:
-        return datetime_date_array_type
+        return datetime_date_array_type, supported
 
     if dtype == bytes_type:
-        return binary_array_type
+        return binary_array_type, supported
 
     arr_typ = string_array_type if dtype == string_type else types.Array(dtype, 1, "C")
 
@@ -900,7 +947,7 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, categor
     ):
         arr_typ = IntegerArrayType(dtype)
 
-    return arr_typ
+    return arr_typ, supported
 
 
 def get_parquet_dataset(
@@ -1547,15 +1594,22 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
     # If there is no index at all, col_names will not include anything.
     col_names = pa_schema.names
     index_col, nullable_from_metadata = get_pandas_metadata(pa_schema, num_pieces)
-    col_types_total = [
-        _get_numba_typ_from_pa_typ(
-            pa_schema.field(c),
+    col_types_total = []
+    is_supported_list = []
+    arrow_types = []
+    for i, c in enumerate(col_names):
+        field = pa_schema.field(c)
+        dtype, supported = _get_numba_typ_from_pa_typ(
+            field,
             c == index_col,
             nullable_from_metadata[c],
             pq_dataset._category_info,
         )
-        for c in col_names
-    ]
+        col_types_total.append(dtype)
+        is_supported_list.append(supported)
+        # Store the unsupported arrow type for future
+        # error messages.
+        arrow_types.append(field.type)
 
     # add partition column data types if any
     if partition_names:
@@ -1585,9 +1639,19 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
         # should still be included.
         selected_columns.append(index_col)
 
-    col_indices = [col_names_map[c] for c in selected_columns]
-    col_types = [col_types_total[col_names_map[c]] for c in selected_columns]
     col_names = selected_columns
+    col_indices = []
+    col_types = []
+    unsupported_columns = []
+    unsupported_arrow_types = []
+    for i, c in enumerate(selected_columns):
+        col_idx = col_names_map[c]
+        col_indices.append(col_idx)
+        col_types.append(col_types_total[col_idx])
+        if not is_supported_list[col_idx]:
+            unsupported_columns.append(i)
+            unsupported_arrow_types.append(arrow_types[col_idx])
+
     # TODO: close file?
     return (
         col_names,
@@ -1595,6 +1659,8 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
         index_col,
         col_indices,
         partition_names,
+        unsupported_columns,
+        unsupported_arrow_types,
     )
 
 
