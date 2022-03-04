@@ -1618,6 +1618,11 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
             _get_partition_cat_dtype(pq_dataset.partitions.levels[i])
             for i in range(len(partition_names))
         ]
+        # All partition column types are supported by default.
+        is_supported_list.extend([True] * len(partition_names))
+        # Extend arrow_types for consistency. Here we use None
+        # because none of these are actually in the pq file.
+        arrow_types.extend([None] * len(partition_names))
     # Map column names to index to allow efficient search
     col_names_map = {c: i for i, c in enumerate(col_names)}
 
