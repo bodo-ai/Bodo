@@ -896,6 +896,8 @@ class UntypedPass:
             data_arrs,
             out_types,
             converted_colnames,
+            unsupported_columns,
+            unsupported_arrow_types,
             is_select_query,
         ) = _get_sql_types_arr_colnames(sql_const, con_const, lhs)
 
@@ -910,6 +912,8 @@ class UntypedPass:
                 converted_colnames,
                 db_type,
                 lhs.loc,
+                unsupported_columns,
+                unsupported_arrow_types,
                 is_select_query,
             )
         ]
@@ -2757,8 +2761,11 @@ def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
 def _get_sql_types_arr_colnames(sql_const, con_const, lhs):
     """
     Wrapper function to determine the db_type, column names,
-    array variables, array types, and includes any column names
-    that were converted. This is written as a standalone
+    array variables, array types, any column names
+    that were converted, and any unsupported columns that may
+    be possible to type but shouldn't be loaded.
+
+    This is written as a standalone
     function because other packages (i.e. BodoSQL) may need
     to type a SQL query.
     """
@@ -2797,7 +2804,12 @@ def _get_sql_types_arr_colnames(sql_const, con_const, lhs):
     ):
         raise BodoError(f"{sql_word} query is not supported with {db_type}.\n")
     # find df type
-    df_type, converted_colnames = _get_sql_df_type_from_db(
+    (
+        df_type,
+        converted_colnames,
+        unsupported_columns,
+        unsupported_arrow_types,
+    ) = _get_sql_df_type_from_db(
         sql_const, con_const, db_type, is_select_query, sql_word
     )
     dtypes = df_type.data
@@ -2810,7 +2822,16 @@ def _get_sql_types_arr_colnames(sql_const, con_const, lhs):
     columns, data_arrs, out_types = _get_read_file_col_info(
         dtype_map, date_cols, col_names, lhs
     )
-    return db_type, columns, data_arrs, out_types, converted_colnames, is_select_query
+    return (
+        db_type,
+        columns,
+        data_arrs,
+        out_types,
+        converted_colnames,
+        unsupported_columns,
+        unsupported_arrow_types,
+        is_select_query,
+    )
 
 
 def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql_word):
@@ -2868,15 +2889,23 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql
                 pa_schema = conn.cursor().execute(sql_call).fetch_arrow_all().schema
                 # arrow schema
                 col_names = pa_schema.names
-                col_types = [
-                    _get_numba_typ_from_pa_typ(
-                        pa_schema.field(c),
+                col_types = []
+                unsupported_columns = []
+                unsupported_arrow_types = []
+                for i, c in enumerate(col_names):
+                    field = pa_schema.field(c)
+                    dtype, supported = _get_numba_typ_from_pa_typ(
+                        field,
                         False,  # index_col
                         None,  # nullable_from_metadata
                         None,  # category_info
                     )
-                    for c in col_names
-                ]
+                    col_types.append(dtype)
+                    if not supported:
+                        unsupported_columns.append(i)
+                        # Store the unsupported arrow type for future
+                        # error messages.
+                        unsupported_arrow_types.append(field.type)
 
                 # Ensure column name case matches Pandas/sqlalchemy. See:
                 # https://github.com/snowflakedb/snowflake-sqlalchemy#object-name-case-handling
@@ -2895,6 +2924,9 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql
                     data=tuple(col_types), columns=tuple(new_colnames)
                 )
             else:
+                # Unsupported arrow columns is unused by other paths.
+                unsupported_columns = []
+                unsupported_arrow_types = []
                 # MySQL+DESCRIBE: has fixed DataFrameType. Created upfront.
                 # SHOW has many variation depending on object to show
                 # so it will fall in the else-stmt
@@ -2930,7 +2962,12 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql
             # int for example, but later rows could have NAs
             # Q: Is this needed for snowflake?
             df_type = to_nullable_type(df_type)
-            df_info = (df_type, converted_colnames)
+            df_info = (
+                df_type,
+                converted_colnames,
+                unsupported_columns,
+                unsupported_arrow_types,
+            )
         except Exception as e:
             message = f"{type(e).__name__}:'{e}'"
 
@@ -2948,8 +2985,13 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql
             raise RuntimeError(
                 f"{common_err_msg}\nPlease refer to errors on other ranks."
             )
-    df_type, converted_colnames = comm.bcast(df_info)
-    return df_type, converted_colnames
+    (
+        df_type,
+        converted_colnames,
+        unsupported_columns,
+        unsupported_arrow_types,
+    ) = comm.bcast(df_info)
+    return df_type, converted_colnames, unsupported_columns, unsupported_arrow_types
 
 
 class CSVFileInfo(FileInfo):

@@ -42,6 +42,8 @@ class SqlReader(ir.Stmt):
         converted_colnames,
         db_type,
         loc,
+        unsupported_columns,
+        unsupported_arrow_types,
         is_select_query,
     ):
         self.connector_typ = "sql"
@@ -49,6 +51,9 @@ class SqlReader(ir.Stmt):
         self.connection = connection
         self.df_out = df_out  # used only for printing
         self.df_colnames = df_colnames
+        # Keep a copy of the column names before running DCE.
+        # This is used to detect if we still have unsupported_columns.
+        self.original_df_colnames = df_colnames
         self.out_vars = out_vars
         self.out_types = out_types
         # Any columns that had their output name converted by the actual
@@ -61,17 +66,24 @@ class SqlReader(ir.Stmt):
         self.db_type = db_type
         # Support for filter pushdown. Currently only used with snowflake.
         self.filters = None
+        # These fields are used to enable compilation if unsupported columns
+        # get eliminated. Currently only used with snowflake.
+        self.unsupported_columns = unsupported_columns
+        self.unsupported_arrow_types = unsupported_arrow_types
         self.is_select_query = is_select_query
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadSql(sql_request={}, connection={}, col_names={}, types={}, vars={}, limit={})".format(
+        return "{} = ReadSql(sql_request={}, connection={}, col_names={}, original_col_names={}, types={}, vars={}, limit={}, unsupported_columns={}, unsupported_arrow_types={})".format(
             self.df_out,
             self.sql_request,
             self.connection,
             self.df_colnames,
+            self.original_df_colnames,
             self.out_types,
             self.out_vars,
             self.limit,
+            self.unsupported_columns,
+            self.unsupported_arrow_types,
         )
 
 
@@ -111,6 +123,40 @@ def sql_distributed_run(
                 and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
             ):
                 parallel = False
+
+    # Check for any unsupported columns still remaining
+    if sql_node.unsupported_columns:
+        # Determine the columns that were eliminated.
+        unsupported_cols_set = set(sql_node.unsupported_columns)
+        # Compute the intersection of what was kept.
+        remaining_unsupported = set()
+        name_idx = 0
+        for name in sql_node.df_colnames:
+            while sql_node.original_df_colnames[name_idx] != name:
+                name_idx += 1
+            if name_idx in unsupported_cols_set:
+                remaining_unsupported.add(name_idx)
+            name_idx += 1
+
+        if remaining_unsupported:
+            unsupported_list = sorted(remaining_unsupported)
+            msg_list = [
+                f"pandas.read_sql(): 1 or more columns found with Arrow types that are not supported in Bodo and could not be eliminated. "
+                + "Please manually remove these columns from your sql query by specifying the columns you need in your SELECT statement. If these "
+                + "columns are needed, you will need to modify your dataset to use a supported type.",
+                "Unsupported Columns:",
+            ]
+            # Find the arrow types for the unsupported types
+            idx = 0
+            for col_num in unsupported_list:
+                while sql_node.unsupported_columns[idx] != col_num:
+                    idx += 1
+                msg_list.append(
+                    f"Column '{sql_node.original_df_colnames[col_num]}' with unsupported arrow type {sql_node.unsupported_arrow_types[idx]}"
+                )
+                idx += 1
+            total_msg = "\n".join(msg_list)
+            raise BodoError(total_msg, loc=sql_node.loc)
 
     n_cols = len(sql_node.out_vars)
     arg_names = ", ".join("arr" + str(i) for i in range(n_cols))
