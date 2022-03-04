@@ -18,13 +18,9 @@ from bodo.tests.utils import (
     check_func,
     get_start_end,
     reduce_sum,
+    sql_user_pass_and_hostname,
 )
 from bodo.utils.typing import BodoError
-
-# TODO: Include testing DBs for other systems: PostgreSQL, MSSQL, SQLite, ...
-sql_user_pass_and_hostname = (
-    "user:pass@localhost"
-)
 
 
 def test_write_sql_aws(memory_leak_check):

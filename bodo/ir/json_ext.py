@@ -94,6 +94,18 @@ def remove_dead_json(
 def json_distributed_run(
     json_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
+    # Add debug info about column pruning
+    if bodo.user_logging.get_verbose_level() >= 1:
+        msg = "Finish column pruning on read_json node:\n%s\nColumns loaded %s\n"
+        json_source = json_node.loc.strformat()
+        json_cols = json_node.df_colnames
+        bodo.user_logging.log_message(
+            "Column Pruning",
+            msg,
+            json_source,
+            json_cols,
+        )
+
     parallel = False
     if array_dists is not None:
         parallel = True

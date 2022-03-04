@@ -114,6 +114,18 @@ def remove_dead_sql(
 def sql_distributed_run(
     sql_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
+    # Add debug info about column pruning
+    if bodo.user_logging.get_verbose_level() >= 1:
+        msg = "Finish column pruning on read_sql node:\n%s\nColumns loaded %s\n"
+        sql_source = sql_node.loc.strformat()
+        sql_cols = sql_node.df_colnames
+        bodo.user_logging.log_message(
+            "Column Pruning",
+            msg,
+            sql_source,
+            sql_cols,
+        )
+
     parallel = False
     if array_dists is not None:
         parallel = True

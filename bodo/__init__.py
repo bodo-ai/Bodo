@@ -147,6 +147,7 @@ del get_versions
 
 import bodo.utils.tracing
 import bodo.utils.tracing_py
+from bodo.user_logging import set_bodo_verbose_logger, set_verbose_level
 
 
 def _global_except_hook(exctype, value, traceback):

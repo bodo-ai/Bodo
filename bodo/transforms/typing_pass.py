@@ -736,11 +736,25 @@ class TypingTransforms:
                     new_filters.append(old_or_cond + new_or_cond)
             filters = new_filters
 
+        # Update the logs with the successful filter pushdown.
+        # (no exception was raise until this end point so filters are valid)
+        if bodo.user_logging.get_verbose_level() >= 1:
+            msg = "Filter pushdown successfully performed. Moving filter step:\n%s\ninto IO step:\n%s\n"
+            filter_source = index_def.loc.strformat()
+            read_source = read_node.loc.strformat()
+            bodo.user_logging.log_message(
+                "Filter Pushdown",
+                msg,
+                filter_source,
+                read_source,
+            )
+
         # set ParquetReader/SQLReader node filters (no exception was raise until this end point
         # so filters are valid)
         read_node.filters = filters
         # remove filtering code since not necessary anymore
         assign.value = assign.value.value
+
         # Mark the IR as changed
         self.changed = True
         # Return the updates to the working body so we can modify blocks that may not

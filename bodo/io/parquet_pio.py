@@ -475,6 +475,18 @@ def pq_distributed_run(
     exec(func_text, {}, loc_vars)
     pq_impl = loc_vars["pq_impl"]
 
+    # Add debug info about column pruning
+    if bodo.user_logging.get_verbose_level() >= 1:
+        msg = "Finish column pruning on read_parquet node:\n%s\nColumns loaded %s\n"
+        pq_source = pq_node.loc.strformat()
+        pq_cols = [pq_node.df_colnames[i] for i in pq_node.type_usecol_offset]
+        bodo.user_logging.log_message(
+            "Column Pruning",
+            msg,
+            pq_source,
+            pq_cols,
+        )
+
     # parallel read flag
     parallel = False
     if array_dists is not None:

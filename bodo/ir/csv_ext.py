@@ -235,6 +235,14 @@ def csv_distributed_run(
         else types.unliteral(typemap[csv_node.skiprows.name])
     )
     if csv_node.chunksize is not None:
+        # Add debug info about column pruning. Chunksize doesn't yet prune
+        # any columns.
+        if bodo.user_logging.get_verbose_level() >= 1:
+            msg = "Finish column pruning on read_csv node:\n%s\nColumns loaded %s\n"
+            csv_source = csv_node.loc.strformat()
+            csv_cols = csv_node.df_colnames
+            bodo.user_logging.log_message("Column Pruning", msg, csv_source, csv_cols)
+
         if array_dists is not None:
             # Parallel flag for iterator is based on the single var.
             iterator_varname = csv_node.out_vars[0].name
@@ -355,6 +363,16 @@ def csv_distributed_run(
     final_usecols = csv_node.usecols
     if final_usecols:
         final_usecols = [csv_node.usecols[i] for i in csv_node.type_usecol_offset]
+    # Add debug info about column pruning
+    if bodo.user_logging.get_verbose_level() >= 1:
+        msg = "Finish column pruning on read_csv node:\n%s\nColumns loaded %s\n"
+        csv_source = csv_node.loc.strformat()
+        if final_usecols:
+            csv_cols = [csv_node.df_colnames[i] for i in final_usecols]
+        else:
+            csv_cols = []
+        bodo.user_logging.log_message("Column Pruning", msg, csv_source, csv_cols)
+
     csv_reader_py = _gen_csv_reader_py(
         csv_node.df_colnames,
         csv_node.out_types,
@@ -585,7 +603,7 @@ compiled_funcs = []
 
 @numba.njit
 def check_nrows_skiprows_value(nrows, skiprows):
-    """ Check at runtime that nrows and skiprows values are >= 0 """
+    """Check at runtime that nrows and skiprows values are >= 0"""
     # Corner case: if user did nrows=-1, this will pass. -1 to mean all rows.
     if nrows < -1:
         raise ValueError("pd.read_csv: nrows must be integer >= 0.")
