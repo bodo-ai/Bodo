@@ -89,6 +89,20 @@ See more in [File IO][file_io], such as
           df = pd.read_parquet(f)
           return df
         ```
+
+    -   `_bodo_input_file_name_col` is a Bodo specific argument.
+        When specified, a column with this
+        name is added to the dataframe consisting of the name of the file the
+        row was read from. This is similar to SparkSQL's 
+        [`input_file_name`](https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.sql.functions.input_file_name.html){target=blank} function.
+
+        For example:
+        ```py
+        @bodo.jit()
+        def impl(f):
+          df = pd.read_parquet(f, _bodo_input_file_name_col="fname")
+          return df
+        ```
         
 #### `pd.read_json`
 

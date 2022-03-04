@@ -146,9 +146,10 @@ class ParquetFileInfo(FileInfo):
     """FileInfo object passed to ForceLiteralArg for
     file name arguments that refer to a parquet dataset"""
 
-    def __init__(self, columns, storage_options=None):
+    def __init__(self, columns, storage_options=None, input_file_name_col=None):
         self.columns = columns  # columns to select from parquet dataset
         self.storage_options = storage_options
+        self.input_file_name_col = input_file_name_col
         super().__init__()
 
     def _get_schema(self, fname):
@@ -157,6 +158,7 @@ class ParquetFileInfo(FileInfo):
                 fname,
                 selected_columns=self.columns,
                 storage_options=self.storage_options,
+                input_file_name_col=self.input_file_name_col,
             )
         except OSError as e:
             if "non-file path" in str(e):
@@ -173,7 +175,9 @@ class ParquetHandler:
         self.args = args
         self.locals = _locals
 
-    def gen_parquet_read(self, file_name, lhs, columns, storage_options=None):
+    def gen_parquet_read(
+        self, file_name, lhs, columns, storage_options=None, input_file_name_col=None
+    ):
         scope = lhs.scope
         loc = lhs.loc
 
@@ -195,7 +199,11 @@ class ParquetHandler:
                 self.func_ir,
                 msg,
                 arg_types=self.args,
-                file_info=ParquetFileInfo(columns, storage_options=storage_options),
+                file_info=ParquetFileInfo(
+                    columns,
+                    storage_options=storage_options,
+                    input_file_name_col=input_file_name_col,
+                ),
             )
 
             got_schema = False
@@ -225,7 +233,10 @@ class ParquetHandler:
                     unsupported_columns,
                     unsupported_arrow_types,
                 ) = parquet_file_schema(
-                    file_name_str, columns, storage_options=storage_options
+                    file_name_str,
+                    columns,
+                    storage_options=storage_options,
+                    input_file_name_col=input_file_name_col,
                 )
         else:
             col_names_total = list(table_types.keys())
@@ -263,6 +274,7 @@ class ParquetHandler:
             col_types = col_types.copy()
             index_column_index = col_indices.pop(type_index)
             index_column_type = col_types.pop(type_index)
+            col_names.pop(type_index)
 
         # HACK convert types using decorator for int columns with NaN
         for i, c in enumerate(col_names):
@@ -287,6 +299,7 @@ class ParquetHandler:
                 storage_options,
                 index_column_index,
                 index_column_type,
+                input_file_name_col,
                 unsupported_columns,
                 unsupported_arrow_types,
             )
@@ -547,6 +560,7 @@ def pq_distributed_run(
         meta_head_only_info,
         pq_node.index_column_index,
         pq_node.index_column_type,
+        pq_node.input_file_name_col,
     )
     # First arg is the path to the parquet dataset, and can be a string or a list
     # of strings
@@ -646,6 +660,7 @@ def _gen_pq_reader_py(
     meta_head_only_info,
     index_column_index,
     index_column_type,
+    input_file_name_col,
 ):
 
     # a unique int used to create global variables with unique names
@@ -655,7 +670,7 @@ def _gen_pq_reader_py(
     func_text = f"def pq_reader_py(fname,{extra_args}):\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
-    func_text += "    ev.add_attribute('fname', fname)\n"
+    func_text += f"    ev.add_attribute('fname', fname)\n"
     func_text += f"    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={is_parallel})\n"
     func_text += f'    dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({extra_args}{comma}))\n'
     # convert the filename, which could be a string or a list of strings, to a
@@ -680,6 +695,20 @@ def _gen_pq_reader_py(
     sanitized_col_names = [sanitize_varname(c) for c in col_names]
     partition_names = [sanitize_varname(c) for c in partition_names]
 
+    # If the input_file_name column was pruned out, then set it to None
+    # (since that's what it effectively is now). Otherwise keep it
+    # (and sanitize the variable name)
+    # NOTE We could modify the ParquetReader node to store the
+    # index instead of the name of the column to have slightly
+    # cleaner code, although we need to make sure dead column elimination
+    # works as expected.
+    input_file_name_col = (
+        sanitize_varname(input_file_name_col)
+        if (input_file_name_col is not None)
+        and (col_names.index(input_file_name_col) in type_usecol_offset)
+        else None
+    )
+
     # Create maps for efficient index lookups.
     col_indices_map = {c: i for i, c in enumerate(col_indices)}
     sanitized_col_names_map = {c: i for i, c in enumerate(sanitized_col_names)}
@@ -692,13 +721,16 @@ def _gen_pq_reader_py(
     # Here because columns may have been eliminated by 'pq_remove_dead_column',
     # we only load the indices in type_usecol_offset.
     selected_cols = []
-    parititon_indices = set()
+    partition_indices = set()
+    cols_to_skip = partition_names + [input_file_name_col]
     for i in type_usecol_offset:
-        if sanitized_col_names[i] not in partition_names:
+        if sanitized_col_names[i] not in cols_to_skip:
             selected_cols.append(col_indices[i])
-        else:
+        elif (not input_file_name_col) or (
+            sanitized_col_names[i] != input_file_name_col
+        ):
             # Track which partitions are valid to simplify filtering later
-            parititon_indices.add(col_indices[i])
+            partition_indices.add(col_indices[i])
 
     if index_column_index is not None:
         selected_cols.append(index_column_index)
@@ -740,7 +772,7 @@ def _gen_pq_reader_py(
             col_out_idx = sanitized_col_names_map[part_name]
             # Only load part_name values that are selected
             # This occurs if we can prune these columns.
-            if col_indices[col_out_idx] not in parititon_indices:
+            if col_indices[col_out_idx] not in partition_indices:
                 # this partition column has not been selected for read
                 continue
         except (KeyError, ValueError):
@@ -759,11 +791,28 @@ def _gen_pq_reader_py(
     # Call pq_read() in C++
     # single-element numpy array to return number of global rows from C++
     func_text += f"    total_rows_np = np.array([0], dtype=np.int64)\n"
+    func_text += f"    out_table = pq_read(\n"
+    func_text += f"        fname_py, {is_parallel},\n"
+    func_text += f"        unicode_to_utf8(bucket_region),\n"
+    func_text += f"        dnf_filters, expr_filters,\n"
+    func_text += f"        storage_options_py, {tot_rows_to_read}, selected_cols_arr_{call_id}.ctypes,\n"
+    func_text += f"        {len(selected_cols)},\n"
+    func_text += f"        nullable_cols_arr_{call_id}.ctypes,\n"
     if len(selected_partition_cols) > 0:
-        func_text += f"    out_table = pq_read(fname_py, {is_parallel}, unicode_to_utf8(bucket_region), dnf_filters, expr_filters, storage_options_py, {tot_rows_to_read}, selected_cols_arr_{call_id}.ctypes, {len(selected_cols)}, nullable_cols_arr_{call_id}.ctypes, np.array({selected_partition_cols}, dtype=np.int32).ctypes, np.array({partition_col_cat_dtypes}, dtype=np.int32).ctypes, {len(selected_partition_cols)}, total_rows_np.ctypes)\n"
+        func_text += (
+            f"        np.array({selected_partition_cols}, dtype=np.int32).ctypes,\n"
+        )
+        func_text += (
+            f"        np.array({partition_col_cat_dtypes}, dtype=np.int32).ctypes,\n"
+        )
+        func_text += f"        {len(selected_partition_cols)},\n"
     else:
-        func_text += f"    out_table = pq_read(fname_py, {is_parallel}, unicode_to_utf8(bucket_region), dnf_filters, expr_filters, storage_options_py, {tot_rows_to_read}, selected_cols_arr_{call_id}.ctypes, {len(selected_cols)}, nullable_cols_arr_{call_id}.ctypes, 0, 0, 0, total_rows_np.ctypes)\n"
-    func_text += "    check_and_propagate_cpp_exception()\n"
+        func_text += f"        0, 0, 0,\n"
+    func_text += f"        total_rows_np.ctypes,\n"
+    # The C++ code only needs a flag
+    func_text += f"        {input_file_name_col is not None},\n"
+    func_text += f"    )\n"
+    func_text += f"    check_and_propagate_cpp_exception()\n"
 
     # handle index column
     index_arr = "None"
@@ -786,10 +835,18 @@ def _gen_pq_reader_py(
         # and mark it as null in the conversion to Python
         table_idx = []
         j = 0
+        input_file_name_col_idx = (
+            col_indices[col_names.index(input_file_name_col)]
+            if input_file_name_col is not None
+            else None
+        )
         for i, col_num in enumerate(col_indices):
             if j < len(type_usecol_offset) and i == type_usecol_offset[j]:
                 col_idx = col_indices[i]
-                if col_idx in parititon_indices:
+                if input_file_name_col_idx and col_idx == input_file_name_col_idx:
+                    # input_file_name column goes at the end
+                    table_idx.append(len(selected_cols) + len(sel_partition_names))
+                elif col_idx in partition_indices:
                     c_name = sanitized_col_names[i]
                     table_idx.append(
                         len(selected_cols) + sel_partition_names_map[c_name]
@@ -805,10 +862,10 @@ def _gen_pq_reader_py(
         func_text += "    T = None\n"
     else:
         func_text += f"    T = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id})\n"
-    func_text += "    delete_table(out_table)\n"
+    func_text += f"    delete_table(out_table)\n"
     func_text += f"    total_rows = total_rows_np[0]\n"
     func_text += f"    ev.finalize()\n"
-    func_text += "    return (total_rows, T, index_arr)\n"
+    func_text += f"    return (total_rows, T, index_arr)\n"
     loc_vars = {}
     glbs = {
         f"py_table_type_{call_id}": py_table_type,
@@ -1573,7 +1630,9 @@ def get_pandas_metadata(schema, num_pieces):
     return index_col, nullable_from_metadata
 
 
-def parquet_file_schema(file_name, selected_columns, storage_options=None):
+def parquet_file_schema(
+    file_name, selected_columns, storage_options=None, input_file_name_col=None
+):
     """get parquet schema from file using Parquet dataset and Arrow APIs"""
     col_names = []
     col_types = []
@@ -1635,6 +1694,17 @@ def parquet_file_schema(file_name, selected_columns, storage_options=None):
         # Extend arrow_types for consistency. Here we use None
         # because none of these are actually in the pq file.
         arrow_types.extend([None] * len(partition_names))
+
+    # add input_file_name column data type if one is specified
+    if input_file_name_col is not None:
+        col_names += [input_file_name_col]
+        col_types_total += [string_array_type]
+        # input_file_name column is a string array which is supported by default.
+        is_supported_list.append(True)
+        # Extend arrow_types for consistency. Here we use None
+        # because this column isn't actually in the pq file.
+        arrow_types.append(None)
+
     # Map column names to index to allow efficient search
     col_names_map = {c: i for i, c in enumerate(col_names)}
 
@@ -1708,6 +1778,7 @@ _pq_read = types.ExternalFunction(
         types.voidptr,
         types.int32,
         types.voidptr,
+        types.boolean,
     ),
 )
 

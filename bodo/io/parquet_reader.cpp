@@ -3,11 +3,11 @@
 // Implementation of ParquetReader (subclass of ArrowDataframeReader) with
 // functionality that is specific to reading parquet datasets
 
-#include "arrow_reader.h"
 #include "_fsspec_reader.h"
 #include "_hdfs_reader.h"
 #include "_s3_reader.h"
 #include "arrow/io/hdfs.h"
+#include "arrow_reader.h"
 #include "parquet/api/reader.h"
 #include "parquet/arrow/reader.h"
 
@@ -86,6 +86,28 @@ static void fill_partition_column(int64_t val, char* data, int64_t offset,
     }
 }
 
+/**
+ * Fill a range in an output input_file_name column with a given value.
+ * NOTE: input_file_name columns are always string columns.
+ * @param fname : name of the file to fill
+ * @param data : output buffer
+ * @param offsets : offsets buffer in the underlying array_info
+ * @param start_idx : index to start filling at
+ * @param rows_to_fill : number of elements to write
+ */
+static void fill_input_file_name_column(const char* fname, char* data,
+                                        char* offsets, int64_t start_idx,
+                                        int64_t rows_to_fill) {
+    offset_t* col_offsets = (offset_t*)offsets;
+    offset_t start_offset = col_offsets[start_idx];
+    int64_t fname_len = std::strlen(fname);
+    for (int64_t i = 0; i < rows_to_fill; i++) {
+        memcpy(data + start_offset + (i * fname_len), fname,
+               sizeof(char) * fname_len);
+        col_offsets[start_idx + i + 1] = col_offsets[start_idx + i] + fname_len;
+    }
+}
+
 // -------- ParquetReader --------
 
 class ParquetReader : public ArrowDataframeReader {
@@ -99,14 +121,16 @@ class ParquetReader : public ArrowDataframeReader {
                   PyObject* _storage_options, int64_t _tot_rows_to_read,
                   int32_t* _selected_fields, int32_t num_selected_fields,
                   int32_t* is_nullable, int32_t* _selected_part_cols,
-                  int32_t* _part_cols_cat_dtype, int32_t num_partition_cols)
+                  int32_t* _part_cols_cat_dtype, int32_t num_partition_cols,
+                  bool _input_file_name_col)
         : ArrowDataframeReader(_parallel, _tot_rows_to_read, _selected_fields,
                                num_selected_fields, is_nullable),
           path(_path),
           bucket_region(_bucket_region),
           dnf_filters(_dnf_filters),
           expr_filters(_expr_filters),
-          storage_options(_storage_options) {
+          storage_options(_storage_options),
+          input_file_name_col(_input_file_name_col) {
         if (storage_options == Py_None)
             throw std::runtime_error("ParquetReader: storage_options is None");
 
@@ -159,6 +183,17 @@ class ParquetReader : public ArrowDataframeReader {
             selected_part_cols.push_back(_selected_part_cols[i]);
         }
         part_cols_offset.resize(num_partition_cols, 0);
+
+        // allocate input_file_name column if one is specified. This
+        // is a string array
+        // TODO Convert to Dictionary-encoded string array in the future
+        if (input_file_name_col) {
+            this->input_file_name_col_arr = alloc_array(
+                this->count, this->input_file_name_col_total_chars, -1,
+                bodo_array_type::STRING, Bodo_CTypes::CTypeEnum::STRING, 0, -1);
+            offset_t* offsets = (offset_t*)input_file_name_col_arr->data2;
+            offsets[0] = 0;
+        }
     }
 
     virtual ~ParquetReader() {}
@@ -169,6 +204,8 @@ class ParquetReader : public ArrowDataframeReader {
     /// returns output partition columns
     std::vector<array_info*>& get_partition_cols() { return part_cols; }
 
+    array_info* get_input_file_name_col() { return input_file_name_col_arr; }
+
    protected:
     virtual void add_piece(PyObject* piece, int64_t num_rows) {
         // p = piece.path
@@ -176,6 +213,8 @@ class ParquetReader : public ArrowDataframeReader {
         const char* c_path = PyUnicode_AsUTF8(p);
         file_paths.emplace_back(c_path);
         pieces_nrows.push_back(num_rows);
+        this->input_file_name_col_total_chars +=
+            (num_rows * (std::strlen(c_path) + this->prefix.length()));
         // for this parquet file: store partition value of each partition column
         get_partition_info(piece);
         Py_DECREF(p);
@@ -230,6 +269,7 @@ class ParquetReader : public ArrowDataframeReader {
     virtual void read_all(TableBuilder& builder) {
         if (get_num_pieces() == 0) return;
 
+        int64_t rows_read_so_far = 0;
         size_t cur_piece = 0;
         int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
 
@@ -266,7 +306,8 @@ class ParquetReader : public ArrowDataframeReader {
         Py_DECREF(storage_options);
         Py_DECREF(fnames_list_py);
         PyObject* batch_py = NULL;
-        //while ((batch_py = PyIter_Next(batches_it))) {  // XXX Fails with batch reader returned by scanner
+        // while ((batch_py = PyIter_Next(batches_it))) {  // XXX Fails with
+        // batch reader returned by scanner
         while ((batch_py =
                     PyObject_CallMethod(batches_it, "read_next_batch", NULL))) {
             auto batch = arrow::py::unwrap_batch(batch_py).ValueOrDie();
@@ -280,26 +321,40 @@ class ParquetReader : public ArrowDataframeReader {
                 builder.append(table);
                 rows_left -= length;
 
-                if (part_cols.size() > 0) {  // handle partition columns
+                // handle partition columns and input_file_name column
+                if (part_cols.size() > 0 || input_file_name_col) {
                     while (length > 0) {
                         int64_t rows_read_from_piece =
                             std::min(rows_left_cur_piece, length);
                         rows_left_cur_piece -= rows_read_from_piece;
                         length -= rows_read_from_piece;
-                        // fill partition cols
-                        for (auto i = 0; i < part_cols.size(); i++) {
-                            int64_t part_val =
-                                part_vals[cur_piece][selected_part_cols[i]];
-                            fill_partition_column(part_val, part_cols[i]->data1,
-                                                  part_cols_offset[i],
-                                                  rows_read_from_piece,
-                                                  part_cols[i]->dtype);
-                            part_cols_offset[i] += rows_read_from_piece;
+                        if (part_cols.size() > 0) {
+                            // fill partition cols
+                            for (auto i = 0; i < part_cols.size(); i++) {
+                                int64_t part_val =
+                                    part_vals[cur_piece][selected_part_cols[i]];
+                                fill_partition_column(
+                                    part_val, part_cols[i]->data1,
+                                    part_cols_offset[i], rows_read_from_piece,
+                                    part_cols[i]->dtype);
+                                part_cols_offset[i] += rows_read_from_piece;
+                            }
+                        }
+                        if (this->input_file_name_col) {
+                            // fill the input_file_name column
+                            std::string fname =
+                                this->prefix + this->file_paths[cur_piece];
+                            fill_input_file_name_column(
+                                fname.c_str(),
+                                this->input_file_name_col_arr->data1,
+                                this->input_file_name_col_arr->data2,
+                                rows_read_so_far, rows_read_from_piece);
                         }
                         if (rows_left_cur_piece == 0 &&
                             cur_piece < get_num_pieces() - 1) {
                             rows_left_cur_piece = pieces_nrows[++cur_piece];
                         }
+                        rows_read_so_far += rows_read_from_piece;
                     }
                 }
             }
@@ -322,6 +377,7 @@ class ParquetReader : public ArrowDataframeReader {
     PyObject* expr_filters = nullptr;
     PyObject* storage_options;
     PyObject* selected_fields_py;
+    bool input_file_name_col;
 
     std::vector<int64_t> pieces_nrows;
     double avg_num_pieces = 0;
@@ -348,6 +404,9 @@ class ParquetReader : public ArrowDataframeReader {
     std::vector<array_info*> part_cols;
     // current fill offset of each partition column
     std::vector<int64_t> part_cols_offset;
+    // output input_file_name column
+    int64_t input_file_name_col_total_chars = 0;
+    array_info* input_file_name_col_arr = nullptr;
 
     /**
      * Get values for all partition columns of a piece of
@@ -399,7 +458,7 @@ void pq_init_reader(const char* file_name,
             pool, ParquetFileReader::Open(file), &arrow_reader);
         CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
         *a_reader = std::move(arrow_reader);
-    // S3
+        // S3
     } else if (f_name.find("s3://") == 0) {
         std::shared_ptr<::arrow::io::RandomAccessFile> file;
         // remove s3://
@@ -412,7 +471,7 @@ void pq_init_reader(const char* file_name,
             pool, ParquetFileReader::Open(file), &arrow_reader);
         CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
         *a_reader = std::move(arrow_reader);
-    // Google Cloud Storage
+        // Google Cloud Storage
     } else if (protocol == "gcs" || protocol == "gs" || pyfs.count(protocol)) {
         std::shared_ptr<::arrow::io::RandomAccessFile> file;
         fsspec_open_file(f_name, protocol, &file);
@@ -433,8 +492,8 @@ void pq_init_reader(const char* file_name,
 /**
  * Read a parquet dataset.
  *
- * @param path : path to parquet dataset (can be a Python string -single path- or
- * a Python list of strings -multiple files constituting a single dataset-).
+ * @param path : path to parquet dataset (can be a Python string -single path-
+ * or a Python list of strings -multiple files constituting a single dataset-).
  * The PyObject is passed throught to parquet_pio.py::get_parquet_dataset
  * @param parallel: true if reading in parallel
  * @param bucket_region : S3 bucket region (when reading from S3)
@@ -458,6 +517,8 @@ void pq_init_reader(const char* file_name,
  * codes array for each partition column.
  * @param num_partition_cols : number of selected partition columns
  * @param[out] total_rows_out : total number of global rows read
+ * @param input_file_name_col : boolean specifying whether a column with the
+ * the names of the files that each row belongs to should be created
  * @return table containing all the arrays read (first the selected fields
  * followed by selected partition columns, in same order as specified to this
  * function).
@@ -468,19 +529,25 @@ table_info* pq_read(PyObject* path, bool parallel, char* bucket_region,
                     int32_t* selected_fields, int32_t num_selected_fields,
                     int32_t* is_nullable, int32_t* selected_part_cols,
                     int32_t* part_cols_cat_dtype, int32_t num_partition_cols,
-                    int64_t* total_rows_out) {
+                    int64_t* total_rows_out, bool input_file_name_col) {
     try {
         ParquetReader reader(path, parallel, bucket_region, dnf_filters,
                              expr_filters, storage_options, tot_rows_to_read,
                              selected_fields, num_selected_fields, is_nullable,
                              selected_part_cols, part_cols_cat_dtype,
-                             num_partition_cols);
+                             num_partition_cols, input_file_name_col);
         *total_rows_out = reader.get_total_rows();
         table_info* out = reader.read();
         // append the partition columns to the final output table
         std::vector<array_info*>& part_cols = reader.get_partition_cols();
         out->columns.insert(out->columns.end(), part_cols.begin(),
                             part_cols.end());
+        // append the input_file_column to the output table
+        if (input_file_name_col) {
+            array_info* input_file_name_col_arr =
+                reader.get_input_file_name_col();
+            out->columns.push_back(input_file_name_col_arr);
+        }
         return out;
     } catch (const std::exception& e) {
         // if the error string is "python" this means the C++ exception is

@@ -2046,7 +2046,9 @@ class UntypedPass:
     def _handle_pq_to_pandas(self, assign, lhs, rhs, t_var):
         return self._gen_parquet_read(self.arrow_tables[t_var.name], lhs)
 
-    def _gen_parquet_read(self, fname, lhs, columns=None, storage_options=None):
+    def _gen_parquet_read(
+        self, fname, lhs, columns=None, storage_options=None, input_file_name_col=None
+    ):
         # make sure pyarrow is available
         if not bodo.utils.utils.has_pyarrow():
             raise RuntimeError("pyarrow is required for Parquet support")
@@ -2059,7 +2061,11 @@ class UntypedPass:
             col_types,
             index_col_type,
         ) = self.pq_handler.gen_parquet_read(
-            fname, lhs, columns, storage_options=storage_options
+            fname,
+            lhs,
+            columns,
+            storage_options=storage_options,
+            input_file_name_col=input_file_name_col,
         )
         n_cols = len(columns)
 
@@ -2099,17 +2105,8 @@ class UntypedPass:
                 types.none if index_name is None else types.literal(index_name),
             )
 
-        col_args = tuple(
-            c for c in columns if index_colname is None or c != index_colname
-        )
-        df_col_types = tuple(
-            t
-            for (c, t) in zip(columns, col_types)
-            if index_colname is None or c != index_colname
-        )
-
         out_df_type = DataFrameType(
-            df_col_types, index_typ, col_args, is_table_format=True
+            tuple(col_types), index_typ, tuple(columns), is_table_format=True
         )
         func_text = "def _init_df(T, index_arr):\n"
         func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((T,), {index_arg}, out_df_type)\n"
@@ -2133,12 +2130,31 @@ class UntypedPass:
             "read_parquet", rhs.args, kws, 10e4, "storage_options", rhs.loc, default={}
         )
 
+        # Bodo specific arguments. To avoid constantly needing to update Pandas we
+        # make these kwargs only.
+
+        # Equivalent to Spark SQL's input_file_name
+        # https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.sql.functions.input_file_name.html
+        # When specified, create a column in the resulting dataframe with this name
+        # that contains the name of the file the row comes from
+        _bodo_input_file_name_col = self._get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            10e4,
+            "_bodo_input_file_name_col",
+            rhs.loc,
+            use_default=True,
+            default=None,
+        )
+
         # check unsupported arguments
         supported_args = (
             "path",
             "engine",
             "columns",
             "storage_options",
+            "_bodo_input_file_name_col",
         )
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
@@ -2174,7 +2190,9 @@ class UntypedPass:
         if columns == -1:
             columns = None
 
-        return self._gen_parquet_read(fname, lhs, columns, storage_options)
+        return self._gen_parquet_read(
+            fname, lhs, columns, storage_options, _bodo_input_file_name_col
+        )
 
     def _handle_np_fromfile(self, assign, lhs, rhs):
         """translate np.fromfile() to native
