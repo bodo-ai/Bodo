@@ -29,6 +29,11 @@ from bodo.utils.utils import (
     is_expr,
 )
 
+# TODO: Include testing DBs for other systems: PostgreSQL, MSSQL, SQLite, ...
+sql_user_pass_and_hostname = (
+    "user:pass@localhost"
+)
+
 
 class InputDist(Enum):
     """
