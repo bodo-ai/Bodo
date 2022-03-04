@@ -1399,7 +1399,6 @@ def test_read_partitions2(memory_leak_check):
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
-@pytest.mark.slow
 def test_read_partitions_predicate_dead_column(memory_leak_check):
     """test reading and filtering predicate + partition columns
     doesn't load the columns if they are unused."""
