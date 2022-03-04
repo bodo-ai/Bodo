@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Tests I/O for CSV, Parquet, HDF5, etc.
 """
+import io
 import os
 import random
 import shutil
@@ -16,6 +17,11 @@ import pytest
 from numba.core.ir_utils import build_definitions, find_callname
 
 import bodo
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
     DistTestPipeline,
@@ -3121,6 +3127,190 @@ def test_read_parquet_all_null_col_subsets(col_subset, memory_leak_check, datapa
     py_output = pd.read_parquet(fname, columns=col_subset)
 
     check_func(test_impl, (fname,), py_output=py_output)
+
+
+def test_read_parquet_input_file_name_col(datapath, memory_leak_check):
+    """test basic input_col_name functionality for read_parquet"""
+    fname = datapath("decimal1.pq")
+
+    import pyspark.sql.functions as F
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+
+    def test_impl(fname):
+        df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
+        # pyspark adds this prefix for local files, so we're adding it
+        # here for comparison
+        # XXX Should we do this by default?
+        df.fname = df.fname.apply(lambda x: f"file://{x}")
+        return df
+
+    py_output = (
+        spark.read.format("parquet")
+        .load(fname)
+        .withColumn("fname", F.input_file_name())
+    ).toPandas()
+
+    check_func(
+        test_impl,
+        (fname,),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_output,
+    )
+
+
+def test_read_parquet_input_file_name_col_with_partitions(datapath, memory_leak_check):
+    """
+    test input_col_name functionality for read_parquet
+    In particular, this tests that it works as expected when
+    the input dataset has partitions
+    """
+
+    fname = datapath("test_partitioned.pq")
+
+    import pyspark.sql.functions as F
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+
+    def test_impl(fname):
+        df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
+        # pyspark adds this prefix for local files, so we're adding it
+        # here for comparison
+        # XXX Should we do this by default?
+        df.fname = df.fname.apply(lambda x: f"file://{x}")
+        return df
+
+    py_output = (
+        spark.read.format("parquet")
+        .load(fname)
+        .withColumn("fname", F.input_file_name())
+    ).toPandas()
+    # Spark reads it as int32 by default, so to make it comparable
+    # we convert it to categorical
+    py_output.A = py_output.A.astype("category")
+
+    check_func(
+        test_impl,
+        (fname,),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_output,
+    )
+
+
+def test_read_parquet_input_file_name_col_with_index(datapath, memory_leak_check):
+    """
+    test input_col_name functionality for read_parquet
+    In particular we check that it works fine with files containing
+    index columns (e.g. written by pandas)
+    """
+    fname = datapath("example.parquet")
+
+    def test_impl(fname):
+        df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
+        return df
+
+    # Unlike the other tests, we're only checking for a specific code path,
+    # so we don't need to check against PySpark directly.
+    py_output = pd.read_parquet(fname)
+    py_output["fname"] = fname
+
+    check_func(
+        test_impl,
+        (fname,),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_output,
+    )
+
+
+def test_read_parquet_input_file_name_col_pruned_out(datapath, memory_leak_check):
+    """
+    test input_col_name functionality for read_parquet
+    In particular we check that it works fine when the input_file_name
+    column is pruned out.
+    This test should also trigger the memory_leak_check if the pruning
+    doesn't work as expected
+    """
+    fname = datapath("example.parquet")
+
+    def test_impl(fname):
+        df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
+        df = df[["one", "two", "three"]]
+        return df
+
+    # Check that columns were pruned using verbose logging
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(test_impl)(fname)
+        check_logger_msg(stream, "Columns loaded ['one', 'two', 'three']")
+
+    # Check that output is correct
+    # Unlike the other tests, we're only checking for a specific optimization,
+    # so we don't need to check against PySpark directly.
+    py_output = pd.read_parquet(fname)
+    py_output = py_output[["one", "two", "three"]]
+
+    check_func(
+        test_impl,
+        (fname,),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_output,
+    )
+
+
+def test_read_parquet_only_input_file_name_col(datapath, memory_leak_check):
+    """
+    test input_col_name functionality for read_parquet
+    In particular test that it works as expected when only the filename
+    column is used (the rest are pruned).
+    """
+    fname = datapath("decimal1.pq")
+
+    import pyspark.sql.functions as F
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+
+    def test_impl(fname):
+        df = pd.read_parquet(fname, _bodo_input_file_name_col="fname")
+        # pyspark adds this prefix for local files, so we're adding it
+        # here for comparison
+        df.fname = df.fname.apply(lambda x: f"file://{x}")
+        return df[["fname"]]
+
+    # Check that columns were pruned using verbose logging
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(test_impl)(fname)
+        check_logger_msg(stream, "Columns loaded ['fname']")
+
+    # Check that output is correct
+    py_output = (
+        spark.read.format("parquet")
+        .load(fname)
+        .withColumn("fname", F.input_file_name())
+    ).toPandas()
+    py_output = py_output[["fname"]]
+
+    check_func(
+        test_impl,
+        (fname,),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_output,
+    )
 
 
 def test_csv_dtype_unicode(memory_leak_check):

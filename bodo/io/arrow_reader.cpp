@@ -192,7 +192,8 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
     if (null_bitmap_buff != nullptr && out_dtype == Bodo_CTypes::FLOAT64) {
         double* double_data = (double*)out_data;
         for (int64_t i = 0; i < rows_to_read; i++) {
-            if (!::arrow::bit_util::GetBit(null_bitmap_buff, i + rows_to_skip)) {
+            if (!::arrow::bit_util::GetBit(null_bitmap_buff,
+                                           i + rows_to_skip)) {
                 // TODO: use NPY_NAN
                 double_data[i] = std::nan("");
             }
@@ -202,7 +203,8 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
     if (null_bitmap_buff != nullptr && out_dtype == Bodo_CTypes::FLOAT32) {
         float* float_data = (float*)out_data;
         for (int64_t i = 0; i < rows_to_read; i++) {
-            if (!::arrow::bit_util::GetBit(null_bitmap_buff, i + rows_to_skip)) {
+            if (!::arrow::bit_util::GetBit(null_bitmap_buff,
+                                           i + rows_to_skip)) {
                 // TODO: use NPY_NAN
                 float_data[i] = std::nanf("");
             }
@@ -212,7 +214,8 @@ inline void copy_data(uint8_t* out_data, const uint8_t* buff,
     if (null_bitmap_buff != nullptr && out_dtype == Bodo_CTypes::DATETIME) {
         int64_t* data = (int64_t*)out_data;
         for (int64_t i = 0; i < rows_to_read; i++) {
-            if (!::arrow::bit_util::GetBit(null_bitmap_buff, i + rows_to_skip)) {
+            if (!::arrow::bit_util::GetBit(null_bitmap_buff,
+                                           i + rows_to_skip)) {
                 data[i] = std::numeric_limits<int64_t>::min();
             }
         }
@@ -230,7 +233,8 @@ inline void copy_nulls(uint8_t* out_nulls, const uint8_t* null_bitmap_buff,
             }
         } else {
             for (size_t i = 0; i < size_t(num_values); i++) {
-                auto bit = ::arrow::bit_util::GetBit(null_bitmap_buff, skip + i);
+                auto bit =
+                    ::arrow::bit_util::GetBit(null_bitmap_buff, skip + i);
                 SetBitTo(out_nulls, null_offset + i, bit);
             }
         }
@@ -413,7 +417,8 @@ class StringBuilder : public TableBuilder::BuilderColumn {
                    sizeof(char) * n_chars);  // data
             for (int64_t i = 0; i < n_strings; i++) {
                 out_offsets[n_strings_copied + i + 1] =
-                    out_offsets[n_strings_copied + i] + in_offsets[str_start_offset + i + 1] -
+                    out_offsets[n_strings_copied + i] +
+                    in_offsets[str_start_offset + i + 1] -
                     in_offsets[str_start_offset + i];
                 if (!str_arr->IsNull(i))
                     SetBitTo((uint8_t*)out_array->null_bitmask,
@@ -486,7 +491,8 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
                 (uint32_t*)list_arr->value_offsets()->data();
             for (int64_t i = 0; i < n_lists; i++) {
                 out_offsets[n_lists_copied + i + 1] =
-                    out_offsets[n_lists_copied + i] + in_offsets[list_start_offset + i + 1] -
+                    out_offsets[n_lists_copied + i] +
+                    in_offsets[list_start_offset + i + 1] -
                     in_offsets[list_start_offset + i];
                 if (!list_arr->IsNull(i))
                     SetBitTo((uint8_t*)out_array->null_bitmask,
@@ -531,7 +537,9 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
         // This copies to new buffers managed by Arrow, and then we copy again
         // to our own buffers in nested_array_to_c called by info_to_array
         // https://bodo.atlassian.net/browse/BE-1426
-        out_arrow_array = arrow::Concatenate(arrays, arrow::default_memory_pool()).ValueOrDie();
+        out_arrow_array =
+            arrow::Concatenate(arrays, arrow::default_memory_pool())
+                .ValueOrDie();
         arrays.clear();  // memory of each array will be freed now
         out_array = new array_info(
             bodo_array_type::ARROW, Bodo_CTypes::INT8 /*dummy*/,
@@ -657,7 +665,8 @@ void ArrowDataframeReader::init() {
                 PyObject* num_rows_piece_py =
                     PyObject_GetAttrString(piece, "_bodo_num_rows");
                 if (num_rows_piece_py == NULL)
-                    throw std::runtime_error("_bodo_num_rows attribute not in piece");
+                    throw std::runtime_error(
+                        "_bodo_num_rows attribute not in piece");
                 int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
                 Py_DECREF(num_rows_piece_py);
                 if (num_rows_piece > 0) add_piece(piece, num_rows_piece);
@@ -699,13 +708,15 @@ void ArrowDataframeReader::init() {
         if (this->count > 0) {
             // total number of rows of all the pieces we iterate through
             int64_t count_rows = 0;
-            // track total rows that this rank will read from pieces we iterate through
+            // track total rows that this rank will read from pieces we iterate
+            // through
             int64_t rows_added = 0;
             while ((piece = PyIter_Next(iterator))) {
                 PyObject* num_rows_piece_py =
                     PyObject_GetAttrString(piece, "_bodo_num_rows");
                 if (num_rows_piece_py == NULL)
-                    throw std::runtime_error("_bodo_num_rows attribute not in piece");
+                    throw std::runtime_error(
+                        "_bodo_num_rows attribute not in piece");
                 int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
                 Py_DECREF(num_rows_piece_py);
 
@@ -720,9 +731,12 @@ void ArrowDataframeReader::init() {
                         // this is the first piece
                         this->start_row_first_piece =
                             start_row_global - count_rows;
-                        rows_added_from_piece = std::min(num_rows_piece - this->start_row_first_piece, this->count);
+                        rows_added_from_piece = std::min(
+                            num_rows_piece - this->start_row_first_piece,
+                            this->count);
                     } else {
-                        rows_added_from_piece = std::min(num_rows_piece, this->count - rows_added);
+                        rows_added_from_piece =
+                            std::min(num_rows_piece, this->count - rows_added);
                     }
                     rows_added += rows_added_from_piece;
                     this->add_piece(piece, rows_added_from_piece);

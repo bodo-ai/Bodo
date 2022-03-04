@@ -223,6 +223,26 @@ def test_s3_pq_groupby3(minio_server, s3_bucket, datapath):
     check_func(test_impl, (), py_output=py_output)
 
 
+def test_s3_pq_input_file_name_col(
+    minio_server, s3_bucket, datapath, memory_leak_check
+):
+    """
+    test s3 read_parquet input_file_name_col functionality
+    This is only meant to test that the input_file_name functionality
+    works with S3, not the correctness itself.
+    """
+
+    def test_impl():
+        return pd.read_parquet(
+            "s3://bodo-test/groupby3.pq", _bodo_input_file_name_col="filename"
+        )
+
+    fname = datapath("groupby3.pq")
+    py_output = pd.read_parquet(fname)
+    py_output["filename"] = "s3://bodo-test/groupby3.pq"
+    check_func(test_impl, (), py_output=py_output)
+
+
 def test_s3_pq_list_files(minio_server, s3_bucket, datapath, memory_leak_check):
     """
     test s3 read_parquet list of files

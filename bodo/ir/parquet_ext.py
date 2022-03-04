@@ -30,6 +30,7 @@ class ParquetReader(ir.Stmt):
         storage_options,
         index_column_index,
         index_column_type,
+        input_file_name_col,
         unsupported_columns,
         unsupported_arrow_types,
     ):
@@ -65,6 +66,8 @@ class ParquetReader(ir.Stmt):
         # the actual columns numbers that should be loaded. For more
         # information see 'pq_remove_dead_column'.
         self.type_usecol_offset = list(range(len(col_indices)))
+        # Name of the column where we insert the name of file that the row comes from
+        self.input_file_name_col = input_file_name_col
         # These fields are used to enable compilation if unsupported columns
         # get eliminated.
         self.unsupported_columns = unsupported_columns
@@ -72,7 +75,7 @@ class ParquetReader(ir.Stmt):
 
     def __repr__(self):  # pragma: no cover
         # TODO
-        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})".format(
+        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})".format(
             self.df_out,
             self.file_name.name,
             self.df_colnames,
@@ -87,6 +90,7 @@ class ParquetReader(ir.Stmt):
             self.index_column_index,
             self.index_column_type,
             self.type_usecol_offset,
+            self.input_file_name_col,
             self.unsupported_columns,
             self.unsupported_arrow_types,
         )
