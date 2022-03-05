@@ -850,3 +850,22 @@ def test_series_rename_axis():
         ),
     ):
         bodo.jit(test_impl)(s, ["a", "b"])
+
+
+def test_unique(memory_leak_check):
+    """
+    Tests for pd.unique() on 1-d array and Series
+    """
+
+    def test_impl(vals):
+        return pd.unique(vals)
+
+    s = pd.Series([1, 2, 3, 4, 2, 3, 5] * 5)
+    a = np.array([1, 2, 3, 4, 2, 3, 5] * 5)
+    check_func(test_impl, (s,), sort_output=True, is_out_distributed=False)
+    check_func(test_impl, (a,), sort_output=True, is_out_distributed=False)
+    with pytest.raises(
+        BodoError,
+        match=re.escape("pd.unique(): 'values' must be either a Series or a 1-d array"),
+    ):
+        bodo.jit(test_impl)([1, 2, 3, 4, 2, 3, 5] * 5)
