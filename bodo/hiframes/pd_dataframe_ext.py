@@ -4135,7 +4135,6 @@ pd_unsupported = (
     pd.melt,
     pd.merge_ordered,
     pd.factorize,
-    pd.unique,
     pd.wide_to_long,
     ## Top-level dealing with datetimelike
     pd.bdate_range,

@@ -2280,6 +2280,29 @@ def get_q_list_overload(q):
     return lambda q: q  # pragma: no cover
 
 
+@overload(pd.unique, inline="always", no_unliteral=True)
+def overload_unique(values):
+    # TODO: accept values of list and index types
+
+    if not is_series_type(values) and not (
+        bodo.utils.utils.is_array_typ(values, False) and values.ndim == 1
+    ):
+        raise BodoError("pd.unique(): 'values' must be either a Series or a 1-d array")
+
+    if is_series_type(values):
+
+        def impl(values):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(values)
+            return bodo.allgatherv(bodo.libs.array_kernels.unique(arr), False)
+
+        return impl
+
+    else:
+        return lambda values: bodo.allgatherv(
+            bodo.libs.array_kernels.unique(values), False
+        )  # pragma: no cover
+
+
 @overload(pd.qcut, inline="always", no_unliteral=True)
 def overload_qcut(
     x,

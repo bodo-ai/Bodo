@@ -534,6 +534,36 @@ Merge Notes
          6   0  1   0  0
          7   0  0   1  0
 
+
+``pd.unique``
+^^^^^^^^^^^^^
+
+* :func:`pandas.unique` ``(values)``
+
+    `Suported arguments`:
+
+    .. list-table::
+       :widths: 25 35
+       :header-rows: 1
+
+       * - argument
+         - datatypes
+       * - ``values``
+         - Series or 1-d Array
+     
+    `Example Usage`:
+
+    .. code-block:: ipython
+
+         >>> @bodo.jit
+         ... f(vals):
+         ...   return pd.unique(vals)
+
+         >>> S = pd.Series([1, 2, 1, 3, 2, 1])
+         >>> f(S)
+         array([1, 2, 3])
+
+
 Top-level missing data
 ***********************
 
