@@ -342,7 +342,13 @@ def determine_filter_cast(pq_node, typemap, filter_val, orig_colname_map):
             col_cast = ""
     else:
         col_cast = ""
-    rhs_scalar_typ = typemap[filter_val[2].name]
+    rhs_typ = typemap[filter_val[2].name]
+    # If we do isin, then rhs_typ will be a list or set
+    if isinstance(rhs_typ, (types.List, types.Set)):
+        rhs_scalar_typ = rhs_typ.dtype
+    else:
+        rhs_scalar_typ = rhs_typ
+
     # Here we assume is_common_scalar_dtype conversions are common
     # enough that Arrow will support them, since these are conversions
     # like int -> float. TODO: Test
@@ -350,13 +356,20 @@ def determine_filter_cast(pq_node, typemap, filter_val, orig_colname_map):
         # If a cast is not implicit it must be in our white list.
         if not bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
             raise BodoError(
-                f"Unsupport Arrow cast from {lhs_scalar_typ} to {rhs_scalar_typ} in filter pushdown. Please try a comparison that avoids casting the column."
+                f"Unsupported Arrow cast from {lhs_scalar_typ} to {rhs_scalar_typ} in filter pushdown. Please try a comparison that avoids casting the column."
             )
         # We always cast string -> other types
         # Only supported types should be string and timestamp
         if lhs_scalar_typ == types.unicode_type:
             return ".cast(pyarrow.timestamp('ns'), safe=False)", ""
         elif lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type):
+            if isinstance(rhs_typ, (types.List, types.Set)):  # pragma: no cover
+                # This path should never be reached because we checked that
+                # list/set doesn't contain Timestamp or datetime64 in typing pass.
+                type_name = "list" if isinstance(rhs_typ, types.List) else "tuple"
+                raise BodoError(
+                    f"Cannot cast {type_name} values with isin filter pushdown."
+                )
             return col_cast, ".cast(pyarrow.timestamp('ns'), safe=False)"
 
     return col_cast, ""
@@ -422,9 +435,18 @@ def pq_distributed_run(
                     column_cast, scalar_cast = determine_filter_cast(
                         pq_node, typemap, v, orig_colname_map
                     )
-                    expr_and_conds.append(
-                        f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_map[v[2].name]}){scalar_cast})"
-                    )
+                    if v[1] == "in":
+                        # Expected output for this format should like
+                        # (ds.field('A').isin(py_var))
+                        expr_and_conds.append(
+                            f"(ds.field('{v[0]}').isin({filter_map[v[2].name]}))"
+                        )
+                    else:
+                        # Expected output for this format should like
+                        # (ds.field('A') > ds.scalar(py_var))
+                        expr_and_conds.append(
+                            f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_map[v[2].name]}){scalar_cast})"
+                        )
                 else:
                     # Currently the only constant expressions we support are IS [NOT] NULL
                     assert v[2] == "NULL", "unsupport constant used in filter pushdown"
@@ -432,6 +454,8 @@ def pq_distributed_run(
                         prefix = "~"
                     else:
                         prefix = ""
+                    # Expected output for this format should like
+                    # (~ds.field('A').is_null())
                     expr_and_conds.append(f"({prefix}ds.field('{v[0]}').is_null())")
                 # Now handle the dnf section. We can only append a value if its not a constant
                 # expression and is a partition column

@@ -452,7 +452,6 @@ def test_sql_snowflake_na_pushdown(memory_leak_check):
     Test that filter pushdown with isna/notna/isnull/notnull works in snowflake.
     """
 
-    # TODO: Support isna/notna without and/or
     def impl_or_isna(query, conn):
         df = pd.read_sql(query, conn)
         df = df[(df["l_orderkey"] > 10) | (df["l_linenumber"].isna())]
@@ -511,6 +510,57 @@ def test_sql_snowflake_na_pushdown(memory_leak_check):
     check_func(impl_just_nona, (query, conn), check_dtype=False, reset_index=True)
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_just_nona)
     bodo_func(query, conn)
+    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
+    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_sql_snowflake_isin_pushdown(memory_leak_check):
+    """
+    Test that filter pushdown with isna/notna/isnull/notnull works in snowflake.
+    """
+
+    def impl_isin(query, conn, isin_list):
+        df = pd.read_sql(query, conn)
+        df = df[df["l_orderkey"].isin(isin_list)]
+        return df["l_suppkey"]
+
+    def impl_isin_or(query, conn, isin_list):
+        df = pd.read_sql(query, conn)
+        df = df[(df["l_shipmode"] == "FOB") | df["l_orderkey"].isin(isin_list)]
+        return df["l_suppkey"]
+
+    def impl_isin_and(query, conn, isin_list):
+        df = pd.read_sql(query, conn)
+        df = df[(df["l_shipmode"] == "FOB") & df["l_orderkey"].isin(isin_list)]
+        return df["l_suppkey"]
+
+    isin_list = [32, 35]
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+
+    check_func(impl_isin, (query, conn, isin_list), check_dtype=False, reset_index=True)
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_isin)
+    bodo_func(query, conn, isin_list)
+    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
+    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+
+    check_func(
+        impl_isin_or, (query, conn, isin_list), check_dtype=False, reset_index=True
+    )
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_isin_or)
+    bodo_func(query, conn, isin_list)
+    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
+    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+
+    check_func(
+        impl_isin_and, (query, conn, isin_list), check_dtype=False, reset_index=True
+    )
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_isin_and)
+    bodo_func(query, conn, isin_list)
     _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
     _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
 

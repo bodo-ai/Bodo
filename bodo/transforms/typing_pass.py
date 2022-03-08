@@ -606,19 +606,16 @@ class TypingTransforms:
         index_def = guard(get_definition, self.func_ir, rhs.index)
         value_def = guard(get_definition, self.func_ir, rhs.value)
         index_call_name = None
-        # Check call expresions for isna, isnull, notna, and notnull.
+        # Check call expresions for isna, isnull, notna, notnull, and isin.
         if is_call(index_def):
-            index_call_name = guard(find_callname, self.func_ir, index_def)
+            index_call_name = guard(
+                find_callname, self.func_ir, index_def, self.typemap
+            )
         if (
             (
                 is_expr(index_def, "binop")
-                or (
-                    is_call(index_def)
-                    and index_call_name[0] in ("isna", "isnull", "notna", "notnull")
-                    and isinstance(
-                        self.typemap.get(index_call_name[1].name, None), SeriesType
-                    )
-                )
+                or self._is_na_filter_pushdown_func(index_def, index_call_name)
+                or self._is_isin_filter_pushdown_func(index_def, index_call_name)
             )
             and is_call(value_def)
             and guard(find_callname, self.func_ir, value_def)
@@ -894,24 +891,53 @@ class TypingTransforms:
             return {index_def} | left_nodes | right_nodes
         return {index_def}
 
-    def _get_null_filter(self, call_def, func_ir, df_var):
+    def _get_call_filter(self, call_def, func_ir, df_var):
+        """
+        Function used by _get_partition_filters to extract filters
+        related to series method calls.
+
+        Currently this supports null related filters and isin.
+        """
+        require(is_expr(call_def, "call"))
+        call_list = find_callname(func_ir, call_def, self.typemap)
+        require(len(call_list) == 2 and isinstance(call_list[1], ir.Var))
+        if call_list[0] in ("notna", "isna", "notnull", "isnull"):
+            return self._get_null_filter(call_list, func_ir, df_var)
+        elif call_list[0] == "isin":
+            return self._get_isin_filter(call_list, call_def, func_ir, df_var)
+        else:
+            # Trigger a GuardException because we have hit an unknown function.
+            # This should be caught by a surrounding function.
+            raise GuardException
+
+    def _get_null_filter(self, call_list, func_ir, df_var):
         """
         Function used by _get_partition_filters to extract null related
         filters from series method calls.
         """
-        require(is_expr(call_def, "call"))
-        call_list = find_callname(func_ir, call_def)
-        require(
-            len(call_list) == 2
-            and call_list[0] in ("notna", "isna", "notnull", "isnull")
-            and isinstance(call_list[1], ir.Var)
-        )
         colname = self._get_col_name(call_list[1], df_var, func_ir)
         if call_list[0] in ("notna", "notnull"):
             op = "is not"
         else:
             op = "is"
         return (colname, op, "NULL")
+
+    def _get_isin_filter(self, call_list, call_def, func_ir, df_var):
+        """
+        Function used by _get_partition_filters to extract isin related
+        filters from series method calls.
+        """
+        # We must check for a list/set because this isn't previously checked
+        # if we have binops (i.e. filter = (df.A < 3) & df.B.isin([1, 2]))
+        list_set_arg = call_def.args[0]
+        list_set_typ = self.typemap.get(list_set_arg.name, None)
+        require(
+            isinstance(list_set_typ, (types.List, types.Set))
+            and list_set_typ.dtype not in (bodo.datetime64ns, bodo.pd_timestamp_type)
+        )
+        colname = self._get_col_name(call_list[1], df_var, func_ir)
+        op = "in"
+        return (colname, op, list_set_arg)
 
     def _get_partition_filters(
         self, index_def, df_var, lhs_def, rhs_def, func_ir, read_node, from_bodosql
@@ -935,7 +961,7 @@ class TypingTransforms:
                         lhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
                     )
                 else:
-                    left_or = [[self._get_null_filter(lhs_def, func_ir, df_var)]]
+                    left_or = [[self._get_call_filter(lhs_def, func_ir, df_var)]]
                 if is_expr(rhs_def, "binop"):
                     l_def = get_definition(func_ir, rhs_def.lhs)
                     r_def = get_definition(func_ir, rhs_def.rhs)
@@ -943,7 +969,7 @@ class TypingTransforms:
                         rhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
                     )
                 else:
-                    right_or = [[self._get_null_filter(rhs_def, func_ir, df_var)]]
+                    right_or = [[self._get_call_filter(rhs_def, func_ir, df_var)]]
                 return left_or + right_or
 
             # And case: distribute Or over And to normalize if needed
@@ -1023,7 +1049,7 @@ class TypingTransforms:
                         lhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
                     )
                 else:
-                    left_or = [[self._get_null_filter(lhs_def, func_ir, df_var)]]
+                    left_or = [[self._get_call_filter(lhs_def, func_ir, df_var)]]
                 if is_expr(rhs_def, "binop"):
                     l_def = get_definition(func_ir, rhs_def.lhs)
                     r_def = get_definition(func_ir, rhs_def.rhs)
@@ -1031,7 +1057,7 @@ class TypingTransforms:
                         rhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
                     )
                 else:
-                    right_or = [[self._get_null_filter(rhs_def, func_ir, df_var)]]
+                    right_or = [[self._get_call_filter(rhs_def, func_ir, df_var)]]
 
                 # If either expression is an AND, we may still have ORs inside
                 # the AND. As a result, distributed ANDs across all ORs.
@@ -1087,7 +1113,7 @@ class TypingTransforms:
             else:
                 cond = (left_colname, op_map[index_def.fn], index_def.rhs)
         else:
-            cond = self._get_null_filter(index_def, func_ir, df_var)
+            cond = self._get_call_filter(index_def, func_ir, df_var)
 
         # If this is parquet we need to verify this is a filter we can process.
         # We don't do this check if there is a call expression because isnull
@@ -3705,6 +3731,42 @@ class TypingTransforms:
                     ):
                         self._transformed_vars.add(v[1].name)
         self._transformed_vars.add(varname)
+
+    def _is_na_filter_pushdown_func(self, index_def, index_call_name):
+        """
+        Does an expression match a supported is/not na call that can
+        be used in filterpushdown.
+        """
+        return (
+            is_call(index_def)
+            and index_call_name[0] in ("isna", "isnull", "notna", "notnull")
+            and isinstance(self.typemap.get(index_call_name[1].name, None), SeriesType)
+        )
+
+    def _is_isin_filter_pushdown_func(self, index_def, index_call_name):
+        """
+        Does an expression match a supported isin call that can be
+        used in filter pushdown.
+
+        Note: we only allow isin with lists/sets. We don't support Series/Array
+        because we don't want to worry about distributed data and tuples aren't
+        supported in the isin API.
+        """
+        if not (
+            is_call(index_def)
+            and index_call_name[0] == "isin"
+            and isinstance(self.typemap.get(index_call_name[1].name, None), SeriesType)
+        ):
+            return False
+        list_set_typ = self.typemap.get(index_def.args[0].name, None)
+        # We don't support casting pd_timestamp_type/datetime64 values in arrow, so we avoid
+        # filter pushdown in that situation.
+        return isinstance(
+            list_set_typ, (types.List, types.Set)
+        ) and list_set_typ.dtype not in (
+            bodo.datetime64ns,
+            bodo.pd_timestamp_type,
+        )
 
 
 def _create_const_var(val, name, scope, loc, nodes):
