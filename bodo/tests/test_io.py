@@ -1844,6 +1844,150 @@ def test_read_predicates_isnull_alone(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_read_predicates_isin(memory_leak_check):
+    """test that predicate pushdown with isin"""
+
+    try:
+        if bodo.get_rank() == 0:
+            df = pd.DataFrame(
+                {
+                    "A": pd.Series([0, 1, 2, None] * 10, dtype="Int64"),
+                    "B": [1, 2] * 20,
+                    "C": ["A", "B", "C", "D", "E"] * 8,
+                }
+            )
+            df.to_parquet("pq_data")
+        bodo.barrier()
+
+        def impl1(path):
+            df = pd.read_parquet("pq_data")
+            df = df[df.A.isin([1, 2])]
+            return df.B
+
+        def impl2(path):
+            df = pd.read_parquet("pq_data")
+            df = df[df.A.isin({1, 2})]
+            return df.B
+
+        def impl3(path):
+            df = pd.read_parquet("pq_data")
+            df = df[df["A"].isin([1, 2]) & df["C"].isin(["B"])]
+            return df.B
+
+        def impl4(path):
+            df = pd.read_parquet("pq_data")
+            df = df[df["A"].isin({1, 2}) | df["C"].isin(["B"])]
+            return df.B
+
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            # TODO [BE-2351]: Fix index
+            check_func(impl1, ("pq_data",), reset_index=True)
+            # Check filter pushdown succeeded
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['B']")
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            # TODO [BE-2351]: Fix index
+            check_func(impl2, ("pq_data",), reset_index=True)
+            # Check filter pushdown succeeded
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['B']")
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            # TODO [BE-2351]: Fix index
+            check_func(impl3, ("pq_data",), reset_index=True)
+            # Check filter pushdown succeeded
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['B']")
+        bodo.barrier()
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            # TODO [BE-2351]: Fix index
+            check_func(impl4, ("pq_data",), reset_index=True)
+            # Check filter pushdown succeeded
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['B']")
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove("pq_data")
+
+
+@pytest.mark.slow
+def test_read_partitions_isin(memory_leak_check):
+    """test that partition pushdown with isin"""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            table = pa.table(
+                {
+                    "A": [0, 1, 2, 3] * 10,
+                    "B": [1, 2] * 20,
+                    "C": ["A", "B", "C", "D", "E"] * 8,
+                }
+            )
+            pq.write_to_dataset(table, "pq_data", partition_cols=["A"])
+        bodo.barrier()
+
+        def impl1(path):
+            df = pd.read_parquet("pq_data")
+            df = df[df.A.isin([1, 2])]
+            return df.B
+
+        def impl2(path):
+            df = pd.read_parquet("pq_data")
+            df = df[df["A"].isin([1, 2]) & df["C"].isin(["B"])]
+            return df.B
+
+        def impl3(path):
+            df = pd.read_parquet("pq_data")
+            df = df[df["A"].isin([1, 2]) | df["C"].isin(["B"])]
+            return df.B
+
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            # TODO: Fix index
+            check_func(impl1, ("pq_data",), reset_index=True)
+            # Check filter pushdown succeeded
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['B']")
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            # TODO: Fix index
+            check_func(impl2, ("pq_data",), reset_index=True)
+            # Check filter pushdown succeeded
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['B']")
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            # TODO: Fix index
+            check_func(impl3, ("pq_data",), reset_index=True)
+            # Check filter pushdown succeeded
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['B']")
+        bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree("pq_data", ignore_errors=True)
+
+
+@pytest.mark.slow
 def test_read_predicates_and_or(memory_leak_check):
     """test that predicate pushdown with and/or in the expression."""
 

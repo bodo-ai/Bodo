@@ -319,11 +319,13 @@ def escape_column_names(col_names, db_type, converted_colnames):
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def _get_snowflake_sql_literal(filter_value):
+def _get_snowflake_sql_literal_scalar(filter_value):
     """
-    Given a filter_value, which is python variable,
+    Given a filter_value, which is a scalar python variable,
     returns a string representation of the filter value
     that could be used in a Snowflake SQL query.
+
+    This is in a separate function to enable recursion.
     """
     filter_type = types.unliteral(filter_value)
     if filter_type == types.unicode_type:
@@ -356,6 +358,43 @@ def _get_snowflake_sql_literal(filter_value):
         # https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#date
         return (
             lambda filter_value: f"date '{filter_value.strftime('%Y-%m-%d')}'"
+        )  # pragma: no cover
+    else:
+        raise BodoError(
+            f"pd.read_sql(): Internal error, unsupported scalar type {filter_type} used in filter pushdown."
+        )
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def _get_snowflake_sql_literal(filter_value):
+    """
+    Given a filter_value, which is python variable,
+    returns a string representation of the filter value
+    that could be used in a Snowflake SQL query.
+    """
+    scalar_isinstance = (types.Integer, types.Float)
+    scalar_equals = (
+        bodo.datetime_date_type,
+        bodo.pd_timestamp_type,
+        types.unicode_type,
+        types.bool_,
+    )
+    filter_type = types.unliteral(filter_value)
+    if isinstance(filter_type, types.List) and (
+        isinstance(filter_type.dtype, scalar_isinstance)
+        or filter_type.dtype in scalar_equals
+    ):
+        # List are written as tuples
+        def impl(filter_value):  # pragma: no cover
+            content_str = ", ".join(
+                [_get_snowflake_sql_literal_scalar(x) for x in filter_value]
+            )
+            return f"({content_str})"
+
+        return impl
+    elif isinstance(filter_type, scalar_isinstance) or filter_type in scalar_equals:
+        return lambda filter_value: _get_snowflake_sql_literal_scalar(
+            filter_value
         )  # pragma: no cover
     else:
         raise BodoError(
