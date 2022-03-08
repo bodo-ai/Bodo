@@ -268,10 +268,6 @@ class ParquetHandler:
         index_column_type = types.none
         if index_colname:
             type_index = col_names.index(index_colname)
-            # NOTE: copying col_indices/col_types since they are stored in FilenameType
-            # schema and stored in cache so can't be mutated
-            col_indices = col_indices.copy()
-            col_types = col_types.copy()
             index_column_index = col_indices.pop(type_index)
             index_column_type = col_types.pop(type_index)
             col_names.pop(type_index)
@@ -1731,7 +1727,7 @@ def parquet_file_schema(
     col_types = []
     unsupported_columns = []
     unsupported_arrow_types = []
-    for i, c in enumerate(selected_columns):
+    for i, c in enumerate(col_names):
         col_idx = col_names_map[c]
         col_indices.append(col_idx)
         col_types.append(col_types_total[col_idx])
