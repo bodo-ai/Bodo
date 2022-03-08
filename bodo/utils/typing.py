@@ -2,6 +2,7 @@
 """
 Helper functions to enable typing.
 """
+import copy
 import itertools
 import operator
 import types as pytypes
@@ -193,7 +194,7 @@ class FilenameType(types.Literal):
 
     def __init__(self, fname, finfo):
         self.fname = fname
-        self.schema = finfo.get_schema(fname)
+        self._schema = finfo.get_schema(fname)
         super(FilenameType, self).__init__(self.fname)
 
     def __hash__(self):
@@ -202,16 +203,21 @@ class FilenameType(types.Literal):
 
     def __eq__(self, other):
         if isinstance(other, types.FilenameType):
-            assert self.schema is not None
-            assert other.schema is not None
+            assert self._schema is not None
+            assert other._schema is not None
             # NOTE: check fname type match since the type objects are interned in Numba,
             # and the fact that data model can be either list or string can cause
             # issues if the same type object is reused. See [BE-2050]
             return (bodo.typeof(self.fname) == bodo.typeof(other.fname)) and (
-                self.schema == other.schema
+                self._schema == other._schema
             )
         else:
             return False
+
+    @property
+    def schema(self):
+        # Create a copy in case the contents are mutated.
+        return copy.deepcopy(self._schema)
 
 
 types.FilenameType = FilenameType
