@@ -20,7 +20,7 @@ FIELD_TYPE_TO_PA_TYPE = [
     # String data
     pa.string(),
     # Date data. TODO: handle bitwidth
-    pa.date64(),
+    pa.date32(),
     pa.timestamp("ns"),
     # Variant
     pa.string(),
