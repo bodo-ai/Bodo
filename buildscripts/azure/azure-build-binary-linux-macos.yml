@@ -153,7 +153,6 @@ jobs:
       fi
     displayName: 'Amend Commit to remove dirty from version'
 
-  #TODO: add M1 NumbaDev recipe?
   - script: |
       set -eo pipefail
       if [[ "${{ parameters.name }}" == "macOS_ARM" ]]; then
@@ -168,12 +167,7 @@ jobs:
       if [[ "${{ parameters.name }}" == "macOS_ARM" ]]; then
         cd buildscripts/bodo-m1-conda-recipe/
       else
-        if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
-          cd buildscripts/bodo-numba-dev-conda-recipe/
-          echo "Using Numba-Dev Conda Recipe"
-        else
-          cd buildscripts/bodo-conda-recipe/
-        fi
+        cd buildscripts/bodo-conda-recipe/
       fi
       if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
         export CHECK_LICENSE_EXPIRED="0"
@@ -183,12 +177,8 @@ jobs:
         export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
         export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
       fi
-      if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
-        conda-build . -c numba/label/dev -c conda-forge --no-test
-        echo "Using numba/label/dev channel"
-      else
-        conda-build . -c conda-forge --no-test
-      fi
+
+      conda-build . -c conda-forge --no-test
     displayName: 'Conda build Bodo'
 
   - task: DownloadSecureFile@1
@@ -200,8 +190,6 @@ jobs:
   - script: |
       set -eo pipefail
       echo "BODO_VERSION: $BODO_VERSION"
-      export NUMBA_DEV="${{ parameters.useNumbaDev }}"
-      echo "NUMBA_DEV: $NUMBA_DEV"
       sudo chmod a+r $(secret_file.secureFilePath)
       sudo cp $(secret_file.secureFilePath) $HOME/secret_file
       cd $(System.DefaultWorkingDirectory)
@@ -219,7 +207,7 @@ jobs:
         export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
         export PLATFORM_DEV_RELEASE="false"
       fi
-      artifactory_channel=`./buildscripts/azure/get_channel.sh $NUMBA_DEV $PLATFORM_DEV_RELEASE`
+      artifactory_channel=`./buildscripts/azure/get_channel.sh $PLATFORM_DEV_RELEASE`
       echo "artifactory_channel: $artifactory_channel"
       if [[ "${{ parameters.name }}" = Linux* ]]; then
         artifactory_os_dir="linux-64"

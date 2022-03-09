@@ -71,7 +71,7 @@ jobs:
       fi
       export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
       cd $(System.DefaultWorkingDirectory)
-      ./buildscripts/azure/install_bodo.sh "${{ parameters.useNumbaDev }}" $BODO_VERSION $PLATFORM_DEV_RELEASE
+      ./buildscripts/azure/install_bodo.sh $BODO_VERSION $PLATFORM_DEV_RELEASE
     displayName: 'Install Bodo from conda'
 
   - script: |
