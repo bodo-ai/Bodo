@@ -119,7 +119,6 @@ jobs:
   - bash: |
       set -eo pipefail
       echo "BODO_VERSION: $BODO_VERSION"
-      export NUMBA_DEV="false"
       cp `cygpath -u "$(secret_file.secureFilePath)"` $HOME/secret_file
       cd `cygpath -u "$(System.DefaultWorkingDirectory)"`
       mkdir bodo-inc
@@ -128,7 +127,7 @@ jobs:
       export OBFUSCATE=$(OBFUSCATE)
       export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
       export PLATFORM_DEV_RELEASE="false"
-      artifactory_channel=`./buildscripts/azure/get_channel.sh $NUMBA_DEV $PLATFORM_DEV_RELEASE`
+      artifactory_channel=`./buildscripts/azure/get_channel.sh $PLATFORM_DEV_RELEASE`
       echo "artifactory_channel: $artifactory_channel"
       artifactory_os_dir="win-64"
       echo "artifactory_os_dir: $artifactory_os_dir"

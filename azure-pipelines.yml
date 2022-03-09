@@ -10,17 +10,6 @@ pr:
 - master
 
 jobs:
-# Mac and Linux use the same template with different matrixes
-- template: buildscripts/azure/azure-linux-macos.yml
-  parameters:
-    name: Linux
-    vmImage: ubuntu-latest
-    matrix:
-      py37_np1:
-        CONDA_ENV: 'bodo'
-        PYTEST_MARKER: not slow
-        NP: 1
-
 - template: buildscripts/azure/azure-test-build-windows.yml
   parameters:
     name: Windows_conda_build
