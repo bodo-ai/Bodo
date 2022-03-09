@@ -1,9 +1,46 @@
 from urllib.parse import parse_qsl, urlparse
 
+import pyarrow as pa
 import snowflake.connector
 
 import bodo
 from bodo.utils import tracing
+
+# Mapping of the Snowflake field types to the pyarrow types taken
+# from the snowflake connector. These are not fully accurate and don't match
+# the arrow types. However, they can be used when the returned data is empty.
+# TODO: Improve this information to only require describe.
+# https://github.com/snowflakedb/snowflake-connector-python/blob/a73a602f96678e4c761a63d89676fed182ef5093/src/snowflake/connector/result_batch.py#L671
+# https://docs.snowflake.com/en/user-guide/python-connector-api.html#label-python-connector-type-codes
+FIELD_TYPE_TO_PA_TYPE = [
+    # Number/Int. TODO: handle signed/unsigned + bitwidth
+    pa.int64(),
+    # Float/Double. TODO: handle bitwidth
+    pa.float64(),
+    # String data
+    pa.string(),
+    # Date data. TODO: handle bitwidth
+    pa.date64(),
+    pa.timestamp("ns"),
+    # Variant
+    pa.string(),
+    # Timestamp stored in utc TIMESTAMP_LTZ
+    pa.timestamp("ns"),
+    # Timestamp with a timezone, TIMESTAMP_TZ. TODO: handle timestamp
+    pa.timestamp("ns"),
+    # Timestamp without a timezone, TIMESTAMP_NTZ
+    pa.timestamp("ns"),
+    # Object
+    pa.string(),
+    # Array TODO: Fix ME???
+    pa.string(),
+    # Binary
+    pa.binary(),
+    # Time. Not supported in bodo. TODO: handle bitwidth
+    pa.time64("ns"),
+    # Boolean
+    pa.bool_(),
+]
 
 
 def get_connection_params(conn_str):  # pragma: no cover
@@ -50,7 +87,7 @@ def get_connection_params(conn_str):  # pragma: no cover
 
 
 class SnowflakeDataset(object):
-    """ Store dataset info in the way expected by Arrow reader in C++. """
+    """Store dataset info in the way expected by Arrow reader in C++."""
 
     def __init__(self, batches, schema, conn):
         # pieces, _bodo_total_rows and _bodo_total_rows are the attributes
@@ -67,7 +104,7 @@ class SnowflakeDataset(object):
 
 
 def get_dataset(query, conn_str):
-    """ Get snowflake dataset info required by Arrow reader in C++. """
+    """Get snowflake dataset info required by Arrow reader in C++."""
     ev = tracing.Event("get_snowflake_dataset")
 
     from mpi4py import MPI
@@ -91,7 +128,19 @@ def get_dataset(query, conn_str):
         # TODO is there a way to get Arrow schema without loading data?
         ev_get_schema = tracing.Event("get_schema", is_parallel=False)
         query_probe = f"select * from ({query}) x LIMIT {100}"
-        schema = cur.execute(query_probe).fetch_arrow_all().schema
+        arrow_data = cur.execute(query_probe).fetch_arrow_all()
+        if arrow_data is None:
+            # If we don't load any data we construct a schema from describe.
+            described_query = cur.describe(query)
+            # Construct the arrow schema from the describe info
+            pa_fields = [
+                pa.field(x.name, FIELD_TYPE_TO_PA_TYPE[x.type_code])
+                for x in described_query
+            ]
+            schema = pa.schema(pa_fields)
+        else:
+            schema = arrow_data.schema
+
         ev_get_schema.finalize()
 
         # execute query
