@@ -595,7 +595,7 @@ def test_sql_snowflake_json_url(memory_leak_check):
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
-def test_snowflake_unsupported_timezones(datapath, memory_leak_check):
+def test_snowflake_unsupported_timezones(memory_leak_check):
     """
     Tests trying to read Arrow timestamp columns with
     timezones using Bodo + Snowflake. Bodo doesn't support timezones,
@@ -657,6 +657,40 @@ def test_snowflake_unsupported_timezones(datapath, memory_leak_check):
         match="1 or more columns found with Arrow types that are not supported",
     ):
         test_impl3(partial_query, conn)
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_snowflake_empty_typing(memory_leak_check):
+    """
+    Tests support for read_sql when typing a query returns an empty DataFrame.
+    """
+
+    def test_impl(query, conn):
+        return pd.read_sql(query, conn)
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    query = "SELECT L_ORDERKEY FROM LINEITEM WHERE L_ORDERKEY IN (10, 11)"
+    check_func(test_impl, (query, conn))
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_snowflake_empty_filter(memory_leak_check):
+    """
+    Tests support for read_sql when a query returns an empty DataFrame via filter pushdown.
+    """
+
+    def test_impl(query, conn):
+        df = pd.read_sql(query, conn)
+        df = df[df["l_orderkey"] == 10]
+        return df
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    query = "SELECT L_ORDERKEY FROM LINEITEM"
+    check_func(test_impl, (query, conn), check_dtype=False)
 
 
 # ---------------------Oracle Database------------------------#

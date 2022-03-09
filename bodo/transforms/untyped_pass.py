@@ -11,6 +11,7 @@ import datetime
 import pandas as pd
 import numpy as np
 from urllib.parse import urlparse
+import pyarrow as pa
 
 import numba
 from numba.core import ir, ir_utils, types
@@ -2904,18 +2905,40 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql
 
                 conn_params = get_connection_params(con_const)
                 conn = snowflake.connector.connect(**conn_params)
-                pa_schema = conn.cursor().execute(sql_call).fetch_arrow_all().schema
-                # arrow schema
-                col_names = pa_schema.names
+                cursor = conn.cursor()
+                described_query = cursor.describe(sql_call)
+                col_names = []
+                is_nullable = []
+                for x in described_query:
+                    col_names.append(x.name)
+                    is_nullable.append(x.is_nullable)
+                # TODO: Avoid executing the query once its possible to determine
+                # the exact arrow types.
+                executed_query = cursor.execute(sql_call)
+                arrow_data = executed_query.fetch_arrow_all()
+                if arrow_data is None:
+                    # If there is no data to load, construct the types
+                    # based on the metadata.
+                    pa_fields = [
+                        pa.field(
+                            x.name, bodo.io.snowflake.FIELD_TYPE_TO_PA_TYPE[x.type_code]
+                        )
+                        for x in described_query
+                    ]
+                else:
+                    pa_fields = [
+                        arrow_data.schema.field(i) for i in range(len(col_names))
+                    ]
+
                 col_types = []
                 unsupported_columns = []
                 unsupported_arrow_types = []
                 for i, c in enumerate(col_names):
-                    field = pa_schema.field(c)
+                    field = pa_fields[i]
                     dtype, supported = _get_numba_typ_from_pa_typ(
                         field,
                         False,  # index_col
-                        None,  # nullable_from_metadata
+                        is_nullable[i],  # nullable_from_metadata
                         None,  # category_info
                     )
                     col_types.append(dtype)
