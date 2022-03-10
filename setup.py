@@ -581,6 +581,7 @@ setup(
         "bodo.tests": [
             "data/*",
             "data/*/*",
+            "data/*/*/*"
         ],
         # on Windows and MacOS we copy libssl and libcrypto DLLs to
         # bodo/libs to bundle them with our package and avoid
