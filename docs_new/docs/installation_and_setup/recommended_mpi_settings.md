@@ -25,8 +25,8 @@ Based on our internal benchmarking, we recommend setting these
 environment variables as follows:
 
 ```shell
-export I_MPI_ALLREDUCE=4
-export I_MPI_REDUCE=3
+export I_MPI_ADJUST_ALLREDUCE=4
+export I_MPI_ADJUST_REDUCE=3
 ```
 
 ## MPI Process Placement
@@ -91,7 +91,7 @@ mpiexec -n <N> -f <hostfile> -rr python bodo_file.py
 
 ### Useful References
 
-- More information on controlling process placement with Intel MPI can be found 
+- More information on controlling process placement with Intel MPI can be found
 [here](https://www.intel.com/content/www/us/en/developer/articles/technical/controlling-process-placement-with-the-intel-mpi-library.html){target="blank"}.
 
 - See how to use the Hydra Process Manager for MPICH [here](https://wiki.mpich.org/mpich/index.php/Using_the_Hydra_Process_Manager){target="blank"}.
@@ -119,18 +119,18 @@ Some points to note in addition to the referenced instructions:
 
 3.  For use with Intel-MPI, a minimal installation of the EFA drivers is
     sufficient and recommended:
-    
+
     ```shell
     sudo ./efa_installer.sh -y --minimal
     ```
-    
+
     Depending on where the drivers were downloaded from, you might need
     to include a `--no-verify` flag:
-    
+
     ```shell
     sudo ./efa_installer.sh -y --minimal --no-verify
     ```
-    
+
 We recommend the following versions for the EFA installer and Intel-MPI:
 
 ```console
