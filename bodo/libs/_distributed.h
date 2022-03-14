@@ -81,7 +81,7 @@ static void c_allgatherv(void* send_data, int sendcount, void* recv_data,
                          int* recv_counts, int* displs,
                          int typ_enum) __UNUSED__;
 static void c_bcast(void* send_data, int sendcount, int typ_enum,
-                    int* comm_ranks, int nranks) __UNUSED__;
+                    int* comm_ranks, int nranks, int root) __UNUSED__;
 
 static void c_alltoallv(void* send_data, void* recv_data, int* send_counts,
                         int* recv_counts, int* send_disp, int* recv_disp,
@@ -576,25 +576,24 @@ static void c_comm_create(const int* comm_ranks, int n, MPI_Comm* comm) {
 
 /**
  * MPI_Bcast for all ranks or subset of them
- * NOTE: broadcast root is 0 (ROOT_PE) for both MPI_COMM_WORLD or
- * subcommunicator
  *
  * @param send_data pointer to data buffer to broadcast
  * @param sendcount number of elements in the data buffer
  * @param typ_enum datatype of buffer
  * @param comm_ranks pointer to ranks integer array. ([-1] for MPI_COMM_WORLD)
  * @param n number of elements in ranks array (0 for MPI_COMM_WORLD)
+ * @param root rank to broadcast.
  */
 static void c_bcast(void* send_data, int sendcount, int typ_enum,
-                    int* comm_ranks, int n) {
+                    int* comm_ranks, int n, int root) {
     MPI_Datatype mpi_typ = get_MPI_typ(typ_enum);
     if (n == 0) {
-        MPI_Bcast(send_data, sendcount, mpi_typ, ROOT_PE, MPI_COMM_WORLD);
+        MPI_Bcast(send_data, sendcount, mpi_typ, root, MPI_COMM_WORLD);
     } else {
         MPI_Comm comm;
         c_comm_create(comm_ranks, n, &comm);
         if (MPI_COMM_NULL != comm) {
-            MPI_Bcast(send_data, sendcount, mpi_typ, ROOT_PE, comm);
+            MPI_Bcast(send_data, sendcount, mpi_typ, root, comm);
         }
     }
     return;
