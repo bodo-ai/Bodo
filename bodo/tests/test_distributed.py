@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import datetime
 import random
 from decimal import Decimal
 
@@ -2338,3 +2339,193 @@ def test_barrier_error():
         match=r"too many positional arguments",
     ):
         bodo.jit(f)()
+
+
+# @pytest.mark.slow
+@pytest.mark.parametrize(
+    "val1, val2",
+    [
+        ("hello from rank0", "other"),
+        (1, 0),
+        (
+            np.datetime64("2005-02-25").astype("datetime64[ns]"),
+            np.datetime64("2000-01-01").astype("datetime64[ns]"),
+        ),
+        (
+            np.timedelta64(10).astype("timedelta64[ns]"),
+            np.timedelta64(-1).astype("timedelta64[ns]"),
+        ),
+        (True, False),
+        (3.14159, 123.123123),
+    ],
+)
+@pytest.mark.parametrize("root", [0, 1, 2])
+def test_bcast_scalar_root(val1, val2, root):
+    # Run if root is in range of num. of processes
+    if root >= bodo.get_size():
+        return
+
+    def impl():
+        if bodo.get_rank() == root:
+            scalar_val = val1
+        else:
+            scalar_val = val2
+        n = bodo.libs.distributed_api.bcast_scalar(scalar_val, root)
+        return n
+
+    check_func(impl, (), py_output=val1)
+
+
+# @pytest.mark.slow
+@pytest.mark.parametrize(
+    "val1, val2",
+    [
+        (
+            np.datetime64("2005-02-25").astype("datetime64[ns]"),
+            np.datetime64("2000-01-01").astype("datetime64[ns]"),
+        ),
+        (
+            np.timedelta64(10).astype("timedelta64[ns]"),
+            np.timedelta64(-1).astype("timedelta64[ns]"),
+        ),
+    ],
+)
+@pytest.mark.parametrize("root", [0, 1, 2])
+def test_bcast_tuple_root(val1, val2, root):
+    # Run if root is in range of num. of processes
+    if root >= bodo.get_size():
+        return
+
+    def impl():
+        if bodo.get_rank() == root:
+            tuple_val = ("Hi from rank 0", 1, 3.14159, val1, True, None)
+        else:
+            tuple_val = ("foo", -1, -1.0, val2, False, None)
+        n = bodo.libs.distributed_api.bcast_tuple(tuple_val, root)
+        return n
+
+    check_func(impl, (), py_output=("Hi from rank 0", 1, 3.14159, val1, True, None))
+
+
+@pytest.mark.parametrize(
+    "val1, val2",
+    [
+        (
+            # StringArray
+            pd.array(
+                [
+                    "True",
+                    "False",
+                    "go",
+                    "bears",
+                    "u",
+                    "who",
+                    "power",
+                    "trip",
+                ]
+            ),
+            pd.array(
+                [
+                    "hihi",
+                    "gogo1",
+                    "to",
+                    "yours",
+                    "w",
+                    "hii",
+                    "trips",
+                    "powr",
+                ]
+            ),
+        ),
+        # Numpy array
+        (
+            np.array([1.121, 0.0, 35.13431, -2414.4242, 23211.22], dtype=np.float32),
+            np.array(
+                [1.121, 0.0, 5.1, -2.42, 32.2],
+                dtype=np.float32,
+            ),
+        ),
+        # Nullable boolean
+        (
+            np.array(
+                [
+                    True,
+                    False,
+                    True,
+                    True,
+                    False,
+                    False,
+                    True,
+                    None,
+                ]
+            ),
+            np.array(
+                [
+                    False,
+                    False,
+                    False,
+                    False,
+                    False,
+                    True,
+                    False,
+                    None,
+                ]
+            ),
+        ),
+        # date
+        (
+            np.append(
+                pd.date_range("2017-07-03", "2017-07-17").date,
+                [datetime.date(2016, 3, 3)],
+            ),
+            np.append(
+                pd.date_range("2017-07-15", "2017-07-29").date,
+                [datetime.date(2018, 6, 7)],
+            ),
+        ),
+        # Decimal
+        (
+            np.array(
+                [
+                    Decimal("1.6"),
+                    Decimal("-0.222"),
+                    Decimal("1111.316"),
+                    Decimal("1234.00046"),
+                    Decimal("5.1"),
+                    Decimal("-11131.0056"),
+                    Decimal("0.0"),
+                ]
+            ),
+            np.array(
+                [
+                    Decimal("0.0"),
+                    Decimal("-0.222"),
+                    Decimal("1111.316"),
+                    Decimal("1"),
+                    Decimal("5.1"),
+                    Decimal("-1"),
+                    Decimal("-1"),
+                ]
+            ),
+        ),
+    ],
+)
+@pytest.mark.parametrize("root", [0, 1, 2])
+@pytest.mark.skip(reason="[BE-2375] Seg fault with Linux")
+def test_bcast(val1, val2, root):
+    """
+    NOTE: per current implementation. Array is pre-allocated (i.e. same array size).
+    """
+    # Run if root is in range of num. of processes
+    if root >= bodo.get_size():
+        return
+
+    def impl():
+        if bodo.get_rank() == root:
+            val = val1
+        else:
+            val = val2
+        bodo.libs.distributed_api.bcast(val, root)
+        return val
+
+    check_func(impl, (), py_output=val1, is_out_distributed=False)
