@@ -80,7 +80,7 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      pip install pytest pytest-azurepipelines pytest-cov
+      pip install pytest==7.0.1 pytest-azurepipelines pytest-cov
       if [[ ("$NP" -eq 1) && ("${{ parameters.name }}" == "Linux") ]]; then
         python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER)" --cov-report= --cov=./ bodo/tests/
       else
