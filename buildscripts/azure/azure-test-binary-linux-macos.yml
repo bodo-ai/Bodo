@@ -190,7 +190,7 @@ jobs:
       sudo cp $(testLicense.secureFilePath) $HOME/bodo-inc
       export PATH=$HOME/miniconda3/bin:${PATH}
       source activate $CONDA_ENV
-      pip install pytest pytest-azurepipelines
+      pip install pytest==7.0.1 pytest-azurepipelines
       if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
         export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH
       else
