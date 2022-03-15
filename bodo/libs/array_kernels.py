@@ -806,7 +806,6 @@ def duplicated(data, parallel=False):
     func_text += "    shuffle_info = bodo.libs.array.get_shuffle_info(out_cpp_table)\n"
     func_text += "    bodo.libs.array.delete_table(out_cpp_table)\n"
     func_text += "    bodo.libs.array.delete_table(cpp_table)\n"
-    func_text += "  data = bodo.libs.str_arr_ext.to_list_if_immutable_arr(data)\n"
     func_text += "  n = len(data[0])\n"
     func_text += "  out = np.empty(n, np.bool_)\n"
     func_text += "  uniqs = dict()\n"
