@@ -54,8 +54,8 @@ def test_usage_example(fig_test, fig_ref):
         x = np.arange(10)
         ax = input_fig.subplots()  # Create a figure and an axes.
         ax.plot(x, x, label="linear")  # Plot some data on the axes.
-        ax.plot(x, x ** 2, label="quadratic")  # Plot more data on the axes...
-        ax.plot(x, x ** 3, label="cubic")  # ... and some more.
+        ax.plot(x, x**2, label="quadratic")  # Plot more data on the axes...
+        ax.plot(x, x**3, label="cubic")  # ... and some more.
         ax.set_xlabel("x label")  # Add an x-label to the axes.
         ax.set_ylabel("y label")  # Add a y-label to the axes.
         ax.set_title("Simple Plot")  # Add a title to the axes.
@@ -75,8 +75,8 @@ def test_usage_axes_example(fig_test, fig_ref):
         x = np.arange(10)
         axes = input_fig.subplots(nrows=4, ncols=2)  # Create a figure and an axes.
         axes[0][1].plot(x, x, label="linear")  # Plot some data on the axes.
-        axes[1][0].plot(x, x ** 2, label="quadratic")  # Plot more data on the axes...
-        axes[1][0].plot(x, x ** 3, label="cubic")  # ... and some more.
+        axes[1][0].plot(x, x**2, label="quadratic")  # Plot more data on the axes...
+        axes[1][0].plot(x, x**3, label="cubic")  # ... and some more.
         axes[1][0].set_xlabel("x label")  # Add an x-label to the axes.
         axes[1][0].set_ylabel("y label")  # Add a y-label to the axes.
         axes[1][0].set_title("Simple Plot")  # Add a title to the axes.
@@ -95,8 +95,8 @@ def test_usage_replicated_example(fig_test, fig_ref):
     def impl(x, input_fig):
         ax = input_fig.subplots()  # Create a figure and an axes.
         ax.plot(x, x, label="linear")  # Plot some data on the axes.
-        ax.plot(x, x ** 2, label="quadratic")  # Plot more data on the axes...
-        ax.plot(x, x ** 3, label="cubic")  # ... and some more.
+        ax.plot(x, x**2, label="quadratic")  # Plot more data on the axes...
+        ax.plot(x, x**3, label="cubic")  # ... and some more.
         ax.set_xlabel("x label")  # Add an x-label to the axes.
         ax.set_ylabel("y label")  # Add a y-label to the axes.
         ax.set_title("Simple Plot")  # Add a title to the axes.
@@ -190,7 +190,7 @@ def test_contour_replicated_example(fig_test, fig_ref):
 
     def impl(x, input_fig):
         ax = input_fig.subplots()  # Create a figure and an axes.
-        ax.contour(z)  # Plot some data on the axes.
+        ax.contour(x)  # Plot some data on the axes.
 
     z = np.arange(50).reshape(5, 10)
     impl(z, fig_ref)
@@ -605,8 +605,8 @@ def test_axes_set_off(fig_test, fig_ref):
         x = np.arange(10)
         ax = input_fig.subplots()
         ax.plot(x, x, label="linear")
-        ax.plot(x, x ** 2, label="quadratic")
-        ax.plot(x, x ** 3, label="cubic")
+        ax.plot(x, x**2, label="quadratic")
+        ax.plot(x, x**3, label="cubic")
         ax.set_xscale("symlog")
         ax.set_yscale("log")
         ax.set_xlim(left=1.0, right=2.2)
@@ -637,8 +637,8 @@ def test_axes_set_on(fig_test, fig_ref):
         x = np.arange(10)
         ax = input_fig.subplots()
         ax.plot(x, x, label="linear")
-        ax.plot(x, x ** 2, label="quadratic")
-        ax.plot(x, x ** 3, label="cubic")
+        ax.plot(x, x**2, label="quadratic")
+        ax.plot(x, x**3, label="cubic")
         ax.set_xscale("symlog")
         ax.set_yscale("log")
         ax.set_xlim(left=1.0, right=2.2)

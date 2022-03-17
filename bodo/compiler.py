@@ -7,7 +7,7 @@ import warnings
 from collections import namedtuple
 
 import numba
-from numba.core import ir, ir_utils
+from numba.core import ir, ir_utils, types
 from numba.core.compiler import DefaultPassBuilder
 from numba.core.compiler_machinery import (
     AnalysisPass,
@@ -696,6 +696,11 @@ class LowerBodoIRExtSeq(FunctionPass):
         from bodo.transforms.table_column_del_pass import (
             remove_dead_table_columns,
         )
+        from bodo.utils.transform import compile_func_single_block
+        from bodo.utils.typing import (
+            decode_if_dict_array,
+            to_str_arr_if_dict_array,
+        )
 
         state.func_ir._definitions = build_definitions(state.func_ir.blocks)
 
@@ -729,7 +734,40 @@ class LowerBodoIRExtSeq(FunctionPass):
                     fdef = guard(find_callname, state.func_ir, rhs)
                     # remove gatherv() in sequential mode to avoid hang
                     if fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo"):
-                        inst.value = rhs.args[0]
+                        lhs_typ = state.typemap[inst.target.name]
+                        rhs_typ = state.typemap[rhs.args[0].name]
+                        if (
+                            # TODO: Can other types except arrays be read only.
+                            isinstance(rhs_typ, types.Array)
+                            and isinstance(lhs_typ, types.Array)
+                        ):
+                            modifiable_input = rhs_typ.copy(readonly=False)
+                            modifiable_output = lhs_typ.copy(readonly=False)
+                            if modifiable_input == modifiable_output:
+                                # If data is equal make a copy.
+                                new_body += compile_func_single_block(
+                                    eval("lambda data: data.copy()"),
+                                    (rhs.args[0],),
+                                    inst.target,
+                                    typing_info,
+                                )
+                                continue
+                        if lhs_typ != rhs_typ and to_str_arr_if_dict_array(
+                            lhs_typ
+                        ) == to_str_arr_if_dict_array(rhs_typ):
+                            new_body += compile_func_single_block(
+                                eval("lambda data: decode_if_dict_array(data)"),
+                                (rhs.args[0],),
+                                inst.target,
+                                typing_info,
+                                extra_globals={
+                                    "decode_if_dict_array": decode_if_dict_array
+                                },
+                            )
+                            continue
+                        else:
+                            inst.value = rhs.args[0]
+
                     new_body.append(inst)
                 else:
                     new_body.append(inst)

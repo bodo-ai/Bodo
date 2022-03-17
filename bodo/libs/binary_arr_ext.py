@@ -6,23 +6,19 @@ element instead of 'str'.
 import operator
 
 import llvmlite.binding as ll
-import llvmlite.llvmpy.core as lc
 import numba
 import numpy as np
 from llvmlite import ir as lir
 from numba.core import cgutils, types
-from numba.core.imputils import RefType, impl_ret_borrowed, iternext_impl
-from numba.core.typing.templates import signature
+from numba.core.imputils import impl_ret_borrowed
 from numba.extending import (
     intrinsic,
     lower_builtin,
     lower_cast,
     make_attribute_wrapper,
-    models,
     overload,
     overload_attribute,
     overload_method,
-    register_model,
 )
 
 import bodo
@@ -39,7 +35,7 @@ bytes_type = types.Bytes(types.uint8, 1, "C", readonly=True)
 
 
 # type for ndarray with bytes object values
-class BinaryArrayType(types.ArrayCompatible):
+class BinaryArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self):
         super(BinaryArrayType, self).__init__(name="BinaryArrayType()")
 
@@ -53,6 +49,10 @@ class BinaryArrayType(types.ArrayCompatible):
 
     def copy(self):
         return BinaryArrayType()
+
+    @property
+    def iterator_type(self):
+        return bodo.utils.typing.BodoArrayIterator(self)
 
 
 binary_array_type = BinaryArrayType()
@@ -373,57 +373,7 @@ def create_binary_cmp_op_overload(op):
     return overload_binary_cmp
 
 
-class BinaryArrayIterator(types.SimpleIteratorType):
-    """
-    Type class for iterators of binary arrays.
-    Largely copied from the corresponding StringArrayIterator class
-    in str_arr_ext.
-    """
-
-    def __init__(self):
-        name = "iter(Bytes)"
-        yield_type = bytes_type
-        super(BinaryArrayIterator, self).__init__(name, yield_type)
-
-
-@register_model(BinaryArrayIterator)
-class BinaryArrayIteratorModel(models.StructModel):
-    def __init__(self, dmm, fe_type):
-        # We use an unsigned index to avoid the cost of negative index tests.
-        members = [
-            ("index", types.EphemeralPointer(types.uintp)),
-            ("array", binary_array_type),
-        ]
-        super(BinaryArrayIteratorModel, self).__init__(dmm, fe_type, members)
-
-
 lower_builtin("getiter", binary_array_type)(numba.np.arrayobj.getiter_array)
-
-
-@lower_builtin("iternext", BinaryArrayIterator)
-@iternext_impl(RefType.NEW)
-def iternext_binary_array(context, builder, sig, args, result):
-    [iterty] = sig.args
-    [iter_arg] = args
-
-    iterobj = context.make_helper(builder, iterty, value=iter_arg)
-    len_sig = signature(types.intp, binary_array_type)
-    nitems = context.compile_internal(
-        builder, lambda a: len(a), len_sig, [iterobj.array]
-    )
-
-    index = builder.load(iterobj.index)
-    is_valid = builder.icmp(lc.ICMP_SLT, index, nitems)
-    result.set_valid(is_valid)
-
-    with builder.if_then(is_valid):
-        getitem_sig = signature(bytes_type, binary_array_type, types.intp)
-        value = context.compile_internal(
-            builder, lambda a, i: a[i], getitem_sig, [iterobj.array, index]
-        )
-        result.yield_(value)
-        nindex = cgutils.increment_index(builder, index)
-        builder.store(nindex, iterobj.index)
 
 
 # TODO: array analysis and remove call for other functions

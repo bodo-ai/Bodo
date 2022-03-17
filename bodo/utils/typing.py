@@ -13,8 +13,9 @@ import numba
 import numba.cpython.unicode
 import numpy as np
 import pandas as pd
-from numba.core import ir, ir_utils, types
+from numba.core import cgutils, ir, ir_utils, types
 from numba.core.errors import NumbaError
+from numba.core.imputils import RefType, iternext_impl
 from numba.core.registry import CPUDispatcher
 from numba.core.typing.templates import AbstractTemplate, signature
 from numba.extending import (
@@ -59,6 +60,89 @@ def is_nullable(typ):
     return bodo.utils.utils.is_array_typ(typ, False) and (
         not isinstance(typ, types.Array) or is_dtype_nullable(typ.dtype)
     )
+
+
+def is_str_arr_type(t):
+    """check if 't' is a regular or dictionary-encoded string array type
+    TODO(ehsan): add other string types like np str array when properly supported
+    """
+    return t == bodo.string_array_type or t == bodo.dict_str_arr_type
+
+
+def decode_if_dict_array(A):  # pragma: no cover
+    return A
+
+
+@overload(decode_if_dict_array)
+def decode_if_dict_array_overload(A):
+    """decodes input array if it is a dictionary-encoded array.
+    Used as a fallback when dict array is not supported yet.
+    """
+
+    if isinstance(A, types.BaseTuple):
+        n = len(A.types)
+        func_text = "def f(A):\n"
+        res = ",".join(f"decode_if_dict_array(A[{i}])" for i in range(n))
+        func_text += "  return ({}{})\n".format(res, "," if n == 1 else "")
+        loc_vars = {}
+        exec(func_text, {"decode_if_dict_array": decode_if_dict_array}, loc_vars)
+        impl = loc_vars["f"]
+        return impl
+
+    if A == bodo.dict_str_arr_type:
+        return lambda A: A._decode()  # pragma: no cover
+
+    if isinstance(A, bodo.SeriesType):
+
+        def impl(A):  # pragma: no cover
+            arr = bodo.hiframes.pd_series_ext.get_series_data(A)
+            index = bodo.hiframes.pd_series_ext.get_series_index(A)
+            name = bodo.hiframes.pd_series_ext.get_series_name(A)
+            out_arr = decode_if_dict_array(arr)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return impl
+
+    if isinstance(A, bodo.DataFrameType):
+        if A.is_table_format:
+            data_args = "bodo.hiframes.table.decode_if_dict_table(bodo.hiframes.pd_dataframe_ext.get_dataframe_table(A))"
+        else:
+            # TODO(ehsan): support table format directly to return table format if possible
+            data_args = ", ".join(
+                f"decode_if_dict_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(A, {i}))"
+                for i in range(len(A.columns))
+            )
+        impl = bodo.hiframes.dataframe_impl._gen_init_df(
+            "def impl(A):\n",
+            A.columns,
+            data_args,
+            "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(A)",
+            extra_globals={"decode_if_dict_array": decode_if_dict_array, "bodo": bodo},
+            out_df_type=to_str_arr_if_dict_array(A),
+        )
+        return impl
+
+    return lambda A: A  # pragma: no cover
+
+
+def to_str_arr_if_dict_array(t):
+    """convert type 't' to a regular string array if it is a dictionary-encoded array"""
+    if t == bodo.dict_str_arr_type:
+        return bodo.string_array_type
+
+    if isinstance(t, types.BaseTuple):
+        return types.BaseTuple.from_types(
+            [to_str_arr_if_dict_array(a) for a in t.types]
+        )
+
+    if isinstance(t, bodo.TableType):
+        new_arr_types = tuple(to_str_arr_if_dict_array(t) for t in t.arr_types)
+        return bodo.TableType(new_arr_types, t.has_runtime_cols)
+
+    if isinstance(t, bodo.DataFrameType):
+        return t.copy(data=tuple(to_str_arr_if_dict_array(t) for t in t.data))
+
+    return t
 
 
 class BodoError(NumbaError):
@@ -1943,6 +2027,58 @@ def type_col_to_index(col_names):
             return bodo.NumericIndexType(types.int64)
     else:
         return bodo.hiframes.pd_index_ext.HeterogeneousIndexType(col_names)
+
+
+class BodoArrayIterator(types.SimpleIteratorType):
+    """
+    Type class for iterators of bodo arrays.
+    TODO(ehsan): add iterator support using this for all bodo array types.
+    """
+
+    def __init__(self, arr_type):
+        self.arr_type = arr_type
+        name = f"iter({arr_type})"
+        yield_type = arr_type.dtype
+        super(BodoArrayIterator, self).__init__(name, yield_type)
+
+
+@register_model(BodoArrayIterator)
+class BodoArrayIteratorModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        # We use an unsigned index to avoid the cost of negative index tests.
+        members = [
+            ("index", types.EphemeralPointer(types.uintp)),
+            ("array", fe_type.arr_type),
+        ]
+        super(BodoArrayIteratorModel, self).__init__(dmm, fe_type, members)
+
+
+@lower_builtin("iternext", BodoArrayIterator)
+@iternext_impl(RefType.NEW)
+def iternext_bodo_array(context, builder, sig, args, result):
+    import llvmlite.llvmpy.core as lc
+
+    [iterty] = sig.args
+    [iter_arg] = args
+
+    iterobj = context.make_helper(builder, iterty, value=iter_arg)
+    len_sig = signature(types.intp, iterty.arr_type)
+    nitems = context.compile_internal(
+        builder, lambda a: len(a), len_sig, [iterobj.array]
+    )
+
+    index = builder.load(iterobj.index)
+    is_valid = builder.icmp(lc.ICMP_SLT, index, nitems)
+    result.set_valid(is_valid)
+
+    with builder.if_then(is_valid):
+        getitem_sig = signature(iterty.arr_type.dtype, iterty.arr_type, types.intp)
+        value = context.compile_internal(
+            builder, lambda a, i: a[i], getitem_sig, [iterobj.array, index]
+        )
+        result.yield_(value)
+        nindex = cgutils.increment_index(builder, index)
+        builder.store(nindex, iterobj.index)
 
 
 def index_typ_from_dtype_name(elem_dtype, name):

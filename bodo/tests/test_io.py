@@ -2218,6 +2218,127 @@ def test_write_parquet_params(memory_leak_check):
                 bodo.barrier()
 
 
+def test_write_parquet_dict(memory_leak_check):
+    """
+    Test to_parquet when dictionary arrays are used
+    in a DataFrame.
+    """
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    @bodo.jit(distributed=["arr1", "arr2"])
+    def impl(arr1, arr2):
+        df = pd.DataFrame(
+            {
+                "A": arr1,
+                "B": arr2,
+            }
+        )
+        df.to_parquet("arr_dict_test.pq", index=False)
+
+    arr1 = pa.array(
+        ["abc", "b", None, "abc", None, "b", "cde"] * 4,
+        type=pa.dictionary(pa.int32(), pa.string()),
+    )
+    arr2 = pa.array(
+        ["gh", "b", "gh", "eg", None, "b", "eg"] * 4,
+        type=pa.dictionary(pa.int32(), pa.string()),
+    )
+    arr1 = _get_dist_arg(arr1, False)
+    arr2 = _get_dist_arg(arr2, False)
+    impl(arr1, arr2)
+    passed = 1
+    if bodo.get_rank() == 0:
+        try:
+            # Check the output.
+            result = pd.read_parquet("arr_dict_test.pq")
+            py_output = pd.DataFrame(
+                {
+                    "A": ["abc", "b", None, "abc", None, "b", "cde"] * 4,
+                    "B": ["gh", "b", "gh", "eg", None, "b", "eg"] * 4,
+                }
+            )
+            passed = _test_equal_guard(
+                result,
+                py_output,
+            )
+
+            # Check the schema to ensure its stored as string
+            bodo_table = pq.read_table("arr_dict_test.pq")
+            schema = bodo_table.schema
+            expected_dtype = pa.string()
+            for c in py_output.columns:
+                assert (
+                    schema.field(c).type == expected_dtype
+                ), f"Field '{c}' has an incorrect type"
+        except Exception:
+            passed = 0
+        finally:
+            shutil.rmtree("arr_dict_test.pq")
+    n_passed = reduce_sum(passed)
+    assert (
+        n_passed == bodo.get_size()
+    ), "to_parquet output doesn't match expected pandas output"
+
+
+def test_write_parquet_dict_table(memory_leak_check):
+    """
+    Test to_parquet when dictionary arrays are used
+    in a DataFrame containing a table representation.
+
+    To do this consistently we load heavily compressed data
+    from parquet.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    if bodo.get_rank() == 0:
+        df = pd.DataFrame(
+            {
+                "A": ["a" * 100, "b" * 100, None, "c" * 100, "a" * 100] * 1000,
+                "B": ["feefw" * 50, "bf3" * 500, None, "32c" * 20, "a"] * 1000,
+            }
+        )
+        df.to_parquet("dummy_source.pq", index=False)
+    bodo.barrier()
+
+    @bodo.jit
+    def impl():
+        df = pd.read_parquet("dummy_source.pq")
+        df.to_parquet("arr_dict_test.pq", index=False)
+
+    impl()
+    passed = 1
+    if bodo.get_rank() == 0:
+        try:
+            # Check the output.
+            result = pd.read_parquet("arr_dict_test.pq")
+            py_output = pd.read_parquet("dummy_source.pq")
+            passed = _test_equal_guard(
+                result,
+                py_output,
+            )
+
+            # Check the schema to ensure its stored as string
+            bodo_table = pq.read_table("arr_dict_test.pq")
+            schema = bodo_table.schema
+            expected_dtype = pa.string()
+            for c in py_output.columns:
+                assert (
+                    schema.field(c).type == expected_dtype
+                ), f"Field '{c}' has an incorrect type"
+        except Exception:
+            passed = 0
+        finally:
+            shutil.rmtree("arr_dict_test.pq")
+            os.remove("dummy_source.pq")
+    n_passed = reduce_sum(passed)
+    assert (
+        n_passed == bodo.get_size()
+    ), "to_parquet output doesn't match expected pandas output"
+
+
 def test_csv_bool1(datapath, memory_leak_check):
     """Test boolean data in CSV files.
     Also test extra separator at the end of the file

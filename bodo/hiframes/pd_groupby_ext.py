@@ -85,6 +85,7 @@ from bodo.utils.typing import (
     list_cumulative,
     raise_bodo_error,
     raise_const_error,
+    to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import dt_err, is_expr
 
@@ -290,6 +291,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
     If the operation is not feasible (e.g. summing dates) then an error message
     is passed upward to be decided according to the context.
     """
+    arr_type = to_str_arr_if_dict_array(arr_type)
     is_list_string = arr_type == ArrayItemArrayType(string_array_type)
     in_dtype = arr_type.dtype
     # Bodo don't support DatetimeTimeDeltaType. use (timedelta64 instead)
@@ -430,7 +432,7 @@ def get_keys_not_as_index(
         else:
             e_col = k
         ind = grp.df_type.columns.index(k)
-        data = grp.df_type.data[ind]
+        data = to_str_arr_if_dict_array(grp.df_type.data[ind])
         out_columns.append(e_col)
         out_data.append(data)
         out_column_type.append(ColumnType.KeyColumn.value)
@@ -475,13 +477,15 @@ def get_agg_typ(
                 grp.df_type.columns.index(grp.keys[i]) for i in range(len(grp.keys))
             )
             arr_types = tuple(grp.df_type.data[ind] for ind in key_col_inds)
+            arr_types = tuple(to_str_arr_if_dict_array(t) for t in arr_types)
             index = MultiIndexType(
                 arr_types, tuple(types.StringLiteral(k) for k in grp.keys)
             )
         else:
             ind = grp.df_type.columns.index(grp.keys[0])
+            ind_arr_t = to_str_arr_if_dict_array(grp.df_type.data[ind])
             index = bodo.hiframes.pd_index_ext.array_type_to_index(
-                grp.df_type.data[ind], types.StringLiteral(grp.keys[0])
+                ind_arr_t, types.StringLiteral(grp.keys[0])
             )
 
     # gb_info maps (in_col, func_name) -> out_col
@@ -506,6 +510,7 @@ def get_agg_typ(
         for c in columns:
             ind = grp.df_type.columns.index(c)
             data = grp.df_type.data[ind]  # type of input column
+            data = to_str_arr_if_dict_array(data)
             e_column_type = ColumnType.NonNumericalColumn.value
             if isinstance(data, (types.Array, IntegerArrayType)) and isinstance(
                 data.dtype, (types.Integer, types.Float)
@@ -633,7 +638,7 @@ def get_agg_typ(
                 )
 
             if err_msg == "ok":
-                out_arr = out_dtype
+                out_arr = to_str_arr_if_dict_array(out_dtype)
                 out_data.append(out_arr)
                 out_columns.append(c)
                 if func_name == "agg":
@@ -993,6 +998,7 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         gb_info[(c, name_operation)] = c
         ind = grp.df_type.columns.index(c)
         data = grp.df_type.data[ind]
+        data = to_str_arr_if_dict_array(data)
         if name_operation == "cumprod":
             if not isinstance(data.dtype, (types.Integer, types.Float)):
                 raise BodoError(msg)
@@ -1391,13 +1397,16 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
                         for i in range(len(grp.keys))
                     )
                     arr_types = tuple(grp.df_type.data[ind] for ind in key_col_inds)
+                    arr_types = tuple(to_str_arr_if_dict_array(t) for t in arr_types)
                     out_index_type = MultiIndexType(
                         arr_types, tuple(types.literal(k) for k in grp.keys)
                     )
                 else:
                     ind = grp.df_type.columns.index(grp.keys[0])
+                    ind_arr_t = grp.df_type.data[ind]
+                    ind_arr_t = to_str_arr_if_dict_array(ind_arr_t)
                     out_index_type = bodo.hiframes.pd_index_ext.array_type_to_index(
-                        grp.df_type.data[ind], types.literal(grp.keys[0])
+                        ind_arr_t, types.literal(grp.keys[0])
                     )
             out_data = tuple(out_data)
             out_columns = tuple(out_columns)
@@ -1405,6 +1414,7 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             key_arr_types = tuple(
                 grp.df_type.data[grp.df_type.columns.index(c)] for c in grp.keys
             )
+            key_arr_types = tuple(to_str_arr_if_dict_array(t) for t in key_arr_types)
             index_names = tuple(
                 types.literal(v) for v in grp.keys
             ) + get_index_name_types(f_return_type.index)
@@ -1486,6 +1496,7 @@ def _get_groupby_apply_udf_out_type(
         if len(grp.selection) == 1:
             col_name = grp.selection[0]
             data_arr = in_df_type.data[in_df_type.columns.index(col_name)]
+            data_arr = to_str_arr_if_dict_array(data_arr)
             in_data_type = SeriesType(
                 data_arr.dtype, data_arr, in_df_type.index, types.literal(col_name)
             )
@@ -1493,6 +1504,7 @@ def _get_groupby_apply_udf_out_type(
             in_data = tuple(
                 in_df_type.data[in_df_type.columns.index(c)] for c in grp.selection
             )
+            in_data = tuple(to_str_arr_if_dict_array(t) for t in in_data)
             in_data_type = DataFrameType(
                 in_data, in_df_type.index, tuple(grp.selection)
             )
@@ -1585,6 +1597,7 @@ class PivotTableTyper(AbstractTemplate):
 
         # get output data type
         data = df.data[df.columns.index(values)]
+        data = to_str_arr_if_dict_array(data)
         out_dtype = get_pivot_output_dtype(data, aggfunc.literal_value)
         out_arr_typ = dtype_to_array_type(out_dtype)
 
@@ -1597,8 +1610,10 @@ class PivotTableTyper(AbstractTemplate):
         n_vals = len(pivot_vals)
 
         ind = df.columns.index(index)
+        ind_arr_t = df.data[ind]
+        ind_arr_t = to_str_arr_if_dict_array(ind_arr_t)
         index_typ = bodo.hiframes.pd_index_ext.array_type_to_index(
-            df.data[ind], types.StringLiteral(index)
+            ind_arr_t, types.StringLiteral(index)
         )
 
         out_df = DataFrameType((out_arr_typ,) * n_vals, index_typ, tuple(pivot_vals))
@@ -1634,7 +1649,7 @@ class CrossTabTyper(AbstractTemplate):
         pivot_vals = _pivot_values.meta
         n_vals = len(pivot_vals)
         index_typ = bodo.hiframes.pd_index_ext.array_type_to_index(
-            index.data, types.StringLiteral("index")
+            to_str_arr_if_dict_array(index.data), types.StringLiteral("index")
         )
         out_df = DataFrameType((out_arr_typ,) * n_vals, index_typ, tuple(pivot_vals))
 

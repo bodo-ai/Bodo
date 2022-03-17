@@ -45,12 +45,12 @@ static void array_isin_kernel(array_info* out_arr, array_info* in_arr,
     int64_t len_values = in_values->length;
     std::vector<uint32_t> hashes_values(len_values);
     hash_array(hashes_values.data(), in_values, (size_t)len_values, seed,
-               is_parallel);
+               is_parallel, /*global_dict_needed=*/false);
 
     int64_t len_in_arr = in_arr->length;
     std::vector<uint32_t> hashes_in_arr(len_in_arr);
     hash_array(hashes_in_arr.data(), in_arr, (size_t)len_in_arr, seed,
-               is_parallel);
+               is_parallel, /*global_dict_needed=*/false);
 
     std::function<bool(int64_t, int64_t)> equal_fct =
         [&](int64_t const& pos1, int64_t const& pos2) -> bool {
@@ -506,7 +506,9 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
         key_arrs[iKey] = in_table->columns[iKey];
 
     uint32_t seed = SEED_HASH_CONTAINER;
-    if (hashes == nullptr) hashes = hash_keys(key_arrs, seed, is_parallel);
+    if (hashes == nullptr)
+        hashes = hash_keys(key_arrs, seed, is_parallel,
+                           /*global_dict_needed=*/false);
     HashDropDuplicates hash_fct{hashes};
     KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
     UNORD_MAP_CONTAINER<size_t, size_t, HashDropDuplicates,
@@ -660,7 +662,8 @@ table_info* drop_duplicates_keys(table_info* in_table, int64_t num_keys,
  * @return the vector of pointers to be used.
  */
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
-                                  int64_t num_keys, int64_t keep, bool dropna) {
+                                  int64_t num_keys, int64_t keep, bool dropna,
+                                  bool drop_local_first) {
     try {
         // serial case
         if (!is_parallel) {
@@ -670,18 +673,22 @@ table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
         // parallel case
         // pre reduction of duplicates
         table_info* red_table;
-        red_table = drop_duplicates_table_inner(in_table, num_keys, keep, 2,
-                                                is_parallel, dropna);
+        if (drop_local_first)
+            red_table = drop_duplicates_table_inner(in_table, num_keys, keep, 2,
+                                                    is_parallel, dropna);
+        else
+            red_table = in_table;
         // shuffling of values
         table_info* shuf_table =
             shuffle_table(red_table, num_keys, is_parallel);
         // no need to decref since shuffle_table() steals a reference
-        delete_table(red_table);
+        if (drop_local_first) delete_table(red_table);
         // reduction after shuffling
         // We don't drop NA values again because the first
         // drop_duplicates_table_inner should have already handled this
+        if (drop_local_first) dropna = false;
         table_info* ret_table = drop_duplicates_table_inner(
-            shuf_table, num_keys, keep, 1, is_parallel, false);
+            shuf_table, num_keys, keep, 1, is_parallel, dropna);
         delete_table(shuf_table);
         // returning table
         return ret_table;

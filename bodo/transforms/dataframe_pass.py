@@ -61,6 +61,7 @@ from bodo.utils.typing import (
     is_overload_constant_tuple,
     is_overload_none,
     list_cumulative,
+    to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import (
     get_getsetitem_index_var,
@@ -772,6 +773,14 @@ class DataFramePass:
 
         in_key_arrs = [get_value(c) for c in key_names]
         if inplace:
+            if any(
+                self.typemap[v.name] == bodo.dict_str_arr_type
+                for v in in_key_arrs + list(in_vars.values())
+            ):
+                raise BodoError(
+                    "inplace sort not supported for dictionary-encoded string arrays yet",
+                    loc=rhs.loc,
+                )
             out_key_vars = in_key_arrs.copy()
             out_vars = in_vars.copy()
             out_index_var = in_index_var
@@ -780,7 +789,7 @@ class DataFramePass:
             for k in df_typ.columns:
                 out_var = ir.Var(lhs.scope, mk_unique_var(sanitize_varname(k)), lhs.loc)
                 ind = df_typ.columns.index(k)
-                self.typemap[out_var.name] = df_typ.data[ind]
+                self.typemap[out_var.name] = to_str_arr_if_dict_array(df_typ.data[ind])
                 out_vars[k] = out_var
             # index var
             out_index_var = ir.Var(lhs.scope, mk_unique_var("_index_"), lhs.loc)
@@ -1420,7 +1429,9 @@ class DataFramePass:
                     lhs.scope, mk_unique_var(sanitize_varname(k)), lhs.loc
                 )
                 ind = df_type.columns.index(k)
-                self.typemap[out_key_var.name] = df_type.data[ind]
+                self.typemap[out_key_var.name] = to_str_arr_if_dict_array(
+                    df_type.data[ind]
+                )
                 out_key_vars.append(out_key_var)
 
         if input_has_index:
@@ -1638,14 +1649,16 @@ class DataFramePass:
             used_cols = [df_type.columns[0]]
 
         n_keys = len(grp_typ.keys)
-        key_names = ["k" + str(i) for i in range(n_keys)]
-        col_names = ["c" + str(i) for i in range(len(used_cols))]
+        key_names = [f"k{i}" for i in range(n_keys)]
+        col_names = [f"c{i}" for i in range(len(used_cols))]
         key_name_args = ", ".join(key_names)
         col_name_args = ", ".join(col_names)
 
         func_text = (
             f"def f({key_name_args}, {col_name_args}, df_index, {extra_arg_names}):\n"
         )
+        for a in key_names + col_names:
+            func_text += f"  {a} = decode_if_dict_array({a})\n"
 
         func_text += f"  in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({col_name_args},), df_index, {gen_const_tup(used_cols)})\n"
 
@@ -1704,6 +1717,7 @@ class DataFramePass:
             "bodo": bodo,
             "out_type": out_typ,
             "_bodo_groupby_apply_impl": _bodo_groupby_apply_impl,
+            "decode_if_dict_array": bodo.utils.typing.decode_if_dict_array,
         }
 
         return replace_func(
@@ -2027,7 +2041,7 @@ class DataFramePass:
             lhs.scope, mk_unique_var(sanitize_varname(index)), lhs.loc
         )
         ind = df_type.columns.index(index)
-        self.typemap[out_index_var.name] = df_type.data[ind]
+        self.typemap[out_index_var.name] = to_str_arr_if_dict_array(df_type.data[ind])
         out_key_vars.append(out_index_var)
 
         input_has_index = False
@@ -2104,7 +2118,9 @@ class DataFramePass:
         # TODO: Add the name of the index to the construction. Pandas does it.
         out_key_vars = []
         out_index_var = ir.Var(lhs.scope, mk_unique_var("index"), lhs.loc)
-        self.typemap[out_index_var.name] = self.typemap[index.name]
+        self.typemap[out_index_var.name] = to_str_arr_if_dict_array(
+            self.typemap[index.name]
+        )
         out_key_vars.append(out_index_var)
 
         df_in_vars = {}

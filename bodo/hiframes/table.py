@@ -33,9 +33,13 @@ from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.templates import OverloadedKeyAttributeTemplate
 from bodo.utils.typing import (
     BodoError,
+    decode_if_dict_array,
     get_overload_const_int,
     is_list_like_index_type,
+    is_overload_constant_bool,
     is_overload_constant_int,
+    is_overload_true,
+    to_str_arr_if_dict_array,
 )
 
 
@@ -777,20 +781,28 @@ def lower_constant_table(context, builder, table_type, pyval):
 
 
 @intrinsic
-def init_table(typingctx, table_type=None):
+def init_table(typingctx, table_type, to_str_if_dict_t=None):
     """initialize a table object with same structure as input table without setting it's
     array blocks (to be set later)
     """
     assert isinstance(table_type, TableType), "table type expected"
+    assert is_overload_constant_bool(
+        to_str_if_dict_t
+    ), "constant to_str_if_dict_t expected"
+    out_table_type = table_type
+
+    # convert dictionary-encoded string arrays to regular string arrays
+    if is_overload_true(to_str_if_dict_t):
+        out_table_type = to_str_arr_if_dict_array(table_type)
 
     def codegen(context, builder, sig, args):
-        table = cgutils.create_struct_proxy(table_type)(context, builder)
-        for t, blk in table_type.type_to_blk.items():
+        table = cgutils.create_struct_proxy(out_table_type)(context, builder)
+        for t, blk in out_table_type.type_to_blk.items():
             null_list = context.get_constant_null(types.List(t))
             setattr(table, f"block_{blk}", null_list)
         return table._getvalue()
 
-    sig = table_type(table_type)
+    sig = out_table_type(table_type, to_str_if_dict_t)
     return sig, codegen
 
 
@@ -902,20 +914,30 @@ def set_table_len(typingctx, table_type, l_type=None):
 
 
 @intrinsic
-def alloc_list_like(typingctx, list_type=None):
+def alloc_list_like(typingctx, list_type, to_str_if_dict_t=None):
     """
     allocate a list with same type and size as input list but filled with null values
     """
     assert isinstance(list_type, types.List), "list type expected"
+    assert is_overload_constant_bool(
+        to_str_if_dict_t
+    ), "constant to_str_if_dict_t expected"
+    out_list_type = list_type
+
+    # convert dictionary-encoded string arrays to regular string arrays
+    if is_overload_true(to_str_if_dict_t):
+        out_list_type = types.List(to_str_arr_if_dict_array(list_type.dtype))
 
     def codegen(context, builder, sig, args):
         in_list = ListInstance(context, builder, list_type, args[0])
         size = in_list.size
-        _, out_arr_list = ListInstance.allocate_ex(context, builder, list_type, size)
+        _, out_arr_list = ListInstance.allocate_ex(
+            context, builder, out_list_type, size
+        )
         out_arr_list.size = size
         return out_arr_list.value
 
-    sig = list_type(list_type)
+    sig = out_list_type(list_type, to_str_if_dict_t)
     return sig, codegen
 
 
@@ -958,7 +980,7 @@ def gen_table_filter(T, used_cols=None):
         glbls["used_cols"] = np.array(used_cols, dtype=np.int64)
 
     func_text = "def impl(T, idx):\n"
-    func_text += f"  T2 = init_table(T)\n"
+    func_text += f"  T2 = init_table(T, False)\n"
     func_text += f"  l = 0\n"
 
     # set table length using index value and return if no table column is used
@@ -976,7 +998,7 @@ def gen_table_filter(T, used_cols=None):
     for blk in T.type_to_blk.values():
         glbls[f"arr_inds_{blk}"] = np.array(T.block_to_arr_ind[blk], dtype=np.int64)
         func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
-        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk})\n"
+        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, False)\n"
         func_text += f"  for i in range(len(arr_list_{blk})):\n"
         func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
         if used_cols is not None:
@@ -986,6 +1008,48 @@ def gen_table_filter(T, used_cols=None):
             f"    out_arr_{blk} = ensure_contig_if_np(arr_list_{blk}[i][idx])\n"
         )
         func_text += f"    l = len(out_arr_{blk})\n"
+        func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
+        func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
+    func_text += f"  T2 = set_table_len(T2, l)\n"
+    func_text += f"  return T2\n"
+
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl"]
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def decode_if_dict_table(T):
+    """
+    Takes a Table that may contain a dict_str_array_type
+    and converts the dict_str_array to a regular string
+    array. This is used as a fallback when some operations
+    aren't supported on dictionary arrays.
+
+    Note: This current DOES NOT currently handle dead columns
+    and is currently only used in situations where we are certain
+    all columns are alive (i.e. before write).
+    """
+    func_text = "def impl(T):\n"
+    func_text += f"  T2 = init_table(T, True)\n"
+    func_text += f"  l = len(T)\n"
+    glbls = {
+        "init_table": init_table,
+        "get_table_block": get_table_block,
+        "ensure_column_unboxed": ensure_column_unboxed,
+        "set_table_block": set_table_block,
+        "set_table_len": set_table_len,
+        "alloc_list_like": alloc_list_like,
+        "decode_if_dict_array": decode_if_dict_array,
+    }
+    for blk in T.type_to_blk.values():
+        glbls[f"arr_inds_{blk}"] = np.array(T.block_to_arr_ind[blk], dtype=np.int64)
+        func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
+        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, True)\n"
+        func_text += f"  for i in range(len(arr_list_{blk})):\n"
+        func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
+        func_text += f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
+        func_text += f"    out_arr_{blk} = decode_if_dict_array(arr_list_{blk}[i])\n"
         func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
     func_text += f"  T2 = set_table_len(T2, l)\n"

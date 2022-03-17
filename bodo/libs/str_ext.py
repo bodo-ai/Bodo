@@ -30,6 +30,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 from bodo.libs import hstr_ext
 from bodo.utils.typing import (
+    BodoError,
     get_overload_const_int,
     get_overload_const_str,
     is_overload_constant_int,

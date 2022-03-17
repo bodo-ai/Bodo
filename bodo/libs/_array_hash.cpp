@@ -30,9 +30,11 @@ static typename std::enable_if<!std::is_floating_point<T>::value, void>::type
 hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
                  const uint32_t seed, uint8_t* null_bitmask) {
     if (null_bitmask) {
+        uint32_t na_hash;
+        hash_na_val(seed, &na_hash);
         for (size_t i = 0; i < n_rows; i++) {
             hash_inner_32<T>(&data[i], seed, &out_hashes[i]);
-            if (!GetBit(null_bitmask, i)) out_hashes[i]++;
+            if (!GetBit(null_bitmask, i)) out_hashes[i] = na_hash;
         }
     } else {
         for (size_t i = 0; i < n_rows; i++)
@@ -393,10 +395,14 @@ void hash_arrow_array(uint32_t* out_hashes,
  * @param n_rows: the number of rows of the table.
  * @param seed: the seed of the computation.
  * @param is_parallel: whether we run in parallel or not.
- *
+ * @param global_dict_needed: this only applies to hashing of dictionary-encoded
+ * arrays. This parameter specifies whether the dictionary has to be global
+ * or not (for correctness or for performance -for example avoiding collisions
+ * after shuffling-). This is context-dependent
  */
 void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                const uint32_t seed, bool is_parallel) {
+                const uint32_t seed, bool is_parallel,
+                bool global_dict_needed) {
     // dispatch to proper function
     // TODO: general dispatcher
     // XXX: assumes nullable array data for nulls is always consistent
@@ -410,6 +416,28 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
         return hash_array_string(
             out_hashes, (char*)array->data1, (offset_t*)array->data2,
             (uint8_t*)array->null_bitmask, n_rows, seed, is_parallel);
+    }
+    if (array->arr_type == bodo_array_type::DICT) {
+        if (array->has_global_dictionary || !is_parallel ||
+            !global_dict_needed) {
+            // in this case we can just hash the indices since the dictionary is
+            // synchronized across ranks or is only needed for a local
+            // operation where hashing based on local dictionary won't affect
+            // correctness or performance
+            return hash_array_inner<dict_indices_t>(
+                out_hashes, (dict_indices_t*)array->info2->data1, n_rows, seed,
+                (uint8_t*)array->info2->null_bitmask);
+        } else {
+            // 3 options:
+            // - Convert to global dictionary now
+            // - Require the conversion to have happened before calling this function
+            // - Access the strings to get globally consistent hashes (this is not efficient
+            //   if we are going to end up converting to global dictionary as part of the
+            //   operation that called hash_array())
+            throw std::runtime_error(
+                "hashing dictionary array requires global dictionary in this "
+                "context");
+        }
     }
     if (array->arr_type == bodo_array_type::LIST_STRING) {
         return hash_array_list_string(
@@ -541,8 +569,9 @@ static void hash_array_combine_string(uint32_t* out_hashes, char* data,
     }
 }
 
+// See hash_array for documentation of parameters
 void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                        const uint32_t seed) {
+                        const uint32_t seed, bool global_dict_needed) {
     // dispatch to proper function
     // TODO: general dispatcher
     if (array->arr_type == bodo_array_type::ARROW) {
@@ -553,6 +582,26 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
     if (array->arr_type == bodo_array_type::STRING) {
         return hash_array_combine_string(out_hashes, (char*)array->data1,
                                          (offset_t*)array->data2, n_rows, seed);
+    }
+    if (array->arr_type == bodo_array_type::DICT) {
+        if (array->has_global_dictionary || !global_dict_needed) {
+            // in this case we can just hash the indices since the dictionary is
+            // synchronized across ranks or is only needed for a local
+            // operation where hashing based on local dictionary won't affect
+            // correctness or performance
+            return hash_array_combine_inner<dict_indices_t>(
+                out_hashes, (dict_indices_t*)array->info2->data1, n_rows, seed);
+        } else {
+            // 3 options:
+            // - Convert to global dictionary now
+            // - Require the conversion to have happened before calling this function
+            // - Access the strings to get globally consistent hashes (this is not efficient
+            //   if we are going to end up converting to global dictionary as part of the
+            //   operation that called hash_array())
+            throw std::runtime_error(
+                "hashing dictionary array requires global dictionary in this "
+                "context");
+        }
     }
     if (array->arr_type == bodo_array_type::LIST_STRING) {
         return combine_hash_array_list_string(
@@ -645,10 +694,12 @@ void coherent_hash_array_inner_uint64(uint32_t* out_hashes, array_info* array,
         }
     } else {  // We are in NULLABLE_INT_BOOL
         uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        uint32_t na_hash;
+        hash_na_val(seed, &na_hash);
         for (size_t i = 0; i < n_rows; i++) {
             uint64_t val = data[i];
             hash_inner_32<uint64_t>(&val, seed, &out_hashes[i]);
-            if (!GetBit(null_bitmask, i)) out_hashes[i]++;
+            if (!GetBit(null_bitmask, i)) out_hashes[i] = na_hash;
         }
     }
 }
@@ -665,10 +716,12 @@ void coherent_hash_array_inner_int64(uint32_t* out_hashes, array_info* array,
         }
     } else {  // We are in NULLABLE_INT_BOOL
         uint8_t* null_bitmask = (uint8_t*)array->null_bitmask;
+        uint32_t na_hash;
+        hash_na_val(seed, &na_hash);
         for (size_t i = 0; i < n_rows; i++) {
             int64_t val = data[i];
             hash_inner_32<int64_t>(&val, seed, &out_hashes[i]);
-            if (!GetBit(null_bitmask, i)) out_hashes[i]++;
+            if (!GetBit(null_bitmask, i)) out_hashes[i] = na_hash;
         }
     }
 }
@@ -699,11 +752,18 @@ void coherent_hash_array_inner_double(uint32_t* out_hashes, array_info* array,
 void coherent_hash_array(uint32_t* out_hashes, array_info* array,
                          array_info* ref_array, size_t n_rows,
                          const uint32_t seed, bool is_parallel = true) {
+    if ((array->arr_type == bodo_array_type::DICT) &&
+        (array->info1 != ref_array->info1)) {
+        throw std::runtime_error(
+            "coherent_hash_array: don't know if arrays have unified "
+            "dictionary");
+    }
+
     // For those types, no type conversion is ever needed.
     if (array->arr_type == bodo_array_type::ARROW ||
         array->arr_type == bodo_array_type::STRING ||
         array->arr_type == bodo_array_type::LIST_STRING) {
-        return hash_array(out_hashes, array, n_rows, seed, is_parallel);
+        return hash_array(out_hashes, array, n_rows, seed, is_parallel, true);
     }
     // Now we are in NUMPY / NULLABLE_INT_BOOL. Getting into hot waters.
     // For DATE / DATETIME / TIMEDELTA / DECIMAL no type conversion is allowed
@@ -712,12 +772,12 @@ void coherent_hash_array(uint32_t* out_hashes, array_info* array,
         array->dtype == Bodo_CTypes::TIMEDELTA ||
         array->dtype == Bodo_CTypes::DECIMAL ||
         array->dtype == Bodo_CTypes::_BOOL) {
-        return hash_array(out_hashes, array, n_rows, seed, is_parallel);
+        return hash_array(out_hashes, array, n_rows, seed, is_parallel, true);
     }
     // If we have the same type on left or right then no need
     if (array->arr_type == ref_array->arr_type ||
         array->dtype == ref_array->dtype) {
-        return hash_array(out_hashes, array, n_rows, seed, is_parallel);
+        return hash_array(out_hashes, array, n_rows, seed, is_parallel, true);
     }
     // If both are unsigned int, we convert to uint64_t
     if (is_unsigned_integer(array->dtype) &&
@@ -877,7 +937,7 @@ void coherent_hash_array_combine(uint32_t* out_hashes, array_info* array,
     if (array->arr_type == bodo_array_type::ARROW ||
         array->arr_type == bodo_array_type::STRING ||
         array->arr_type == bodo_array_type::LIST_STRING) {
-        return hash_array_combine(out_hashes, array, n_rows, seed);
+        return hash_array_combine(out_hashes, array, n_rows, seed, true);
     }
     // Now we are in NUMPY / NULLABLE_INT_BOOL. Getting into hot waters.
     // For DATE / DATETIME / TIMEDELTA / DECIMAL no type conversion is allowed
@@ -886,12 +946,12 @@ void coherent_hash_array_combine(uint32_t* out_hashes, array_info* array,
         array->dtype == Bodo_CTypes::TIMEDELTA ||
         array->dtype == Bodo_CTypes::DECIMAL ||
         array->dtype == Bodo_CTypes::_BOOL) {
-        return hash_array_combine(out_hashes, array, n_rows, seed);
+        return hash_array_combine(out_hashes, array, n_rows, seed, true);
     }
     // If we have the same type on left or right then no need
     if (array->arr_type == ref_array->arr_type ||
         array->dtype == ref_array->dtype) {
-        return hash_array_combine(out_hashes, array, n_rows, seed);
+        return hash_array_combine(out_hashes, array, n_rows, seed, true);
     }
     // If both are unsigned int, we convert to uint64_t
     if (is_unsigned_integer(array->dtype) &&
@@ -1000,15 +1060,163 @@ uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
 }
 
 uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
-                    const uint32_t seed, bool is_parallel) {
+                    const uint32_t seed, bool is_parallel,
+                    bool global_dict_needed) {
     tracing::Event ev("hash_keys", is_parallel);
     size_t n_rows = (size_t)key_arrs[0]->length;
     uint32_t* hashes = new uint32_t[n_rows];
     // hash first array
-    hash_array(hashes, key_arrs[0], n_rows, seed, is_parallel);
+    hash_array(hashes, key_arrs[0], n_rows, seed, is_parallel,
+               global_dict_needed);
     // combine other array hashes
     for (size_t i = 1; i < key_arrs.size(); i++) {
-        hash_array_combine(hashes, key_arrs[i], n_rows, seed);
+        hash_array_combine(hashes, key_arrs[i], n_rows, seed,
+                           global_dict_needed);
     }
     return hashes;
+}
+
+void unify_dictionaries(array_info* arr1, array_info* arr2) {
+    // TODO To simplify things for now we require dictionaries to be global
+    if (!arr1->has_global_dictionary)
+        throw std::runtime_error(
+            "unify_dictionaries: first array does not have global dictionary");
+
+    if (!arr2->has_global_dictionary)
+        throw std::runtime_error(
+            "unify_dictionaries: second array does not have global dictionary");
+
+    if (arr1->info1 == arr2->info1) return;  // dictionaries are the same
+
+    const size_t arr1_dictionary_len = static_cast<size_t>(arr1->info1->length);
+    const size_t arr2_dictionary_len = static_cast<size_t>(arr2->info1->length);
+    // these vectors will be used to map old indices to new ones
+    std::vector<dict_indices_t> arr1_index_map(arr1_dictionary_len);
+    std::vector<dict_indices_t> arr2_index_map(arr2_dictionary_len);
+
+    const uint32_t hash_seed = SEED_HASH_JOIN;
+    uint32_t* arr1_hashes = new uint32_t[arr1_dictionary_len];
+    uint32_t* arr2_hashes = new uint32_t[arr2_dictionary_len];
+    hash_array(arr1_hashes, arr1->info1, arr1_dictionary_len, hash_seed, false,
+               /*global_dict_needed=*/false);
+    hash_array(arr2_hashes, arr2->info1, arr2_dictionary_len, hash_seed, false,
+               /*global_dict_needed=*/false);
+
+    // hash map mapping dictionary values of arr1 and arr2 to index in unified
+    // dictionary
+    HashDict hash_fct{arr1_dictionary_len, arr1_hashes, arr2_hashes};
+    KeyEqualDict equal_fct{arr1_dictionary_len, arr1->info1,
+                           arr2->info1 /*, is_na_equal*/};
+    UNORD_MAP_CONTAINER<size_t, dict_indices_t, HashDict, KeyEqualDict>
+        dict_value_to_unified_index({}, hash_fct, equal_fct);
+    // Size of new dictionary could end up as large as
+    // arr1_dictionary_len + arr2_dictionary_len. We could get an accurate
+    // estimate with hyperloglog but it seems unnecessary for this use case.
+    // For now we reserve initial capacity as the max size of the two
+    dict_value_to_unified_index.reserve(
+        std::max(arr1_dictionary_len, arr2_dictionary_len));
+
+    // this vector stores indices of the strings (in arr1 and arr2) that will be
+    // part of the unified dictionary. index values greater than
+    // arr1_dictionary_len correspond to arr2 (for these we substract
+    // arr1_dictionary_len to get the index value)
+    std::vector<size_t> unique_strs;
+    unique_strs.reserve(std::max(arr1_dictionary_len, arr2_dictionary_len));
+
+    dict_indices_t next_index = 1;
+    int64_t n_chars = 0;
+
+    offset_t const* const arr1_str_offsets = (offset_t*)arr1->info1->data2;
+    for (size_t i = 0; i < arr1_dictionary_len; i++) {
+        dict_indices_t& index = dict_value_to_unified_index[i];
+        if (index == 0) {
+            // found new string
+            index = next_index++;
+            n_chars += (arr1_str_offsets[i + 1] - arr1_str_offsets[i]);
+            unique_strs.emplace_back(i);
+        }
+        arr1_index_map[i] = index - 1;
+    }
+
+    offset_t const* const arr2_str_offsets = (offset_t*)arr2->info1->data2;
+    for (size_t i = 0; i < arr2_dictionary_len; i++) {
+        dict_indices_t& index =
+            dict_value_to_unified_index[i + arr1_dictionary_len];
+        if (index == 0) {
+            // found new string
+            index = next_index++;
+            n_chars += (arr2_str_offsets[i + 1] - arr2_str_offsets[i]);
+            unique_strs.emplace_back(i + arr1_dictionary_len);
+        }
+        arr2_index_map[i] = index - 1;
+    }
+    int64_t n_strings = unique_strs.size();
+    dict_value_to_unified_index.clear();
+    dict_value_to_unified_index.reserve(0);  // try to force dealloc of hashmap
+    delete[] arr1_hashes;
+    delete[] arr2_hashes;
+
+    array_info* new_dict = alloc_string_array(n_strings, n_chars, 0);
+    offset_t* new_dict_str_offsets = (offset_t*)new_dict->data2;
+    offset_t cur_offset = 0;
+    int64_t cur_str = 0;
+    offset_t str_len;
+    for (auto i : unique_strs) {
+        if (i < arr1_dictionary_len) {
+            str_len = arr1_str_offsets[i + 1] - arr1_str_offsets[i];
+            memcpy(new_dict->data1 + cur_offset,
+                   arr1->info1->data1 + arr1_str_offsets[i], str_len);
+        } else {
+            str_len = arr2_str_offsets[i - arr1_dictionary_len + 1] -
+                      arr2_str_offsets[i - arr1_dictionary_len];
+            memcpy(
+                new_dict->data1 + cur_offset,
+                arr2->info1->data1 + arr2_str_offsets[i - arr1_dictionary_len],
+                str_len);
+        }
+        new_dict_str_offsets[cur_str++] = cur_offset;
+        cur_offset += str_len;
+    }
+    new_dict_str_offsets[n_strings] = n_chars;
+
+    // replace old dictionaries with new one
+    delete_info_decref_array(arr1->info1);
+    delete_info_decref_array(arr2->info1);
+    arr1->info1 = new_dict;
+    arr2->info1 = new_dict;
+    incref_array(new_dict);
+
+    // convert old indices to new ones
+
+    bool inplace = (arr1->info2->meminfo->refct == 1);
+    if (!inplace) {
+        array_info* indices = copy_array(arr1->info2);
+        delete_info_decref_array(arr1->info2);
+        arr1->info2 = indices;
+    }
+
+    uint8_t* null_bitmask1 = (uint8_t *) arr1->null_bitmask;
+
+    for (size_t i = 0; i < arr1->info2->length; i++) {
+        if (GetBit(null_bitmask1, i)) {
+            dict_indices_t& index = arr1->info2->at<dict_indices_t>(i);
+            index = arr1_index_map[index];
+        }
+    }
+
+    inplace = (arr2->info2->meminfo->refct == 1);
+    if (!inplace) {
+        array_info* indices = copy_array(arr2->info2);
+        delete_info_decref_array(arr2->info2);
+        arr2->info2 = indices;
+    }
+
+    uint8_t* null_bitmask2 = (uint8_t *) arr2->null_bitmask;
+
+    for (size_t i = 0; i < arr2->info2->length; i++) {
+        if (GetBit(null_bitmask2, i)) {
+            dict_indices_t& index = arr2->info2->at<dict_indices_t>(i);
+            index = arr2_index_map[index];
+        }
+    }
 }

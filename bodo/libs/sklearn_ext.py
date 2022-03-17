@@ -1814,6 +1814,8 @@ def overload_confusion_matrix(
     # to object mode, so we convert to arrays
     func_text += "    y_true = bodo.utils.conversion.coerce_to_array(y_true)\n"
     func_text += "    y_pred = bodo.utils.conversion.coerce_to_array(y_pred)\n"
+    func_text += "    y_true = bodo.utils.typing.decode_if_dict_array(y_true)\n"
+    func_text += "    y_pred = bodo.utils.typing.decode_if_dict_array(y_pred)\n"
 
     cm_dtype = ("int64[:,:]", "np.int64")
     if not is_overload_none(normalize):
@@ -4480,6 +4482,7 @@ def overload_preprocessing_label_encoder_fit(
         def _sklearn_preprocessing_label_encoder_fit_impl(
             m, y, _is_data_distributed=False
         ):  # pragma: no cover
+            y = bodo.utils.typing.decode_if_dict_array(y)
             y_classes = bodo.libs.array_kernels.unique(y, parallel=True)
             y_classes = bodo.allgatherv(y_classes, False)
             y_classes = bodo.libs.array_kernels.sort(

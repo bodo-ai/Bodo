@@ -49,6 +49,7 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_none,
     is_overload_true,
+    is_str_arr_type,
     raise_bodo_error,
 )
 
@@ -161,8 +162,9 @@ def common_validate_padding(func_name, width, fillchar):
 
 @overload_attribute(SeriesType, "str")
 def overload_series_str(S):
-    if not isinstance(S, SeriesType) or not (
-        S.data in (string_array_type, string_array_split_view_type)
+    if not (
+        is_str_arr_type(S.data)
+        or S.data == string_array_split_view_type
         or isinstance(S.data, ArrayItemArrayType)
     ):
         raise_bodo_error("Series.str: input should be a series of string or arrays")
@@ -202,6 +204,8 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
         and get_overload_const_str(pat).isascii()
         and is_overload_constant_int(n)
         and get_overload_const_int(n) == -1
+        # only works on regular string arrays
+        and S_str.stype.data == string_array_type
     ):
 
         def _str_split_view_impl(
@@ -233,7 +237,7 @@ def overload_str_method_split(S_str, pat=None, n=-1, expand=False):
 def overload_str_method_get(S_str, i):
     arr_typ = S_str.stype.data
     if (
-        arr_typ != string_array_split_view_type and arr_typ != string_array_type
+        arr_typ != string_array_split_view_type and not is_str_arr_type(arr_typ)
     ) and not isinstance(arr_typ, ArrayItemArrayType):
         raise_bodo_error(
             "Series.str.get(): only supports input type of Series(array(item)) "
@@ -311,7 +315,7 @@ def overload_str_method_join(S_str, sep):
     if (
         arr_typ != string_array_split_view_type
         and arr_typ != ArrayItemArrayType(string_array_type)
-        and arr_typ != string_array_type
+        and not is_str_arr_type(arr_typ)
     ):
         raise_bodo_error(
             "Series.str.join(): only supports input type of Series(list(str)) "
@@ -1093,6 +1097,7 @@ def create_str2str_methods_overload(func_name):
         func_text = "def f(S_str):\n"
     func_text += "    S = S_str._obj\n"
     func_text += "    str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "    str_arr = decode_if_dict_array(str_arr)\n"
     func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
     func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
     func_text += "    numba.parfors.parfor.init_prange()\n"
@@ -1127,6 +1132,7 @@ def create_str2str_methods_overload(func_name):
             "numba": numba,
             "num_total_chars": bodo.libs.str_arr_ext.num_total_chars,
             "get_utf8_size": bodo.libs.str_arr_ext.get_utf8_size,
+            "decode_if_dict_array": bodo.utils.typing.decode_if_dict_array,
         },
         loc_vars,
     )

@@ -592,6 +592,7 @@ inline bool does_keys_have_nulls(std::vector<array_info*> const& key_cols) {
               key_col->dtype == Bodo_CTypes::TIMEDELTA)) ||
             key_col->arr_type == bodo_array_type::STRING ||
             key_col->arr_type == bodo_array_type::CATEGORICAL ||
+            key_col->arr_type == bodo_array_type::DICT ||
             key_col->arr_type == bodo_array_type::LIST_STRING ||
             key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             return true;
@@ -611,7 +612,8 @@ inline bool does_row_has_nulls(std::vector<array_info*> const& key_cols,
                 return true;
         } else if (key_col->arr_type == bodo_array_type::STRING ||
                    key_col->arr_type == bodo_array_type::LIST_STRING ||
-                   key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+                   key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+                   key_col->arr_type == bodo_array_type::DICT) {
             if (!GetBit((uint8_t*)key_col->null_bitmask, i)) return true;
         } else if (key_col->arr_type == bodo_array_type::NUMPY) {
             if ((key_col->dtype == Bodo_CTypes::FLOAT32 &&

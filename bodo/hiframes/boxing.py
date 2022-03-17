@@ -69,11 +69,19 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     raise_bodo_error,
     to_nullable_type,
+    to_str_arr_if_dict_array,
 )
 
+ll.add_symbol("is_np_array", hstr_ext.is_np_array)
 ll.add_symbol("array_size", hstr_ext.array_size)
 ll.add_symbol("array_getptr1", hstr_ext.array_getptr1)
+
+# the number of dataframe columns above which we use table format in unboxing
 TABLE_FORMAT_THRESHOLD = 20
+
+# A flag to use dictionary-encode string arrays for all string arrays
+# Used for testing purposes
+_use_dict_str_type = False  # TODO(ehsan): set to false before merge
 
 
 def _set_bodo_meta_in_pandas():
@@ -156,8 +164,15 @@ def typeof_pd_series(val, c):
     else:
         idx_typ = numba.typeof(val.index)
 
+    dtype = _infer_series_dtype(val)
+    arr_typ = dtype_to_array_type(dtype)
+    # use dictionary-encoded array if necessary for testing (_use_dict_str_type set)
+    if _use_dict_str_type and arr_typ == string_array_type:
+        arr_typ = bodo.dict_str_arr_type
+
     return SeriesType(
-        _infer_series_dtype(val),
+        dtype,
+        data=arr_typ,
         index=idx_typ,
         name_typ=numba.typeof(val.name),
         dist=dist,
@@ -243,6 +258,11 @@ def get_hiframes_dtypes(df):
             _infer_series_dtype(df.iloc[:, i], array_metadata=column_typing_metadata[i])
         )
         for i in range(len(df.columns))
+    ]
+    # use dictionary-encoded array if necessary for testing (_use_dict_str_type set)
+    hi_typs = [
+        bodo.dict_str_arr_type if _use_dict_str_type and t == string_array_type else t
+        for t in hi_typs
     ]
     return tuple(hi_typs)
 
@@ -1128,6 +1148,18 @@ def unbox_dataframe_column(typingctx, df, i=None):
     return signature(types.none, df, i), codegen
 
 
+@numba.njit
+def unbox_col_if_needed(df, i):  # pragma: no cover
+    """
+    Helper function used to call unbox_dataframe_column when
+    necessary without inlining the function
+    """
+    if bodo.hiframes.pd_dataframe_ext.has_parent(
+        df
+    ) and bodo.hiframes.pd_dataframe_ext._column_needs_unboxing(df, i):
+        bodo.hiframes.boxing.unbox_dataframe_column(df, i)
+
+
 @unbox(SeriesType)
 def unbox_series(typ, val, c):
     arr_obj_orig = c.pyapi.object_getattr_string(val, "values")
@@ -1444,11 +1476,11 @@ def _infer_ndarray_obj_dtype(val):
                 "This can cause errors in parallel execution."
             )
         )
-        return string_array_type
+        return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
 
     first_val = val[i]
     if isinstance(first_val, str):
-        return string_array_type
+        return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
     elif isinstance(first_val, bytes):
         return binary_array_type
     elif isinstance(first_val, bool):
@@ -1469,6 +1501,8 @@ def _infer_ndarray_obj_dtype(val):
     elif isinstance(first_val, (dict, Dict)):
         key_arr_type = numba.typeof(_value_to_array(list(first_val.keys())))
         value_arr_type = numba.typeof(_value_to_array(list(first_val.values())))
+        key_arr_type = to_str_arr_if_dict_array(key_arr_type)
+        value_arr_type = to_str_arr_if_dict_array(value_arr_type)
         # TODO: handle 2D ndarray case
         return MapArrayType(key_arr_type, value_arr_type)
     elif isinstance(first_val, tuple):
@@ -1488,6 +1522,7 @@ def _infer_ndarray_obj_dtype(val):
         if isinstance(first_val, list):
             first_val = _value_to_array(first_val)
         val_typ = numba.typeof(first_val)
+        val_typ = to_str_arr_if_dict_array(val_typ)
         return ArrayItemArrayType(val_typ)
     if isinstance(first_val, datetime.date):
         return datetime_date_array_type
@@ -1498,7 +1533,7 @@ def _infer_ndarray_obj_dtype(val):
         return DecimalArrayType(38, 18)
 
     raise BodoError(
-        "Unsupported object array with first value: {}".format(first_val)
+        f"Unsupported object array with first value: {first_val}"
     )  # pragma: no cover
 
 
@@ -1546,13 +1581,3 @@ def _get_struct_value_arr_type(v):
         arr_typ = to_nullable_type(arr_typ)
 
     return arr_typ
-
-
-# TODO: support array of strings
-# @typeof_impl.register(np.ndarray)
-# def typeof_np_string(val, c):
-#     arr_typ = numba.core.typing.typeof._typeof_ndarray(val, c)
-#     # match string dtype
-#     if isinstance(arr_typ.dtype, (types.UnicodeCharSeq, types.CharSeq)):
-#         return string_array_type
-#     return arr_typ

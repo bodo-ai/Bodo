@@ -69,6 +69,7 @@ from bodo.utils.typing import (
     raise_bodo_error,
     to_nullable_type,
     FileInfo,
+    to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import check_java_installation
 
@@ -1584,6 +1585,9 @@ class UntypedPass:
                     pd_low_memory,
                     escapechar,
                 )
+            df_type = df_type.copy(
+                tuple(to_str_arr_if_dict_array(t) for t in df_type.data)
+            )
             dtypes = df_type.data
             if usecols is None:
                 usecols = list(range(len(dtypes)))
@@ -1907,6 +1911,9 @@ class UntypedPass:
                     lines,
                     compression,
                 )
+            df_type = df_type.copy(
+                tuple(to_str_arr_if_dict_array(t) for t in df_type.data)
+            )
             dtypes = df_type.data
             # convert Pandas generated integer names if any
             col_names = [str(df_type.columns[i]) for i in range(len(dtypes))]
@@ -2709,6 +2716,9 @@ def _get_json_df_type_from_file(
             f"error from: {type(df_type_or_e).__name__}: {str(df_type_or_e)}\n"
         )
 
+    df_type_or_e = df_type_or_e.copy(
+        data=tuple(to_str_arr_if_dict_array(t) for t in df_type_or_e.data)
+    )
     return df_type_or_e
 
 
@@ -2749,6 +2759,9 @@ def _get_excel_df_type_from_file(
     if isinstance(df_type_or_e, Exception):
         raise BodoError(df_type_or_e)
 
+    df_type_or_e = df_type_or_e.copy(
+        data=tuple(to_str_arr_if_dict_array(t) for t in df_type_or_e.data)
+    )
     return df_type_or_e
 
 
@@ -3032,6 +3045,9 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql
         unsupported_columns,
         unsupported_arrow_types,
     ) = comm.bcast(df_info)
+    df_type = df_type.copy(
+        data=tuple(to_str_arr_if_dict_array(t) for t in df_type.data)
+    )
     return df_type, converted_colnames, unsupported_columns, unsupported_arrow_types
 
 
@@ -3132,6 +3148,9 @@ def _get_csv_df_type_from_file(
             f"error from: {type(df_type_or_e).__name__}: {str(df_type_or_e)}\n"
         )
 
+    df_type_or_e = df_type_or_e.copy(
+        data=tuple(to_str_arr_if_dict_array(t) for t in df_type_or_e.data)
+    )
     return df_type_or_e
 
 

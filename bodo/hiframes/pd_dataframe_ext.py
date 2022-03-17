@@ -49,6 +49,7 @@ from bodo.hiframes.series_indexing import SeriesIlocType
 from bodo.hiframes.table import (
     Table,
     TableType,
+    decode_if_dict_table,
     get_table_data,
     set_table_data_codegen,
 )
@@ -70,7 +71,7 @@ from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.distributed_api import bcast_scalar
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import str_arr_from_sequence, string_array_type
+from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.cg_helpers import is_ll_eq
@@ -86,6 +87,7 @@ from bodo.utils.typing import (
     BodoWarning,
     check_unsupported_args,
     create_unsupported_overload,
+    decode_if_dict_array,
     dtype_to_array_type,
     get_index_data_arr_types,
     get_literal_value,
@@ -107,9 +109,11 @@ from bodo.utils.typing import (
     is_overload_int,
     is_overload_none,
     is_overload_true,
+    is_str_arr_type,
     is_tuple_like_type,
     raise_bodo_error,
     to_nullable_type,
+    to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import is_null_pointer
 
@@ -1787,8 +1791,18 @@ def cast_df_to_df(context, builder, fromty, toty, val):
     ):
         return _cast_empty_df(context, builder, toty)
 
-    # cases below assume data types are the same (only index and format changes)
-    if fromty.data != toty.data or fromty.has_runtime_cols != toty.has_runtime_cols:
+    # cases below assume data types are the same except DictionaryArray -> StringArrayType (only index and format changes)
+    if (
+        len(fromty.data) != len(toty.data)
+        or (
+            fromty.data != toty.data
+            and any(
+                context.typing_context.unify_pairs(fromty.data[i], toty.data[i]) is None
+                for i in range(len(fromty.data))
+            )
+        )
+        or fromty.has_runtime_cols != toty.has_runtime_cols
+    ):
         raise BodoError(f"Invalid dataframe cast from {fromty} to {toty}")
 
     in_dataframe_payload = get_dataframe_payload(context, builder, fromty, val)
@@ -1804,8 +1818,8 @@ def cast_df_to_df(context, builder, fromty, toty, val):
         new_index = in_dataframe_payload.index
         context.nrt.incref(builder, fromty.index, new_index)
 
-    # data format doesn't change
-    if fromty.is_table_format == toty.is_table_format:
+    # data format and content doesn't change
+    if fromty.is_table_format == toty.is_table_format and fromty.data == toty.data:
         new_data = in_dataframe_payload.data
         if fromty.is_table_format:
             context.nrt.incref(builder, types.Tuple([fromty.table_type]), new_data)
@@ -1813,15 +1827,23 @@ def cast_df_to_df(context, builder, fromty, toty, val):
             context.nrt.incref(
                 builder, types.BaseTuple.from_types(fromty.data), new_data
             )
-    # data format change
+    # data format or content change.
     else:
-        if toty.is_table_format:
+        if not fromty.is_table_format and toty.is_table_format:
             new_data = _cast_df_data_to_table_format(
-                context, builder, fromty, toty, in_dataframe_payload
+                context, builder, fromty, toty, val, in_dataframe_payload
+            )
+        elif fromty.is_table_format and not toty.is_table_format:
+            new_data = _cast_df_data_to_tuple_format(
+                context, builder, fromty, toty, val, in_dataframe_payload
+            )
+        elif fromty.is_table_format and toty.is_table_format:
+            new_data = _cast_df_data_keep_table_format(
+                context, builder, fromty, toty, val, in_dataframe_payload
             )
         else:
-            new_data = _cast_df_data_to_tuple_format(
-                context, builder, fromty, toty, in_dataframe_payload
+            new_data = _cast_df_data_keep_tuple_format(
+                context, builder, fromty, toty, val, in_dataframe_payload
             )
 
     return construct_dataframe(
@@ -1870,7 +1892,9 @@ def _cast_empty_df(context, builder, toty):
     return df
 
 
-def _cast_df_data_to_table_format(context, builder, fromty, toty, in_dataframe_payload):
+def _cast_df_data_to_table_format(
+    context, builder, fromty, toty, df, in_dataframe_payload
+):
     """cast df data from tuple data format to table data format"""
     check_runtime_cols_unsupported(
         toty, "casting traditional DataFrame to table format"
@@ -1892,12 +1916,28 @@ def _cast_df_data_to_table_format(context, builder, fromty, toty, in_dataframe_p
 
     # copy array values from input
     for i, t in enumerate(fromty.data):
+        out_type = toty.data[i]
+        if t != out_type:
+            # If the actual type changes we need an explicit cast, so as a result
+            # we must ensure the column is unboxed.
+            sig_args = (fromty, types.literal(i))
+            impl = lambda df, i: bodo.hiframes.boxing.unbox_col_if_needed(df, i)
+            sig = types.none(*sig_args)
+            args = (df, context.get_constant(types.int64, i))
+            context.compile_internal(builder, impl, sig, args)
         arr = builder.extract_value(in_dataframe_payload.data, i)
+        # Perform the cast
+        if t != out_type:
+            new_arr = context.cast(builder, arr, t, out_type)
+            should_incref = False
+        else:
+            new_arr = arr
+            should_incref = True
         blk = table_type.type_to_blk[t]
         arr_list = getattr(table, f"block_{blk}")
         arr_list_inst = ListInstance(context, builder, types.List(t), arr_list)
         offset = context.get_constant(types.int64, table_type.block_offsets[i])
-        arr_list_inst.setitem(offset, arr, True)
+        arr_list_inst.setitem(offset, new_arr, should_incref)
 
     data_tup = context.make_tuple(
         builder, types.Tuple([table_type]), [table._getvalue()]
@@ -1905,7 +1945,119 @@ def _cast_df_data_to_table_format(context, builder, fromty, toty, in_dataframe_p
     return data_tup
 
 
-def _cast_df_data_to_tuple_format(context, builder, fromty, toty, in_dataframe_payload):
+def _cast_df_data_keep_tuple_format(
+    context, builder, fromty, toty, df, in_dataframe_payload
+):
+    """cast df data from tuple data format to  tuple format.
+    This path is only used when there are types to need to be handled
+    through casting.
+    """
+    check_runtime_cols_unsupported(toty, "casting traditional DataFrame columns")
+
+    data_arrs = []
+    for i in range(len(fromty.data)):
+        if fromty.data[i] != toty.data[i]:
+            # If the types aren't equal we need to cast. This cast requires
+            # the array contents so we must unbox the column.
+            sig_args = (fromty, types.literal(i))
+            impl = lambda df, i: bodo.hiframes.boxing.unbox_col_if_needed(df, i)
+            sig = types.none(*sig_args)
+            args = (df, context.get_constant(types.int64, i))
+            context.compile_internal(builder, impl, sig, args)
+            arr = builder.extract_value(in_dataframe_payload.data, i)
+            new_arr = context.cast(builder, arr, fromty.data[i], toty.data[i])
+            should_incref = False
+        else:
+            # Otherwise we incref and just copy the data
+            new_arr = builder.extract_value(in_dataframe_payload.data, i)
+            should_incref = True
+        if should_incref:
+            context.nrt.incref(builder, toty.data[i], new_arr)
+        data_arrs.append(new_arr)
+
+    data_tup = context.make_tuple(builder, types.Tuple(toty.data), data_arrs)
+    return data_tup
+
+
+def _cast_df_data_keep_table_format(
+    context, builder, fromty, toty, df, in_dataframe_payload
+):
+    """cast df data from table format to table format.
+    This path is only used when there are types to need to be handled
+    through casting.
+    """
+    check_runtime_cols_unsupported(toty, "casting table format DataFrame columns")
+
+    in_table_type = fromty.table_type
+    in_table = cgutils.create_struct_proxy(in_table_type)(
+        context, builder, builder.extract_value(in_dataframe_payload.data, 0)
+    )
+    out_table_type = toty.table_type
+    out_table = cgutils.create_struct_proxy(out_table_type)(context, builder)
+    out_table.parent = in_dataframe_payload.parent
+
+    # create blocks in output
+    for t, blk in out_table_type.type_to_blk.items():
+        n_arrs = context.get_constant(
+            types.int64, len(out_table_type.block_to_arr_ind[blk])
+        )
+        _, out_arr_list = ListInstance.allocate_ex(
+            context, builder, types.List(t), n_arrs
+        )
+        out_arr_list.size = n_arrs
+        setattr(out_table, f"block_{blk}", out_arr_list.value)
+
+    # copy array values from input
+    # TODO: Reduce codegen for table format if all values in a list maps to
+    # the same output type.
+    # type mapping.
+    for i in range(len(fromty.data)):
+        in_type = fromty.data[i]
+        out_type = toty.data[i]
+        if in_type != out_type:
+            # If the actual type changes we need an explicit cast, so as a result
+            # we must ensure the column is unboxed.
+            # TODO: Handle dead columns.
+            sig_args = (fromty, types.literal(i))
+            impl = lambda df, i: bodo.hiframes.boxing.unbox_col_if_needed(df, i)
+            sig = types.none(*sig_args)
+            args = (df, context.get_constant(types.int64, i))
+            context.compile_internal(builder, impl, sig, args)
+        # Get the input data
+        in_blk = in_table_type.type_to_blk[in_type]
+        in_arr_list = getattr(in_table, f"block_{in_blk}")
+        in_arr_list_inst = ListInstance(
+            context, builder, types.List(in_type), in_arr_list
+        )
+        in_offset = context.get_constant(types.int64, in_table_type.block_offsets[i])
+        arr = in_arr_list_inst.getitem(in_offset)
+        # Perform the cast
+        if in_type != out_type:
+            # TODO: Handle dead columns?
+            new_arr = context.cast(builder, arr, in_type, out_type)
+            should_incref = False
+        else:
+            new_arr = arr
+            should_incref = True
+
+        # Store in the output.
+        out_blk = out_table_type.type_to_blk[t]
+        out_arr_list = getattr(out_table, f"block_{out_blk}")
+        out_arr_list_inst = ListInstance(
+            context, builder, types.List(out_type), out_arr_list
+        )
+        out_offset = context.get_constant(types.int64, out_table_type.block_offsets[i])
+        out_arr_list_inst.setitem(out_offset, new_arr, should_incref)
+
+    data_tup = context.make_tuple(
+        builder, types.Tuple([out_table_type]), [out_table._getvalue()]
+    )
+    return data_tup
+
+
+def _cast_df_data_to_tuple_format(
+    context, builder, fromty, toty, df, in_dataframe_payload
+):
     """cast df data from table data format to tuple data format"""
     check_runtime_cols_unsupported(
         fromty, "casting table format to traditional DataFrame"
@@ -1919,13 +2071,30 @@ def _cast_df_data_to_tuple_format(context, builder, fromty, toty, in_dataframe_p
     # copy array values from input
     data_arrs = []
     for i, t in enumerate(toty.data):
+        in_type = fromty.data[i]
+        if t != in_type:
+            # If the actual type changes we need an explicit cast, so as a result
+            # we must ensure the column is unboxed.
+            sig_args = (fromty, types.literal(i))
+            impl = lambda df, i: bodo.hiframes.boxing.unbox_col_if_needed(df, i)
+            sig = types.none(*sig_args)
+            args = (df, context.get_constant(types.int64, i))
+            context.compile_internal(builder, impl, sig, args)
+
         blk = table_type.type_to_blk[t]
         arr_list = getattr(table, f"block_{blk}")
         arr_list_inst = ListInstance(context, builder, types.List(t), arr_list)
         offset = context.get_constant(types.int64, table_type.block_offsets[i])
         arr = arr_list_inst.getitem(offset)
-        context.nrt.incref(builder, t, arr)
-        data_arrs.append(arr)
+        if t != in_type:
+            new_arr = context.cast(builder, arr, in_type, t)
+            should_incref = False
+        else:
+            new_arr = arr
+            should_incref = True
+        if should_incref:
+            context.nrt.incref(builder, t, new_arr)
+        data_arrs.append(new_arr)
 
     data_tup = context.make_tuple(builder, types.Tuple(toty.data), data_arrs)
     return data_tup
@@ -1955,6 +2124,75 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
     _init_df = loc_vars["_init_df"]
     return _init_df
+
+
+@intrinsic
+def _tuple_to_table_format_decoded(typingctx, df_typ):
+    """
+    Internal testing function used to convert a
+    tuple format to table format and changing dict
+    arrays to string arrays. This leads to
+    a cast and is used to test casting between formats.
+    """
+    assert (
+        not df_typ.is_table_format
+    ), "_tuple_to_table_format requires a tuple format input"
+
+    def codegen(context, builder, signature, args):
+        # Force a cast.
+        # TODO: Test for incref condition?
+        return context.cast(
+            builder,
+            args[0],
+            signature.args[0],
+            signature.return_type,
+        )
+
+    ret_typ = DataFrameType(
+        to_str_arr_if_dict_array(df_typ.data),
+        df_typ.index,
+        df_typ.columns,
+        dist=df_typ.dist,
+        is_table_format=True,
+    )
+
+    sig = signature(ret_typ, df_typ)
+    return sig, codegen
+
+
+@intrinsic
+def _table_to_tuple_format_decoded(typingctx, df_typ):
+    """
+    Internal testing function used to convert a
+    table format to tuple format and changing dict
+    arrays to string arrays. This leads to
+    a cast and is used to test casting between formats.
+    """
+
+    assert (
+        df_typ.is_table_format
+    ), "_tuple_to_table_format requires a table format input"
+
+    def codegen(context, builder, signature, args):
+        # Force a cast
+        # TODO: Test for incref condition?
+        return context.cast(
+            builder,
+            args[0],
+            signature.args[0],
+            signature.return_type,
+        )
+
+    ret_typ = DataFrameType(
+        to_str_arr_if_dict_array(df_typ.data),
+        df_typ.index,
+        df_typ.columns,
+        dist=df_typ.dist,
+        is_table_format=False,
+    )
+
+    sig = signature(ret_typ, df_typ)
+    return sig, codegen
 
 
 def _get_df_args(data, index, columns, dtype, copy):
@@ -2260,19 +2498,49 @@ class JoinTyper(AbstractTemplate):
         is_right = how in {"right", "outer"}
         columns = []
         data = []
-        # In the case of merging on one index and a column we have to add another
-        # column to the output. This is in the case of a column showing up also
-        # on the other side.
+        if left_index:
+            left_key_type = bodo.utils.typing.get_index_data_arr_types(left_df.index)[0]
+        else:
+            # TODO: Fix for large # columns
+            left_key_type = left_df.data[left_df.columns.index(left_on[0])]
+        if right_index:
+            right_key_type = bodo.utils.typing.get_index_data_arr_types(right_df.index)[
+                0
+            ]
+        else:
+            # TODO: Fix for large # columns
+            right_key_type = right_df.data[right_df.columns.index(right_on[0])]
+
         if left_index and not right_index and not is_join.literal_value:
             right_key = right_on[0]
             if right_key in left_df.columns:
                 columns.append(right_key)
-                data.append(right_df.data[right_df.columns.index(right_key)])
+                if (
+                    right_key_type == bodo.dict_str_arr_type
+                    and left_key_type == bodo.string_array_type
+                ):
+                    # If we have a merge between a dict_array and a regular string
+                    # array, the output needs to be a string array. This is because
+                    # we will fall back to a string array for the join.
+                    out_col = bodo.string_array_type
+                else:
+                    out_col = right_key_type
+                data.append(out_col)
         if right_index and not left_index and not is_join.literal_value:
             left_key = left_on[0]
             if left_key in right_df.columns:
                 columns.append(left_key)
-                data.append(left_df.data[left_df.columns.index(left_key)])
+                if (
+                    left_key_type == bodo.dict_str_arr_type
+                    and right_key_type == bodo.string_array_type
+                ):
+                    # If we have a merge between a dict_array and a regular string
+                    # array, the output needs to be a string array. This is because
+                    # we will fall back to a string array for the join.
+                    out_col = bodo.string_array_type
+                else:
+                    out_col = left_key_type
+                data.append(out_col)
 
         # The left side. All of it got included.
         for in_type, col in zip(left_df.data, left_df.columns):
@@ -2281,20 +2549,49 @@ class JoinTyper(AbstractTemplate):
             )
             if col in comm_keys:
                 # For a common key we take either from left or right, so no additional NaN occurs.
+                if in_type == bodo.dict_str_arr_type:
+                    # If we have a dict array we need to check that the other table doesn't have a string
+                    # array, otherwise we must use a regular string array.
+                    # TODO: Fix for large # columns
+                    in_type = right_df.data[right_df.columns.index(col)]
                 data.append(in_type)
             else:
-                # For a key that is not common OR data column, we have to plan for a NaN column
-                data.append(to_nullable_type(in_type) if is_right else in_type)
+                if in_type == bodo.dict_str_arr_type and col in left_on:
+                    # If we have a dict array we need to check that the other table doesn't have a string
+                    # array, otherwise we must use a regular string array.
+                    # TODO: Fix for large # columns
+                    if right_index:
+                        in_type = right_key_type
+                    else:
+                        key_num = left_on.index(col)
+                        right_key_name = right_on[key_num]
+                        in_type = right_df.data[right_df.columns.index(right_key_name)]
+                if is_right:
+                    # For a key that is not common OR data column, we have to plan for a NaN column
+                    in_type = to_nullable_type(in_type)
+                data.append(in_type)
         # The right side
         # common keys are added only once so avoid adding them
         for in_type, col in zip(right_df.data, right_df.columns):
             if col not in comm_keys:
-                # a key column that is not common needs to plan for NaN.
-                # Same for a data column of course.
                 columns.append(
                     str(col) + suffix_y.literal_value if col in add_suffix else col
                 )
-                data.append(to_nullable_type(in_type) if is_left else in_type)
+                if in_type == bodo.dict_str_arr_type and col in right_on:
+                    # If we have a dict array we need to check that the other table doesn't have a string
+                    # array, otherwise we must use a regular string array.
+                    # TODO: Fix for large # columns
+                    if left_index:
+                        in_type = left_key_type
+                    else:
+                        key_num = right_on.index(col)
+                        left_key_name = left_on[key_num]
+                        in_type = left_df.data[left_df.columns.index(left_key_name)]
+                if is_left:
+                    # a key column that is not common needs to plan for NaN.
+                    # Same for a data column of course.
+                    in_type = to_nullable_type(in_type)
+                data.append(in_type)
 
         # If indicator=True, add a column called "_merge", which is categorical
         # with Categories: ['left_only', 'right_only', 'both']
@@ -2430,7 +2727,8 @@ def concat_overload(
             func_text, names, ", ".join(data_args), index
         )
 
-    assert axis == 0
+    if axis != 0:
+        raise_bodo_error("pd.concat(): axis must be 0 or 1")
 
     # dataframe tuples case
     if isinstance(objs, types.BaseTuple) and isinstance(objs.types[0], DataFrameType):
@@ -2605,8 +2903,9 @@ class SortDummyTyper(AbstractTemplate):
         index = df.index
         if isinstance(index, bodo.hiframes.pd_index_ext.RangeIndexType):
             index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
+        data = tuple(to_str_arr_if_dict_array(t) for t in df.data)
         # TODO(ehsan): support table format
-        ret_typ = df.copy(index=index, is_table_format=False)
+        ret_typ = df.copy(index=index, data=data, is_table_format=False)
         return signature(ret_typ, *args)
 
 
@@ -2835,7 +3134,7 @@ def pivot_impl(
     # If we have a string array then we need to do 2 passes
     has_str_array = False
     for i, data_arr_typ in enumerate(data_arr_typs):
-        if data_arr_typ == bodo.string_array_type:
+        if is_str_arr_type(data_arr_typ):
             has_str_array = True
             # Allocate arrays for the lengths
             func_text += f"    len_arrs_{i} = [np.zeros(n_rows, np.int64) for _ in range(n_cols)]\n"
@@ -2874,14 +3173,14 @@ def pivot_impl(
         else:
             # If we need to generate multiple lists, generate code per list
             for i, data_arr_typ in enumerate(data_arr_typs):
-                if data_arr_typ == bodo.string_array_type:
+                if is_str_arr_type(data_arr_typ):
                     func_text += f"        if not bodo.libs.array_kernels.isna(values_tup[{i}], i):\n"
                     func_text += f"            len_arrs_{i}[pivot_idx][row_idx] = len(values_tup[{i}][i])\n"
                     func_text += f"            total_lens_{i}[pivot_idx] += len(values_tup[{i}][i])\n"
 
     # Allocate the data arrays. If we have string data we use the info from the first pass
     for i, data_arr_typ in enumerate(data_arr_typs):
-        if data_arr_typ == bodo.string_array_type:
+        if is_str_arr_type(data_arr_typ):
             func_text += f"    data_arrs_{i} = [\n"
             func_text += "        bodo.libs.str_arr_ext.gen_na_str_array_lens(\n"
             func_text += f"            n_rows, total_lens_{i}[i], len_arrs_{i}[i]\n"
@@ -2945,7 +3244,7 @@ def pivot_impl(
     if use_multi_index:
         # If we have a multi-index we have to update value_names and pivot_values for each entry.
         func_text += "    num_rows = len(value_names) * len(pivot_values)\n"
-        if value_names == bodo.string_array_type:
+        if is_str_arr_type(value_names):
             func_text += "    total_chars = 0\n"
             func_text += "    for i in range(len(value_names)):\n"
             func_text += "        total_chars += len(value_names[i])\n"
@@ -2953,7 +3252,7 @@ def pivot_impl(
         else:
             func_text += "    new_value_names = bodo.utils.utils.alloc_type(num_rows, value_names, (-1,))\n"
 
-        if pivot_values == bodo.string_array_type:
+        if is_str_arr_type(pivot_values):
             func_text += "    total_chars = 0\n"
             func_text += "    for i in range(len(pivot_values)):\n"
             func_text += "        total_chars += len(pivot_values[i])\n"
@@ -3027,7 +3326,7 @@ def gen_pandas_parquet_metadata(
             pandas_type = numpy_type = col_type.dtype.name
             if numpy_type.startswith("datetime"):
                 pandas_type = "datetime"
-        elif col_type == string_array_type:
+        elif is_str_arr_type(col_type):
             pandas_type = "unicode"
             numpy_type = "object"
         elif col_type == binary_array_type:
@@ -3281,7 +3580,7 @@ def to_parquet_overload(
     # convert dataframe columns to array_info
     if not df.is_table_format:
         data_args = ", ".join(
-            "array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}))".format(
+            "array_to_info(decode_if_dict_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})))".format(
                 i
             )
             for i in range(len(df.columns))
@@ -3291,6 +3590,14 @@ def to_parquet_overload(
     # put arrays in table_info
     if df.is_table_format:
         func_text += "    py_table = get_dataframe_table(df)\n"
+        contains_dict_str_array = np.any(
+            [
+                x == bodo.libs.dict_arr_ext.dict_str_arr_type
+                for x in df.table_type.type_to_blk.keys()
+            ]
+        )
+        if contains_dict_str_array:
+            func_text += "    py_table = decode_if_dict_table(py_table)\n"
         func_text += "    table = py_table_to_cpp_table(py_table, py_table_typ)\n"
     else:
         func_text += "    info_list = [{}]\n".format(data_args)
@@ -3434,11 +3741,13 @@ def to_parquet_overload(
             "delete_table_decref_arrays": delete_table_decref_arrays,
             "col_names_arr": col_names_arr,
             "py_table_to_cpp_table": py_table_to_cpp_table,
-            "py_table_typ": df.table_type,
+            "py_table_typ": to_str_arr_if_dict_array(df.table_type),
             "get_dataframe_table": get_dataframe_table,
             "col_names_no_parts_arr": col_names_no_parts_arr,
             "get_dataframe_column_names": get_dataframe_column_names,
             "fix_arr_dtype": fix_arr_dtype,
+            "decode_if_dict_array": decode_if_dict_array,
+            "decode_if_dict_table": decode_if_dict_table,
         },
         loc_vars,
     )

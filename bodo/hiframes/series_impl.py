@@ -48,7 +48,7 @@ from bodo.libs.binary_arr_ext import (
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import StringArrayType, string_array_type
+from bodo.libs.str_arr_ext import StringArrayType
 from bodo.libs.str_ext import string_type
 from bodo.utils.transform import gen_const_tup, is_var_size_item_array_type
 from bodo.utils.typing import (
@@ -78,8 +78,10 @@ from bodo.utils.typing import (
     is_overload_true,
     is_overload_zero,
     is_scalar_type,
+    is_str_arr_type,
     raise_bodo_error,
     to_nullable_type,
+    to_str_arr_if_dict_array,
 )
 
 
@@ -2975,6 +2977,11 @@ def overload_series_fillna(
 
     if is_overload_true(inplace):
         if S.dtype == bodo.string_type:
+            if S.data == bodo.dict_str_arr_type:
+                raise_bodo_error(
+                    "Series.fillna(): 'inplace' not supported for dictionary-encoded string arrays yet."
+                )
+
             # optimization: just set null bit if fill is empty
             if is_overload_constant_str(value) and get_overload_const_str(value) == "":
                 return lambda S, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None: bodo.libs.str_arr_ext.set_null_bits_to_value(
@@ -3010,7 +3017,7 @@ def overload_series_fillna(
             return fillna_inplace_impl
     else:  # not inplace
         # value is a Series
-        _dtype = S.data
+        _dtype = to_str_arr_if_dict_array(S.data)
         if isinstance(value, SeriesType):
 
             def fillna_series_impl(
@@ -3292,7 +3299,7 @@ def overload_series_replace(
 
         return impl
 
-    ret_dtype = S.data
+    ret_dtype = to_str_arr_if_dict_array(S.data)
     if isinstance(ret_dtype, CategoricalArrayType):
 
         def cat_impl(
@@ -3643,7 +3650,6 @@ def overload_series_dropna(S, axis=0, inplace=False, how=None):
 
 @overload_method(SeriesType, "shift", inline="always", no_unliteral=True)
 def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
-    # TODO: handle strings
 
     unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
     arg_defaults = dict(freq=None, axis=0, fill_value=None)
@@ -3877,7 +3883,7 @@ def _validate_self_other_mask_where(
         # support S.where(A) where A is a binary/string array.
         # If S is Categorical, allow it if the element type matches
         or (
-            isinstance(other, StringArrayType)
+            is_str_arr_type(other)
             and (
                 arr.dtype == bodo.string_type
                 or isinstance(arr, bodo.CategoricalArrayType)
@@ -3896,7 +3902,10 @@ def _validate_self_other_mask_where(
             (
                 # need this check here, in the case that someone passes in series.mask(_, bad_str/bin_arr_val),
                 # as str/bin_arr.data.dtype gives a pretty unintelligble error from the user perspective
-                not isinstance(other, (StringArrayType, BinaryArrayType))
+                not (
+                    isinstance(other, (StringArrayType, BinaryArrayType))
+                    or other == bodo.dict_str_arr_type
+                )
                 and (
                     isinstance(arr.dtype, types.Integer)
                     # Handle case that other is Series with underlying data = Nullable Int array
@@ -4574,8 +4583,8 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
 
     # string array case
     # TODO: support tuple, list, scalar
-    if arg_a != string_array_type:
-        raise BodoError("pd.to_numeric(): invalid argument type {}".format(arg_a))
+    if not is_str_arr_type(arg_a):
+        raise BodoError(f"pd.to_numeric(): invalid argument type {arg_a}")
 
     if out_dtype == types.float64:
 

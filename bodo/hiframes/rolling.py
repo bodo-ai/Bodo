@@ -14,6 +14,7 @@ import bodo
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.utils.typing import (
     BodoError,
+    decode_if_dict_array,
     get_overload_const_func,
     get_overload_const_str,
     is_const_func_type,
@@ -1239,7 +1240,7 @@ def add_var(val, nobs, mean_x, ssqdm_x):  # pragma: no cover
         nobs += 1
         delta = val - mean_x
         mean_x += delta / nobs
-        ssqdm_x += ((nobs - 1) * delta ** 2) / nobs
+        ssqdm_x += ((nobs - 1) * delta**2) / nobs
     return nobs, mean_x, ssqdm_x
 
 
@@ -1250,7 +1251,7 @@ def remove_var(val, nobs, mean_x, ssqdm_x):  # pragma: no cover
         if nobs != 0:
             delta = val - mean_x
             mean_x -= delta / nobs
-            ssqdm_x -= ((nobs + 1) * delta ** 2) / nobs
+            ssqdm_x -= ((nobs + 1) * delta**2) / nobs
         else:
             mean_x = 0.0
             ssqdm_x = 0.0
@@ -1348,6 +1349,9 @@ def shift_overload(in_arr, shift, parallel):
 
 def shift_impl(in_arr, shift, parallel):  # pragma: no cover
     N = len(in_arr)
+    # fallback to regular string array if dictionary-encoded array
+    # TODO(ehsan): support dictionary-encoded arrays directly
+    in_arr = decode_if_dict_array(in_arr)
     output = alloc_shift(N, in_arr, (-1,))
     send_right = shift > 0
     send_left = shift <= 0
@@ -1494,6 +1498,7 @@ def is_supported_shift_array_type(arr_type):
             bodo.datetime_date_array_type,
             bodo.string_array_type,
             bodo.binary_array_type,
+            bodo.dict_str_arr_type,
         )
     )
 

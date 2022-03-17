@@ -312,6 +312,35 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         }
         out_offsets[nRowOut] = pos;
     }
+    if (arr_type == bodo_array_type::DICT) {
+        // TODO refactor: this is mostly the same as NULLABLE_INT_BOOL
+
+        array_info* in_indices = in_arr->info2;
+        char* in_data1 = in_indices->data1;
+        array_info* out_indices = alloc_array(
+            nRowOut, -1, -1, in_indices->arr_type, in_indices->dtype, 0, 0);
+        char* out_data1 = out_indices->data1;
+        uint64_t siztype = numpy_item_size[in_indices->dtype];
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            int64_t idx = f(iRow);
+            // To allow NaN values in the column.
+            bool bit = false;
+            if (idx >= 0) {
+                char* out_ptr = out_data1 + siztype * iRow;
+                char* in_ptr = in_data1 + siztype * idx;
+                memcpy(out_ptr, in_ptr, siztype);
+                bit = in_indices->get_null_bit(idx);
+            }
+            out_indices->set_null_bit(iRow, bit);
+        }
+        out_arr = new array_info(
+            bodo_array_type::DICT, in_arr->dtype, out_indices->length, -1, -1,
+            NULL, NULL, NULL, out_indices->null_bitmask,
+            NULL, NULL, NULL, NULL, 0, 0, 0, in_arr->has_global_dictionary,
+            in_arr->info1, out_indices);
+        // input and output share the same dictionary array
+        incref_array(in_arr->info1);
+    }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // In the case of NULLABLE array, we do a single loop for
         // assigning the arrays.
@@ -465,6 +494,14 @@ array_info* RetrieveArray_TwoColumns(
     array_info* const& arr1, array_info* const& arr2,
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
     int const& ChoiceColumn, bool const& map_integer_type) {
+    if ((arr1 != nullptr) && (arr2 != nullptr) &&
+        (arr1->arr_type == bodo_array_type::DICT) &&
+        (arr2->arr_type == bodo_array_type::DICT) &&
+        (arr1->info1 != arr2->info1)) {
+        throw std::runtime_error(
+            "RetrieveArray_TwoColumns: don't know if arrays have unified "
+            "dictionary");
+    }
     size_t nRowOut = ListPairWrite.size();
     array_info* out_arr = NULL;
     /* The function for computing the returning values
@@ -604,6 +641,34 @@ array_info* RetrieveArray_TwoColumns(
             out_arr->set_null_bit(iRow, bit);
         }
         out_offsets[nRowOut] = pos;
+    }
+    if (arr_type == bodo_array_type::DICT) {
+        // TODO refactor? this is mostly the same logic as NULLABLE_INT_BOOL
+        //if (is_parallel && !ref_column->has_global_dictionary)
+        //    throw std::runtime_error("RetrieveArray_TwoColumns: reference column doesn't have a global dictionary");
+        array_info* out_indices =
+            alloc_array(nRowOut, -1, -1, ref_column->info2->arr_type,
+                        ref_column->info2->dtype, 0, 0);
+        uint64_t siztype = numpy_item_size[ref_column->info2->dtype];
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
+            bool bit = false;
+            if (ArrRow.second >= 0) {
+                array_info* e_col = ArrRow.first;
+                char* out_ptr = out_indices->data1 + siztype * iRow;
+                char* in_ptr = e_col->info2->data1 + siztype * ArrRow.second;
+                memcpy(out_ptr, in_ptr, siztype);
+                bit = e_col->info2->get_null_bit(ArrRow.second);
+            }
+            out_indices->set_null_bit(iRow, bit);
+        }
+        out_arr = new array_info(bodo_array_type::DICT, ref_column->dtype,
+                                 out_indices->length, -1, -1, NULL, NULL, NULL,
+                                 out_indices->null_bitmask,
+                                 NULL, NULL, NULL, NULL, 0, 0, 0,
+                                 ref_column->has_global_dictionary,
+                                 ref_column->info1, out_indices);
+        incref_array(ref_column->info1);
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         // In the case of NULLABLE array, we do a single loop for
@@ -942,7 +1007,17 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
             }
         }
     }
-    if (arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+    if (arr1->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+        arr1->arr_type == bodo_array_type::DICT) {
+        if (arr1->arr_type == bodo_array_type::DICT) {
+            if (arr1->info1 != arr2->info1) {
+                throw std::runtime_error(
+                    "TestEqualColumn: don't know if arrays have unified "
+                    "dictionary");
+            }
+            arr1 = arr1->info2;
+            arr2 = arr2->info2;
+        }
         // NULLABLE case. We need to consider the bitmask and the values.
         bool bit1 = arr1->get_null_bit(pos1);
         bool bit2 = arr2->get_null_bit(pos2);

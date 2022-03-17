@@ -109,6 +109,8 @@ from bodo.utils.typing import (
     is_literal_type,
     is_overload_constant_str,
     is_overload_constant_tuple,
+    is_str_arr_type,
+    to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import (
     find_build_tuple,
@@ -1137,9 +1139,7 @@ class SeriesPass:
 
         # Start of Array Operations
 
-        if rhs.fn == operator.add and (
-            typ1 == string_array_type or typ2 == string_array_type
-        ):
+        if rhs.fn == operator.add and (is_str_arr_type(typ1) or is_str_arr_type(typ2)):
             impl = bodo.libs.str_arr_ext.overload_add_operator_string_array(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
@@ -1169,9 +1169,10 @@ class SeriesPass:
         # inline string array comparison ops
         if (
             rhs.fn in _string_array_comp_ops
-            and (typ1 == string_array_type or typ2 == string_array_type)
+            and (is_str_arr_type(typ1) or is_str_arr_type(typ2))
             and all(
-                types.unliteral(t) in (string_array_type, string_type)
+                types.unliteral(t)
+                in (string_array_type, bodo.dict_str_arr_type, string_type)
                 for t in (typ1, typ2)
             )
         ):
@@ -1934,7 +1935,9 @@ class SeriesPass:
 
             # dummy output data arrays for results
             out_data = ir.Var(lhs.scope, mk_unique_var(data.name + "_data"), lhs.loc)
-            self.typemap[out_data.name] = self.typemap[data.name]
+            self.typemap[out_data.name] = to_str_arr_if_dict_array(
+                self.typemap[data.name]
+            )
 
             in_df = {"inds": index_var}
             out_df = {"inds": lhs}
@@ -2004,9 +2007,10 @@ class SeriesPass:
                 eval("lambda A, B: (A, B)"), (out_data, out_index), lhs, self
             )
 
+        # inline StringArray.astype()
         if (
             isinstance(func_mod, ir.Var)
-            and self.typemap[func_mod.name] == string_array_type
+            and is_str_arr_type(self.typemap[func_mod.name])
             and func_name == "astype"
         ):
             rhs.args.insert(0, func_mod)
@@ -2083,6 +2087,14 @@ class SeriesPass:
                 and len(var_def.args) > 1
             ):
                 assign.value = var_def.args[1]
+            return [assign]
+
+        # optimize out decode_if_dict_array() if not needed
+        if (
+            fdef == ("decode_if_dict_array", "bodo.utils.typing")
+            and self.typemap[rhs.args[0].name] == self.typemap[assign.target.name]
+        ):
+            assign.value = rhs.args[0]
             return [assign]
 
         # pd.DataFrame() calls init_series for even Series since it's untyped
@@ -3781,20 +3793,23 @@ class SeriesPass:
 
 def _fix_typ_undefs(new_typ, old_typ):
     if isinstance(old_typ, (types.Array, SeriesType)):
-        assert isinstance(
-            new_typ,
-            (
-                types.Array,
-                IntegerArrayType,
-                SeriesType,
-                StringArrayType,
-                ArrayItemArrayType,
-                StructArrayType,
-                TupleArrayType,
-                bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
-                types.List,
-                StringArraySplitViewType,
-            ),
+        assert (
+            isinstance(
+                new_typ,
+                (
+                    types.Array,
+                    IntegerArrayType,
+                    SeriesType,
+                    StringArrayType,
+                    ArrayItemArrayType,
+                    StructArrayType,
+                    TupleArrayType,
+                    bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
+                    types.List,
+                    StringArraySplitViewType,
+                ),
+            )
+            or new_typ == bodo.dict_str_arr_type
         )
         if new_typ.dtype == types.undefined:
             return new_typ.copy(old_typ.dtype)

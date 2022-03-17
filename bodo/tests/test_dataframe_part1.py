@@ -1059,7 +1059,7 @@ def test_df_dtypes(df_value):
         if py_output.iloc[i] == object:
             if df_type.data[i] == bodo.boolean_array:
                 py_output.iloc[i] = pd.BooleanDtype()
-            if df_type.data[i] == bodo.string_array_type:
+            if df_type.data[i] in (bodo.string_array_type, bodo.dict_str_arr_type):
                 py_output.iloc[i] = pd.StringDtype()
         # Bodo reads all bool arrays as nullable
         if py_output.iloc[i] == np.bool_:

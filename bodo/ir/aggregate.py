@@ -32,7 +32,7 @@ from numba.core.ir_utils import (
 )
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
-from numba.extending import intrinsic, lower_builtin, overload
+from numba.extending import intrinsic, lower_builtin
 from numba.parfors.parfor import (
     Parfor,
     unwrap_parfor_blocks,
@@ -73,6 +73,7 @@ from bodo.transforms.distributed_analysis import Distribution
 from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
+    decode_if_dict_array,
     get_literal_value,
     get_overload_const_func,
     get_overload_const_str,
@@ -80,6 +81,7 @@ from bodo.utils.typing import (
     is_overload_constant_dict,
     is_overload_constant_str,
     list_cumulative,
+    to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import (
     debug_prints,
@@ -187,7 +189,7 @@ def add_agg_cfunc_sym(typingctx, func, sym):
 
 @numba.jit
 def get_agg_udf_addr(name):
-    """ Resolve address of cfunc given by its symbol name """
+    """Resolve address of cfunc given by its symbol name"""
     with numba.objmode(addr="int64"):
         addr = gb_agg_cfunc_addr[name]
     return addr
@@ -217,12 +219,12 @@ class AggUDFStruct(object):
             self.general_udfs = True
 
     def set_regular_cfuncs(self, update_cb, combine_cb, eval_cb):
-        """ Set the cfuncs that are called from C++ that apply regular UDFs """
+        """Set the cfuncs that are called from C++ that apply regular UDFs"""
         assert self.regular_udfs and self.regular_udf_cfuncs is None
         self.regular_udf_cfuncs = [update_cb, combine_cb, eval_cb]
 
     def set_general_cfunc(self, general_udf_cb):
-        """ Set the cfunc that is called from C++ that applies general UDFs """
+        """Set the cfunc that is called from C++ that applies general UDFs"""
         assert self.general_udfs and self.general_udf_cfunc is None
         self.general_udf_cfunc = general_udf_cb
 
@@ -665,7 +667,7 @@ class Aggregate(ir.Stmt):
         )
 
     def remove_out_col(self, out_col_name):
-        """ Remove output column and associated input column if no longer needed """
+        """Remove output column and associated input column if no longer needed"""
 
         self.df_out_vars.pop(out_col_name)
 
@@ -1064,6 +1066,8 @@ def agg_distributed_run(
         key_typs + tuple(typemap[v.name] for v in in_col_vars) + (pivot_typ,)
     )
 
+    in_col_typs = [to_str_arr_if_dict_array(t) for t in in_col_typs]
+
     glbs = {
         "bodo": bodo,
         "np": np,
@@ -1119,6 +1123,7 @@ def agg_distributed_run(
             "add_agg_cfunc_sym": add_agg_cfunc_sym,
             "get_agg_udf_addr": get_agg_udf_addr,
             "delete_table_decref_arrays": delete_table_decref_arrays,
+            "decode_if_dict_array": decode_if_dict_array,
         }
     )
     if udf_func_struct is not None:
@@ -1221,30 +1226,6 @@ class BoolNoneTyper(AbstractTemplate):
 def lower_column_mean_impl(context, builder, sig, args):
     res = context.compile_internal(builder, lambda a: False, sig, args)
     return res  # impl_ret_untracked(context, builder, sig.return_type, res)
-
-
-def setitem_array_with_str(arr, i, v):  # pragma: no cover
-    return
-
-
-@overload(setitem_array_with_str)
-def setitem_array_with_str_overload(arr, i, val):
-    if arr == string_array_type:
-
-        def setitem_str_arr(arr, i, val):  # pragma: no cover
-            arr[i] = val
-
-        return setitem_str_arr
-
-    # return_key == False case where val could be string resulting in typing
-    # issue, no need to set
-    if val == string_type:
-        return lambda arr, i, val: None
-
-    def setitem_impl(arr, i, val):  # pragma: no cover
-        arr[i] = val
-
-    return setitem_impl
 
 
 # TODO: Use `bodo.utils.utils.alloc_type` instead if possible
@@ -1729,12 +1710,16 @@ def gen_top_level_agg_func(
         in_args,
         ", index_arg" if agg_node.input_has_index else "",
     )
+    for a in key_arg_names + tuple(in_arg_names.values()):
+        func_text += f"    {a} = decode_if_dict_array({a})\n"
 
     # convert arrays to table
     # For each unique function applied to a given input column (i.e. each
     # (in_col, func) pair) we add the column to the table_info passed to C++
     # (in other words input columns can be repeated in the table info)
     if has_pivot_value:
+        # Pivot array must not be a dictionary array
+        func_text += f"    pivot_arr = decode_if_dict_array(pivot_arr)\n"
         # For pivot case we can't use gb_info_out because multiple output
         # columns match to the same input column for a given function, but we
         # only want to add one input per (input_col, func)
@@ -1998,29 +1983,35 @@ def gen_top_level_agg_func(
         func_text += "    dispatch_table = arr_info_list_to_table([arr_info])\n"
         func_text += "    pivot_info = array_to_info(pivot_arr)\n"
         func_text += "    dispatch_info = arr_info_list_to_table([pivot_info])\n"
-        func_text += "    out_table = pivot_groupby_and_aggregate(table, {}, dispatch_table, dispatch_info, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
-            n_keys,
-            agg_node.input_has_index,
-            parallel,
-            agg_node.is_crosstab,
-            skipdropna,
-            agg_node.return_key,
-            agg_node.same_index,
+        func_text += (
+            "    out_table = pivot_groupby_and_aggregate(table, {}, dispatch_table, dispatch_info, {},"
+            " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
+                n_keys,
+                agg_node.input_has_index,
+                parallel,
+                agg_node.is_crosstab,
+                skipdropna,
+                agg_node.return_key,
+                agg_node.same_index,
+            )
         )
         func_text += "    delete_info_decref_array(pivot_info)\n"
         func_text += "    delete_info_decref_array(arr_info)\n"
     else:
-        func_text += "    out_table = groupby_and_aggregate(table, {}, {}," " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
-            n_keys,
-            agg_node.input_has_index,
-            parallel,
-            skipdropna,
-            shift_periods,
-            transform_func,
-            head_n,
-            agg_node.return_key,
-            agg_node.same_index,
-            agg_node.dropna,
+        func_text += (
+            "    out_table = groupby_and_aggregate(table, {}, {},"
+            " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
+                n_keys,
+                agg_node.input_has_index,
+                parallel,
+                skipdropna,
+                shift_periods,
+                transform_func,
+                head_n,
+                agg_node.return_key,
+                agg_node.same_index,
+                agg_node.dropna,
+            )
         )
 
     idx = 0
@@ -2252,7 +2243,7 @@ def replace_closures(f_ir, closure, code):
 
 
 class RegularUDFGenerator(object):
-    """ Generate code that applies UDFs to all columns that use them """
+    """Generate code that applies UDFs to all columns that use them"""
 
     def __init__(
         self,

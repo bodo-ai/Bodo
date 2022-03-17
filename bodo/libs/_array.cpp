@@ -283,6 +283,31 @@ array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
                           NULL);
 }
 
+array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
+                                   char* null_bitmap,
+                                   int32_t has_global_dictionary) {
+    return new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
+                          indices_arr->length, -1, -1, NULL, NULL, NULL,
+                          null_bitmap, NULL, NULL, NULL, NULL, 0, 0, 0,
+                          bool(has_global_dictionary), str_arr, indices_arr);
+}
+
+array_info* get_nested_info(array_info* dict_arr, int32_t info_no) {
+    if (info_no == 1) {
+        return dict_arr->info1;
+    } else if (info_no == 2) {
+        return dict_arr->info2;
+    } else {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "get_nested_info: invalid info_no");
+        return NULL;
+    }
+}
+
+int32_t get_has_global_dictionary(array_info* dict_arr) {
+    return int32_t(dict_arr->has_global_dictionary);
+}
+
 array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
                                 NRT_MemInfo* meminfo) {
     // TODO: better memory management of struct, meminfo refcount?
@@ -1244,18 +1269,17 @@ void int_array_from_sequence(PyObject* arr_obj, int64_t* data,
 }
 
 /**
- * Extract the value from a table with the given column and row numbers.
+ * Extract the value from an array with the given row number.
  * This function does not check for NA values (these are handled elsewhere).
  * Currently we only include data types supported in general join conds
  * that require data beyond just data1 (as those are handled by a
  * different fast path).
  *
- * Returns a pointer the the start of the data in the given row and col.
+ * Returns a pointer the the start of the data in the given row.
  * output_size is updated to give the size of the returned data.
  */
-char* array_info_getitem(array_info** table, int64_t col_num,
-                         int64_t row_num, offset_t* output_size) {
-    array_info* arr = table[col_num];
+char* array_info_getitem(array_info* arr, int64_t row_num,
+                         offset_t* output_size) {
     bodo_array_type::arr_type_enum arr_type = arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = arr->dtype;
     if (arr_type == bodo_array_type::STRING) {
@@ -1269,6 +1293,10 @@ char* array_info_getitem(array_info** table, int64_t col_num,
         return in_data1 + start_offset;
     }
     throw std::runtime_error("array_info_getitem : Unsupported type");
+}
+
+char* array_info_getdata1(array_info* arr) {
+    return arr->data1;
 }
 
 PyMODINIT_FUNC PyInit_array_ext(void) {
@@ -1305,6 +1333,15 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     // Not covered by error handler
     PyObject_SetAttrString(m, "string_array_to_info",
                            PyLong_FromVoidPtr((void*)(&string_array_to_info)));
+    // Not covered by error handler
+    PyObject_SetAttrString(
+        m, "dict_str_array_to_info",
+        PyLong_FromVoidPtr((void*)(&dict_str_array_to_info)));
+    PyObject_SetAttrString(m, "get_nested_info",
+                           PyLong_FromVoidPtr((void*)(&get_nested_info)));
+    PyObject_SetAttrString(
+        m, "get_has_global_dictionary",
+        PyLong_FromVoidPtr((void*)(&get_has_global_dictionary)));
     // Not covered by error handler
     PyObject_SetAttrString(m, "numpy_array_to_info",
                            PyLong_FromVoidPtr((void*)(&numpy_array_to_info)));
@@ -1502,5 +1539,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
 
     PyObject_SetAttrString(m, "array_info_getitem",
                            PyLong_FromVoidPtr((void*)(&array_info_getitem)));
+
+    PyObject_SetAttrString(m, "array_info_getdata1",
+                           PyLong_FromVoidPtr((void*)(&array_info_getdata1)));
     return m;
 }

@@ -6,7 +6,6 @@ import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
-from numba import generated_jit
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
     compile_to_numba_ir,
@@ -21,51 +20,32 @@ import bodo
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
-    compute_node_partition_by_hash,
     delete_table,
     delete_table_decref_arrays,
     hash_join_table,
     info_from_table,
     info_to_array,
 )
-from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
+from bodo.libs.int_arr_ext import IntDtype
 from bodo.libs.str_arr_ext import (
     copy_str_arr_slice,
     cp_str_list_to_array,
-    get_bit_bitmap,
-    get_null_bitmap_ptr,
-    get_str_arr_item_length,
-    get_str_arr_item_ptr,
-    get_utf8_size,
     getitem_str_offset,
     num_total_chars,
     pre_alloc_string_array,
-    set_bit_to,
-    str_copy_ptr,
-    string_array_type,
     to_list_if_immutable_arr,
 )
-from bodo.libs.str_ext import string_type
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.shuffle import (
-    _get_data_tup,
-    _get_keys_tup,
-    alloc_pre_shuffle_metadata,
-    alltoallv_tup,
-    finalize_shuffle_meta,
-    getitem_arr_tup_single,
-    update_shuffle_meta,
-)
 from bodo.utils.typing import (
     BodoError,
     dtype_to_array_type,
     find_common_np_dtype,
     is_dtype_nullable,
     is_nullable_type,
+    is_str_arr_type,
     to_nullable_type,
 )
 from bodo.utils.utils import alloc_arr_tup, debug_prints, is_null_pointer
@@ -143,7 +123,7 @@ def add_join_gen_cond_cfunc_sym(typingctx, func, sym):
 
 @numba.jit
 def get_join_cond_addr(name):
-    """ Resolve address of cfunc given by its symbol name """
+    """Resolve address of cfunc given by its symbol name"""
     with numba.objmode(addr="int64"):
         addr = join_gen_cond_cfunc_addr[name]
     return addr
@@ -912,8 +892,8 @@ def _replace_column_accesses(
             continue
         getitem_fname = f"getitem_{table_name}_val_{c_ind}"
         val_varname = f"_bodo_{table_name}_val_{c_ind}"
-        col_dtype = typemap[col_vars[c].name].dtype
-        if col_dtype == types.unicode_type:
+        array_typ = typemap[col_vars[c].name]
+        if is_str_arr_type(array_typ):
             # If we have unicode we pass the table variable which is an array info
             func_text += f"  {val_varname}, {val_varname}_size = {getitem_fname}({table_name}_table, {table_name}_ind)\n"
             # Create proper Python string.
@@ -923,22 +903,20 @@ def _replace_column_accesses(
             func_text += f"  {val_varname} = {getitem_fname}({table_name}_data1, {table_name}_ind)\n"
 
         table_getitem_funcs[getitem_fname] = bodo.libs.array._gen_row_access_intrinsic(
-            col_dtype, c_ind
+            array_typ, c_ind
         )
         expr = expr.replace(cname, val_varname)
 
         # We should only require an NA check if the column is also present
         na_cname = f"({na_check_name}.{table_name}.{c})"
         if na_cname in expr:
-            array_typ = typemap[col_vars[c].name]
             na_check_fname = f"nacheck_{table_name}_val_{c_ind}"
             na_val_varname = f"_bodo_isna_{table_name}_val_{c_ind}"
-            if isinstance(
-                array_typ, bodo.libs.int_arr_ext.IntegerArrayType
-            ) or array_typ in [
-                bodo.libs.bool_arr_ext.boolean_array,
-                bodo.libs.str_arr_ext.string_array_type,
-            ]:
+            if (
+                isinstance(array_typ, bodo.libs.int_arr_ext.IntegerArrayType)
+                or array_typ == bodo.libs.bool_arr_ext.boolean_array
+                or is_str_arr_type(array_typ)
+            ):
                 func_text += f"  {na_val_varname} = {na_check_fname}({table_name}_null_bitmap, {table_name}_ind)\n"
             else:
                 func_text += f"  {na_val_varname} = {na_check_fname}({table_name}_data1, {table_name}_ind)\n"
@@ -982,7 +960,10 @@ def _match_join_key_types(t1, t2, loc):
             if is_nullable_type(t1) or is_nullable_type(t2)
             else arr
         )
-    except:
+    except Exception:
+        # Different forms of string arrays should still match.
+        if is_str_arr_type(t1) and is_str_arr_type(t2):
+            return bodo.string_array_type
         raise BodoError(f"Join key types {t1} and {t2} do not match", loc=loc)
 
 
@@ -1104,6 +1085,13 @@ def _gen_local_hash_join(
                     f"    typ_{idx} = bodo.libs.bool_arr_ext.alloc_bool_array(1)\n"
                 )
                 out_type = f"typ_{idx}"
+        elif in_type == bodo.string_array_type:
+            # Generate an output for string arrays to handle join DictionaryArray and StringArray
+            # with a string output.
+            ins_text = (
+                f"    typ_{idx} = bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0)\n"
+            )
+            out_type = f"typ_{idx}"
         else:
             ins_text = ""
             out_type = in_name
@@ -1164,9 +1152,10 @@ def _gen_local_hash_join(
     func_text += "    delete_table(table_right)\n"
     idx = 0
     if optional_column:
-        func_text += (
-            f"    opti_0 = info_to_array(info_from_table(out_table, {idx}), opti_c0)\n"
-        )
+        rec_typ = get_out_type(idx, out_types[idx], "opti_c0", False, False)
+        func_text += rec_typ[0]
+        glbs[f"out_type_{idx}"] = out_types[idx]
+        func_text += f"    opti_0 = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
         idx += 1
     for i, t in enumerate(left_key_names):
         key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
@@ -1177,7 +1166,10 @@ def _gen_local_hash_join(
         glbs[f"out_type_{idx}"] = out_types[idx]
         # use astype only if necessary due to Index handling bugs
         # see: test_merge_index_column_second"[df22-df10]" TODO(ehsan): fix
-        if key_type != left_key_types[i]:
+        if (
+            key_type != left_key_types[i]
+            and left_key_types[i] != bodo.dict_str_arr_type
+        ):
             func_text += f"    t1_keys_{i} = bodo.utils.utils.astype(info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]}), out_type_{idx})\n"
         else:
             func_text += f"    t1_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
@@ -1199,7 +1191,10 @@ def _gen_local_hash_join(
             # NOTE: subtracting len(left_other_names) since output right keys are
             # generated before left_other_names
             glbs[f"out_type_{idx}"] = out_types[idx - len(left_other_names)]
-            if key_type != right_key_types[i]:
+            if (
+                key_type != right_key_types[i]
+                and right_key_types[i] != bodo.dict_str_arr_type
+            ):
                 func_text += f"    t2_keys_{i} = bodo.utils.utils.astype(info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]}), out_type_{idx})\n"
             else:
                 func_text += f"    t2_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
@@ -1220,50 +1215,6 @@ def _gen_local_hash_join(
 
     func_text += "    delete_table(out_table)\n"
     return func_text
-
-
-# @numba.njit
-def parallel_join_impl(key_arrs, data):  # pragma: no cover
-    # alloc shuffle meta
-    n_pes = bodo.libs.distributed_api.get_size()
-    pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, False)
-    n = len(key_arrs[0])
-    node_ids = np.empty(n, np.int32)
-
-    input_table = arr_info_list_to_table([array_to_info(key_arrs[0])])
-    n_key = 1
-    out_table = compute_node_partition_by_hash(input_table, n_key, n_pes)
-    data_dummy = np.empty(1, np.int32)
-    out_arr = info_to_array(info_from_table(out_table, 0), data_dummy)
-    delete_table(out_table)
-    delete_table(input_table)
-
-    # calc send/recv counts
-    for i in range(n):
-        val = getitem_arr_tup_single(key_arrs, i)
-        node_id = out_arr[i]
-        node_ids[i] = node_id
-        update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, data, False)
-
-    shuffle_meta = finalize_shuffle_meta(key_arrs, data, pre_shuffle_meta, n_pes, False)
-
-    # write send buffers
-    for i in range(n):
-        node_id = node_ids[i]
-        write_send_buff(shuffle_meta, node_id, i, key_arrs, data)
-        # update last since it is reused in data
-        shuffle_meta.tmp_offset[node_id] += 1
-
-    # shuffle
-    recvs = alltoallv_tup(key_arrs + data, shuffle_meta, key_arrs)
-    out_keys = _get_keys_tup(recvs, key_arrs)
-    out_data = _get_data_tup(recvs, key_arrs)
-    return out_keys, out_data
-
-
-@generated_jit(nopython=True, cache=True)
-def parallel_shuffle(key_arrs, data):
-    return parallel_join_impl
 
 
 @numba.njit
@@ -1336,66 +1287,6 @@ def _count_overlap(r_key_arr, start, end):  # pragma: no cover
     return offset, count
 
 
-def write_send_buff(shuffle_meta, node_id, i, key_arrs, data):  # pragma: no cover
-    return i
-
-
-@overload(write_send_buff, no_unliteral=True)
-def write_data_buff_overload(meta, node_id, i, key_arrs, data):
-    func_text = "def f(meta, node_id, i, key_arrs, data):\n"
-    func_text += "  w_ind = meta.send_disp[node_id] + meta.tmp_offset[node_id]\n"
-    n_keys = len(key_arrs.types)
-    for i, typ in enumerate(key_arrs.types + data.types):
-        arr = "key_arrs[{}]".format(i) if i < n_keys else "data[{}]".format(i - n_keys)
-        if not typ in (string_type, string_array_type, binary_array_type, bytes_type):
-            func_text += "  meta.send_buff_tup[{}][w_ind] = {}[i]\n".format(i, arr)
-        else:
-            func_text += "  n_chars_{} = get_str_arr_item_length({}, i)\n".format(
-                i, arr
-            )
-            func_text += "  meta.send_arr_lens_tup[{}][w_ind] = n_chars_{}\n".format(
-                i, i
-            )
-            if i >= n_keys:
-                func_text += "  out_bitmap = meta.send_arr_nulls_tup[{}][meta.send_disp_nulls[node_id]:].ctypes\n".format(
-                    i
-                )
-                func_text += "  bit_val = get_bit_bitmap(get_null_bitmap_ptr(data[{}]), i)\n".format(
-                    i - n_keys
-                )
-                func_text += (
-                    "  set_bit_to(out_bitmap, meta.tmp_offset[node_id], bit_val)\n"
-                )
-            func_text += "  indc_{} = meta.send_disp_char_tup[{}][node_id] + meta.tmp_offset_char_tup[{}][node_id]\n".format(
-                i, i, i
-            )
-            func_text += "  item_ptr_{} = get_str_arr_item_ptr({}, i)\n".format(i, arr)
-            func_text += "  str_copy_ptr(meta.send_arr_chars_tup[{}], indc_{}, item_ptr_{}, n_chars_{})\n".format(
-                i, i, i, i
-            )
-            func_text += (
-                "  meta.tmp_offset_char_tup[{}][node_id] += n_chars_{}\n".format(i, i)
-            )
-
-    func_text += "  return w_ind\n"
-
-    loc_vars = {}
-    exec(
-        func_text,
-        {
-            "str_copy_ptr": str_copy_ptr,
-            "get_null_bitmap_ptr": get_null_bitmap_ptr,
-            "get_bit_bitmap": get_bit_bitmap,
-            "set_bit_to": set_bit_to,
-            "get_str_arr_item_length": get_str_arr_item_length,
-            "get_str_arr_item_ptr": get_str_arr_item_ptr,
-        },
-        loc_vars,
-    )
-    write_impl = loc_vars["f"]
-    return write_impl
-
-
 import llvmlite.binding as ll
 
 from bodo.libs import hdist
@@ -1466,166 +1357,6 @@ def ensure_capacity_str(arr, new_size, n_chars):  # pragma: no cover
     return new_arr
 
 
-def trim_arr_tup(data, new_size):  # pragma: no cover
-    return data
-
-
-@overload(trim_arr_tup, no_unliteral=True)
-def trim_arr_tup_overload(data, new_size):
-    assert isinstance(data, types.BaseTuple)
-    count = data.count
-
-    func_text = "def f(data, new_size):\n"
-    func_text += "  return ({}{})\n".format(
-        ",".join(["trim_arr(data[{}], new_size)".format(i) for i in range(count)]),
-        "," if count == 1 else "",
-    )  # single value needs comma to become tuple
-
-    loc_vars = {}
-    exec(func_text, {"trim_arr": trim_arr}, loc_vars)
-    alloc_impl = loc_vars["f"]
-    return alloc_impl
-
-
-# @numba.njit
-# def copy_merge_data(left_key, data_left, data_right, left_ind, right_ind,
-#                         out_left_key, out_data_left, out_data_right, out_ind):
-#     out_left_key = ensure_capacity(out_left_key, out_ind+1)
-#     out_data_left = ensure_capacity(out_data_left, out_ind+1)
-#     out_data_right = ensure_capacity(out_data_right, out_ind+1)
-
-#     out_left_key[out_ind] = left_keys[left_ind]
-#     copyElement_tup(data_left, left_ind, out_data_left, out_ind)
-#     copyElement_tup(data_right, right_ind, out_data_right, out_ind)
-#     return out_left_key, out_data_left, out_data_right
-
-
-def copy_elem_buff(arr, ind, val):  # pragma: no cover
-    new_arr = ensure_capacity(arr, ind + 1)
-    new_arr[ind] = val
-    return new_arr
-
-
-@overload(copy_elem_buff, no_unliteral=True)
-def copy_elem_buff_overload(arr, ind, val):
-    if isinstance(arr, types.Array) or arr == boolean_array:
-        return copy_elem_buff
-
-    assert arr == string_array_type
-
-    def copy_elem_buff_str(arr, ind, val):  # pragma: no cover
-        new_arr = ensure_capacity_str(arr, ind + 1, get_utf8_size(val))
-        new_arr[ind] = val
-        return new_arr
-
-    return copy_elem_buff_str
-
-
-def copy_elem_buff_tup(arr, ind, val):  # pragma: no cover
-    return arr
-
-
-@overload(copy_elem_buff_tup, no_unliteral=True)
-def copy_elem_buff_tup_overload(data, ind, val):
-    assert isinstance(data, types.BaseTuple)
-    count = data.count
-
-    func_text = "def f(data, ind, val):\n"
-    for i in range(count):
-        func_text += "  arr_{} = copy_elem_buff(data[{}], ind, val[{}])\n".format(
-            i, i, i
-        )
-    func_text += "  return ({}{})\n".format(
-        ",".join(["arr_{}".format(i) for i in range(count)]), "," if count == 1 else ""
-    )
-
-    loc_vars = {}
-    exec(func_text, {"copy_elem_buff": copy_elem_buff}, loc_vars)
-    cp_impl = loc_vars["f"]
-    return cp_impl
-
-
-def trim_arr(arr, size):  # pragma: no cover
-    return arr[:size]
-
-
-@overload(trim_arr, no_unliteral=True)
-def trim_arr_overload(arr, size):
-    if isinstance(arr, types.Array) or arr == boolean_array:
-        return trim_arr
-
-    assert arr == string_array_type
-
-    def trim_arr_str(arr, size):  # pragma: no cover
-        # print("trim size", size, arr[size-1], getitem_str_offset(arr, size))
-        new_arr = pre_alloc_string_array(size, np.int64(getitem_str_offset(arr, size)))
-        copy_str_arr_slice(new_arr, arr, size)
-        return new_arr
-
-    return trim_arr_str
-
-
-def setnan_elem_buff(arr, ind):  # pragma: no cover
-    new_arr = ensure_capacity(arr, ind + 1)
-    bodo.libs.array_kernels.setna(new_arr, ind)
-    return new_arr
-
-
-@overload(setnan_elem_buff, no_unliteral=True)
-def setnan_elem_buff_overload(arr, ind):
-    if isinstance(arr, types.Array) or arr == boolean_array:
-        return setnan_elem_buff
-
-    assert arr == string_array_type
-
-    def setnan_elem_buff_str(arr, ind):  # pragma: no cover
-        new_arr = ensure_capacity_str(arr, ind + 1, 0)
-        # TODO: why doesn't setitem_str_offset work
-        # setitem_str_offset(arr, ind+1, getitem_str_offset(arr, ind))
-        new_arr[ind] = ""
-        bodo.libs.array_kernels.setna(new_arr, ind)
-        # print(getitem_str_offset(arr, ind), getitem_str_offset(arr, ind+1))
-        return new_arr
-
-    return setnan_elem_buff_str
-
-
-def setnan_elem_buff_tup(arr, ind):  # pragma: no cover
-    return arr
-
-
-@overload(setnan_elem_buff_tup, no_unliteral=True)
-def setnan_elem_buff_tup_overload(data, ind):
-    assert isinstance(data, types.BaseTuple)
-    count = data.count
-
-    func_text = "def f(data, ind):\n"
-    for i in range(count):
-        func_text += "  arr_{} = setnan_elem_buff(data[{}], ind)\n".format(i, i)
-    func_text += "  return ({}{})\n".format(
-        ",".join(["arr_{}".format(i) for i in range(count)]), "," if count == 1 else ""
-    )
-
-    loc_vars = {}
-    exec(func_text, {"setnan_elem_buff": setnan_elem_buff}, loc_vars)
-    cp_impl = loc_vars["f"]
-    return cp_impl
-
-
-@generated_jit(nopython=True, cache=True)
-def _check_ind_if_hashed(right_keys, r_ind, l_key):
-    if right_keys == types.Tuple((types.intp[::1],)):
-        return lambda right_keys, r_ind, l_key: r_ind
-
-    def _impl(right_keys, r_ind, l_key):
-        r_key = getitem_arr_tup(right_keys, r_ind)
-        if r_key != l_key:
-            return -1
-        return r_ind
-
-    return _impl
-
-
 @numba.njit
 def local_merge_asof(left_keys, right_keys, data_left, data_right):  # pragma: no cover
     # adapted from pandas/_libs/join_func_helper.pxi
@@ -1685,93 +1416,5 @@ def copy_arr_tup_overload(arrs):
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
-
-
-def get_nan_bits(arr, ind):  # pragma: no cover
-    return 0
-
-
-@overload(get_nan_bits, no_unliteral=True)
-def overload_get_nan_bits(arr, ind):
-    """Get nan bit for types that have null bitmap"""
-    if arr == string_array_type:
-
-        def impl_str(arr, ind):  # pragma: no cover
-            in_null_bitmap_ptr = get_null_bitmap_ptr(arr)
-            return get_bit_bitmap(in_null_bitmap_ptr, ind)
-
-        return impl_str
-
-    if isinstance(arr, IntegerArrayType) or arr == boolean_array:
-
-        def impl(arr, ind):  # pragma: no cover
-            return bodo.libs.int_arr_ext.get_bit_bitmap_arr(arr._null_bitmap, ind)
-
-        return impl
-
-    return lambda arr, ind: False
-
-
-def get_nan_bits_tup(arr_tup, ind):  # pragma: no cover
-    return tuple(get_nan_bits(arr, ind) for arr in arr_tup)
-
-
-@overload(get_nan_bits_tup, no_unliteral=True)
-def overload_get_nan_bits_tup(arr_tup, ind):
-    count = arr_tup.count
-
-    func_text = "def f(arr_tup, ind):\n"
-    func_text += "  return ({}{})\n".format(
-        ",".join(["get_nan_bits(arr_tup[{}], ind)".format(i) for i in range(count)]),
-        "," if count == 1 else "",
-    )  # single value needs comma to become tuple
-
-    loc_vars = {}
-    exec(func_text, {"get_nan_bits": get_nan_bits}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
-
-
-def set_nan_bits(arr, ind, na_val):  # pragma: no cover
-    return 0
-
-
-@overload(set_nan_bits, no_unliteral=True)
-def overload_set_nan_bits(arr, ind, na_val):
-    """Set nan bit for types that have null bitmap, currently just string array"""
-    if arr == string_array_type:
-
-        def impl_str(arr, ind, na_val):  # pragma: no cover
-            in_null_bitmap_ptr = get_null_bitmap_ptr(arr)
-            set_bit_to(in_null_bitmap_ptr, ind, na_val)
-
-        return impl_str
-
-    if isinstance(arr, IntegerArrayType) or arr == boolean_array:
-
-        def impl(arr, ind, na_val):  # pragma: no cover
-            bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, na_val)
-
-        return impl
-    return lambda arr, ind, na_val: None
-
-
-def set_nan_bits_tup(arr_tup, ind, na_val):  # pragma: no cover
-    return tuple(set_nan_bits(arr, ind, na_val) for arr in arr_tup)
-
-
-@overload(set_nan_bits_tup, no_unliteral=True)
-def overload_set_nan_bits_tup(arr_tup, ind, na_val):
-    count = arr_tup.count
-
-    func_text = "def f(arr_tup, ind, na_val):\n"
-    for i in range(count):
-        func_text += "  set_nan_bits(arr_tup[{}], ind, na_val[{}])\n".format(i, i)
-    func_text += "  return\n"
-
-    loc_vars = {}
-    exec(func_text, {"set_nan_bits": set_nan_bits}, loc_vars)
     impl = loc_vars["f"]
     return impl

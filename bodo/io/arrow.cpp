@@ -13,6 +13,7 @@ table_info* pq_read(PyObject* path, bool parallel, char* bucket_region,
                     int32_t* selected_cols, int32_t num_selected_cols,
                     int32_t* is_nullable, int32_t* selected_part_cols,
                     int32_t* part_cols_cat_dtype, int32_t num_partition_cols,
+                    int32_t* str_as_dict_cols, int32_t num_str_as_dict_cols,
                     int64_t* total_rows_out, bool input_file_name_col);
 
 // --------- functions defined in parquet_write.cpp ---------

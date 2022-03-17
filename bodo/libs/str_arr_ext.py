@@ -9,19 +9,12 @@ offsets:           [0, 1, 3, 3, 6, 6, 8]
 import glob
 import operator
 
-import llvmlite.llvmpy.core as lc
 import numba
 import numba.core.typing.typeof
 import numpy as np
 import pandas as pd
 from numba.core import cgutils, types
-from numba.core.imputils import (
-    RefType,
-    impl_ret_borrowed,
-    iternext_impl,
-    lower_constant,
-)
-from numba.core.typing.templates import signature
+from numba.core.imputils import impl_ret_borrowed, lower_constant
 from numba.core.unsafe.bytes import memcpy_region
 from numba.extending import (
     NativeValue,
@@ -55,11 +48,14 @@ from bodo.libs.binary_arr_ext import (
 )
 from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
 from bodo.utils.typing import (
+    BodoArrayIterator,
     BodoError,
+    decode_if_dict_array,
     is_list_like_index_type,
     is_overload_constant_int,
     is_overload_none,
     is_overload_true,
+    is_str_arr_type,
     parse_dtype,
     raise_bodo_error,
 )
@@ -94,7 +90,7 @@ class StringArrayType(types.IterableType, types.ArrayCompatible):
 
     @property
     def iterator_type(self):
-        return StringArrayIterator()
+        return BodoArrayIterator(self)
 
     def copy(self):
         return StringArrayType()
@@ -123,6 +119,9 @@ class StringArrayModel(models.StructModel):
 
 make_attribute_wrapper(StringArrayType, "data", "_data")
 make_attribute_wrapper(BinaryArrayType, "data", "_data")
+
+
+lower_builtin("getiter", string_array_type)(numba.np.arrayobj.getiter_array)
 
 
 @intrinsic
@@ -177,9 +176,18 @@ lower_builtin(pd.StringDtype)(lambda c, b, s, a: c.get_dummy_value())
 def create_binary_op_overload(op):
     """create an overload function for a string array comparison operator"""
 
+    # TODO(ehsan): use more optimized implementation for dictionary-encoded arrays when
+    # possible, e.g. dictionaries are compatible
+
     def overload_string_array_binary_op(lhs, rhs):
+
+        # optimized paths for dictionary-encoded arrays
+        opt_impl = bodo.libs.dict_arr_ext.get_binary_op_overload(op, lhs, rhs)
+        if opt_impl is not None:
+            return opt_impl
+
         # both string array
-        if lhs == string_array_type and rhs == string_array_type:
+        if is_str_arr_type(lhs) and is_str_arr_type(rhs):
 
             def impl_both(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
@@ -203,7 +211,7 @@ def create_binary_op_overload(op):
             return impl_both
 
         # left arg is string array
-        if lhs == string_array_type and types.unliteral(rhs) == string_type:
+        if is_str_arr_type(lhs) and types.unliteral(rhs) == string_type:
 
             def impl_left(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
@@ -222,7 +230,7 @@ def create_binary_op_overload(op):
             return impl_left
 
         # right arg is string array
-        if types.unliteral(lhs) == string_type and rhs == string_array_type:
+        if types.unliteral(lhs) == string_type and is_str_arr_type(rhs):
 
             def impl_right(lhs, rhs):  # pragma: no cover
                 numba.parfors.parfor.init_prange()
@@ -240,24 +248,24 @@ def create_binary_op_overload(op):
 
             return impl_right
 
-        raise BodoError(f"{op} operator not supported for data types {lhs} and {rhs}.")
+        raise_bodo_error(f"{op} operator not supported for data types {lhs} and {rhs}.")
 
     return overload_string_array_binary_op
 
 
 def overload_add_operator_string_array(lhs, rhs):
-    lhs_is_unicode_or_string_array = lhs == string_array_type or (
+    lhs_is_unicode_or_string_array = is_str_arr_type(lhs) or (
         isinstance(lhs, types.Array) and lhs.dtype == string_type
     )
-    rhs_is_unicode_or_string_array = rhs == string_array_type or (
+    rhs_is_unicode_or_string_array = is_str_arr_type(rhs) or (
         isinstance(rhs, types.Array) and rhs.dtype == string_type
     )
 
     # both string arrays
     # Check that at least 1 arg is an actual string_array_type to avoid
     # conflict with Numba's overload.
-    if (lhs == string_array_type and rhs_is_unicode_or_string_array) or (
-        lhs_is_unicode_or_string_array and rhs == string_array_type
+    if (is_str_arr_type(lhs) and rhs_is_unicode_or_string_array) or (
+        lhs_is_unicode_or_string_array and is_str_arr_type(rhs)
     ):
 
         def impl_both(lhs, rhs):  # pragma: no cover
@@ -279,7 +287,7 @@ def overload_add_operator_string_array(lhs, rhs):
         return impl_both
 
     # left arg is string array
-    if lhs == string_array_type and types.unliteral(rhs) == string_type:
+    if is_str_arr_type(lhs) and types.unliteral(rhs) == string_type:
 
         def impl_left(lhs, rhs):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -298,7 +306,7 @@ def overload_add_operator_string_array(lhs, rhs):
         return impl_left
 
     # right arg is string array
-    if types.unliteral(lhs) == string_type and rhs == string_array_type:
+    if types.unliteral(lhs) == string_type and is_str_arr_type(rhs):
 
         def impl_right(lhs, rhs):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -321,7 +329,7 @@ def overload_add_operator_string_array(lhs, rhs):
 
 def overload_mul_operator_str_arr(lhs, rhs):
     # rhs is an integer
-    if lhs == string_array_type and isinstance(rhs, types.Integer):
+    if is_str_arr_type(lhs) and isinstance(rhs, types.Integer):
 
         def impl(lhs, rhs):  # pragma: no cover
             numba.parfors.parfor.init_prange()
@@ -340,63 +348,12 @@ def overload_mul_operator_str_arr(lhs, rhs):
         return impl
 
     # lhs is an integer
-    if isinstance(lhs, types.Integer) and rhs == string_array_type:
+    if isinstance(lhs, types.Integer) and is_str_arr_type(rhs):
 
         def impl(lhs, rhs):  # pragma: no cover
             return rhs * lhs
 
         return impl
-
-
-class StringArrayIterator(types.SimpleIteratorType):
-    """
-    Type class for iterators of string arrays.
-    """
-
-    def __init__(self):
-        name = "iter(String)"
-        yield_type = string_type
-        super(StringArrayIterator, self).__init__(name, yield_type)
-
-
-@register_model(StringArrayIterator)
-class StrArrayIteratorModel(models.StructModel):
-    def __init__(self, dmm, fe_type):
-        # We use an unsigned index to avoid the cost of negative index tests.
-        members = [
-            ("index", types.EphemeralPointer(types.uintp)),
-            ("array", string_array_type),
-        ]
-        super(StrArrayIteratorModel, self).__init__(dmm, fe_type, members)
-
-
-lower_builtin("getiter", string_array_type)(numba.np.arrayobj.getiter_array)
-
-
-@lower_builtin("iternext", StringArrayIterator)
-@iternext_impl(RefType.NEW)
-def iternext_str_array(context, builder, sig, args, result):
-    [iterty] = sig.args
-    [iter_arg] = args
-
-    iterobj = context.make_helper(builder, iterty, value=iter_arg)
-    len_sig = signature(types.intp, string_array_type)
-    nitems = context.compile_internal(
-        builder, lambda a: len(a), len_sig, [iterobj.array]
-    )
-
-    index = builder.load(iterobj.index)
-    is_valid = builder.icmp(lc.ICMP_SLT, index, nitems)
-    result.set_valid(is_valid)
-
-    with builder.if_then(is_valid):
-        getitem_sig = signature(string_type, string_array_type, types.intp)
-        value = context.compile_internal(
-            builder, lambda a, i: a[i], getitem_sig, [iterobj.array, index]
-        )
-        result.yield_(value)
-        nindex = cgutils.increment_index(builder, index)
-        builder.store(nindex, iterobj.index)
 
 
 def _get_str_binary_arr_payload(context, builder, arr_value, arr_typ):
@@ -871,7 +828,7 @@ def to_list_if_immutable_arr_overload(data, str_null_bools=None):
     an array of bools as null mask for each string array
     """
     # TODO: create a StringRandomWriteArray
-    if data in [string_array_type, binary_array_type]:
+    if is_str_arr_type(data) or data == binary_array_type:
 
         def to_list_impl(data, str_null_bools=None):  # pragma: no cover
             n = len(data)
@@ -889,7 +846,7 @@ def to_list_if_immutable_arr_overload(data, str_null_bools=None):
             out += [
                 "get_str_null_bools(data[{}])".format(i)
                 for i in range(count)
-                if data.types[i] in [string_array_type, binary_array_type]
+                if is_str_arr_type(data.types[i]) or data.types[i] == binary_array_type
             ]
 
         func_text = "def f(data, str_null_bools=None):\n"
@@ -1774,6 +1731,8 @@ def inplace_eq_overload(A, ind, val):
     value from the element (which incurrs allocation overhead).
     """
 
+    # TODO(ehsan): support dict encoded array
+
     def impl(A, ind, val):  # pragma: no cover
         utf8_str, utf8_len = unicode_to_utf8_and_len(val)
         start_offset = getitem_str_offset(A, ind)
@@ -2300,6 +2259,7 @@ def set_to_numeric_out_na_err_overload(out_arr, out_ind, err_code):
 
 @numba.njit(no_cpython_wrapper=True)
 def str_arr_item_to_numeric(out_arr, out_ind, str_arr, ind):  # pragma: no cover
+    str_arr = decode_if_dict_array(str_arr)
     err_code = _str_arr_item_to_numeric(
         get_arr_data_ptr(out_arr, out_ind),
         str_arr,
@@ -2311,8 +2271,8 @@ def str_arr_item_to_numeric(out_arr, out_ind, str_arr, ind):  # pragma: no cover
 
 @intrinsic
 def _str_arr_item_to_numeric(typingctx, out_ptr_t, str_arr_t, ind_t, out_dtype_t=None):
-    assert str_arr_t == string_array_type
-    assert ind_t == types.int64
+    assert str_arr_t == string_array_type, "_str_arr_item_to_numeric: str arr expected"
+    assert ind_t == types.int64, "_str_arr_item_to_numeric: integer index expected"
 
     def codegen(context, builder, sig, args):
         # TODO: return tuple with value and error and avoid array arg?

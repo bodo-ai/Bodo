@@ -48,7 +48,6 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.io import csv_cpp
 from bodo.libs.distributed_api import Reduce_Type
-from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import (
     string_type,
     unicode_to_utf8,
@@ -67,7 +66,13 @@ from bodo.utils.transform import (
     get_const_value_inner,
     set_call_expr_arg,
 )
-from bodo.utils.typing import BodoError, list_cumulative
+from bodo.utils.typing import (
+    BodoError,
+    decode_if_dict_array,
+    is_str_arr_type,
+    list_cumulative,
+    to_str_arr_if_dict_array,
+)
 from bodo.utils.utils import (
     debug_prints,
     find_build_tuple,
@@ -1688,17 +1693,69 @@ class DistributedPass:
 
         # no need to gather if input data is replicated
         if (
-            fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo")
-        ) and self._is_REP(rhs.args[0].name):
+            (fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo"))
+            and self._is_REP(rhs.args[0].name)
+            and self.typemap[rhs.args[0].name] == self.typemap[assign.target.name]
+        ):
+            # NOTE: input/output type match check is necessary for dictionary encoded
+            # string array since it is converted to a regular string array
             assign.value = rhs.args[0]
             return [assign]
+
+        # no need to gather if input data is replicated, but the data is a
+        # readonly array we need to make a copy.
+        if (
+            (fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo"))
+            and self._is_REP(rhs.args[0].name)
+            # TODO: Can other types except arrays be read only.
+            and isinstance(self.typemap[rhs.args[0].name], types.Array)
+            and isinstance(self.typemap[assign.target.name], types.Array)
+        ):
+            modifiable_input = self.typemap[rhs.args[0].name].copy(readonly=False)
+            modifiable_output = self.typemap[assign.target.name].copy(readonly=False)
+            if modifiable_input == modifiable_output:
+                # If data is equal make a copy.
+                return compile_func_single_block(
+                    eval("lambda data: data.copy()"),
+                    (rhs.args[0],),
+                    assign.target,
+                    self,
+                )
+
+        # if input data is replicated and we convert from dict_array to string
+        # array, replace with decode_if_dict_array (which happens inside gatherv).
+        if (
+            (fdef == ("gatherv", "bodo") or fdef == ("allgatherv", "bodo"))
+            and self._is_REP(rhs.args[0].name)
+            # Was data converted from dict -> str inside gatherv.
+            and to_str_arr_if_dict_array(self.typemap[rhs.args[0].name])
+            == to_str_arr_if_dict_array(self.typemap[assign.target.name])
+        ):
+            return compile_func_single_block(
+                eval("lambda data: decode_if_dict_array(data)"),
+                (rhs.args[0],),
+                assign.target,
+                self,
+                extra_globals={"decode_if_dict_array": decode_if_dict_array},
+            )
 
         # no need to scatter if input data is distributed
         if (fdef == ("scatterv", "bodo")) and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
         ):
-            assign.value = rhs.args[0]
-            return [assign]
+            lhs_typ = self.typemap[assign.target.name]
+            rhs_typ = self.typemap[rhs.args[0].name]
+            if lhs_typ == rhs_typ:
+                assign.value = rhs.args[0]
+                return [assign]
+            if to_str_arr_if_dict_array(lhs_typ) == to_str_arr_if_dict_array(rhs_typ):
+                return compile_func_single_block(
+                    eval("lambda data: decode_if_dict_array(data)"),
+                    (rhs.args[0],),
+                    assign.target,
+                    self,
+                    extra_globals={"decode_if_dict_array": decode_if_dict_array},
+                )
 
         if fdef == ("dist_return", "bodo.libs.distributed_api"):
             assign.value = rhs.args[0]
@@ -4098,7 +4155,7 @@ class DistributedPass:
         self.calltypes[inst] = sig
 
     def _get_arr_ndim(self, arrname):
-        if self.typemap[arrname] == string_array_type:
+        if is_str_arr_type(self.typemap[arrname]):
             return 1
         return self.typemap[arrname].ndim
 

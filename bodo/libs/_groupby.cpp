@@ -6123,7 +6123,7 @@ class GroupbyPipeline {
             // TODO: do a hash combine that writes to an empty hash
             // array to avoid memcpy?
             hash_array_combine(key_value_hashes, tmp->columns[num_keys], n_rows,
-                               SEED_HASH_PARTITION);
+                               SEED_HASH_PARTITION, /*global_dict_needed=*/true);
 
             // Compute the local fraction of unique hashes
             size_t nunique_keyval_hashes =
