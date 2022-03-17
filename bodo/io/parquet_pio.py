@@ -52,6 +52,7 @@ from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.distributed_api import get_end, get_start
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
@@ -81,6 +82,9 @@ from urllib.parse import urlparse
 import bodo.io.pa_parquet
 
 REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
+# the ratio of total_uncompressed_size of a Parquet string column vs number of values,
+# below which we read as dictionary-encoded string array
+READ_STR_AS_DICT_THRESHOLD = 1.0
 
 
 class ParquetPredicateType(types.Type):
@@ -777,6 +781,18 @@ def _gen_pq_reader_py(
         for col_in_idx in selected_cols
     ]
 
+    # XXX is special handling needed for table format?
+    # pass indices to C++ of the selected string columns that are to be read
+    # in dictionary-encoded format
+    str_as_dict_cols = []
+    for col_in_idx in selected_cols:
+        if col_in_idx == index_column_index:
+            t = index_column_type
+        else:
+            t = out_types[col_indices_map[col_in_idx]]
+        if t == dict_str_arr_type:
+            str_as_dict_cols.append(col_in_idx)
+
     # partition_names is the list of *all* partition column names in the
     # parquet dataset as given by pyarrow.parquet.ParquetDataset.
     # We pass selected partition columns to C++, in the order and index used
@@ -828,6 +844,11 @@ def _gen_pq_reader_py(
         func_text += f"        {len(selected_partition_cols)},\n"
     else:
         func_text += f"        0, 0, 0,\n"
+    if len(str_as_dict_cols) > 0:
+        # TODO pass array as global to function instead?
+        func_text += f"        np.array({str_as_dict_cols}, dtype=np.int32).ctypes, {len(str_as_dict_cols)},\n"
+    else:
+        func_text += f"        0, 0,\n"
     func_text += f"        total_rows_np.ctypes,\n"
     # The C++ code only needs a flag
     func_text += f"        {input_file_name_col is not None},\n"
@@ -949,7 +970,13 @@ _pa_numba_typ_map = {
 }
 
 
-def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, category_info):
+def _get_numba_typ_from_pa_typ(
+    pa_typ,
+    is_index,
+    nullable_from_metadata,
+    category_info,
+    str_as_dict=False,
+):
     """return Bodo array type from pyarrow Field (column type) and if the type is supported.
     If a type is not support but can be adequately typed, we return that it isn't supported
     and later in compilation we will check if dead code/column elimination has successfully
@@ -978,6 +1005,11 @@ def _get_numba_typ_from_pa_typ(pa_typ, is_index, nullable_from_metadata, categor
     # Decimal128Array type
     if isinstance(pa_typ.type, pa.Decimal128Type):
         return DecimalArrayType(pa_typ.type.precision, pa_typ.type.scale), True
+
+    if str_as_dict:
+        if pa_typ.type != pa.string():
+            raise BodoError(f"Read as dictionary used for non-string column {pa_typ}")
+        return dict_str_arr_type, True
 
     # Categorical data type
     if isinstance(pa_typ.type, pa.DictionaryType):
@@ -1311,6 +1343,18 @@ def get_parquet_dataset(
                 f"error from pyarrow: {type(error).__name__}: {str(error)}\n"
             )
         dataset_schema = comm.bcast(None)
+
+    # Reinitialize the file system. The filesystem is needed at compile time
+    # to get metadata from a sample of pieces in determine_str_as_dict_columns
+    # and at runtime is needed to get metadata for rowcounts and row counts
+    # for filter pushdown.
+    if get_row_counts:
+        filesystem = getfs()
+    else:
+        # Compile time needs the legacy filesystem.
+        filesystem = get_legacy_fs()
+    dataset._metadata.fs = filesystem
+
     if get_row_counts:
         ev_bcast.finalize()
 
@@ -1335,7 +1379,6 @@ def get_parquet_dataset(
         total_row_groups_chunk = 0
         total_row_groups_size_chunk = 0
         valid = True  # True if schema of all parquet files match
-        dataset._metadata.fs = getfs()
         if expr_filters is not None:
             import random
 
@@ -1511,6 +1554,7 @@ def get_scanner_batches(
     storage_options,
     region,
     prefix,  # examples: "hdfs://localhost:9000", "abfs://demo@bododemo.dfs.core.windows.net"
+    str_as_dict_cols,
 ):
     """return RecordBatchReader for dataset of 'fpaths' that contain the rows
     that match expr_filters (or all rows if expr_filters is None). Only project the
@@ -1554,8 +1598,12 @@ def get_scanner_batches(
         filesystem = None
     # We only support hive partitioning right now and will need to change this
     # if we also support directory partitioning
+    pq_format = ds.ParquetFileFormat(dictionary_columns=str_as_dict_cols)
     dataset = ds.dataset(
-        fpaths, filesystem=filesystem, partitioning=ds.partitioning(flavor="hive")
+        fpaths,
+        filesystem=filesystem,
+        partitioning=ds.partitioning(flavor="hive"),
+        format=pq_format,
     )
     col_names = dataset.schema.names
     selected_names = [col_names[field_num] for field_num in selected_fields]
@@ -1650,6 +1698,60 @@ def get_pandas_metadata(schema, num_pieces):
     return index_col, nullable_from_metadata
 
 
+def determine_str_as_dict_columns(pq_dataset, pa_schema):
+    """Determine which string columns should be read by Arrow as dictionary
+    encoded arrays, based on this heuristic:
+    # calculating the ratio of total_uncompressed_size of the column vs number
+    # of values.
+    # If the ratio is less than READ_STR_AS_DICT_THRESHOLD we read as DICT"""
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    str_columns = []
+    for col_name in pa_schema.names:
+        field = pa_schema.field(col_name)
+        if field.type == pa.string():
+            str_columns.append((col_name, pa_schema.get_field_index(col_name)))
+    if len(str_columns) == 0:
+        return set()  # no string as dict columns
+
+    # We don't want to open every file at compile time, so instead we will open
+    # a sample of N files where N is the number of ranks. Each rank looks at
+    # the metadata of a different random file
+    if len(pq_dataset.pieces) > bodo.get_size():
+        import random
+
+        random.seed(37)
+        pieces = random.sample(pq_dataset.pieces, bodo.get_size())
+    else:
+        pieces = pq_dataset.pieces
+    total_uncompressed_sizes = np.zeros(len(str_columns), dtype=np.int64)
+    total_uncompressed_sizes_recv = np.zeros(len(str_columns), dtype=np.int64)
+    if bodo.get_rank() < len(pieces):
+        piece = pieces[bodo.get_rank()]
+        metadata = piece.get_metadata()
+        for i in range(metadata.num_row_groups):
+            for j, (_, idx) in enumerate(str_columns):
+                total_uncompressed_sizes[j] += (
+                    metadata.row_group(i).column(idx).total_uncompressed_size
+                )
+        num_rows = metadata.num_rows
+    else:
+        num_rows = 0
+    total_rows = comm.allreduce(num_rows, op=MPI.SUM)
+    if total_rows == 0:
+        return set()  # no string as dict columns
+    comm.Allreduce(total_uncompressed_sizes, total_uncompressed_sizes_recv, op=MPI.SUM)
+    str_column_metrics = total_uncompressed_sizes_recv / total_rows
+    str_as_dict = set()
+    for i, metric in enumerate(str_column_metrics):
+        if metric < READ_STR_AS_DICT_THRESHOLD:
+            col_name = str_columns[i][0]
+            str_as_dict.add(col_name)
+    return str_as_dict
+
+
 def parquet_file_schema(
     file_name, selected_columns, storage_options=None, input_file_name_col=None
 ):
@@ -1666,6 +1768,7 @@ def parquet_file_schema(
         storage_options=storage_options,
         read_categories=True,
     )
+
     # not using 'partition_names' since the order may not match 'levels'
     partition_names = (
         []
@@ -1677,6 +1780,8 @@ def parquet_file_schema(
     )
     pa_schema = pq_dataset.schema.to_arrow_schema()
     num_pieces = len(pq_dataset.pieces)
+
+    str_as_dict = determine_str_as_dict_columns(pq_dataset, pa_schema)
 
     # NOTE: use arrow schema instead of the dataset schema to avoid issues with
     # names of list types columns (arrow 0.17.0)
@@ -1695,6 +1800,7 @@ def parquet_file_schema(
             c == index_col,
             nullable_from_metadata[c],
             pq_dataset._category_info,
+            str_as_dict=c in str_as_dict,
         )
         col_types_total.append(dtype)
         is_supported_list.append(supported)
@@ -1795,6 +1901,8 @@ _pq_read = types.ExternalFunction(
         types.int32,
         types.voidptr,
         types.voidptr,
+        types.voidptr,
+        types.int32,
         types.voidptr,
         types.int32,
         types.voidptr,

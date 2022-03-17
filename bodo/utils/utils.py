@@ -40,7 +40,13 @@ from bodo.libs.str_arr_ext import (
 )
 from bodo.libs.str_ext import string_type
 from bodo.utils.cg_helpers import is_ll_eq
-from bodo.utils.typing import NOT_CONSTANT, BodoError, BodoWarning, MetaType
+from bodo.utils.typing import (
+    NOT_CONSTANT,
+    BodoError,
+    BodoWarning,
+    MetaType,
+    is_str_arr_type,
+)
 
 int128_type = types.Integer("int128", 128)
 
@@ -251,7 +257,7 @@ def cprint_lower(context, builder, sig, args):  # pragma: no cover
 
 
 def is_whole_slice(typemap, func_ir, var, accept_stride=False):
-    """ return True if var can be determined to be a whole slice """
+    """return True if var can be determined to be a whole slice"""
     require(
         typemap[var.name] == types.slice2_type
         or (accept_stride and typemap[var.name] == types.slice3_type)
@@ -324,6 +330,7 @@ def is_array_typ(var_typ, include_index_series=True):
         in (
             string_array_type,
             bodo.binary_array_type,
+            bodo.dict_str_arr_type,
             bodo.hiframes.split_impl.string_array_split_view_type,
             bodo.hiframes.datetime_date_ext.datetime_date_array_type,
             bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
@@ -436,46 +443,6 @@ def build_set_seen_na(A):
     return impl
 
 
-@numba.generated_jit(nopython=True, cache=True)
-def build_set(A):
-    # if isinstance(A, IntegerArrayType):
-    #     #return lambda A: set(A._data)
-    #     def impl_int_arr(A):
-    #         s = set()
-    #         for i in range(len(A)):
-    #             if not bodo.libs.array_kernels.isna(A, i):
-    #                 s.add(A[i])
-    #         return s
-
-    #     return impl_int_arr
-    # else:
-    #     return lambda A: set(A)
-
-    # TODO: use more efficient hash table optimized for addition and
-    # membership check
-    # XXX using dict for now due to Numba's #4577
-    # avoid value if NA is not sentinel like np.nan
-    if isinstance(A, IntegerArrayType) or A in (string_array_type, boolean_array):
-
-        def impl_int_arr(A):  # pragma: no cover
-            s = dict()
-            for i in range(len(A)):
-                if not bodo.libs.array_kernels.isna(A, i):
-                    s[A[i]] = 0
-            return s
-
-        return impl_int_arr
-    else:
-
-        def impl(A):  # pragma: no cover
-            s = dict()
-            for i in range(len(A)):
-                s[A[i]] = 0
-            return s
-
-        return impl
-
-
 # converts an iterable to array, similar to np.array, but can support
 # other things like StringArray
 # TODO: other types like datetime?
@@ -508,15 +475,6 @@ def to_array_overload(A):
         return to_array_impl
     except:
         pass  # should be handled elsewhere (e.g. Set)
-
-
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def unique(A):
-    if isinstance(A, IntegerArrayType) or A == boolean_array:
-        return lambda A: A.unique()  # pragma: no cover
-
-    # TODO: preserve order
-    return lambda A: to_array(build_set(A))  # pragma: no cover
 
 
 def empty_like_type(n, arr):  # pragma: no cover
@@ -738,7 +696,10 @@ def overload_alloc_type(n, t, s=None):
     needed for allocation.
     """
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
-    if typ == string_array_type:
+
+    # NOTE: creating regular string array for dictionary-encoded strings to get existing
+    # code that doesn't support dict arr to work
+    if is_str_arr_type(typ):
         return lambda n, t, s=None: bodo.libs.str_arr_ext.pre_alloc_string_array(
             n, s[0]
         )  # pragma: no cover
@@ -862,6 +823,14 @@ def overload_astype(A, t):
         return lambda A, t: bodo.libs.int_arr_ext.init_integer_array(
             A.astype(dtype),
             np.full((len(A) + 7) >> 3, 255, np.uint8),
+        )  # pragma: no cover
+
+    # Convert dictionary array to regular string array. This path is used
+    # by join when 1 key is a regular string array and the other is a
+    # dictionary array.
+    if A == bodo.libs.dict_arr_ext.dict_str_arr_type and typ == bodo.string_array_type:
+        return lambda A, t: bodo.utils.typing.decode_if_dict_array(
+            A
         )  # pragma: no cover
 
     raise BodoError(f"cannot convert array type {A} to {typ}")

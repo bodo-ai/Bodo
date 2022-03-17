@@ -20,8 +20,8 @@ from numba.extending import (
     NativeValue,
     box,
     intrinsic,
-    lower_cast,
     lower_builtin,
+    lower_cast,
     make_attribute_wrapper,
     models,
     overload,
@@ -1310,6 +1310,53 @@ def pandas_string_array_to_datetime(
     return result
 
 
+@numba.njit
+def pandas_dict_string_array_to_datetime(
+    arr,
+    errors,
+    dayfirst,
+    yearfirst,
+    utc,
+    format,
+    exact,
+    unit,
+    infer_datetime_format,
+    origin,
+    cache,
+):  # pragma: no cover
+    """
+    Implementation of converting a dictionary array of strings
+    to datetime. This is grouped into an intermediate function to
+    avoid parallelism issues from extracting arr._data. Calling
+    pandas_string_array_to_datetime shouldn't be exposed to the main
+    IR for this example because arr._data isn't truly REP or DIST.
+    """
+    n = len(arr)
+    B = np.empty(n, "datetime64[ns]")
+    indices = arr._indices
+    # get datetime64 value for each dictionary value.
+    # Use an intermediate functions to avoid distribution issues.
+    dt64_vals = pandas_string_array_to_datetime(
+        arr._data,
+        errors,
+        dayfirst,
+        yearfirst,
+        utc,
+        format,
+        exact,
+        unit,
+        infer_datetime_format,
+        origin,
+        cache,
+    ).values
+    for i in range(n):
+        if bodo.libs.array_kernels.isna(indices, i):
+            bodo.libs.array_kernels.setna(B, i)
+            continue
+        B[i] = dt64_vals[indices[i]]
+    return B
+
+
 @overload(pd.to_datetime, inline="always", no_unliteral=True)
 def overload_to_datetime(
     arg_a,
@@ -1445,8 +1492,6 @@ def overload_to_datetime(
 
     # string_array_type as input
     if arg_a == string_array_type:
-        dt64_dtype = np.dtype("datetime64[ns]")
-        iNaT = pd._libs.tslibs.iNaT
 
         def impl_string_array(
             arg_a,
@@ -1564,6 +1609,39 @@ def overload_to_datetime(
             return bodo.hiframes.pd_index_ext.init_datetime_index(B, None)
 
         return impl_cat_arr
+
+    # Dictionary-encoded string array
+    if arg_a == bodo.dict_str_arr_type:
+
+        def impl_dict_str_arr(
+            arg_a,
+            errors="raise",
+            dayfirst=False,
+            yearfirst=False,
+            utc=None,
+            format=None,
+            exact=True,
+            unit=None,
+            infer_datetime_format=False,
+            origin="unix",
+            cache=True,
+        ):  # pragma: no cover
+            B = pandas_dict_string_array_to_datetime(
+                arg_a,
+                errors,
+                dayfirst,
+                yearfirst,
+                utc,
+                format,
+                exact,
+                unit,
+                infer_datetime_format,
+                origin,
+                cache,
+            )
+            return bodo.hiframes.pd_index_ext.init_datetime_index(B, None)
+
+        return impl_dict_str_arr
 
     # Timestamp input. This ignores other fields and just returns Timestamp
     # TODO: Support useful fields like unit without objmode
@@ -2088,6 +2166,7 @@ def strftime(ts, format):
 def to_datetime64(ts):
     def impl(ts):
         return integer_to_dt64(ts.value)
+
     return impl
 
 
@@ -2223,7 +2302,9 @@ def _install_pd_timestamp_unsupported():
 _install_pd_timestamp_unsupported()
 
 
-@lower_builtin(numba.core.types.functions.NumberClass, pd_timestamp_type, types.StringLiteral)
+@lower_builtin(
+    numba.core.types.functions.NumberClass, pd_timestamp_type, types.StringLiteral
+)
 def datetime64_constructor(context, builder, sig, args):
     def datetime64_constructor_impl(a, b):
         return integer_to_dt64(a.value)

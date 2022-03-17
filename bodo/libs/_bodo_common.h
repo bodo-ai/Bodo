@@ -59,6 +59,8 @@ struct Bodo_CTypes {
     };
 };
 
+typedef int32_t dict_indices_t;
+
 // use 64-bit offsets for string and nested arrays
 typedef uint64_t offset_t;
 #define OFFSET_BITWIDTH 64
@@ -161,6 +163,7 @@ struct bodo_array_type {
         CATEGORICAL = 5,
         ARRAY_ITEM = 6,
         INTERVAL = 7,
+        DICT = 8,  // dictionary-encoded string array
         // string_array_split_view_type, etc.
     };
 };
@@ -209,7 +212,7 @@ inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
 struct array_info {
     bodo_array_type::arr_type_enum arr_type;
     Bodo_CTypes::CTypeEnum dtype;
-    int64_t length;       // number of elements in the array (not bytes)
+    int64_t length;       // number of elements in the array (not bytes) For DICT arrays this is the length of indices array
     int64_t n_sub_elems;  // number of sub-elements for variable length arrays,
                           // e.g. characters in string array
     int64_t n_sub_sub_elems;  // second level of subelements (e.g. for the
@@ -224,9 +227,12 @@ struct array_info {
     NRT_MemInfo* meminfo;
     NRT_MemInfo* meminfo_bitmask;
     std::shared_ptr<arrow::Array> array;
-    int32_t precision;       // for array of decimals
-    int32_t scale;           // for array of decimals
-    int64_t num_categories;  // for categorical arrays
+    int32_t precision;           // for array of decimals
+    int32_t scale;               // for array of decimals
+    int64_t num_categories;      // for categorical arrays
+    bool has_global_dictionary;  // for dict-encoded arrays
+    array_info* info1;           // for dict-encoded arrays
+    array_info* info2;           // for dict-encoded arrays
     // TODO: shape/stride for multi-dim arrays
     explicit array_info(bodo_array_type::arr_type_enum _arr_type,
                         Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
@@ -236,7 +242,9 @@ struct array_info {
                         NRT_MemInfo* _meminfo, NRT_MemInfo* _meminfo_bitmask,
                         std::shared_ptr<arrow::Array> _array = nullptr,
                         int32_t _precision = 0, int32_t _scale = 0,
-                        int64_t _num_categories = 0)
+                        int64_t _num_categories = 0,
+                        bool _has_global_dictionary = false,
+                        array_info* _info1 = nullptr, array_info* _info2 = nullptr)
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -252,13 +260,20 @@ struct array_info {
           array(_array),
           precision(_precision),
           scale(_scale),
-          num_categories(_num_categories) {}
+          num_categories(_num_categories),
+          has_global_dictionary(_has_global_dictionary),
+          info1(_info1),
+          info2(_info2) {}
 
     template <typename T>
-    T& at(size_t idx) { return ((T*)data1)[idx]; }
+    T& at(size_t idx) {
+        return ((T*)data1)[idx];
+    }
 
     template <typename T>
-    const T& at(size_t idx) const { return ((T*)data1)[idx]; }
+    const T& at(size_t idx) const {
+        return ((T*)data1)[idx];
+    }
 
     bool get_null_bit(size_t idx) const {
         return GetBit((uint8_t*)null_bitmask, idx);
@@ -374,6 +389,9 @@ array_info* alloc_list_string_array(int64_t n_lists, array_info* string_arr,
 
 array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
                                     int64_t n_chars, int64_t extra_null_bytes);
+
+array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
+                                    int64_t n_chars_keys, bool has_global_dictionary);
 
 /* Store several array_info in one structure and assign them
    as required.
@@ -664,7 +682,8 @@ void dtor_array_item_array(array_item_arr_numpy_payload* payload, int64_t size,
                            void* in);
 NRT_MemInfo* alloc_array_item_arr_meminfo();
 
-Bodo_CTypes::CTypeEnum arrow_to_bodo_type(std::shared_ptr<arrow::DataType> type);
+Bodo_CTypes::CTypeEnum arrow_to_bodo_type(
+    std::shared_ptr<arrow::DataType> type);
 
 void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
                        array_info** infos, int64_t& lengths_pos,

@@ -59,6 +59,7 @@ from bodo.utils.typing import (
     is_overload_false,
     is_overload_none,
     is_overload_true,
+    is_str_arr_type,
     parse_dtype,
     raise_bodo_error,
 )
@@ -163,9 +164,7 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
 
     @property
     def iterator_type(self):
-        # same as Buffer
-        # TODO: fix timestamp
-        return types.iterators.ArrayIterator(_dt_index_data_typ)
+        return bodo.utils.typing.BodoArrayIterator(self)
 
     @property
     def pandas_type_name(self):
@@ -1148,9 +1147,7 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
 
     @property
     def iterator_type(self):
-        # same as Buffer
-        # TODO: fix timedelta
-        return types.iterators.ArrayIterator(_timedelta_index_data_typ)
+        return bodo.utils.typing.BodoArrayIterator(self)
 
     @property
     def pandas_type_name(self):
@@ -1854,8 +1851,7 @@ class PeriodIndexType(types.IterableType, types.ArrayCompatible):
 
     @property
     def iterator_type(self):
-        # TODO: handle iterator
-        return types.iterators.ArrayIterator(types.Array(types.int64, 1, "C"))
+        return bodo.utils.typing.BodoArrayIterator(self)
 
     @property
     def pandas_type_name(self):
@@ -2454,8 +2450,7 @@ class NumericIndexType(types.IterableType, types.ArrayCompatible):
 
     @property
     def iterator_type(self):
-        # TODO: handle iterator
-        return types.iterators.ArrayIterator(types.Array(self.dtype, 1, "C"))
+        return bodo.utils.typing.BodoArrayIterator(self)
 
     @property
     def pandas_type_name(self):
@@ -2687,13 +2682,13 @@ _install_numeric_constructors()
 class StringIndexType(types.IterableType, types.ArrayCompatible):
     """type class for pd.Index() objects with 'string' as inferred_dtype."""
 
-    def __init__(self, name_typ=None):
+    def __init__(self, name_typ=None, data_typ=None):
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
-        self.data = string_array_type
+        self.data = string_array_type if data_typ is None else data_typ
         super(StringIndexType, self).__init__(
-            name="StringIndexType({})".format(name_typ)
+            name=f"StringIndexType({name_typ}, {self.data})",
         )
 
     ndim = 1
@@ -2704,7 +2699,7 @@ class StringIndexType(types.IterableType, types.ArrayCompatible):
         return types.Array(types.undefined, 1, "C")
 
     def copy(self):
-        return StringIndexType(self.name_typ)
+        return StringIndexType(self.name_typ, self.data)
 
     @property
     def dtype(self):
@@ -2720,8 +2715,7 @@ class StringIndexType(types.IterableType, types.ArrayCompatible):
 
     @property
     def iterator_type(self):
-        # TODO: handle iterator
-        return bodo.libs.str_arr_ext.StringArrayIterator()
+        return bodo.utils.typing.BodoArrayIterator(self)
 
 
 # even though name attribute is mutable, we don't handle it for now
@@ -2730,7 +2724,8 @@ class StringIndexType(types.IterableType, types.ArrayCompatible):
 class StringIndexModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
-            ("data", string_array_type),
+            # TODO(ehsan): optimize get_loc() handling for dict-encoded str array case
+            ("data", fe_type.data),
             ("name", fe_type.name_typ),
             ("dict", types.DictType(string_type, types.int64)),
         ]
@@ -2751,7 +2746,11 @@ make_attribute_wrapper(StringIndexType, "dict", "_dict")
 class BinaryIndexType(types.IterableType, types.ArrayCompatible):
     """type class for pd.Index() objects with 'binary' as inferred_dtype."""
 
-    def __init__(self, name_typ=None):
+    def __init__(self, name_typ=None, data_typ=None):
+        # data_typ is added just for compatibility with StringIndexType
+        assert (
+            data_typ is None or data_typ == binary_array_type
+        ), "data_typ must be binary_array_type"
         name_typ = types.none if name_typ is None else name_typ
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
@@ -2784,8 +2783,7 @@ class BinaryIndexType(types.IterableType, types.ArrayCompatible):
 
     @property
     def iterator_type(self):
-        # TODO: handle merging string/binary iterator
-        return bodo.libs.binary_arr_ext.BinaryArrayIterator()
+        return bodo.utils.typing.BodoArrayIterator(self)
 
 
 # even though name attribute is mutable, we don't handle it for now
@@ -2880,7 +2878,7 @@ def init_binary_str_index(typingctx, data, name=None):
     """Create StringIndex or BinaryIndex object"""
     name = types.none if name is None else name
 
-    sig = type(bodo.utils.typing.get_index_type_from_dtype(data.dtype))(name)(
+    sig = type(bodo.utils.typing.get_index_type_from_dtype(data.dtype))(name, data)(
         data, name
     )
     cg = get_binary_str_codegen(is_binary=data.dtype == bytes_type)
@@ -2898,10 +2896,8 @@ def get_binary_str_codegen(is_binary=False):
     """
 
     if is_binary:
-        array_dtype_string = "binary_array_type"
         scalar_dtype_string = "bytes_type"
     else:
-        array_dtype_string = "string_array_type"
         scalar_dtype_string = "string_type"
 
     func_text = "def impl(context, builder, signature, args):\n"
@@ -2913,7 +2909,7 @@ def get_binary_str_codegen(is_binary=False):
     func_text += "    index_val.data = args[0]\n"
     func_text += "    index_val.name = args[1]\n"
     func_text += "    # increase refcount of stored values\n"
-    func_text += f"    context.nrt.incref(builder, {array_dtype_string}, args[0])\n"
+    func_text += "    context.nrt.incref(builder, signature.args[0], args[0])\n"
     func_text += "    context.nrt.incref(builder, index_typ.name_typ, args[1])\n"
     func_text += "    # create empty dict for get_loc hashmap\n"
     func_text += "    index_val.dict = context.compile_internal(\n"
@@ -2935,8 +2931,6 @@ def get_binary_str_codegen(is_binary=False):
             "types": types,
             "bytes_type": bytes_type,
             "string_type": string_type,
-            "string_array_type": string_array_type,
-            "binary_array_type": binary_array_type,
         },
         loc_vars,
     )
@@ -3025,8 +3019,8 @@ def overload_index_getitem(I, ind):
 # similar to index_from_array()
 def array_type_to_index(arr_typ, name_typ=None):
     """convert array type to a corresponding Index type"""
-    if arr_typ == bodo.string_array_type:
-        return StringIndexType(name_typ)
+    if is_str_arr_type(arr_typ):
+        return StringIndexType(name_typ, arr_typ)
     if arr_typ == bodo.binary_array_type:
         return BinaryIndexType(name_typ)
 
@@ -4197,21 +4191,8 @@ def getiter_range_index(context, builder, sig, args):
     return out
 
 
-def getiter_index(context, builder, sig, args):
-    """
-    Support for getiter with Index types. Extracts the stored array and
-    calls numba.np.arrayobj.getiter_array.
-    """
-    [indexty] = sig.args
-    [index] = args
-    indexobj = context.make_helper(builder, indexty, value=index)
-    return numba.np.arrayobj.getiter_array(
-        context, builder, signature(sig.return_type, sig.args[0].data), (indexobj.data,)
-    )
-
-
 def _install_index_getiter():
-    """install an overload that raises BodoError for unsupported methods of pd.Index"""
+    """install iterators for Index types"""
     index_types = [
         NumericIndexType,
         StringIndexType,
@@ -4222,7 +4203,7 @@ def _install_index_getiter():
     ]
 
     for typ in index_types:
-        lower_builtin("getiter", typ)(getiter_index)
+        lower_builtin("getiter", typ)(numba.np.arrayobj.getiter_array)
 
 
 _install_index_getiter()

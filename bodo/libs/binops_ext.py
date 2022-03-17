@@ -43,9 +43,13 @@ from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
-from bodo.utils.typing import BodoError, is_overload_bool, is_timedelta_type
+from bodo.utils.typing import (
+    BodoError,
+    is_overload_bool,
+    is_str_arr_type,
+    is_timedelta_type,
+)
 
 
 class SeriesCmpOpTemplate(AbstractTemplate):
@@ -76,9 +80,15 @@ class SeriesCmpOpTemplate(AbstractTemplate):
         lhs_arr = lhs.data if isinstance(lhs, SeriesType) else lhs
         rhs_arr = rhs.data if isinstance(rhs, SeriesType) else rhs
         # Timestamp and Timestamp need to be unboxed if compared to dt64/td64 array
-        if lhs_arr in (bodo.pd_timestamp_type, bodo.pd_timedelta_type) and rhs_arr.dtype in (bodo.datetime64ns, bodo.timedelta64ns):
+        if lhs_arr in (
+            bodo.pd_timestamp_type,
+            bodo.pd_timedelta_type,
+        ) and rhs_arr.dtype in (bodo.datetime64ns, bodo.timedelta64ns):
             lhs_arr = rhs_arr.dtype
-        elif rhs_arr in (bodo.pd_timestamp_type, bodo.pd_timedelta_type) and lhs_arr.dtype in (bodo.datetime64ns, bodo.timedelta64ns):
+        elif rhs_arr in (
+            bodo.pd_timestamp_type,
+            bodo.pd_timedelta_type,
+        ) and lhs_arr.dtype in (bodo.datetime64ns, bodo.timedelta64ns):
             rhs_arr = lhs_arr.dtype
 
         recursed_args = (lhs_arr, rhs_arr)
@@ -281,7 +291,7 @@ def overload_sub_operator_scalars(lhs, rhs):
 
 ## arith operators
 def create_overload_arith_op(op):
-    """ Create overloads for arithmetic operators. """
+    """Create overloads for arithmetic operators."""
 
     def overload_arith_operator(lhs, rhs):
         """Overload some of the arithmetic operators like add, sub, truediv, floordiv, mul, pow, mod."""
@@ -330,7 +340,7 @@ def create_overload_arith_op(op):
 
         # String arrays
         if op == operator.add and (
-            lhs == string_array_type or types.unliteral(lhs) == string_type
+            is_str_arr_type(lhs) or types.unliteral(lhs) == string_type
         ):
             return bodo.libs.str_arr_ext.overload_add_operator_string_array(lhs, rhs)
 
@@ -409,7 +419,7 @@ def create_overload_arith_op(op):
 
 ## cmp ops
 def create_overload_cmp_operator(op):
-    """ create overloads for the comparison operators. """
+    """create overloads for the comparison operators."""
 
     def overload_cmp_operator(lhs, rhs):
 
@@ -443,7 +453,7 @@ def create_overload_cmp_operator(op):
             return impl(lhs, rhs)
 
         # str_arr
-        if lhs == string_array_type or rhs == string_array_type:
+        if is_str_arr_type(lhs) or is_str_arr_type(rhs):
             return bodo.libs.str_arr_ext.create_binary_op_overload(op)(lhs, rhs)
 
         # decimal_arr
@@ -517,7 +527,7 @@ def create_overload_cmp_operator(op):
 
 ## Helper functions for the add operator
 def add_dt_td_and_dt_date(lhs, rhs):
-    """ Helper function to check types supported in datetime_date_ext overload. """
+    """Helper function to check types supported in datetime_date_ext overload."""
 
     lhs_td = lhs == datetime_timedelta_type and rhs == datetime_date_type
     rhs_td = rhs == datetime_timedelta_type and lhs == datetime_date_type
@@ -525,7 +535,7 @@ def add_dt_td_and_dt_date(lhs, rhs):
 
 
 def add_timestamp(lhs, rhs):
-    """ Helper function to check types supported in pd_timestamp_ext overload. """
+    """Helper function to check types supported in pd_timestamp_ext overload."""
 
     ts_and_td = lhs == pd_timestamp_type and is_timedelta_type(rhs)
     td_and_ts = is_timedelta_type(lhs) and rhs == pd_timestamp_type
@@ -534,7 +544,7 @@ def add_timestamp(lhs, rhs):
 
 
 def add_datetime_and_timedeltas(lhs, rhs):
-    """ Helper function to check types supported in datetime_timedelta_ext overload. """
+    """Helper function to check types supported in datetime_timedelta_ext overload."""
 
     td_types = [datetime_timedelta_type, pd_timedelta_type]
     lhs_types = [datetime_timedelta_type, pd_timedelta_type, datetime_datetime_type]
@@ -548,8 +558,8 @@ def add_datetime_and_timedeltas(lhs, rhs):
 
 ## Helper functions for the mul operator
 def mul_string_arr_and_int(lhs, rhs):
-    rhs_arr = isinstance(lhs, types.Integer) and rhs == string_array_type
-    lhs_arr = lhs == string_array_type and isinstance(rhs, types.Integer)
+    rhs_arr = isinstance(lhs, types.Integer) and is_str_arr_type(rhs)
+    lhs_arr = is_str_arr_type(lhs) and isinstance(rhs, types.Integer)
 
     return rhs_arr or lhs_arr
 
@@ -565,32 +575,24 @@ def mul_timedelta_and_int(lhs, rhs):
 
 
 def mul_date_offset_and_int(lhs, rhs):
-    lhs_offset = (
-        lhs
-        in [
-            week_type,
-            month_end_type,
-            month_begin_type,
-            date_offset_type,
-        ]
-        and isinstance(rhs, types.Integer)
-    )
-    rhs_offset = (
-        rhs
-        in [
-            week_type,
-            month_end_type,
-            month_begin_type,
-            date_offset_type,
-        ]
-        and isinstance(lhs, types.Integer)
-    )
+    lhs_offset = lhs in [
+        week_type,
+        month_end_type,
+        month_begin_type,
+        date_offset_type,
+    ] and isinstance(rhs, types.Integer)
+    rhs_offset = rhs in [
+        week_type,
+        month_end_type,
+        month_begin_type,
+        date_offset_type,
+    ] and isinstance(lhs, types.Integer)
     return lhs_offset or rhs_offset
 
 
 ## Helper functions for the sub operator
 def sub_offset_to_datetime_or_timestamp(lhs, rhs):
-    """ Helper function to check types supported in pd_offsets_ext add op overload. """
+    """Helper function to check types supported in pd_offsets_ext add op overload."""
 
     dt_types = [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
     offset_types = [date_offset_type, month_begin_type, month_end_type, week_type]
@@ -599,7 +601,7 @@ def sub_offset_to_datetime_or_timestamp(lhs, rhs):
 
 
 def sub_dt_index_and_timestamp(lhs, rhs):
-    """ Helper function to check types supported in pd_index_ext sub op overload. """
+    """Helper function to check types supported in pd_index_ext sub op overload."""
 
     lhs_index = isinstance(lhs, DatetimeIndexType) and rhs == pd_timestamp_type
     rhs_index = isinstance(rhs, DatetimeIndexType) and lhs == pd_timestamp_type
@@ -608,7 +610,7 @@ def sub_dt_index_and_timestamp(lhs, rhs):
 
 
 def sub_dt_or_td(lhs, rhs):
-    """ Helper function to check types supported in datetime_date_ext sub op overload. """
+    """Helper function to check types supported in datetime_date_ext sub op overload."""
 
     date_and_timedelta = lhs == datetime_date_type and rhs == datetime_timedelta_type
     date_and_date = lhs == datetime_date_type and rhs == datetime_date_type
@@ -620,7 +622,7 @@ def sub_dt_or_td(lhs, rhs):
 
 
 def sub_datetime_and_timedeltas(lhs, rhs):
-    """ Helper function to check types supported in datetime_timedelta_ext sub op overload. """
+    """Helper function to check types supported in datetime_timedelta_ext sub op overload."""
 
     td_cond = (is_timedelta_type(lhs) or lhs == datetime_datetime_type) and (
         is_timedelta_type(rhs)
@@ -658,7 +660,7 @@ def mod_timedeltas(lhs, rhs):
 
 ## Helper functions for the cmp operators
 def cmp_dt_index_to_string(lhs, rhs):
-    """ Helper function to check types supported in pd_index_ext by cmp op overload. """
+    """Helper function to check types supported in pd_index_ext by cmp op overload."""
 
     lhs_index = (
         isinstance(lhs, DatetimeIndexType) and types.unliteral(rhs) == string_type
@@ -671,7 +673,7 @@ def cmp_dt_index_to_string(lhs, rhs):
 
 
 def cmp_timestamp_or_date(lhs, rhs):
-    """ Helper function to check types supported in pd_timestamp_ext by cmp op overload. """
+    """Helper function to check types supported in pd_timestamp_ext by cmp op overload."""
 
     ts_and_date = (
         lhs == pd_timestamp_type
@@ -690,7 +692,7 @@ def cmp_timestamp_or_date(lhs, rhs):
 
 
 def cmp_timeseries(lhs, rhs):
-    """ Helper function to check types supported in series_dt_impl by cmp op overload. """
+    """Helper function to check types supported in series_dt_impl by cmp op overload."""
 
     dt64s_with_string_or_ts = bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs) and (
         bodo.utils.typing.is_overload_constant_str(lhs)
@@ -718,7 +720,7 @@ def cmp_timeseries(lhs, rhs):
 
 
 def cmp_timedeltas(lhs, rhs):
-    """ Helper function to check types supported in datetime_timedelta_ext by cmp op overload. """
+    """Helper function to check types supported in datetime_timedelta_ext by cmp op overload."""
 
     deltas = [pd_timedelta_type, bodo.timedelta64ns]
     return lhs in deltas and rhs in deltas
@@ -758,7 +760,7 @@ def can_cmp_date_datetime(lhs, rhs, op):
 
 
 def time_series_operation(lhs, rhs):
-    """ Helper function to check types supported in series_dt_impl by add/sub op overload. """
+    """Helper function to check types supported in series_dt_impl by add/sub op overload."""
     td64series_and_timedelta = (
         bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(lhs)
         and rhs == datetime_timedelta_type
@@ -797,7 +799,7 @@ def args_td_and_int_array(lhs, rhs):
 
 ## Checks for Numba support
 def arith_op_supported_by_numba(op, lhs, rhs):
-    """ Signatures supported by Numba for binary operators. """
+    """Signatures supported by Numba for binary operators."""
 
     if op == operator.mul:
         # np timedeltas
@@ -821,7 +823,9 @@ def arith_op_supported_by_numba(op, lhs, rhs):
         numbers = ints or reals or cmplx
 
         # Lists
-        lists = (isinstance(lhs, types.List) and isinstance(rhs, types.Integer)) or (isinstance(lhs, types.Integer) and isinstance(rhs, types.List))
+        lists = (isinstance(lhs, types.List) and isinstance(rhs, types.Integer)) or (
+            isinstance(lhs, types.Integer) and isinstance(rhs, types.List)
+        )
 
         # char seq
         tys = (types.UnicodeCharSeq, types.CharSeq, types.Bytes)
@@ -963,7 +967,7 @@ def arith_op_supported_by_numba(op, lhs, rhs):
 
 
 def cmp_op_supported_by_numba(lhs, rhs):
-    """ Signatures supported by Numba for cmp operator. """
+    """Signatures supported by Numba for cmp operator."""
 
     # arrays
     arrs = isinstance(lhs, types.Array) or isinstance(rhs, types.Array)
@@ -1032,7 +1036,7 @@ def cmp_op_supported_by_numba(lhs, rhs):
 
 ## Helper function for raising errors
 def raise_error_if_not_numba_supported(op, lhs, rhs):
-    """ If arithmetic operator supported by Numba pass, otherwise raise a BodoError. """
+    """If arithmetic operator supported by Numba pass, otherwise raise a BodoError."""
 
     if arith_op_supported_by_numba(op, lhs, rhs):
         return
@@ -1080,7 +1084,7 @@ _install_cmp_ops()
 
 
 def install_arith_ops():
-    """ Install arithmetic operators overload. """
+    """Install arithmetic operators overload."""
 
     for op in (
         operator.add,

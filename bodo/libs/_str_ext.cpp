@@ -81,6 +81,7 @@ void str_from_float64(char* s, double in);
 void inplace_int64_to_str(char* str, int64_t l, int64_t value);
 
 void del_str(std::string* in_str);
+int is_np_array(PyObject* obj);
 npy_intp array_size(PyArrayObject* arr);
 void* array_getptr1(PyArrayObject* arr, npy_intp ind);
 void array_setitem(PyArrayObject* arr, char* p, PyObject* s);
@@ -177,6 +178,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(m, "del_str", PyLong_FromVoidPtr((void*)(&del_str)));
     PyObject_SetAttrString(m, "array_size",
                            PyLong_FromVoidPtr((void*)(&array_size)));
+    PyObject_SetAttrString(m, "is_np_array",
+                           PyLong_FromVoidPtr((void*)(&is_np_array)));
     PyObject_SetAttrString(m, "unicode_to_utf8",
                            PyLong_FromVoidPtr((void*)(&unicode_to_utf8)));
     PyObject_SetAttrString(m, "array_getptr1",
@@ -605,13 +608,15 @@ void* pd_array_from_string_array(int64_t no_strings,
 }
 
 // helper functions for call Numpy APIs
+int is_np_array(PyObject* obj) {
+    return PyArray_CheckExact(obj);
+}
+
 npy_intp array_size(PyArrayObject* arr) {
-    // std::cout << "get size\n";
     return PyArray_SIZE(arr);
 }
 
 void* array_getptr1(PyArrayObject* arr, npy_intp ind) {
-    // std::cout << "get array ptr " << ind << '\n';
     return PyArray_GETPTR1(arr, ind);
 }
 
@@ -621,7 +626,6 @@ void array_setitem(PyArrayObject* arr, char* p, PyObject* s) {
         std::cerr << msg << std::endl; \
         return;                        \
     }
-    // std::cout << "get array ptr " << ind << '\n';
     int err = PyArray_SETITEM(arr, p, s);
     CHECK(err == 0, "setting item in numpy array failed");
     return;

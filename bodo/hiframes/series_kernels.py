@@ -11,6 +11,7 @@ from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.libs.int_arr_ext import IntDtype
+from bodo.utils.typing import decode_if_dict_array
 
 
 # TODO[BE-476]: refactor dataframe column filtering
@@ -50,6 +51,7 @@ def _column_fillna_impl(A, B, fill):  # pragma: no cover
 def _series_dropna_str_alloc_impl_inner(B):  # pragma: no cover
     # TODO: test
     # TODO: generalize
+    B = decode_if_dict_array(B)
     old_len = len(B)
     na_count = 0
     for i in range(len(B)):
@@ -282,7 +284,7 @@ def compute_skew(first_moment, second_moment, third_moment, count):  # pragma: n
     if count < 3:
         return np.nan
     mu = first_moment / count
-    numerator = third_moment - 3 * second_moment * mu + 2 * count * mu ** 3
+    numerator = third_moment - 3 * second_moment * mu + 2 * count * mu**3
     denominator = second_moment - mu * first_moment
     s = (
         (count * (count - 1) ** (1.5) / (count - 2))
@@ -303,13 +305,13 @@ def compute_kurt(
     m4 = (
         fourth_moment
         - 4 * third_moment * mu
-        + 6 * second_moment * mu ** 2
-        - 3 * count * mu ** 4
+        + 6 * second_moment * mu**2
+        - 3 * count * mu**4
     )
     m2 = second_moment - mu * first_moment
     adj = 3 * (count - 1) ** 2 / ((count - 2) * (count - 3))
     numer = count * (count + 1) * (count - 1) * m4
-    denom = (count - 2) * (count - 3) * m2 ** 2
+    denom = (count - 2) * (count - 3) * m2**2
     s = (count - 1) * (numer / denom - adj)
     s = s / (count - 1)
     return s

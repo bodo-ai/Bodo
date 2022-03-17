@@ -64,9 +64,7 @@ from bodo.utils.typing import (
 class IntegerArrayType(types.ArrayCompatible):
     def __init__(self, dtype):
         self.dtype = dtype
-        super(IntegerArrayType, self).__init__(
-            name="IntegerArrayType({})".format(dtype)
-        )
+        super(IntegerArrayType, self).__init__(name=f"IntegerArrayType({dtype})")
 
     @property
     def as_array(self):

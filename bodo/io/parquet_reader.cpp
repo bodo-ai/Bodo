@@ -24,17 +24,6 @@ using parquet::ParquetFileReader;
 // -------- Helper functions --------
 
 /**
- * Open Arrow parquet file reader (parquet::arrow::FileReader).
- * @param[in] file_name : Path of parquet file to open
- * @param[out] a_reader : pointer to file reader
- * @param[in] bucket_region : S3 bucket region (when reading from S3)
- * @param[in] s3fs_anon : true if anonymous access (when reading from S3)
- */
-void pq_init_reader(const char* file_name,
-                    std::shared_ptr<parquet::arrow::FileReader>* a_reader,
-                    const char* bucket_region, bool s3fs_anon);
-
-/**
  * Get number of columns in a parquet file that correspond to a field
  * in the Arrow schema. For example, a struct with two int64 fields consists
  * of two columns of data in the parquet file.
@@ -122,6 +111,7 @@ class ParquetReader : public ArrowDataframeReader {
                   int32_t* _selected_fields, int32_t num_selected_fields,
                   int32_t* is_nullable, int32_t* _selected_part_cols,
                   int32_t* _part_cols_cat_dtype, int32_t num_partition_cols,
+                  int32_t* _str_as_dict_cols, int32_t num_str_as_dict_cols,
                   bool _input_file_name_col)
         : ArrowDataframeReader(_parallel, _tot_rows_to_read, _selected_fields,
                                num_selected_fields, is_nullable),
@@ -171,6 +161,13 @@ class ParquetReader : public ArrowDataframeReader {
             MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T, MPI_SUM,
                           MPI_COMM_WORLD);
             avg_num_pieces = num_pieces / static_cast<double>(num_ranks);
+        }
+
+        // TODO move this code to parent class
+        for (auto i = _str_as_dict_cols;
+             i < _str_as_dict_cols + num_str_as_dict_cols; i++) {
+            auto field = schema->field(*i);
+            str_as_dict_cols.emplace(field->name());
         }
 
         // allocate output partition columns. These are categorical columns
@@ -280,6 +277,13 @@ class ParquetReader : public ArrowDataframeReader {
                            PyUnicode_FromString(p.c_str()));
         }
 
+        PyObject* str_as_dict_cols_py = PyList_New(str_as_dict_cols.size());
+        i = 0;
+        for (auto field_name : str_as_dict_cols) {
+            PyList_SetItem(str_as_dict_cols_py, i++,
+                           PyUnicode_FromString(field_name.c_str()));
+        }
+
         int64_t rows_to_skip = start_row_first_piece;
         PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
         // This only loads record batches that match the filter.
@@ -293,9 +297,10 @@ class ParquetReader : public ArrowDataframeReader {
         // seems to help, but the problem can still occur, so this needs
         // further investigation,
         PyObject* dataset_batches_tup = PyObject_CallMethod(
-            pq_mod, "get_scanner_batches", "OOOdiOss", fnames_list_py,
+            pq_mod, "get_scanner_batches", "OOOdiOssO", fnames_list_py,
             expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
-            storage_options, bucket_region.c_str(), prefix.c_str());
+            storage_options, bucket_region.c_str(), prefix.c_str(),
+            str_as_dict_cols_py);
         // PyTuple_GetItem returns a borrowed reference
         PyObject* dataset = PyTuple_GetItem(dataset_batches_tup, 0);
         Py_INCREF(dataset);  // call incref to keep the reference
@@ -305,6 +310,7 @@ class ParquetReader : public ArrowDataframeReader {
         Py_DECREF(selected_fields_py);
         Py_DECREF(storage_options);
         Py_DECREF(fnames_list_py);
+        Py_DECREF(str_as_dict_cols_py);
         PyObject* batch_py = NULL;
         // while ((batch_py = PyIter_Next(batches_it))) {  // XXX Fails with
         // batch reader returned by scanner
@@ -435,60 +441,6 @@ class ParquetReader : public ArrowDataframeReader {
     }
 };
 
-void pq_init_reader(const char* file_name,
-                    std::shared_ptr<parquet::arrow::FileReader>* a_reader,
-                    const char* bucket_region, bool s3fs_anon) {
-    PyObject* f_mod;
-    std::string f_name(file_name);
-    auto pool = ::arrow::default_memory_pool();
-    arrow::Status status;
-
-    size_t colon = f_name.find_first_of(':');
-    std::string protocol = f_name.substr(0, colon);
-    std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
-    // HDFS if starts with hdfs://, abfs:// or abfss://
-    if (f_name.find("hdfs://") == 0 || f_name.find("abfs://") == 0 ||
-        f_name.find("abfss://") == 0) {
-        std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
-        std::shared_ptr<::arrow::io::RandomAccessFile> file;
-        // open Parquet file
-        hdfs_open_file(file_name, &file);
-        // create Arrow reader
-        status = parquet::arrow::FileReader::Make(
-            pool, ParquetFileReader::Open(file), &arrow_reader);
-        CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
-        *a_reader = std::move(arrow_reader);
-        // S3
-    } else if (f_name.find("s3://") == 0) {
-        std::shared_ptr<::arrow::io::RandomAccessFile> file;
-        // remove s3://
-        f_name = f_name.substr(strlen("s3://"));
-        // get s3 opener function
-        // open Parquet file
-        s3_open_file(f_name.c_str(), &file, bucket_region, s3fs_anon);
-        // create Arrow reader
-        status = parquet::arrow::FileReader::Make(
-            pool, ParquetFileReader::Open(file), &arrow_reader);
-        CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
-        *a_reader = std::move(arrow_reader);
-        // Google Cloud Storage
-    } else if (protocol == "gcs" || protocol == "gs" || pyfs.count(protocol)) {
-        std::shared_ptr<::arrow::io::RandomAccessFile> file;
-        fsspec_open_file(f_name, protocol, &file);
-        status = parquet::arrow::FileReader::Make(
-            pool, ParquetFileReader::Open(file), &arrow_reader);
-        CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
-        *a_reader = std::move(arrow_reader);
-    } else  // regular file system
-    {
-        status = parquet::arrow::FileReader::Make(
-            pool, ParquetFileReader::OpenFile(f_name, false), &arrow_reader);
-        CHECK_ARROW(status, "parquet::arrow::FileReader::Make");
-        *a_reader = std::move(arrow_reader);
-    }
-    return;
-}
-
 /**
  * Read a parquet dataset.
  *
@@ -529,13 +481,15 @@ table_info* pq_read(PyObject* path, bool parallel, char* bucket_region,
                     int32_t* selected_fields, int32_t num_selected_fields,
                     int32_t* is_nullable, int32_t* selected_part_cols,
                     int32_t* part_cols_cat_dtype, int32_t num_partition_cols,
+                    int32_t* str_as_dict_cols, int32_t num_str_as_dict_cols,
                     int64_t* total_rows_out, bool input_file_name_col) {
     try {
         ParquetReader reader(path, parallel, bucket_region, dnf_filters,
                              expr_filters, storage_options, tot_rows_to_read,
                              selected_fields, num_selected_fields, is_nullable,
                              selected_part_cols, part_cols_cat_dtype,
-                             num_partition_cols, input_file_name_col);
+                             num_partition_cols, str_as_dict_cols,
+                             num_str_as_dict_cols, input_file_name_col);
         *total_rows_out = reader.get_total_rows();
         table_info* out = reader.read();
         // append the partition columns to the final output table

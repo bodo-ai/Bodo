@@ -2127,8 +2127,7 @@ def test_scatterv_None_warning(df_value):
     pd.testing.assert_frame_equal(df_proper, df_improper)
 
 
-# TODO: add memory_leak_check when error with table format dataframes is fixed
-def test_gatherv_empty_df():
+def test_gatherv_empty_df(memory_leak_check):
     """test using gatherv inside jit functions"""
 
     def impl(df):
@@ -2137,6 +2136,24 @@ def test_gatherv_empty_df():
     df = pd.DataFrame()
     df_gathered = bodo.jit()(impl)(df)
     pd.testing.assert_frame_equal(df, df_gathered)
+
+
+def test_gatherv_str(memory_leak_check):
+    """make sure gatherv() works for string arrays with over-allocated data arrays"""
+
+    def impl(S):
+        # replace implementation uses automatic string data expansion (over-allocation)
+        S2 = S.str.replace("A", "ABC")
+        return bodo.gatherv(S2)
+
+    S = pd.Series(["A", "B", "C"])
+    S2 = bodo.jit(distributed=["S"])(impl)(S)
+    if bodo.get_rank() == 0:
+        pd.testing.assert_series_equal(
+            pd.concat([S] * bodo.get_size()).str.replace("A", "ABC"),
+            S2,
+            check_index=False,
+        )
 
 
 @pytest.mark.slow
@@ -2529,3 +2546,23 @@ def test_bcast(val1, val2, root):
         return val
 
     check_func(impl, (), py_output=val1, is_out_distributed=False)
+
+
+def test_gatherv_global(memory_leak_check):
+    """
+    Test that gatherv is properly optimized out when run with
+    a global array.
+    """
+    arr = np.arange(100)
+
+    @bodo.jit
+    def impl1():
+        return bodo.gatherv(arr)
+
+    # Test the sequential pipeline
+    @bodo.jit(distributed=False)
+    def impl2():
+        return bodo.gatherv(arr)
+
+    np.testing.assert_array_equal(impl1(), arr)
+    np.testing.assert_array_equal(impl2(), arr)

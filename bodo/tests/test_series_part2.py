@@ -311,11 +311,11 @@ def test_series_map_dict(memory_leak_check):
 
     # homogeneous output
     def impl1(S):
-        return S.map(lambda a: {"A": a + 1, "B": a ** 2})
+        return S.map(lambda a: {"A": a + 1, "B": a**2})
 
     # heterogeneous output
     def impl2(S):
-        return S.map(lambda a: {"A": a + 1, "B": a ** 2.0})
+        return S.map(lambda a: {"A": a + 1, "B": a**2.0})
 
     S = pd.Series([1, 211, 333, 43, 51, 12, 15])
     check_func(impl1, (S,))
@@ -1155,7 +1155,7 @@ def test_series_argsort(series_val, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_series_index(series_val, memory_leak_check):
+def test_series_sort_index(series_val, memory_leak_check):
     """test Series.sort_index() on various Series types"""
 
     def test_impl(A):
@@ -1164,7 +1164,7 @@ def test_series_index(series_val, memory_leak_check):
     check_func(test_impl, (series_val,))
 
 
-def test_series_index_fast(memory_leak_check):
+def test_series_sort_index_fast(memory_leak_check):
     """test Series.sort_index() on a single Series type for faster CI"""
 
     def test_impl(A):
@@ -1295,7 +1295,7 @@ def test_series_quantile(numeric_series_val, memory_leak_check):
 
 @pytest.mark.slow
 def test_series_quantile_q(memory_leak_check):
-    """ Tests passing list, int, and unsupported type to q argument"""
+    """Tests passing list, int, and unsupported type to q argument"""
 
     # List
     def test_impl(S):
@@ -1545,6 +1545,9 @@ def test_series_fillna_specific_method(
     check_func(test_impl, (fillna_series,), check_dtype=False)
 
 
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
+)
 @pytest.mark.parametrize(
     "S,value",
     [
@@ -2848,7 +2851,7 @@ def test_series_var(memory_leak_check):
 
 
 def test_series_sem(memory_leak_check):
-    """ Test Series.sem """
+    """Test Series.sem"""
 
     def f(S):
         return S.sem()
@@ -3116,7 +3119,7 @@ def test_datetime_series_mean(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_mem_usage(memory_leak_check):
-    """ Test Series.memory_usage() with and w/o index"""
+    """Test Series.memory_usage() with and w/o index"""
 
     def impl1(S):
         return S.memory_usage()

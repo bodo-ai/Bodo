@@ -64,6 +64,7 @@ from bodo.libs.bool_arr_ext import (
     boolean_dtype,
 )
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.map_arr_ext import MapArrayType
@@ -2650,7 +2651,7 @@ def overload_isna(obj):
     if isinstance(
         obj, (DataFrameType, SeriesType)
     ) or bodo.hiframes.pd_index_ext.is_pd_index_type(obj):
-        return lambda obj: obj.isna()
+        return lambda obj: obj.isna()  # pragma: no cover
 
     # Bodo arrays, use array_kernels.isna()
     if is_array_typ(obj):
@@ -2685,7 +2686,7 @@ def overload_isna_scalar(obj):
     # array-like: list, tuple
     if isinstance(obj, (types.List, types.UniTuple)):
         # no reuse of array implementation to avoid prange (unexpected threading etc.)
-        def impl(obj):
+        def impl(obj):  # pragma: no cover
             n = len(obj)
             out_arr = np.empty(n, np.bool_)
             for i in range(n):
@@ -2740,12 +2741,11 @@ def overload_notna(obj):
     # TODO: ~pd.isna(obj) implementation fails for some reason in
     # test_dataframe.py::test_pd_notna[na_test_obj7] with 1D_Var input
     check_runtime_cols_unsupported(obj, "pd.notna()")
-    if isinstance(obj, DataFrameType):
+    if isinstance(obj, (DataFrameType, SeriesType)):
         return lambda obj: obj.notna()  # pragma: no cover
-    if (
-        isinstance(obj, (SeriesType, types.Array, types.List, types.UniTuple))
-        or bodo.hiframes.pd_index_ext.is_pd_index_type(obj)
-        or obj == bodo.string_array_type
+
+    if isinstance(obj, (types.List, types.UniTuple)) or is_array_typ(
+        obj, include_index_series=True
     ):
         return lambda obj: ~pd.isna(obj)  # pragma: no cover
 
@@ -3226,6 +3226,7 @@ def common_validate_merge_merge_asof_spec(
     )
     valid_dataframe_column_insts = {
         string_array_type,
+        dict_str_arr_type,
         binary_array_type,
         datetime_date_array_type,
         datetime_timedelta_array_type,

@@ -13,6 +13,7 @@ from enum import Enum
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from mpi4py import MPI
 from numba.core import ir, types
 from numba.core.compiler_machinery import FunctionPass, register_pass
@@ -542,7 +543,10 @@ def _get_dist_arg(a, copy=False, var_length=False, check_typing_issues=True):
     if isinstance(a, pytypes.FunctionType) or not is_distributable_typ(bodo.typeof(a)):
         return a
 
-    start, end = get_start_end(a.shape[0])
+    # PyArrow doesn't support shape
+    l = len(a) if isinstance(a, pa.Array) else a.shape[0]
+
+    start, end = get_start_end(l)
     # for var length case to be different than regular 1D in chunk sizes, add
     # one extra element to last processor
     if var_length and bodo.get_size() >= 2:
@@ -763,6 +767,15 @@ def _test_equal(
             isinstance(bodo_out, scipy.sparse.csr_matrix)
             and py_out.shape == bodo_out.shape
             and (py_out != bodo_out).nnz == 0
+        )
+    # pyarrow array types
+    elif isinstance(py_out, pa.Array):
+        pd.testing.assert_series_equal(
+            pd.Series(py_out),
+            pd.Series(bodo_out),
+            check_dtype=False,
+            atol=atol,
+            rtol=rtol,
         )
     elif isinstance(py_out, float):
         # avoid equality check since paralellism can affect floating point operations

@@ -437,6 +437,105 @@ class StringBuilder : public TableBuilder::BuilderColumn {
     arrow::ArrayVector arrays;
 };
 
+/// Column builder for dictionary-encoded string arrays
+class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
+   public:
+    /**
+     * @param type : Arrow type of input array
+     */
+    DictionaryEncodedStringBuilder(std::shared_ptr<arrow::DataType> type,
+                                   int64_t length)
+        : length(length) {
+        //  'type' comes from the schema returned from
+        //  bodo.io.parquet_pio.get_parquet_dataset() which always has string
+        //  columns as STRING (not DICT)
+        Bodo_CTypes::CTypeEnum dtype = arrow_to_bodo_type(type);
+        if (dtype != Bodo_CTypes::CTypeEnum::STRING &&
+            dtype != Bodo_CTypes::CTypeEnum::BINARY) {
+            throw std::runtime_error(
+                "DictionaryEncodedStringBuilder only supports STRING and "
+                "BINARY data types");
+        }
+    }
+
+    virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
+        // Store the chunks
+        this->all_chunks.insert(this->all_chunks.end(),
+                                chunked_arr->chunks().begin(),
+                                chunked_arr->chunks().end());
+    }
+
+    virtual array_info* get_output() {
+        if (out_array != nullptr) return out_array;
+
+        if (length == 0) {
+            this->out_array = alloc_dict_string_array(0, 0, 0, /*has_global_dictionary=*/false);
+            return this->out_array;
+        }
+
+        // Unify all the chunks
+        arrow::Result<std::shared_ptr<::arrow::ChunkedArray>> chunked_arr_res =
+            ::arrow::ChunkedArray::Make(this->all_chunks);
+        if (!chunked_arr_res.ok()) {
+            throw std::runtime_error(
+                "Runtime error in creation of chunked array...");
+        }
+        std::shared_ptr<::arrow::ChunkedArray> chunked_arr =
+            chunked_arr_res.ValueOrDie();
+        arrow::Result<std::shared_ptr<::arrow::ChunkedArray>> unified_arr_res =
+            arrow::DictionaryUnifier::UnifyChunkedArray(chunked_arr);
+        if (!unified_arr_res.ok()) {
+            throw std::runtime_error(
+                "Runtime error in chunk array dictionary unification...");
+        }
+        std::shared_ptr<::arrow::ChunkedArray> unified_arr =
+            unified_arr_res.ValueOrDie();
+
+        // After unification, all chunks should have the same dictionary
+        // TODO Verify
+        std::shared_ptr<arrow::Array> first_chunk = (unified_arr->chunk(0));
+        std::shared_ptr<arrow::Array> dictionary =
+            reinterpret_cast<arrow::DictionaryArray*>(first_chunk.get())
+                ->dictionary();
+
+        // copy from Arrow arrays to Bodo array
+
+        // copy dictionary
+        StringBuilder dictionary_builder(dictionary->type());
+        arrow::ArrayVector dict_v{dictionary};
+        dictionary_builder.append(
+            std::make_shared<arrow::ChunkedArray>(dict_v));
+        array_info* bodo_dictionary = dictionary_builder.get_output();
+
+        // copy indices
+        PrimitiveBuilder indices_builder(arrow::int32(), this->length,
+                                         /*is_nullable=*/true,
+                                         /*is_categorical=*/false);
+        arrow::ArrayVector indices_chunks;
+        for (auto chunk : unified_arr->chunks()) {
+            std::shared_ptr<arrow::DictionaryArray> dict_array_chunk =
+                std::dynamic_pointer_cast<arrow::DictionaryArray>(chunk);
+            // TODO assert that dict_array_chunk->indices() type is int32
+            indices_chunks.push_back(dict_array_chunk->indices());
+        }
+        indices_builder.append(
+            std::make_shared<arrow::ChunkedArray>(indices_chunks));
+        array_info* bodo_indices = indices_builder.get_output();
+
+        out_array = new array_info(
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1,
+            -1, NULL, NULL, NULL, bodo_indices->null_bitmask, NULL, NULL, NULL,
+            NULL, 0, 0, 0, false, bodo_dictionary, bodo_indices);
+
+        all_chunks.clear();
+        return out_array;
+    }
+
+   private:
+    const int64_t length;  // number of indices of output array
+    arrow::ArrayVector all_chunks;
+};
+
 /// Column builder for list of string arrays
 class ListStringBuilder : public TableBuilder::BuilderColumn {
    public:
@@ -572,7 +671,8 @@ class AllNullsBuilder : public TableBuilder::BuilderColumn {
 TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                            std::set<int>& selected_fields,
                            const int64_t num_rows,
-                           std::vector<bool>& is_nullable) {
+                           std::vector<bool>& is_nullable,
+                           const std::set<std::string>& str_as_dict_cols) {
     int j = 0;
     for (int i : selected_fields) {
         const bool nullable_field = is_nullable[j++];
@@ -580,6 +680,9 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
         // is a single field)
         auto field = schema->field(i);
         auto type = field->type()->id();
+        // 'type' comes from the schema returned from
+        // bodo.io.parquet_pio.get_parquet_dataset() which always has string
+        // columns as STRING (not DICT)
         bool is_categorical = arrow::is_dictionary(type);
         if (arrow::is_primitive(type) || arrow::is_decimal(type) ||
             is_categorical) {
@@ -593,7 +696,11 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                 columns.push_back(new PrimitiveBuilder(
                     field->type(), num_rows, nullable_field, is_categorical));
             }
-        } else if (is_binary_like(type)) {
+        } else if (arrow::is_binary_like(type) &&
+                   (str_as_dict_cols.count(field->name()) > 0)) {
+            columns.push_back(
+                new DictionaryEncodedStringBuilder(field->type(), num_rows));
+        } else if (arrow::is_binary_like(type)) {
             columns.push_back(new StringBuilder(field->type()));
         } else if (type == arrow::Type::LIST &&
                    arrow::is_binary_like(

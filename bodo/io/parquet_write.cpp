@@ -101,6 +101,51 @@ void bodo_array_to_arrow(
                 arrow::MakeArray(arr_data));
         }
     }
+    // TODO: Reuse some of this code to enable to_parquet with Categorical
+    // Arrays?
+    // if (array->arr_type == bodo_array_type::DICT) {
+    //     // C++ dictionary arrays in Bodo are dictionary arrays in Arrow.
+    //     // We construct the array using arrow::DictionaryArray::FromArrays
+    //     // https://arrow.apache.org/docs/cpp/api/array.html#_CPPv4N5arrow15DictionaryArray10FromArraysERKNSt10shared_ptrI8DataTypeEERKNSt10shared_ptrI5ArrayEERKNSt10shared_ptrI5ArrayEE
+
+
+    //     // Dummy vector to enable recrusive calls.
+    //     std::vector<std::shared_ptr<arrow::Field>> dummy_schema_vector;
+    //     std::vector<std::shared_ptr<arrow::ChunkedArray>> dict_parts(2);
+
+    //     // Recurse on the dictionary
+    //     bodo_array_to_arrow(pool, array->info1, col_name, dummy_schema_vector, &dict_parts[0]);
+    //     // Recurse on the index array
+    //     bodo_array_to_arrow(pool, array->info2, col_name, dummy_schema_vector, &dict_parts[1]);
+
+    //     // Extract the types from the dictionary call.
+    //     std::shared_ptr<arrow::DataType> type = arrow::dictionary(
+    //         dummy_schema_vector[1]->type(),
+    //         dummy_schema_vector[0]->type()
+    //         // TODO: Can we provide ordered?
+    //     );
+    //     schema_vector.push_back(arrow::field(col_name, type));
+
+    //     // Dictionary arrays are only supported when there is a single chunk.
+    //     // TODO: Replace the assert with an alternative path that converts the
+    //     // dict array to a string array when we have multiple chunks
+    //     // i.e. (offsets[array->length] - offsets[0] > max_chunk_size)
+    //     assert(dict_parts[0]->num_chunks() == 1);
+    //     assert(dict_parts[1]->num_chunks() == 1);
+
+    //     std::shared_ptr<arrow::Array> dictionary = dict_parts[0]->chunk(0);
+    //     // Int32 always has 1 chunk
+    //     std::shared_ptr<arrow::Array> index_array = dict_parts[1]->chunk(0);
+    //     arrow::Result<std::shared_ptr<arrow::Array>> result = arrow::DictionaryArray::FromArrays(
+    //         type,
+    //         index_array,
+    //         dictionary
+    //     );
+    //     std::shared_ptr<arrow::Array> dict_array;
+    //     CHECK_ARROW_AND_ASSIGN(result, "arrow::DictionaryArray::FromArrays", dict_array)
+
+    //     *out = std::make_shared<arrow::ChunkedArray>(dict_array);
+    // }
 
     if (array->arr_type == bodo_array_type::NUMPY ||
         (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&

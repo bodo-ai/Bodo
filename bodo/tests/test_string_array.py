@@ -436,6 +436,10 @@ def test_nbytes(memory_leak_check):
 
     A = np.array(["AA", "B"] * 4, object)
     py_output = 8 * (8 + bodo.get_size()) + 12 + bodo.get_size()
+    if bodo.hiframes.boxing._use_dict_str_type:
+        # Each rank has a dictionary with 3 8-byte offsets, 3 characters and a null byte
+        # There is also an index array with 8 4-byte offsets
+        py_output = (8 * 3 + 3 + 1) * bodo.get_size() + 8 * 4 + bodo.get_size()
     check_func(impl, (A,), py_output=py_output)
 
 
@@ -465,6 +469,9 @@ def test_astype_str(memory_leak_check):
     check_func(test_impl, (pd.array(["AA", "B"] * 4),))
 
 
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
+)
 def test_str_copy_inplace(memory_leak_check):
     """Test inplace string copy optimization across arrays in series pass"""
 
@@ -525,6 +532,9 @@ def _check_str_item_length(impl):
     assert dist_IR_contains(fir, "get_str_arr_str_length")
 
 
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
+)
 def test_str_length_inplace(memory_leak_check):
     """Test optimizing len(A[i]) with inplace item length in series pass"""
 

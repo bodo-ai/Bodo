@@ -1,4 +1,5 @@
 import datetime
+import os
 
 import numpy as np
 import pandas as pd
@@ -1237,3 +1238,59 @@ def test_empty_dataframe_creation(memory_leak_check):
         return df
 
     check_func(impl, (), check_dtype=False)
+
+
+def test_unify_dict_string_dataframes():
+    """
+    Tests unifying DataFrames when the inputs consist of
+    dict_string_array columns.
+    """
+    # TODO: Add memory leak check, casting bug
+
+    def impl1(df):
+        # Tuple to tuple
+        if len(df) > 200:
+            # This implementation should always be False so
+            # at runtime we check the cast
+            df = df.sort_values(by="A")
+        return df
+
+    def impl2(source_file):
+        # table to tuple
+        df = pd.read_parquet(source_file)
+        return bodo.hiframes.pd_dataframe_ext._table_to_tuple_format_decoded(df)
+
+    def impl3(source_file):
+        # Table to table
+        df = pd.read_parquet(source_file)
+        if len(df) > 200:
+            # This implementation should always be False so
+            # at runtime we check the cast
+            df = bodo.utils.typing.decode_if_dict_array(df)
+        return df
+
+    def impl4(df):
+        # tuple to table
+        return bodo.hiframes.pd_dataframe_ext._tuple_to_table_format_decoded(df)
+
+    df = pd.DataFrame({"A": ["aefw", "ER", None, "Few"] * 25, "B": ["#$@4", "!1"] * 50})
+    temp_file = "temp_file.pq"
+    if bodo.get_rank() == 0:
+        # Send to a file to create table source
+        df.to_parquet(temp_file, index=False)
+    bodo.barrier()
+    # use dictionary-encoded arrays for strings
+    saved_dict_arr_flag = bodo.hiframes.boxing._use_dict_str_type
+    saved_read_as_dict_threshold = bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD
+    try:
+        bodo.hiframes.boxing._use_dict_str_type = True
+        bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD = 1000.0
+        check_func(impl1, (df,))
+        check_func(impl2, (temp_file,), py_output=df)
+        check_func(impl3, (temp_file,))
+        check_func(impl4, (df,), py_output=df)
+    finally:
+        bodo.hiframes.boxing._use_dict_str_type = saved_dict_arr_flag
+        bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD = saved_read_as_dict_threshold
+        if bodo.get_rank() == 0:
+            os.remove(temp_file)

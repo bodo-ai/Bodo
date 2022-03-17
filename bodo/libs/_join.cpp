@@ -30,6 +30,25 @@ table_info* hash_join_table(
     cond_expr_fn_t cond_func, int64_t* cond_func_left_columns,
     int64_t cond_func_left_column_len, int64_t* cond_func_right_columns,
     int64_t cond_func_right_column_len) {
+
+    // XXX Not sure if this is needed. has_global_dictionary
+    // should be set by the compiler automatically for
+    // replicated data
+    if (!left_parallel) {
+        for (array_info* a : left_table->columns) {
+            if (a->arr_type == bodo_array_type::DICT) {
+                a->has_global_dictionary = true;
+            }
+        }
+    }
+    if (!right_parallel) {
+        for (array_info* a : right_table->columns) {
+            if (a->arr_type == bodo_array_type::DICT) {
+                a->has_global_dictionary = true;
+            }
+        }
+    }
+
     // Does this join need an additional cond_func
     const bool uses_cond_func = cond_func != nullptr;
     try {
@@ -159,6 +178,22 @@ table_info* hash_join_table(
                 // we do a shuffle-join. To shuffle the tables we build
                 // a hash table (ensuring that comparable
                 // types hash to the same values).
+
+                // for shuffling of dictionary-encoded arrays we need the
+                // dictionaries to be global, and for coherent hashing between
+                // left and right tables we need dictionaries to be unified
+                for (auto i = 0; i < n_key; i++) {
+                    auto arr1 = left_table->columns[i];
+                    auto arr2 = right_table->columns[i];
+                    if ((arr1->arr_type == bodo_array_type::DICT) &&
+                        (arr2->arr_type == bodo_array_type::DICT)) {
+                        if (!arr1->has_global_dictionary)
+                            convert_local_dictionary_to_global(arr1);
+                        if (!arr2->has_global_dictionary)
+                            convert_local_dictionary_to_global(arr2);
+                        unify_dictionaries(arr1, arr2);
+                    }
+                }
 
                 // only do filters for inner join for now
                 BloomFilter* bloom_left = nullptr;
@@ -329,6 +364,43 @@ table_info* hash_join_table(
                 static_cast<void*>(work_right_table->columns[i]->data1);
             null_bitmap_right[i] =
                 static_cast<void*>(work_right_table->columns[i]->null_bitmask);
+        }
+
+        // Unify dictionaries of DICT key columns (required for key comparison)
+        // IMPORTANT: need to do this before computing the hashes
+        for (auto i = 0; i < n_key; i++) {
+            auto arr1 = work_left_table->columns[i];
+            auto arr2 = work_right_table->columns[i];
+            if ((arr1->arr_type == bodo_array_type::DICT) &&
+                (arr2->arr_type == bodo_array_type::DICT)) {
+                if (!arr1->has_global_dictionary)
+                    convert_local_dictionary_to_global(arr1);
+                if (!arr2->has_global_dictionary)
+                    convert_local_dictionary_to_global(arr2);
+                unify_dictionaries(arr1, arr2);
+            }
+        }
+        // Non-keys used in cond_func need global dictionaries
+        // for hashing, but no unifying is necessary.
+        for (auto i = 0; i < cond_func_left_column_len; i++) {
+            int64_t col_num = cond_func_left_columns[i];
+            if (col_num >= n_key) {
+                auto arr = left_table->columns[col_num];
+                if (arr->arr_type == bodo_array_type::DICT) {
+                    if (!arr->has_global_dictionary)
+                        convert_local_dictionary_to_global(arr);
+                }
+            }
+        }
+        for (auto i = 0; i < cond_func_right_column_len; i++) {
+            int64_t col_num = cond_func_right_columns[i];
+            if (col_num >= n_key) {
+                auto arr = right_table->columns[col_num];
+                if (arr->arr_type == bodo_array_type::DICT) {
+                    if (!arr->has_global_dictionary)
+                        convert_local_dictionary_to_global(arr);
+                }
+            }
         }
 
         //

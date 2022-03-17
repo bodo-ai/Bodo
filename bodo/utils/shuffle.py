@@ -7,31 +7,25 @@ from collections import namedtuple
 
 import numba
 import numpy as np
-from numba import generated_jit
 from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.libs.array_item_arr_ext import offset_type
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
-    convert_len_arr_to_offset,
-    convert_len_arr_to_offset32,
     get_bit_bitmap,
     get_data_ptr,
     get_null_bitmap_ptr,
-    get_offset_ptr,
     get_str_arr_item_length,
     num_total_chars,
-    print_str_arr,
     set_bit_to,
     string_array_type,
 )
 from bodo.libs.str_ext import string_type
-from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
-from bodo.utils.utils import alloc_arr_tup, get_ctypes_ptr, numba_to_c_type
+from bodo.libs.timsort import getitem_arr_tup
+from bodo.utils.utils import get_ctypes_ptr
 
 ########## metadata required for shuffle
 # send_counts -> pre, single
@@ -424,200 +418,6 @@ def finalize_shuffle_meta_overload(
     return finalize_impl
 
 
-def alltoallv_tup(arrs, shuffle_meta, key_arrs):  # pragma: no cover
-    return arrs
-
-
-@overload(alltoallv_tup, no_unliteral=True)
-def alltoallv_tup_overload(arrs, meta, key_arrs):
-    n_keys = len(key_arrs.types)
-    func_text = "def f(arrs, meta, key_arrs):\n"
-
-    # null bitmap counts are send counts divided by 8
-    if any(is_null_masked_type(t) for t in arrs.types):
-        func_text += "  send_counts_nulls = np.empty(len(meta.send_counts), np.int32)\n"
-        func_text += "  for i in range(len(meta.send_counts)):\n"
-        func_text += "    send_counts_nulls[i] = (meta.send_counts[i] + 7) >> 3\n"
-        func_text += "  recv_counts_nulls = np.empty(len(meta.recv_counts), np.int32)\n"
-        func_text += "  for i in range(len(meta.recv_counts)):\n"
-        func_text += "    recv_counts_nulls[i] = (meta.recv_counts[i] + 7) >> 3\n"
-        func_text += "  tmp_null_bytes = np.empty(recv_counts_nulls.sum(), np.uint8)\n"
-
-    func_text += "  lens = np.empty(meta.n_out, np.uint32)\n"
-    for i, typ in enumerate(arrs.types):
-        if isinstance(
-            typ,
-            (
-                types.Array,
-                IntegerArrayType,
-                BooleanArrayType,
-                bodo.CategoricalArrayType,
-            ),
-        ):
-            func_text += (
-                "  bodo.libs.distributed_api.alltoallv("
-                "meta.send_buff_tup[{}], meta.out_arr_tup[{}], meta.send_counts,"
-                "meta.recv_counts, meta.send_disp, meta.recv_disp)\n"
-            ).format(i, i)
-        else:
-            assert typ in [string_array_type, binary_array_type]
-            func_text += (
-                "  offset_ptr_{} = get_offset_ptr(meta.out_arr_tup[{}])\n".format(i, i)
-            )
-
-            if offset_type.bitwidth == 32:  # pragma: no cover
-                func_text += (
-                    "  bodo.libs.distributed_api.c_alltoallv("
-                    "meta.send_arr_lens_tup[{}].ctypes, offset_ptr_{}, meta.send_counts.ctypes, "
-                    "meta.recv_counts.ctypes, meta.send_disp.ctypes, "
-                    "meta.recv_disp.ctypes, int32_typ_enum)\n"
-                ).format(i, i)
-            else:
-                func_text += (
-                    "  bodo.libs.distributed_api.c_alltoallv("
-                    "meta.send_arr_lens_tup[{}].ctypes, lens.ctypes, meta.send_counts.ctypes, "
-                    "meta.recv_counts.ctypes, meta.send_disp.ctypes, "
-                    "meta.recv_disp.ctypes, int32_typ_enum)\n"
-                ).format(i)
-
-            func_text += (
-                "  bodo.libs.distributed_api.c_alltoallv("
-                "meta.send_arr_chars_tup[{}], get_data_ptr(meta.out_arr_tup[{}]), meta.send_counts_char_tup[{}].ctypes,"
-                "meta.recv_counts_char_tup[{}].ctypes, meta.send_disp_char_tup[{}].ctypes,"
-                "meta.recv_disp_char_tup[{}].ctypes, char_typ_enum)\n"
-            ).format(i, i, i, i, i, i)
-
-            if offset_type.bitwidth == 32:  # pragma: no cover
-                func_text += (
-                    "  convert_len_arr_to_offset32(offset_ptr_{}, meta.n_out)\n".format(
-                        i
-                    )
-                )
-            else:
-                func_text += "  convert_len_arr_to_offset(lens.ctypes, offset_ptr_{}, meta.n_out)\n".format(
-                    i
-                )
-
-        if is_null_masked_type(typ):
-            func_text += "  null_bitmap_ptr_{} = get_arr_null_ptr(meta.out_arr_tup[{}])\n".format(
-                i, i
-            )
-            func_text += (
-                "  bodo.libs.distributed_api.c_alltoallv("
-                "meta.send_arr_nulls_tup[{}].ctypes, tmp_null_bytes.ctypes, send_counts_nulls.ctypes, "
-                "recv_counts_nulls.ctypes, meta.send_disp_nulls.ctypes, "
-                "meta.recv_disp_nulls.ctypes, char_typ_enum)\n"
-            ).format(i)
-
-            func_text += "  copy_gathered_null_bytes(null_bitmap_ptr_{}, tmp_null_bytes, recv_counts_nulls, meta.recv_counts)\n".format(
-                i
-            )
-
-    func_text += "  return ({}{})\n".format(
-        ",".join(["meta.out_arr_tup[{}]".format(i) for i in range(arrs.count)]),
-        "," if arrs.count == 1 else "",
-    )
-    int32_typ_enum = np.int32(numba_to_c_type(types.int32))
-    char_typ_enum = np.int32(numba_to_c_type(types.uint8))
-    loc_vars = {}
-    exec(
-        func_text,
-        {
-            "np": np,
-            "bodo": bodo,
-            "get_offset_ptr": get_offset_ptr,
-            "get_data_ptr": get_data_ptr,
-            "int32_typ_enum": int32_typ_enum,
-            "char_typ_enum": char_typ_enum,
-            "convert_len_arr_to_offset": convert_len_arr_to_offset,
-            "convert_len_arr_to_offset32": convert_len_arr_to_offset32,
-            "copy_gathered_null_bytes": bodo.libs.distributed_api.copy_gathered_null_bytes,
-            "get_arr_null_ptr": get_arr_null_ptr,
-            "print_str_arr": print_str_arr,
-        },
-        loc_vars,
-    )
-    a2a_impl = loc_vars["f"]
-    return a2a_impl
-
-
-def shuffle_with_index_impl(key_arrs, node_arr, data):  # pragma: no cover
-    # alloc shuffle meta
-    n_pes = bodo.libs.distributed_api.get_size()
-    pre_shuffle_meta = alloc_pre_shuffle_metadata(key_arrs, data, n_pes, False)
-    n = len(key_arrs[0])
-    orig_indices = np.arange(n)
-    node_ids = np.empty(n, np.int32)
-
-    # calc send/recv counts
-    for i in range(n):
-        val = getitem_arr_tup_single(key_arrs, i)
-        node_id = node_arr[i]
-        node_ids[i] = node_id
-        update_shuffle_meta(pre_shuffle_meta, node_id, i, key_arrs, data, False)
-
-    shuffle_meta = finalize_shuffle_meta(key_arrs, data, pre_shuffle_meta, n_pes, False)
-
-    # write send buffers
-    for i in range(n):
-        val = getitem_arr_tup_single(key_arrs, i)
-        node_id = node_ids[i]
-        w_ind = bodo.ir.join.write_send_buff(shuffle_meta, node_id, i, key_arrs, data)
-        orig_indices[w_ind] = i
-        # update last since it is reused in data
-        shuffle_meta.tmp_offset[node_id] += 1
-
-    # shuffle
-    recvs = alltoallv_tup(key_arrs + data, shuffle_meta, key_arrs)
-    out_keys = _get_keys_tup(recvs, key_arrs)
-    out_data = _get_data_tup(recvs, key_arrs)
-    return out_keys, out_data, orig_indices, shuffle_meta
-
-
-@generated_jit(nopython=True, cache=True)
-def shuffle_with_index(key_arrs, node_arr, data):
-    """shuffle the data but preserve index of data elements to reverse later"""
-    return shuffle_with_index_impl
-
-
-@numba.njit(cache=True)
-def reverse_shuffle(data, orig_indices, shuffle_meta):  # pragma: no cover
-    # TODO: handle strings
-    # allocate output
-    out_arrs = alloc_arr_tup(shuffle_meta.n_send, data)
-    # reverse send/recv buffers
-    new_sh = ShuffleMeta(
-        shuffle_meta.recv_counts,
-        shuffle_meta.send_counts,
-        shuffle_meta.n_out,
-        shuffle_meta.n_send,
-        shuffle_meta.recv_disp,
-        shuffle_meta.send_disp,
-        shuffle_meta.recv_disp_nulls,
-        shuffle_meta.send_disp_nulls,
-        shuffle_meta.tmp_offset,
-        data,
-        out_arrs,
-        shuffle_meta.recv_counts_char_tup,
-        shuffle_meta.send_counts_char_tup,
-        shuffle_meta.send_arr_lens_tup,
-        shuffle_meta.send_arr_nulls_tup,
-        shuffle_meta.send_arr_chars_tup,
-        shuffle_meta.recv_disp_char_tup,
-        shuffle_meta.send_disp_char_tup,
-        shuffle_meta.tmp_offset_char_tup,
-        shuffle_meta.send_arr_chars_arr_tup,
-    )
-
-    out_arrs = alltoallv_tup(data, new_sh, ())
-
-    new_out = alloc_arr_tup(shuffle_meta.n_send, data)
-    for i in range(len(orig_indices)):
-        setitem_arr_tup(new_out, orig_indices[i], getitem_arr_tup(out_arrs, i))
-
-    return new_out
-
-
 def _get_keys_tup(recvs, key_arrs):  # pragma: no cover
     return recvs[: len(key_arrs)]
 
@@ -676,17 +476,13 @@ def val_to_tup_overload(val):
 
 
 def is_null_masked_type(t):
-    return (
-        t
-        in (
-            string_type,
-            string_array_type,
-            bytes_type,
-            binary_array_type,
-            boolean_array,
-        )
-        or isinstance(t, IntegerArrayType)
-    )
+    return t in (
+        string_type,
+        string_array_type,
+        bytes_type,
+        binary_array_type,
+        boolean_array,
+    ) or isinstance(t, IntegerArrayType)
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)

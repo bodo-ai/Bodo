@@ -2212,6 +2212,9 @@ def test_loc_setitem(memory_leak_check):
     check_func(impl10, (df, A))
 
 
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
+)
 def test_loc_setitem_str(memory_leak_check):
     """test df.iloc[idx, col_ind] setitem for string array"""
 
@@ -2260,6 +2263,9 @@ def test_iat_getitem(df_value, memory_leak_check):
     check_func(impl, (df, n), dist_test=dist_test)
 
 
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
+)
 def test_iat_setitem_all_types(df_value, memory_leak_check):
     """test df.iat[] setitem (single value)"""
 
@@ -2425,6 +2431,10 @@ def test_df_drop_column_check(memory_leak_check):
         bodo.jit(test_impl)(df)
 
 
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type,
+    reason="not supported for dict string type",
+)
 def test_df_fillna_str_inplace(memory_leak_check):
     """Make sure inplace fillna for string columns is reflected in output"""
 

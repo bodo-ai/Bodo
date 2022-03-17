@@ -1032,6 +1032,10 @@ def test_pure_func(datapath):
     assert not _func_is_pure(impl14, (types.DictType(types.int64, types.int64),), {})
 
 
+# default string type changes with _use_dict_str_type making type annotation invalid
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type, reason="cannot test with dict string type"
+)
 def test_objmode_types():
     """
     Test creating types in JIT code and passing to objmode

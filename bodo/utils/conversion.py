@@ -16,6 +16,7 @@ from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (
     BodoError,
+    decode_if_dict_array,
     dtype_to_array_type,
     get_overload_const_list,
     get_overload_const_str,
@@ -25,6 +26,7 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_none,
     is_overload_true,
+    is_str_arr_type,
     to_nullable_type,
 )
 
@@ -423,6 +425,7 @@ def overload_coerce_to_array(
 
     if data in (
         bodo.string_array_type,
+        bodo.dict_str_arr_type,
         bodo.binary_array_type,
         bodo.libs.bool_arr_ext.boolean_array,
         bodo.hiframes.datetime_date_ext.datetime_date_array_type,
@@ -864,6 +867,16 @@ def overload_fix_arr_dtype(
 
             return impl_float
         else:
+            # optimized implementation for dictionary arrays
+            if data == bodo.dict_str_arr_type:
+
+                def impl_dict(
+                    data, new_dtype, copy=None, nan_to_str=True, from_series=False
+                ):
+                    return bodo.libs.dict_arr_ext.convert_dict_arr_to_int(data, _dtype)
+
+                return impl_dict
+
             # data is a string array or integer array (nullable or non-nullable)
             def impl(
                 data, new_dtype, copy=None, nan_to_str=True, from_series=False
@@ -1083,7 +1096,7 @@ def parse_datetimes_from_strings(data):  # pragma: no cover
 
 @overload(parse_datetimes_from_strings, no_unliteral=True)
 def overload_parse_datetimes_from_strings(data):
-    assert data == bodo.string_array_type
+    assert is_str_arr_type(data), "parse_datetimes_from_strings: string array expected"
 
     def parse_impl(data):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -1121,7 +1134,7 @@ def overload_convert_to_dt64ns(data):
     if is_np_arr_typ(data, types.NPDatetime("ns")):
         return lambda data: data  # pragma: no cover
 
-    if data == bodo.string_array_type:
+    if is_str_arr_type(data):
         return lambda data: bodo.utils.conversion.parse_datetimes_from_strings(
             data
         )  # pragma: no cover
@@ -1148,7 +1161,7 @@ def overload_convert_to_td64ns(data):
     if is_np_arr_typ(data, types.NPTimedelta("ns")):
         return lambda data: data  # pragma: no cover
 
-    if data == bodo.string_array_type:
+    if is_str_arr_type(data):
         # TODO: support
         raise BodoError("conversion to timedelta from string not supported yet")
 
@@ -1228,6 +1241,10 @@ def overload_index_from_array(data, name=None):
     if data in [bodo.string_array_type, bodo.binary_array_type]:
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_binary_str_index(
             data, name
+        )  # pragma: no cover
+    if data == bodo.dict_str_arr_type:
+        return lambda data, name=None: bodo.hiframes.pd_index_ext.init_binary_str_index(
+            decode_if_dict_array(data), name
         )  # pragma: no cover
     if (
         data == bodo.hiframes.datetime_date_ext.datetime_date_array_type

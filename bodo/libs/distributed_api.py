@@ -40,7 +40,7 @@ from bodo.libs.array_item_arr_ext import (
 )
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.map_arr_ext import MapArrayType
@@ -60,15 +60,16 @@ from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
+    decode_if_dict_array,
     is_overload_false,
     is_overload_none,
+    is_str_arr_type,
 )
 from bodo.utils.utils import (
     CTypeEnum,
     check_and_propagate_cpp_exception,
     empty_like_type,
     numba_to_c_type,
-    tuple_to_scalar,
 )
 
 ll.add_symbol("dist_get_time", hdist.dist_get_time)
@@ -234,13 +235,14 @@ def isend(arr, size, pe, tag, cond=True):
         return impl_nullable
 
     # string arrays
-    if arr in [binary_array_type, string_array_type]:
+    if is_str_arr_type(arr) or arr == binary_array_type:
         offset_typ_enum = np.int32(numba_to_c_type(offset_type))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         # using blocking communication for string arrays instead since the array
         # slice passed in shift() may not stay alive (not a view of the original array)
         def impl_str_arr(arr, size, pe, tag, cond=True):  # pragma: no cover
+            arr = decode_if_dict_array(arr)
             # send number of characters first
             n_chars = np.int64(bodo.libs.str_arr_ext.num_total_chars(arr))
             send(n_chars, pe, tag - 1)
@@ -619,11 +621,12 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
         return gatherv_impl
 
-    if data == string_array_type:
+    if is_str_arr_type(data):
 
         def gatherv_str_arr_impl(
             data, allgather=False, warn_if_rep=True, root=MPI_ROOT
         ):  # pragma: no cover
+            data = decode_if_dict_array(data)
             # call gatherv() on underlying array(item) array
             all_data = bodo.gatherv(data._data, allgather, warn_if_rep, root)
             return bodo.libs.str_arr_ext.init_str_arr(all_data)
@@ -909,13 +912,15 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
         }
         func_text = f"def impl_table(data, allgather=False, warn_if_rep=True, root={MPI_ROOT}):\n"
         func_text += "  T = data\n"
-        func_text += "  T2 = init_table(T)\n"
+        func_text += "  T2 = init_table(T, True)\n"
         for blk in data.type_to_blk.values():
             glbls[f"arr_inds_{blk}"] = np.array(
                 data.block_to_arr_ind[blk], dtype=np.int64
             )
             func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
-            func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk})\n"
+            func_text += (
+                f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, True)\n"
+            )
             func_text += f"  for i in range(len(arr_list_{blk})):\n"
             func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
             func_text += (
@@ -1011,6 +1016,8 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             rank = bodo.libs.distributed_api.get_rank()
             offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(data)
             data_arr = bodo.libs.array_item_arr_ext.get_data(data)
+            # remove excess data due to possible over-allocation
+            data_arr = data_arr[: offsets_arr[-1]]
             null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(data)
             n_loc = len(data)
 
@@ -1536,6 +1543,11 @@ def get_value_for_type(dtype):  # pragma: no cover
     if dtype == string_array_type:
         return pd.array(["A"], "string")
 
+    if dtype == bodo.dict_str_arr_type:
+        import pyarrow as pa
+
+        return pa.array(["a"], type=pa.dictionary(pa.int32(), pa.string()))
+
     if dtype == binary_array_type:
         return np.array([b"A"], dtype=object)
 
@@ -1573,9 +1585,13 @@ def get_value_for_type(dtype):  # pragma: no cover
 
     # MultiIndex index
     if isinstance(dtype, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
+        import pyarrow as pa
+
         name = _get_name_value_for_type(dtype.name_typ)
         names = tuple(_get_name_value_for_type(t) for t in dtype.names_typ)
         arrs = tuple(get_value_for_type(t) for t in dtype.array_types)
+        # convert pyarrow arrays to numpy to avoid errors in pd.MultiIndex.from_arrays
+        arrs = tuple(a.to_numpy(False) if isinstance(a, pa.Array) else a for a in arrs)
         val = pd.MultiIndex.from_arrays(arrs, names=names)
         val.name = name
         return val
@@ -1653,7 +1669,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
             data, send_counts
         )  # pragma: no cover
 
-    if data in [binary_array_type, string_array_type]:
+    if is_str_arr_type(data) or data == binary_array_type:
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
@@ -1665,6 +1681,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
         func_text = f"""def impl(
             data, send_counts=None, warn_if_dist=True
         ):  # pragma: no cover
+            data = decode_if_dict_array(data)
             rank = bodo.libs.distributed_api.get_rank()
             n_pes = bodo.libs.distributed_api.get_size()
             n_all = bodo.libs.distributed_api.bcast_scalar(len(data))
@@ -1768,6 +1785,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
                 "np": np,
                 "int32_typ_enum": int32_typ_enum,
                 "char_typ_enum": char_typ_enum,
+                "decode_if_dict_array": decode_if_dict_array,
             },
             loc_vars,
         )
@@ -1785,6 +1803,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
         ):  # pragma: no cover
             in_offsets_arr = bodo.libs.array_item_arr_ext.get_offsets(data)
             in_data_arr = bodo.libs.array_item_arr_ext.get_data(data)
+            in_data_arr = in_data_arr[: in_offsets_arr[-1]]
             in_null_bitmap_arr = bodo.libs.array_item_arr_ext.get_null_bitmap(data)
 
             rank = bodo.libs.distributed_api.get_rank()
@@ -2181,11 +2200,12 @@ def bcast_overload(data, root=MPI_ROOT):
         return bcast_impl_int_arr
 
     # string arrays
-    if data in [binary_array_type, string_array_type]:
+    if is_str_arr_type(data) or data == binary_array_type:
         offset_typ_enum = np.int32(numba_to_c_type(offset_type))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
         def bcast_str_impl(data, root=MPI_ROOT):  # pragma: no cover
+            data = decode_if_dict_array(data)
             n_loc = len(data)
             n_all_chars = num_total_chars(data)
             assert n_loc < INT_MAX
@@ -2400,94 +2420,6 @@ def slice_getitem_overload(arr, slice_index, arr_start, total_len):
     return getitem_impl
 
 
-# assuming start and step are None
-def slice_getitem_from_start(arr, slice_index):  # pragma: no cover
-    return arr[slice_index]
-
-
-@overload(slice_getitem_from_start, no_unliteral=True)
-def slice_getitem_from_start_overload(arr, slice_index):
-
-    if arr == bodo.hiframes.datetime_date_ext.datetime_date_array_type:
-
-        def getitem_datetime_date_impl(arr, slice_index):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            k = slice_index.stop
-            A = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(k)
-            if rank == 0:
-                A = arr[:k]
-            bodo.libs.distributed_api.bcast(A)
-            return A
-
-        return getitem_datetime_date_impl
-
-    if arr == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type:
-
-        def getitem_datetime_timedelta_impl(arr, slice_index):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            k = slice_index.stop
-            A = bodo.hiframes.datetime_timedelta_ext.alloc_datetime_timedelta_array(k)
-            if rank == 0:
-                A = arr[:k]
-            bodo.libs.distributed_api.bcast(A)
-            return A
-
-        return getitem_datetime_timedelta_impl
-
-    if isinstance(arr.dtype, Decimal128Type):
-        precision = arr.dtype.precision
-        scale = arr.dtype.scale
-
-        def getitem_decimal_impl(arr, slice_index):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            k = slice_index.stop
-            A = bodo.libs.decimal_arr_ext.alloc_decimal_array(k, precision, scale)
-            if rank == 0:
-                for i in range(k):
-                    A._data[i] = arr._data[i]
-                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(arr._null_bitmap, i)
-                    bodo.libs.int_arr_ext.set_bit_to_arr(A._null_bitmap, i, bit)
-            bodo.libs.distributed_api.bcast(A)
-            return A
-
-        return getitem_decimal_impl
-
-    if arr == string_array_type:
-
-        def getitem_str_impl(arr, slice_index):  # pragma: no cover
-            rank = bodo.libs.distributed_api.get_rank()
-            k = slice_index.stop
-            # get total characters for allocation
-            n_chars = np.uint64(0)
-            if rank == 0:
-                out_arr = arr[:k]
-                n_chars = num_total_chars(out_arr)
-            n_chars = bcast_scalar(n_chars)
-            if rank != 0:
-                out_arr = pre_alloc_string_array(k, n_chars)
-
-            # actual communication
-            bodo.libs.distributed_api.bcast(out_arr)
-            return out_arr
-
-        return getitem_str_impl
-
-    arr_type = arr
-
-    def getitem_impl(arr, slice_index):  # pragma: no cover
-        rank = bodo.libs.distributed_api.get_rank()
-        k = slice_index.stop
-        out_arr = bodo.utils.utils.alloc_type(
-            tuple_to_scalar((k,) + arr.shape[1:]), arr_type
-        )
-        if rank == 0:
-            out_arr = arr[:k]
-        bodo.libs.distributed_api.bcast(out_arr)
-        return out_arr
-
-    return getitem_impl
-
-
 dummy_use = numba.njit(lambda a: None)
 
 
@@ -2518,7 +2450,7 @@ def overload_transform_str_getitem_output(data, length):
 
 @overload(int_getitem, no_unliteral=True)
 def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
-    if arr in [bodo.binary_array_type, string_array_type]:
+    if is_str_arr_type(arr) or arr == bodo.binary_array_type:
         # TODO: other kinds, unicode
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
@@ -2529,6 +2461,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
             if ind >= total_len:
                 raise IndexError("index out of bounds")
 
+            arr = decode_if_dict_array(arr)
             # Share the array contents by sending the raw bytes.
             # Match unicode support by only performing the decode at
             # the end after the data has been broadcast.
@@ -2579,6 +2512,7 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
             dummy_use(send_size)
             l = bcast_scalar(l)
+            dummy_use(arr)
             if rank != root:
                 val = bodo.libs.str_ext.alloc_empty_bytes_or_string_data(
                     _alloc_dtype, kind, l, 1

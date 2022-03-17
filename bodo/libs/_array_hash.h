@@ -14,7 +14,7 @@
 #define SEED_HASH_CONTAINER 0xb0d01284
 
 void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                        const uint32_t seed);
+                        const uint32_t seed, bool global_dict_needed);
 
 /**
  * Function for the computation of hashes for keys
@@ -26,14 +26,15 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
  *
  */
 uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
-                    const uint32_t seed, bool is_parallel);
+                    const uint32_t seed, bool is_parallel,
+                    bool global_dict_needed = true);
 
 uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
                              std::vector<array_info*> const& ref_key_arrs,
                              const uint32_t seed);
 
 void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                const uint32_t seed, bool is_parallel);
+                const uint32_t seed, bool is_parallel, bool global_dict_needed);
 
 /**
  * Function for the getting table keys and returning its hashes
@@ -186,6 +187,56 @@ struct multi_col_key {
 
 struct multi_col_key_hash {
     std::size_t operator()(const multi_col_key& k) const { return k.hash; }
+};
+
+/**
+ * Unifies dictionaries of DICT arrays arr1 and arr2
+ * If the arrays have a reference to the same dictionary then
+ * this function does nothing and returns.
+ * Replaces old dictionary with the new one.
+ * Updates the indices to conform to the new dictionary.
+ */
+void unify_dictionaries(array_info* arr1, array_info* arr2);
+
+// For hashing function involving dictionaries of dictionary-encoded arrays
+struct HashDict {
+    uint32_t operator()(const size_t iRow) const {
+        if (iRow < global_array_rows) {
+            return global_array_hashes[iRow];
+        } else {
+            return local_array_hashes[iRow - global_array_rows];
+        }
+    }
+    const size_t global_array_rows;
+    const uint32_t* global_array_hashes;
+    const uint32_t* local_array_hashes;
+};
+
+// For key comparison involving dictionaries of dictionary-encoded arrays
+struct KeyEqualDict {
+    bool operator()(const size_t iRowA, const size_t iRowB) const {
+        size_t jRowA, jRowB;
+        array_info *dict_A, *dict_B;
+        if (iRowA < global_array_rows) {
+            dict_A = global_dictionary;
+            jRowA = iRowA;
+        } else {
+            dict_A = local_dictionary;
+            jRowA = iRowA - global_array_rows;
+        }
+        if (iRowB < global_array_rows) {
+            dict_B = global_dictionary;
+            jRowB = iRowB;
+        } else {
+            dict_B = local_dictionary;
+            jRowB = iRowB - global_array_rows;
+        }
+        // TODO inline?
+        return TestEqualColumn(dict_A, jRowA, dict_B, jRowB, true);
+    }
+    size_t global_array_rows;
+    array_info* global_dictionary;
+    array_info* local_dictionary;
 };
 
 #endif  // _ARRAY_HASH_H_INCLUDED

@@ -61,6 +61,17 @@ def get_bitmap_bit(builder, null_bitmap_ptr, ind):
     return builder.and_(byte, mask)
 
 
+def pyarray_check(builder, context, obj):
+    """check if obj is a Numpy array"""
+
+    pyobj = context.get_argument_type(types.pyobject)
+    arr_check_fnty = lir.FunctionType(lir.IntType(32), [pyobj])
+    arr_check_fn = cgutils.get_or_insert_function(
+        builder.module, arr_check_fnty, name="is_np_array"
+    )
+    return builder.call(arr_check_fn, [obj])
+
+
 def pyarray_getitem(builder, context, arr_obj, ind):
     """getitem of 1D Numpy array"""
     pyobj = context.get_argument_type(types.pyobject)

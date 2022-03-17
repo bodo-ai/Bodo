@@ -940,9 +940,13 @@ def test_slice_replace_all_args(test_unicode, memory_leak_check):
 
 def test_add_series(test_unicode, memory_leak_check):
     def test_impl(S1, S2):
-        return S1.add(S2)
+        return S1.add(S2, fill_value="🍔")
 
-    S2 = test_unicode.map(lambda x: x if pd.isna(x) else x[::-1])
+    S2 = test_unicode.map(lambda x: np.nan if pd.isna(x) else x[::-1])
+    # dict arr unboxing sets nulls to None to avoid PyArrow issues but None causes
+    # issues with Series.add. Setting back to np.nan here:
+    if bodo.hiframes.boxing._use_dict_str_type:
+        test_unicode = test_unicode.map(lambda x: np.nan if pd.isna(x) else x)
     check_func(test_impl, (test_unicode, S2))
 
 
@@ -1152,6 +1156,9 @@ def test_split_non_ascii(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
+)
 def test_setitem_unichar_arr(memory_leak_check):
     """test Series setitem when the string array comes from Numpy
     UnicodeSeq Arrays"""

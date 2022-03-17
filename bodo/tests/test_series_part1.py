@@ -179,6 +179,9 @@ def test_series_fillna_series_val(series_val):
         check_func(impl, (series_val,), dist_test=False, check_dtype=False)
 
 
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
+)
 def test_string_series_fillna_inplace():
     """tests fillna on string series with inplace = True"""
 
@@ -211,9 +214,7 @@ def test_string_series_fillna_inplace():
 def test_binary_series_fillna_inplace():
     """tests fillna on binary series with inplace = True"""
 
-    A = pd.Series(
-        [b"sakdhjlf", b"a", np.nan, b"asdjg", bytes(1)] * 3
-    )
+    A = pd.Series([b"sakdhjlf", b"a", np.nan, b"asdjg", bytes(1)] * 3)
     A2 = pd.Series([bytes(1), b"avsjbdhjof", b"bjknjoiuh", b"abnsdgd", b""] * 3)
 
     def impl0(S):
@@ -239,6 +240,9 @@ def test_binary_series_fillna_inplace():
     check_func(impl3, (A2, A), check_dtype=False)
 
 
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
+)
 def test_str_binary_series_fillna_inplace_mismatch():
     """test that fillna doesn't accept mismatched sizes"""
     A = pd.Series(["a", None, "B"] * 2)
@@ -1220,6 +1224,9 @@ def test_series_loc_getitem_int_range(memory_leak_check):
     check_func(test_impl, (S,))
 
 
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
+)
 @pytest.mark.slow
 def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
     """Tests that setitem with Series.loc works with a Boolean List index"""
@@ -1382,6 +1389,9 @@ def test_series_iloc_setitem_int(series_val, memory_leak_check):
     check_func(test_impl, (series_val, val), copy_input=True, dist_test=False)
 
 
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
+)
 def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
     """
     Test setitem for Series.iloc and Series with bool arr/list idx.
@@ -2012,6 +2022,9 @@ def test_series_setitem_list_int(series_val, idx, list_val_arg, memory_leak_chec
 ############################ Series.loc indexing ##########################
 
 
+@pytest.mark.skipif(
+    bodo.hiframes.boxing._use_dict_str_type, reason="not supported for dict string type"
+)
 def test_series_loc_setitem_bool(memory_leak_check):
     """test Series.loc[bool_arr] setitem"""
 
@@ -2626,7 +2639,7 @@ def test_series_apply_args_and_kwargs(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_apply_supported_types(series_val, memory_leak_check):
-    """ Test Series.apply with all Bodo supported Types """
+    """Test Series.apply with all Bodo supported Types"""
 
     def test_impl(S, val):
         return S.apply(lambda a, val: a if a != val else None, val=val)
@@ -2648,7 +2661,7 @@ def test_series_apply_supported_types(series_val, memory_leak_check):
 
 @pytest.mark.slow
 def test_series_apply_args(memory_leak_check):
-    """ Test Series.apply with unsupported and wrong arguments """
+    """Test Series.apply with unsupported and wrong arguments"""
 
     def test_convert_dtype_false(S):
         return S.apply(lambda a: a, convert_dtype=False)
@@ -2685,7 +2698,7 @@ def test_series_apply_args(memory_leak_check):
 # TODO: Add memory leak check once constant lowering memory leak is fixed
 @pytest.mark.slow
 def test_series_map_supported_types(series_val):
-    """ Test Series.map with all Bodo supported Types """
+    """Test Series.map with all Bodo supported Types"""
 
     def test_impl(S):
         return S.map(lambda a: a)  # if not pd.isna(a) else None)
@@ -2700,7 +2713,7 @@ def test_series_map_supported_types(series_val):
 
 @pytest.mark.slow
 def test_series_map_args(memory_leak_check):
-    """ Test Series.map with unsupported and wrong arguments """
+    """Test Series.map with unsupported and wrong arguments"""
 
     def test_na_action_ignore(S):
         return S.map(lambda a: a, na_action="ignore")
@@ -2726,7 +2739,7 @@ def test_series_map_args(memory_leak_check):
 # TODO: add memory_leak_check after fix its failure with Categorical
 @pytest.mark.slow
 def test_series_groupby_supported_types(series_val):
-    """ Test Series.groupby with all Bodo supported Types """
+    """Test Series.groupby with all Bodo supported Types"""
 
     def test_impl(S):
         return S.groupby(level=0).max()
@@ -2752,7 +2765,7 @@ def test_series_groupby_supported_types(series_val):
 
 @pytest.mark.slow
 def test_series_groupby_by_arg_supported_types(series_val, memory_leak_check):
-    """ Test Series.groupby by argument with all Bodo supported Types """
+    """Test Series.groupby by argument with all Bodo supported Types"""
 
     def test_impl_by(S, byS):
         return S.groupby(byS).mean()

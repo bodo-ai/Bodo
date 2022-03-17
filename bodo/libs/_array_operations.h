@@ -51,11 +51,14 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
  *        keep = 1 corresponds to the case of keep="last" keep last entry
  *        keep = 2 corresponds to the case of keep=False : remove all duplicates
  * @param dropna: Should NA be included in the final table
+ * @param drop_local_first: Whether to drop duplicates in local data before
+ * shuffling
  * @return the unicized table
  */
 table_info* drop_duplicates_table(table_info* in_table, bool is_parallel,
                                   int64_t num_keys, int64_t keep,
-                                  bool dropna = false);
+                                  bool dropna = false,
+                                  bool drop_local_first = true);
 
 table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
                                         int64_t keep, int step,

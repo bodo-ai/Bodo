@@ -64,7 +64,12 @@ from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import NativeValue, lower_builtin, typeof_impl
 from numba.parfors.parfor import get_expr_args
 
-from bodo.utils.typing import BodoError, get_overload_const, is_overload_constant_str, get_overload_const_str, raise_bodo_error
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_str,
+    is_overload_constant_str,
+    raise_bodo_error,
+)
 
 # flag for checking whether the functions we are replacing have changed in a later Numba
 # release. Needs to be checked for every new Numba release so we update our changes.
@@ -3091,8 +3096,9 @@ def resolve_number___call__(self, classty):
     Resolve a number class's constructor (e.g. calling int(...))
     """
     import numpy as np
-    import bodo
     from numba.core.typing.templates import make_callable_template
+
+    import bodo
 
     ty = classty.instance_type
 
@@ -3101,7 +3107,9 @@ def resolve_number___call__(self, classty):
         def typer(val1, val2):
             if val1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
                 if not is_overload_constant_str(val2):
-                    raise_bodo_error("datetime64(): 'units' must be a 'str' specifying 'ns'")
+                    raise_bodo_error(
+                        "datetime64(): 'units' must be a 'str' specifying 'ns'"
+                    )
                 units = get_overload_const_str(val2)
                 if units != "ns":
                     raise BodoError("datetime64(): 'units' must be 'ns'")

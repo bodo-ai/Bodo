@@ -215,6 +215,18 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars,
     return out_arr;
 }
 
+array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
+                                    int64_t n_chars_keys, bool has_global_dictionary) {
+    // dictionary
+    array_info* dict_data_arr = alloc_string_array(n_keys, n_chars_keys, 0);
+    // indices
+    array_info* indices_data_arr = alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
+
+    return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
+                   -1, -1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0,
+                   0, has_global_dictionary, dict_data_arr, indices_data_arr);
+}
+
 /**
  * Allocates memory for string allocation as a NRT_MemInfo
  */
@@ -409,7 +421,11 @@ array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
  * -- length is the number of rows.
  * -- n_sub_elems is the number of strings.
  * -- n_sub_sub_elems is the total number of characters.
- *
+ * In the case of DICT:
+ * -- length is the number of rows (same as the number of indices)
+ * -- n_sub_elems is the number of keys in the dictionary
+ * -- n_sub_sub_elems is the total number of characters for
+ *    the keys in the dictionary
  */
 array_info* alloc_array(int64_t length, int64_t n_sub_elems,
                         int64_t n_sub_sub_elems,
@@ -436,6 +452,9 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
 
     if (arr_type == bodo_array_type::ARRAY_ITEM)
         return alloc_array_item(length, n_sub_elems, dtype, extra_null_bytes);
+
+    if (arr_type == bodo_array_type::DICT)
+        return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems, false);
 
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Type not covered in alloc_array");
     return nullptr;
@@ -500,7 +519,13 @@ int64_t array_memory_size(array_info* earr) {
         uint64_t siztype = numpy_item_size[earr->dtype];
         return siztype * earr->length;
     }
-    if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+    if (earr->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+        earr->arr_type == bodo_array_type::DICT) {
+        if (earr->arr_type == bodo_array_type::DICT)
+            // TODO also contribute dictionary size, but note that when
+            // table_global_memory_size() calls this function, it's not supposed
+            // to add the size of dictionaries of all ranks
+            earr = earr->info2;
         uint64_t siztype = numpy_item_size[earr->dtype];
         int64_t n_bytes = ((earr->length + 7) >> 3);
         return n_bytes + siztype * earr->length;
@@ -536,9 +561,19 @@ int64_t table_global_memory_size(table_info* table) {
 
 array_info* copy_array(array_info* earr) {
     int64_t extra_null_bytes = 0;
-    array_info* farr = alloc_array(
-        earr->length, earr->n_sub_elems, earr->n_sub_sub_elems, earr->arr_type,
-        earr->dtype, extra_null_bytes, earr->num_categories);
+    array_info* farr;
+    if (earr->arr_type == bodo_array_type::DICT) {
+        array_info* dictionary = copy_array(earr->info1);
+        array_info* indices = copy_array(earr->info2);
+        farr = new array_info(
+            bodo_array_type::DICT, earr->dtype, indices->length, -1, -1, NULL,
+            NULL, NULL, indices->null_bitmask, NULL, NULL, NULL, NULL, 0, 0, 0,
+            earr->has_global_dictionary, dictionary, indices);
+    } else {
+        farr = alloc_array(earr->length, earr->n_sub_elems,
+                           earr->n_sub_sub_elems, earr->arr_type, earr->dtype,
+                           extra_null_bytes, earr->num_categories);
+    }
     if (earr->arr_type == bodo_array_type::NUMPY ||
         earr->arr_type == bodo_array_type::CATEGORICAL) {
         uint64_t siztype = numpy_item_size[earr->dtype];
@@ -626,6 +661,13 @@ void delete_table_decref_arrays(table_info* table) {
   Thus we have two calls for destructors when they are not NULL.
  */
 void decref_array(array_info* arr) {
+    // dictionary-encoded string array uses nested infos
+    if (arr->arr_type == bodo_array_type::DICT) {
+        if (arr->info1 != nullptr) decref_array(arr->info1);
+        if (arr->info2 != nullptr) decref_array(arr->info2);
+        return;
+    }
+
     if (arr->meminfo != NULL && arr->meminfo->refct != -1) {
         arr->meminfo->refct--;
         if (arr->meminfo->refct == 0) NRT_MemInfo_call_dtor(arr->meminfo);
@@ -638,6 +680,13 @@ void decref_array(array_info* arr) {
 }
 
 void incref_array(array_info* arr) {
+    // dictionary-encoded string array uses nested infos
+    if (arr->arr_type == bodo_array_type::DICT) {
+        if (arr->info1 != nullptr) incref_array(arr->info1);
+        if (arr->info2 != nullptr) incref_array(arr->info2);
+        return;
+    }
+
     if (arr->meminfo != NULL && arr->meminfo->refct != -1)
         arr->meminfo->refct++;
     if (arr->meminfo_bitmask != NULL && arr->meminfo_bitmask->refct != -1)

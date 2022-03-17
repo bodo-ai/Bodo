@@ -1142,9 +1142,18 @@ class DistributedAnalysis:
                 self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if func_mod == "bodo.libs.dict_arr_ext" and func_name in (
+            "dict_arr_eq",
+            "dict_arr_ne",
+            "convert_dict_arr_to_int",
+        ):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("series_contains_regex", "bodo.hiframes.series_str_impl"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
+
         if fdef == ("setna", "bodo.libs.array_kernels"):
             return
 
@@ -1320,6 +1329,26 @@ class DistributedAnalysis:
         if fdef == (
             "pandas_string_array_to_datetime",
             "bodo.hiframes.pd_timestamp_ext",
+        ):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if fdef == (
+            "pandas_dict_string_array_to_datetime",
+            "bodo.hiframes.pd_timestamp_ext",
+        ):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if fdef in (
+            (
+                "_table_to_tuple_format_decoded",
+                "bodo.hiframes.pd_dataframe_ext",
+            ),
+            (
+                "_tuple_to_table_format_decoded",
+                "bodo.hiframes.pd_dataframe_ext",
+            ),
         ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
@@ -1626,6 +1655,10 @@ class DistributedAnalysis:
                 "Tuples and lists are not distributed by default. Convert to array/Series/DataFrame and use bodo.scatterv() to distribute if necessary.",
                 rhs.loc,
             )
+            return
+
+        if fdef == ("decode_if_dict_array", "bodo.utils.typing"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         # from flat map pattern: pd.Series(list(itertools.chain(*A)))

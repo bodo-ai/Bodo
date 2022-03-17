@@ -244,4 +244,6 @@ inline void fill_recv_data_inner(T* recv_buff, T* data, uint32_t* hashes,
     }
 }
 
+void convert_local_dictionary_to_global(array_info* dict_array);
+
 #endif  // _SHUFFLE_H_INCLUDED

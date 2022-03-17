@@ -20,6 +20,7 @@ from bodo.utils.typing import (
     is_iterable_type,
     is_overload_true,
     is_overload_zero,
+    is_str_arr_type,
 )
 
 
@@ -630,6 +631,7 @@ def overload_array_op_isin(arr, values):
         out_arr = np.empty(n, np.bool_)
         for i in numba.parfors.parfor.internal_prange(n):
             # TODO: avoid Timestamp conversion for date comparisons if possible
+            # TODO: handle None/nan/NA values properly
             out_arr[i] = bodo.utils.conversion.box_if_dt64(arr[i]) in values
         return out_arr
 
@@ -664,7 +666,7 @@ def array_unique_vector_map(in_arr_tup):
         for i, in_arr in enumerate(arr_typ_list):
             func_text += f"  in_lst_{i} = []\n"
             # If the array is a string type, compute the output size while computing unique
-            if in_arr == bodo.string_array_type:
+            if is_str_arr_type(in_arr):
                 func_text += f"  total_len_{i} = 0\n"
             func_text += f"  null_in_lst_{i} = []\n"
         func_text += "  for i in range(n):\n"
@@ -685,7 +687,7 @@ def array_unique_vector_map(in_arr_tup):
         for i, in_arr in enumerate(arr_typ_list):
             func_text += f"      in_lst_{i}.append(values_tup[{i}])\n"
             func_text += f"      null_in_lst_{i}.append(nulls_tup[{i}])\n"
-            if in_arr == bodo.string_array_type:
+            if is_str_arr_type(in_arr):
                 # If the data is null nulls_tup[i] == 0, so we multiply here
                 func_text += (
                     f"      total_len_{i}  += nulls_tup[{i}] * len(values_tup[{i}])\n"
@@ -697,7 +699,7 @@ def array_unique_vector_map(in_arr_tup):
         # Compute the output arrays for the index.
         func_text += "  n_rows = len(arr_map)\n"
         for i, in_arr in enumerate(arr_typ_list):
-            if in_arr == bodo.string_array_type:
+            if is_str_arr_type(in_arr):
                 func_text += f"  out_arr_{i} = bodo.libs.str_arr_ext.pre_alloc_string_array(n_rows, total_len_{i})\n"
             else:
                 func_text += f"  out_arr_{i} = bodo.utils.utils.alloc_type(n_rows, in_arr_tup[{i}], (-1,))\n"
@@ -720,7 +722,7 @@ def array_unique_vector_map(in_arr_tup):
         func_text += "  map_vector = np.empty(n, np.int64)\n"
         func_text += "  is_na = 0\n"
         func_text += "  in_lst = []\n"
-        if arr_typ_list[0] == bodo.string_array_type:
+        if is_str_arr_type(arr_typ_list[0]):
             func_text += "  total_len = 0\n"
         func_text += "  for i in range(n):\n"
         func_text += "    if bodo.libs.array_kernels.isna(in_arr, i):\n"
@@ -734,7 +736,7 @@ def array_unique_vector_map(in_arr_tup):
         func_text += "        set_val = len(arr_map)\n"
         # Add the data to index info
         func_text += "        in_lst.append(data_val)\n"
-        if arr_typ_list[0] == bodo.string_array_type:
+        if is_str_arr_type(arr_typ_list[0]):
             func_text += "        total_len += len(data_val)\n"
         func_text += "        arr_map[data_val] = len(arr_map)\n"
         func_text += "      else:\n"
@@ -742,7 +744,7 @@ def array_unique_vector_map(in_arr_tup):
         func_text += "    map_vector[i] = set_val\n"
         # Compute the output arrays for the index.
         func_text += "  n_rows = len(arr_map) + is_na\n"
-        if arr_typ_list[0] == bodo.string_array_type:
+        if is_str_arr_type(arr_typ_list[0]):
             func_text += "  out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n_rows, total_len)\n"
         else:
             func_text += (

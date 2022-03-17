@@ -1991,7 +1991,7 @@ def test_merge_general_cond_strings(memory_leak_check):
         py_output=py_out,
     )
 
-    # # test left/right/outer cases, needs Spark to generate reference output
+    # test left/right/outer cases, needs Spark to generate reference output
     from pyspark.sql import SparkSession
 
     spark = SparkSession.builder.getOrCreate()

@@ -3,6 +3,7 @@
 #include <arrow/api.h>
 #include <numeric>
 #include "_array_hash.h"
+#include "_array_operations.h"
 #include "_array_utils.h"
 #include "_distributed.h"
 
@@ -18,6 +19,7 @@ mpi_comm_info::mpi_comm_info(std::vector<array_info*>& _arrays)
     has_nulls = false;
     for (array_info* arr_info : arrays) {
         if (arr_info->arr_type == bodo_array_type::STRING ||
+            arr_info->arr_type == bodo_array_type::DICT ||
             arr_info->arr_type == bodo_array_type::LIST_STRING ||
             arr_info->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
             has_nulls = true;
@@ -32,6 +34,8 @@ mpi_comm_info::mpi_comm_info(std::vector<array_info*>& _arrays)
     recv_disp = std::vector<int64_t>(n_pes);
     // init counts for string arrays
     for (array_info* arr_info : arrays) {
+        // Note that for dictionary arrays the dictionary is handled separately
+        // and so we only shuffle the indices, which is a nullable int array
         if (arr_info->arr_type == bodo_array_type::STRING ||
             arr_info->arr_type == bodo_array_type::LIST_STRING) {
             send_count_sub.emplace_back(std::vector<int64_t>(n_pes, 0));
@@ -476,6 +480,119 @@ static void copy_gathered_null_bytes(uint8_t* null_bitmask,
     }
 }
 
+void convert_local_dictionary_to_global(array_info* dict_array) {
+
+    if (dict_array->has_global_dictionary) return;
+
+    array_info* local_dictionary = dict_array->info1;
+
+    // table containing a single column with the dictionary values (not
+    // indices/codes)
+    table_info* in_dictionary_table = new table_info();
+    in_dictionary_table->columns.push_back(local_dictionary);
+    // get distributed global dictionary
+    // drop_duplicates_table steals the reference to local_dictionary, but I
+    // need to keep it around until the end of the conversion (decref later in
+    // this function)
+    incref_array(local_dictionary);
+    // TODO dropna? are there NAs in dictionary and how should they be handled
+    table_info* dist_dictionary_table =
+        drop_duplicates_table(in_dictionary_table, true, 1, 0, false, false);
+    delete in_dictionary_table;  // no array decref because
+                                 // drop_duplicates_table stole the reference
+
+    // replicate the global dictionary on all ranks
+    // allgather
+    table_info* global_dictionary_table =
+        gather_table(dist_dictionary_table, 1, true, true);
+    delete dist_dictionary_table;  // no array decref because gather_table stole
+                                   // the reference
+    array_info* global_dictionary = global_dictionary_table->columns[0];
+    delete global_dictionary_table;
+
+    // XXX do I need to sort the global dictionary? I can just sort locally
+    // since it's replicated
+
+    // XXX this doesn't propagate to Python
+    dict_array->info1 = global_dictionary;
+    dict_array->has_global_dictionary = true;
+
+    // -------------
+    // calculate mapping from old (local) indices to global ones
+    const uint32_t hash_seed = SEED_HASH_JOIN;
+    const size_t local_dict_len = static_cast<size_t>(local_dictionary->length);
+    const size_t global_dict_len =
+        static_cast<size_t>(global_dictionary->length);
+    uint32_t* hashes_local_dict = new uint32_t[local_dict_len];
+    uint32_t* hashes_global_dict = new uint32_t[global_dict_len];
+    hash_array(hashes_local_dict, local_dictionary, local_dict_len, hash_seed,
+               false, /*global_dict_needed=*/false);
+    hash_array(hashes_global_dict, global_dictionary, global_dict_len,
+               hash_seed, false, /*global_dict_needed=*/false);
+
+    HashDict hash_fct{global_dict_len, hashes_global_dict, hashes_local_dict};
+    KeyEqualDict equal_fct{global_dict_len, global_dictionary,
+                           local_dictionary /*, is_na_equal*/};
+    // dict_value_to_global_index will map a dictionary value (string) to its
+    // index in the global dictionary array. We don't want strings as keys
+    // of the hash map because that would be inefficient in terms of storage
+    // and string copies. Instead, we will use the global and local dictionary
+    // indices as keys, and use these indices to refer to the strings. Because
+    // the index space of global and local dictionaries overlap, to have the
+    // hash map distinguish between them, indices referring to the local
+    // dictionary are incremented by 'global_dict_len' before accessing
+    // the map.
+    // For example:
+    // global dictionary: ["ABC", "CC", "D"]. Keys that refer to these strings: [0, 1, 2]
+    // local dictionary: ["CC", "D"]. Keys that refer to these strings: [3, 4]
+    // Also see HashDict and KeyEqualDict to see how keys are mapped to get
+    // the hashes and to compare values
+
+    UNORD_MAP_CONTAINER<size_t, dict_indices_t, HashDict, KeyEqualDict>
+        dict_value_to_global_index({}, hash_fct, equal_fct);
+    dict_value_to_global_index.reserve(global_dict_len);
+
+    dict_indices_t next_index = 1;
+    for (size_t i = 0; i < global_dict_len; i++) {
+        dict_indices_t& index = dict_value_to_global_index[i];
+        if (index == 0) index = next_index++;
+    }
+
+    std::vector<dict_indices_t> local_to_global_index(local_dict_len);
+    for (size_t i = 0; i < local_dict_len; i++) {
+        // if val is not in new_map, inserts it and returns next code
+        dict_indices_t index = dict_value_to_global_index[i + global_dict_len];
+        local_to_global_index[i] = index - 1;
+    }
+    dict_value_to_global_index.clear();
+    dict_value_to_global_index.reserve(0);  // try to force dealloc of hashmap
+    delete[] hashes_local_dict;
+    delete[] hashes_global_dict;
+    //decref_array(local_dictionary);
+    delete_info_decref_array(local_dictionary);
+
+    // --------------
+    // remap old (local) indices to global ones
+
+    // TODO? if there is only one reference to dict_array remaining, I can
+    // modify indices in place, otherwise I have to allocate a new array if I am
+    // not changing the dictionary of the input array in Python side
+    bool inplace = (dict_array->info2->meminfo->refct == 1);
+    if (!inplace) {
+        array_info* dict_indices = copy_array(dict_array->info2);
+        delete_info_decref_array(dict_array->info2);
+        dict_array->info2 = dict_indices;
+    }
+
+    uint8_t* null_bitmask = (uint8_t *) dict_array->null_bitmask;
+    for (size_t i = 0; i < dict_array->info2->length; i++) {
+        if (GetBit(null_bitmask, i)) {
+            dict_indices_t& index = dict_array->info2->at<dict_indices_t>(i);
+            index = local_to_global_index[index];
+        }
+    }
+}
+
 // shuffle_array
 void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
                                       mpi_comm_info const& comm_info,
@@ -632,6 +749,10 @@ static void shuffle_array(array_info* send_arr, array_info* out_arr,
                        recv_disp_null, mpi_typ, MPI_COMM_WORLD);
         copy_gathered_null_bytes((uint8_t*)out_arr->null_bitmask,
                                  tmp_null_bytes, recv_count_null, recv_count);
+    }
+    if (send_arr->arr_type == bodo_array_type::DICT) {
+        throw std::runtime_error(
+            "shuffle_array shouldn't be called with DICT array");
     }
 }
 
@@ -1033,6 +1154,14 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
         comm_info.send_count.begin(), comm_info.send_count.end(), int64_t(0));
     for (size_t i = 0; i < n_cols; i++) {
         array_info* in_arr = in_table->columns[i];
+        if (in_arr->arr_type == bodo_array_type::DICT) {
+            if (!in_arr->has_global_dictionary)
+                throw std::runtime_error(
+                    "shuffle_array: input dictionary array doesn't have a "
+                    "global dictionary");
+            // in_arr <- indices array, to simplify code below
+            in_arr = in_arr->info2;
+        }
         array_info* out_arr;
         if (in_arr->arr_type != bodo_array_type::ARROW) {
             const std::vector<int64_t>& send_count_sub =
@@ -1085,11 +1214,22 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                 -1, -1, NULL, NULL, NULL, NULL, NULL, meminfo, NULL, out_array);
         }
         // release reference of input array
-        // This a a steal reference case. The idea is to release memory as soon
+        // This is a steal reference case. The idea is to release memory as soon
         // as possible. If this release is not wished (which is a rare case)
         // then the incref before operation is needed. Using an optional
         // argument (like decref_input) to the input is a false good idea since
         // it changes the semantics to something different from Python.
+        if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
+            in_arr = in_table->columns[i];
+            array_info* out_dict_arr = new array_info(
+                bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1, -1,
+                NULL, NULL, NULL, out_arr->null_bitmask,
+                NULL, NULL, NULL, NULL, 0, 0, 0, true, in_arr->info1, out_arr);
+            // info1 is dictionary. incref so it doesn't get deleted since
+            // it is given to the output array
+            incref_array(in_arr->info1);
+            out_arr = out_dict_arr;
+        }
         decref_array(in_arr);
         out_arrs.push_back(out_arr);
     }
@@ -1482,6 +1622,22 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
 
     const bool delete_hashes = (hashes == nullptr);
     mpi_comm_info* comm_info = new mpi_comm_info(in_table->columns);
+
+    // For any dictionary arrays that have local dictionaries, convert their
+    // dictionaries to global now (since it's needed for the shuffle) and if
+    // any of them are key columns, this will allow to simply hash the indices
+    // TODO maybe it's better to do this in hash_keys_table to avoid repeating
+    // this code in other operations?
+    for (array_info* a : in_table->columns) {
+        if ((a->arr_type == bodo_array_type::DICT) &&
+            !a->has_global_dictionary) {
+            // XXX is the dictionary replaced in Python input array and
+            // correctly replaced? Can it be done easily? (this includes
+            // has_global_dictionary attribute)
+            convert_local_dictionary_to_global(a);
+        }
+    }
+
     // computing the hash data structure
     if (hashes == nullptr)
         hashes =
@@ -1556,6 +1712,17 @@ table_info* coherent_shuffle_table(
     }
     const bool delete_hashes = (hashes == nullptr);
     mpi_comm_info comm_info(in_table->columns);
+
+    // For any dictionary arrays that have local dictionaries, convert their
+    // dictionaries to global now (since it's needed for the shuffle) and if
+    // any of them are key columns, this will allow to simply hash the indices
+    for (array_info* a : in_table->columns) {
+        if ((a->arr_type == bodo_array_type::DICT) &&
+            !a->has_global_dictionary) {
+            convert_local_dictionary_to_global(a);
+        }
+    }
+
     // computing the hash data structure
     if (hashes == nullptr)
         hashes = coherent_hash_keys_table(in_table, ref_table, n_keys,
@@ -2276,6 +2443,11 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         int64_t arr_gath_s[3];
         array_info* in_arr = in_table->columns[i_col];
+        if (in_arr->arr_type == bodo_array_type::DICT) {
+            if (!in_arr->has_global_dictionary)
+                convert_local_dictionary_to_global(in_arr);
+            in_arr = in_arr->info2;
+        }
         int64_t n_rows = in_arr->length;
         int64_t n_sub_elems = in_arr->n_sub_elems;
         int64_t n_sub_sub_elems = in_arr->n_sub_sub_elems;
@@ -2540,6 +2712,15 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                                          tmp_null_bytes, recv_count_null,
                                          rows_counts);
             }
+        }
+        if (in_table->columns[i_col]->arr_type == bodo_array_type::DICT) {
+            in_arr = in_table->columns[i_col];
+            out_arr = new array_info(
+                bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1, -1,
+                NULL, NULL, NULL, out_arr->null_bitmask, NULL, NULL, NULL, NULL,
+                0, 0, 0, /*has_global_dictionary=*/true, in_arr->info1,
+                out_arr);
+            incref_array(in_arr->info1);
         }
         out_arrs.push_back(out_arr);
         // Reference stealing. See shuffle_table_kernel for discussion.
