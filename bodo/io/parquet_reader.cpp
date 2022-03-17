@@ -149,7 +149,7 @@ class ParquetReader : public ArrowDataframeReader {
         }
 
         // initialize reader
-        init();
+        init({_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols});
 
         if (parallel) {
             // Get the average number of pieces per rank. This is used to
@@ -161,13 +161,6 @@ class ParquetReader : public ArrowDataframeReader {
             MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T, MPI_SUM,
                           MPI_COMM_WORLD);
             avg_num_pieces = num_pieces / static_cast<double>(num_ranks);
-        }
-
-        // TODO move this code to parent class
-        for (auto i = _str_as_dict_cols;
-             i < _str_as_dict_cols + num_str_as_dict_cols; i++) {
-            auto field = schema->field(*i);
-            str_as_dict_cols.emplace(field->name());
         }
 
         // allocate output partition columns. These are categorical columns
@@ -277,9 +270,9 @@ class ParquetReader : public ArrowDataframeReader {
                            PyUnicode_FromString(p.c_str()));
         }
 
-        PyObject* str_as_dict_cols_py = PyList_New(str_as_dict_cols.size());
+        PyObject* str_as_dict_cols_py = PyList_New(str_as_dict_colnames.size());
         i = 0;
-        for (auto field_name : str_as_dict_cols) {
+        for (auto field_name : str_as_dict_colnames) {
             PyList_SetItem(str_as_dict_cols_py, i++,
                            PyUnicode_FromString(field_name.c_str()));
         }

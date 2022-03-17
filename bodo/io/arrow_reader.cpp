@@ -724,7 +724,7 @@ void TableBuilder::append(std::shared_ptr<::arrow::Table> table) {
 }
 
 // -------------------- ArrowDataframeReader --------------------
-void ArrowDataframeReader::init() {
+void ArrowDataframeReader::init(const std::vector<int32_t>& str_as_dict_cols) {
     if (initialized)
         throw std::runtime_error("ArrowDataframeReader already initialized");
     tracing::Event ev("reader::init", parallel);
@@ -736,6 +736,23 @@ void ArrowDataframeReader::init() {
 
     PyObject* ds = get_dataset();
     schema = get_schema(ds);
+
+    for (auto i : str_as_dict_cols) {
+        auto field = schema->field(i);
+        str_as_dict_colnames.emplace(field->name());
+    }
+    if (ev.is_tracing() && str_as_dict_cols.size() > 0) {
+        std::string str_as_dict_colnames_str = "[";
+        size_t i = 0;
+        for (auto colname : str_as_dict_colnames) {
+            if (i < str_as_dict_colnames.size() - 1)
+                str_as_dict_colnames_str += colname + ", ";
+            else
+                str_as_dict_colnames_str += colname + "]";
+            i++;
+        }
+        ev.add_attribute("g_str_as_dict_cols", str_as_dict_colnames_str);
+    }
 
     // total_rows = ds.total_rows
     PyObject* total_rows_py = PyObject_GetAttrString(ds, "_bodo_total_rows");

@@ -127,7 +127,7 @@ class ArrowDataframeReader {
             throw std::runtime_error(
                 "ArrowDataframeReader::read(): not initialized");
         TableBuilder builder(schema, selected_fields, count, is_nullable,
-                             str_as_dict_cols);
+                             str_as_dict_colnames);
         rows_left = count;
         read_all(builder);
         if (rows_left != 0)
@@ -143,7 +143,7 @@ class ArrowDataframeReader {
     std::shared_ptr<arrow::Schema> schema;
     std::vector<bool> is_nullable;
     std::set<int> selected_fields;
-    std::set<std::string> str_as_dict_cols;
+    std::set<std::string> str_as_dict_colnames;
 
     /// Total number of rows in the dataset (all pieces)
     int64_t total_rows = 0;
@@ -156,7 +156,7 @@ class ArrowDataframeReader {
     int64_t rows_left;  // only used during ArrowDataframeReader::read()
 
     /// initialize reader
-    void init();
+    void init(const std::vector<int32_t>& str_as_dict_cols = {});
 
     /**
      * Register a piece for this process to read
