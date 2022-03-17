@@ -58,6 +58,6 @@ jobs:
         # login to ECR and run the docker
         aws_token=`AWS_ACCESS_KEY_ID=$AWS_AKI AWS_SECRET_ACCESS_KEY=$AWS_SAK AWS_DEFAULT_REGION=us-east-2 aws ecr get-login-password`
         docker login -u AWS -p $aws_token https://427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-pip-centos
-        docker run -v `pwd`:/bodo -e IS_RELEASE=$IS_RELEASE -e CHECK_LICENSE_EXPIRED=$CHECK_LICENSE_EXPIRED -e CHECK_LICENSE_CORE_COUNT=$CHECK_LICENSE_CORE_COUNT 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-pip-centos:1.0 /bodo/buildscripts/pip/centos7/generate_manylinux_wheels.sh
+        docker run -v `pwd`:/bodo -e IS_RELEASE=$IS_RELEASE -e CHECK_LICENSE_EXPIRED=$CHECK_LICENSE_EXPIRED -e CHECK_LICENSE_CORE_COUNT=$CHECK_LICENSE_CORE_COUNT 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-pip-centos:1.1 /bodo/buildscripts/pip/centos7/generate_manylinux_wheels.sh
       fi
     displayName: 'Build and publish pip wheel'
