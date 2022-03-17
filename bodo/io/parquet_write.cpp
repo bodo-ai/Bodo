@@ -10,7 +10,11 @@
 #include "../libs/_bodo_common.h"
 #include "../libs/_datetime_ext.h"
 #include "_fs_io.h"
+#include "arrow/ipc/writer.h"
+#include "arrow/util/base64.h"
+#include "parquet/arrow/schema.h"
 #include "parquet/arrow/writer.h"
+#include "parquet/file_writer.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
@@ -103,49 +107,41 @@ void bodo_array_to_arrow(
     }
     // TODO: Reuse some of this code to enable to_parquet with Categorical
     // Arrays?
-    // if (array->arr_type == bodo_array_type::DICT) {
-    //     // C++ dictionary arrays in Bodo are dictionary arrays in Arrow.
-    //     // We construct the array using arrow::DictionaryArray::FromArrays
-    //     // https://arrow.apache.org/docs/cpp/api/array.html#_CPPv4N5arrow15DictionaryArray10FromArraysERKNSt10shared_ptrI8DataTypeEERKNSt10shared_ptrI5ArrayEERKNSt10shared_ptrI5ArrayEE
+    if (array->arr_type == bodo_array_type::DICT) {
+        // C++ dictionary arrays in Bodo are dictionary arrays in Arrow.
+        // We construct the array using arrow::DictionaryArray::FromArrays
+        // https://arrow.apache.org/docs/cpp/api/array.html#_CPPv4N5arrow15DictionaryArray10FromArraysERKNSt10shared_ptrI8DataTypeEERKNSt10shared_ptrI5ArrayEERKNSt10shared_ptrI5ArrayEE
 
+        // Dummy vector to enable recursive calls.
+        std::vector<std::shared_ptr<arrow::Field>> dummy_schema_vector;
+        std::vector<std::shared_ptr<arrow::ChunkedArray>> dict_parts(2);
 
-    //     // Dummy vector to enable recrusive calls.
-    //     std::vector<std::shared_ptr<arrow::Field>> dummy_schema_vector;
-    //     std::vector<std::shared_ptr<arrow::ChunkedArray>> dict_parts(2);
+        // Recurse on the dictionary
+        bodo_array_to_arrow(pool, array->info1, col_name, dummy_schema_vector,
+                            &dict_parts[0]);
+        // Recurse on the index array
+        bodo_array_to_arrow(pool, array->info2, col_name, dummy_schema_vector,
+                            &dict_parts[1]);
 
-    //     // Recurse on the dictionary
-    //     bodo_array_to_arrow(pool, array->info1, col_name, dummy_schema_vector, &dict_parts[0]);
-    //     // Recurse on the index array
-    //     bodo_array_to_arrow(pool, array->info2, col_name, dummy_schema_vector, &dict_parts[1]);
+        // Extract the types from the dictionary call.
+        std::shared_ptr<arrow::DataType> type = arrow::dictionary(
+            dummy_schema_vector[1]->type(), dummy_schema_vector[0]->type()
+            // TODO: Can we provide ordered?
+        );
+        schema_vector.push_back(arrow::field(col_name, type));
 
-    //     // Extract the types from the dictionary call.
-    //     std::shared_ptr<arrow::DataType> type = arrow::dictionary(
-    //         dummy_schema_vector[1]->type(),
-    //         dummy_schema_vector[0]->type()
-    //         // TODO: Can we provide ordered?
-    //     );
-    //     schema_vector.push_back(arrow::field(col_name, type));
+        // bodo_array_to_arrow for primitive and string arrays returns
+        // single-chunk chunked arrays, so we know there is only one chunk
+        std::shared_ptr<arrow::Array> dictionary = dict_parts[0]->chunk(0);
+        std::shared_ptr<arrow::Array> index_array = dict_parts[1]->chunk(0);
+        arrow::Result<std::shared_ptr<arrow::Array>> result =
+            arrow::DictionaryArray::FromArrays(type, index_array, dictionary);
+        std::shared_ptr<arrow::Array> dict_array;
+        CHECK_ARROW_AND_ASSIGN(result, "arrow::DictionaryArray::FromArrays",
+                               dict_array)
 
-    //     // Dictionary arrays are only supported when there is a single chunk.
-    //     // TODO: Replace the assert with an alternative path that converts the
-    //     // dict array to a string array when we have multiple chunks
-    //     // i.e. (offsets[array->length] - offsets[0] > max_chunk_size)
-    //     assert(dict_parts[0]->num_chunks() == 1);
-    //     assert(dict_parts[1]->num_chunks() == 1);
-
-    //     std::shared_ptr<arrow::Array> dictionary = dict_parts[0]->chunk(0);
-    //     // Int32 always has 1 chunk
-    //     std::shared_ptr<arrow::Array> index_array = dict_parts[1]->chunk(0);
-    //     arrow::Result<std::shared_ptr<arrow::Array>> result = arrow::DictionaryArray::FromArrays(
-    //         type,
-    //         index_array,
-    //         dictionary
-    //     );
-    //     std::shared_ptr<arrow::Array> dict_array;
-    //     CHECK_ARROW_AND_ASSIGN(result, "arrow::DictionaryArray::FromArrays", dict_array)
-
-    //     *out = std::make_shared<arrow::ChunkedArray>(dict_array);
-    // }
+        *out = std::make_shared<arrow::ChunkedArray>(dict_array);
+    }
 
     if (array->arr_type == bodo_array_type::NUMPY ||
         (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL &&
@@ -251,20 +247,21 @@ void bodo_array_to_arrow(
             std::make_shared<arrow::ChunkedArray>(arrow::MakeArray(arr_data));
     } else if (array->arr_type == bodo_array_type::STRING) {
         arrow::Status status;
-        // Create 16MB chunks for binary data
-        constexpr int32_t kBinaryChunksize = 1 << 24;
-        ::arrow::internal::ChunkedBinaryBuilder *builder;
+        ::arrow::BinaryBuilder *builder;
         if (array->dtype == Bodo_CTypes::BINARY) {
             schema_vector.push_back(arrow::field(col_name, arrow::binary()));
-            builder = new ::arrow::internal::ChunkedBinaryBuilder(
-                kBinaryChunksize, pool);
+            builder = new ::arrow::BinaryBuilder();
         } else {
             schema_vector.push_back(arrow::field(col_name, arrow::utf8()));
-            builder = new ::arrow::internal::ChunkedStringBuilder(
-                kBinaryChunksize, pool);
+            builder = new ::arrow::StringBuilder();
         }
+        // TODO Try to make Arrow arrays that reuse our data and offset buffers
+        // instead of copying to new memory buffers
         char *cur_str = array->data1;
         offset_t *offsets = (offset_t *)array->data2;
+        // ensure there won't be any reallocations during build
+        builder->Reserve(array->length);               // n_strings
+        builder->ReserveData(offsets[array->length]);  // n_chars
         for (int64_t i = 0; i < array->length; i++) {
             if (!GetBit((uint8_t *)array->null_bitmask, i)) {
                 status = builder->AppendNull();
@@ -277,9 +274,10 @@ void bodo_array_to_arrow(
             }
         }
 
-        ::arrow::ArrayVector result;
-        status = builder->Finish(&result);
+        std::shared_ptr<arrow::Array> out_array;
+        status = builder->Finish(&out_array);
         CHECK_ARROW(status, "builder->Finish")
+        ::arrow::ArrayVector result{out_array};
         *out = std::make_shared<arrow::ChunkedArray>(result);
         delete builder;
     } else if (array->arr_type == bodo_array_type::LIST_STRING) {
@@ -349,6 +347,101 @@ Bodo_Fs::FsEnum filesystem_type(const char *fname) {
     }
     return fs_type;
 }
+
+// ----------------------------------------------------------------------------
+// The following three functions are copied from Arrow.
+// We modify them slightly in order to pass a different schema to generate
+// the Arrow schema string that is embedded as custom metadata in the parquet
+// file. We do this because we don't want Bodo dictionary-encoded string arrays
+// to be typed as Arrow dictionary arrays, but as strings. Arrow will by default
+// type them as dictionary arrays because we use Arrow DictionaryArray to write
+// them to parquet.
+// NOTE: as far as parquet is concerned Arrow StringArray and DictionaryArray
+// have the same parquet type: "BYTE_ARRAY / String"
+
+// XXX Unfortunately we need to copy this function from Arrow because Arrow
+// doesn't expose it in a header. And simply declaring it doesn't seem to be
+// enough (there are dynamic linking issues, but maybe they can be solved and
+// worth exploring)
+// Only changes to this function are addition of namespace prefixes and clang
+// formatting
+static arrow::Status GetSchemaMetadata(
+    const ::arrow::Schema &schema, ::arrow::MemoryPool *pool,
+    const parquet::ArrowWriterProperties &properties,
+    std::shared_ptr<const arrow::KeyValueMetadata> *out) {
+    if (!properties.store_schema()) {
+        *out = nullptr;
+        return arrow::Status::OK();
+    }
+
+    static const std::string kArrowSchemaKey = "ARROW:schema";
+    std::shared_ptr<arrow::KeyValueMetadata> result;
+    if (schema.metadata()) {
+        result = schema.metadata()->Copy();
+    } else {
+        result = ::arrow::key_value_metadata({}, {});
+    }
+
+    ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Buffer> serialized,
+                          ::arrow::ipc::SerializeSchema(schema, pool));
+
+    // The serialized schema is not UTF-8, which is required for Thrift
+    std::string schema_as_string = serialized->ToString();
+    std::string schema_base64 = ::arrow::util::base64_encode(schema_as_string);
+    result->Append(kArrowSchemaKey, schema_base64);
+    *out = result;
+    return arrow::Status::OK();
+}
+
+// This function is copied from Arrow.
+// Bodo change: pass a different schema for metadata (added schema_for_metadata
+// parameter)
+static arrow::Status OpenFileWriter(
+    const ::arrow::Schema &schema, const ::arrow::Schema &schema_for_metadata,
+    ::arrow::MemoryPool *pool, std::shared_ptr<::arrow::io::OutputStream> sink,
+    std::shared_ptr<parquet::WriterProperties> properties,
+    std::shared_ptr<parquet::ArrowWriterProperties> arrow_properties,
+    std::unique_ptr<parquet::arrow::FileWriter> *writer) {
+    std::shared_ptr<parquet::SchemaDescriptor> parquet_schema;
+    RETURN_NOT_OK(parquet::arrow::ToParquetSchema(
+        &schema, *properties, *arrow_properties, &parquet_schema));
+
+    auto schema_node = std::static_pointer_cast<parquet::schema::GroupNode>(
+        parquet_schema->schema_root());
+
+    std::shared_ptr<const arrow::KeyValueMetadata> metadata;
+    // Bodo change: use schema_for_metadata to generate the Arrow schema to
+    // be embedded in the parquet custom metadata
+    RETURN_NOT_OK(GetSchemaMetadata(schema_for_metadata, pool,
+                                    *arrow_properties, &metadata));
+
+    std::unique_ptr<parquet::ParquetFileWriter> base_writer;
+    PARQUET_CATCH_NOT_OK(base_writer = parquet::ParquetFileWriter::Open(
+                             std::move(sink), schema_node,
+                             std::move(properties), std::move(metadata)));
+
+    auto schema_ptr = std::make_shared<::arrow::Schema>(schema);
+    return parquet::arrow::FileWriter::Make(
+        pool, std::move(base_writer), std::move(schema_ptr),
+        std::move(arrow_properties), writer);
+}
+
+// This function is copied from Arrow.
+// Bodo change: passing through schema_for_metadata to OpenFileWriter
+static arrow::Status WriteTable(
+    const ::arrow::Table &table, ::arrow::MemoryPool *pool,
+    std::shared_ptr<::arrow::io::OutputStream> sink, int64_t chunk_size,
+    std::shared_ptr<parquet::WriterProperties> properties,
+    std::shared_ptr<parquet::ArrowWriterProperties> arrow_properties,
+    std::shared_ptr<arrow::Schema> schema_for_metadata) {
+    std::unique_ptr<parquet::arrow::FileWriter> writer;
+    RETURN_NOT_OK(OpenFileWriter(*table.schema(), *schema_for_metadata, pool,
+                                 std::move(sink), std::move(properties),
+                                 std::move(arrow_properties), &writer));
+    RETURN_NOT_OK(writer->WriteTable(table, chunk_size));
+    return writer->Close();
+}
+// ----------------------------------------------------------------------------
 
 /*
  * Write the Bodo table (the chunk in this process) to a parquet file.
@@ -426,12 +519,41 @@ void pq_write(const char *_path_name, const table_info *table,
     // convert Bodo table to Arrow: construct Arrow Schema and ChunkedArray
     // columns
     std::vector<std::shared_ptr<arrow::Field>> schema_vector;
+    std::vector<std::shared_ptr<arrow::Field>> schema_for_metadata_vector;
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns(
         table->columns.size());
     for (size_t i = 0; i < table->columns.size(); i++) {
         auto col = table->columns[i];
         bodo_array_to_arrow(pool, col, col_names[i], schema_vector,
                             &columns[i]);
+    }
+
+    // dictionary-encoded column handling
+    // See comments on top of GetSchemaMetadata for why we generate a different
+    // schema for the Arrow metadata string
+    if (schema_vector.size() != table->ncols())
+        throw std::runtime_error(
+            "to_parquet: number of fields in schema doesn't match number of "
+            "columns in Bodo table");
+    bool has_dictionary_columns = false;
+    std::shared_ptr<arrow::Field> dict_str_field;
+    for (auto i = 0; i < schema_vector.size(); i++) {
+        auto field = schema_vector[i];
+        if (table->columns[i]->arr_type == bodo_array_type::DICT) {
+            if (!arrow::is_dictionary(field->type()->id()))
+                throw std::runtime_error(
+                    "to_parquet: Arrow type of dictionary-encoded column is "
+                    "not dictionary");
+            // For the custom metadata that Arrow puts in the parquet file, we
+            // will indicate that this is a string column, so Arrow doesn't
+            // identify it as dictionary when reading the written parquet file
+            schema_for_metadata_vector.push_back(
+                arrow::field(col_names[i], arrow::utf8()));
+            has_dictionary_columns = true;
+            dict_str_field = field;
+        } else {
+            schema_for_metadata_vector.push_back(field);
+        }
     }
 
     if (write_index) {
@@ -455,6 +577,9 @@ void pq_write(const char *_path_name, const table_info *table,
     // make Arrow Schema object
     std::shared_ptr<arrow::Schema> schema =
         std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
+    std::shared_ptr<arrow::Schema> schema_for_metadata =
+        std::make_shared<arrow::Schema>(schema_for_metadata_vector,
+                                        schema_metadata);
 
     // make Arrow table from Schema and ChunkedArray columns
     int64_t row_group_size = table->nrows();
@@ -476,19 +601,44 @@ void pq_write(const char *_path_name, const table_info *table,
     prop_builder.compression(codec_type);
     std::shared_ptr<parquet::WriterProperties> writer_properties =
         prop_builder.build();
+    std::shared_ptr<parquet::ArrowWriterProperties> arrow_writer_properties =
+        ::parquet::ArrowWriterProperties::Builder()
+            .coerce_timestamps(::arrow::TimeUnit::MICRO)
+            ->allow_truncated_timestamps()
+            ->store_schema()
+            ->build();
+
+    if (has_dictionary_columns) {
+        // Make sure that Arrow stores dictionary-encoded column as Parquet
+        // type BYTE_ARRAY / String, because in the Arrow schema that is
+        // inserted in the parquet metadata we are saying that it's a string
+        // column
+        std::shared_ptr<parquet::schema::Node> node;
+        parquet::arrow::FieldToNode(dict_str_field, *writer_properties,
+                                    *arrow_writer_properties, &node);
+        if (node->is_primitive()) {
+            auto primitive_node =
+                std::dynamic_pointer_cast<parquet::schema::PrimitiveNode>(node);
+            if ((primitive_node->physical_type() !=
+                 parquet::Type::BYTE_ARRAY) ||
+                (!primitive_node->logical_type()->Equals(
+                    *parquet::LogicalType::String())))
+                throw std::runtime_error(
+                    "Arrow is not storing dictionary array as parquet string");
+        } else {
+            throw std::runtime_error(
+                "Arrow is not storing dictionary array as parquet string");
+        }
+    }
 
     // open file and write table
-    arrow::Status status = parquet::arrow::WriteTable(
+    arrow::Status status = /*parquet::arrow::*/ WriteTable(
         *arrow_table, pool, out_stream, row_group_size, writer_properties,
         // store_schema() = true is needed to write the schema metadata to
         // file
         // .coerce_timestamps(::arrow::TimeUnit::MICRO)->allow_truncated_timestamps()
         // not needed when moving to parquet 2.0
-        ::parquet::ArrowWriterProperties::Builder()
-            .coerce_timestamps(::arrow::TimeUnit::MICRO)
-            ->allow_truncated_timestamps()
-            ->store_schema()
-            ->build());
+        arrow_writer_properties, schema_for_metadata);
     CHECK_ARROW(status, "parquet::arrow::WriteTable");
 }
 
