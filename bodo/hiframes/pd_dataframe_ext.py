@@ -3580,7 +3580,7 @@ def to_parquet_overload(
     # convert dataframe columns to array_info
     if not df.is_table_format:
         data_args = ", ".join(
-            "array_to_info(decode_if_dict_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})))".format(
+            "array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}))".format(
                 i
             )
             for i in range(len(df.columns))
@@ -3590,14 +3590,6 @@ def to_parquet_overload(
     # put arrays in table_info
     if df.is_table_format:
         func_text += "    py_table = get_dataframe_table(df)\n"
-        contains_dict_str_array = np.any(
-            [
-                x == bodo.libs.dict_arr_ext.dict_str_arr_type
-                for x in df.table_type.type_to_blk.keys()
-            ]
-        )
-        if contains_dict_str_array:
-            func_text += "    py_table = decode_if_dict_table(py_table)\n"
         func_text += "    table = py_table_to_cpp_table(py_table, py_table_typ)\n"
     else:
         func_text += "    info_list = [{}]\n".format(data_args)
@@ -3741,7 +3733,7 @@ def to_parquet_overload(
             "delete_table_decref_arrays": delete_table_decref_arrays,
             "col_names_arr": col_names_arr,
             "py_table_to_cpp_table": py_table_to_cpp_table,
-            "py_table_typ": to_str_arr_if_dict_array(df.table_type),
+            "py_table_typ": df.table_type,
             "get_dataframe_table": get_dataframe_table,
             "col_names_no_parts_arr": col_names_no_parts_arr,
             "get_dataframe_column_names": get_dataframe_column_names,
