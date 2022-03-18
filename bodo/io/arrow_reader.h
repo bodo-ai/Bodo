@@ -162,8 +162,11 @@ class ArrowDataframeReader {
      * Register a piece for this process to read
      * @param piece : piece to register
      * @param num_rows : number of rows from this piece to read
+     * @param total_rows : total number of rows this process has to read (across
+     * pieces)
      */
-    virtual void add_piece(PyObject* piece, int64_t num_rows) = 0;
+    virtual void add_piece(PyObject* piece, int64_t num_rows,
+                           int64_t total_rows) = 0;
 
     /// Return Python object representing Arrow dataset
     virtual PyObject* get_dataset() = 0;

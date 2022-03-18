@@ -469,7 +469,8 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         if (out_array != nullptr) return out_array;
 
         if (length == 0) {
-            this->out_array = alloc_dict_string_array(0, 0, 0, /*has_global_dictionary=*/false);
+            this->out_array = alloc_dict_string_array(
+                0, 0, 0, /*has_global_dictionary=*/false);
             return this->out_array;
         }
 
@@ -793,7 +794,8 @@ void ArrowDataframeReader::init(const std::vector<int32_t>& str_as_dict_cols) {
                         "_bodo_num_rows attribute not in piece");
                 int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
                 Py_DECREF(num_rows_piece_py);
-                if (num_rows_piece > 0) add_piece(piece, num_rows_piece);
+                if (num_rows_piece > 0)
+                    add_piece(piece, num_rows_piece, this->count);
                 Py_DECREF(piece);
                 count_rows += num_rows_piece;
                 // finish when number of rows of my pieces covers my chunk
@@ -863,7 +865,7 @@ void ArrowDataframeReader::init(const std::vector<int32_t>& str_as_dict_cols) {
                             std::min(num_rows_piece, this->count - rows_added);
                     }
                     rows_added += rows_added_from_piece;
-                    this->add_piece(piece, rows_added_from_piece);
+                    this->add_piece(piece, rows_added_from_piece, this->count);
                 }
                 Py_DECREF(piece);
 

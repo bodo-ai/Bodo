@@ -1824,8 +1824,8 @@ def parquet_file_schema(
     # add input_file_name column data type if one is specified
     if input_file_name_col is not None:
         col_names += [input_file_name_col]
-        col_types_total += [string_array_type]
-        # input_file_name column is a string array which is supported by default.
+        col_types_total += [dict_str_arr_type]
+        # input_file_name column is a dictionary-encoded string array which is supported by default.
         is_supported_list.append(True)
         # Extend arrow_types for consistency. Here we use None
         # because this column isn't actually in the pq file.

@@ -76,24 +76,39 @@ static void fill_partition_column(int64_t val, char* data, int64_t offset,
 }
 
 /**
- * Fill a range in an output input_file_name column with a given value.
- * NOTE: input_file_name columns are always string columns.
- * @param fname : name of the file to fill
+ * Fill a range in the indices array of input_file_name column with a given
+ * value. NOTE: input_file_name column is always a dictionary-encoded string
+ * array.
+ * @param val : value with which to fill
  * @param data : output buffer
- * @param offsets : offsets buffer in the underlying array_info
- * @param start_idx : index to start filling at
+ * @param offset : start at this position
  * @param rows_to_fill : number of elements to write
  */
-static void fill_input_file_name_column(const char* fname, char* data,
-                                        char* offsets, int64_t start_idx,
-                                        int64_t rows_to_fill) {
+static void fill_input_file_name_col_indices(int32_t val, char* data,
+                                             int64_t offset,
+                                             int64_t rows_to_fill) {
+    // Reuse the partition column functionality with INT32 (since
+    // that's the type of indices array of a dictionary-encoded
+    // string array).
+    fill_partition_column(val, data, offset, rows_to_fill, Bodo_CTypes::INT32);
+}
+
+/**
+ * Fill the dictionary array of input_file_name column with given values.
+ * NOTE: input_file_name column is always a dictionary-encoded string array.
+ * @param file_paths : vector of file paths to fill
+ * @param prefix : prefix to attach to the file-paths (for ADLS, HDFS, etc.)
+ * @param data : output buffer
+ * @param offsets : offsets buffer in the underlying array_info
+ */
+static void fill_input_file_name_col_dict(
+    const std::vector<std::string>& file_paths, const std::string& prefix,
+    char* data, char* offsets) {
     offset_t* col_offsets = (offset_t*)offsets;
-    offset_t start_offset = col_offsets[start_idx];
-    int64_t fname_len = std::strlen(fname);
-    for (int64_t i = 0; i < rows_to_fill; i++) {
-        memcpy(data + start_offset + (i * fname_len), fname,
-               sizeof(char) * fname_len);
-        col_offsets[start_idx + i + 1] = col_offsets[start_idx + i] + fname_len;
+    for (int64_t i = 0; i < file_paths.size(); i++) {
+        std::string fname = prefix + file_paths[i];
+        memcpy(data + col_offsets[i], fname.c_str(), fname.length());
+        col_offsets[i + 1] = col_offsets[i] + fname.length();
     }
 }
 
@@ -173,17 +188,6 @@ class ParquetReader : public ArrowDataframeReader {
             selected_part_cols.push_back(_selected_part_cols[i]);
         }
         part_cols_offset.resize(num_partition_cols, 0);
-
-        // allocate input_file_name column if one is specified. This
-        // is a string array
-        // TODO Convert to Dictionary-encoded string array in the future
-        if (input_file_name_col) {
-            this->input_file_name_col_arr = alloc_array(
-                this->count, this->input_file_name_col_total_chars, -1,
-                bodo_array_type::STRING, Bodo_CTypes::CTypeEnum::STRING, 0, -1);
-            offset_t* offsets = (offset_t*)input_file_name_col_arr->data2;
-            offsets[0] = 0;
-        }
     }
 
     virtual ~ParquetReader() {}
@@ -197,14 +201,33 @@ class ParquetReader : public ArrowDataframeReader {
     array_info* get_input_file_name_col() { return input_file_name_col_arr; }
 
    protected:
-    virtual void add_piece(PyObject* piece, int64_t num_rows) {
+    virtual void add_piece(PyObject* piece, int64_t num_rows,
+                           int64_t total_rows) {
         // p = piece.path
         PyObject* p = PyObject_GetAttrString(piece, "path");
         const char* c_path = PyUnicode_AsUTF8(p);
         file_paths.emplace_back(c_path);
         pieces_nrows.push_back(num_rows);
-        this->input_file_name_col_total_chars +=
-            (num_rows * (std::strlen(c_path) + this->prefix.length()));
+        if (this->input_file_name_col) {
+            // allocate indices array for the dictionary-encoded
+            // input_file_name col if not already allocated
+            if (this->input_file_name_col_indices_arr == nullptr) {
+                // use alloc_nullable_array_no_nulls since there cannot
+                // be any nulls here
+                this->input_file_name_col_indices_arr =
+                    alloc_nullable_array_no_nulls(total_rows,
+                                                  Bodo_CTypes::INT32, 0);
+            }
+            // fill a range in the indices array
+            fill_input_file_name_col_indices(
+                file_paths.size() - 1,
+                this->input_file_name_col_indices_arr->data1,
+                this->input_file_name_col_indices_offset, num_rows);
+            this->input_file_name_col_indices_offset += num_rows;
+            this->input_file_name_col_dict_arr_total_chars +=
+                (std::strlen(c_path) + this->prefix.length());
+        }
+
         // for this parquet file: store partition value of each partition column
         get_partition_info(piece);
         Py_DECREF(p);
@@ -259,7 +282,6 @@ class ParquetReader : public ArrowDataframeReader {
     virtual void read_all(TableBuilder& builder) {
         if (get_num_pieces() == 0) return;
 
-        int64_t rows_read_so_far = 0;
         size_t cur_piece = 0;
         int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
 
@@ -321,39 +343,26 @@ class ParquetReader : public ArrowDataframeReader {
                 rows_left -= length;
 
                 // handle partition columns and input_file_name column
-                if (part_cols.size() > 0 || input_file_name_col) {
+                if (part_cols.size() > 0) {
                     while (length > 0) {
                         int64_t rows_read_from_piece =
                             std::min(rows_left_cur_piece, length);
                         rows_left_cur_piece -= rows_read_from_piece;
                         length -= rows_read_from_piece;
-                        if (part_cols.size() > 0) {
-                            // fill partition cols
-                            for (auto i = 0; i < part_cols.size(); i++) {
-                                int64_t part_val =
-                                    part_vals[cur_piece][selected_part_cols[i]];
-                                fill_partition_column(
-                                    part_val, part_cols[i]->data1,
-                                    part_cols_offset[i], rows_read_from_piece,
-                                    part_cols[i]->dtype);
-                                part_cols_offset[i] += rows_read_from_piece;
-                            }
-                        }
-                        if (this->input_file_name_col) {
-                            // fill the input_file_name column
-                            std::string fname =
-                                this->prefix + this->file_paths[cur_piece];
-                            fill_input_file_name_column(
-                                fname.c_str(),
-                                this->input_file_name_col_arr->data1,
-                                this->input_file_name_col_arr->data2,
-                                rows_read_so_far, rows_read_from_piece);
+                        // fill partition cols
+                        for (auto i = 0; i < part_cols.size(); i++) {
+                            int64_t part_val =
+                                part_vals[cur_piece][selected_part_cols[i]];
+                            fill_partition_column(part_val, part_cols[i]->data1,
+                                                  part_cols_offset[i],
+                                                  rows_read_from_piece,
+                                                  part_cols[i]->dtype);
+                            part_cols_offset[i] += rows_read_from_piece;
                         }
                         if (rows_left_cur_piece == 0 &&
                             cur_piece < get_num_pieces() - 1) {
                             rows_left_cur_piece = pieces_nrows[++cur_piece];
                         }
-                        rows_read_so_far += rows_read_from_piece;
                     }
                 }
             }
@@ -368,6 +377,30 @@ class ParquetReader : public ArrowDataframeReader {
             PyErr_Clear();
         Py_DECREF(dataset_batches_tup);
         Py_DECREF(dataset);  // delete dataset last
+
+        if (this->input_file_name_col) {
+            // allocate and fill the dictionary for the
+            // dictionary-encoded input_file_name column
+            this->input_file_name_col_dict_arr = alloc_string_array(
+                this->file_paths.size(),
+                this->input_file_name_col_dict_arr_total_chars, 0);
+            offset_t* offsets =
+                (offset_t*)this->input_file_name_col_dict_arr->data2;
+            offsets[0] = 0;
+            fill_input_file_name_col_dict(
+                this->file_paths, this->prefix,
+                this->input_file_name_col_dict_arr->data1,
+                this->input_file_name_col_dict_arr->data2);
+
+            // create the final dictionary-encoded input_file_name
+            // column from the indices array and dictionary
+            this->input_file_name_col_arr = new array_info(
+                bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
+                this->count, -1, -1, NULL, NULL, NULL,
+                this->input_file_name_col_indices_arr->null_bitmask, NULL, NULL,
+                NULL, NULL, 0, 0, 0, false, this->input_file_name_col_dict_arr,
+                this->input_file_name_col_indices_arr);
+        }
     }
 
    private:
@@ -403,8 +436,16 @@ class ParquetReader : public ArrowDataframeReader {
     std::vector<array_info*> part_cols;
     // current fill offset of each partition column
     std::vector<int64_t> part_cols_offset;
+
     // output input_file_name column
-    int64_t input_file_name_col_total_chars = 0;
+    // indices for the dictionary-encoding
+    array_info* input_file_name_col_indices_arr = nullptr;
+    int64_t input_file_name_col_indices_offset = 0;
+    // dictionary for the dictionary encoding
+    array_info* input_file_name_col_dict_arr = nullptr;
+    int64_t input_file_name_col_dict_arr_total_chars = 0;
+    // output array_info for the dictionary-encoded
+    // string array
     array_info* input_file_name_col_arr = nullptr;
 
     /**
