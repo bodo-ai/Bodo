@@ -212,7 +212,8 @@ inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
 struct array_info {
     bodo_array_type::arr_type_enum arr_type;
     Bodo_CTypes::CTypeEnum dtype;
-    int64_t length;       // number of elements in the array (not bytes) For DICT arrays this is the length of indices array
+    int64_t length;  // number of elements in the array (not bytes) For DICT
+                     // arrays this is the length of indices array
     int64_t n_sub_elems;  // number of sub-elements for variable length arrays,
                           // e.g. characters in string array
     int64_t n_sub_sub_elems;  // second level of subelements (e.g. for the
@@ -244,7 +245,8 @@ struct array_info {
                         int32_t _precision = 0, int32_t _scale = 0,
                         int64_t _num_categories = 0,
                         bool _has_global_dictionary = false,
-                        array_info* _info1 = nullptr, array_info* _info2 = nullptr)
+                        array_info* _info1 = nullptr,
+                        array_info* _info2 = nullptr)
         : arr_type(_arr_type),
           dtype(_dtype),
           length(_length),
@@ -381,6 +383,10 @@ array_info* alloc_nullable_array(int64_t length,
                                  Bodo_CTypes::CTypeEnum typ_enum,
                                  int64_t extra_null_bytes);
 
+array_info* alloc_nullable_array_no_nulls(int64_t length,
+                                          Bodo_CTypes::CTypeEnum typ_enum,
+                                          int64_t extra_null_bytes);
+
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes);
 
@@ -391,7 +397,8 @@ array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
                                     int64_t n_chars, int64_t extra_null_bytes);
 
 array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
-                                    int64_t n_chars_keys, bool has_global_dictionary);
+                                    int64_t n_chars_keys,
+                                    bool has_global_dictionary);
 
 /* Store several array_info in one structure and assign them
    as required.

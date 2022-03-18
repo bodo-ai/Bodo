@@ -30,7 +30,8 @@ class SnowflakeReader : public ArrowDataframeReader {
     virtual size_t get_num_pieces() const { return batches.size(); }
 
    protected:
-    virtual void add_piece(PyObject* piece, int64_t num_rows) {
+    virtual void add_piece(PyObject* piece, int64_t num_rows,
+                           int64_t total_rows) {
         Py_INCREF(piece);  // keeping a reference to this piece
         batches.push_back(piece);
     }
@@ -67,7 +68,8 @@ class SnowflakeReader : public ArrowDataframeReader {
             int64_t offset = 0;
             if (piece_idx == 0) offset = start_row_first_piece;
             PyObject* batch = batches[piece_idx];
-            PyObject* arrow_table_py = PyObject_CallMethod(batch, "to_arrow", "O", sf_conn);
+            PyObject* arrow_table_py =
+                PyObject_CallMethod(batch, "to_arrow", "O", sf_conn);
             auto table = arrow::py::unwrap_table(arrow_table_py).ValueOrDie();
             int64_t length = std::min(rows_left, table->num_rows() - offset);
             // pass zero-copy slice to TableBuilder to append to read data

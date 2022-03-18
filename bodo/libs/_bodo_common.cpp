@@ -196,6 +196,19 @@ array_info* alloc_nullable_array(int64_t length,
                           meminfo_bitmask);
 }
 
+array_info* alloc_nullable_array_no_nulls(int64_t length,
+                                          Bodo_CTypes::CTypeEnum typ_enum,
+                                          int64_t extra_null_bytes) {
+    // Same as alloc_nullable_array but we set the null_bitmask
+    // such that there are no null values in the output.
+    // Useful for cases like allocating indices array of dictionary-encoded
+    // string arrays such as input_file_name column where nulls are not possible
+    array_info* arr = alloc_nullable_array(length, typ_enum, extra_null_bytes);
+    size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    memset(arr->null_bitmask, 0xff, n_bytes);  // null not possible
+    return arr;
+}
+
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes) {
     // allocate underlying array(item) data array
@@ -216,15 +229,18 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars,
 }
 
 array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
-                                    int64_t n_chars_keys, bool has_global_dictionary) {
+                                    int64_t n_chars_keys,
+                                    bool has_global_dictionary) {
     // dictionary
     array_info* dict_data_arr = alloc_string_array(n_keys, n_chars_keys, 0);
     // indices
-    array_info* indices_data_arr = alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
+    array_info* indices_data_arr =
+        alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
 
-    return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length,
-                   -1, -1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0,
-                   0, has_global_dictionary, dict_data_arr, indices_data_arr);
+    return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
+                          length, -1, -1, NULL, NULL, NULL, NULL, NULL, NULL,
+                          NULL, NULL, 0, 0, 0, has_global_dictionary,
+                          dict_data_arr, indices_data_arr);
 }
 
 /**
@@ -454,7 +470,8 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
         return alloc_array_item(length, n_sub_elems, dtype, extra_null_bytes);
 
     if (arr_type == bodo_array_type::DICT)
-        return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems, false);
+        return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
+                                       false);
 
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Type not covered in alloc_array");
     return nullptr;
