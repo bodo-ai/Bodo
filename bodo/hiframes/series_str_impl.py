@@ -351,6 +351,22 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
     str_arg_check("replace", "pat", pat)
     str_arg_check("replace", "repl", repl)
     int_arg_check("replace", "flags", flags)
+
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_replace_dict_impl(
+            S_str, pat, repl, n=-1, case=None, flags=0, regex=True
+        ):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_replace(arr, pat, repl, flags, regex)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_replace_dict_impl
+
     # TODO: support other arguments
     # TODO: support dynamic values for regex
     if is_overload_true(regex):

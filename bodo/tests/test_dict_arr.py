@@ -159,6 +159,39 @@ def test_gatherv_rm(dict_arr_value, memory_leak_check):
     )
 
 
+def test_str_replace(memory_leak_check):
+    """test optimizaton of Series.str.replace() for dict array"""
+
+    def impl1(A):
+        return pd.Series(A).str.replace("AB*", "EE", regex=True)
+
+    def impl2(A):
+        return pd.Series(A).str.replace("피츠*", "뉴욕의", regex=True)
+
+    def impl3(A):
+        return pd.Series(A).str.replace("AB", "EE", regex=False)
+
+    data1 = ["AB", None, "ABCD", "CDE", None, "ABBB", "ABB", "AC"]
+    data2 = ["피츠", None, "피츠뉴욕의", "뉴욕의", None, "뉴욕의뉴욕의", "피츠츠츠", "츠"]
+    A1 = pa.array(data1, type=pa.dictionary(pa.int32(), pa.string()))
+    A2 = pa.array(data2, type=pa.dictionary(pa.int32(), pa.string()))
+
+    check_func(
+        impl1, (A1,), py_output=pd.Series(data1).str.replace("AB*", "EE", regex=True)
+    )
+    check_func(
+        impl2, (A2,), py_output=pd.Series(data2).str.replace("피츠*", "뉴욕의", regex=True)
+    )
+    check_func(
+        impl3, (A1,), py_output=pd.Series(data1).str.replace("AB", "EE", regex=False)
+    )
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(A1)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_replace")
+
+
 def test_dict_array_unify(dict_arr_value):
     """Tests that unifying dict arrays works as expected."""
     # TODO: Add memory leak check, casting bug
