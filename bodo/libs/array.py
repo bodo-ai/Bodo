@@ -103,9 +103,6 @@ ll.add_symbol("pivot_groupby_and_aggregate", array_ext.pivot_groupby_and_aggrega
 ll.add_symbol("get_groupby_labels", array_ext.get_groupby_labels)
 ll.add_symbol("array_isin", array_ext.array_isin)
 ll.add_symbol("get_search_regex", array_ext.get_search_regex)
-ll.add_symbol(
-    "compute_node_partition_by_hash", array_ext.compute_node_partition_by_hash
-)
 ll.add_symbol("array_info_getitem", array_ext.array_info_getitem)
 ll.add_symbol("array_info_getdata1", array_ext.array_info_getdata1)
 
@@ -2053,30 +2050,6 @@ def hash_join_table(
         ),
         codegen,
     )
-
-
-@intrinsic
-def compute_node_partition_by_hash(typingctx, table_t, n_keys_t, n_pes_t):
-    """
-    Interface to the computation of the hash node partition from C++
-    """
-    assert table_t == table_type
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [lir.IntType(8).as_pointer(), lir.IntType(64), lir.IntType(64)],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="compute_node_partition_by_hash"
-        )
-        ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
-        return ret
-
-    return table_type(table_t, types.int64, types.int64), codegen
 
 
 @intrinsic

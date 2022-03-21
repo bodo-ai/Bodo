@@ -443,40 +443,6 @@ def build_set_seen_na(A):
     return impl
 
 
-# converts an iterable to array, similar to np.array, but can support
-# other things like StringArray
-# TODO: other types like datetime?
-def to_array(A):  # pragma: no cover
-    return np.array(A)
-
-
-@overload(to_array, no_unliteral=True)
-def to_array_overload(A):
-    # handle dict for set replacement workaround
-    if isinstance(A, types.DictType):
-        dtype = A.key_type
-
-        def impl(A):  # pragma: no cover
-            n = len(A)
-            arr = alloc_type(n, dtype, (-1,))
-            i = 0
-            for v in A.keys():
-                arr[i] = v
-                i += 1
-            return arr
-
-        return impl
-    # try regular np.array and return it if it works
-    def to_array_impl(A):  # pragma: no cover
-        return np.array(A)
-
-    try:
-        numba.njit(to_array_impl).get_call_template((A,), {})
-        return to_array_impl
-    except:
-        pass  # should be handled elsewhere (e.g. Set)
-
-
 def empty_like_type(n, arr):  # pragma: no cover
     return np.empty(n, arr.dtype)
 
@@ -887,18 +853,6 @@ def overload_full_type(n, val, t):
 
 
 @intrinsic
-def get_ctypes_ptr(typingctx, ctypes_typ=None):
-    assert isinstance(ctypes_typ, types.ArrayCTypes)
-
-    def codegen(context, builder, sig, args):
-        (in_carr,) = args
-        ctinfo = context.make_helper(builder, sig.args[0], in_carr)
-        return ctinfo.data
-
-    return types.voidptr(ctypes_typ), codegen
-
-
-@intrinsic
 def is_null_pointer(typingctx, ptr_typ=None):
     """check whether the pointer type is NULL or not"""
 
@@ -954,18 +908,6 @@ def object_length(c, obj):
     fnty = lir.FunctionType(lir.IntType(64), [pyobj_lltyp])
     fn = cgutils.get_or_insert_function(c.builder.module, fnty, name="PyObject_Length")
     return c.builder.call(fn, (obj,))
-
-
-def sequence_getitem(c, obj, ind):  # pragma: no cover
-    """
-    seq[ind]
-    """
-    pyobj_lltyp = c.context.get_argument_type(types.pyobject)
-    fnty = lir.FunctionType(pyobj_lltyp, [pyobj_lltyp, lir.IntType(64)])
-    fn = cgutils.get_or_insert_function(
-        c.builder.module, fnty, name="PySequence_GetItem"
-    )
-    return c.builder.call(fn, (obj, ind))
 
 
 @intrinsic
@@ -1082,7 +1024,7 @@ def list_reverse(A):
         return impl_reversed
 
 
-@numba.njit()
+@numba.njit
 def count_nonnan(a):  # pragma: no cover
     """
     Count number of non-NaN elements in an array
@@ -1090,7 +1032,7 @@ def count_nonnan(a):  # pragma: no cover
     return np.count_nonzero(~np.isnan(a))
 
 
-@numba.njit()
+@numba.njit
 def nanvar_ddof1(a):  # pragma: no cover
     """
     Simple implementation for np.nanvar(arr, ddof=1)
@@ -1101,7 +1043,7 @@ def nanvar_ddof1(a):  # pragma: no cover
     return np.nanvar(a) * (num_el / (num_el - 1))
 
 
-@numba.njit()
+@numba.njit
 def nanstd_ddof1(a):  # pragma: no cover
     """
     Simple implementation for np.nanstd(arr, ddof=1)

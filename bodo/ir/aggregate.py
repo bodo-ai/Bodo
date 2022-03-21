@@ -45,7 +45,6 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
-    compute_node_partition_by_hash,
     delete_info_decref_array,
     delete_table,
     delete_table_decref_arrays,
@@ -1115,7 +1114,6 @@ def agg_distributed_run(
             "coerce_to_array": bodo.utils.conversion.coerce_to_array,
             "groupby_and_aggregate": groupby_and_aggregate,
             "pivot_groupby_and_aggregate": pivot_groupby_and_aggregate,
-            "compute_node_partition_by_hash": compute_node_partition_by_hash,
             "info_from_table": info_from_table,
             "info_to_array": info_to_array,
             "delete_info_decref_array": delete_info_decref_array,

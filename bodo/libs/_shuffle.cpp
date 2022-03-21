@@ -2734,27 +2734,6 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
     return new table_info(out_arrs);
 }
 
-table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
-                                           int64_t n_pes, bool is_parallel) {
-    try {
-        int64_t n_rows = in_table->nrows();
-        uint32_t* hashes =
-            hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION, is_parallel);
-
-        std::vector<array_info*> out_arrs;
-        array_info* out_arr = alloc_array(
-            n_rows, -1, -1, bodo_array_type::NUMPY, Bodo_CTypes::INT32, 0, 0);
-        for (int64_t i_row = 0; i_row < n_rows; i_row++) {
-            int32_t node_id = hash_to_rank(hashes[i_row], n_pes);
-            out_arr->at<int32_t>(i_row) = node_id;
-        }
-        out_arrs.push_back(out_arr);
-        return new table_info(out_arrs);
-    } catch (const std::exception& e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
-    }
-}
 
 /* Whether or not a reshuffling is needed.
    The idea is following:

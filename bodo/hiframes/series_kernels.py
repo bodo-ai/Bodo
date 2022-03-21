@@ -27,25 +27,6 @@ def _column_filter_impl(B, ind):  # pragma: no cover
     return A
 
 
-def _column_count_impl(A):  # pragma: no cover
-    numba.parfors.parfor.init_prange()
-    count = 0
-    for i in numba.parfors.parfor.internal_prange(len(A)):
-        if not bodo.libs.array_kernels.isna(A, i):
-            count += 1
-
-    res = count
-    return res
-
-
-def _column_fillna_impl(A, B, fill):  # pragma: no cover
-    for i in numba.parfors.parfor.internal_prange(len(A)):
-        s = B[i]
-        if bodo.libs.array_kernels.isna(B, i):
-            s = fill
-        A[i] = s
-
-
 # using njit since 1D_var is broken for alloc when there is calculation of len
 @numba.njit(no_cpython_wrapper=True)
 def _series_dropna_str_alloc_impl_inner(B):  # pragma: no cover
@@ -227,15 +208,6 @@ def _mean_handle_nan(s, count):  # pragma: no cover
         s = get_float_nan(s)
     else:
         s = s / count
-    return s
-
-
-@numba.njit
-def _handle_nan_count(s, count):  # pragma: no cover
-    if count <= 1:
-        s = np.nan
-    else:
-        s = s / (count - 1)
     return s
 
 
