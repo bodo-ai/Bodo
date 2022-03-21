@@ -131,10 +131,13 @@ def test_int_convert_opt(memory_leak_check):
     """test optimizaton of integer conversion for dict array"""
 
     def impl(A):
-        return A.astype("Int32")
+        return pd.Series(A).astype("Int32")
 
-    A = pd.Series(pd.array(["14", None, "-3", "11", "-155", None], "string"))
-    check_func(impl, (A,))
+    data = ["14", None, "-3", "11", "-155", None]
+    A = pa.array(data, type=pa.dictionary(pa.int32(), pa.string()))
+    check_func(
+        impl, (A,), py_output=pd.Series(pd.array(data, "string")).astype("Int32")
+    )
     # make sure IR has the optimized function
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
     bodo_func(A)
