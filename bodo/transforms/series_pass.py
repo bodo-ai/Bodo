@@ -1394,6 +1394,15 @@ class SeriesPass:
                 run_full_pipeline=True,
             )
 
+        # remove unnecessary bool() calls generated for branch conditions by Numba to
+        # simplify the IR
+        if (
+            fdef == ("bool", "builtins")
+            and self.typemap[rhs.args[0].name] == types.bool_
+        ):
+            assign.value = rhs.args[0]
+            return [assign]
+
         # support call ufuncs on Series
         if (
             func_mod in ("numpy", "ufunc")
