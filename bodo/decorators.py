@@ -298,14 +298,6 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
         "fusion": True,
     }
 
-    # turn off automatic distribution detection for args/returns if some distribution
-    # is manually specified by the user
-    if "distributed" in options or "distributed_block" in options:
-        if "args_maybe_distributed" not in options:
-            options["args_maybe_distributed"] = False
-        if "returns_maybe_distributed" not in options:
-            options["returns_maybe_distributed"] = False
-
     pipeline_class = (
         bodo.compiler.BodoCompiler if pipeline_class is None else pipeline_class
     )

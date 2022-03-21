@@ -321,7 +321,11 @@ class DistributedAnalysis:
     def _check_user_distributed_args(self, array_dists, name, loc):
         """check that no arguments in the originally compiled
         function is specified as distributed but marked as REP"""
-        err_msg = "Variable '{}' has distributed flag in function '{}', but it's not possible to distribute it.\nDistributed diagnostics:\n{}"
+        err_msg = (
+            "Variable '{}' has distributed flag in function '{}', but it's not "
+            "possible to distribute it due to non-distributed dependent operations.\n"
+            "Distributed diagnostics:\n{}"
+        )
         if name in array_dists and is_REP(array_dists[name]):
             raise BodoError(
                 err_msg.format(
