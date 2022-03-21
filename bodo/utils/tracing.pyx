@@ -76,6 +76,14 @@ def is_tracing():
     return TRACING
 
 
+cdef convert_np_scalars_to_python(event):
+    if "args" in event:
+        for k, val in list(event["args"].items()):
+            if isinstance(val, np.generic):
+                # convert to Python type to avoid JSON serialization errors
+                event["args"][k] = val.item()
+
+
 def dump(fname=None, clear_traces=True):
     """Dump current traces to JSON file"""
     cdef int rank, num_ranks, num_nodes
@@ -87,6 +95,9 @@ def dump(fname=None, clear_traces=True):
         MPI_Comm_size(MPI_COMM_WORLD, &num_ranks)
         if num_ranks > 1:
             aggregate_events()
+        else:
+            for e in traceEvents:
+                convert_np_scalars_to_python(e)
         if rank == 0 and len(traceEvents) > 0:
             if fname is None:
                 fname = trace_filename
@@ -165,9 +176,7 @@ cdef generic_aggregate_func(object traces_all):
             values = np.array([t["args"][arg] for t in traces_all])
             aggregate_helper(values, arg, result)
             del result["args"][arg]
-        for k, val in list(result["args"].items()):
-            if isinstance(val, np.int64):
-                result["args"][k] = int(val)
+        convert_np_scalars_to_python(result)
     return result
 
 
