@@ -515,7 +515,6 @@ def test_datetime_compare(comparison_impl, dti_val, memory_leak_check):
     check_func(comparison_impl, (t, dti_val))
 
 
-
 def test_string_index_constant_lowering(memory_leak_check):
     si = pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"])
 
@@ -1792,7 +1791,7 @@ def test_index_rename(idx, new_name):
 def test_index_rename_dist_bug(memory_leak_check):
     """tests index.rename() for distribution match between input and output [BE-2285]"""
 
-    @bodo.jit(distributed=["I"])
+    @bodo.jit(distributed=["I"], returns_maybe_distributed=False)
     def f(I):
         return I.rename("B")
 

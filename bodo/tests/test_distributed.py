@@ -1801,6 +1801,22 @@ def test_bodo_meta_jit_calls(memory_leak_check):
     assert count_array_OneD_Vars() == 0
 
 
+@pytest.mark.slow
+def test_partial_dist_flag(memory_leak_check):
+    """make sure specifying distributions partially works as expected"""
+
+    @bodo.jit(distributed=["df"])
+    def f(df):
+        df2 = df.groupby("A").sum()
+        return df2
+
+    df = pd.DataFrame(
+        {"A": [1, 1, 1, 2, 2, 2, 3, 3, 3], "B": [1, 2, 3, 1, 2, 3, 1, 2, 3]}
+    )
+    f(df)
+    assert count_array_REPs() == 0
+
+
 def test_dist_type_change_multi_func1(memory_leak_check):
     """test a corner case in multi-function case where distribution of output of a
     dispatcher call is not set properly [BE-1328]
