@@ -10,6 +10,7 @@ https://arrow.apache.org/docs/cpp/api/array.html#dictionary-encoded
 """
 
 import operator
+import re
 
 import numba
 import numpy as np
@@ -506,3 +507,31 @@ def cast_dict_str_arr_to_str_arr(context, builder, fromty, toty, val):
     sig = toty(fromty)
     res = context.compile_internal(builder, func, sig, (val,))
     return impl_ret_new_ref(context, builder, toty, res)
+
+
+@numba.jit(cache=True, no_cpython_wrapper=True)
+def str_replace(arr, pat, repl, flags, regex):  # pragma: no cover
+    """implement optimized string replace for dictionary array.
+    Only transforms the dictionary array and just copies the indices.
+    """
+    # Pandas implementation:
+    # https://github.com/pandas-dev/pandas/blob/60c2940fcf28ee84b64ebda813adfd78a68eea9f/pandas/core/strings/object_array.py#L141
+    data_arr = arr._data
+    n_data = len(data_arr)
+    out_str_arr = pre_alloc_string_array(n_data, -1)
+
+    if regex:
+        e = re.compile(pat, flags)
+        for i in range(n_data):
+            if bodo.libs.array_kernels.isna(data_arr, i):
+                bodo.libs.array_kernels.setna(out_str_arr, i)
+                continue
+            out_str_arr[i] = e.sub(repl=repl, string=data_arr[i])
+    else:
+        for i in range(n_data):
+            if bodo.libs.array_kernels.isna(data_arr, i):
+                bodo.libs.array_kernels.setna(out_str_arr, i)
+                continue
+            out_str_arr[i] = data_arr[i].replace(pat, repl)
+
+    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)

@@ -431,7 +431,7 @@ def test_replace_noregex(test_unicode, memory_leak_check):
         return S.str.replace("AB", "EE", regex=False)
 
     def test_impl2(S):
-        return S.str.replace("피츠버그의", "뉴욕의", regex=True)
+        return S.str.replace("피츠버그의", "뉴욕의", regex=False)
 
     check_func(test_impl, (test_unicode,))
     check_func(test_impl2, (test_unicode,))
