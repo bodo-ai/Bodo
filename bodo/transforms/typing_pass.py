@@ -1640,7 +1640,12 @@ class TypingTransforms:
 
     def _run_call_bodosql_table_path(self, assign, rhs, label):
         nodes = []
-        func_args = [(0, "file_path"), (1, "file_type"), (2, "conn_str")]
+        func_args = [
+            (0, "file_path"),
+            (1, "file_type"),
+            (2, "conn_str"),
+            (3, "reorder_io"),
+        ]
         nodes += self._replace_arg_with_literal(
             "bodosql.TablePath", rhs, func_args, label
         )
