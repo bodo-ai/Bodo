@@ -26,16 +26,8 @@ from bodo.libs.array import (
     info_from_table,
     info_to_array,
 )
-from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntDtype
-from bodo.libs.str_arr_ext import (
-    copy_str_arr_slice,
-    cp_str_list_to_array,
-    getitem_str_offset,
-    num_total_chars,
-    pre_alloc_string_array,
-    to_list_if_immutable_arr,
-)
+from bodo.libs.str_arr_ext import cp_str_list_to_array, to_list_if_immutable_arr
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
@@ -1301,60 +1293,6 @@ def calc_disp(arr):  # pragma: no cover
     for i in range(1, len(arr)):
         disp[i] = disp[i - 1] + arr[i - 1]
     return disp
-
-
-def ensure_capacity(arr, new_size):  # pragma: no cover
-    new_arr = arr
-    curr_len = len(arr)
-    if curr_len < new_size:
-        new_len = 2 * curr_len
-        new_arr = bodo.utils.utils.alloc_type(new_len, arr)
-        new_arr[:curr_len] = arr
-    return new_arr
-
-
-@overload(ensure_capacity, no_unliteral=True)
-def ensure_capacity_overload(arr, new_size):
-    if isinstance(arr, types.Array) or arr == boolean_array:
-        return ensure_capacity
-    assert isinstance(arr, types.BaseTuple)
-    count = arr.count
-
-    func_text = "def f(arr, new_size):\n"
-    func_text += "  return ({}{})\n".format(
-        ",".join(
-            ["ensure_capacity(arr[{}], new_size)".format(i) for i in range(count)]
-        ),
-        "," if count == 1 else "",
-    )  # single value needs comma to become tuple
-
-    loc_vars = {}
-    exec(func_text, {"ensure_capacity": ensure_capacity}, loc_vars)
-    alloc_impl = loc_vars["f"]
-    return alloc_impl
-
-
-@numba.njit
-def ensure_capacity_str(arr, new_size, n_chars):  # pragma: no cover
-    # new_size is right after write index
-    new_arr = arr
-    curr_len = len(arr)
-    curr_num_chars = num_total_chars(arr)
-    needed_total_chars = getitem_str_offset(arr, new_size - 1) + n_chars
-
-    # TODO: corner case test
-    # print("new alloc", new_size, curr_len, getitem_str_offset(arr, new_size-1), n_chars, curr_num_chars)
-    if curr_len < new_size or needed_total_chars > curr_num_chars:
-        new_len = int(2 * curr_len if curr_len < new_size else curr_len)
-        new_num_chars = int(
-            2 * curr_num_chars + n_chars
-            if needed_total_chars > curr_num_chars
-            else curr_num_chars
-        )
-        new_arr = pre_alloc_string_array(new_len, new_num_chars)
-        copy_str_arr_slice(new_arr, arr, new_size - 1)
-
-    return new_arr
 
 
 @numba.njit

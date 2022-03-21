@@ -152,19 +152,6 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
 table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                          bool all_gather, bool is_parallel);
 
-/** Getting the computing node on which a row belongs to
- *
- * The template paramter is T.
- * @param in_table: the input table
- * @param n_keys  : the number of keys to be used for the hash
- * @param n_pes   : the number of processor considered
- * @param is_parallel: true because this function is call in parallel_join_impl
- * only
- * @return the table containing a single column with the nodes
- */
-table_info* compute_node_partition_by_hash(table_info* in_table, int64_t n_keys,
-                                           int64_t n_pes,
-                                           bool is_parallel = true);
 
 /** Compute whether we need to do a reshuffling or not for performance reasons.
     The dilemna is following:
