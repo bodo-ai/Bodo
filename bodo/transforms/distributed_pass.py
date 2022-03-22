@@ -1522,6 +1522,13 @@ class DistributedPass:
             return [assign]
 
         if fdef == (
+            "first_last_valid_index",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
+        if fdef == (
             "get_valid_entries_from_date_offset",
             "bodo.libs.array_kernels",
         ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
