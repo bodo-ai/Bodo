@@ -1349,8 +1349,6 @@ series_unsupported_methods = (
     # Time series-related
     "asfreq",
     "asof",
-    "first_valid_index",
-    "last_valid_index",
     "resample",
     "tz_convert",
     "tz_localize",

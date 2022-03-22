@@ -1,4 +1,5 @@
 import re
+from string import ascii_lowercase
 
 import numpy as np
 import pandas as pd
@@ -817,6 +818,42 @@ def test_series_duplicated(S_val, memory_leak_check):
         return S.duplicated()
 
     check_func(test_impl, (S_val,), sort_output=True, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "arr",
+    [
+        [None] * 5 + [None, None, 2, 3, None] + [None] * 5,
+        [None] * 15,
+    ],
+)
+@pytest.mark.parametrize(
+    "idx",
+    [
+        pd.Index(list(ascii_lowercase[:15])),
+        pd.Index(np.arange(100, 115)),
+        pd.date_range("01-01-2022", periods=15, freq="D"),
+    ],
+)
+def test_series_first_last_valid_index(arr, idx):
+    """
+    Tests for Series.first_valid_index() and Series.last_valid_index()
+    """
+
+    def test_first(S):
+        return S.first_valid_index()
+
+    def test_last(S):
+        return S.last_valid_index()
+
+    def f(S):
+        idx_val = S.first_valid_index()
+        return idx_val.date
+
+    s = pd.Series(arr, index=idx)
+    # S = pd.Series(np.arange(5), index=pd.date_range("2018-04-09", periods=5, freq="2D1H"))
+    check_func(test_last, (s,), check_typing_issues=False)
+    check_func(test_first, (s,), check_typing_issues=False)
 
 
 def test_series_rename_axis():

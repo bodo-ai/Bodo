@@ -81,6 +81,7 @@ ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
 
 MPI_ROOT = 0
 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
+min_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Min.value)
 
 
 def isna(arr, i):  # pragma: no cover
@@ -352,6 +353,74 @@ def overload_setna_slice(arr, s):
         arr_slice = numba.cpython.unicode._normalize_slice(s, len(arr))
         for i in range(arr_slice.start, arr_slice.stop, arr_slice.step):
             setna(arr, i)
+
+    return impl
+
+
+@numba.generated_jit
+def first_last_valid_index(arr, index_arr, is_first=True, parallel=False):
+    """
+    Taking a data array (arr) and index array (index_arr) as input, this function determines the index
+    corresponding to the first or last entry of the data array which is non-NA. (is_first is true iff
+    looking for the index of the first valid entry.)
+
+    In the serial case, the data array is scanned forward (if is_first) or backwards (otherwise) until the
+    first non-NA entry is reached, and the corresponding index for the entry is returned.
+
+    In the parallel case, the function will compute the pair (min_rank, index_val) by doing the following.
+    On each rank i:
+        1. initialize loc_min = num_ranks
+        2. scan array locally for first/last valid index, if some_val is found
+            2a. loc_min = i
+            2b. index_val = some_val
+    Once this computation is done on all ranks, we find (via reduction):
+        3. min_rank = min of loc_min across all ranks
+    Using this min_rank, on each rank
+        4. broadcast index_val to each rank from min_rank
+    If all ranks had fully-NA arrays, we expect min_rank = num_ranks, so on each rank:
+        5. return index_val if min_rank != num_ranks otherwise return None
+    """
+    is_first = get_overload_const_bool(is_first)
+    if is_first:
+        range_str = "n"
+    else:
+        range_str = "n-1, -1, -1"
+    func_text = f"""def impl(arr, index_arr, is_first=True, parallel=False):
+    n = len(arr)
+    index_val = index_arr[0]
+    has_valid = False
+    loc_min = -1
+    if parallel:
+        rank = bodo.libs.distributed_api.get_rank()
+        n_pes = bodo.libs.distributed_api.get_size()
+        loc_min = n_pes
+    for i in range({range_str}):
+        if not isna(arr, i):
+            if parallel:
+                loc_min = rank
+            index_val = index_arr[i]
+            has_valid = True
+            break
+    if parallel:
+        min_rank = np.int32(bodo.libs.distributed_api.dist_reduce(loc_min, min_op))
+        if min_rank != n_pes:
+            has_valid = True
+            index_val = bodo.libs.distributed_api.bcast_scalar(index_val, min_rank)
+    return has_valid, box_if_dt64(index_val)\n
+    """
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "np": np,
+            "bodo": bodo,
+            "isna": isna,
+            "min_op": min_op,
+            "box_if_dt64": bodo.utils.conversion.box_if_dt64,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
 
     return impl
 

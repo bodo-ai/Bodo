@@ -1520,6 +1520,34 @@ def overload_series_last(S, offset):
     return impl
 
 
+@overload_method(SeriesType, "first_valid_index", inline="always", no_unliteral=True)
+def overload_series_first_valid_index(S):
+    def impl(S):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        index_arr = bodo.utils.conversion.index_to_array(index)
+        has_valid, index_val = bodo.libs.array_kernels.first_last_valid_index(
+            arr, index_arr
+        )
+        return index_val if has_valid else None
+
+    return impl
+
+
+@overload_method(SeriesType, "last_valid_index", inline="always", no_unliteral=True)
+def overload_series_last_valid_index(S):
+    def impl(S):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        index_arr = bodo.utils.conversion.index_to_array(index)
+        has_valid, index_val = bodo.libs.array_kernels.first_last_valid_index(
+            arr, index_arr, False
+        )
+        return index_val if has_valid else None
+
+    return impl
+
+
 @overload_method(SeriesType, "nlargest", inline="always", no_unliteral=True)
 def overload_series_nlargest(S, n=5, keep="first"):
     # TODO: cache implementation

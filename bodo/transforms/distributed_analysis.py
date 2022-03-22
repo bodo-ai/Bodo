@@ -1247,6 +1247,10 @@ class DistributedAnalysis:
             array_dists[lhs] = new_dist
             return
 
+        if fdef == ("first_last_valid_index", "bodo.libs.array_kernels"):
+            # doesn't affect distribution of either input or output
+            return
+
         if fdef == ("get_valid_entries_from_date_offset", "bodo.libs.array_kernels"):
             # doesn't affect distribution of either input or output
             return
