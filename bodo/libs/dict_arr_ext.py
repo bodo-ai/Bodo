@@ -43,7 +43,11 @@ from bodo.libs.str_arr_ext import (
     overload_str_arr_astype,
     pre_alloc_string_array,
 )
-from bodo.utils.typing import BodoArrayIterator, raise_bodo_error
+from bodo.utils.typing import (
+    BodoArrayIterator,
+    is_overload_none,
+    raise_bodo_error,
+)
 
 # we use nullable int32 for dictionary indices to match Arrow for faster and easier IO.
 # more than 2 billion unique values doesn't make sense for a dictionary-encoded array.
@@ -491,6 +495,65 @@ def convert_dict_arr_to_int_overload(arr, dtype):
 
         return out_arr
 
+    return impl
+
+
+def cat_dict_str(arrs, sep):  # pragma: no cover
+    pass
+
+
+@overload(cat_dict_str)
+def cat_dict_str_overload(arrs, sep):
+    """optimized function for concatenating dictionary array elements one by one.
+    Keeps a map of index combinations in input dictionaries to avoid recomputing
+    repeated values.
+    """
+    n_arrs = len(arrs)
+    func_text = "def impl(arrs, sep):\n"
+    func_text += "  ind_map = {}\n"
+    func_text += "  out_strs = []\n"
+    func_text += "  n = len(arrs[0])\n"
+    for i in range(n_arrs):
+        func_text += f"  indices{i} = arrs[{i}]._indices\n"
+    for i in range(n_arrs):
+        func_text += f"  data{i} = arrs[{i}]._data\n"
+    func_text += "  out_indices = bodo.libs.int_arr_ext.alloc_int_array(n, np.int32)\n"
+    func_text += "  for i in range(n):\n"
+    na_check = " or ".join(
+        [f"bodo.libs.array_kernels.isna(arrs[{i}], i)" for i in range(n_arrs)]
+    )
+    func_text += f"    if {na_check}:\n"
+    func_text += "      bodo.libs.array_kernels.setna(out_indices, i)\n"
+    func_text += "      continue\n"
+    for i in range(n_arrs):
+        func_text += f"    ind{i} = indices{i}[i]\n"
+    ind_tup = "(" + ", ".join(f"ind{i}" for i in range(n_arrs)) + ")"
+    func_text += f"    if {ind_tup} not in ind_map:\n"
+    func_text += "      out_ind = len(out_strs)\n"
+    func_text += f"      ind_map[{ind_tup}] = out_ind\n"
+    sep_str = "''" if is_overload_none(sep) else "sep"
+    str_list = ", ".join([f"data{i}[ind{i}]" for i in range(n_arrs)])
+    func_text += f"      v = {sep_str}.join([{str_list}])\n"
+    func_text += "      out_strs.append(v)\n"
+    func_text += "    else:\n"
+    func_text += f"      out_ind = ind_map[{ind_tup}]\n"
+    func_text += "    out_indices[i] = out_ind\n"
+    func_text += (
+        "  out_str_arr = bodo.libs.str_arr_ext.str_arr_from_sequence(out_strs)\n"
+    )
+    func_text += "  return bodo.libs.dict_arr_ext.init_dict_arr(out_str_arr, out_indices, False)\n"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "numba": numba,
+            "np": np,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
     return impl
 
 

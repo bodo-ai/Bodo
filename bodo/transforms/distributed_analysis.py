@@ -1155,6 +1155,22 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        # dict-arr concat
+        if fdef == ("cat_dict_str", "bodo.libs.dict_arr_ext"):
+            # all input arrays and output array have the same distribution
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+
+            out_dist = Distribution(
+                min(
+                    min(a.value for a in array_dists[rhs.args[0].name]),
+                    array_dists[lhs].value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, out_dist)
+            self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+            return
+
         if fdef == ("series_contains_regex", "bodo.hiframes.series_str_impl"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return

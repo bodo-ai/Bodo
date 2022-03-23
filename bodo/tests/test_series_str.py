@@ -454,6 +454,17 @@ def test_contains_regex(test_unicode, case, memory_leak_check):
     check_func(test_impl3, (test_unicode,))
 
 
+@pytest.mark.parametrize("sep", [None, "__"])
+def test_cat(test_unicode, sep, memory_leak_check):
+    """test Series.str.cat() with dataframe input"""
+
+    def impl(S, df, sep):
+        return S.str.cat(df, sep)
+
+    df = pd.DataFrame({"A": test_unicode, "B": ["ABC"] * len(test_unicode)})
+    check_func(impl, (test_unicode, df, sep))
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("case", [True, False])
 def test_re_syntax(case, memory_leak_check):
