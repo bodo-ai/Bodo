@@ -19,6 +19,7 @@ from numba.extending import (
 )
 
 import bodo
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_index_ext import StringIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.split_impl import (
@@ -513,6 +514,79 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
             "np": np,
             "re_ignorecase_value": re_ignorecase_value,
             "get_search_regex": get_search_regex,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
+@overload_method(SeriesStrMethodType, "cat", no_unliteral=True)
+def overload_str_method_cat(S_str, others=None, sep=None, na_rep=None, join="left"):
+
+    # only DataFrame input is currently supported (TODO: support Series/Index/array)
+    if not isinstance(others, DataFrameType):
+        raise_bodo_error("Series.str.cat(): 'others' must be a DataFrame currently")
+
+    if not is_overload_none(sep):
+        str_arg_check("cat", "sep", sep)
+
+    if not is_overload_constant_str(join) or get_overload_const_str(join) != "left":
+        raise_bodo_error("Series.str.cat(): 'join' not supported yet")
+
+    func_text = "def impl(S_str, others=None, sep=None, na_rep=None, join='left'):\n"
+    func_text += "  S = S_str._obj\n"
+    func_text += "  arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "  index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+    func_text += "  l = len(arr)\n"
+
+    for i in range(len(others.columns)):
+        func_text += f"  data{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(others, {i})\n"
+
+    # optimized path for dictionar-encoded string arrays
+    if S_str.stype.data == bodo.dict_str_arr_type and all(
+        t == bodo.dict_str_arr_type for t in others.data
+    ):
+        in_data = ", ".join(f"data{i}" for i in range(len(others.columns)))
+        func_text += (
+            f"  out_arr = bodo.libs.dict_arr_ext.cat_dict_str((arr, {in_data}), sep)\n"
+        )
+
+    else:
+        na_check = " or ".join(
+            ["bodo.libs.array_kernels.isna(arr, i)"]
+            + [
+                f"bodo.libs.array_kernels.isna(data{i}, i)"
+                for i in range(len(others.columns))
+            ]
+        )
+
+        func_text += "  out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)\n"
+        func_text += "  numba.parfors.parfor.init_prange()\n"
+
+        func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
+        func_text += f"      if {na_check}:\n"
+        func_text += "          bodo.libs.array_kernels.setna(out_arr, i)\n"
+        func_text += "          continue\n"
+
+        str_list = ", ".join(
+            ["arr[i]"] + [f"data{i}[i]" for i in range(len(others.columns))]
+        )
+
+        sep_str = "''" if is_overload_none(sep) else "sep"
+        func_text += f"      out_arr[i] = {sep_str}.join([{str_list}])\n"
+
+    func_text += (
+        "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+    )
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "numba": numba,
         },
         loc_vars,
     )
@@ -1332,7 +1406,6 @@ _install_catseries_unsupported()
 
 unsupported_str_methods = {
     "casefold",
-    "cat",
     "decode",
     "encode",
     "findall",

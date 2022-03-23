@@ -548,10 +548,10 @@ def test_center_errorcheck(memory_leak_check):
 
 @pytest.mark.slow
 def test_unsupported_str_method(memory_leak_check):
-    """ Raise Bodo error for unsupported str methods"""
+    """Raise Bodo error for unsupported str methods"""
 
     def test_impl():
         return pd.Series([" 123", "abc  "]).str.cat(sep=" ")
 
-    with pytest.raises(BodoError, match="not supported yet"):
+    with pytest.raises(BodoError, match="must be a DataFrame"):
         bodo.jit(test_impl)()

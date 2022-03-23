@@ -159,6 +159,32 @@ def test_gatherv_rm(dict_arr_value, memory_leak_check):
     )
 
 
+def test_str_cat_opt(memory_leak_check):
+    """test optimizaton of Series.str.cat() for dict array"""
+
+    def impl1(S, A, B):
+        S = pd.Series(S)
+        df = pd.DataFrame({"A": A, "B": B})
+        return S.str.cat(df, sep=", ")
+
+    data1 = ["AB", None, "CDE", "ABBB", "ABB", "AC"]
+    data2 = ["123", "312", "091", "345", None, "AC"]
+    data3 = ["UAW", "13", None, "hb3 g", "h56", "AC"]
+    A = pa.array(data1, type=pa.dictionary(pa.int32(), pa.string()))
+    B = pa.array(data2, type=pa.dictionary(pa.int32(), pa.string()))
+    S = pa.array(data3, type=pa.dictionary(pa.int32(), pa.string()))
+
+    py_output = pd.Series(data3).str.cat(
+        pd.DataFrame({"A": data1, "B": data2}), sep=", "
+    )
+    check_func(impl1, (S, A, B), py_output=py_output)
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(S, A, B)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "cat_dict_str")
+
+
 def test_str_replace(memory_leak_check):
     """test optimizaton of Series.str.replace() for dict array"""
 
