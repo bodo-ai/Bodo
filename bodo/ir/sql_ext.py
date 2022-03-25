@@ -450,6 +450,66 @@ def sqlalchemy_check_():  # pragma: no cover
         raise BodoError(message)
 
 
+@numba.njit
+def pymysql_check():
+    """MySQL Check that user has pymysql installed."""
+    with numba.objmode():
+        pymysql_check_()
+
+
+def pymysql_check_():  # pragma: no cover
+    try:
+        import pymysql  # noqa
+    except ImportError:
+        message = (
+            "Using MySQL URI string requires pymsql to be installed."
+            " It can be installed by calling"
+            " 'conda install -c conda-forge pymysql'"
+            " or 'pip install PyMySQL'."
+        )
+        raise BodoError(message)
+
+
+@numba.njit
+def cx_oracle_check():
+    """Oracle Check that user has cx_oracle installed."""
+    with numba.objmode():
+        cx_oracle_check_()
+
+
+def cx_oracle_check_():  # pragma: no cover
+    try:
+        import cx_oracle  # noqa
+    except ImportError:
+        message = (
+            "Using Oracle URI string requires cx_oracle to be installed."
+            " It can be installed by calling"
+            " 'conda install -c conda-forge cx_oracle'"
+            " or 'pip install cx-Oracle'."
+        )
+        raise BodoError(message)
+
+
+@numba.njit
+def psycopg2_check():
+    """PostgreSQL Check that user has psycopg2 installed."""
+    with numba.objmode():
+        psycopg2_check_()
+
+
+def psycopg2_check_():  # pragma: no cover
+    try:
+        import psycopg2  # noqa
+    except ImportError:
+        message = (
+            "Using PostgreSQL URI string requires psycopg2 to be installed."
+            " It can be installed by calling"
+            " 'conda install -c conda-forge psycopg2'"
+            " or 'pip install psycopg2'."
+        )
+        raise BodoError(message)
+
+
 def req_limit(sql_request):
     """
     Processes a SQL requests and search for a LIMIT in the outermost
@@ -492,42 +552,7 @@ def _gen_sql_reader_py(
         "{}='{}'".format(s_cname, _get_dtype_str(t))
         for s_cname, t in zip(sanitized_cnames, col_typs)
     ]
-    # Method below is incorrect if the data is required to be ordered.
-    # It is left here as historical record.
-    #
-    # Algorithm is following:
-    # ---We download blocks one by one.
-    # ---Each MPI computational process downloads a block according to its
-    #    range.
-    # ---Termination happens when the size of blocks is 0.
-    # ---Different MPI process may have different number of blocks.
-    #    (but the number will differ by at most 1 between MPI nodes)
-    if bodo.sql_access_method == "multiple_access_by_block":
-        func_text = "def sql_reader_py(sql_request,conn):\n"
-        func_text += "  sqlalchemy_check()\n"
-        func_text += "  rank = bodo.libs.distributed_api.get_rank()\n"
-        func_text += "  n_pes = bodo.libs.distributed_api.get_size()\n"
-        func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
-        func_text += "    list_df_block = []\n"
-        func_text += "    block_size = 50000\n"
-        func_text += "    iter = 0\n"
-        func_text += "    while(True):\n"
-        func_text += "      offset = (iter * n_pes + rank) * block_size\n"
-        # https://docs.oracle.com/javadb/10.8.3.0/ref/rrefsqljoffsetfetch.html
-        if db_type == "oracle":
-            func_text += "      sql_cons = 'select * from (' + sql_request + ') OFFSET ' + str(offset) + ' ROWS FETCH NEXT ' + str(block_size) + ' ROWS ONLY'\n"
-        else:
-            func_text += "      sql_cons = 'select * from (' + sql_request + ') x LIMIT ' + str(block_size) + ' OFFSET ' + str(offset)\n"
-        func_text += "      df_block = pd.read_sql(sql_cons, conn)\n"
-        func_text += "      if df_block.size == 0:\n"
-        func_text += "        break\n"
-        func_text += "      list_df_block.append(df_block)\n"
-        func_text += "      iter += 1\n"
-        func_text += "    df_ret = pd.concat(list_df_block)\n"
-        # We assumed here that sanitized_cnames and col_names are list of strings.
-        for s_cname, cname in zip(sanitized_cnames, col_names):
-            func_text += "    {} = df_ret['{}'].values\n".format(s_cname, cname)
-        func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
+    # See old method in Confluence (Search "multiple_access_by_block")
     # This is a more advanced downloading procedure. It downloads data in an
     # ordered way.
     #
@@ -572,6 +597,13 @@ def _gen_sql_reader_py(
             func_text += f"  ev.finalize()\n"
         else:
             func_text += "  sqlalchemy_check()\n"
+            if db_type == "mysql" or db_type == "mysql+pymysql":
+                func_text += "  pymysql_check()\n"
+            elif db_type == "oracle":
+                func_text += "  cx_oracle_check()\n"
+            elif db_type == "postgresql" or db_type == "postgresql+psycopg2":
+                func_text += "  psycopg2_check()\n"
+
             if parallel and is_select_query:
                 func_text += "  rank = bodo.libs.distributed_api.get_rank()\n"
                 if limit is not None:
@@ -627,6 +659,9 @@ def _gen_sql_reader_py(
                 "pd": pd,
                 "objmode": objmode,
                 "bcast_scalar": bcast_scalar,
+                "pymysql_check": pymysql_check,
+                "cx_oracle_check": cx_oracle_check,
+                "psycopg2_check": psycopg2_check,
             }
         )
 

@@ -133,7 +133,6 @@ import bodo.dl
 
 use_pandas_join = False
 use_cpp_drop_duplicates = True
-# sql_access_method = "multiple_access_by_block"
 sql_access_method = "multiple_access_nb_row_first"
 from bodo.decorators import is_jit_execution, jit
 from bodo.master_mode import init_master_mode
