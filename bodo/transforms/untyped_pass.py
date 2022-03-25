@@ -1784,8 +1784,10 @@ class UntypedPass:
         schema: pandas.read_json(path_or_buf=None, orient=None, typ='frame',
         dtype=None, convert_axes=None, convert_dates=True,
         keep_default_dates=True, numpy=False, precise_float=False,
-        date_unit=None, encoding=None, lines=False, chunksize=None,
-        compression='infer')
+        date_unit=None, encoding=None, encoding_errors='strict',
+        lines=False, chunksize=None, compression='infer'
+        nrows=None, storage_options=None
+        )
         """
         # convert_dates required for date cols
         kws = dict(rhs.kws)
@@ -1827,6 +1829,9 @@ class UntypedPass:
             "date_unit",
             "encoding",
             "chunksize",
+            "encoding_errors",
+            "nrows",
+            "storage_options",
         }
 
         passed_unsupported = unsupported_args.intersection(kws.keys())
@@ -2657,44 +2662,18 @@ def _get_json_df_type_from_file(
                 else:
                     compression = None
 
-            # Ideally, we should use chunksize to read the number of rows desired
-            # instead of manually reading the number of rows into a buffer.
-            # There is a issue for it in pandas:
-            # https://github.com/pandas-dev/pandas/issues/27135
-            # read() is used instead of readline() because
-            # Pyarrow's hdfs open() returns stream (NativeFile) that does not
-            # readline() implemented, but seems like they are working on it:
-            # https://issues.apache.org/jira/browse/ARROW-7584
-
-            file_name_or_buff = file_name_or_handler
-
-            # TODO read only `rows_to_read` of compressed files
-            if is_handler and compression is None:
-                read_chunk_size = 500  # max number of bytes read at a time
-                rows_read = 0  # rows seen
-                size_read = 0  # number of bytes seen
-                buff = b""  # bytes read
-                # keep reading until we read at least rows_to_read number of rows
-                while size_read < f_size and rows_read < rows_to_read:
-                    read_size = min(read_chunk_size, f_size - size_read)
-                    tmp_buff = file_name_or_handler.read(read_size)
-                    rows_read += tmp_buff.count(b"\n")
-                    buff += tmp_buff
-                    size_read += read_size
-
-                # NOTE: Since data is read in chunks, `buff` may include
-                # extra data from row rows_to_read+1.
-                # rsplit: Include data add upto last \n in the buff.
-                file_name_or_buff = buff.rsplit(b"\n", 1)[0]
+            # nrows: This can only be passed if lines=True.
+            # https://pandas.pydata.org/docs/reference/api/pandas.read_json.html
+            # This is safe since code will only reach _get_json_df_type_from_file iff lines=True
 
             df = pd.read_json(
-                file_name_or_buff,
+                file_name_or_handler,
                 orient=orient,
                 convert_dates=convert_dates,
                 precise_float=precise_float,
                 lines=lines,
                 compression=compression,
-                # chunksize=rows_to_read,
+                nrows=rows_to_read,
             )
 
             # TODO: categorical, etc.

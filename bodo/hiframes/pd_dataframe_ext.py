@@ -4172,13 +4172,17 @@ def to_csv_overload(
 def to_json_overload(
     df,
     path_or_buf=None,
-    orient="columns",
+    # Pandas default "columns"
+    # Change it to match Bodo default for `read_json`
+    orient="records",
     date_format=None,
     double_precision=10,
     force_ascii=True,
     date_unit="ms",
     default_handler=None,
-    lines=False,
+    # Pandas default: "False"
+    # Change it to match Bodo default for `read_json`
+    lines=True,
     compression="infer",
     index=True,
     indent=None,
@@ -4204,13 +4208,13 @@ def to_json_overload(
         def _impl(
             df,
             path_or_buf=None,
-            orient="columns",
+            orient="records",
             date_format=None,
             double_precision=10,
             force_ascii=True,
             date_unit="ms",
             default_handler=None,
-            lines=False,
+            lines=True,
             compression="infer",
             index=True,
             indent=None,
@@ -4238,13 +4242,13 @@ def to_json_overload(
     def _impl(
         df,
         path_or_buf=None,
-        orient="columns",
+        orient="records",
         date_format=None,
         double_precision=10,
         force_ascii=True,
         date_unit="ms",
         default_handler=None,
-        lines=False,
+        lines=True,
         compression="infer",
         index=True,
         indent=None,

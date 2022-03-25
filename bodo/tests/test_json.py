@@ -3,6 +3,7 @@
 Test I/O for JSON files using pd.read_json()
 """
 import os
+import shutil
 import subprocess
 
 import numpy as np
@@ -301,10 +302,12 @@ def test_df(request, memory_leak_check):
 def test_json_write_simple_df(memory_leak_check):
     """
     test to_json with default arguments
+    Bodo has different default than Pandas for orient and lines
+    This tests Pandas default
     """
 
     def test_impl(df, fname):
-        df.to_json(fname)
+        df.to_json(fname, orient="columns", lines=False)
 
     def read_impl(fname):
         return pd.read_json(fname)
@@ -363,7 +366,7 @@ def test_json_write_orient(test_df, orient, memory_leak_check):
     """
 
     def test_impl(df, fname):
-        df.to_json(fname, orient=orient)
+        df.to_json(fname, orient=orient, lines=False)
 
     def read_impl(fname):
         # Supply D has a boolean dtype because there are null values.
@@ -377,3 +380,45 @@ def test_json_write_orient(test_df, orient, memory_leak_check):
         return pd.read_json(fname, orient=orient, dtype=dtype)
 
     json_write_test(test_impl, read_impl, test_df, "C")
+
+
+@pytest.mark.slow
+def test_json_write_read_simple_df(memory_leak_check):
+    """
+    test to_json with default arguments
+    matching read_json with default arguments for Bodo
+    """
+
+    def write_impl(n, fname):
+        df = pd.DataFrame(
+            {
+                "A": np.arange(n),
+                "B": np.arange(n) % 2,
+            },
+            index=np.arange(n) * 2,
+        )
+        df.to_json(fname)
+
+    def read_impl(fname):
+        return pd.read_json(fname)
+
+    n = 10
+    fname_file = "json_data.json"
+    bodo.jit(write_impl)(n, fname_file)
+    py_output = df = pd.DataFrame(
+        {
+            "A": np.arange(n),
+            "B": np.arange(n) % 2,
+        },
+        index=np.arange(n) * 2,
+    )
+    check_func(
+        read_impl,
+        (fname_file,),
+        py_output=py_output,
+        reset_index=True,
+        check_dtype=False,
+    )
+    if bodo.get_rank() == 0:
+        if bodo.get_rank() == 0:
+            shutil.rmtree(fname_file, ignore_errors=True)
