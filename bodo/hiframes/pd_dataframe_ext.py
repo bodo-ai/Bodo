@@ -3815,10 +3815,12 @@ def to_sql_exception_guard(
             df.columns = [c.upper() if c.islower() else c for c in df.columns]
         except ImportError:
             err_msg = (
-                "Snowflake Python connector not found."
-                " It can be installed by calling"
-                " 'conda install -c conda-forge snowflake-connector-python' or"
-                " 'pip install snowflake-connector-python'."
+                "Snowflake Python connector packages not found."
+                " Using 'to_sql' with Snowflake requires both snowflake-sqlalchemy"
+                " and snowflake-connector-python."
+                " These can be installed by calling"
+                " 'conda install -c conda-forge snowflake-sqlalchemy snowflake-connector-python' or"
+                " 'pip install snowflake-sqlalchemy snowflake-connector-python'."
             )
             return err_msg
     try:
