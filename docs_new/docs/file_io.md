@@ -318,6 +318,7 @@ def example_read_json_multi_lines():
         file.
     -   Bodo cannot read a directory containing multiple multi-line JSON
         files
+    -   Bodo's default values for ``orient`` and ``lines`` are ``records`` and ``False`` respectively.
 
 ``to_json(name)`` has different behaviors for different file systems:
 

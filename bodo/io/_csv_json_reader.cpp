@@ -38,7 +38,7 @@
 // when json_lines=true, we are reading Json line format where each
 // dataframe row/json record takes up exactly one line, ended with '\n'
 // when json_lines=false. we are reading a multi line json format where each
-// dataframe row/json record takes up more than one lines, separated by ',\n'
+// dataframe row/json record takes up more than one lines, separated by '},'
 
 #define CHECK(expr, msg)                                    \
     if (!(expr)) {                                          \
