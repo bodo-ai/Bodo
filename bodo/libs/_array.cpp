@@ -286,10 +286,12 @@ array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
 array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
                                    char* null_bitmap,
                                    int32_t has_global_dictionary) {
-    return new array_info(bodo_array_type::DICT, Bodo_CTypes::STRING,
-                          indices_arr->length, -1, -1, NULL, NULL, NULL,
-                          null_bitmap, NULL, NULL, NULL, NULL, 0, 0, 0,
-                          bool(has_global_dictionary), str_arr, indices_arr);
+    // For now has_sorted_dictionary is only available and exposed in the C++
+    // struct, so we set it to false
+    return new array_info(
+        bodo_array_type::DICT, Bodo_CTypes::STRING, indices_arr->length, -1, -1,
+        NULL, NULL, NULL, null_bitmap, NULL, NULL, NULL, NULL, 0, 0, 0,
+        bool(has_global_dictionary), false, str_arr, indices_arr);
 }
 
 array_info* get_nested_info(array_info* dict_arr, int32_t info_no) {
@@ -1295,9 +1297,7 @@ char* array_info_getitem(array_info* arr, int64_t row_num,
     throw std::runtime_error("array_info_getitem : Unsupported type");
 }
 
-char* array_info_getdata1(array_info* arr) {
-    return arr->data1;
-}
+char* array_info_getdata1(array_info* arr) { return arr->data1; }
 
 PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject* m;

@@ -220,6 +220,19 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               bool parallel) {
     try {
         tracing::Event ev("sort_values_table", parallel);
+
+        if (parallel) {
+            // Convert all local dictionaries to global for dict columns.
+            // Also sort the dictionaries, so the sorting process
+            // is more efficient (we can compare indices directly)
+            for (array_info* arr : in_table->columns) {
+                if (arr->arr_type == bodo_array_type::DICT) {
+                    if (!arr->has_global_dictionary)
+                        convert_local_dictionary_to_global(arr, true);
+                }
+            }
+        }
+
         int64_t n_local = in_table->nrows();
         table_info* local_sort = sort_values_table_local(
             in_table, n_key_t, vect_ascending, na_position, parallel);
@@ -307,6 +320,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         // broadcasting the bounds
         // The local_sort is used as reference for the data type of the array.
         // This is because pre_bounds is NULL for ranks != 0
+        // The underlying dictionary is the same for local_sort and pre_bounds
+        // for the dict columns, as needed for broadcast_table.
         table_info* bounds =
             broadcast_table(local_sort, pre_bounds, n_key_t, parallel);
         if (myrank == mpi_root) delete_table(pre_bounds);
@@ -348,6 +363,18 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;
     }
+}
+
+array_info* sort_values_array_local(array_info* in_arr, bool is_parallel,
+                                    int64_t ascending, int64_t na_position) {
+    std::vector<array_info*> cols = {in_arr};
+    table_info* dummy_table = new table_info(cols);
+    table_info* sorted_table = sort_values_table_local(
+        dummy_table, 1, &ascending, &na_position, is_parallel);
+    delete_table(dummy_table);
+    array_info* sorted_arr = sorted_table->columns[0];
+    delete sorted_table;
+    return sorted_arr;
 }
 
 //

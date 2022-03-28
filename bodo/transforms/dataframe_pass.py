@@ -789,7 +789,7 @@ class DataFramePass:
             for k in df_typ.columns:
                 out_var = ir.Var(lhs.scope, mk_unique_var(sanitize_varname(k)), lhs.loc)
                 ind = df_typ.columns.index(k)
-                self.typemap[out_var.name] = to_str_arr_if_dict_array(df_typ.data[ind])
+                self.typemap[out_var.name] = df_typ.data[ind]
                 out_vars[k] = out_var
             # index var
             out_index_var = ir.Var(lhs.scope, mk_unique_var("_index_"), lhs.loc)

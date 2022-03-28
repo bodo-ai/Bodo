@@ -27,7 +27,6 @@ from bodo.libs.array import (
 from bodo.libs.str_arr_ext import cp_str_list_to_array, to_list_if_immutable_arr
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.typing import decode_if_dict_array, to_str_arr_if_dict_array
 from bodo.utils.utils import debug_prints, gen_getitem
 
 MIN_SAMPLES = 1000000
@@ -383,7 +382,6 @@ def sort_distributed_run(
             "sort_values_table": sort_values_table,
             "arr_info_list_to_table": arr_info_list_to_table,
             "array_to_info": array_to_info,
-            "decode_if_dict_array": decode_if_dict_array,
         },
         typingctx=typingctx,
         targetctx=targetctx,
@@ -396,11 +394,11 @@ def sort_distributed_run(
     ret_var = nodes[-1].target
     # get key tup
     key_arrs_tup_var = ir.Var(scope, mk_unique_var("key_data"), loc)
-    typemap[key_arrs_tup_var.name] = to_str_arr_if_dict_array(key_typ)
+    typemap[key_arrs_tup_var.name] = key_typ
     gen_getitem(key_arrs_tup_var, ret_var, 0, calltypes, nodes)
     # get data tup
     data_tup_var = ir.Var(scope, mk_unique_var("sort_data"), loc)
-    typemap[data_tup_var.name] = to_str_arr_if_dict_array(data_tup_typ)
+    typemap[data_tup_var.name] = data_tup_typ
     gen_getitem(data_tup_var, ret_var, 1, calltypes, nodes)
 
     for i, var in enumerate(sort_node.out_key_arrs):
@@ -436,8 +434,6 @@ def get_sort_cpp_section(
     key_name_args, col_name_args, ascending_list, na_position_b, parallel_b
 ):
     func_text = ""
-    for a in key_name_args + col_name_args:
-        func_text += f"  {a} = decode_if_dict_array({a})\n"
     key_count = len(key_name_args)
     total_list = ["array_to_info({})".format(name) for name in key_name_args] + [
         "array_to_info({})".format(name) for name in col_name_args

@@ -526,7 +526,7 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         out_array = new array_info(
             bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1,
             -1, NULL, NULL, NULL, bodo_indices->null_bitmask, NULL, NULL, NULL,
-            NULL, 0, 0, 0, false, bodo_dictionary, bodo_indices);
+            NULL, 0, 0, 0, false, false, bodo_dictionary, bodo_indices);
 
         all_chunks.clear();
         return out_array;
