@@ -2903,9 +2903,8 @@ class SortDummyTyper(AbstractTemplate):
         index = df.index
         if isinstance(index, bodo.hiframes.pd_index_ext.RangeIndexType):
             index = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
-        data = tuple(to_str_arr_if_dict_array(t) for t in df.data)
         # TODO(ehsan): support table format
-        ret_typ = df.copy(index=index, data=data, is_table_format=False)
+        ret_typ = df.copy(index=index, is_table_format=False)
         return signature(ret_typ, *args)
 
 

@@ -218,6 +218,39 @@ def test_str_replace(memory_leak_check):
     assert dist_IR_contains(f_ir, "str_replace")
 
 
+def test_sort_values(memory_leak_check):
+    """test that sort_values works for dict array"""
+
+    def impl(A, col):
+        return A.sort_values(col)
+
+    dataA = ["ABC", "def", "abc", "ABC", "DE", "def", "SG"]
+    A = pa.array(dataA, type=pa.dictionary(pa.int32(), pa.string()))
+    DF = pd.DataFrame({"A": A})
+    check_func(
+        impl,
+        (DF, "A"),
+        py_output=pd.DataFrame({"A": dataA}).sort_values("A"),
+    )
+
+    dataA[4] = None
+    A = pa.array(dataA, type=pa.dictionary(pa.int32(), pa.string()))
+    DF = pd.DataFrame({"A": A})
+    check_func(
+        impl,
+        (DF, "A"),
+        py_output=pd.DataFrame({"A": dataA}).sort_values("A"),
+    )
+
+    dataB = ["ABC", "DEF", "abc", "ABC", "DE", "re", "DEF"]
+    DF = pd.DataFrame({"A": A, "B": pd.Series(dataB)})
+    check_func(
+        impl,
+        (DF, ["A", "B"]),
+        py_output=pd.DataFrame({"A": dataA, "B": dataB}).sort_values(["A", "B"]),
+    )
+
+
 def test_dict_array_unify(dict_arr_value):
     """Tests that unifying dict arrays works as expected."""
     # TODO: Add memory leak check, casting bug

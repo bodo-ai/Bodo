@@ -35,6 +35,22 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, int64_t* na_position,
                               bool parallel);
 
+/**
+ * Helper function to sort contents of array_info.
+ * Note that the provided array_info is deleted and a new one
+ * is returned.
+ * This is implemented through a wrapper around sort_values_table_local
+ *
+ * @param in_arr array_info to sort
+ * @param is_parallel true if data is distributed (used to indicate whether
+ * tracing should be parallel or not)
+ * @param ascending, whether to sort ascending or not
+ * @param na_position, true corresponds to last, false to first.
+ * @return array_info* sorted array_info
+ */
+array_info* sort_values_array_local(array_info* in_arr, bool is_parallel,
+                                    int64_t ascending, int64_t na_position);
+
 /** This function is the function for the dropping of duplicated rows.
  * This C++ code should provide following functionality of pandas
  * drop_duplicates:

@@ -104,7 +104,8 @@ void mpi_comm_info::set_counts(
     if (ev.is_tracing()) {
         int64_t n_rows_send =
             std::accumulate(send_count.begin(), send_count.end(), int64_t(0));
-        ev.add_attribute("nrows_filtered", static_cast<size_t>(n_rows - n_rows_send));
+        ev.add_attribute("nrows_filtered",
+                         static_cast<size_t>(n_rows - n_rows_send));
         ev.add_attribute("filtered", filtered);
     }
     // get recv count
@@ -179,14 +180,15 @@ void mpi_comm_info::set_counts(
 }
 
 /**
- * @param is_parallel: Used to indicate whether tracing should be parallel or not
+ * @param is_parallel: Used to indicate whether tracing should be parallel or
+ * not
  */
 template <class T>
 static void fill_send_array_inner(T* send_buff, const T* data,
                                   std::vector<int64_t> const& send_disp,
                                   const size_t n_rows,
-                                  const std::vector<int>& row_dest,
-                                  bool filter, bool is_parallel) {
+                                  const std::vector<int>& row_dest, bool filter,
+                                  bool is_parallel) {
     tracing::Event ev("fill_send_array_inner", is_parallel);
     std::vector<int64_t> tmp_offset(send_disp);
     if (!filter) {
@@ -205,12 +207,14 @@ static void fill_send_array_inner(T* send_buff, const T* data,
 }
 
 /**
- * @param is_parallel: Used to indicate whether tracing should be parallel or not
+ * @param is_parallel: Used to indicate whether tracing should be parallel or
+ * not
  */
 static void fill_send_array_inner_decimal(uint8_t* send_buff, uint8_t* data,
                                           std::vector<int64_t> const& send_disp,
                                           const size_t n_rows,
-                                          const std::vector<int>& row_dest, bool is_parallel) {
+                                          const std::vector<int>& row_dest,
+                                          bool is_parallel) {
     tracing::Event ev("fill_send_array_inner_decimal", is_parallel);
     std::vector<int64_t> tmp_offset(send_disp);
     for (size_t i = 0; i < n_rows; i++) {
@@ -336,7 +340,8 @@ static void fill_send_array_null_inner(
 }
 
 /**
- * @param is_parallel: Used to indicate whether tracing should be parallel or not
+ * @param is_parallel: Used to indicate whether tracing should be parallel or
+ * not
  */
 static void fill_send_array(array_info* send_arr, array_info* in_arr,
                             std::vector<int64_t> const& send_disp,
@@ -354,13 +359,13 @@ static void fill_send_array(array_info* send_arr, array_info* in_arr,
                                    (uint8_t*)in_arr->null_bitmask,
                                    send_disp_null, n_pes, n_rows, row_dest);
     if (in_arr->dtype == Bodo_CTypes::_BOOL)
-        return fill_send_array_inner<bool>((bool*)send_arr->data1,
-                                           (bool*)in_arr->data1, send_disp,
-                                           n_rows, row_dest, filter, is_parallel);
+        return fill_send_array_inner<bool>(
+            (bool*)send_arr->data1, (bool*)in_arr->data1, send_disp, n_rows,
+            row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::INT8)
-        return fill_send_array_inner<int8_t>((int8_t*)send_arr->data1,
-                                             (int8_t*)in_arr->data1, send_disp,
-                                             n_rows, row_dest, filter, is_parallel);
+        return fill_send_array_inner<int8_t>(
+            (int8_t*)send_arr->data1, (int8_t*)in_arr->data1, send_disp, n_rows,
+            row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::UINT8)
         return fill_send_array_inner<uint8_t>(
             (uint8_t*)send_arr->data1, (uint8_t*)in_arr->data1, send_disp,
@@ -396,13 +401,13 @@ static void fill_send_array(array_info* send_arr, array_info* in_arr,
             (int64_t*)send_arr->data1, (int64_t*)in_arr->data1, send_disp,
             n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::FLOAT32)
-        return fill_send_array_inner<float>((float*)send_arr->data1,
-                                            (float*)in_arr->data1, send_disp,
-                                            n_rows, row_dest, filter, is_parallel);
+        return fill_send_array_inner<float>(
+            (float*)send_arr->data1, (float*)in_arr->data1, send_disp, n_rows,
+            row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::FLOAT64)
-        return fill_send_array_inner<double>((double*)send_arr->data1,
-                                             (double*)in_arr->data1, send_disp,
-                                             n_rows, row_dest, filter, is_parallel);
+        return fill_send_array_inner<double>(
+            (double*)send_arr->data1, (double*)in_arr->data1, send_disp, n_rows,
+            row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::DECIMAL)
         return fill_send_array_inner_decimal((uint8_t*)send_arr->data1,
                                              (uint8_t*)in_arr->data1, send_disp,
@@ -480,8 +485,8 @@ static void copy_gathered_null_bytes(uint8_t* null_bitmask,
     }
 }
 
-void convert_local_dictionary_to_global(array_info* dict_array) {
-
+void convert_local_dictionary_to_global(array_info* dict_array,
+                                        bool sort_dictionary) {
     if (dict_array->has_global_dictionary) return;
 
     array_info* local_dictionary = dict_array->info1;
@@ -510,8 +515,15 @@ void convert_local_dictionary_to_global(array_info* dict_array) {
     array_info* global_dictionary = global_dictionary_table->columns[0];
     delete global_dictionary_table;
 
-    // XXX do I need to sort the global dictionary? I can just sort locally
-    // since it's replicated
+    // Sort dictionary locally since it's replicated
+    // XXX Should we always sort?
+    if (sort_dictionary) {
+        // sort_values_array_local deletes the input array_info and returns
+        // a new one
+        global_dictionary =
+            sort_values_array_local(global_dictionary, false, 1, 1);
+        dict_array->has_sorted_dictionary = true;
+    }
 
     // XXX this doesn't propagate to Python
     dict_array->info1 = global_dictionary;
@@ -543,10 +555,10 @@ void convert_local_dictionary_to_global(array_info* dict_array) {
     // dictionary are incremented by 'global_dict_len' before accessing
     // the map.
     // For example:
-    // global dictionary: ["ABC", "CC", "D"]. Keys that refer to these strings: [0, 1, 2]
-    // local dictionary: ["CC", "D"]. Keys that refer to these strings: [3, 4]
-    // Also see HashDict and KeyEqualDict to see how keys are mapped to get
-    // the hashes and to compare values
+    // global dictionary: ["ABC", "CC", "D"]. Keys that refer to these strings:
+    // [0, 1, 2] local dictionary: ["CC", "D"]. Keys that refer to these
+    // strings: [3, 4] Also see HashDict and KeyEqualDict to see how keys are
+    // mapped to get the hashes and to compare values
 
     UNORD_MAP_CONTAINER<size_t, dict_indices_t, HashDict, KeyEqualDict>
         dict_value_to_global_index({}, hash_fct, equal_fct);
@@ -568,7 +580,7 @@ void convert_local_dictionary_to_global(array_info* dict_array) {
     dict_value_to_global_index.reserve(0);  // try to force dealloc of hashmap
     delete[] hashes_local_dict;
     delete[] hashes_global_dict;
-    //decref_array(local_dictionary);
+    // decref_array(local_dictionary);
     delete_info_decref_array(local_dictionary);
 
     // --------------
@@ -584,7 +596,7 @@ void convert_local_dictionary_to_global(array_info* dict_array) {
         dict_array->info2 = dict_indices;
     }
 
-    uint8_t* null_bitmask = (uint8_t *) dict_array->null_bitmask;
+    uint8_t* null_bitmask = (uint8_t*)dict_array->null_bitmask;
     for (size_t i = 0; i < dict_array->info2->length; i++) {
         if (GetBit(null_bitmask, i)) {
             dict_indices_t& index = dict_array->info2->at<dict_indices_t>(i);
@@ -649,7 +661,8 @@ void shuffle_list_string_null_bitmask(array_info* in_arr, array_info* out_arr,
 }
 
 /**
- * @param is_parallel: Used to indicate whether tracing should be parallel or not
+ * @param is_parallel: Used to indicate whether tracing should be parallel or
+ * not
  */
 static void shuffle_array(array_info* send_arr, array_info* out_arr,
                           std::vector<int64_t> const& send_count,
@@ -668,7 +681,8 @@ static void shuffle_array(array_info* send_arr, array_info* out_arr,
                           std::vector<int64_t> const& recv_count_null,
                           std::vector<int64_t> const& send_disp_null,
                           std::vector<int64_t> const& recv_disp_null,
-                          std::vector<uint8_t>& tmp_null_bytes, bool is_parallel) {
+                          std::vector<uint8_t>& tmp_null_bytes,
+                          bool is_parallel) {
     tracing::Event ev("shuffle_array", is_parallel);
     if (send_arr->arr_type == bodo_array_type::LIST_STRING) {
         // index_offsets
@@ -1124,7 +1138,8 @@ std::shared_ptr<arrow::Array> shuffle_arrow_array(
   accordingly. 2b) Second do the shuffling of data between all processors.
  */
 table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
-                                 mpi_comm_info const& comm_info, bool is_parallel) {
+                                 mpi_comm_info const& comm_info,
+                                 bool is_parallel) {
     tracing::Event ev("shuffle_table_kernel", is_parallel);
     if (ev.is_tracing()) {
         ev.add_attribute("table_nrows_before", size_t(in_table->nrows()));
@@ -1223,8 +1238,9 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
             in_arr = in_table->columns[i];
             array_info* out_dict_arr = new array_info(
                 bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1, -1,
-                NULL, NULL, NULL, out_arr->null_bitmask,
-                NULL, NULL, NULL, NULL, 0, 0, 0, true, in_arr->info1, out_arr);
+                NULL, NULL, NULL, out_arr->null_bitmask, NULL, NULL, NULL, NULL,
+                0, 0, 0, true, in_arr->has_sorted_dictionary, in_arr->info1,
+                out_arr);
             // info1 is dictionary. incref so it doesn't get deleted since
             // it is given to the output array
             incref_array(in_arr->info1);
@@ -1644,7 +1660,8 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
             hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION, is_parallel);
     comm_info->set_counts(hashes, is_parallel);
 
-    table_info* table = shuffle_table_kernel(in_table, hashes, *comm_info, is_parallel);
+    table_info* table =
+        shuffle_table_kernel(in_table, hashes, *comm_info, is_parallel);
     if (keep_comm_info) {
         table->comm_info = comm_info;
         table->hashes = hashes;
@@ -1727,7 +1744,7 @@ table_info* coherent_shuffle_table(
     if (hashes == nullptr)
         hashes = coherent_hash_keys_table(in_table, ref_table, n_keys,
                                           SEED_HASH_PARTITION);
-    //coherent_shuffle_table only called in join with parallel options.
+    // coherent_shuffle_table only called in join with parallel options.
     // is_parallel = true
     // Prereq to calling shuffle_table_kernel
     comm_info.set_counts(hashes, true, filter);
@@ -1975,17 +1992,27 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
 
 /* Broadcasting the first n_cols of in_table to the other nodes.
    The ref_table contains only the type information. In order to eliminate it,
-   we would need to have a broadcast_datatype function
+   we would need to have a broadcast_datatype function.
 
-   @param ref_table : the reference table used for the datatype
+   For dict columns, we use the global dictionary from columns of
+   ref_table (since columns in in_table are null on ranks != 0).
+   Ensure that ref_table and in_table share the same dictionary
+   and that it is global.
+
+   @param ref_table : the reference table used for the datatype.
    @param in_table : the table that is broadcasted.
    @param n_cols : the number of columns in output
-   @param is_parallel: Used to indicate whether tracing should be parallel or not
+   @param is_parallel: Used to indicate whether tracing should be parallel or
+   not
    @return the table put in all the nodes
 */
 table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                             size_t n_cols, bool is_parallel) {
     tracing::Event ev("broadcast_table", is_parallel);
+    int n_pes, myrank;
+    int mpi_root = 0;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 #ifdef DEBUG_BROADCAST
     std::cout << "INPUT of broadcast_table. ref_table=\n";
     DEBUG_PrintRefct(std::cout, ref_table->columns);
@@ -1996,16 +2023,25 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
         DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     }
 #endif
-    int n_pes, myrank;
-    int mpi_root = 0;
-    MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     std::vector<array_info*> out_arrs;
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         int64_t arr_bcast[6];
         array_info* in_arr = nullptr;
         if (myrank == mpi_root) {
             in_arr = in_table->columns[i_col];
+            if (in_arr->arr_type == bodo_array_type::DICT) {
+                if (!in_arr->has_global_dictionary) {
+                    throw std::runtime_error(
+                        "broadcast_table: Not supported for DICT arrays "
+                        "without global dictionary.");
+                }
+
+                // In case of dictionary encoded string arrays,
+                // we assume that the dictionary is global.
+                // Which means we just need to broadcast the indices
+                // array, which is the same logic as NULLABLE_INT_BOOL.
+                in_arr = in_arr->info2;
+            }
             arr_bcast[0] = in_arr->length;
             arr_bcast[1] = in_arr->dtype;
             arr_bcast[2] = in_arr->arr_type;
@@ -2097,6 +2133,33 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
             int n_bytes = (n_rows + 7) >> 3;
             MPI_Bcast(out_arr->null_bitmask, n_bytes, mpi_typ, mpi_root,
                       MPI_COMM_WORLD);
+        }
+
+        // Handle the case that input arr is DICT (we changed reference of
+        // in_arr to the indices portion earlier).
+        // At this point out_arr is a NULLABLE_INT_BOOL array and contains
+        // the indices.
+        // We assume the ref_table has the correct global
+        // dictionary that can be used for the final dictionary output array.
+        if (ref_table->columns[i_col]->arr_type == bodo_array_type::DICT) {
+            if (myrank == mpi_root) {
+                // Restore in_arr to the DICT array
+                // This is important since we do a decref_array on in_arr
+                // at the end.
+                in_arr = in_table->columns[i_col];
+            }
+            array_info* dict_arr = ref_table->columns[i_col]->info1;
+            // Create a DICT out_arr
+            out_arr = new array_info(
+                bodo_array_type::DICT, dict_arr->dtype, out_arr->length, -1, -1,
+                NULL, NULL, NULL, out_arr->null_bitmask, NULL, NULL, NULL, NULL,
+                0, 0, 0, /*has_global_dictionary=*/true,
+                ref_table->columns[i_col]->has_sorted_dictionary, dict_arr,
+                out_arr);
+            // On rank == 0, the dict_arr shares a reference with in_arr which
+            // will be decref later, so we need to increment the refcount of the
+            // array
+            incref_array(dict_arr);
         }
         out_arrs.push_back(out_arr);
         // Standard stealing of reference. See shuffle_table_kernel for
@@ -2420,7 +2483,8 @@ std::shared_ptr<arrow::Array> gather_arrow_array(
 }
 
 /**
- * @param is_parallel: Used to indicate whether tracing should be parallel or not
+ * @param is_parallel: Used to indicate whether tracing should be parallel or
+ * not
  */
 table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                          bool all_gather, bool is_parallel = true) {
@@ -2715,12 +2779,15 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
         }
         if (in_table->columns[i_col]->arr_type == bodo_array_type::DICT) {
             in_arr = in_table->columns[i_col];
-            out_arr = new array_info(
-                bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1, -1,
-                NULL, NULL, NULL, out_arr->null_bitmask, NULL, NULL, NULL, NULL,
-                0, 0, 0, /*has_global_dictionary=*/true, in_arr->info1,
-                out_arr);
-            incref_array(in_arr->info1);
+            if (all_gather || myrank == mpi_root) {
+                out_arr = new array_info(
+                    bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1,
+                    -1, NULL, NULL, NULL, out_arr->null_bitmask, NULL, NULL,
+                    NULL, NULL, 0, 0, 0, /*has_global_dictionary=*/true,
+                    in_arr->has_sorted_dictionary, in_arr->info1, out_arr);
+                incref_array(in_arr->info1);
+            } // else
+                // out_arr is already NULL, so doesn't need to be handled
         }
         out_arrs.push_back(out_arr);
         // Reference stealing. See shuffle_table_kernel for discussion.
@@ -2733,7 +2800,6 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
 #endif
     return new table_info(out_arrs);
 }
-
 
 /* Whether or not a reshuffling is needed.
    The idea is following:

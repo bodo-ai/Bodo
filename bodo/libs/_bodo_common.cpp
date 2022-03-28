@@ -239,7 +239,7 @@ array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
 
     return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
                           length, -1, -1, NULL, NULL, NULL, NULL, NULL, NULL,
-                          NULL, NULL, 0, 0, 0, has_global_dictionary,
+                          NULL, NULL, 0, 0, 0, has_global_dictionary, false,
                           dict_data_arr, indices_data_arr);
 }
 
@@ -582,10 +582,11 @@ array_info* copy_array(array_info* earr) {
     if (earr->arr_type == bodo_array_type::DICT) {
         array_info* dictionary = copy_array(earr->info1);
         array_info* indices = copy_array(earr->info2);
-        farr = new array_info(
-            bodo_array_type::DICT, earr->dtype, indices->length, -1, -1, NULL,
-            NULL, NULL, indices->null_bitmask, NULL, NULL, NULL, NULL, 0, 0, 0,
-            earr->has_global_dictionary, dictionary, indices);
+        farr = new array_info(bodo_array_type::DICT, earr->dtype,
+                              indices->length, -1, -1, NULL, NULL, NULL,
+                              indices->null_bitmask, NULL, NULL, NULL, NULL, 0,
+                              0, 0, earr->has_global_dictionary,
+                              earr->has_sorted_dictionary, dictionary, indices);
     } else {
         farr = alloc_array(earr->length, earr->n_sub_elems,
                            earr->n_sub_sub_elems, earr->arr_type, earr->dtype,

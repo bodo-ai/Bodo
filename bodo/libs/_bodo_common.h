@@ -232,6 +232,7 @@ struct array_info {
     int32_t scale;               // for array of decimals
     int64_t num_categories;      // for categorical arrays
     bool has_global_dictionary;  // for dict-encoded arrays
+    bool has_sorted_dictionary;  // for dict-encoded arrays
     array_info* info1;           // for dict-encoded arrays
     array_info* info2;           // for dict-encoded arrays
     // TODO: shape/stride for multi-dim arrays
@@ -245,6 +246,7 @@ struct array_info {
                         int32_t _precision = 0, int32_t _scale = 0,
                         int64_t _num_categories = 0,
                         bool _has_global_dictionary = false,
+                        bool _has_sorted_dictionary = false,
                         array_info* _info1 = nullptr,
                         array_info* _info2 = nullptr)
         : arr_type(_arr_type),
@@ -264,6 +266,7 @@ struct array_info {
           scale(_scale),
           num_categories(_num_categories),
           has_global_dictionary(_has_global_dictionary),
+          has_sorted_dictionary(_has_sorted_dictionary),
           info1(_info1),
           info2(_info2) {}
 

@@ -335,9 +335,9 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         }
         out_arr = new array_info(
             bodo_array_type::DICT, in_arr->dtype, out_indices->length, -1, -1,
-            NULL, NULL, NULL, out_indices->null_bitmask,
-            NULL, NULL, NULL, NULL, 0, 0, 0, in_arr->has_global_dictionary,
-            in_arr->info1, out_indices);
+            NULL, NULL, NULL, out_indices->null_bitmask, NULL, NULL, NULL, NULL,
+            0, 0, 0, in_arr->has_global_dictionary,
+            in_arr->has_sorted_dictionary, in_arr->info1, out_indices);
         // input and output share the same dictionary array
         incref_array(in_arr->info1);
     }
@@ -644,8 +644,9 @@ array_info* RetrieveArray_TwoColumns(
     }
     if (arr_type == bodo_array_type::DICT) {
         // TODO refactor? this is mostly the same logic as NULLABLE_INT_BOOL
-        //if (is_parallel && !ref_column->has_global_dictionary)
-        //    throw std::runtime_error("RetrieveArray_TwoColumns: reference column doesn't have a global dictionary");
+        // if (is_parallel && !ref_column->has_global_dictionary)
+        //    throw std::runtime_error("RetrieveArray_TwoColumns: reference
+        //    column doesn't have a global dictionary");
         array_info* out_indices =
             alloc_array(nRowOut, -1, -1, ref_column->info2->arr_type,
                         ref_column->info2->dtype, 0, 0);
@@ -662,12 +663,11 @@ array_info* RetrieveArray_TwoColumns(
             }
             out_indices->set_null_bit(iRow, bit);
         }
-        out_arr = new array_info(bodo_array_type::DICT, ref_column->dtype,
-                                 out_indices->length, -1, -1, NULL, NULL, NULL,
-                                 out_indices->null_bitmask,
-                                 NULL, NULL, NULL, NULL, 0, 0, 0,
-                                 ref_column->has_global_dictionary,
-                                 ref_column->info1, out_indices);
+        out_arr = new array_info(
+            bodo_array_type::DICT, ref_column->dtype, out_indices->length, -1,
+            -1, NULL, NULL, NULL, out_indices->null_bitmask, NULL, NULL, NULL,
+            NULL, 0, 0, 0, ref_column->has_global_dictionary,
+            ref_column->has_sorted_dictionary, ref_column->info1, out_indices);
         incref_array(ref_column->info1);
     }
     if (arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -956,7 +956,8 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
             if (epair.second) {
                 int test = 0;
                 // TODO: implement other types
-                Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(primitive_array1->type());
+                Bodo_CTypes::CTypeEnum bodo_typ =
+                    arrow_to_bodo_type(primitive_array1->type());
                 size_t siz_typ = numpy_item_size[bodo_typ];
                 char* ptr1 = (char*)primitive_array1->values()->data() +
                              siz_typ * n_pos1_s;
@@ -1283,6 +1284,53 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
             if (len1 < len2) return 1;
         }
     }
+    if (arr1->arr_type == bodo_array_type::DICT) {
+        if (arr2->arr_type == bodo_array_type::DICT) {
+            if (arr1->info1 != arr2->info1) {
+                throw std::runtime_error(
+                    "KeyComparisonAsPython_Column: don't know if arrays "
+                    "have unified dictionary");
+            }
+        }
+        // Since arr1->info1 == arr2->info1 (if arr2 is DICT)
+        array_info* arr_dict = arr1->info1;
+        array_info* arr1_indices = arr1->info2;
+        array_info* arr2_indices = arr2->info2;
+
+        if (arr1->has_sorted_dictionary) {
+            // In case of sorted dictionaries, we can simply compare the
+            // indices
+            return KeyComparisonAsPython_Column(na_position_bis, arr1_indices,
+                                                iRow1, arr2_indices, iRow2);
+        }
+        // If the dictionary is not sorted, then do the regular STRING like
+        // check
+
+        // NULLABLE case. We need to consider the bitmask and the values (of
+        // the indices)
+        bool bit1 = arr1_indices->get_null_bit(iRow1);
+        bool bit2 = arr2_indices->get_null_bit(iRow2);
+        // If one bitmask is T and the other the reverse then they are
+        // clearly not equal.
+        int reply = process_bits(bit1, bit2);
+        if (reply != 0) return reply;
+
+        // Currently we assume there are no null values in the dictionary
+        // itself, so no special handling is needed, but this might change in
+        // the future.
+
+        // If both bitmasks are false, then it does not matter what value
+        // they are storing.
+        if (bit1) {
+            // Get the index for the dict array
+            int32_t new_iRow1 = arr1_indices->at<int32_t>(iRow1);
+            int32_t new_iRow2 = arr2_indices->at<int32_t>(iRow2);
+
+            // Now we compare the dict entries (same as the STRING logic)
+            return KeyComparisonAsPython_Column(na_position_bis, arr_dict,
+                                                new_iRow1, arr_dict, new_iRow2);
+        }
+    }
     return 0;
 }
 
@@ -1314,7 +1362,8 @@ bool KeyComparisonAsPython(size_t const& n_key, int64_t* vect_ascending,
 /** Printing the string expression of an entry in the column
  *
  * @param dtype: the data type on input
- * @param ptrdata: The pointer to the data (its length is determined by dtype)
+ * @param ptrdata: The pointer to the data (its length is determined by
+ * dtype)
  * @return The string on output.
  */
 std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
@@ -1761,6 +1810,7 @@ std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type) {
     if (arr_type == bodo_array_type::LIST_STRING) return "LIST_STRING";
     if (arr_type == bodo_array_type::ARROW) return "ARROW";
     if (arr_type == bodo_array_type::CATEGORICAL) return "CATEGORICAL";
+    if (arr_type == bodo_array_type::DICT) return "DICT";
     return "Uncovered case of GetDtypeString\n";
 }
 
@@ -1802,8 +1852,8 @@ void DEBUG_PrintColumn(std::ostream& os, multiple_array_info* arr) {
 }
 
 /**
- * Used for a custom reduction to merge all the HyperLogLog registers across all
- * ranks.
+ * Used for a custom reduction to merge all the HyperLogLog registers across
+ * all ranks.
  *
  * The body of this function is what is done in the `HyperLogLog.merge()`
  * function with some decoration to deal with MPI.
@@ -1812,8 +1862,8 @@ void MPI_hyper_log_log_merge(void* in, void* inout, int* len,
                              MPI_Datatype* dptr) {
     uint8_t* M_in = reinterpret_cast<uint8_t*>(in);
     uint8_t* M_inout = reinterpret_cast<uint8_t*>(inout);
-    // The loop below comes from libs/hyperloglog.hpp:merge() (currently like
-    // 161)
+    // The loop below comes from libs/hyperloglog.hpp:merge() (currently
+    // like 161)
     for (int r = 0; r < *len; ++r) {
         if (M_inout[r] < M_in[r]) {
             M_inout[r] |= M_in[r];
