@@ -2156,9 +2156,8 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                 0, 0, 0, /*has_global_dictionary=*/true,
                 ref_table->columns[i_col]->has_sorted_dictionary, dict_arr,
                 out_arr);
-            // On rank == 0, the dict_arr shares a reference with in_arr which
-            // will be decref later, so we need to increment the refcount of the
-            // array
+            // incref the dictionary so it doesn't get deleted since
+            // it is given to the output array
             incref_array(dict_arr);
         }
         out_arrs.push_back(out_arr);
@@ -2786,8 +2785,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                     NULL, NULL, 0, 0, 0, /*has_global_dictionary=*/true,
                     in_arr->has_sorted_dictionary, in_arr->info1, out_arr);
                 incref_array(in_arr->info1);
-            } // else
-                // out_arr is already NULL, so doesn't need to be handled
+            }  // else out_arr is already NULL, so doesn't need to be handled
         }
         out_arrs.push_back(out_arr);
         // Reference stealing. See shuffle_table_kernel for discussion.
