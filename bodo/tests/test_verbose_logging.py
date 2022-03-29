@@ -10,6 +10,7 @@
     written accordingly.
 """
 import io
+import os
 
 import pandas as pd
 
@@ -202,3 +203,44 @@ def test_pq_logging_multifunction_inlining(datapath, memory_leak_check):
         check_logger_msg(stream, "Filter pushdown successfully performed")
         # Check the columns were pruned
         check_logger_msg(stream, "Columns loaded ['four']")
+
+
+def test_pq_dict_arrays(memory_leak_check):
+    """
+    Tests that logging accurately records which columns are optimized to use
+    dictionary encoded arrays when loading from a parquet file.
+    """
+    # TODO: Add tests for dictionary encoding of other file types once they are
+    # supported.
+
+    fname = "encoding.pq"
+
+    if bodo.get_rank() == 0:
+        # Write to parquet on rank 0
+        df = pd.DataFrame(
+            {
+                # A should be dictionary encoded
+                "A": ["awerwe", "awerwev24v2", "3r2r32rfc3", "ERr32r23rrrrrr"] * 250,
+                # B should not be dictionary encoded
+                "B": [str(i) for i in range(1000)],
+                # C should be dictionary encoded
+                "C": ["r32r23r32r32r23"] * 1000,
+            }
+        )
+        df.to_parquet(fname, index=False)
+    bodo.barrier()
+
+    @bodo.jit
+    def test_impl(fname):
+        return pd.read_parquet(fname)
+
+    try:
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            test_impl(fname)
+            check_logger_msg(stream, "Columns ['A', 'C'] using dictionary encoding")
+
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove(fname)

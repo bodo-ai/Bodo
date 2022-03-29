@@ -243,6 +243,23 @@ def csv_distributed_run(
             csv_cols = csv_node.df_colnames
             bodo.user_logging.log_message("Column Pruning", msg, csv_source, csv_cols)
 
+            # Log if any columns use dictionary encoded arrays.
+            col_types = csv_node.out_types[0].yield_type.data
+            dict_encoded_cols = [
+                c
+                for i, c in enumerate(csv_node.df_colnames)
+                if isinstance(col_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType)
+            ]
+            # TODO: Test. Dictionary encoding isn't supported yet.
+            if dict_encoded_cols:
+                encoding_msg = "Finished optimized encoding on read_csv node:\n%s\nColumns %s using dictionary encoding to reduce memory usage.\n"
+                bodo.user_logging.log_message(
+                    "Dictionary Encoding",
+                    encoding_msg,
+                    csv_source,
+                    dict_encoded_cols,
+                )
+
         if array_dists is not None:
             # Parallel flag for iterator is based on the single var.
             iterator_varname = csv_node.out_vars[0].name
@@ -367,11 +384,26 @@ def csv_distributed_run(
     if bodo.user_logging.get_verbose_level() >= 1:
         msg = "Finish column pruning on read_csv node:\n%s\nColumns loaded %s\n"
         csv_source = csv_node.loc.strformat()
+        csv_cols = []
+        dict_encoded_cols = []
         if final_usecols:
-            csv_cols = [csv_node.df_colnames[i] for i in final_usecols]
-        else:
-            csv_cols = []
+            for i in final_usecols:
+                colname = csv_node.df_colnames[i]
+                csv_cols.append(colname)
+                if isinstance(
+                    csv_node.out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType
+                ):
+                    dict_encoded_cols.append(colname)
         bodo.user_logging.log_message("Column Pruning", msg, csv_source, csv_cols)
+        # TODO: Test. Dictionary encoding isn't supported yet.
+        if dict_encoded_cols:
+            encoding_msg = "Finished optimized encoding on read_csv node:\n%s\nColumns %s using dictionary encoding to reduce memory usage.\n"
+            bodo.user_logging.log_message(
+                "Dictionary Encoding",
+                encoding_msg,
+                csv_source,
+                dict_encoded_cols,
+            )
 
     csv_reader_py = _gen_csv_reader_py(
         csv_node.df_colnames,
