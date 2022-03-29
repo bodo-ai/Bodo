@@ -23,13 +23,17 @@ from bodo.tests.utils import (
 from bodo.utils.typing import BodoError
 
 
-def test_write_sql_aws(memory_leak_check):
+@pytest.mark.parametrize(
+    "chunksize",
+    [None, 4],
+)
+def test_write_sql_aws(chunksize, memory_leak_check):
     """This test for a write down on a SQL database"""
 
-    def test_impl_write_sql(df, table_name, conn):
-        df.to_sql(table_name, conn, if_exists="replace")
+    def test_impl_write_sql(df, table_name, conn, chunksize):
+        df.to_sql(table_name, conn, if_exists="replace", chunksize=chunksize)
 
-    def test_specific_dataframe(test_impl, is_distributed, df_in):
+    def test_specific_dataframe(test_impl, is_distributed, df_in, chunksize):
         table_name = "test_table_ABCD"
         conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
         bodo_impl = bodo.jit(all_args_distributed_block=is_distributed)(test_impl)
@@ -38,7 +42,7 @@ def test_write_sql_aws(memory_leak_check):
             df_input = df_in.iloc[start:end]
         else:
             df_input = df_in
-        bodo_impl(df_input, table_name, conn)
+        bodo_impl(df_input, table_name, conn, chunksize)
         bodo.barrier()
         passed = 1
         npes = bodo.get_size()
@@ -67,8 +71,8 @@ def test_write_sql_aws(memory_leak_check):
     list_double = list(np.random.choice([4.0, np.nan], len_list))
     list_datetime = pd.date_range("2001-01-01", periods=len_list)
     df1 = pd.DataFrame({"A": list_int, "B": list_double, "C": list_datetime})
-    test_specific_dataframe(test_impl_write_sql, False, df1)
-    test_specific_dataframe(test_impl_write_sql, True, df1)
+    test_specific_dataframe(test_impl_write_sql, False, df1, chunksize)
+    test_specific_dataframe(test_impl_write_sql, True, df1, chunksize)
 
 
 # TODO: Add memory_leak_check when bug is resolved.

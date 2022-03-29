@@ -3888,16 +3888,6 @@ def to_sql_overload(
     _is_parallel=False,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.to_sql()")
-    unsupported_args = dict(chunksize=chunksize)
-    arg_defaults = dict(chunksize=None)
-    check_unsupported_args(
-        "to_sql",
-        unsupported_args,
-        arg_defaults,
-        package_name="pandas",
-        module_name="IO",
-    )
-
     if is_overload_none(schema):
         if bodo.get_rank() == 0:
             import warnings
@@ -3907,6 +3897,10 @@ def to_sql_overload(
                     f"DataFrame.to_sql(): schema argument is recommended to avoid permission issues when writing the table."
                 )
             )
+    if not (is_overload_none(chunksize) or isinstance(chunksize, types.Integer)):
+        raise BodoError(
+            "DataFrame.to_sql(): 'chunksize' argument must be an integer if provided."
+        )
 
     def _impl(
         df,
