@@ -740,7 +740,7 @@ class TestSeries(unittest.TestCase):
         def test_impl(s_tup):
             return s_tup[0].max()
 
-        bodo_func = bodo.jit(locals={"s_tup:input": "distributed"})(test_impl)
+        bodo_func = bodo.jit(distributed=["s_tup"])(test_impl)
         n = 111
         S = pd.Series(np.arange(n))
         S2 = pd.Series(np.arange(n) + 1.0)

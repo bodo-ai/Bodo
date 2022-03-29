@@ -721,13 +721,7 @@ class TestHiFrames(unittest.TestCase):
 
         A = np.array([1, 1, 2, 3])
         B = np.array([3, 4, 5, 6])
-        bodo_func = bodo.jit(
-            locals={
-                "A:input": "distributed",
-                "B:input": "distributed",
-                "df2:return": "distributed",
-            }
-        )(test_impl)
+        bodo_func = bodo.jit(distributed=["A", "B", "df2"])(test_impl)
         start, end = get_start_end(len(A))
         df2 = bodo_func(A[start:end], B[start:end])
         # TODO:

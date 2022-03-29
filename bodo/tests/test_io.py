@@ -2523,7 +2523,7 @@ def test_h5_filter(datapath, memory_leak_check):
         f.close()
         return X
 
-    bodo_func = bodo.jit(locals={"X:return": "distributed"})(test_impl)
+    bodo_func = bodo.jit(distributed=["X"])(test_impl)
     n = 4  # len(test_impl())
     start, end = get_start_end(n)
     np.testing.assert_allclose(bodo_func(), test_impl()[start:end])
@@ -2538,7 +2538,7 @@ def test_h5_slice1(datapath, memory_leak_check):
         f.close()
         return X
 
-    bodo_func = bodo.jit(locals={"X:return": "distributed"})(test_impl)
+    bodo_func = bodo.jit(distributed=["X"])(test_impl)
     n = 11  # len(test_impl())
     start, end = get_start_end(n)
     np.testing.assert_allclose(bodo_func(), test_impl()[start:end])
@@ -2553,7 +2553,7 @@ def test_h5_slice2(datapath, memory_leak_check):
         f.close()
         return X
 
-    bodo_func = bodo.jit(locals={"X:return": "distributed"})(test_impl)
+    bodo_func = bodo.jit(distributed=["X"])(test_impl)
     n = 101  # len(test_impl())
     start, end = get_start_end(n)
     np.testing.assert_allclose(bodo_func(), test_impl()[start:end])
@@ -4856,7 +4856,7 @@ class TestIO(unittest.TestCase):
             )
             return (df.A.sum(), df.B.sum(), (df.C == "1966-11-13").sum(), df.D.sum())
 
-        bodo_func = bodo.jit(locals={"df:return": "distributed"})(test_impl)
+        bodo_func = bodo.jit(distributed=["df"])(test_impl)
         self.assertEqual(bodo_func(), test_impl())
 
     def test_csv_usecols1(self):
