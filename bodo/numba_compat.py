@@ -4952,3 +4952,566 @@ def list_mul(context, builder, sig, args):
 
 
 #### END MONKEY PATCH FOR INT * LIST SUPPORT   ####
+
+
+#### BEGIN MONKEY PATCH FOR REFERENCE COUNTED SET SUPPORT ####
+
+
+def _native_set_to_python_list(typ, payload, c):
+    """
+    Create a Python list from a native set's items.
+    """
+    from llvmlite import ir
+
+    nitems = payload.used
+    listobj = c.pyapi.list_new(nitems)
+    ok = cgutils.is_not_null(c.builder, listobj)
+    with c.builder.if_then(ok, likely=True):
+        index = cgutils.alloca_once_value(c.builder, ir.Constant(nitems.type, 0))
+        with payload._iterate() as loop:
+            i = c.builder.load(index)
+            item = loop.entry.key
+            # Bodo change: added incref
+            c.context.nrt.incref(c.builder, typ.dtype, item)
+            itemobj = c.box(typ.dtype, item)
+            c.pyapi.list_setitem(listobj, i, itemobj)
+            i = c.builder.add(i, ir.Constant(i.type, 1))
+            c.builder.store(i, index)
+    return ok, listobj
+
+
+def _lookup(self, item, h, for_insert=False):
+    """
+    Lookup the *item* with the given hash values in the entries.
+    Return a (found, entry index) tuple:
+    - If found is true, <entry index> points to the entry containing
+      the item.
+    - If found is false, <entry index> points to the empty entry that
+      the item can be written to (only if *for_insert* is true)
+    """
+    from llvmlite import ir
+
+    context = self._context
+    builder = self._builder
+    intp_t = h.type
+    mask = self.mask
+    dtype = self._ty.dtype
+    tyctx = context.typing_context
+    fnty = tyctx.resolve_value_type(operator.eq)
+    sig = fnty.get_call_type(tyctx, (dtype, dtype), {})
+    # Bodo change: removed error message from reference counted items in set
+    eqfn = context.get_function(fnty, sig)
+
+    one = ir.Constant(intp_t, 1)
+    five = ir.Constant(intp_t, 5)
+    # The perturbation value for probing
+    perturb = cgutils.alloca_once_value(builder, h)
+    # The index of the entry being considered: start with (hash & mask)
+    index = cgutils.alloca_once_value(builder, builder.and_(h, mask))
+    if for_insert:
+        # The index of the first deleted entry in the lookup chain
+        free_index_sentinel = mask.type(-1)  # highest unsigned index
+        free_index = cgutils.alloca_once_value(builder, free_index_sentinel)
+    bb_body = builder.append_basic_block("lookup.body")
+    bb_found = builder.append_basic_block("lookup.found")
+    bb_not_found = builder.append_basic_block("lookup.not_found")
+    bb_end = builder.append_basic_block("lookup.end")
+
+    def check_entry(i):
+        """
+        Check entry *i* against the value being searched for.
+        """
+        entry = self.get_entry(i)
+        entry_hash = entry.hash
+        with builder.if_then(builder.icmp_unsigned("==", h, entry_hash)):
+            # Hashes are equal, compare values
+            # (note this also ensures the entry is used)
+            eq = eqfn(builder, (item, entry.key))
+            with builder.if_then(eq):
+                builder.branch(bb_found)
+        with builder.if_then(
+            numba.cpython.setobj.is_hash_empty(context, builder, entry_hash)
+        ):
+            builder.branch(bb_not_found)
+        if for_insert:
+            # Memorize the index of the first deleted entry
+            with builder.if_then(
+                numba.cpython.setobj.is_hash_deleted(context, builder, entry_hash)
+            ):
+                j = builder.load(free_index)
+                j = builder.select(
+                    builder.icmp_unsigned("==", j, free_index_sentinel), i, j
+                )
+                builder.store(j, free_index)
+
+    # First linear probing.  When the number of collisions is small,
+    # the lineary probing loop achieves better cache locality and
+    # is also slightly cheaper computationally.
+    with cgutils.for_range(
+        builder, ir.Constant(intp_t, numba.cpython.setobj.LINEAR_PROBES)
+    ):
+        i = builder.load(index)
+        check_entry(i)
+        i = builder.add(i, one)
+        i = builder.and_(i, mask)
+        builder.store(i, index)
+    # If not found after linear probing, switch to a non-linear
+    # perturbation keyed on the unmasked hash value.
+    # XXX how to tell LLVM this branch is unlikely?
+    builder.branch(bb_body)
+    with builder.goto_block(bb_body):
+        i = builder.load(index)
+        check_entry(i)
+        # Perturb to go to next entry:
+        #   perturb >>= 5
+        #   i = (i * 5 + 1 + perturb) & mask
+        p = builder.load(perturb)
+        p = builder.lshr(p, five)
+        i = builder.add(one, builder.mul(i, five))
+        i = builder.and_(mask, builder.add(i, p))
+        builder.store(i, index)
+        builder.store(p, perturb)
+        # Loop
+        builder.branch(bb_body)
+    with builder.goto_block(bb_not_found):
+        if for_insert:
+            # Not found => for insertion, return the index of the first
+            # deleted entry (if any), to avoid creating an infinite
+            # lookup chain (issue #1913).
+            i = builder.load(index)
+            j = builder.load(free_index)
+            i = builder.select(
+                builder.icmp_unsigned("==", j, free_index_sentinel), i, j
+            )
+            builder.store(i, index)
+        builder.branch(bb_end)
+    with builder.goto_block(bb_found):
+        builder.branch(bb_end)
+    builder.position_at_end(bb_end)
+    found = builder.phi(ir.IntType(1), "found")
+    found.add_incoming(cgutils.true_bit, bb_found)
+    found.add_incoming(cgutils.false_bit, bb_not_found)
+    return found, builder.load(index)
+
+
+def _add_entry(self, payload, entry, item, h, do_resize=True):
+    context = self._context
+    builder = self._builder
+
+    old_hash = entry.hash
+    entry.hash = h
+    # Bodo change: added incref
+    context.nrt.incref(builder, self._ty.dtype, item)
+    entry.key = item
+    # used++
+    used = payload.used
+    one = ir.Constant(used.type, 1)
+    used = payload.used = builder.add(used, one)
+    # fill++ if entry wasn't a deleted one
+    with builder.if_then(
+        numba.cpython.setobj.is_hash_empty(context, builder, old_hash), likely=True
+    ):
+        payload.fill = builder.add(payload.fill, one)
+    # Grow table if necessary
+    if do_resize:
+        self.upsize(used)
+    self.set_dirty(True)
+
+
+def _add_key(self, payload, item, h, do_resize=True):
+    from llvmlite import ir
+
+    context = self._context
+    builder = self._builder
+    found, i = payload._lookup(item, h, for_insert=True)
+    not_found = builder.not_(found)
+    with builder.if_then(not_found):
+        # Not found => add it
+        entry = payload.get_entry(i)
+        old_hash = entry.hash
+        entry.hash = h
+        # Bodo change: added incref
+        context.nrt.incref(builder, self._ty.dtype, item)
+        entry.key = item
+        # used++
+        used = payload.used
+        one = ir.Constant(used.type, 1)
+        used = payload.used = builder.add(used, one)
+        # fill++ if entry wasn't a deleted one
+        with builder.if_then(
+            numba.cpython.setobj.is_hash_empty(context, builder, old_hash), likely=True
+        ):
+            payload.fill = builder.add(payload.fill, one)
+        # Grow table if necessary
+        if do_resize:
+            self.upsize(used)
+        self.set_dirty(True)
+
+
+def _remove_entry(self, payload, entry, do_resize=True):
+    from llvmlite import ir
+
+    # Mark entry deleted
+    entry.hash = ir.Constant(entry.hash.type, numba.cpython.setobj.DELETED)
+    # Bodo change: added decref
+    self._context.nrt.decref(self._builder, self._ty.dtype, entry.key)
+    # used--
+    used = payload.used
+    one = ir.Constant(used.type, 1)
+    used = payload.used = self._builder.sub(used, one)
+    # Shrink table if necessary
+    if do_resize:
+        self.downsize(used)
+    self.set_dirty(True)
+
+
+def pop(self):
+    context = self._context
+    builder = self._builder
+    lty = context.get_value_type(self._ty.dtype)
+    key = cgutils.alloca_once(builder, lty)
+    payload = self.payload
+    with payload._next_entry() as entry:
+        builder.store(entry.key, key)
+        # Bodo change: added incref
+        # incref since the value is returned but _remove_entry() decrefs
+        context.nrt.incref(builder, self._ty.dtype, entry.key)
+        self._remove_entry(payload, entry)
+
+    return builder.load(key)
+
+
+def _resize(self, payload, nentries, errmsg):
+    """
+    Resize the payload to the given number of entries.
+    CAUTION: *nentries* must be a power of 2!
+    """
+    context = self._context
+    builder = self._builder
+    # Allocate new entries
+    old_payload = payload
+    ok = self._allocate_payload(nentries, realloc=True)
+    with builder.if_then(builder.not_(ok), likely=False):
+        context.call_conv.return_user_exc(builder, MemoryError, (errmsg,))
+
+    # Bodo change: added decref
+    # Re-insert old entries
+    # Decref to balance incref from `_add_key`
+    payload = self.payload
+    with old_payload._iterate() as loop:
+        entry = loop.entry
+        self._add_key(payload, entry.key, entry.hash, do_resize=False)
+        context.nrt.decref(builder, self._ty.dtype, entry.key)
+
+    self._free_payload(old_payload.ptr)
+
+
+def _replace_payload(self, nentries):
+    """
+    Replace the payload with a new empty payload with the given number
+    of entries.
+    CAUTION: *nentries* must be a power of 2!
+    """
+    context = self._context
+    builder = self._builder
+
+    # Bodo change: added decref
+    # decref all of the previous entries
+    with self.payload._iterate() as loop:
+        entry = loop.entry
+        context.nrt.decref(builder, self._ty.dtype, entry.key)
+
+    # Free old payload
+    self._free_payload(self.payload.ptr)
+
+    ok = self._allocate_payload(nentries, realloc=True)
+    with builder.if_then(builder.not_(ok), likely=False):
+        context.call_conv.return_user_exc(
+            builder, MemoryError, ("cannot reallocate set",)
+        )
+
+
+def _allocate_payload(self, nentries, realloc=False):
+    """
+    Allocate and initialize payload for the given number of entries.
+    If *realloc* is True, the existing meminfo is reused.
+    CAUTION: *nentries* must be a power of 2!
+    """
+    from llvmlite import ir
+
+    context = self._context
+    builder = self._builder
+    ok = cgutils.alloca_once_value(builder, cgutils.true_bit)
+    intp_t = context.get_value_type(types.intp)
+    zero = ir.Constant(intp_t, 0)
+    one = ir.Constant(intp_t, 1)
+    payload_type = context.get_data_type(types.SetPayload(self._ty))
+    payload_size = context.get_abi_sizeof(payload_type)
+    entry_size = self._entrysize
+    # Account for the fact that the payload struct already contains an entry
+    payload_size -= entry_size
+    # Total allocation size = <payload header size> + nentries * entry_size
+    allocsize, ovf = cgutils.muladd_with_overflow(
+        builder,
+        nentries,
+        ir.Constant(intp_t, entry_size),
+        ir.Constant(intp_t, payload_size),
+    )
+    with builder.if_then(ovf, likely=False):
+        builder.store(cgutils.false_bit, ok)
+    with builder.if_then(builder.load(ok), likely=True):
+        if realloc:
+            meminfo = self._set.meminfo
+            ptr = context.nrt.meminfo_varsize_alloc(builder, meminfo, size=allocsize)
+            alloc_ok = cgutils.is_null(builder, ptr)
+        else:
+            # Bodo change: added destructor
+            # create destructor to be called upon set destruction
+            dtor = _imp_dtor(context, builder.module, self._ty)
+            meminfo = context.nrt.meminfo_new_varsize_dtor(
+                builder, allocsize, builder.bitcast(dtor, cgutils.voidptr_t)
+            )
+            alloc_ok = cgutils.is_null(builder, meminfo)
+
+        # Bodo change: used `alloc_ok`
+        with builder.if_else(alloc_ok, likely=False) as (if_error, if_ok):
+            with if_error:
+                builder.store(cgutils.false_bit, ok)
+            with if_ok:
+                if not realloc:
+                    self._set.meminfo = meminfo
+                    self._set.parent = context.get_constant_null(types.pyobject)
+                payload = self.payload
+                # Initialize entries to 0xff (EMPTY)
+                cgutils.memset(builder, payload.ptr, allocsize, 0xFF)
+                payload.used = zero
+                payload.fill = zero
+                payload.finger = zero
+                new_mask = builder.sub(nentries, one)
+                payload.mask = new_mask
+    return builder.load(ok)
+
+
+def _copy_payload(self, src_payload):
+    """
+    Raw-copy the given payload into self.
+    """
+    from llvmlite import ir
+
+    context = self._context
+    builder = self._builder
+    ok = cgutils.alloca_once_value(builder, cgutils.true_bit)
+    intp_t = context.get_value_type(types.intp)
+    zero = ir.Constant(intp_t, 0)
+    one = ir.Constant(intp_t, 1)
+    payload_type = context.get_data_type(types.SetPayload(self._ty))
+    payload_size = context.get_abi_sizeof(payload_type)
+    entry_size = self._entrysize
+    # Account for the fact that the payload struct already contains an entry
+    payload_size -= entry_size
+    mask = src_payload.mask
+    nentries = builder.add(one, mask)
+    # Total allocation size = <payload header size> + nentries * entry_size
+    # (note there can't be any overflow since we're reusing an existing
+    #  payload's parameters)
+    allocsize = builder.add(
+        ir.Constant(intp_t, payload_size),
+        builder.mul(ir.Constant(intp_t, entry_size), nentries),
+    )
+
+    with builder.if_then(builder.load(ok), likely=True):
+        # Bodo change: added destructor
+        # create destructor for new meminfo
+        dtor = _imp_dtor(context, builder.module, self._ty)
+        meminfo = context.nrt.meminfo_new_varsize_dtor(
+            builder, allocsize, builder.bitcast(dtor, cgutils.voidptr_t)
+        )
+        alloc_ok = cgutils.is_null(builder, meminfo)
+
+        # Bodo change: used `alloc_ok`
+        with builder.if_else(alloc_ok, likely=False) as (if_error, if_ok):
+            with if_error:
+                builder.store(cgutils.false_bit, ok)
+            with if_ok:
+                self._set.meminfo = meminfo
+                payload = self.payload
+                payload.used = src_payload.used
+                payload.fill = src_payload.fill
+                payload.finger = zero
+                payload.mask = mask
+
+                # instead of using `_add_key` for every entry, since the
+                # size of the new set is the same, we can just copy the
+                # data directly without having to re-compute the hash
+                cgutils.raw_memcpy(
+                    builder, payload.entries, src_payload.entries, nentries, entry_size
+                )
+                # Bodo change: added increfs
+                # increment the refcounts to simulate `_add_key` for each
+                # element
+                with src_payload._iterate() as loop:
+                    context.nrt.incref(builder, self._ty.dtype, loop.entry.key)
+
+    return builder.load(ok)
+
+
+# Bodo change: added `_imp_dtor`
+def _imp_dtor(context, module, set_type):
+    """Define the dtor for set"""
+    from llvmlite import ir
+
+    llvoidptr = context.get_value_type(types.voidptr)
+    llsize = context.get_value_type(types.uintp)
+    # create a dtor function that takes (void* set, size_t size, void* dtor_info)
+    fnty = ir.FunctionType(
+        ir.VoidType(),
+        [llvoidptr, llsize, llvoidptr],
+    )
+    # create type-specific name
+    fname = f"_numba_set_dtor_{set_type}"
+
+    fn = cgutils.get_or_insert_function(module, fnty, name=fname)
+
+    if fn.is_declaration:
+        # Set linkage
+        fn.linkage = "linkonce_odr"
+        # Define
+        builder = ir.IRBuilder(fn.append_basic_block())
+        set_ptr = builder.bitcast(fn.args[0], cgutils.voidptr_t.as_pointer())
+        payload = numba.cpython.setobj._SetPayload(context, builder, set_type, set_ptr)
+        with payload._iterate() as loop:
+            entry = loop.entry
+            context.nrt.decref(builder, set_type.dtype, entry.key)
+        builder.ret_void()
+
+    return fn
+
+
+@lower_builtin(set, types.IterableType)
+def set_constructor(context, builder, sig, args):
+    set_type = sig.return_type
+    (items_type,) = sig.args
+    (items,) = args
+
+    # Bodo change: added decref
+    # If the argument has a len(), preallocate the set so as to
+    # avoid resizes.
+    # both `add` and `for_iter` incref each item in the set, so manually decref
+    # the items to avoid a leak from the double incref
+    n = numba.core.imputils.call_len(context, builder, items_type, items)
+    inst = numba.cpython.setobj.SetInstance.allocate(context, builder, set_type, n)
+    with numba.core.imputils.for_iter(context, builder, items_type, items) as loop:
+        inst.add(loop.value)
+        context.nrt.decref(builder, set_type.dtype, loop.value)
+
+    return numba.core.imputils.impl_ret_new_ref(context, builder, set_type, inst.value)
+
+
+@lower_builtin("set.update", types.Set, types.IterableType)
+def set_update(context, builder, sig, args):
+    inst = numba.cpython.setobj.SetInstance(context, builder, sig.args[0], args[0])
+    items_type = sig.args[1]
+    items = args[1]
+    # If the argument has a len(), assume there are few collisions and
+    # presize to len(set) + len(items)
+    n = numba.core.imputils.call_len(context, builder, items_type, items)
+    if n is not None:
+        new_size = builder.add(inst.payload.used, n)
+        inst.upsize(new_size)
+    with numba.core.imputils.for_iter(context, builder, items_type, items) as loop:
+        # make sure that the items being added are of the same dtype as the
+        # set instance
+        casted = context.cast(builder, loop.value, items_type.dtype, inst.dtype)
+        inst.add(casted)
+        # Bodo change: added decref
+        # decref each item to counter balance the double incref from `add` +
+        # `for_iter`
+        context.nrt.decref(builder, items_type.dtype, loop.value)
+
+    if n is not None:
+        # If we pre-grew the set, downsize in case there were many collisions
+        inst.downsize(inst.payload.used)
+    return context.get_dummy_value()
+
+
+if _check_numba_change:  # pragma: no cover
+    for name, orig, hash in (
+        (
+            "numba.core.boxing._native_set_to_python_list",
+            numba.core.boxing._native_set_to_python_list,
+            "b47f3d5e582c05d80899ee73e1c009a7e5121e7a660d42cb518bb86933f3c06f",
+        ),
+        (
+            "numba.cpython.setobj._SetPayload._lookup",
+            numba.cpython.setobj._SetPayload._lookup,
+            "c797b5399d7b227fe4eea3a058b3d3103f59345699388afb125ae47124bee395",
+        ),
+        (
+            "numba.cpython.setobj.SetInstance._add_entry",
+            numba.cpython.setobj.SetInstance._add_entry,
+            "c5ed28a5fdb453f242e41907cb792b66da2df63282c17abe0b68fc46782a7f94",
+        ),
+        (
+            "numba.cpython.setobj.SetInstance._add_key",
+            numba.cpython.setobj.SetInstance._add_key,
+            "324d6172638d02a361cfa0ca7f86e241e5a56a008d4ab581a305f9ae5ea4a75f",
+        ),
+        (
+            "numba.cpython.setobj.SetInstance._remove_entry",
+            numba.cpython.setobj.SetInstance._remove_entry,
+            "2c441b00daac61976e673c0e738e8e76982669bd2851951890dd40526fa14da1",
+        ),
+        (
+            "numba.cpython.setobj.SetInstance.pop",
+            numba.cpython.setobj.SetInstance.pop,
+            "1a7b7464cbe0577f2a38f3af9acfef6d4d25d049b1e216157275fbadaab41d1b",
+        ),
+        (
+            "numba.cpython.setobj.SetInstance._resize",
+            numba.cpython.setobj.SetInstance._resize,
+            "5ca5c2ba4f8c4bf546fde106b9c2656d4b22a16d16e163fb64c5d85ea4d88746",
+        ),
+        (
+            "numba.cpython.setobj.SetInstance._replace_payload",
+            numba.cpython.setobj.SetInstance._replace_payload,
+            "ada75a6c85828bff69c8469538c1979801f560a43fb726221a9c21bf208ae78d",
+        ),
+        (
+            "numba.cpython.setobj.SetInstance._allocate_payload",
+            numba.cpython.setobj.SetInstance._allocate_payload,
+            "2e80c419df43ebc71075b4f97fc1701c10dbc576aed248845e176b8d5829e61b",
+        ),
+        (
+            "numba.cpython.setobj.SetInstance._copy_payload",
+            numba.cpython.setobj.SetInstance._copy_payload,
+            "0885ac36e1eb5a0a0fc4f5d91e54b2102b69e536091fed9f2610a71d225193ec",
+        ),
+        (
+            "numba.cpython.setobj.set_constructor",
+            numba.cpython.setobj.set_constructor,
+            "3d521a60c3b8eaf70aa0f7267427475dfddd8f5e5053b5bfe309bb5f1891b0ce",
+        ),
+        (
+            "numba.cpython.setobj.set_update",
+            numba.cpython.setobj.set_update,
+            "965c4f7f7abcea5cbe0491b602e6d4bcb1800fa1ec39b1ffccf07e1bc56051c3",
+        ),
+    ):
+        lines = inspect.getsource(orig)
+        if hashlib.sha256(lines.encode()).hexdigest() != hash:
+            warnings.warn(f"{name} has changed")
+        orig = new
+
+
+numba.core.boxing._native_set_to_python_list = _native_set_to_python_list
+numba.cpython.setobj._SetPayload._lookup = _lookup
+numba.cpython.setobj.SetInstance._add_entry = _add_entry
+numba.cpython.setobj.SetInstance._add_key = _add_key
+numba.cpython.setobj.SetInstance._remove_entry = _remove_entry
+numba.cpython.setobj.SetInstance.pop = pop
+numba.cpython.setobj.SetInstance._resize = _resize
+numba.cpython.setobj.SetInstance._replace_payload = _replace_payload
+numba.cpython.setobj.SetInstance._allocate_payload = _allocate_payload
+numba.cpython.setobj.SetInstance._copy_payload = _copy_payload
+
+#### END MONKEY PATCH FOR REFERENCE COUNTED SET SUPPORT ####
