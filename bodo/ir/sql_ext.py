@@ -116,15 +116,33 @@ def sql_distributed_run(
 ):
     # Add debug info about column pruning
     if bodo.user_logging.get_verbose_level() >= 1:
-        msg = "Finish column pruning on read_sql node:\n%s\nColumns loaded %s\n"
+        pruning_msg = "Finish column pruning on read_sql node:\n%s\nColumns loaded %s\n"
         sql_source = sql_node.loc.strformat()
         sql_cols = sql_node.df_colnames
         bodo.user_logging.log_message(
             "Column Pruning",
-            msg,
+            pruning_msg,
             sql_source,
             sql_cols,
         )
+        # Log if any columns use dictionary encoded arrays.
+        dict_encoded_cols = [
+            c
+            for i, c in enumerate(sql_node.df_colnames)
+            if isinstance(
+                sql_node.out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType
+            )
+        ]
+        # Log if any columns use dictionary encoded arrays.
+        # TODO: Test. Dictionary encoding isn't supported yet.
+        if dict_encoded_cols:
+            encoding_msg = "Finished optimized encoding on read_sql node:\n%s\nColumns %s using dictionary encoding to reduce memory usage.\n"
+            bodo.user_logging.log_message(
+                "Dictionary Encoding",
+                encoding_msg,
+                sql_source,
+                dict_encoded_cols,
+            )
 
     parallel = False
     if array_dists is not None:

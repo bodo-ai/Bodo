@@ -512,17 +512,37 @@ def pq_distributed_run(
     exec(func_text, {}, loc_vars)
     pq_impl = loc_vars["pq_impl"]
 
-    # Add debug info about column pruning
+    # Add debug info about column pruning and dictionary encoded arrays.
     if bodo.user_logging.get_verbose_level() >= 1:
-        msg = "Finish column pruning on read_parquet node:\n%s\nColumns loaded %s\n"
+        # State which columns are pruned
         pq_source = pq_node.loc.strformat()
-        pq_cols = [pq_node.df_colnames[i] for i in pq_node.type_usecol_offset]
+        pq_cols = []
+        dict_encoded_cols = []
+        for i in pq_node.type_usecol_offset:
+            colname = pq_node.df_colnames[i]
+            pq_cols.append(colname)
+            if isinstance(
+                pq_node.out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType
+            ):
+                dict_encoded_cols.append(colname)
+        pruning_msg = (
+            "Finish column pruning on read_parquet node:\n%s\nColumns loaded %s\n"
+        )
         bodo.user_logging.log_message(
             "Column Pruning",
-            msg,
+            pruning_msg,
             pq_source,
             pq_cols,
         )
+        # Log if any columns use dictionary encoded arrays.
+        if dict_encoded_cols:
+            encoding_msg = "Finished optimized encoding on read_parquet node:\n%s\nColumns %s using dictionary encoding to reduce memory usage.\n"
+            bodo.user_logging.log_message(
+                "Dictionary Encoding",
+                encoding_msg,
+                pq_source,
+                dict_encoded_cols,
+            )
 
     # parallel read flag
     parallel = False

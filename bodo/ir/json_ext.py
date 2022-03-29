@@ -105,6 +105,23 @@ def json_distributed_run(
             json_source,
             json_cols,
         )
+        # Log if any columns use dictionary encoded arrays.
+        dict_encoded_cols = [
+            c
+            for i, c in enumerate(json_node.df_colnames)
+            if isinstance(
+                json_node.out_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType
+            )
+        ]
+        # TODO: Test. Dictionary encoding isn't supported yet.
+        if dict_encoded_cols:
+            encoding_msg = "Finished optimized encoding on read_json node:\n%s\nColumns %s using dictionary encoding to reduce memory usage.\n"
+            bodo.user_logging.log_message(
+                "Dictionary Encoding",
+                encoding_msg,
+                json_source,
+                dict_encoded_cols,
+            )
 
     parallel = False
     if array_dists is not None:
