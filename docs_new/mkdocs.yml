@@ -185,6 +185,7 @@ nav:
       - Inlining: performance/inlining.md
       - Bodo Errors: diagnostics_and_troubleshooting/Bodoerrors.md
       - Compilation Tips: diagnostics_and_troubleshooting/compilation.md
+      - Verbose Mode: diagnostics_and_troubleshooting/verbose_mode.md
       - Troubleshooting on AWS: diagnostics_and_troubleshooting/troubleaws.md
       - Troubleshooting on Azure: diagnostics_and_troubleshooting/troubleazure.md
   - Help and Reference:
