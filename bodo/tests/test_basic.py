@@ -670,9 +670,7 @@ def test_permuted_array_indexing(memory_leak_check):
     # details please see https://github.com/numba/numba/issues/2782.
     r = _follow_cpython(get_np_state_ptr())
 
-    hpat_func1 = bodo.jit(
-        locals={"A:return": "distributed", "B:return": "distributed"}
-    )(test_one_dim)
+    hpat_func1 = bodo.jit(distributed=["A", "B"])(test_one_dim)
 
     # Test one-dimensional array indexing.
     for arr_len in [11, 111, 128, 120]:
@@ -701,9 +699,7 @@ def test_permuted_array_indexing(memory_leak_check):
         A, B = A[P], B[P]
         return A, B
 
-    hpat_func2 = bodo.jit(
-        locals={"A:return": "distributed", "B:return": "distributed"}
-    )(test_two_dim)
+    hpat_func2 = bodo.jit(distributed=["A", "B"])(test_two_dim)
 
     for arr_len in [18, 66, 128]:
         hpat_A, hpat_B = hpat_func2(arr_len)
@@ -721,13 +717,7 @@ def test_permuted_array_indexing(memory_leak_check):
         C = A[P]
         return A, B, C
 
-    hpat_func3 = bodo.jit(
-        locals={
-            "A:return": "distributed",
-            "B:return": "distributed",
-            "C:return": "distributed",
-        }
-    )(test_rhs)
+    hpat_func3 = bodo.jit(distributed=["A", "B", "C"])(test_rhs)
 
     for arr_len in [15, 23, 26]:
         A, B, _ = hpat_func3(arr_len)

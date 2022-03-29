@@ -27,7 +27,7 @@ from bodo.tests.utils import (
     get_start_end,
     reduce_sum,
 )
-from bodo.transforms.distributed_analysis import Distribution
+from bodo.transforms.distributed_analysis import Distribution, is_REP
 from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_call_assign
 
@@ -516,12 +516,29 @@ def test_dist_flag_warn1(memory_leak_check):
             D = B + 2
             return D
 
+    # same for replicated
+    @bodo.jit(replicated=["A", "C", "B", "D"])
+    def impl2(A, flag):
+        B = 2 * A
+        if flag:
+            C = B + 1
+            return C
+        else:
+            D = B + 2
+            return D
+
     if bodo.get_rank() == 0:  # warning is thrown only on rank 0
         with pytest.warns(BodoWarning, match="Only function arguments and return"):
             impl1(np.arange(11), True)
     else:
         impl1(np.arange(11), True)
     assert count_array_REPs() == 0
+
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(BodoWarning, match="Only function arguments and return"):
+            impl2(np.arange(11), True)
+    else:
+        impl2(np.arange(11), True)
 
 
 @pytest.mark.slow
@@ -1540,6 +1557,105 @@ def test_user_distributed_rep(memory_leak_check):
         match=err_msg,
     ):
         bodo.jit(impl, all_args_distributed_block=True)(arr_chunk)
+
+
+def test_replicated_flag(memory_leak_check):
+    """test replicated flag in jit decorator"""
+
+    # mix of dist/rep inputs
+    @bodo.jit(distributed=["df1"], replicated=["df2"])
+    def impl1(df1, df2):
+        return df1.A.sum() + df2.A.sum()
+
+    # replicated=True for whole function
+    @bodo.jit(replicated=True)
+    def impl2():
+        return np.arange(50)
+
+    # mix of dist/rep outputs
+    @bodo.jit(distributed=["df1"], replicated=["df2"])
+    def impl3():
+        df1 = pd.DataFrame({"A": np.arange(50)})
+        df2 = pd.DataFrame({"A": np.arange(30)})
+        return df1, df2
+
+    # single rep output
+    @bodo.jit(replicated=["df1"])
+    def impl4():
+        df1 = pd.DataFrame({"A": np.arange(50)})
+        return df1
+
+    # nested JIT calls
+    @bodo.jit(replicated=["df1"])
+    def f(df1):
+        return df1.A.sum()
+
+    @bodo.jit
+    def g():
+        df = pd.DataFrame({"A": np.arange(50)})
+        return f(df)
+
+    df1 = pd.DataFrame({"A": np.arange(50)})
+    # use scatterv so that bodo meta is set to distributed
+    df1_chunk = bodo.scatterv(df1)
+    df2 = pd.DataFrame({"A": np.arange(30) ** 2})
+    impl1(df1_chunk, df2)
+    arr_dists = (
+        impl1.overloads[impl1.signatures[0]]
+        .metadata["distributed_diagnostics"]
+        .array_dists
+    )
+    assert (
+        arr_dists["df1"] == Distribution.OneD_Var
+        and arr_dists["df2"] == Distribution.REP
+    ), "df1 should be distributed and df2 replicated based on user flags"
+    impl1._reset_overloads()
+    impl1(df2, df1_chunk)
+    arr_dists = (
+        impl1.overloads[impl1.signatures[0]]
+        .metadata["distributed_diagnostics"]
+        .array_dists
+    )
+    assert (
+        arr_dists["df1"] == Distribution.OneD_Var
+        and arr_dists["df2"] == Distribution.REP
+    ), "df1 should be distributed and df2 replicated based on user flags"
+
+    impl2()
+    assert not impl2.overloads[impl2.signatures[0]].metadata[
+        "is_return_distributed"
+    ], "output of impl2 should be replicated since replicated=True is set"
+
+    impl3()
+    assert impl3.overloads[impl3.signatures[0]].metadata["is_return_distributed"] == [
+        True,
+        False,
+    ], "df1 should be distributed and df2 replicated based on user flags"
+    impl4()
+    assert (
+        impl4.overloads[impl4.signatures[0]].metadata["is_return_distributed"] == False
+    ), "output of impl4 should be replicated based on user flags"
+
+    g()
+    arr_dists = (
+        g.overloads[g.signatures[0]].metadata["distributed_diagnostics"].array_dists
+    )
+    for v in arr_dists.values():
+        assert is_REP(v), "variables in g() should be REP based on user flags for f()"
+
+
+def test_replicated_error_check(memory_leak_check):
+    """make sure Bodo raises an error if a variable is marked as both distributed and replicated"""
+
+    @bodo.jit(distributed=["S"], replicated=["S"])
+    def impl(S):
+        return S.sum()
+
+    with pytest.raises(
+        BodoError,
+        match=(r"marked as both 'distributed' and 'replicated'"),
+    ):
+        impl(pd.Series([1, 2, 3]))
 
 
 @pytest.mark.slow

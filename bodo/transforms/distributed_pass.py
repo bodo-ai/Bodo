@@ -1768,6 +1768,10 @@ class DistributedPass:
             assign.value = rhs.args[0]
             return [assign]
 
+        if fdef == ("rep_return", "bodo.libs.distributed_api"):
+            assign.value = rhs.args[0]
+            return [assign]
+
         if fdef == ("threaded_return", "bodo.libs.distributed_api"):
             assign.value = rhs.args[0]
             return [assign]

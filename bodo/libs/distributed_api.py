@@ -2838,6 +2838,10 @@ def dist_return(A):  # pragma: no cover
     return A
 
 
+def rep_return(A):  # pragma: no cover
+    return A
+
+
 # array analysis extension for dist_return
 def dist_return_equiv(self, scope, equiv_set, loc, args, kws):
     """dist_return output has the same shape as input"""
@@ -2849,6 +2853,7 @@ def dist_return_equiv(self, scope, equiv_set, loc, args, kws):
 
 
 ArrayAnalysis._analyze_op_call_bodo_libs_distributed_api_dist_return = dist_return_equiv
+ArrayAnalysis._analyze_op_call_bodo_libs_distributed_api_rep_return = dist_return_equiv
 
 
 def threaded_return(A):  # pragma: no cover
@@ -2872,6 +2877,7 @@ def local_alloc_size(n, in_arr):  # pragma: no cover
 # TODO: move other funcs to old API?
 @infer_global(threaded_return)
 @infer_global(dist_return)
+@infer_global(rep_return)
 class ThreadedRetTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws

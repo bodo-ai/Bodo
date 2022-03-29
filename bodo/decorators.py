@@ -32,6 +32,7 @@ numba.core.cpu.CPUTargetOptions.args_maybe_distributed = _mapping(
 )
 numba.core.cpu.CPUTargetOptions.distributed = _mapping("distributed")
 numba.core.cpu.CPUTargetOptions.distributed_block = _mapping("distributed_block")
+numba.core.cpu.CPUTargetOptions.replicated = _mapping("replicated")
 numba.core.cpu.CPUTargetOptions.threaded = _mapping("threaded")
 numba.core.cpu.CPUTargetOptions.pivots = _mapping("pivots")
 numba.core.cpu.CPUTargetOptions.h5_types = _mapping("h5_types")
@@ -183,6 +184,12 @@ detail""",
         doc="distributed 1D arguments or returns",
     )
 
+    replicated = Option(
+        type=set,
+        default=set(),
+        doc="replicated arguments or returns",
+    )
+
     threaded = Option(
         type=set,
         default=set(),
@@ -304,6 +311,10 @@ def jit(signature_or_function=None, pipeline_class=None, **options):
     if "distributed" in options and isinstance(options["distributed"], bool):
         dist = options.pop("distributed")
         pipeline_class = pipeline_class if dist else bodo.compiler.BodoCompilerSeq
+
+    if "replicated" in options and isinstance(options["replicated"], bool):
+        rep = options.pop("replicated")
+        pipeline_class = bodo.compiler.BodoCompilerSeq if rep else pipeline_class
 
     numba_jit = numba.jit(
         signature_or_function, pipeline_class=pipeline_class, **options

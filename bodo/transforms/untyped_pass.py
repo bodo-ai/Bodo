@@ -168,6 +168,17 @@ class UntypedPass:
                     )
                 )
             )
+        # same for "replicated" flag
+        extra_vars = (
+            self.metadata["replicated"] - self._return_varnames - self._arg_names
+        )
+        if extra_vars and bodo.get_rank() == 0:
+            warnings.warn(
+                BodoWarning(
+                    "Only function arguments and return values can be specified as "
+                    f"replicated. Ignoring the flag for variables: {extra_vars}."
+                )
+            )
         return
 
     def _run_assign(self, assign, label):
@@ -2329,6 +2340,9 @@ class UntypedPass:
         if "distributed_block" not in self.metadata:
             self.metadata["distributed_block"] = self.flags.distributed_block.copy()
 
+        if "replicated" not in self.metadata:
+            self.metadata["replicated"] = self.flags.replicated.copy()
+
         if "threaded" not in self.metadata:
             self.metadata["threaded"] = self.flags.threaded.copy()
 
@@ -2340,46 +2354,13 @@ class UntypedPass:
         if "args_maybe_distributed" not in self.metadata:
             self.metadata["args_maybe_distributed"] = self.flags.args_maybe_distributed
 
-        # handle old input flags
-        # e.g. {"A:input": "distributed"} -> "A"
-        dist_inputs = {
-            var_name.split(":")[0]
-            for (var_name, flag) in self.locals.items()
-            if var_name.endswith(":input") and flag == "distributed"
-        }
-
-        thread_inputs = {
-            var_name.split(":")[0]
-            for (var_name, flag) in self.locals.items()
-            if var_name.endswith(":input") and flag == "threaded"
-        }
-
-        # check inputs to be in actuall args
-        for arg_name in dist_inputs | thread_inputs:
-            if arg_name not in self.func_ir.arg_names:
-                raise BodoError(
-                    "distributed input {} not found in arguments".format(arg_name)
-                )
-            self.locals.pop(arg_name + ":input")
-
-        self.metadata["distributed"] |= dist_inputs
-        self.metadata["threaded"] |= thread_inputs
-
-        # handle old return flags
-        # e.g. {"A:return":"distributed"} -> "A"
-        flagged_returns = {
-            var_name.split(":")[0]: flag
-            for (var_name, flag) in self.locals.items()
-            if var_name.endswith(":return")
-        }
-
-        for v, flag in flagged_returns.items():
-            if flag == "distributed":
-                self.metadata["distributed"].add(v)
-            elif flag == "threaded":
-                self.metadata["threaded"].add(v)
-
-            self.locals.pop(v + ":return")
+        # make sure a variable is not marked as both distributed and replicated
+        dist_and_rep = self.metadata["distributed"] & self.metadata["replicated"]
+        if dist_and_rep:
+            raise BodoError(
+                f"Variables {dist_and_rep} marked as both 'distributed' and 'replicated'.",
+                self.func_ir.loc,
+            )
 
     def _run_return(self, ret_node):
         # TODO: handle distributed analysis, requires handling variable name
@@ -2388,6 +2369,7 @@ class UntypedPass:
             self.metadata["distributed"]
             | self.metadata["distributed_block"]
             | self.metadata["threaded"]
+            | self.metadata["replicated"]
         )
         all_returns_distributed = self.flags.all_returns_distributed
         nodes = [ret_node]
@@ -2402,19 +2384,23 @@ class UntypedPass:
         self._return_varnames.add(ret_name)
 
         if ret_name in flagged_vars or all_returns_distributed:
-            flag = (
-                "distributed"
-                if (
-                    ret_name in self.metadata["distributed"]
-                    or ret_name in self.metadata["distributed_block"]
-                    or all_returns_distributed
-                )
-                else "threaded"
-            )
+            if (
+                ret_name in self.metadata["distributed"]
+                or ret_name in self.metadata["distributed_block"]
+                or all_returns_distributed
+            ):
+                flag = "distributed"
+            elif ret_name in self.metadata["replicated"]:
+
+                flag = "replicated"
+            else:
+                flag = "threaded"
             # save in metadata that the return value is distributed
             # TODO(ehsan): support other flags like distributed_block?
             if flag == "distributed":
                 self.metadata["is_return_distributed"] = True
+            if flag == "replicated":
+                self.metadata["is_return_distributed"] = False
             nodes = self._gen_replace_dist_return(cast.value, flag)
             new_arr = nodes[-1].target
             new_cast = ir.Expr.cast(new_arr, loc)
@@ -2438,14 +2424,12 @@ class UntypedPass:
                 self._return_varnames.add(vname)
                 tup_varnames.append(vname)
                 if vname in flagged_vars or all_returns_distributed:
-                    flag = (
-                        "distributed"
-                        if (
-                            vname in self.metadata["distributed"]
-                            or all_returns_distributed
-                        )
-                        else "threaded"
-                    )
+                    if vname in self.metadata["distributed"] or all_returns_distributed:
+                        flag = "distributed"
+                    elif vname in self.metadata["replicated"]:
+                        flag = "replicated"
+                    else:
+                        flag = "threaded"
                     nodes += self._gen_replace_dist_return(v, flag)
                     new_var_list.append(nodes[-1].target)
                 else:
@@ -2472,6 +2456,14 @@ class UntypedPass:
                 ""
                 "def f(_dist_arr):\n"
                 "    dist_return = bodo.libs.distributed_api.dist_return(_dist_arr)\n"
+            )
+
+        elif flag == "replicated":
+
+            func_text = (
+                ""
+                "def f(_rep_arr):\n"
+                "    rep_return = bodo.libs.distributed_api.rep_return(_rep_arr)\n"
             )
 
         elif flag == "threaded":

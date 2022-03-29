@@ -2469,6 +2469,11 @@ class DistributedAnalysis:
         if func_name == "local_alloc_size":
             return
 
+        if func_name == "rep_return":
+            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            self._set_var_dist(args[0].name, array_dists, Distribution.REP)
+            return
+
         if func_name == "dist_return":
             arr_name = args[0].name
             arr_typ = self.typemap[arr_name]
@@ -2574,7 +2579,9 @@ class DistributedAnalysis:
         dist_flag_vars = tuple(dispatcher.targetoptions.get("distributed", ())) + tuple(
             dispatcher.targetoptions.get("distributed_block", ())
         )
+        rep_flag_vars = tuple(dispatcher.targetoptions.get("replicated", ()))
         dist_vars = []
+        rep_vars = []
         rep_inds = {}
 
         # folds arguments and finds the ones that are flagged as distributed
@@ -2584,6 +2591,8 @@ class DistributedAnalysis:
             if param.name in dist_flag_vars:
                 dist_vars.append(value.name)
             else:
+                if param.name in rep_flag_vars:
+                    rep_vars.append(value.name)
                 rep_inds[index] = value.name
             return self.typemap[value.name]
 
@@ -2594,6 +2603,8 @@ class DistributedAnalysis:
             if param.name in dist_flag_vars:
                 dist_vars.extend(v.name for v in values)
             else:
+                if param.name in rep_flag_vars:
+                    rep_vars.extend(v.name for v in values)
                 rep_inds[index] = values
             val_types = tuple(self.typemap[v.name] for v in values)
             return types.StarArgTuple(val_types)
@@ -2637,6 +2648,14 @@ class DistributedAnalysis:
                 if vname not in array_dists:
                     continue
                 typ = arg_types[ind]
+                if vname in rep_vars:
+                    self._set_REP(
+                        vname,
+                        array_dists,
+                        f"replicated flag set for {vname}",
+                        rhs.loc,
+                    )
+                    continue
                 if not hasattr(typ, "dist"):
                     self._set_REP(
                         vname,
@@ -3118,6 +3137,9 @@ class DistributedAnalysis:
             # but transitions to REP. Fixed point iteration dictates that we will
             # eventually fail this check if an argument is ever changed to REP.
             self._check_user_distributed_args(array_dists, lhs, rhs.loc)
+        elif rhs.name in self.metadata["replicated"]:
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.REP)
         elif rhs.name in self.metadata["threaded"]:
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.Thread

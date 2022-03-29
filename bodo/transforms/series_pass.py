@@ -2369,6 +2369,7 @@ class SeriesPass:
 
         if func_mod == "bodo.libs.distributed_api" and func_name in (
             "dist_return",
+            "rep_return",
             "threaded_return",
         ):
             return [assign]
