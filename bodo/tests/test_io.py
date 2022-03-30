@@ -181,10 +181,7 @@ def test_read_parquet_from_deltalake(memory_leak_check):
     ],
 )
 @pytest.mark.parametrize("index_name", [None, "HELLO"])
-# Memory leak check is disabled because to_parquet lowers a
-# constant, which has a leak
-# TODO: Readd memory_leak_check
-def test_pq_write_metadata(df, index_name):
+def test_pq_write_metadata(df, index_name, memory_leak_check):
     import pyarrow.parquet as pq
 
     def impl_index_false(df, path):
@@ -276,8 +273,7 @@ def test_pq_spark_date(datapath, memory_leak_check):
     check_func(impl, (), only_seq=True)
 
 
-# TODO: add memory_leak_check when tracking parquet allocs is possible
-def test_pq_index(datapath):
+def test_pq_index(datapath, memory_leak_check):
     def test_impl(fname):
         return pd.read_parquet(fname)
 
@@ -323,8 +319,7 @@ def test_pq_bool_with_nulls(datapath, memory_leak_check):
     check_func(test_impl, ())
 
 
-# TODO: add memory_leak_check when tracking parquet allocs is possible
-def test_pq_schema(datapath):
+def test_pq_schema(datapath, memory_leak_check):
     fname = datapath("example.parquet")
 
     def impl(f):
@@ -354,7 +349,7 @@ def test_pq_list_str(datapath, memory_leak_check):
     check_func(test_impl, (datapath("list_str_parts.pq"),))
 
 
-# TODO: Add memory_leak_check when bugs are resolved.
+# TODO [BE-1424]: Add memory_leak_check when bugs are resolved.
 def test_pq_arrow_array_random():
     def test_impl(fname):
         return pd.read_parquet(fname)
@@ -407,7 +402,7 @@ def test_pq_arrow_array_random():
         process_df(df)
 
 
-# TODO: Add memory_leak_check when bugs are resolved.
+# TODO [BE-1424]: Add memory_leak_check when bugs are resolved.
 def test_pq_array_item(datapath):
     # TODO: [BE-581] Handle cases where the number of processes are
     # greater than the number of rows for nested arrays and other types.
@@ -861,7 +856,7 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
         return df.C
 
     check_func(impl, (), only_seq=True)
-    # TODO: check for the number of columns actually loaded. CsvReader
+    # TODO [BE-2440]: check for the number of columns actually loaded. CsvReader
     # node no longer contains the loaded columns in df.colnames
 
     if bodo.get_rank() == 0:
@@ -1434,7 +1429,7 @@ def test_read_partitions_predicate_dead_column(memory_leak_check):
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data")
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
-        # TODO: Test that we only load column b.
+        # TODO [BE-2440]: Test that we only load column b.
         bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
@@ -5267,7 +5262,7 @@ def test_excel_non_constant_filepath_error(datapath):
         bodo.jit(lambda: impl2())()
     with pytest.raises(BodoError, match=msg2):
         bodo.jit(lambda: impl3())()
-    # TODO: Support read excel for n=3, see BE-1420
+    # TODO [BE-1420]: Support distributed read_excel
     check_func(impl4, (), only_seq=True)
 
 
