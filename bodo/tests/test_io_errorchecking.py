@@ -994,7 +994,7 @@ def test_to_parquet_engine(datapath):
 
 @pytest.mark.slow
 def test_to_pq_multiIdx_errcheck(memory_leak_check):
-    """ Test unsupported to_parquet with MultiIndexType"""
+    """Test unsupported to_parquet with MultiIndexType"""
     arrays = [
         ["bar", "bar", "baz", "baz", "foo", "foo", "qux", "qux"],
         ["one", "two", "one", "two", "one", "two", "one", "two"],
@@ -1041,3 +1041,26 @@ def test_csv_escapechar_value():
         bodo.jit(impl3)()
     with pytest.raises(BodoError, match="newline as 'escapechar' is not supported"):
         bodo.jit(impl4)()
+
+
+@pytest.mark.slow
+def test_to_parquet_missing_arg(memory_leak_check):
+    """test error raise when user didn't provide all required arguments
+    in Bodo supported method"""
+
+    # Save default developer mode value
+    default_mode = numba.core.config.DEVELOPER_MODE
+    # Test as a user
+    numba.core.config.DEVELOPER_MODE = 0
+
+    def impl1():
+        df = pd.DataFrame({"A": np.arange(10)})
+        df.to_parquet()
+
+    with pytest.raises(
+        numba.core.errors.TypingError, match="missing a required argument"
+    ):
+        bodo.jit(impl1)()
+
+    # Reset developer mode
+    numba.core.config.DEVELOPER_MODE = default_mode

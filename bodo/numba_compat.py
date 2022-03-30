@@ -985,14 +985,18 @@ def get_call_type2(self, context, args, kws):
             # Suppress numba stack trace and use our simplified error message
             # TODO: Disable Python traceback.
             # Message
-            msg = "Compilation error for "
-            # TODO add other data types
-            if isinstance(self.this, bodo.hiframes.pd_dataframe_ext.DataFrameType):
-                msg += "DataFrame."
-            elif isinstance(self.this, bodo.hiframes.pd_series_ext.SeriesType):
-                msg += "Series."
-            msg += f"{self.typing_key[1]}().{bodo_typing_error_info}"
-            raise errors.TypingError(msg)
+            # a temporary solution.
+            if "missing a required argument" in literal_e.msg:
+                msg = "missing a required argument"
+            else:
+                msg = "Compilation error for "
+                # TODO add other data types
+                if isinstance(self.this, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+                    msg += "DataFrame."
+                elif isinstance(self.this, bodo.hiframes.pd_series_ext.SeriesType):
+                    msg += "Series."
+                msg += f"{self.typing_key[1]}().{bodo_typing_error_info}"
+            raise errors.TypingError(msg, loc=literal_e.loc)
     return out
 
 
@@ -1169,7 +1173,7 @@ def _compile_for_args(self, *args, **kws):  # pragma: no cover
                 numba_deny_list = [
                     "Failed in nopython mode pipeline",
                     "Failed in bodo mode pipeline",
-                    "numba",
+                    "Failed at nopython",
                     "Overload",
                     "lowering",
                 ]

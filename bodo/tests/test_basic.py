@@ -1230,3 +1230,34 @@ def test_jitclass(memory_leak_check):
     with pytest.raises(BodoError, match="distribution of value is not compatible with"):
         c = MyClass2()
         c.f1()
+
+
+@pytest.mark.slow
+def test_missing_arg_msg():
+    """
+    test error raise when user didn't provide all required arguments
+    in bodo.jit user-defined method
+    """
+    import numba
+
+    @bodo.jit
+    def test2(arg1):
+        return arg1 + 2
+
+    def test():
+        return test2()
+
+    # Save default developer mode value
+    default_mode = numba.core.config.DEVELOPER_MODE
+
+    # Test as a user
+    numba.core.config.DEVELOPER_MODE = 0
+
+    with pytest.raises(
+        numba.core.errors.TypingError,
+        match=r"missing a required argument",
+    ):
+        bodo.jit(test)()
+
+    # Reset back to original setting
+    numba.core.config.DEVELOPER_MODE = default_mode
