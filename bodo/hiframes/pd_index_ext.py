@@ -3547,6 +3547,20 @@ def overload_index_map(I, mapper, na_action=None):
     if not is_const_func_type(mapper):
         raise BodoError("Index.map(): 'mapper' should be a function")
 
+    unsupported_args = dict(
+        na_action=na_action,
+    )
+    map_defaults = dict(
+        na_action=None,
+    )
+    check_unsupported_args(
+        "Index.map",
+        unsupported_args,
+        map_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
+
     dtype = I.dtype
     # getitem returns Timestamp for dt_index (TODO: pd.Timedelta when available)
     if dtype == types.NPDatetime("ns"):
