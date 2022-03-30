@@ -16,3 +16,8 @@ target_platform:
 
 SDKROOT:
   - /opt
+
+c_compiler_version:
+  - 12.0.1
+cxx_compiler_version:
+  - 12.0.1
