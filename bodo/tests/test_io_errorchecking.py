@@ -435,31 +435,6 @@ def test_csv_skiprows_type(memory_leak_check):
         bodo.jit(impl3)()
 
 
-def test_to_csv_columns_list_error(memory_leak_check):
-    """checks that we raise an error to force the users to convert the list to a tuple type.
-    see BE-1505.
-    """
-
-    def impl_none(df):
-        return df.to_csv(None, columns=["A", "C"])
-
-    def impl(df, f_name):
-        return df.to_csv(f_name, columns=["A", "C"])
-
-    df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
-
-    with pytest.raises(
-        BodoError,
-        match=r"DataFrame.to_csv\(\): 'columns' argument must not be list type. Please convert to tuple type.",
-    ):
-        bodo.jit(impl)(df, "foo")
-    with pytest.raises(
-        BodoError,
-        match=r"DataFrame.to_csv\(\): 'columns' argument must not be list type. Please convert to tuple type.",
-    ):
-        bodo.jit(impl_none)(df)
-
-
 def test_to_csv_compression_kwd_arg():
     """checks that the appropriate errors are raised when compression argument to to_csv"""
     from bodo.tests.test_io import check_CSV_write
