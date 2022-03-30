@@ -12,6 +12,7 @@ https://arrow.apache.org/docs/cpp/api/array.html#dictionary-encoded
 import operator
 import re
 
+import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
@@ -35,6 +36,7 @@ from numba.extending import (
 )
 
 import bodo
+from bodo.libs import hstr_ext
 from bodo.libs.bool_arr_ext import init_bool_array
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
@@ -48,6 +50,8 @@ from bodo.utils.typing import (
     is_overload_none,
     raise_bodo_error,
 )
+
+ll.add_symbol("box_dict_str_array", hstr_ext.box_dict_str_array)
 
 # we use nullable int32 for dictionary indices to match Arrow for faster and easier IO.
 # more than 2 billion unique values doesn't make sense for a dictionary-encoded array.
@@ -225,33 +229,66 @@ def unbox_dict_arr(typ, val, c):
 @box(DictionaryArrayType)
 def box_dict_arr(typ, val, c):
     """box dict array into numpy array of string objects"""
-
     dict_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
-    # create a PyArrow dictionary array fron indices and data
-    # pa.DictionaryArray.from_arrays(dict_arr.data, dict_arr.indices)
-    mod_name = c.context.insert_const_string(c.builder.module, "pyarrow")
-    pa_class_obj = c.pyapi.import_module_noblock(mod_name)
-    pa_dict_arr_class = c.pyapi.object_getattr_string(pa_class_obj, "DictionaryArray")
-    c.context.nrt.incref(c.builder, typ.data, dict_arr.data)
-    data_arr_obj = c.box(typ.data, dict_arr.data)
-    c.context.nrt.incref(c.builder, dict_indices_arr_type, dict_arr.indices)
-    indices_obj = c.box(dict_indices_arr_type, dict_arr.indices)
-    pa_dict_arr_obj = c.pyapi.call_method(
-        pa_dict_arr_class, "from_arrays", (indices_obj, data_arr_obj)
-    )
+    if typ == dict_str_arr_type:
+        # Box the dictionary array for string interning
+        c.context.nrt.incref(c.builder, typ.data, dict_arr.data)
+        data_arr_obj = c.box(typ.data, dict_arr.data)
+        index_arr = cgutils.create_struct_proxy(dict_indices_arr_type)(
+            c.context, c.builder, dict_arr.indices
+        )
+        fnty = lir.FunctionType(
+            c.pyapi.pyobj,
+            [
+                lir.IntType(64),
+                c.pyapi.pyobj,
+                lir.IntType(32).as_pointer(),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_get = cgutils.get_or_insert_function(
+            c.builder.module, fnty, name="box_dict_str_array"
+        )
+        indices_struct = cgutils.create_struct_proxy(types.Array(types.int32, 1, "C"))(
+            c.context, c.builder, index_arr.data
+        )
+        n = c.builder.extract_value(indices_struct.shape, 0)
+        indices_data = indices_struct.data
+        null_bitmap = cgutils.create_struct_proxy(types.Array(types.int8, 1, "C"))(
+            c.context, c.builder, index_arr.null_bitmap
+        ).data
+        np_str_arr_obj = c.builder.call(
+            fn_get, [n, data_arr_obj, indices_data, null_bitmap]
+        )
+        c.pyapi.decref(data_arr_obj)
+    else:
+        # create a PyArrow dictionary array fron indices and data
+        # pa.DictionaryArray.from_arrays(dict_arr.data, dict_arr.indices)
+        mod_name = c.context.insert_const_string(c.builder.module, "pyarrow")
+        pa_class_obj = c.pyapi.import_module_noblock(mod_name)
+        pa_dict_arr_class = c.pyapi.object_getattr_string(
+            pa_class_obj, "DictionaryArray"
+        )
+        c.context.nrt.incref(c.builder, typ.data, dict_arr.data)
+        data_arr_obj = c.box(typ.data, dict_arr.data)
+        c.context.nrt.incref(c.builder, dict_indices_arr_type, dict_arr.indices)
+        indices_obj = c.box(dict_indices_arr_type, dict_arr.indices)
+        pa_dict_arr_obj = c.pyapi.call_method(
+            pa_dict_arr_class, "from_arrays", (indices_obj, data_arr_obj)
+        )
 
-    # convert to numpy array of string objects
-    # pa_dict_arr.to_numpy(False)
-    false_obj = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
-    np_str_arr_obj = c.pyapi.call_method(pa_dict_arr_obj, "to_numpy", (false_obj,))
+        # convert to numpy array of string objects
+        # pa_dict_arr.to_numpy(False)
+        false_obj = c.pyapi.bool_from_bool(c.context.get_constant(types.bool_, False))
+        np_str_arr_obj = c.pyapi.call_method(pa_dict_arr_obj, "to_numpy", (false_obj,))
 
-    c.pyapi.decref(pa_class_obj)
-    c.pyapi.decref(data_arr_obj)
-    c.pyapi.decref(indices_obj)
-    c.pyapi.decref(pa_dict_arr_class)
-    c.pyapi.decref(pa_dict_arr_obj)
-    c.pyapi.decref(false_obj)
+        c.pyapi.decref(pa_class_obj)
+        c.pyapi.decref(data_arr_obj)
+        c.pyapi.decref(indices_obj)
+        c.pyapi.decref(pa_dict_arr_class)
+        c.pyapi.decref(pa_dict_arr_obj)
+        c.pyapi.decref(false_obj)
 
     c.context.nrt.decref(c.builder, typ, val)
     return np_str_arr_obj

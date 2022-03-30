@@ -100,6 +100,8 @@ void bytes_to_hex(char* output, char* data, int64_t data_len);
 int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
                       int64_t data_len);
 void int_to_hex(char* output, int64_t output_len, uint64_t int_val);
+void* box_dict_str_array(int64_t n, PyArrayObject* dict_arr,
+                         const int32_t* indices, const uint8_t* null_bitmap);
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject* m;
@@ -203,6 +205,8 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&bytes_fromhex)));
     PyObject_SetAttrString(m, "int_to_hex",
                            PyLong_FromVoidPtr((void*)(&int_to_hex)));
+    PyObject_SetAttrString(m, "box_dict_str_array",
+                           PyLong_FromVoidPtr((void*)(&box_dict_str_array)));
     return m;
 }
 
@@ -301,10 +305,12 @@ const char* get_c_str(std::string* s) {
 double str_to_float64(std::string* str) {
     try {
         return std::stod(*str);
-    } catch(const std::invalid_argument&) {
-        PyErr_SetString(PyExc_RuntimeError, "invalid string to float conversion");
-    } catch(const std::out_of_range&) {
-        PyErr_SetString(PyExc_RuntimeError, "out of range string to float conversion");
+    } catch (const std::invalid_argument&) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "invalid string to float conversion");
+    } catch (const std::out_of_range&) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "out of range string to float conversion");
     }
     return nan("");
 }
@@ -312,10 +318,12 @@ double str_to_float64(std::string* str) {
 float str_to_float32(std::string* str) {
     try {
         return std::stof(*str);
-    } catch(const std::invalid_argument&) {
-        PyErr_SetString(PyExc_RuntimeError, "invalid string to float conversion");
-    } catch(const std::out_of_range&) {
-        PyErr_SetString(PyExc_RuntimeError, "out of range string to float conversion");
+    } catch (const std::invalid_argument&) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "invalid string to float conversion");
+    } catch (const std::out_of_range&) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "out of range string to float conversion");
     }
     return nanf("");
 }
@@ -457,7 +465,9 @@ int64_t str_to_int64_base(char* data, int64_t length, int64_t base) {
     errno = 0;
     char* buffer = (char*)malloc(length + 1);
     if (!buffer) {
-        PyErr_SetString(PyExc_RuntimeError, "Failed to allocate space for string to int conversion");
+        PyErr_SetString(
+            PyExc_RuntimeError,
+            "Failed to allocate space for string to int conversion");
         return -1;
     }
     buffer[length] = '\0';
@@ -608,13 +618,9 @@ void* pd_array_from_string_array(int64_t no_strings,
 }
 
 // helper functions for call Numpy APIs
-int is_np_array(PyObject* obj) {
-    return PyArray_CheckExact(obj);
-}
+int is_np_array(PyObject* obj) { return PyArray_CheckExact(obj); }
 
-npy_intp array_size(PyArrayObject* arr) {
-    return PyArray_SIZE(arr);
-}
+npy_intp array_size(PyArrayObject* arr) { return PyArray_SIZE(arr); }
 
 void* array_getptr1(PyArrayObject* arr, npy_intp ind) {
     return PyArray_GETPTR1(arr, ind);
@@ -836,6 +842,7 @@ int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
         output[length++] = (unsigned char)((top << 4) + bot);
     }
     return length;
+#undef CHECK
 }
 
 void int_to_hex(char* output, int64_t output_len, uint64_t int_val) {
@@ -851,3 +858,49 @@ void int_to_hex(char* output, int64_t output_len, uint64_t int_val) {
 }
 
 }  // extern "C"
+
+/**
+ * @brief Box native dictionary encoded string array data to Numpy object array
+ * of string items. To reduce memory usage we do string interning using the
+ * dictionary encoding and have only boxed the dictionary array.
+ * @return Numpy object array of strings
+ * @param[in] n number of values
+ * @param[in] dict_arr PyArrayObject containing the boxed dictionary
+ * @param[in] indices Native int32 of dictionary indices for the strings.
+ * @param[in] null_bitmap bitvector representing nulls (Arrow format)
+ */
+void* box_dict_str_array(int64_t n, PyArrayObject* dict_arr,
+                         const int32_t* indices, const uint8_t* null_bitmap) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return NULL;                   \
+    }
+
+    npy_intp dims[] = {n};
+    PyObject* ret = PyArray_SimpleNew(1, dims, NPY_OBJECT);
+    CHECK(ret, "allocating numpy array failed");
+    int err;
+
+    for (int64_t i = 0; i < n; ++i) {
+        auto store_offset = PyArray_GETPTR1((PyArrayObject*)ret, i);
+        CHECK(store_offset, "getting offset in numpy array failed");
+        if (!is_na(null_bitmap, i)) {
+            int32_t index = indices[i];
+            auto load_offset = PyArray_GETPTR1(dict_arr, index);
+            PyObject* str = PyArray_GETITEM(dict_arr, (char*)load_offset);
+            CHECK(str, "Loading string from dictionary failed");
+            err =
+                PyArray_SETITEM((PyArrayObject*)ret, (char*)store_offset, str);
+            // Both PyArray_GETITEM and PyArray_SETITEM increment the refcount,
+            // so decref the getitem.
+            Py_DECREF(str);
+        } else {
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)store_offset,
+                                  Py_None);
+        }
+        CHECK(err == 0, "setting item in numpy array failed");
+    }
+    return ret;
+#undef CHECK
+}
