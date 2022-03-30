@@ -23,8 +23,7 @@ def test_groupby_agg_df(request):
     return request.param
 
 
-# TODO: Add memory_leak_check [BE-1228]
-def test_agg_single_str(test_groupby_agg_df):
+def test_agg_single_str(test_groupby_agg_df, memory_leak_check):
     """
     Check that groupby.agg works with a single
     string argument that matches a legal aggregation
