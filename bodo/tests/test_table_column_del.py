@@ -121,7 +121,7 @@ def test_table_len(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that just column 0 was loaded
+        # TODO [BE-2440]: Add code to check that just column 0 was loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # There shouldn't be any del_column calls
@@ -164,7 +164,6 @@ def test_table_len_with_idx_col(memory_leak_check):
     a correct result.
 
     Manually verified that the index col is dead/removed
-    #TODO: automate this check
     """
     try:
         file_type = "csv"
@@ -175,7 +174,7 @@ def test_table_len_with_idx_col(memory_leak_check):
             return len(df)
 
         check_func(impl, ())
-        # TODO: Add code to check that just column 0 was loaded
+        # TODO [BE-2440]: Add code to check that just column 0 was loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # There shouldn't be any del_column calls
@@ -202,7 +201,7 @@ def test_table_shape(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that just column 0 was loaded
+        # TODO [BE-2440]: Add code to check that just column 0 was loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # There shouldn't be any del_column calls
@@ -228,7 +227,7 @@ def test_table_del_single_block(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 3 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 3 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [[3, 37, 59]])
@@ -259,7 +258,7 @@ def test_table_del_back(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 4 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 4 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [[0], [3, 37, 59]])
@@ -290,7 +289,7 @@ def test_table_del_front(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 4 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 4 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [[0], [0], [3, 37, 59]])
@@ -321,7 +320,7 @@ def test_table_del_front_back(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 6 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 6 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # Note 6 and 9 are deleted on their own in the if statement because the
@@ -356,7 +355,7 @@ def test_table_useall_later_block(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that all columns were loaded
+        # TODO [BE-2440]: Add code to check that all columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # There shouldn't be any del_column calls
@@ -390,7 +389,7 @@ def test_table_useall_early_block(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that all columns were loaded
+        # TODO [BE-2440]: Add code to check that all columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # There shouldn't be any del_column calls
@@ -429,7 +428,7 @@ def test_table_del_usecols(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 6 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 6 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # The column numbers here are remapped to their index in usecols.
@@ -462,7 +461,7 @@ def test_table_set_table_columns(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 6 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 6 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # Note 6 and 9 are deleted on their own in the if statement because the
@@ -490,7 +489,7 @@ def test_table_extra_column(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 6 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 6 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # We should only remove the column added by set_table_data
@@ -520,7 +519,7 @@ def test_table_dead_var(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 1 column was loaded
+        # TODO [BE-2440]: Add code to check that only 1 column was loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [[0]])
@@ -548,7 +547,7 @@ def test_table_for_loop(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, (25,))
-        # TODO: Add code to check that only 2 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 2 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3]])
@@ -577,7 +576,7 @@ def test_table_while_loop(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, (25,))
-        # TODO: Add code to check that only 2 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 2 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3]])
@@ -608,7 +607,7 @@ def test_table_for_loop_branch(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, (25,))
-        # TODO: Add code to check that only 2 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 2 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3]])
@@ -640,7 +639,7 @@ def test_table_while_loop_branch(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, (25,))
-        # TODO: Add code to check that only 2 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 2 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3]])
@@ -669,7 +668,7 @@ def test_table_loop_unroll(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 3 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 3 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # Note: all values are separate because sum adds extra basic blocks
@@ -699,7 +698,7 @@ def test_table_return(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that all columns were loaded
+        # TODO [BE-2440]: Add code to check that all columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # There shouldn't be any del_column calls
@@ -728,7 +727,7 @@ def test_table_len_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that just column 0 was loaded
+        # TODO [BE-2440]: Add code to check that just column 0 was loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # There shouldn't be any del_column calls
@@ -755,7 +754,7 @@ def test_table_shape_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that just column 0 was loaded
+        # TODO [BE-2440]: Add code to check that just column 0 was loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # There shouldn't be any del_column calls
@@ -782,7 +781,7 @@ def test_table_del_single_block_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 3 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 3 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [[3, 37, 59]])
@@ -814,7 +813,7 @@ def test_table_del_back_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 4 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 4 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [[0], [3, 37, 59]])
@@ -846,7 +845,7 @@ def test_table_del_front_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 4 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 4 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [[0], [0], [3, 37, 59]])
@@ -879,7 +878,7 @@ def test_table_del_front_back_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 6 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 6 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # Note 6 and 9 are deleted on their own in the if statement because the
@@ -915,7 +914,7 @@ def test_table_useall_later_block_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that all columns were loaded
+        # TODO [BE-2440]: Add code to check that all columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # There shouldn't be any del_column calls
@@ -951,7 +950,7 @@ def test_table_useall_early_block_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that all columns were loaded
+        # TODO [BE-2440]: Add code to check that all columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # There shouldn't be any del_column calls
@@ -992,7 +991,7 @@ def test_table_del_usecols_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 6 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 6 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # The column numbers here are remapped to their index in usecols.
@@ -1025,7 +1024,7 @@ def test_table_dead_var_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 1 column was loaded
+        # TODO [BE-2440]: Add code to check that only 1 column was loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [[0]])
@@ -1054,7 +1053,7 @@ def test_table_for_loop_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, (25,))
-        # TODO: Add code to check that only 2 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 2 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3]])
@@ -1084,7 +1083,7 @@ def test_table_while_loop_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, (25,))
-        # TODO: Add code to check that only 2 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 2 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3]])
@@ -1117,7 +1116,7 @@ def test_table_for_loop_branch_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, (25,))
-        # TODO: Add code to check that only 2 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 2 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3]])
@@ -1151,7 +1150,7 @@ def test_table_while_loop_branch_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, (25,))
-        # TODO: Add code to check that only 2 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 2 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3]])
@@ -1181,7 +1180,7 @@ def test_table_loop_unroll_alias(file_type, memory_leak_check):
         impl = local_vars["impl"]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 3 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 3 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         # Note: all values are separate because sum adds extra basic blocks
@@ -1205,7 +1204,7 @@ def test_table_del_single_block_pq_index(memory_leak_check):
             return df[["Column3", "Column37", "Column59"]]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 3 columns + index were loaded
+        # TODO [BE-2440]: Add code to check that only 3 columns + index were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [[3, 37, 59]])
@@ -1228,7 +1227,7 @@ def test_table_del_single_block_pq_index_alias(memory_leak_check):
             return df[["Column3", "Column37", "Column59"]]
 
         check_func(impl, ())
-        # TODO: Add code to check that only 3 columns + index were loaded
+        # TODO [BE-2440]: Add code to check that only 3 columns + index were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [[3, 37, 59]])
@@ -1252,7 +1251,7 @@ def test_table_dead_pq_index(memory_leak_check):
             return total + df["Column3"].sum()
 
         check_func(impl, (25,))
-        # TODO: Add code to check that only 2 columns and not the index were loaded
+        # TODO [BE-2440]: Add code to check that only 2 columns and not the index were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3]])
@@ -1277,7 +1276,7 @@ def test_table_dead_pq_index_alias(memory_leak_check):
             return total + df["Column3"].sum()
 
         check_func(impl, (25,))
-        # TODO: Add code to check that only 2 columns and not the index were loaded
+        # TODO [BE-2440]: Add code to check that only 2 columns and not the index were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3]])
@@ -1307,7 +1306,7 @@ def test_table_while_loop_alias_with_idx_col(memory_leak_check):
             return total + df["Column3"].sum()
 
         check_func(impl, (25,))
-        # TODO: Add code to check that only 2 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 2 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
         _check_column_dels(bodo_func, [[0, 3]])
@@ -1329,7 +1328,7 @@ def test_table_dead_pq_table(memory_leak_check):
             return df.index
 
         check_func(impl, ())
-        # TODO: Add code to check that only the index was loaded
+        # TODO [BE-2440]: Add code to check that only the index was loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [])
@@ -1352,7 +1351,7 @@ def test_table_dead_pq_table_alias(memory_leak_check):
             return df.index
 
         check_func(impl, ())
-        # TODO: Add code to check that only the index was loaded
+        # TODO [BE-2440]: Add code to check that only the index was loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [])
@@ -1375,7 +1374,7 @@ def test_table_dead_csv(memory_leak_check):
             return df.index
 
         check_func(impl, ())
-        # TODO: Add code to check that only 3 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 3 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [])
@@ -1383,10 +1382,7 @@ def test_table_dead_csv(memory_leak_check):
         _del_many_column_file(file_type)
 
 
-# Memory leak check is disabled because to_parquet lowers a
-# constant, which has a leak
-# TODO: Readd memory_leak_check
-def test_many_cols_to_parquet():
+def test_many_cols_to_parquet(memory_leak_check):
     """Tests df.to_parquet with many columns."""
     file_type = "csv"
     try:
@@ -1436,7 +1432,7 @@ def test_table_dead_csv(memory_leak_check):
             return df.index
 
         check_func(impl, ())
-        # TODO: Add code to check that only 3 columns were loaded
+        # TODO [BE-2440]: Add code to check that only 3 columns were loaded
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
         _check_column_dels(bodo_func, [])
