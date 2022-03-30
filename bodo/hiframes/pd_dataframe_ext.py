@@ -4044,9 +4044,11 @@ def to_csv_overload(
                     "DataFrame.to_csv(): 'compression' argument defaults to None in JIT code, which is the only supported value."
                 )
             )
-    if isinstance(columns, types.List):
+    if not (
+        is_overload_none(columns) or isinstance(columns, (types.List, types.Tuple))
+    ):
         raise BodoError(
-            "DataFrame.to_csv(): 'columns' argument must not be list type. Please convert to tuple type."
+            "DataFrame.to_csv(): 'columns' argument must be list a or tuple type."
         )
 
     # TODO: refactor when objmode() can understand global string constant

@@ -633,9 +633,13 @@ def test_to_csv_columns_kwd_arg(memory_leak_check):
     def impl(df, f_name):
         return df.to_csv(f_name, columns=("A", "C"))
 
+    def impl_list(df, f_name):
+        return df.to_csv(f_name, columns=["A", "C"])
+
     df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10), "C": np.arange(10)})
     check_to_csv_string_output(df, impl_none)
     check_CSV_write(impl, df)
+    check_CSV_write(impl_list, df)
 
 
 # Header argument tested in test_csv_header_write_read
