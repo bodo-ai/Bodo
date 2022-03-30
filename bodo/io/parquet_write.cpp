@@ -71,7 +71,8 @@ void bodo_array_to_arrow(
         *out = std::make_shared<arrow::ChunkedArray>(array->array);
     }
 
-    if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+    if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
+        array->arr_type == bodo_array_type::STRING) {
         // set arrow bit mask based on bodo bitmask
         for (int64_t i = 0; i < array->length; i++) {
             if (!GetBit((uint8_t *)array->null_bitmask, i)) {
@@ -246,41 +247,42 @@ void bodo_array_to_arrow(
         *out =
             std::make_shared<arrow::ChunkedArray>(arrow::MakeArray(arr_data));
     } else if (array->arr_type == bodo_array_type::STRING) {
-        arrow::Status status;
-        ::arrow::BinaryBuilder *builder;
+        std::shared_ptr<arrow::DataType> arrow_type;
         if (array->dtype == Bodo_CTypes::BINARY) {
-            schema_vector.push_back(arrow::field(col_name, arrow::binary()));
-            builder = new ::arrow::BinaryBuilder();
+#if OFFSET_BITWIDTH == 64
+            arrow_type = arrow::large_binary();
+#else
+            arrow_type = arrow::binary();
+#endif
         } else {
-            schema_vector.push_back(arrow::field(col_name, arrow::utf8()));
-            builder = new ::arrow::StringBuilder();
+#if OFFSET_BITWIDTH == 64
+            arrow_type = arrow::large_utf8();
+#else
+            arrow_type = arrow::utf8();
+#endif
         }
-        // TODO Try to make Arrow arrays that reuse our data and offset buffers
-        // instead of copying to new memory buffers
-        char *cur_str = array->data1;
-        offset_t *offsets = (offset_t *)array->data2;
-        // ensure there won't be any reallocations during build
-        builder->Reserve(array->length);               // n_strings
-        builder->ReserveData(offsets[array->length]);  // n_chars
-        for (int64_t i = 0; i < array->length; i++) {
-            if (!GetBit((uint8_t *)array->null_bitmask, i)) {
-                status = builder->AppendNull();
-                CHECK_ARROW(status, "builder->AppendNull")
-            } else {
-                size_t len = offsets[i + 1] - offsets[i];
-                status = builder->Append((uint8_t *)cur_str, len);
-                CHECK_ARROW(status, "builder->Append")
-                cur_str += len;
-            }
-        }
+        schema_vector.push_back(arrow::field(col_name, arrow_type));
 
-        std::shared_ptr<arrow::Array> out_array;
-        status = builder->Finish(&out_array);
-        CHECK_ARROW(status, "builder->Finish")
-        ::arrow::ArrayVector result{out_array};
-        *out = std::make_shared<arrow::ChunkedArray>(result);
-        delete builder;
+        // we use the same input Bodo buffers (no need to copy to new buffers)
+        const int64_t n_strings = array->length;
+        const int64_t n_chars = ((offset_t *)array->data2)[n_strings];
+
+        std::shared_ptr<arrow::Buffer> chars_buffer =
+            std::make_shared<arrow::Buffer>((uint8_t *)array->data1, n_chars);
+
+        std::shared_ptr<arrow::Buffer> offsets_buffer =
+            std::make_shared<arrow::Buffer>((uint8_t *)array->data2,
+                                            sizeof(offset_t) * (n_strings + 1));
+
+        auto arr_data = arrow::ArrayData::Make(
+            arrow_type, n_strings, {null_bitmap, offsets_buffer, chars_buffer},
+            null_count_, /*offset=*/0);
+        *out =
+            std::make_shared<arrow::ChunkedArray>(arrow::MakeArray(arr_data));
+
     } else if (array->arr_type == bodo_array_type::LIST_STRING) {
+        // TODO try to have Arrow reuse Bodo buffers instead of copying to
+        // new buffers
         schema_vector.push_back(
             arrow::field(col_name, arrow::list(arrow::utf8())));
         int64_t num_lists = array->length;
