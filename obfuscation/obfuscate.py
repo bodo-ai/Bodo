@@ -439,12 +439,8 @@ class Obfuscator(ast.NodeTransformer):
             for xkey in node.context_expr.keywords:
                 # In numba withitem case, the value itself must be fixed.
                 self.insert_fixed_names(xkey.arg)
-        if isinstance(node.context_expr, ast.Call):
-            for xarg in node.context_expr.args:
-                self.visit(xarg)
-            for kw in node.context_expr.keywords:
-                self.visit(kw.value)
 
+        node = self.generic_visit(node)
         return node
 
     # The global entries are indicated as fixed.
