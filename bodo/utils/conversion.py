@@ -1278,6 +1278,12 @@ def overload_index_from_array(data, name=None):
             )
         )  # pragma: no cover
 
+    # datetime array
+    if isinstance(data, bodo.libs.pd_datetime_arr_ext.DatetimeArrayType):
+        return lambda data, name=None: bodo.hiframes.pd_index_ext.init_datetime_index(
+            data, name
+        )  # pragma: no cover
+
     # TODO: timedelta, period
     raise BodoError(f"cannot convert {data} to Index")  # pragma: no cover
 

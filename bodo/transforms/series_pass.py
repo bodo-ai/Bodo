@@ -2106,6 +2106,14 @@ class SeriesPass:
             assign.value = rhs.args[0]
             return [assign]
 
+        # optimize out unwrap_tz_array() if not needed
+        if (
+            fdef == ("unwrap_tz_array", "bodo.libs.pd_datetime_arr_ext")
+            and self.typemap[rhs.args[0].name] == self.typemap[assign.target.name]
+        ):
+            assign.value = rhs.args[0]
+            return [assign]
+
         # pd.DataFrame() calls init_series for even Series since it's untyped
         # remove the call since it is invalid for analysis here
         # XXX remove when df pass is typed? (test_pass_series2)

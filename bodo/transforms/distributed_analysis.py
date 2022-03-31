@@ -1048,6 +1048,11 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("unwrap_tz_array", "bodo.libs.pd_datetime_arr_ext"):
+            # LHS should match RHS
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if is_alloc_callname(func_name, func_mod):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
@@ -2396,7 +2401,7 @@ class DistributedAnalysis:
                 shape_vars = find_build_tuple(self.func_ir, args[0])
             return self._analyze_call_np_reshape(lhs, arr, shape_vars, array_dists, loc)
 
-        if func_name in ("astype", "copy", "view"):
+        if func_name in ("astype", "copy", "view", "tz_convert"):
             in_arr_name = arr.name
             self._meet_array_dists(lhs, in_arr_name, array_dists)
             return

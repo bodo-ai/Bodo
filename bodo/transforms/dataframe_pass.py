@@ -2290,7 +2290,6 @@ class DataFramePass:
         if (
             call_def
             in (
-                ("init_datetime_index", "bodo.hiframes.pd_index_ext"),
                 ("init_timedelta_index", "bodo.hiframes.pd_index_ext"),
                 ("init_binary_str_index", "bodo.hiframes.pd_index_ext"),
                 ("init_numeric_index", "bodo.hiframes.pd_index_ext"),
@@ -2298,6 +2297,9 @@ class DataFramePass:
                 ("init_heter_index", "bodo.hiframes.pd_index_ext"),
             )
             and len(var_def.args) == 2
+        ) or (
+            call_def == ("init_datetime_index", "bodo.hiframes.pd_index_ext")
+            and len(var_def.args) == 3
         ):
             return var_def.args[1]
 

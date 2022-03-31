@@ -10,6 +10,7 @@ import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed, lower_constant
@@ -3306,9 +3307,11 @@ def gen_pandas_parquet_metadata(
     partition_cols=None,
     is_runtime_columns=False,
 ):
-    # returns dict with pandas dataframe metadata for parquet storage.
-    # For more information, see:
-    # https://pandas.pydata.org/pandas-docs/stable/development/developer.html#storing-pandas-dataframe-objects-in-apache-parquet-format
+    """
+    returns dict with pandas dataframe metadata for parquet storage.
+    For more information, see:
+    https://pandas.pydata.org/pandas-docs/stable/development/developer.html#storing-pandas-dataframe-objects-in-apache-parquet-format
+    """
 
     pandas_metadata = {}
 
@@ -3321,7 +3324,18 @@ def gen_pandas_parquet_metadata(
             # partition columns are not written to parquet files, and don't appear
             # in pandas metadata
             continue
-        if isinstance(col_type, types.Array) or col_type == boolean_array:
+        # Currently only timezone types contain metadata
+        metadata = None
+        if isinstance(col_type, bodo.DatetimeArrayType):
+            pandas_type = "datetimetz"
+            numpy_type = "datetime64[ns]"
+            # Reuse pyarrow to construct the metadata.
+            if isinstance(col_type.tz, int):
+                tz = bodo.libs.pd_datetime_arr_ext.nanoseconds_to_offset(col_type.tz)
+            else:
+                tz = pd.DatetimeTZDtype(tz=col_type.tz).tz
+            metadata = {"timezone": pa.lib.tzinfo_to_string(tz)}
+        elif isinstance(col_type, types.Array) or col_type == boolean_array:
             pandas_type = numpy_type = col_type.dtype.name
             if numpy_type.startswith("datetime"):
                 pandas_type = "datetime"
@@ -3374,7 +3388,7 @@ def gen_pandas_parquet_metadata(
             "field_name": col_name,
             "pandas_type": pandas_type,
             "numpy_type": numpy_type,
-            "metadata": None,
+            "metadata": metadata,
         }
         pandas_metadata["columns"].append(col_metadata)
 

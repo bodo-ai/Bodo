@@ -1060,19 +1060,6 @@ def test_objmode_types():
     check_func(impl3, (np.arange(11),))
 
 
-def test_unsupported_tz_dtype(memory_leak_check):
-    """make sure proper error is thrown when input is tz-aware datetime"""
-
-    def test_impl(A):
-        return A
-
-    with pytest.raises(
-        BodoError, match=r"Timezone-aware datetime data type not supported yet"
-    ):
-        A = pd.to_datetime(["2017-01-02"], utc=True).to_series()
-        bodo.jit(test_impl)(A)
-
-
 def test_enumerate_unituple(memory_leak_check):
     """Ensure the enumrate parallel code doesn't break on an enumerate
     that should produce a unituple."""

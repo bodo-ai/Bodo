@@ -12,6 +12,8 @@ from decimal import Decimal
 import h5py
 import numba
 import numpy as np
+import pyarrow.parquet as pq
+import pytz
 import pandas as pd
 import pytest
 from numba.core.ir_utils import build_definitions, find_callname
@@ -3949,98 +3951,6 @@ def test_csv_chunksize_forloop_nested(datapath, memory_leak_check):
     check_func(impl3, (fname, 5))
 
 
-def test_unsupported_timezones(datapath, memory_leak_check):
-    """
-    Tests trying to read Arrow timestamp columns with
-    timezones using Bodo. Bodo doesn't support timezones,
-    so this verifies that if the column can be safely
-    removed as dead code, Bodo succeeds, but if the column
-    is still alive then Bodo throws a compile time error.
-    """
-
-    def test_impl1():
-        """
-        Read parquet that should succeed
-        because there are no tz columns.
-        """
-        df = pd.read_parquet("test_tz.pq")
-        return df.B
-
-    def test_impl2():
-        """
-        Read parquet that should succeed
-        because there are no tz columns.
-        """
-        df = pd.read_parquet("test_tz.pq", columns=["B", "C"])
-        return df.B
-
-    @bodo.jit
-    def test_impl3():
-        """
-        Read parquet that should fail
-        because there are tz columns.
-        """
-        df = pd.read_parquet("test_tz.pq")
-        return df.A
-
-    @bodo.jit
-    def test_impl4():
-        """
-        Read parquet that should fail
-        because there are tz columns.
-        """
-        df = pd.read_parquet("test_tz.pq")
-        return df
-
-    @bodo.jit
-    def test_impl5():
-        """
-        Read parquet that should fail
-        because there are tz columns.
-        """
-        df = pd.read_parquet("test_tz.pq", columns=["B", "C"])
-        return df
-
-    if bodo.get_rank() == 0:
-        df = pd.DataFrame(
-            {
-                "A": pd.date_range(
-                    "2018-04-09", periods=50, freq="2D1H", tz="America/Los_Angeles"
-                ),
-                "B": ["a", "b", "c", "d", "e"] * 10,
-                "C": pd.date_range(
-                    "2018-04-09", periods=50, freq="2D1H", tz="America/Los_Angeles"
-                ),
-            }
-        )
-        # Create a pq ex
-        df.to_parquet("test_tz.pq", index=False)
-    bodo.barrier()
-    try:
-        # Loading just the non-tz columns should suceed.
-        check_func(test_impl1, ())
-        check_func(test_impl2, ())
-        # Loading the tz columns should fail
-        with pytest.raises(
-            BodoError,
-            match="1 or more columns found with Arrow types that are not supported",
-        ):
-            test_impl3()
-        with pytest.raises(
-            BodoError,
-            match="1 or more columns found with Arrow types that are not supported",
-        ):
-            test_impl4()
-        with pytest.raises(
-            BodoError,
-            match="1 or more columns found with Arrow types that are not supported",
-        ):
-            test_impl5()
-    finally:
-        if bodo.get_rank() == 0:
-            os.remove("test_tz.pq")
-
-
 @pytest.mark.slow
 def test_csv_chunksize_enumerate_nested(datapath, memory_leak_check):
     """
@@ -5300,6 +5210,113 @@ def test_pq_non_constant_filepath_error(datapath):
     with pytest.raises(BodoError, match=msg):
         bodo.jit(lambda: impl())()
     bodo.jit(lambda: impl2())()
+
+
+def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
+    """
+    Tests loading and returning an array with timezone information
+    from Arrow.
+    """
+    if bodo.get_rank() == 0:
+        df = pd.DataFrame(
+            {
+                "A": pd.date_range(
+                    "2018-04-09", periods=50, freq="2D1H", tz="America/Los_Angeles"
+                ),
+                "B": pd.date_range("2018-04-09", periods=50, freq="2D1H"),
+                "C": pd.date_range("2018-04-09", periods=50, freq="2D1H", tz="Poland"),
+            }
+        )
+        # Create a pq ex
+        df.to_parquet("test_tz.pq", index=False)
+
+    def test_impl1():
+        """
+        Read parquet that should succeed
+        because there are no tz columns.
+        """
+        df = pd.read_parquet("test_tz.pq")
+        return df
+
+    def test_impl2():
+        """
+        Read parquet that should succeed
+        because there are no tz columns.
+        """
+        df = pd.read_parquet("test_tz.pq", columns=["B", "C"])
+        return df
+
+    bodo.barrier()
+    try:
+        check_func(test_impl1, (), only_seq=True)
+        check_func(test_impl2, (), only_seq=True)
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove("test_tz.pq")
+
+
+def test_tz_to_parquet(memory_leak_check):
+    """
+    Tests loading and returning an array with timezone information
+    from Arrow. This tests both `to_parquet` and `array_to_info` support.
+    """
+    py_output = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                "2018-04-09", periods=50, freq="2D1H", tz="America/Los_Angeles"
+            ),
+            "B": pd.date_range("2018-04-09", periods=50, freq="2D1H"),
+            "C": pd.date_range("2018-04-09", periods=50, freq="2D1H", tz="Poland"),
+            "D": pd.date_range(
+                "2018-04-09", periods=50, freq="2D1H", tz=pytz.FixedOffset(240)
+            ),
+        }
+    )
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, write_filename):
+        df.to_parquet(write_filename, index=False)
+
+    output_filename = "bodo_temp.pq"
+    df = _get_dist_arg(py_output, True)
+    impl(df, output_filename)
+    bodo.barrier()
+    # Read the data on rank 0 and compare
+    passed = 1
+    if bodo.get_rank() == 0:
+        try:
+            result = pd.read_parquet(output_filename)
+            passed = _test_equal_guard(result, py_output)
+            # Check the metadata. We want to verify that columns A and C
+            # have the correct pandas type, numpy types, and metadata because
+            # this is the first type that adds metadata.
+            bodo_table = pq.read_table(output_filename)
+            metadata = bodo_table.schema.pandas_metadata
+            columns_info = metadata["columns"]
+            tz_columns = ("A", "C")
+            for col_name in tz_columns:
+                col_index = result.columns.get_loc(col_name)
+                col_metadata = columns_info[col_index]
+                assert (
+                    col_metadata["pandas_type"] == "datetimetz"
+                ), f"incorrect pandas_type metadata for column {col_name}"
+                assert (
+                    col_metadata["numpy_type"] == "datetime64[ns]"
+                ), f"incorrect numpy_type metadata for column {col_name}"
+                metadata_field = col_metadata["metadata"]
+                assert isinstance(
+                    metadata_field, dict
+                ), f"incorrect metadata field for column {col_name}"
+                fields = [(k, v) for k, v in metadata_field.items()]
+                assert fields == [
+                    ("timezone", result.dtypes[col_index].tz.zone)
+                ], f"incorrect metadata field for column {col_name}"
+        except Exception:
+            passed = 0
+        finally:
+            shutil.rmtree(output_filename)
+    n_passed = reduce_sum(passed)
+    assert n_passed == bodo.get_size(), "Output doesn't match Pandas data"
 
 
 if __name__ == "__main__":

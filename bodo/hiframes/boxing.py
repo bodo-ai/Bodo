@@ -52,6 +52,7 @@ from bodo.libs.int_arr_ext import (
     typeof_pd_int_dtype,
 )
 from bodo.libs.map_arr_ext import MapArrayType
+from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType, PandasDatetimeTZDtype
 from bodo.libs.str_arr_ext import string_array_type, string_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
@@ -821,7 +822,11 @@ def _infer_series_dtype(S, array_metadata=None):
         return types.bool_
 
     if isinstance(S.dtype, pd.DatetimeTZDtype):
-        raise BodoError("Timezone-aware datetime data type not supported yet")
+        unit = S.dtype.unit
+        if unit != "ns":
+            raise BodoError("Timezone-aware datetime data requires 'ns' units")
+        tz_val = bodo.libs.pd_datetime_arr_ext.get_pytz_type_info(S.dtype.tz)
+        return PandasDatetimeTZDtype(tz_val)
 
     # regular numpy types
     try:
@@ -1068,7 +1073,13 @@ def get_df_obj_column_codegen(context, builder, pyapi, df_obj, col_ind, data_typ
 
     df_iloc_obj = pyapi.object_getattr_string(df_obj, "iloc")
     series_obj = pyapi.object_getitem(df_iloc_obj, slice_ind_tup_obj)
-    arr_obj_orig = pyapi.object_getattr_string(series_obj, "values")
+    if isinstance(data_typ, bodo.DatetimeArrayType):
+        # Pandas DatetimeArray aren't accessed with values. That returns
+        # the underlying numpy array. Instead we use array to get the
+        # Pandas array.
+        arr_obj_orig = pyapi.object_getattr_string(series_obj, "array")
+    else:
+        arr_obj_orig = pyapi.object_getattr_string(series_obj, "values")
 
     if isinstance(data_typ, types.Array):
         # call np.ascontiguousarray() on array since it may not be contiguous
@@ -1162,7 +1173,10 @@ def unbox_col_if_needed(df, i):  # pragma: no cover
 
 @unbox(SeriesType)
 def unbox_series(typ, val, c):
-    arr_obj_orig = c.pyapi.object_getattr_string(val, "values")
+    if isinstance(typ.data, DatetimeArrayType):
+        arr_obj_orig = c.pyapi.object_getattr_string(val, "array")
+    else:
+        arr_obj_orig = c.pyapi.object_getattr_string(val, "values")
 
     if isinstance(typ.data, types.Array):
         # make contiguous by calling np.ascontiguousarray()

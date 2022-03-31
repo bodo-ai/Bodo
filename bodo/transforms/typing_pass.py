@@ -35,9 +35,13 @@ import bodo
 from bodo.hiframes.dataframe_indexing import DataFrameILocType, DataFrameLocType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_groupby_ext import DataFrameGroupByType
+from bodo.hiframes.pd_index_ext import DatetimeIndexType
 from bodo.hiframes.pd_rolling_ext import RollingType
 from bodo.hiframes.pd_series_ext import SeriesType
+from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
+from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
+from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.utils.transform import (
     compile_func_single_block,
     container_update_method_names,
@@ -1568,6 +1572,12 @@ class TypingTransforms:
         if func_mod == "pandas":
             return self._run_call_pd_top_level(assign, rhs, func_name, label)
 
+        # handle pd.Timestamp.method() calls
+        if isinstance(func_mod, ir.Var) and isinstance(
+            self._get_method_obj_type(func_mod, rhs.func), PandasTimestampType
+        ):
+            return self._run_call_pd_timestamp(assign, rhs, func_mod, func_name, label)
+
         # handle df.method() calls
         if isinstance(func_mod, ir.Var) and isinstance(
             self._get_method_obj_type(func_mod, rhs.func), DataFrameType
@@ -1622,6 +1632,24 @@ class TypingTransforms:
             # Force table path arguments to be literals if passed to the function.
             return self._run_call_bodosql_table_path(assign, rhs, label)
 
+        # handle PandasDatetimeArray
+        if isinstance(func_mod, ir.Var) and isinstance(
+            self._get_method_obj_type(func_mod, rhs.func), DatetimeArrayType
+        ):
+            return self._run_call_pd_datetime_array(assign, rhs, func_name, label)
+
+        # handle SeriesDatetimePropertiesType
+        if isinstance(func_mod, ir.Var) and isinstance(
+            self._get_method_obj_type(func_mod, rhs.func), SeriesDatetimePropertiesType
+        ):
+            return self._run_call_pd_datetime_properties(assign, rhs, func_name, label)
+
+        # handle DatetimeIndex
+        if isinstance(func_mod, ir.Var) and isinstance(
+            self._get_method_obj_type(func_mod, rhs.func), DatetimeIndexType
+        ):
+            return self._run_call_pd_datetime_index(assign, rhs, func_name, label)
+
         # throw proper error when calling a non-JIT function
         if isinstance(
             self.typemap.get(rhs.func.name, None), bodo.utils.typing.FunctionLiteral
@@ -1637,6 +1665,28 @@ class TypingTransforms:
             )
 
         return [assign]
+
+    def _run_call_pd_datetime_array(self, assign, rhs, func_name, label):
+        """Handle calls to pandas.DatetimeArray methods that need transformation"""
+        nodes = []
+        if func_name == "tz_convert":
+            func_args = [(0, "tz")]
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args, label)
+        return nodes + [assign]
+
+    def _run_call_pd_datetime_index(self, assign, rhs, func_name, label):
+        nodes = []
+        if func_name == "tz_convert":
+            func_args = [(0, "tz")]
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args, label)
+        return nodes + [assign]
+
+    def _run_call_pd_datetime_properties(self, assign, rhs, func_name, label):
+        nodes = []
+        if func_name == "tz_convert":
+            func_args = [(0, "tz")]
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args, label)
+        return nodes + [assign]
 
     def _run_call_bodosql_table_path(self, assign, rhs, label):
         nodes = []
@@ -2250,6 +2300,22 @@ class TypingTransforms:
 
         return nodes + [assign]
 
+    def _run_call_pd_timestamp(self, assign, rhs, ts_var, func_name, label):
+        """Handle pd.Timestamp calls that need transformation to meet Bodo requirements"""
+        nodes = []
+
+        # mapping of Series functions to their arguments that require constant values
+        pd_timestamp_call_const_args = {
+            "tz_convert": [(0, "tz")],
+            "tz_localize": [(0, "tz")],
+        }
+
+        if func_name in pd_timestamp_call_const_args:
+            func_args = pd_timestamp_call_const_args[func_name]
+            nodes += self._replace_arg_with_literal(func_name, rhs, func_args, label)
+
+        return nodes + [assign]
+
     def _run_call_pd_top_level(self, assign, rhs, func_name, label):
         """transform top-level pandas functions"""
         if func_name == "Series":
@@ -2290,6 +2356,7 @@ class TypingTransforms:
                 (3, "columns"),
                 (4, "aggfunc"),
             ],
+            "Timestamp": [(2, "tz")],
         }
 
         if func_name in top_level_call_const_args:

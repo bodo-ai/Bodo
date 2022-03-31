@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+"""Timestamp extension for Pandas Timestamp with timezone support."""
 
 import calendar
 import datetime
@@ -8,6 +9,7 @@ import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+import pytz
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
@@ -49,10 +51,13 @@ from bodo.hiframes.datetime_timedelta_ext import (
 )
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.libs import hdatetime_ext
+from bodo.libs.pd_datetime_arr_ext import get_pytz_type_info
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
+    get_overload_const_bool,
+    get_overload_const_int,
     get_overload_const_str,
     is_iterable_type,
     is_overload_constant_int,
@@ -117,8 +122,13 @@ iNaT = pd._libs.tslibs.iNaT
 
 
 class PandasTimestampType(types.Type):
-    def __init__(self):
-        super(PandasTimestampType, self).__init__(name="PandasTimestampType()")
+    def __init__(self, tz_val=None):
+        self.tz = tz_val
+        if tz_val is None:
+            name = "PandasTimestampType()"
+        else:
+            name = f"PandasTimestampType({tz_val})"
+        super(PandasTimestampType, self).__init__(name=name)
 
 
 pd_timestamp_type = PandasTimestampType()
@@ -126,7 +136,7 @@ pd_timestamp_type = PandasTimestampType()
 
 @typeof_impl.register(pd.Timestamp)
 def typeof_pd_timestamp(val, c):
-    return pd_timestamp_type
+    return PandasTimestampType(get_pytz_type_info(val.tz) if val.tz else None)
 
 
 ts_field_typ = types.int64
@@ -210,19 +220,47 @@ def box_pandas_timestamp(typ, val, c):
     ns_obj = c.pyapi.long_from_longlong(pdts.nanosecond)
 
     pdts_obj = c.pyapi.unserialize(c.pyapi.serialize_object(pd.Timestamp))
-    res = c.pyapi.call_function_objargs(
-        pdts_obj,
-        (
-            year_obj,
-            month_obj,
-            day_obj,
-            hour_obj,
-            minute_obj,
-            second_obj,
-            us_obj,
-            ns_obj,
-        ),
-    )
+    if typ.tz is None:
+        res = c.pyapi.call_function_objargs(
+            pdts_obj,
+            (
+                year_obj,
+                month_obj,
+                day_obj,
+                hour_obj,
+                minute_obj,
+                second_obj,
+                us_obj,
+                ns_obj,
+            ),
+        )
+    else:
+
+        if isinstance(typ.tz, int):
+            tz_obj = c.pyapi.long_from_longlong(lir.Constant(lir.IntType(64), typ.tz))
+        else:
+            tz_str = c.context.insert_const_string(c.builder.module, str(typ.tz))
+            tz_obj = c.pyapi.string_from_string(tz_str)
+
+        args = c.pyapi.tuple_pack(())
+        kwargs = c.pyapi.dict_pack(
+            [
+                ("year", year_obj),
+                ("month", month_obj),
+                ("day", day_obj),
+                ("hour", hour_obj),
+                ("minute", minute_obj),
+                ("second", second_obj),
+                ("microsecond", us_obj),
+                ("nanosecond", ns_obj),
+                ("tz", tz_obj),
+            ]
+        )
+        res = c.pyapi.call(pdts_obj, args, kwargs)
+        c.pyapi.decref(args)
+        c.pyapi.decref(kwargs)
+        c.pyapi.decref(tz_obj)
+
     c.pyapi.decref(year_obj)
     c.pyapi.decref(month_obj)
     c.pyapi.decref(day_obj)
@@ -245,13 +283,14 @@ def init_timestamp(
     second,
     microsecond,
     nanosecond,
-    value=None,
+    value,
+    tz,
 ):
     """Create a PandasTimestampType with provided data values."""
 
     def codegen(context, builder, sig, args):
-        year, month, day, hour, minute, second, us, ns, value = args
-        ts = cgutils.create_struct_proxy(pd_timestamp_type)(context, builder)
+        year, month, day, hour, minute, second, us, ns, value, _ = args
+        ts = cgutils.create_struct_proxy(sig.return_type)(context, builder)
         ts.year = year
         ts.month = month
         ts.day = day
@@ -263,8 +302,16 @@ def init_timestamp(
         ts.value = value
         return ts._getvalue()
 
+    if is_overload_none(tz):
+        typ = pd_timestamp_type
+    elif is_overload_constant_str(tz):
+        typ = PandasTimestampType(get_overload_const_str(tz))
+    elif is_overload_constant_int(tz):
+        typ = PandasTimestampType(get_overload_const_int(tz))
+    else:
+        raise_bodo_error("tz must be a constant string, int, or None")
     return (
-        pd_timestamp_type(
+        typ(
             types.int64,
             types.int64,
             types.int64,
@@ -274,6 +321,7 @@ def init_timestamp(
             types.int64,
             types.int64,
             types.int64,
+            tz,
         ),
         codegen,
     )
@@ -336,6 +384,16 @@ def overload_pd_timestamp(
     # https://github.com/pandas-dev/pandas/blob/8806ed7120fed863b3cd7d3d5f377ec4c81739d0/pandas/_libs/tslibs/np_datetime.pyx#L145
     # create_timestamp_from_ts()
 
+    # check tz argument
+    if (
+        not is_overload_none(tz)
+        and is_overload_constant_str(tz)
+        and get_overload_const_str(tz) not in pytz.all_timezones_set
+    ):
+        raise BodoError(
+            "pandas.Timestamp(): 'tz', if provided, must be constant string found in pytz.all_timezones"
+        )
+
     # User passed keyword arguments
     if ts_input == _no_input or getattr(ts_input, "value", None) == _no_input:
 
@@ -374,6 +432,7 @@ def overload_pd_timestamp(
                 zero_if_none(microsecond),
                 zero_if_none(nanosecond),
                 value,
+                tz,
             )
 
         return impl_kw
@@ -418,6 +477,7 @@ def overload_pd_timestamp(
                 zero_if_none(day),
                 zero_if_none(hour),
                 value,
+                None,
             )
 
         return impl_pos
@@ -452,7 +512,7 @@ def overload_pd_timestamp(
             ):  # pragma: no cover
                 # Create nanosecond value for dt64
                 value = ts_input * nanoseconds
-                return convert_datetime64_to_timestamp(integer_to_dt64(value))
+                return convert_val_to_timestamp(value, tz)
 
             return impl_int
 
@@ -477,7 +537,7 @@ def overload_pd_timestamp(
             if precision:
                 frac = np.round(frac, precision)
             value = base * nanoseconds + np.int64(frac * nanoseconds)
-            return convert_datetime64_to_timestamp(integer_to_dt64(value))
+            return convert_val_to_timestamp(value, tz)
 
         return impl_float
 
@@ -486,6 +546,17 @@ def overload_pd_timestamp(
         # just call Pandas in this case since the string parsing code is complex and
         # handles several possible cases
         types.pd_timestamp_type = pd_timestamp_type
+
+        if is_overload_none(tz):
+            tz_val = None
+        elif is_overload_constant_str(tz):
+            tz_val = get_overload_const_str(tz)
+        else:
+            raise_bodo_error(
+                "pandas.Timestamp(): tz argument must be a constant string or None"
+            )
+
+        typ = PandasTimestampType(tz_val)
 
         def impl_str(
             ts_input=_no_input,
@@ -502,8 +573,8 @@ def overload_pd_timestamp(
             nanosecond=None,
             tzinfo=None,
         ):  # pragma: no cover
-            with numba.objmode(res="pd_timestamp_type"):
-                res = pd.Timestamp(ts_input)
+            with numba.objmode(res=typ):
+                res = pd.Timestamp(ts_input, tz=tz)
             return res
 
         return impl_str
@@ -560,6 +631,7 @@ def overload_pd_timestamp(
                 zero_if_none(microsecond),
                 zero_if_none(nanosecond),
                 value,
+                tz,
             )
 
         return impl_datetime
@@ -606,6 +678,7 @@ def overload_pd_timestamp(
                 zero_if_none(microsecond),
                 zero_if_none(nanosecond),
                 value,
+                None,
             )
 
         return impl_date
@@ -912,6 +985,45 @@ def overload_pd_timestamp_month_name(ptt, locale=None):
     return impl
 
 
+@overload_method(PandasTimestampType, "tz_convert", no_unliteral=True)
+def overload_pd_timestamp_tz_convert(ptt, tz):
+    if ptt.tz is None:
+        # TODO: tz_localize
+        raise BodoError(
+            "Cannot convert tz-naive Timestamp, use tz_localize to localize"
+        )
+
+    if is_overload_none(tz):
+        return lambda ptt, tz: convert_val_to_timestamp(ptt.value)
+    elif is_overload_constant_str(tz):
+        return lambda ptt, tz: convert_val_to_timestamp(ptt.value, tz=tz)
+
+
+@overload_method(PandasTimestampType, "tz_localize", no_unliteral=True)
+def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="raise"):
+    if ptt.tz is not None and not is_overload_none(tz):
+        raise BodoError(
+            "Cannot localize tz-aware Timestamp, use tz_convert for conversions"
+        )
+    unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
+    defaults_args = dict(ambiguous="raise", nonexistent="raise")
+    check_unsupported_args(
+        "Timestamp.tz_localize",
+        unsupported_args,
+        defaults_args,
+        package_name="pandas",
+        module_name="Timestamp",
+    )
+    if is_overload_none(tz):
+        return lambda ptt, tz, ambiguous="raise", nonexistent="raise": convert_val_to_timestamp(
+            ptt.value, is_convert=False
+        )
+    elif is_overload_constant_str(tz):
+        return lambda ptt, tz, ambiguous="raise", nonexistent="raise": convert_val_to_timestamp(
+            ptt.value, tz=tz, is_convert=False
+        )
+
+
 # TODO: support general string formatting
 @numba.njit
 def str_2d(a):  # pragma: no cover
@@ -1082,22 +1194,103 @@ def is_leap_year(year):  # pragma: no cover
     return (year & 0x3) == 0 and ((year % 100) != 0 or (year % 400) == 0)
 
 
+@numba.generated_jit(nopython=True)
+def convert_val_to_timestamp(ts_input, tz=None, is_convert=True):
+    """
+    Converts value given in seconds to timestamp with appropriate timezone.
+    If is_convert, ts_input's value is taken to be in UTC and is stored directly.
+    Otherwise a new value in the appropriate tz is calculated (e.g. tz_localize).
+    """
+    trans = deltas = np.array([])
+    delta_str = "0"
+    if is_overload_constant_str(tz):
+        tz_str = get_overload_const_str(tz)
+        tz_obj = pytz.timezone(tz_str)
+        if isinstance(tz_obj, pytz.tzinfo.DstTzInfo):
+            # Most timezones are pytz.tzinfo.DstTzInfo
+            trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view("i8")
+            deltas = np.array(tz_obj._transition_info)[:, 0]
+            deltas = (
+                (pd.Series(deltas).dt.total_seconds() * 1_000_000_000)
+                .astype(np.int64)
+                .values
+            )  # np.array(tz_obj._transition_info)[:, 0]
+            delta_str = "deltas[np.searchsorted(trans, ts_input, side='right') - 1]"
+        else:
+            # Some are pytz.tzinfo.StaticTzInfo (e.g. 'HST') or pytz.utc
+            deltas = np.int64(tz_obj._utcoffset.total_seconds() * 1_000_000_000)
+            delta_str = "deltas"
+    elif is_overload_constant_int(tz):
+        ns_int = get_overload_const_int(tz)
+        delta_str = str(ns_int)
+    elif not is_overload_none(tz):
+        raise_bodo_error(
+            "convert_val_to_timestamp(): tz value must be a constant string or None"
+        )
+
+    is_convert = get_overload_const_bool(is_convert)
+    if is_convert:
+        dt_val = "tz_ts_input"
+        new_val = "ts_input"
+    else:
+        dt_val = "ts_input"
+        new_val = "tz_ts_input"
+
+    func_text = "def impl(ts_input, tz=None, is_convert=True):\n"
+    func_text += f"  tz_ts_input = ts_input + {delta_str}\n"
+    func_text += f"  dt, year, days = extract_year_days(integer_to_dt64({dt_val}))\n"
+    func_text += "  month, day = get_month_day(year, days)\n"
+    func_text += "  return init_timestamp(\n"
+    func_text += "    year=year,\n"
+    func_text += "    month=month,\n"
+    func_text += "    day=day,\n"
+    func_text += "    hour=dt // (60 * 60 * 1_000_000_000),\n"  # hour
+    func_text += "    minute=(dt // (60 * 1_000_000_000)) % 60,\n"  # minute
+    func_text += "    second=(dt // 1_000_000_000) % 60,\n"  # second
+    func_text += "    microsecond=(dt // 1000) % 1_000_000,\n"  # microsecond
+    func_text += "    nanosecond=dt % 1000,\n"  # nanosecond
+    func_text += f"    value={new_val},\n"
+    func_text += "    tz=tz,\n"
+    func_text += "  )\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "np": np,
+            "pd": pd,
+            "trans": trans,
+            "deltas": deltas,
+            "integer_to_dt64": integer_to_dt64,
+            "extract_year_days": extract_year_days,
+            "get_month_day": get_month_day,
+            "init_timestamp": init_timestamp,
+            "zero_if_none": zero_if_none,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+
+    return impl
+
+
 @numba.njit(no_cpython_wrapper=True)
 def convert_datetime64_to_timestamp(dt64):  # pragma: no cover
     """Converts dt64 value to pd.Timestamp"""
     dt, year, days = extract_year_days(dt64)
     month, day = get_month_day(year, days)
 
-    return pd.Timestamp(
-        year,
-        month,
-        day,
-        dt // (60 * 60 * 1000000000),  # hour
-        (dt // (60 * 1000000000)) % 60,  # minute
-        (dt // 1000000000) % 60,  # second
-        (dt // 1000) % 1000000,  # microsecond
-        dt % 1000,
-    )  # nanosecond
+    return init_timestamp(
+        year=year,
+        month=month,
+        day=day,
+        hour=dt // (60 * 60 * 1000000000),  # hour
+        minute=(dt // (60 * 1000000000)) % 60,  # minute
+        second=(dt // 1000000000) % 60,  # second
+        microsecond=(dt // 1000) % 1000000,  # microsecond
+        nanosecond=dt % 1000,  # nanosecond
+        value=dt64,
+        tz=None,
+    )
 
 
 @numba.njit(no_cpython_wrapper=True)
@@ -2024,6 +2217,7 @@ def compute_pd_timestamp(totmicrosec, nanosecond):  # pragma: no cover
         microsecond,
         nanosecond,
         value,
+        None,
     )
 
 
@@ -2263,8 +2457,6 @@ timestamp_unsupported_methods = [
     "to_numpy",
     "to_period",
     "to_pydatetime",
-    "tz_convert",
-    "tz_localize",
     "tzname",
     "utcoffset",
     "utctimetuple",
