@@ -497,7 +497,7 @@ def cx_oracle_check():
 
 def cx_oracle_check_():  # pragma: no cover
     try:
-        import cx_oracle  # noqa
+        import cx_Oracle  # noqa
     except ImportError:
         message = (
             "Using Oracle URI string requires cx_oracle to be installed."
