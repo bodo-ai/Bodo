@@ -40,7 +40,7 @@ from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType, PandasDatetimeTZDtype
+from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.utils.transform import get_const_func_output_type
@@ -57,7 +57,6 @@ from bodo.utils.typing import (
     is_const_func_type,
     is_heterogeneous_tuple_type,
     is_iterable_type,
-    is_overload_constant_str,
     is_overload_false,
     is_overload_none,
     is_overload_true,
@@ -140,7 +139,12 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
         # NOTE: data array can have flags like readonly
-        self.data = types.Array(bodo.datetime64ns, 1, "C") if data is None else data
+        if isinstance(data, DatetimeArrayType):
+            self.data = data
+        else:
+            # NOTE: Update to add more types to maintain the original arrays for other types.
+            self.data = types.Array(bodo.datetime64ns, 1, "C")
+        # self.data = types.Array(bodo.datetime64ns, 1, "C") if data is None else data
         super(DatetimeIndexType, self).__init__(
             name=f"DatetimeIndex({name_typ}, {self.data})"
         )
@@ -158,11 +162,7 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
 
     @property
     def tzval(self):
-        return (
-            self.data.tz
-            if isinstance(self.data, bodo.DatetimeArrayType)
-            else None
-        )
+        return self.data.tz if isinstance(self.data, bodo.DatetimeArrayType) else None
 
     def copy(self):
         return DatetimeIndexType(self.name_typ, self.data)
@@ -188,8 +188,7 @@ def typeof_datetime_index(val, c):
     # TODO: check value for freq, etc. and raise error since unsupported
     if isinstance(val.dtype, pd.DatetimeTZDtype):
         return DatetimeIndexType(
-            get_val_type_maybe_str_literal(val.name),
-            DatetimeArrayType(val.tz)
+            get_val_type_maybe_str_literal(val.name), DatetimeArrayType(val.tz)
         )
     return DatetimeIndexType(get_val_type_maybe_str_literal(val.name))
 
@@ -227,9 +226,7 @@ def overload_datetime_index_copy(A, name=None, deep=False, dtype=None, names=Non
     if not is_overload_none(name):
 
         def impl(A, name=None, deep=False, dtype=None, names=None):  # pragma: no cover
-            return bodo.hiframes.pd_index_ext.init_datetime_index(
-                A._data.copy(), name
-            )
+            return bodo.hiframes.pd_index_ext.init_datetime_index(A._data.copy(), name)
 
     else:
 
@@ -250,9 +247,7 @@ def box_dt_index(typ, val, c):
     dt_index = numba.core.cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
     c.context.nrt.incref(c.builder, typ.data, dt_index.data)
-    arr_obj = c.pyapi.from_native_value(
-        typ.data, dt_index.data, c.env_manager
-    )
+    arr_obj = c.pyapi.from_native_value(typ.data, dt_index.data, c.env_manager)
     c.context.nrt.incref(c.builder, typ.name_typ, dt_index.name)
     name_obj = c.pyapi.from_native_value(typ.name_typ, dt_index.name, c.env_manager)
 
@@ -296,10 +291,10 @@ def unbox_datetime_index(typ, val, c):
         [],
     )
     index_val.dict = ind_dict
-    
+
     c.pyapi.decref(data_obj)
     c.pyapi.decref(name_obj)
-    
+
     return NativeValue(index_val._getvalue())
 
 
@@ -329,10 +324,8 @@ def init_datetime_index(typingctx, data, name):
         )  # pragma: no cover
 
         return dt_index._getvalue()
-    
-    ret_typ = DatetimeIndexType(
-        name, data
-    )
+
+    ret_typ = DatetimeIndexType(name, data)
     sig = signature(ret_typ, data, name)
     return sig, codegen
 
@@ -779,9 +772,7 @@ def overload_datetime_index_getitem(dti, ind):
                 dti_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
                 name = bodo.hiframes.pd_index_ext.get_index_name(dti)
                 new_arr = dti_arr[ind]
-                return bodo.hiframes.pd_index_ext.init_datetime_index(
-                    new_arr, name
-                )
+                return bodo.hiframes.pd_index_ext.init_datetime_index(new_arr, name)
 
             return impl
 
