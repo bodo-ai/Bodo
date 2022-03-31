@@ -7,8 +7,7 @@ from bodo.tests.utils import check_caching
 
 
 @pytest.mark.smoke
-def test_read_csv_cache(fn_distribution, is_cached, datapath):
-    # TODO: investigate/fix memory leak check, see BE-1375
+def test_read_csv_cache(fn_distribution, is_cached, datapath, memory_leak_check):
     """
     test read_csv with cache=True
     """
@@ -22,8 +21,7 @@ def test_read_csv_cache(fn_distribution, is_cached, datapath):
 
 
 @pytest.mark.smoke
-def test_read_parquet_cache(fn_distribution, is_cached, datapath):
-    # TODO: investigate/fix memory leak check, see BE-1375
+def test_read_parquet_cache(fn_distribution, is_cached, datapath, memory_leak_check):
     """
     test read_parquet with cache=True
     """
@@ -76,8 +74,9 @@ def test_read_parquet_cache_fname_arg_list_files(
     check_caching(impl, (fpaths,), is_cached, fn_distribution, py_output=py_out)
 
 
-def test_read_csv_cache_fname_arg(fn_distribution, is_cached, datapath):
-    # TODO: investigate/fix memory leak check, see BE-1375
+def test_read_csv_cache_fname_arg(
+    fn_distribution, is_cached, datapath, memory_leak_check
+):
     """
     test read_csv with cache=True and passing different file name as
     argument to the Bodo function
