@@ -166,29 +166,10 @@ class BodoException(numba.core.errors.TypingError):
     """
 
 
-class BodoNotConstError(Exception):
-    """Indicates that a constant value is expected but non-constant is provided.
-    Only used in partial typing pass to enable IR transformation. Inherits from regular
-    Exception class for this purpose.
-    """
-
-
 class BodoConstUpdatedError(Exception):
     """Indicates that a constant value is expected but the input list/dict/set is
     updated in place. Only used in partial typing pass to enable error checking.
     """
-
-
-def raise_const_error(msg):
-    """raises an error indicating that a constant value is expected with the given
-    message 'msg'.
-    Raises BodoNotConstError during partial type inference, and BodoError otherwise.
-    """
-    if bodo.transforms.typing_pass.in_partial_typing:
-        bodo.transforms.typing_pass.typing_transform_required = True
-        raise BodoNotConstError(msg)
-    else:
-        raise BodoError(msg)
 
 
 def raise_bodo_error(msg, loc=None):

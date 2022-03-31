@@ -112,7 +112,6 @@ from bodo.utils.typing import (
     is_overload_zero,
     parse_dtype,
     raise_bodo_error,
-    raise_const_error,
     unliteral_val,
 )
 from bodo.utils.utils import is_array_typ
@@ -3260,7 +3259,7 @@ def common_validate_merge_merge_asof_spec(
     if (not is_overload_constant_tuple(suffixes)) and (
         not is_overload_constant_list(suffixes)
     ):
-        raise_const_error(
+        raise_bodo_error(
             name_func + "(): suffixes parameters should be ['_left', '_right']"
         )
 
@@ -3805,13 +3804,13 @@ def validate_groupby_spec(
 
     # make sure by is a const str list
     if not is_literal_type(by) and not is_overload_constant_list(by):
-        raise_const_error(
+        raise_bodo_error(
             f"groupby(): 'by' parameter only supports a constant column label or column labels, not {by}."
         )
 
     # make sure by has valid label(s)
     if len(set(get_overload_const_list(by)).difference(set(df.columns))) > 0:
-        raise_const_error(
+        raise_bodo_error(
             "groupby(): invalid key {} for 'by' (not available in columns {}).".format(
                 get_overload_const_list(by), df.columns
             )
@@ -3819,7 +3818,7 @@ def validate_groupby_spec(
 
     # make sure as_index is of type bool
     if not is_overload_constant_bool(as_index):
-        raise_const_error(
+        raise_bodo_error(
             "groupby(): 'as_index' parameter must be a constant bool, not {}.".format(
                 as_index
             ),
@@ -3827,7 +3826,7 @@ def validate_groupby_spec(
 
     # make sure dropna is of type bool
     if not is_overload_constant_bool(dropna):
-        raise_const_error(
+        raise_bodo_error(
             "groupby(): 'dropna' parameter must be a constant bool, not {}.".format(
                 dropna
             ),
@@ -4449,7 +4448,7 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
     if is_overload_none(by) or (
         not is_literal_type(by) and not is_overload_constant_list(by)
     ):
-        raise_const_error(
+        raise_bodo_error(
             "sort_values(): 'by' parameter only supports "
             "a constant column label or column labels. by={}".format(by)
         )
@@ -4513,7 +4512,7 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
                     "sort_values(): Every value in na_position should either be 'first' or 'last'"
                 )
     else:
-        raise_const_error(
+        raise_bodo_error(
             "sort_values(): na_position parameter must be a literal constant of type str or a constant "
             f"list of str with 1 entry per key column, not {na_position}"
         )
