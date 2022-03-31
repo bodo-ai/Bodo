@@ -554,6 +554,17 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
         # incref the actual array passed to C++
         context.nrt.incref(builder, arr_type, in_arr)
 
+    # PandasDatetimeArray
+    if isinstance(arr_type, bodo.DatetimeArrayType):
+        if is_categorical:
+            raise BodoError(
+                "array_to_info(): Categorical PandasDatetimeArrayType not supported"
+            )
+        # For PandasDatetimeArray, extract the internal
+        # dt64 array
+        in_arr = cgutils.create_struct_proxy(arr_type)(context, builder, in_arr).data
+        arr_type = arr_type.data_array_type
+
     # Numpy
     if isinstance(arr_type, types.Array):
         arr = context.make_array(arr_type)(context, builder, in_arr)
@@ -1310,6 +1321,16 @@ def info_to_array_codegen(context, builder, sig, args):
             context.nrt.incref(builder, arr_type.dtype, dtype)
         out_arr.dtype = dtype
         return out_arr._getvalue()
+
+    # Pandas Datetime Array
+    if isinstance(arr_type, bodo.DatetimeArrayType):
+        arr = cgutils.create_struct_proxy(arr_type)(context, builder)
+        # Timezone information doesn't get sent to C++, just a dt64 array.
+        data = _lower_info_to_array_numpy(
+            arr_type.data_array_type, context, builder, in_info
+        )
+        arr.data = data
+        return arr._getvalue()
 
     # Numpy
     if isinstance(arr_type, types.Array):

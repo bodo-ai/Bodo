@@ -44,6 +44,7 @@ from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.map_arr_ext import MapArrayType
+from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.libs.str_arr_ext import (
     convert_len_arr_to_offset,
     get_bit_bitmap,
@@ -780,6 +781,20 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
         return gatherv_impl_int_arr
 
+    if isinstance(data, DatetimeArrayType):
+
+        tz = data.tz
+
+        def impl_pd_datetime_arr(
+            data, allgather=False, warn_if_rep=True, root=MPI_ROOT
+        ):  # pragma: no cover
+            gathered_data = bodo.gatherv(data._data, allgather, warn_if_rep, root)
+            return bodo.libs.pd_datetime_arr_ext.init_pandas_datetime_array(
+                gathered_data, tz
+            )
+
+        return impl_pd_datetime_arr
+
     # interval array
     if isinstance(data, IntervalArrayType):
         # gather the left/right arrays
@@ -859,7 +874,10 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
     # Index types
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
-        from bodo.hiframes.pd_index_ext import PeriodIndexType
+        from bodo.hiframes.pd_index_ext import (
+            DatetimeIndexType,
+            PeriodIndexType,
+        )
 
         if isinstance(data, PeriodIndexType):
             freq = data.freq

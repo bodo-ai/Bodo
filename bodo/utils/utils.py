@@ -349,6 +349,7 @@ def is_array_typ(var_typ, include_index_series=True):
                 bodo.libs.tuple_arr_ext.TupleArrayType,
                 bodo.libs.map_arr_ext.MapArrayType,
                 bodo.libs.csr_matrix_ext.CSRMatrixType,
+                bodo.DatetimeArrayType,
             ),
         )
         or (

@@ -29,6 +29,7 @@ import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
+from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.io import csv_cpp
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.libs.str_ext import string_type, unicode_to_utf8
@@ -268,7 +269,9 @@ def is_str_series_typ(t):
 
 
 def is_dt64_series_typ(t):
-    return isinstance(t, SeriesType) and t.dtype == types.NPDatetime("ns")
+    return isinstance(t, SeriesType) and (
+        t.dtype == types.NPDatetime("ns") or isinstance(t.dtype, PandasDatetimeTZDtype)
+    )
 
 
 def is_timedelta64_series_typ(t):

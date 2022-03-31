@@ -708,7 +708,7 @@ def box_datetime_date_array(typ, val, c):
 @intrinsic
 def init_datetime_date_array(typingctx, data, nulls=None):
     """Create a DatetimeDateArrayType with provided data values."""
-    assert data == types.Array(types.int64, 1, "C")
+    assert data == types.Array(types.int64, 1, "C") or data == types.Array(types.NPDatetime("ns"), 1, "C")
     assert nulls == types.Array(types.uint8, 1, "C")
 
     def codegen(context, builder, signature, args):

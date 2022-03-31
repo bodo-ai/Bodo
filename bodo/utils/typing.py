@@ -1395,6 +1395,10 @@ def dtype_to_array_type(dtype):
             dtype_to_array_type(dtype.value_type),
         )
 
+    # DatetimeTZDtype are stored as pandas Datetime array
+    if isinstance(dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+        return bodo.DatetimeArrayType(dtype.tz)
+
     # Timestamp/datetime are stored as dt64 array
     if dtype in (
         bodo.pd_timestamp_type,

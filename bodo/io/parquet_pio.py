@@ -789,6 +789,7 @@ def _gen_pq_reader_py(
     def is_nullable(typ):
         return bodo.utils.utils.is_array_typ(typ, False) and (
             not isinstance(typ, types.Array)  # or is_dtype_nullable(typ.dtype)
+            and not isinstance(typ, bodo.DatetimeArrayType)
         )
 
     # we need to load the nullable check in the same order as select columns. To do
@@ -981,13 +982,41 @@ _pa_numba_typ_map = {
     pa.date32(): datetime_date_type,
     pa.date64(): types.NPDatetime("ns"),
     # time (TODO: time32, time64, ...)
-    pa.timestamp("ns"): types.NPDatetime("ns"),
-    pa.timestamp("us"): types.NPDatetime("ns"),
-    pa.timestamp("ms"): types.NPDatetime("ns"),
-    pa.timestamp("s"): types.NPDatetime("ns"),
     # all null column
     null(): string_type,  # map it to string_type, handle differently at runtime
+    # Timestamp information is computed in get_arrow_timestamp_type,
+    # so we don't store it in this dictionary.
 }
+
+
+def get_arrow_timestamp_type(pa_ts_typ):
+    """
+    Function used to determine the the proper Bodo type for various
+    Arrow timestamp types. This generates different types depending
+    on Timestamp values.
+
+    Returns:
+        - Bodo type
+        - Is the timestamp type supported. This is False if a timezone
+          or frequency cannot currently be supported.
+    """
+    supported_units = ("ns", "us", "ms", "s")
+    if pa_ts_typ.unit not in supported_units:
+        # Unsupported units get typed as numpy dt64 array but
+        # marked not supported.
+        return types.Array(bodo.datetime64ns, 1, "C"), False
+    elif pa_ts_typ.tz is not None:
+        # Timezones use the PandasDatetimeArrayType. Timezone information
+        # is stored in the Pandas type.
+        # List of timezones comes from:
+        # https://arrow.readthedocs.io/en/latest/index.html
+        # https://www.iana.org/time-zones
+        tz_type = pa_ts_typ.to_pandas_dtype().tz
+        tz_val = bodo.libs.pd_datetime_arr_ext.get_pytz_type_info(tz_type)
+        return bodo.DatetimeArrayType(tz_val), True
+    else:
+        # Without timezones Arrow ts arrays are converted to dt64 arrays.
+        return types.Array(bodo.datetime64ns, 1, "C"), True
 
 
 def _get_numba_typ_from_pa_typ(
@@ -1048,19 +1077,13 @@ def _get_numba_typ_from_pa_typ(
         )
         return CategoricalArrayType(cat_dtype), True
 
-    if pa_typ.type not in _pa_numba_typ_map:
-        # Timestamps with Timezones aren't supported inside Bodo. However,
-        # they can be safely typed with regular Timestamps. Later in distributed_pass
-        # for SQLReader and ParquetReader we check if these column still exist and
-        # only then raise an exception.
-        if isinstance(pa_typ.type, pa.lib.TimestampType) and pa_typ.type.tz is not None:
-            dtype = types.NPDatetime("ns")
-            supported = False
-        else:
-            raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
-    else:
+    if isinstance(pa_typ.type, pa.lib.TimestampType):
+        return get_arrow_timestamp_type(pa_typ.type)
+    elif pa_typ.type in _pa_numba_typ_map:
         dtype = _pa_numba_typ_map[pa_typ.type]
         supported = True
+    else:
+        raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
 
     if dtype == datetime_date_type:
         return datetime_date_array_type, supported

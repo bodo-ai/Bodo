@@ -2473,6 +2473,8 @@ def test_datetime_timestamp_conversion(datetime, memory_leak_check):
         pytest.param(lambda a, b: a >= b, id="ge"),
     ],
 )
-def test_datetime_compare_pd_timestamp(datetime, timestamp, comparison_impl, memory_leak_check):
+def test_datetime_compare_pd_timestamp(
+    datetime, timestamp, comparison_impl, memory_leak_check
+):
     check_func(comparison_impl, (datetime, timestamp))
     check_func(comparison_impl, (timestamp, datetime))

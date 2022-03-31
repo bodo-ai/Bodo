@@ -3222,6 +3222,7 @@ def common_validate_merge_merge_asof_spec(
         IntegerArrayType,
         DecimalArrayType,
         IntervalArrayType,
+        bodo.DatetimeArrayType,
     )
     valid_dataframe_column_insts = {
         string_array_type,
