@@ -602,8 +602,14 @@ def _gen_sql_reader_py(
             )
 
             def is_nullable(typ):  # TODO refactor
-                return bodo.utils.utils.is_array_typ(typ, False) and (
-                    not isinstance(typ, types.Array)  # or is_dtype_nullable(typ.dtype)
+                return (
+                    bodo.utils.utils.is_array_typ(typ, False)
+                    and (
+                        not isinstance(
+                            typ, types.Array
+                        )  # or is_dtype_nullable(typ.dtype)
+                    )
+                    and not isinstance(typ, bodo.DatetimeArrayType)
                 )
 
             nullable_cols = [int(is_nullable(c_typ)) for c_typ in col_typs]

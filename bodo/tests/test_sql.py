@@ -20,7 +20,6 @@ from bodo.tests.utils import (
     reduce_sum,
     sql_user_pass_and_hostname,
 )
-from bodo.utils.typing import BodoError
 
 
 @pytest.mark.parametrize(
@@ -599,13 +598,10 @@ def test_sql_snowflake_json_url(memory_leak_check):
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
-def test_snowflake_unsupported_timezones(memory_leak_check):
+def test_snowflake_timezones(memory_leak_check):
     """
     Tests trying to read Arrow timestamp columns with
-    timezones using Bodo + Snowflake. Bodo doesn't support timezones,
-    so this verifies that if the column can be safely
-    removed as dead code, Bodo succeeds, but if the column
-    is still alive then Bodo throws a compile time error.
+    timezones using Bodo + Snowflake succeeds.
 
     Note: tz_test was manually created in our snowflake account.
     """
@@ -613,25 +609,21 @@ def test_snowflake_unsupported_timezones(memory_leak_check):
     def test_impl1(query, conn_str):
         """
         read_sql that should succeed
-        because there are no tz columns.
+        and filters out tz columns.
         """
         df = pd.read_sql(query, conn_str)
         return df.b
 
-    @bodo.jit
     def test_impl2(query, conn_str):
         """
-        Read parquet that should fail
-        because there are tz columns.
+        Read parquet loading a single tz column.
         """
         df = pd.read_sql(query, conn_str)
         return df.a
 
-    @bodo.jit
     def test_impl3(query, conn_str):
         """
-        Read parquet that should fail
-        because there are tz columns.
+        Read parquet loading t columns.
         """
         df = pd.read_sql(query, conn_str)
         return df
@@ -645,22 +637,9 @@ def test_snowflake_unsupported_timezones(memory_leak_check):
     # Loading just the non-tz columns should suceed.
     check_func(test_impl1, (full_query, conn), check_dtype=False)
     check_func(test_impl1, (partial_query, conn), check_dtype=False)
-    # Loading the tz columns should fail
-    with pytest.raises(
-        BodoError,
-        match="1 or more columns found with Arrow types that are not supported",
-    ):
-        test_impl2(full_query, conn)
-    with pytest.raises(
-        BodoError,
-        match="1 or more columns found with Arrow types that are not supported",
-    ):
-        test_impl3(full_query, conn)
-    with pytest.raises(
-        BodoError,
-        match="1 or more columns found with Arrow types that are not supported",
-    ):
-        test_impl3(partial_query, conn)
+    check_func(test_impl2, (full_query, conn), check_dtype=False)
+    check_func(test_impl3, (full_query, conn), check_dtype=False)
+    check_func(test_impl3, (partial_query, conn), check_dtype=False)
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
