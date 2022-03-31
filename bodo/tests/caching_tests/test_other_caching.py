@@ -14,8 +14,7 @@ from bodo.tests.test_metadata import (  # noqa
 from bodo.tests.utils import InputDist, check_caching
 
 
-def test_groupby_agg_caching(fn_distribution, is_cached):
-    # TODO: investigate/fix memory leak check, see BE-1375
+def test_groupby_agg_caching(fn_distribution, is_cached, memory_leak_check):
     """Test compiling function that uses groupby.agg(udf) with cache=True
     and loading from cache"""
 
