@@ -174,8 +174,13 @@ cdef generic_aggregate_func(object traces_all):
                 # and we don't aggregate string values
                 continue
             values = np.array([t["args"][arg] for t in traces_all])
-            aggregate_helper(values, arg, result)
-            del result["args"][arg]
+            try:
+                aggregate_helper(values, arg, result)
+                del result["args"][arg]
+            except:
+                if "tracing_errors" not in result["args"]:
+                    result["args"]["tracing_errors"] = []
+                result["args"]["tracing_errors"].append(f"aggregate error {arg}")
         convert_np_scalars_to_python(result)
     return result
 
