@@ -311,15 +311,18 @@ class ParquetReader : public ArrowDataframeReader {
         // Keeping a reference to the dataset and deleting it in the last place
         // seems to help, but the problem can still occur, so this needs
         // further investigation,
+        tracing::Event ev_get_scanner_batches("get_scanner_batches");
         PyObject* dataset_batches_tup = PyObject_CallMethod(
-            pq_mod, "get_scanner_batches", "OOOdiOssO", fnames_list_py,
+            pq_mod, "get_scanner_batches", "OOOdiOssOll", fnames_list_py,
             expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
             storage_options, bucket_region.c_str(), prefix.c_str(),
-            str_as_dict_cols_py);
+            str_as_dict_cols_py, this->start_row_first_piece, this->count);
+        ev_get_scanner_batches.finalize();
         // PyTuple_GetItem returns a borrowed reference
         PyObject* dataset = PyTuple_GetItem(dataset_batches_tup, 0);
         Py_INCREF(dataset);  // call incref to keep the reference
         PyObject* batches_it = PyTuple_GetItem(dataset_batches_tup, 1);
+        rows_to_skip = PyLong_AsLong(PyTuple_GetItem(dataset_batches_tup, 2));
         Py_DECREF(pq_mod);
         Py_DECREF(expr_filters);
         Py_DECREF(selected_fields_py);
