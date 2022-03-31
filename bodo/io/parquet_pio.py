@@ -1426,7 +1426,7 @@ def get_parquet_dataset(
         else:
             filesystem = getfs()
         # Presumably the work is partitioned more or less equally among ranks,
-        # and we are mostly (or just) reading metadata, so we assign two IO
+        # and we are mostly (or just) reading metadata, so we assign four IO
         # threads to every rank
         pa.set_io_thread_count(4)
         pa.set_cpu_count(4)
@@ -1575,6 +1575,8 @@ def get_scanner_batches(
     region,
     prefix,  # examples: "hdfs://localhost:9000", "abfs://demo@bododemo.dfs.core.windows.net"
     str_as_dict_cols,
+    start_offset,  # starting row offset in the pieces this process is going to read
+    rows_to_read,  # total number of rows this process is going to read
 ):
     """return RecordBatchReader for dataset of 'fpaths' that contain the rows
     that match expr_filters (or all rows if expr_filters is None). Only project the
@@ -1627,11 +1629,71 @@ def get_scanner_batches(
     )
     col_names = dataset.schema.names
     selected_names = [col_names[field_num] for field_num in selected_fields]
+
+    # ------- row group filtering -------
+    # Ranks typically will not read all the row groups from their list of
+    # files (they will skip some rows at the beginning of the first file and
+    # some rows at the end of the last one).
+    # To make sure this rank only reads from the minimum necessary row groups,
+    # we can create a new dataset object composed of row group fragments
+    # instead of file fragments. We need to do it like this because Arrow's
+    # scanner doesn't support skipping rows.
+    # For this approach, we need to get row group metadata which can be very
+    # expensive when reading from remote filesystems. Also, row group filtering
+    # typically only benefits when the rank reads from a small set of files
+    # (since the filtering only applies to the first and last file).
+    # So we only filter based on this heuristic:
+    # Filter row groups if the list of files is very small, or if it is <= 10
+    # and this rank needs to skip rows of the first file
+    filter_row_groups = len(fpaths) <= 3 or (start_offset > 0 and len(fpaths) <= 10)
+    if filter_row_groups and (expr_filters is None):
+        # TODO see if getting row counts with filter pushdown could be worthwhile
+        # in some specific cases, and integrate that into the above heuristic
+        new_frags = []
+        # total number of rows of all the row groups we iterate through
+        count_rows = 0
+        # track total rows that this rank will read from row groups we iterate
+        # through
+        rows_added = 0
+        for frag in dataset.get_fragments():  # each fragment is a parquet file
+            # For reference, this is basically the same logic as in
+            # ArrowDataframeReader::init() and just adapted from there.
+            # Get the file's row groups that this rank will read from
+            row_group_ids = []
+            for rg in frag.row_groups:
+                num_rows_rg = rg.num_rows
+                if start_offset < count_rows + num_rows_rg:
+                    # rank needs to read from this row group
+                    if rows_added == 0:
+                        # this is the first row group the rank will read from
+                        start_row_first_rg = start_offset - count_rows
+                        rows_added_from_rg = min(
+                            num_rows_rg - start_row_first_rg, rows_to_read
+                        )
+                    else:
+                        rows_added_from_rg = min(num_rows_rg, rows_to_read - rows_added)
+                    rows_added += rows_added_from_rg
+                    row_group_ids.append(rg.id)
+                count_rows += num_rows_rg
+                if rows_added == rows_to_read:
+                    break
+            # XXX frag.subset(row_group_ids) is expensive on remote filesystems
+            # with datasets composed of many files and row groups
+            new_frags.append(frag.subset(row_group_ids=row_group_ids))
+            if rows_added == rows_to_read:
+                break
+        dataset = ds.FileSystemDataset(
+            new_frags, dataset.schema, pq_format, filesystem=dataset.filesystem
+        )
+        # The starting offset the Parquet reader knows about is from the first
+        # file, not the first row group, so we need to communicate this back to C++
+        start_offset = start_row_first_rg
+
     # TODO: use threads only for s3?
     reader = dataset.scanner(
         columns=selected_names, filter=expr_filters, use_threads=True
     ).to_reader()
-    return dataset, reader
+    return dataset, reader, start_offset
 
 
 def _add_categories_to_pq_dataset(pq_dataset):
