@@ -47,7 +47,6 @@ from bodo.utils.typing import (
     is_overload_int,
     is_overload_none,
     raise_bodo_error,
-    raise_const_error,
 )
 
 
@@ -243,7 +242,7 @@ def _handle_default_min_periods(min_periods, window):  # pragma: no cover
 
 @overload(_handle_default_min_periods)
 def overload_handle_default_min_periods(min_periods, window):
-    """ handle default values for the min_periods kwarg. """
+    """handle default values for the min_periods kwarg."""
     if is_overload_none(min_periods):
         # return win_size if fixed, or 1 if win_type is variable
         if isinstance(window, types.Integer):
@@ -608,7 +607,7 @@ class GetItemDataFrameRolling2(AbstractTemplate):
             series_select = False
             if isinstance(idx, (tuple, list)):
                 if len(set(idx).difference(set(columns))) > 0:  # pragma: no cover
-                    raise_const_error(
+                    raise_bodo_error(
                         "rolling: selected column {} not found in dataframe".format(
                             set(idx).difference(set(columns))
                         )
@@ -616,7 +615,7 @@ class GetItemDataFrameRolling2(AbstractTemplate):
                 selection = list(idx)
             else:
                 if idx not in columns:  # pragma: no cover
-                    raise_const_error(
+                    raise_bodo_error(
                         "rolling: selected column {} not found in dataframe".format(idx)
                     )
                 selection = [idx]

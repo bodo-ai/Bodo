@@ -84,7 +84,6 @@ from bodo.utils.typing import (
     is_overload_true,
     list_cumulative,
     raise_bodo_error,
-    raise_const_error,
     to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import dt_err, is_expr
@@ -163,7 +162,7 @@ def validate_udf(func_name, func):
             CPUDispatcher,
         ),
     ):
-        raise_const_error(f"Groupby.{func_name}: 'func' must be user defined function")
+        raise_bodo_error(f"Groupby.{func_name}: 'func' must be user defined function")
 
 
 @intrinsic
@@ -232,7 +231,7 @@ class StaticGetItemDataFrameGroupBy(AbstractTemplate):
             series_select = False
             if isinstance(idx, (tuple, list)):
                 if len(set(idx).difference(set(grpby.df_type.columns))) > 0:
-                    raise_const_error(
+                    raise_bodo_error(
                         "groupby: selected column {} not found in dataframe".format(
                             set(idx).difference(set(grpby.df_type.columns))
                         )
@@ -240,7 +239,7 @@ class StaticGetItemDataFrameGroupBy(AbstractTemplate):
                 selection = idx
             else:
                 if idx not in grpby.df_type.columns:
-                    raise_const_error(
+                    raise_bodo_error(
                         "groupby: selected column {} not found in dataframe".format(idx)
                     )
                 selection = (idx,)
@@ -800,7 +799,7 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
 
         # make sure selected columns exist in dataframe
         if any(c not in grp.selection and c not in grp.keys for c in in_col_names):
-            raise_const_error(
+            raise_bodo_error(
                 f"Selected column names {in_col_names} not all available in dataframe column names {grp.selection}"
             )
 
@@ -1475,7 +1474,7 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
         if self._is_existing_attr(attr):
             return
         if attr not in grpby.df_type.columns:
-            raise_const_error(
+            raise_bodo_error(
                 f"groupby: invalid attribute {attr} (column not found in dataframe or unsupported function)"
             )
         return DataFrameGroupByType(
