@@ -355,6 +355,7 @@ def _to_readonly(t):
         TimedeltaIndexType,
     )
 
+    # TODO: Support the readonly flag on DatetimeIndexType with tz-aware data.
     # TODO(ehsan): add support for other index/array types
 
     if isinstance(t, CategoricalArrayType):
@@ -729,6 +730,12 @@ def cat_replace(arr, to_replace, value):  # pragma: no cover
 
 @overload(cat_replace, no_unliteral=True)
 def cat_replace_overload(arr, to_replace, value):
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        to_replace, "CategoricalArray.replace()"
+    )
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        value, "CategoricalArray.replace()"
+    )
     _ordered = arr.dtype.ordered
     _elem_type = arr.dtype.elem_type
 

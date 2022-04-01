@@ -346,6 +346,9 @@ def _get_snowflake_sql_literal_scalar(filter_value):
     This is in a separate function to enable recursion.
     """
     filter_type = types.unliteral(filter_value)
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        filter_type, "Filter pushdown"
+    )
     if filter_type == types.unicode_type:
         # Strings require double $$ to avoid escape characters
         # https://docs.snowflake.com/en/sql-reference/data-types-text.html#dollar-quoted-string-constants

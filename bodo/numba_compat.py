@@ -3109,6 +3109,9 @@ def resolve_number___call__(self, classty):
     if isinstance(ty, types.NPDatetime):
 
         def typer(val1, val2):
+            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+                val1, "numpy.datetime64"
+            )
             if val1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
                 if not is_overload_constant_str(val2):
                     raise_bodo_error(

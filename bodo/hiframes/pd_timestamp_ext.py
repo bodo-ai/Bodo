@@ -134,6 +134,44 @@ class PandasTimestampType(types.Type):
 pd_timestamp_type = PandasTimestampType()
 
 
+def check_tz_aware_unsupported(val, func_name):
+    """
+    Checks if Timestamp, Array, DatetimeIndex, Series, or Series.dt
+    if Timezone-aware but the intended operation doesn't support it.
+
+    Raises an exception indicating the user must convert to timezone-naive
+    """
+    if isinstance(val, bodo.hiframes.series_dt_impl.SeriesDatetimePropertiesType):
+        val = val.stype
+
+    if isinstance(val, PandasTimestampType) and val.tz is not None:
+        raise BodoError(
+            f"{func_name} on Timezone-aware timestamp not yet supported. Please convert to timezone naive with ts.tz_convert(None)"
+        )
+    elif isinstance(val, bodo.DatetimeArrayType):
+        raise BodoError(
+            f"{func_name} on Timezone-aware array not yet supported. Please convert to timezone naive with arr.tz_convert(None)"
+        )
+    elif isinstance(val, bodo.DatetimeIndexType) and isinstance(
+        val.data, bodo.DatetimeArrayType
+    ):
+        raise BodoError(
+            f"{func_name} on Timezone-aware index not yet supported. Please convert to timezone naive with index.tz_convert(None)"
+        )
+    elif isinstance(val, bodo.SeriesType) and isinstance(
+        val.data, bodo.DatetimeArrayType
+    ):
+        raise BodoError(
+            f"{func_name} on Timezone-aware series not yet supported. Please convert to timezone naive with series.dt.tz_convert(None)"
+        )
+    elif isinstance(val, bodo.DataFrameType):
+        for arr_typ in val.data:
+            if isinstance(arr_typ, bodo.DatetimeArrayType):
+                raise BodoError(
+                    f"{func_name} on Timezone-aware columns not yet supported. Please convert each column to timezone naive with series.dt.tz_convert(None)"
+                )
+
+
 @typeof_impl.register(pd.Timestamp)
 def typeof_pd_timestamp(val, c):
     return PandasTimestampType(get_pytz_type_info(val.tz) if val.tz else None)
@@ -1838,7 +1876,7 @@ def overload_to_datetime(
 
     # Timestamp input. This ignores other fields and just returns Timestamp
     # TODO: Support useful fields like unit without objmode
-    if arg_a == pd_timestamp_type:
+    if isinstance(arg_a, PandasTimestampType):
 
         def impl_timestamp(
             arg_a,
@@ -2096,6 +2134,7 @@ def toordinal(date):
 # https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timedeltas.pyx#L1219
 def overload_freq_methods(method):
     def freq_overload(td, freq, ambiguous="raise", nonexistent="raise"):
+        check_tz_aware_unsupported(td, f"Timestamp.{method}()")
         unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
         floor_defaults = dict(ambiguous="raise", nonexistent="raise")
         check_unsupported_args(
@@ -2320,6 +2359,8 @@ def overload_add_operator_timestamp(lhs, rhs):
 
 @overload(min, no_unliteral=True)
 def timestamp_min(lhs, rhs):
+    check_tz_aware_unsupported(lhs, f"Timestamp.min()")
+    check_tz_aware_unsupported(rhs, f"Timestamp.min()")
     if lhs == pd_timestamp_type and rhs == pd_timestamp_type:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -2330,6 +2371,8 @@ def timestamp_min(lhs, rhs):
 
 @overload(max, no_unliteral=True)
 def timestamp_max(lhs, rhs):
+    check_tz_aware_unsupported(lhs, f"Timestamp.max()")
+    check_tz_aware_unsupported(rhs, f"Timestamp.max()")
     if lhs == pd_timestamp_type and rhs == pd_timestamp_type:
 
         def impl(lhs, rhs):  # pragma: no cover

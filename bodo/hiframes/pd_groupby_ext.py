@@ -104,6 +104,9 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
         explicit_select=False,
         series_select=False,
     ):
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+            df_type, "pandas.groupby()"
+        )
 
         self.df_type = df_type
         self.keys = keys
@@ -2002,7 +2005,7 @@ dataframe_only_unsupported = {
 }
 
 
-def _install_groupy_unsupported():
+def _install_groupby_unsupported():
     """install an overload that raises BodoError for unsupported methods of GroupBy,
     DataFrameGroupBy, and SeriesGroupBy types
     """
@@ -2035,4 +2038,4 @@ def _install_groupy_unsupported():
         )
 
 
-_install_groupy_unsupported()
+_install_groupby_unsupported()

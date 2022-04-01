@@ -441,6 +441,7 @@ def overload_coerce_to_array(
             bodo.libs.struct_arr_ext.StructArrayType,
             bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
             bodo.libs.csr_matrix_ext.CSRMatrixType,
+            bodo.DatetimeArrayType,
         ),
     ):
         return (
@@ -529,7 +530,14 @@ def overload_coerce_to_array(
         return impl_str
 
     # Convert list of Timestamps to dt64 array
-    if isinstance(data, types.List) and data.dtype == bodo.pd_timestamp_type:
+    if isinstance(data, types.List) and isinstance(
+        data.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
+    ):
+
+        # Currently only support tz naive. Need an allocation function.
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+            data, "coerce_to_array()"
+        )
 
         def impl_list_timestamp(
             data,
@@ -563,6 +571,12 @@ def overload_coerce_to_array(
             return A
 
         return impl_list_timedelta
+
+    if isinstance(data, bodo.hiframes.pd_timestamp_ext.PandasTimestampType):
+        # Currently only support tz naive. Need an allocation function.
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+            data, "coerce_to_array()"
+        )
 
     # Timestamp/Timedelta scalars to array
     if not is_overload_none(scalar_to_arr_len) and data in [
@@ -628,6 +642,7 @@ def overload_fix_arr_dtype(
     operations where the casting behavior changes depending on if the input is a Series
     or an Array (specifically, S.astype(str) vs S.values.astype(str))
     """
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "fix_arr_dtype()")
     do_copy = is_overload_true(copy)
 
     # If the new dtype is "object", we treat it as a no-op.
@@ -1246,6 +1261,7 @@ def overload_index_from_array(data, name=None):
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_binary_str_index(
             decode_if_dict_array(data), name
         )  # pragma: no cover
+
     if (
         data == bodo.hiframes.datetime_date_ext.datetime_date_array_type
         or data.dtype == types.NPDatetime("ns")

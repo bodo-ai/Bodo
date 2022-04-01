@@ -359,8 +359,8 @@ def gen_dti_field_impl(field):
     # func_text += "        if bodo.libs.array_kernels.isna(A, i):\n"
     # func_text += "            bodo.libs.array_kernels.setna(S, i)\n"
     # func_text += "            continue\n"
-    func_text += "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])\n"
-    func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
+    func_text += "        val = A[i]\n"
+    func_text += "        ts = bodo.utils.conversion.box_if_dt64(val)\n"
     if field in [
         "weekday",
     ]:
@@ -396,8 +396,8 @@ def overload_datetime_index_is_leap_year(dti):
         # TODO (ritwika): use nullable bool array.
         S = np.empty(n, np.bool_)
         for i in numba.parfors.parfor.internal_prange(n):
-            dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])
-            ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
+            val = A[i]
+            ts = bodo.utils.conversion.box_if_dt64(val)
             S[i] = bodo.hiframes.pd_timestamp_ext.is_leap_year(ts.year)
         return S
 
@@ -414,8 +414,8 @@ def overload_datetime_index_date(dti):
         n = len(A)
         S = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
         for i in numba.parfors.parfor.internal_prange(n):
-            dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(A[i])
-            ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
+            val = A[i]
+            ts = bodo.utils.conversion.box_if_dt64(val)
             S[i] = datetime.date(ts.year, ts.month, ts.day)
         return S
 
@@ -446,6 +446,7 @@ def overload_datetime_index_min(dti, axis=None, skipna=True):
         package_name="pandas",
         module_name="Index",
     )
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(dti, "Index.min()")
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -475,6 +476,7 @@ def overload_datetime_index_max(dti, axis=None, skipna=True):
         package_name="pandas",
         module_name="Index",
     )
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(dti, "Index.max()")
 
     def impl(dti, axis=None, skipna=True):  # pragma: no cover
         numba.parfors.parfor.init_prange()
@@ -524,6 +526,10 @@ def pd_datetimeindex_overload(
     # TODO: check/handle other input
     if is_overload_none(data):
         raise BodoError("data argument in pd.DatetimeIndex() expected")
+
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        data, "pandas.DatetimeIndex()"
+    )
 
     unsupported_args = dict(
         freq=freq,
@@ -658,6 +664,8 @@ def overload_binop_dti_str(op):
 @overload(pd.Index, inline="always", no_unliteral=True)
 def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_cols=True):
 
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "pandas.Index()")
+
     # Todo: support Categorical dtype, Interval dtype, Period dtype, MultiIndex (?)
     # Todo: Extension dtype (?)
 
@@ -756,13 +764,11 @@ def overload_datetime_index_getitem(dti, ind):
     # TODO: other getitem cases
     if isinstance(dti, DatetimeIndexType):
         if isinstance(ind, types.Integer):
-            # TODO: extract dti.tzval and use to init timestamp
+
             def impl(dti, ind):  # pragma: no cover
                 dti_arr = bodo.hiframes.pd_index_ext.get_index_data(dti)
-                dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(dti_arr[ind])
-                return bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
-                    dt64
-                )
+                val = dti_arr[ind]
+                return bodo.utils.conversion.box_if_dt64(val)
 
             return impl
         else:
@@ -1118,9 +1124,7 @@ def overload_pd_timestamp_isocalendar(idx):
                 years[i],
                 weeks[i],
                 days[i],
-            ) = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
-                A[i]
-            ).isocalendar()
+            ) = bodo.utils.conversion.box_if_dt64(A[i]).isocalendar()
         return bodo.hiframes.pd_dataframe_ext.init_dataframe(
             (years, weeks, days), idx, ("year", "week", "day")
         )
@@ -3058,6 +3062,9 @@ def array_type_to_index(arr_typ, name_typ=None):
     ):
         return DatetimeIndexType(name_typ)
 
+    if isinstance(arr_typ, bodo.DatetimeArrayType):
+        return DatetimeIndexType(name_typ, arr_typ)
+
     # categorical array
     if isinstance(arr_typ, bodo.CategoricalArrayType):
         return CategoricalIndexType(arr_typ, name_typ)
@@ -3197,6 +3204,9 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
 
     # Timestamp/Timedelta types are handled the same as datetime64/timedelta64
     key = types.unliteral(key)
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        I, "DatetimeIndex.get_loc"
+    )
     if key == pd_timestamp_type:
         key = bodo.datetime64ns
     if key == pd_timedelta_type:
@@ -3325,6 +3335,7 @@ _install_isna_specific_methods()
 @overload_attribute(DatetimeIndexType, "values")
 @overload_attribute(TimedeltaIndexType, "values")
 def overload_values(I):
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "Index.values")
     return lambda I: bodo.utils.conversion.coerce_to_array(I)  # pragma: no cover
 
 
@@ -3382,6 +3393,9 @@ def overload_index_is_montonic(I):
     Implementation of is_monotonic and is_monotonic_increasing attributes for Int64Index,
     UInt64Index, Float64Index, DatetimeIndex, TimedeltaIndex, and RangeIndex types.
     """
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        I, "Index.is_monotonic_increasing"
+    )
     if isinstance(I, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType)):
 
         def impl(I):  # pragma: no cover
@@ -3409,6 +3423,9 @@ def overload_index_is_montonic_decreasing(I):
     Implementation of is_monotonic_decreasing attribute for Int64Index,
     UInt64Index, Float64Index, DatetimeIndex, TimedeltaIndex, and RangeIndex.
     """
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        I, "Index.is_monotonic_decreasing"
+    )
     if isinstance(I, (NumericIndexType, DatetimeIndexType, TimedeltaIndexType)):
 
         def impl(I):  # pragma: no cover
@@ -3583,6 +3600,7 @@ def overload_index_map(I, mapper, na_action=None):
 
     dtype = I.dtype
     # getitem returns Timestamp for dt_index (TODO: pd.Timedelta when available)
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "DatetimeIndex.map")
     if dtype == types.NPDatetime("ns"):
         dtype = pd_timestamp_type
     if dtype == types.NPTimedelta("ns"):
@@ -4118,9 +4136,13 @@ def overload_heter_index_getitem(I, ind):  # pragma: no cover
 @lower_constant(TimedeltaIndexType)
 def lower_constant_time_index(context, builder, ty, pyval):
     """Constant lowering for DatetimeIndexType and TimedeltaIndexType."""
-    data = context.get_constant_generic(
-        builder, types.Array(types.int64, 1, "C"), pyval.values.view(np.int64)
-    )
+    if isinstance(ty.data, bodo.DatetimeArrayType):
+        # TODO [BE-2441]: Unify?
+        data = context.get_constant_generic(builder, ty.data, pyval.array)
+    else:
+        data = context.get_constant_generic(
+            builder, types.Array(types.int64, 1, "C"), pyval.values.view(np.int64)
+        )
     name = context.get_constant_generic(builder, ty.name_typ, pyval.name)
 
     # set the dictionary to null since we can't create it without memory leak (BE-2114)

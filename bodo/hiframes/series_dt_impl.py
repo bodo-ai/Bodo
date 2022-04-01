@@ -25,17 +25,11 @@ from bodo.hiframes.pd_series_ext import (
     get_series_name,
     init_series,
 )
-from bodo.libs.pd_datetime_arr_ext import (
-    DatetimeArrayType,
-    PandasDatetimeTZDtype,
-    init_pandas_datetime_array,
-)
+from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
     create_unsupported_overload,
-    get_overload_const_str,
-    is_overload_constant_str,
     raise_bodo_error,
 )
 
@@ -103,6 +97,9 @@ def create_date_field_overload(field):
             S_dt.stype.dtype, PandasDatetimeTZDtype
         ):  # pragma: no cover
             return
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+            S_dt, f"Series.dt.{field}"
+        )
         func_text = "def impl(S_dt):\n"
         func_text += "    S = S_dt._obj\n"
         func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
@@ -210,10 +207,9 @@ def create_date_method_overload(method):
         func_text += "    )\n"
     else:
         func_text = "def overload_method(S_dt):\n"
+        func_text += f"    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S_dt, 'Series.dt.{method}()')\n"
     # .dt methods only work on datetime64s"""
-    func_text += (
-        "    if not S_dt.stype.dtype == bodo.datetime64ns:\n"  # pragma: no cover
-    )
+    func_text += "    if not (S_dt.stype.dtype == bodo.datetime64ns or isinstance(S_dt.stype.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)):\n"  # pragma: no cover
     func_text += "        return\n"
     if is_str_method:
         func_text += "    def impl(S_dt, locale=None):\n"
@@ -233,7 +229,7 @@ def create_date_method_overload(method):
     func_text += "            if bodo.libs.array_kernels.isna(arr, i):\n"
     func_text += "                bodo.libs.array_kernels.setna(out_arr, i)\n"
     func_text += "                continue\n"
-    func_text += "            ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(arr[i])\n"
+    func_text += "            ts = bodo.utils.conversion.box_if_dt64(arr[i])\n"
     func_text += f"            method_val = ts.{method}()\n"
     if is_str_method:
         func_text += "            out_arr[i] = method_val\n"
@@ -262,7 +258,12 @@ _install_date_methods()
 
 @overload_attribute(SeriesDatetimePropertiesType, "date")
 def series_dt_date_overload(S_dt):
-    if not S_dt.stype.dtype == types.NPDatetime("ns"):  # pragma: no cover
+    if not (
+        S_dt.stype.dtype == types.NPDatetime("ns")
+        or isinstance(
+            S_dt.stype.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+        )
+    ):  # pragma: no cover
         return
 
     def impl(S_dt):  # pragma: no cover
@@ -274,8 +275,8 @@ def series_dt_date_overload(S_dt):
         n = len(arr)
         out_arr = bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
         for i in numba.parfors.parfor.internal_prange(n):
-            dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])
-            ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)
+            dt64_val = arr[i]
+            ts = bodo.utils.conversion.box_if_dt64(dt64_val)
             out_arr[i] = datetime.date(ts.year, ts.month, ts.day)
         #        S[i] = datetime.date(ts.year, ts.month, ts.day)\n'
         #        S[i] = ts.day + (ts.month << 16) + (ts.year << 32)\n'
@@ -286,11 +287,22 @@ def series_dt_date_overload(S_dt):
 
 def create_series_dt_df_output_overload(attr):
     def series_dt_df_output_overload(S_dt):
+
         if not (
             (attr == "components" and S_dt.stype.dtype == types.NPTimedelta("ns"))
-            or (attr == "isocalendar" and S_dt.stype.dtype == types.NPDatetime("ns"))
+            or (
+                attr == "isocalendar"
+                and (
+                    S_dt.stype.dtype == types.NPDatetime("ns")
+                    or isinstance(S_dt.stype.dtype, PandasDatetimeTZDtype)
+                )
+            )
         ):  # pragma: no cover
             return
+
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+            S_dt, f"Series.dt.{attr}"
+        )
 
         if attr == "components":
             fields = [
@@ -476,7 +488,12 @@ _install_S_dt_timedelta_methods()
     SeriesDatetimePropertiesType, "strftime", inline="always", no_unliteral=True
 )
 def dt_strftime(S_dt, date_format):
-    if S_dt.stype.dtype != types.NPDatetime("ns"):  # pragma: no cover
+    if not (
+        S_dt.stype.dtype == types.NPDatetime("ns")
+        or isinstance(
+            S_dt.stype.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+        )
+    ):  # pragma: no cover
         return
 
     if types.unliteral(date_format) != types.unicode_type:
@@ -496,9 +513,7 @@ def dt_strftime(S_dt, date_format):
             if bodo.libs.array_kernels.isna(A, j):
                 bodo.libs.array_kernels.setna(B, j)
                 continue
-            B[j] = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
-                A[j]
-            ).strftime(date_format)
+            B[j] = bodo.utils.conversion.box_if_dt64(A[j]).strftime(date_format)
         return bodo.hiframes.pd_series_ext.init_series(B, index, name)
 
     return impl
@@ -520,12 +535,17 @@ def overload_dt_tz_convert(S_dt, tz):
 
 def create_timedelta_freq_overload(method):
     def freq_overload(S_dt, freq, ambiguous="raise", nonexistent="raise"):
-        if S_dt.stype.dtype != types.NPTimedelta(
-            "ns"
-        ) and S_dt.stype.dtype != types.NPDatetime(
-            "ns"
+        if (
+            S_dt.stype.dtype != types.NPTimedelta("ns")
+            and S_dt.stype.dtype != types.NPDatetime("ns")
+            and not isinstance(
+                S_dt.stype.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+            )
         ):  # pragma: no cover
             return
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+            S_dt, f"Series.dt.{method}()"
+        )
         unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
         floor_defaults = dict(ambiguous="raise", nonexistent="raise")
         check_unsupported_args(

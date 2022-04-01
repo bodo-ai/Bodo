@@ -1023,6 +1023,15 @@ def get_index_type_from_dtype(t):
     if t in [bodo.hiframes.pd_timestamp_ext.pd_timestamp_type, bodo.datetime64ns]:
         return DatetimeIndexType(types.none)
 
+    # Timezone-aware timestamp
+    if (
+        isinstance(t, bodo.hiframes.pd_timestamp_ext.PandasTimestampType)
+        and t.tz is not None
+    ):
+        return DatetimeIndexType(
+            types.none, bodo.libs.pd_datetime_arr_ext.DatetimeArrayType(t.tz)
+        )
+
     if t in [
         bodo.hiframes.datetime_timedelta_ext.pd_timedelta_type,
         bodo.timedelta64ns,
@@ -1437,6 +1446,10 @@ def get_udf_out_arr_type(f_return_type, return_nullable=False):
         f_return_type = f_return_type.type
         return_nullable = True
 
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        f_return_type, "Series.apply"
+    )
+
     # unbox Timestamp to dt64 in Series
     if f_return_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
         f_return_type = types.NPDatetime("ns")
@@ -1494,12 +1507,12 @@ def is_hashable_type(t):
         types.StringLiteral,
         types.UnicodeCharSeq,
         types.Number,
+        bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
     )
     whitelist_instances = (
         types.bool_,
         bodo.datetime64ns,
         bodo.timedelta64ns,
-        bodo.pd_timestamp_type,
         bodo.pd_timedelta_type,
     )
 
@@ -1564,7 +1577,15 @@ def is_scalar_type(t):
     """
     returns True if 't' is a scalar type like integer, boolean, string, ...
     """
-    return isinstance(t, (types.Boolean, types.Number, types.StringLiteral,)) or t in (
+    return isinstance(
+        t,
+        (
+            types.Boolean,
+            types.Number,
+            types.StringLiteral,
+            bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
+        ),
+    ) or t in (
         bodo.datetime64ns,
         bodo.timedelta64ns,
         bodo.string_type,
@@ -1572,7 +1593,6 @@ def is_scalar_type(t):
         bodo.datetime_date_type,
         bodo.datetime_datetime_type,
         bodo.datetime_timedelta_type,
-        bodo.pd_timestamp_type,
         bodo.pd_timedelta_type,
         bodo.month_end_type,
         bodo.week_type,

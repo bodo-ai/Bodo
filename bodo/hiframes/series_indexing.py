@@ -106,6 +106,8 @@ def overload_series_iat_getitem(I, idx):
         if not isinstance(types.unliteral(idx), types.Integer):
             raise BodoError("iAt based indexing can only have integer indexers")
 
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "Series.iat")
+
         # box dt64 to timestamp
         if I.stype.dtype == types.NPDatetime("ns"):
             return lambda I, idx: convert_datetime64_to_timestamp(

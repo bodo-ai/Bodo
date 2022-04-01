@@ -663,6 +663,7 @@ def overload_alloc_type(n, t, s=None):
     needed for allocation.
     """
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(typ, "bodo.alloc_type()")
 
     # NOTE: creating regular string array for dictionary-encoded strings to get existing
     # code that doesn't support dict arr to work
@@ -888,6 +889,12 @@ def tuple_list_to_array(A, data, elem_type):
     """
     elem_type = (
         elem_type.instance_type if isinstance(elem_type, types.TypeRef) else elem_type
+    )
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        A, "tuple_list_to_array()"
+    )
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        elem_type, "tuple_list_to_array()"
     )
     func_text = "def impl(A, data, elem_type):\n"
     func_text += "  for i, d in enumerate(data):\n"
