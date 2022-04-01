@@ -1,5 +1,8 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
+import re
+
+import numpy as np
 import pandas as pd
 import pytest
 import pytz
@@ -112,3 +115,95 @@ def test_timestamp_tz_ts_input():
             tz_str,
         ),
     )
+
+
+def test_tz_timestamp_unsupported():
+    def impl(ts):
+        return max(ts, ts)
+
+    non_tz_ts = pd.Timestamp("2020-01-01")
+    tz_ts = pd.Timestamp("2020-01-01", tz="US/Eastern")
+
+    check_func(impl, (non_tz_ts,))
+
+    with pytest.raises(
+        BodoError,
+        match=".*Timezone-aware timestamp not yet supported.*",
+    ):
+        bodo.jit(impl)(tz_ts)
+
+
+def test_tz_datetime_arr_unsupported():
+    def impl(arr):
+        return np.hstack([arr, arr])
+
+    non_tz_arr = pd.array([pd.Timestamp("2020-01-01")] * 10)
+    tz_arr = pd.array([pd.Timestamp("2020-01-01", tz="US/Eastern")] * 10)
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "Cannot support timezone naive pd.arrays.DatetimeArray. Please convert to a numpy array with .astype('datetime64[ns]')"
+        ),
+    ):
+        bodo.jit(impl)(non_tz_arr)
+
+    with pytest.raises(
+        BodoError,
+        match=".*Timezone-aware array not yet supported.*",
+    ):
+        bodo.jit(impl)(tz_arr)
+
+
+def test_tz_index_unsupported():
+    def impl(idx):
+        return idx.min()
+
+    non_tz_idx = pd.date_range("2020-01-01", periods=10)
+    tz_idx = pd.date_range("2020-01-01", periods=10, tz="US/Eastern")
+
+    check_func(impl, (non_tz_idx,))
+
+    with pytest.raises(
+        BodoError,
+        match=".*Timezone-aware index not yet supported.*",
+    ):
+        bodo.jit(impl)(tz_idx)
+
+
+def test_tz_series_unsupported():
+    def impl(s):
+        return s.dtype
+
+    non_tz_s = pd.Series([pd.Timestamp(f"2020-01-0{i}") for i in range(1, 10)])
+    tz_s = pd.Series(
+        [pd.Timestamp(f"2020-01-0{i}", tz="US/Eastern") for i in range(1, 10)]
+    )
+
+    check_func(impl, (non_tz_s,))
+
+    with pytest.raises(
+        BodoError,
+        match=".*Timezone-aware series not yet supported.*",
+    ):
+        bodo.jit(impl)(tz_s)
+
+
+def test_tz_dataframe_unsupported(memory_leak_check):
+    def impl(df):
+        return df.astype("int64")
+
+    non_tz_df = pd.DataFrame(
+        {"a": [pd.Timestamp("2020-01-01")] * 10},
+    )
+    tz_df = pd.DataFrame(
+        {"a": [pd.Timestamp("2020-01-01", tz="US/Eastern")] * 10},
+    )
+
+    check_func(impl, (non_tz_df,))
+
+    with pytest.raises(
+        BodoError,
+        match=".*Timezone-aware columns not yet supported.*",
+    ):
+        bodo.jit(impl)(tz_df)

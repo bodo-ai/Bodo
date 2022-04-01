@@ -62,6 +62,14 @@ class RollingType(types.Type):
         explicit_select=False,
         series_select=False,
     ):
+        if isinstance(obj_type, bodo.SeriesType):
+            name = "Series"
+        else:
+            name = "DataFrame"
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+            obj_type, f"{name}.rolling()"
+        )
+
         # obj_type can be either Series or DataFrame
         self.obj_type = obj_type
         self.window_type = window_type

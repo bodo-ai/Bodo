@@ -874,10 +874,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
     # Index types
     if bodo.hiframes.pd_index_ext.is_pd_index_type(data):
-        from bodo.hiframes.pd_index_ext import (
-            DatetimeIndexType,
-            PeriodIndexType,
-        )
+        from bodo.hiframes.pd_index_ext import PeriodIndexType
 
         if isinstance(data, PeriodIndexType):
             freq = data.freq
@@ -1674,6 +1671,7 @@ def scatterv_overload(data, send_counts=None, warn_if_dist=True):
     bodo.hiframes.pd_dataframe_ext.check_runtime_cols_unsupported(
         data, "bodo.scatterv()"
     )
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "bodo.scatterv()")
     return lambda data, send_counts=None, warn_if_dist=True: scatterv_impl(
         data, send_counts
     )  # pragma: no cover
@@ -2166,6 +2164,7 @@ def bcast_overload(data, root=MPI_ROOT):
     """broadcast array from rank root. 'data' array is assumed to be pre-allocated in
     non-root ranks.
     """
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "bodo.bcast()")
     # numpy arrays
     if isinstance(data, types.Array):
 

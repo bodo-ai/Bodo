@@ -576,6 +576,9 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         # e.g. dt64 to timestamp in TestDate.test_ts_map_date2
         dtypes = []
         for arr_typ in df.data:
+            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+                arr_typ, "DataFrame.apply()"
+            )
             series_typ = SeriesType(arr_typ.dtype, arr_typ, df.index, string_type)
             # iloc necessary since Series getitem may not be supported for df.index
             el_typ = self.context.resolve_function_type(
@@ -598,6 +601,9 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         )
         data_type = types.BaseTuple.from_types(dtypes)
         name_dtype = df.index.dtype
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+            df.index, "DataFrame.apply()"
+        )
         if name_dtype == types.NPDatetime("ns"):
             name_dtype = bodo.pd_timestamp_type
         if name_dtype == types.NPTimedelta("ns"):
@@ -1722,7 +1728,16 @@ def lower_constant_dataframe(context, builder, df_type, pyval):
     """
     check_runtime_cols_unsupported(df_type, "lowering a constant DataFrame")
     n_cols = len(pyval.columns)
-    data_arrs = tuple(pyval.iloc[:, i].values for i in range(n_cols))
+    data_arrs = []
+    for i in range(n_cols):
+        col = pyval.iloc[:, i]
+        if isinstance(df_type.data[i], bodo.DatetimeArrayType):
+            # TODO [BE-2441]: Unify?
+            py_arr = col.array
+        else:
+            py_arr = col.values
+        data_arrs.append(py_arr)
+    data_arrs = tuple(data_arrs)
 
     if df_type.is_table_format:
         table = context.get_constant_generic(
@@ -2708,7 +2723,10 @@ def concat_overload(
         names = []
         for i, obj in enumerate(objs.types):
             assert isinstance(obj, (SeriesType, DataFrameType))
-            check_runtime_cols_unsupported(obj, "pd.concat()")
+            check_runtime_cols_unsupported(obj, "pandas.concat()")
+            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+                obj, "pandas.concat()"
+            )
             if isinstance(obj, SeriesType):
                 # TODO: use Series name if possible
                 names.append(str(col_no))
@@ -2738,7 +2756,10 @@ def concat_overload(
         # get output column names
         all_colnames = []
         for df in objs.types:
-            check_runtime_cols_unsupported(df, "pd.concat()")
+            check_runtime_cols_unsupported(df, "pandas.concat()")
+            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+                df, "pandas.concat()"
+            )
             all_colnames.extend(df.columns)
 
         # remove duplicates but keep original order
@@ -2825,7 +2846,10 @@ def concat_overload(
 
     # list of dataframes
     if isinstance(objs, types.List) and isinstance(objs.dtype, DataFrameType):
-        check_runtime_cols_unsupported(objs.dtype, "pd.concat()")
+        check_runtime_cols_unsupported(objs.dtype, "pandas.concat()")
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+            objs.dtype, "pandas.concat()"
+        )
         # TODO(ehsan): index
         df_type = objs.dtype
         for col_no, c in enumerate(df_type.columns):

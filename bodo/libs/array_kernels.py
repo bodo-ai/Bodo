@@ -51,6 +51,7 @@ from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import DictionaryArrayType
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.libs.str_arr_ext import str_arr_set_na, string_array_type
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
@@ -159,6 +160,10 @@ def overload_isna(arr, i):
             arr._data, arr._indices[i]
         )  # pragma: no cover
 
+    # Pandas Datetime Array
+    if isinstance(arr, DatetimeArrayType):
+        return lambda arr, i: np.isnat(arr._data[i])  # pragma: no cover
+
     # TODO: extend to other types (which ones are missing?)
     assert isinstance(arr, types.Array), f"Invalid array type in isna(): {arr}"
 
@@ -188,6 +193,15 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         def _setnan_impl(arr, ind, int_nan_const=0):  # pragma: no cover
             arr[ind] = nat
+
+        return _setnan_impl
+
+    if isinstance(arr, DatetimeArrayType):
+
+        nat = bodo.datetime64ns("NaT")
+
+        def _setnan_impl(arr, ind, int_nan_const=0):  # pragma: no cover
+            arr._data[ind] = nat
 
         return _setnan_impl
 
@@ -1089,6 +1103,7 @@ def overload_dropna(data, how, thresh, subset):
     """drop NA rows in tuple of arrays 'data'. 'subset' is the index numbers of arrays
     to consider for NA check. 'how' and 'thresh' are the same as df.dropna().
     """
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "bodo.dropna()")
 
     n_data_arrs = len(data.types)
     out_names = ["out" + str(i) for i in range(n_data_arrs)]
@@ -1216,6 +1231,10 @@ def concat(arr_list):  # pragma: no cover
 
 @overload(concat, no_unliteral=True)
 def concat_overload(arr_list):
+
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        arr_list.dtype, "bodo.concat()"
+    )
 
     # TODO: Support actually handling the possibles null values
     if isinstance(arr_list, bodo.NullableTupleType):
@@ -2064,6 +2083,9 @@ def resize_and_copy(A, new_len):  # pragma: no cover
 @overload(resize_and_copy, no_unliteral=True)
 def overload_resize_and_copy(A, old_size, new_len):
     """allocate a new array (same type as 'A') and copy data of array 'A'"""
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        A, "bodo.resize_and_copy()"
+    )
 
     _dtype = A
 
@@ -2261,6 +2283,8 @@ def nonzero(arr):
 
 @overload(nonzero, no_unliteral=True)
 def nonzero_overload(A, parallel=False):
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "bodo.nonzero()")
+
     if not bodo.utils.utils.is_array_typ(A, False):  # pragma: no cover
         return
 
@@ -2294,6 +2318,10 @@ def ffill_bfill_overload(A, method, parallel=False):
     If method is 'ffill' or 'pad',  forward fills NA arguments, i.e. propagates last valid value.
     Otherwise, it backward fills NA arguments, i.e. uses the next valid observation to fill gap.
     """
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        A, "bodo.ffill_bfill_arr()"
+    )
+
     _dtype = element_type(A)
 
     # This function assumes _dtype error checking is done by calling function.
@@ -2473,6 +2501,8 @@ def repeat_kernel(A, repeats):  # pragma: no cover
 @overload(repeat_kernel, no_unliteral=True)
 def repeat_kernel_overload(A, repeats):
     """kernel for repeating array values (for Series.repeat)"""
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "Series.repeat()")
+
     _dtype = to_str_arr_if_dict_array(A)
 
     # int case
@@ -2733,6 +2763,8 @@ def overload_np_linspace_get_stepsize(start, stop, num, endpoint):
 
 @overload(operator.contains, no_unliteral=True)
 def arr_contains(A, val):
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "np.contains()")
+
     # TODO: Add support for types with different width. i.e. int64 and int16
     if not (
         bodo.utils.utils.is_array_typ(A, False) and A.dtype == types.unliteral(val)
@@ -2753,6 +2785,8 @@ def arr_contains(A, val):
 
 @overload(np.any, inline="always", no_unliteral=True)
 def np_any(A, axis=None, out=None, keepdims=None):
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "np.any()")
+
     if not (
         bodo.utils.utils.is_array_typ(A, False) and A.ndim == 1
     ):  # pragma: no cover
@@ -2776,6 +2810,8 @@ def np_any(A, axis=None, out=None, keepdims=None):
 
 @overload(np.all, inline="always", no_unliteral=True)
 def np_all(A, axis=None, out=None, keepdims=None):
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(A, "np.all()")
+
     if not (
         bodo.utils.utils.is_array_typ(A, False) and A.ndim == 1
     ):  # pragma: no cover
@@ -2909,11 +2945,18 @@ def np_hstack(tup):
     if isinstance(tup, types.BaseTuple):
         # Determine that each type is an array type
         for typ in tup.types:
+            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+                typ, "numpy.hstack()"
+            )
             # TODO: Add proper checking for if the arrays can be merged
             is_sequence = is_sequence and bodo.utils.utils.is_array_typ(typ, False)
     elif isinstance(tup, types.List):
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+            tup.dtype, "numpy.hstack()"
+        )
         is_sequence = bodo.utils.utils.is_array_typ(tup.dtype, False)
     elif is_series:
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(tup, "numpy.hstack()")
         # Replace nullable tuples with the underlying type
         tup_data_val = (
             tup.data.tuple_typ

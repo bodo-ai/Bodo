@@ -29,9 +29,9 @@ import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
-from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.io import csv_cpp
 from bodo.libs.int_arr_ext import IntDtype
+from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.utils.templates import OverloadedKeyAttributeTemplate
 from bodo.utils.transform import get_const_func_output_type
@@ -668,6 +668,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         dtype = ary.dtype
         # TODO(ehsan): use getitem resolve similar to df.apply?
         # getitem returns Timestamp for dt_index and series(dt64)
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(ary, "Series.map()")
         if dtype == types.NPDatetime("ns"):
             dtype = pd_timestamp_type
         # getitem returns Timedelta for td_index and series(td64)
@@ -838,6 +839,12 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         # get return type
         dtype1 = ary.dtype
         # getitem returns Timestamp for dt_index and series(dt64)
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+            ary, "Series.combine()"
+        )
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+            other, "Series.combine()"
+        )
         if dtype1 == types.NPDatetime("ns"):
             dtype1 = pd_timestamp_type
         dtype2 = other.dtype
@@ -865,6 +872,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
 
     @bound_function("series.pipe", no_unliteral=True)
     def resolve_pipe(self, ary, args, kws):
+        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(ary, "Series.pipe()")
         return bodo.hiframes.pd_groupby_ext.resolve_obj_pipe(
             self, ary, args, kws, "Series"
         )
@@ -1250,7 +1258,12 @@ def lower_constant_series(context, builder, series_type, pyval):
     """embed constant Series value by getting constant values for data array and
     Index.
     """
-    data_val = context.get_constant_generic(builder, series_type.data, pyval.values)
+    if isinstance(series_type.data, bodo.DatetimeArrayType):
+        # TODO [BE-2441]: Unify?
+        py_arr = pyval.array
+    else:
+        py_arr = pyval.values
+    data_val = context.get_constant_generic(builder, series_type.data, py_arr)
     index_val = context.get_constant_generic(builder, series_type.index, pyval.index)
     name_val = context.get_constant_generic(builder, series_type.name_typ, pyval.name)
 

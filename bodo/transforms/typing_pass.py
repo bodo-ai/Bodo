@@ -937,7 +937,10 @@ class TypingTransforms:
         list_set_typ = self.typemap.get(list_set_arg.name, None)
         require(
             isinstance(list_set_typ, (types.List, types.Set))
-            and list_set_typ.dtype not in (bodo.datetime64ns, bodo.pd_timestamp_type)
+            and list_set_typ.dtype != bodo.datetime64ns
+            and not isinstance(
+                list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
+            )
         )
         colname = self._get_col_name(call_list[1], df_var, func_ir)
         op = "in"
@@ -3833,11 +3836,12 @@ class TypingTransforms:
         list_set_typ = self.typemap.get(index_def.args[0].name, None)
         # We don't support casting pd_timestamp_type/datetime64 values in arrow, so we avoid
         # filter pushdown in that situation.
-        return isinstance(
-            list_set_typ, (types.List, types.Set)
-        ) and list_set_typ.dtype not in (
-            bodo.datetime64ns,
-            bodo.pd_timestamp_type,
+        return (
+            isinstance(list_set_typ, (types.List, types.Set))
+            and list_set_typ.dtype != bodo.datetime64ns
+            and not isinstance(
+                list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
+            )
         )
 
 

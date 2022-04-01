@@ -768,7 +768,10 @@ class SeriesPass:
             isinstance(rhs_type, SeriesDatetimePropertiesType)
             and rhs.attr not in timedelta_methods
         ):
-            if rhs_type.stype.dtype == types.NPDatetime("ns"):
+            if rhs_type.stype.dtype == types.NPDatetime("ns") or isinstance(
+                rhs_type.stype.dtype,
+                bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype,
+            ):
                 if rhs.attr == "date":
                     impl = bodo.hiframes.series_dt_impl.series_dt_date_overload(
                         rhs_type

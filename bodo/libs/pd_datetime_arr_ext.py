@@ -2,10 +2,8 @@
 """DatetimeArray extension for Pandas DatetimeArray with timezone support."""
 
 import operator
-from re import T
 
 import numba
-import numpy as np
 import pandas as pd
 import pytz
 from llvmlite import ir as lir
@@ -24,6 +22,7 @@ from numba.extending import (
     typeof_impl,
     unbox,
 )
+from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.utils.conversion import ensure_contig_if_np
@@ -31,9 +30,7 @@ from bodo.utils.typing import (
     BodoArrayIterator,
     BodoError,
     get_literal_value,
-    get_overload_const_bool,
     is_list_like_index_type,
-    is_overload_constant_bool,
     is_overload_constant_int,
     is_overload_constant_str,
     raise_bodo_error,
@@ -134,7 +131,14 @@ make_attribute_wrapper(DatetimeArrayType, "data", "_data")
 
 @typeof_impl.register(pd.arrays.DatetimeArray)
 def typeof_pd_datetime_array(val, c):
-    return DatetimeArrayType(val.dtype.tz)
+    if val.tz is None:
+        # DatetimeArray can contain no timezone. We don't yet support
+        # this yet.
+        raise BodoError(
+            "Cannot support timezone naive pd.arrays.DatetimeArray. Please convert to a numpy array with .astype('datetime64[ns]')."
+        )
+    else:
+        return DatetimeArrayType(val.dtype.tz)
 
 
 @unbox(DatetimeArrayType)
@@ -242,12 +246,21 @@ def overload_pd_datetime_arr_len(A):
 
 @lower_constant(DatetimeArrayType)
 def lower_constant_pd_datetime_arr(context, builder, typ, pyval):
-    raise BodoError("pd.DatetimeArray(): Lowering not supported")
+    numpy_data = context.get_constant_generic(
+        builder, typ.data_array_type, pyval.to_numpy("datetime64[ns]")
+    )
+    datetime_arr_val = lir.Constant.literal_struct([numpy_data])
+    return datetime_arr_val
 
 
 @overload_attribute(DatetimeArrayType, "shape")
 def overload_pd_datetime_arr_shape(A):
     return lambda A: (len(A._data),)  # pragma: no cover
+
+
+@overload_attribute(DatetimeArrayType, "nbytes")
+def overload_pd_datetime_arr_nbytes(A):
+    return lambda A: A._data.nbytes  # pragma: no cover
 
 
 @overload_method(DatetimeArrayType, "tz_convert", no_unliteral=True)
@@ -312,9 +325,22 @@ def overload_getitem(A, ind):
     )
 
 
-# TODO: Add an alias?
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def unwrap_tz_array(A):
     if isinstance(A, DatetimeArrayType):
         return lambda A: A._data  # pragma: no cover
     return lambda A: A  # pragma: no cover
+
+
+# array analysis extension
+def unwrap_tz_array_equiv(self, scope, equiv_set, loc, args, kws):
+    assert len(args) == 1 and not kws
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_pd_datetime_arr_ext_unwrap_tz_array = (
+    unwrap_tz_array_equiv
+)

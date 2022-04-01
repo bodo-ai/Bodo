@@ -356,6 +356,12 @@ def determine_filter_cast(pq_node, typemap, filter_val, orig_colname_map):
     # Here we assume is_common_scalar_dtype conversions are common
     # enough that Arrow will support them, since these are conversions
     # like int -> float. TODO: Test
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        lhs_scalar_typ, "Filter pushdown"
+    )
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        rhs_scalar_typ, "Filter pushdown"
+    )
     if not bodo.utils.typing.is_common_scalar_dtype([lhs_scalar_typ, rhs_scalar_typ]):
         # If a cast is not implicit it must be in our white list.
         if not bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
