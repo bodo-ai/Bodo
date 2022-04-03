@@ -138,13 +138,7 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
         # TODO: support other properties like freq/dtype/yearfirst?
         self.name_typ = name_typ
         # Add a .data field for consistency with other index types
-        # NOTE: data array can have flags like readonly
-        if isinstance(data, DatetimeArrayType):
-            self.data = data
-        else:
-            # NOTE: Update to add more types to maintain the original arrays for other types.
-            self.data = types.Array(bodo.datetime64ns, 1, "C")
-        # self.data = types.Array(bodo.datetime64ns, 1, "C") if data is None else data
+        self.data = types.Array(bodo.datetime64ns, 1, "C") if data is None else data
         super(DatetimeIndexType, self).__init__(
             name=f"DatetimeIndex({name_typ}, {self.data})"
         )
