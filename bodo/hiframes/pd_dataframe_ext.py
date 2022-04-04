@@ -600,6 +600,8 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
             None,
         )
         data_type = types.BaseTuple.from_types(dtypes)
+        null_tup_type = types.Tuple([types.bool_] * len(data_type))
+        nullable_dtype = bodo.NullableTupleType(data_type, null_tup_type)
         name_dtype = df.index.dtype
         bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
             df.index, "DataFrame.apply()"
@@ -609,9 +611,11 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         if name_dtype == types.NPTimedelta("ns"):
             name_dtype = bodo.pd_timedelta_type
         if is_heterogeneous_tuple_type(data_type):
-            row_typ = HeterogeneousSeriesType(data_type, index_type, name_dtype)
+            row_typ = HeterogeneousSeriesType(nullable_dtype, index_type, name_dtype)
         else:
-            row_typ = SeriesType(data_type.dtype, data_type, index_type, name_dtype)
+            row_typ = SeriesType(
+                data_type.dtype, nullable_dtype, index_type, name_dtype
+            )
         arg_typs = (row_typ,)
         if f_args is not None:
             arg_typs += tuple(f_args.types)
@@ -657,12 +661,31 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
                 # NOTE: get_const_func_output_type() adds const_info attribute for Series
                 # output
                 _, index_vals = f_return_type.const_info
-                arrs = tuple(dtype_to_array_type(t) for t in f_return_type.data.types)
+                # Heterogenous Series should always return a Nullable Tuple in the output type,
+                if isinstance(
+                    f_return_type.data, bodo.libs.nullable_tuple_ext.NullableTupleType
+                ):
+                    scalar_types = f_return_type.data.tuple_typ.types
+                elif isinstance(f_return_type.data, types.Tuple):
+                    # TODO: Confirm if this path ever taken? It shouldn't be.
+                    scalar_types = f_return_type.data.types
+                else:
+                    raise_bodo_error(
+                        "df.apply(): Unexpected Series return type for Heterogeneous data"
+                    )
+                # NOTE: nullable is determined at runtime, so by default always assume nullable type
+                # TODO: Support for looking at constant values.
+                arrs = tuple(
+                    to_nullable_type(dtype_to_array_type(t)) for t in scalar_types
+                )
                 ret_type = DataFrameType(arrs, df.index, index_vals)
             elif isinstance(f_return_type, SeriesType):
                 n_cols, index_vals = f_return_type.const_info
+                # Note: For homogenous Series we return a regular tuple, so
+                # convert to nullable.
                 arrs = tuple(
-                    dtype_to_array_type(f_return_type.dtype) for _ in range(n_cols)
+                    to_nullable_type(dtype_to_array_type(f_return_type.dtype))
+                    for _ in range(n_cols)
                 )
                 ret_type = DataFrameType(arrs, df.index, index_vals)
             else:

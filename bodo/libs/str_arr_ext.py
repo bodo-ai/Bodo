@@ -2148,7 +2148,10 @@ def overload_str_arr_astype(A, dtype, copy=True):
 
     # TODO: support other dtypes if any
     # TODO: error checking
-    if not isinstance(nb_dtype, (types.Float, types.Integer)):  # pragma: no cover
+    if not isinstance(nb_dtype, (types.Float, types.Integer)) and nb_dtype not in (
+        types.bool_,
+        bodo.libs.bool_arr_ext.boolean_dtype,
+    ):  # pragma: no cover
         raise BodoError("invalid dtype in StringArray.astype()")
 
     # NA positions are assigned np.nan for float output
@@ -2166,6 +2169,35 @@ def overload_str_arr_astype(A, dtype, copy=True):
             return B
 
         return impl_float
+    elif nb_dtype == types.bool_:
+
+        def impl_bool(A, dtype, copy=True):  # pragma: no cover
+            numba.parfors.parfor.init_prange()  # TODO: test fusion
+            n = len(A)
+            B = np.empty(n, nb_dtype)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(A, i):
+                    B[i] = False
+                else:
+                    B[i] = bool(A[i])
+            return B
+
+        return impl_bool
+
+    elif nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
+
+        def impl_bool(A, dtype, copy=True):  # pragma: no cover
+            numba.parfors.parfor.init_prange()  # TODO: test fusion
+            n = len(A)
+            B = np.empty(n, nb_dtype)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(A, i):
+                    bodo.libs.array_kernels.setna(B, i)
+                else:
+                    B[i] = bool(A[i])
+            return B
+
+        return impl_bool
 
     else:
         # int dtype doesn't support NAs

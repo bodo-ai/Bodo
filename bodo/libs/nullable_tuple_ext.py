@@ -76,6 +76,10 @@ class NullableTupleType(types.IterableType):
         # TODO: Support nullable section (likely optional issues)
         return self.tuple_typ.iterator_type
 
+    def __len__(self):
+        # Determine len based on tuple.
+        return len(self.tuple_typ)
+
 
 @register_model(NullableTupleType)
 class NullableTupleModel(models.StructModel):

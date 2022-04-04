@@ -1668,6 +1668,26 @@ class SeriesPass:
                 kws=dict(rhs.kws),
             )
 
+        # Inlining astype with nullable tuple can lead to to_datetime
+        # or to_timedelta remaining in the IR. Since we have already
+        # passed the inlining stage we need to manually inline.
+        if fdef in (
+            ("to_datetime", "pandas.core.tools.datetimes"),
+            ("to_timedelta", "pandas.core.tools.timedeltas"),
+        ):
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+            impl = getattr(bodo.hiframes.pd_timestamp_ext, f"overload_{fdef[0]}")(
+                *arg_typs, **kw_typs
+            )
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
         # replace _get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
         # TODO: min

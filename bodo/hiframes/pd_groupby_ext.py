@@ -84,6 +84,7 @@ from bodo.utils.typing import (
     is_overload_true,
     list_cumulative,
     raise_bodo_error,
+    to_nullable_type,
     to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import dt_err, is_expr
@@ -1434,14 +1435,31 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
         if single_row_output:
             if isinstance(f_return_type, HeterogeneousSeriesType):
                 _, index_vals = f_return_type.const_info
-                arrs = tuple(dtype_to_array_type(t) for t in f_return_type.data.types)
+                # Heterogenous Series should always return a Nullable Tuple in the output type,
+                if isinstance(
+                    f_return_type.data, bodo.libs.nullable_tuple_ext.NullableTupleType
+                ):
+                    scalar_types = f_return_type.data.tuple_typ.types
+                elif isinstance(f_return_type.data, types.Tuple):
+                    # TODO: Confirm if this path ever taken? It shouldn't be.
+                    scalar_types = f_return_type.data.types
+                # NOTE: nullable is determined at runtime, so by default always assume nullable type
+                # TODO: Support for looking at constant values.
+                arrs = tuple(
+                    to_nullable_type(dtype_to_array_type(t)) for t in scalar_types
+                )
                 ret_type = DataFrameType(
                     out_data + arrs, out_index_type, out_columns + index_vals
                 )
             elif isinstance(f_return_type, SeriesType):
                 n_cols, index_vals = f_return_type.const_info
+                # Note: For homogenous Series we return a regular tuple, so
+                # convert to nullable.
+                # NOTE: nullable is determined at runtime, so by default always assume nullable type
+                # TODO: Support for looking at constant values.
                 arrs = tuple(
-                    dtype_to_array_type(f_return_type.dtype) for _ in range(n_cols)
+                    to_nullable_type(dtype_to_array_type(f_return_type.dtype))
+                    for _ in range(n_cols)
                 )
                 ret_type = DataFrameType(
                     out_data + arrs, out_index_type, out_columns + index_vals

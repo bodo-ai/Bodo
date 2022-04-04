@@ -52,7 +52,10 @@ from bodo.libs.int_arr_ext import (
     typeof_pd_int_dtype,
 )
 from bodo.libs.map_arr_ext import MapArrayType
-from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType, PandasDatetimeTZDtype
+from bodo.libs.pd_datetime_arr_ext import (
+    DatetimeArrayType,
+    PandasDatetimeTZDtype,
+)
 from bodo.libs.str_arr_ext import string_array_type, string_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
@@ -1499,7 +1502,20 @@ def _infer_ndarray_obj_dtype(val):
         return binary_array_type
     elif isinstance(first_val, bool):
         return bodo.libs.bool_arr_ext.boolean_array
-    elif isinstance(first_val, (int, np.int32, np.int64)):
+    elif isinstance(
+        first_val,
+        (
+            int,
+            np.int8,
+            np.int16,
+            np.int32,
+            np.int64,
+            np.uint8,
+            np.uint16,
+            np.uint32,
+            np.uint64,
+        ),
+    ):
         return bodo.libs.int_arr_ext.IntegerArrayType(numba.typeof(first_val))
     # assuming object arrays with dictionary values string keys are struct arrays, which
     # means all keys are string and match across dictionaries, and all values with same

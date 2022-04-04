@@ -798,6 +798,210 @@ def test_empty_series_first_last():
     check_func(impl_last, (empty_ts,))
 
 
+def _convert_helper(df, typ):
+    # NOTE: first value in each column must not be NA
+    res = df.fillna(method="ffill").apply(lambda r: r.astype(typ), axis=1)
+    res[pd.isna(df)] = np.nan
+    res.replace(np.nan, pd.NA)
+    return res
+
+
+@pytest.mark.parametrize(
+    "to_type",
+    (
+        "str",
+        # TODO: support non-nullable boolean
+        "bool",
+        "boolean",
+        "int",
+        "float",
+        "float32",
+        "float64",
+        "Int8",
+        "UInt8",
+        "Int16",
+        "UInt16",
+        "Int32",
+        "UInt32",
+        "Int64",
+        "UInt64",
+        # TODO: support non-nullable types
+        # below equivalent to np.int* or np.float*
+        # "int8",
+        # "int16",
+        # "int32",
+        # "int64",
+        # "uint8",
+        # "uint16",
+        # "uint32",
+        # "uint64",
+        "datetime64[ns]",
+        "timedelta64[ns]",
+    ),
+)
+def test_heterogeneous_series_df_apply_astype(to_type):
+    """
+    Tests astype on heterogenous series produced by df.apply
+    i.e. type conversion for Series of tuples
+    """
+
+    def test_impl(df):
+        res = df.apply(lambda row: row.astype(to_type), axis=1)
+        return res
+
+    df_str = pd.DataFrame(
+        {
+            "A": pd.array([1, 0, 3], dtype="Int32"),
+            "B": [4.3, 2.4, 1.2],
+            "C": ["a", None, "c"],
+            "D": [True, True, False],
+        }
+    )
+    df_int = pd.DataFrame(
+        {
+            "A": pd.array([1, 295, 3], dtype="Int32"),
+            "B": pd.Series([4, None, 7], dtype="Int8"),
+            "C": ["1", None, "4"],
+        }
+    )
+    df_float = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], dtype="Int32"),
+            "B": pd.array([4.3, None, 1.2], dtype="float32"),
+            "C": pd.Series([4, None, 7], dtype="Int8"),
+            "D": ["1.2", None, "4.5"],
+        }
+    )
+    df_dt = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], dtype="Int64"),
+            "B": pd.array([1, 2, 3], dtype="UInt64"),
+            "C": pd.date_range("01-01-2022", periods=3),
+            "D": ["01-01-2021", "01-02-2021", "01-03-2022"],
+        }
+    )
+    df_td = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], dtype="Int64"),
+            "B": pd.array([1, 2, 3], dtype="UInt64"),
+            "C": pd.timedelta_range("1 second", periods=3),
+            # String columns don't work properly in Pandas
+        }
+    )
+    if to_type in ("str", "bool", "boolean"):
+        if to_type == "str":
+
+            def _str_helper(x):
+                if pd.isna(x):
+                    return pd.NA
+                elif type(x) == float:
+                    return "{:.6f}".format(x)
+                else:
+                    return str(x)
+
+            exp_output = df_str.applymap(_str_helper)
+        elif to_type in ("bool", "boolean"):
+            exp_output = df_str.applymap(lambda x: bool(x) if not pd.isna(x) else pd.NA)
+        check_func(test_impl, (df_str,), check_dtype=False, py_output=exp_output)
+    elif "int" in to_type or "Int" in to_type:
+        int_func = {
+            "int": int,
+            "int8": np.int8,
+            "int16": np.int16,
+            "int32": np.int32,
+            "int64": np.int64,
+            "uint8": np.uint8,
+            "uint16": np.uint16,
+            "uint32": np.uint32,
+            "uint64": np.uint64,
+        }
+        exp_output = df_int.applymap(
+            lambda x: int_func[to_type.lower()](x) if not pd.isna(x) else pd.NA
+        )
+        check_func(test_impl, (df_int,), py_output=exp_output)
+    elif "float" in to_type:
+        float_func = {
+            "float": float,
+            "float32": np.float32,
+            "float64": np.float64,
+        }
+        exp_output = df_float.applymap(
+            lambda x: float_func[to_type](x)
+            if not pd.isna(x)
+            else float_func[to_type](np.nan)
+        )
+        check_func(test_impl, (df_float,), py_output=exp_output)
+    elif to_type == "datetime64[ns]":
+        # astype behavior fails when iterating through rows in pandas
+        py_output = df_dt.astype(to_type)
+        check_func(test_impl, (df_dt,), py_output=py_output)
+    elif to_type == "timedelta64[ns]":
+        check_func(test_impl, (df_td,))
+
+
+def test_heterogeneous_series_df_apply_astype_classes():
+    """
+    Tests astype on heterogenous series produced by df.apply
+    i.e. type conversion for Series of tuples
+    """
+
+    def test_impl_str(df):
+        return df.apply(lambda row: row.astype(str), axis=1)
+
+    def test_impl_bool(df):
+        return df.apply(lambda row: row.astype(bool), axis=1)
+
+    def test_impl_int(df):
+        return df.apply(lambda row: row.astype(int), axis=1)
+
+    def test_impl_float(df):
+        return df.apply(lambda row: row.astype("float"), axis=1)
+
+    df_str = pd.DataFrame(
+        {
+            "A": pd.array([1, 0, 3], dtype="Int32"),
+            "B": [4.3, 2.4, 1.2],
+            "C": ["a", None, "c"],
+            "D": [True, True, False],
+        }
+    )
+    df_int = pd.DataFrame(
+        {
+            "A": pd.array([1, 295, 3], dtype="Int32"),
+            "B": pd.Series([4, None, 7], dtype="Int8"),
+            "C": ["1", None, "4"],
+        }
+    )
+    df_float = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 3], dtype="Int32"),
+            "B": pd.array([4.3, np.nan, 1.2], dtype="float"),
+            "C": pd.Series([4, None, 7], dtype="Int8"),
+            "D": ["1.2", None, "4.5"],
+        }
+    )
+
+    def _str_helper(x):
+        if pd.isna(x):
+            return pd.NA
+        elif type(x) == float:
+            return "{:.6f}".format(x)
+        else:
+            return str(x)
+
+    str_output = df_str.applymap(_str_helper)
+    # TODO: nullable bool
+    bool_output = df_str.applymap(lambda x: bool(x) if not pd.isna(x) else pd.NA)
+    int_output = df_int.applymap(lambda x: int(x) if not pd.isna(x) else pd.NA)
+    float_output = df_float.applymap(lambda x: float(x) if not pd.isna(x) else pd.NA)
+
+    check_func(test_impl_str, (df_str,), py_output=str_output)
+    check_func(test_impl_bool, (df_str,), py_output=bool_output)
+    check_func(test_impl_int, (df_int,), py_output=int_output)
+    # TODO: error with float32
+    # check_func(test_impl_float, (df_float,), py_output=float_output)
+
+
 @pytest.mark.parametrize(
     "S_val",
     [

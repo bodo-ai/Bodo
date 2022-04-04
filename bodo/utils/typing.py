@@ -903,6 +903,8 @@ def parse_dtype(dtype, func_name=None):
             )
         if d_str == "boolean":
             return bodo.libs.bool_arr_ext.boolean_dtype
+        if d_str == "str":
+            return bodo.string_type
         return numba.np.numpy_support.from_dtype(np.dtype(d_str))
     except:
         pass

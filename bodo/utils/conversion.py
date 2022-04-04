@@ -12,7 +12,9 @@ from numba.extending import overload
 
 import bodo
 from bodo.libs.binary_arr_ext import bytes_type
+from bodo.libs.bool_arr_ext import boolean_dtype
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.nullable_tuple_ext import NullableTupleType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (
     BodoError,
@@ -659,9 +661,110 @@ def overload_fix_arr_dtype(
             lambda data, new_dtype, copy=None, nan_to_str=True, from_series=False: data
         )  # pragma: no cover
 
+    if isinstance(data, NullableTupleType):
+        nb_dtype = bodo.utils.typing.parse_dtype(new_dtype)
+        if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
+            nb_dtype = nb_dtype.dtype
+
+        default_value_dict = {
+            types.unicode_type: "",
+            boolean_dtype: False,
+            types.bool_: False,
+            types.int8: np.int8(0),
+            types.int16: np.int16(0),
+            types.int32: np.int32(0),
+            types.int64: np.int64(0),
+            types.uint8: np.uint8(0),
+            types.uint16: np.uint16(0),
+            types.uint32: np.uint32(0),
+            types.uint64: np.uint64(0),
+            types.float32: np.float32(0),
+            types.float64: np.float64(0),
+            bodo.datetime64ns: pd.Timestamp(0),
+            bodo.timedelta64ns: pd.Timedelta(0),
+        }
+
+        convert_func_dict = {
+            types.unicode_type: str,
+            types.bool_: bool,
+            boolean_dtype: bool,
+            types.int8: np.int8,
+            types.int16: np.int16,
+            types.int32: np.int32,
+            types.int64: np.int64,
+            types.uint8: np.uint8,
+            types.uint16: np.uint16,
+            types.uint32: np.uint32,
+            types.uint64: np.uint64,
+            types.float32: np.float32,
+            types.float64: np.float64,
+            bodo.datetime64ns: pd.to_datetime,
+            bodo.timedelta64ns: pd.to_timedelta,
+        }
+
+        # If NA values properly done this should suffice for default_value_dict:
+        # default_value_dict = {typ: func(0) for typ, func in convert_func_dict.items()}
+
+        valid_types = default_value_dict.keys()
+        scalar_types = list(data._tuple_typ.types)
+
+        if nb_dtype not in valid_types:
+            raise BodoError(f"type conversion to {nb_dtype} types unsupported.")
+        for typ in scalar_types:
+            if typ == bodo.datetime64ns:
+                if nb_dtype not in (
+                    types.unicode_type,
+                    types.int64,
+                    types.uint64,
+                    bodo.datetime64ns,
+                ):
+                    raise BodoError(
+                        f"invalid type conversion from {typ} to {nb_dtype}."
+                    )
+            elif typ == bodo.timedelta64ns:
+                if nb_dtype not in (
+                    types.unicode_type,
+                    types.int64,
+                    types.uint64,
+                    bodo.timedelta64ns,
+                ):
+                    raise BodoError(
+                        f"invalid type conversion from {typ} to {nb_dtype}."
+                    )
+
+        func_text = "def impl(data, new_dtype, copy=None, nan_to_str=True, from_series=False):\n"
+        func_text += "  data_tup = data._data\n"
+        func_text += "  null_tup = data._null_values\n"
+        for i in range(len(scalar_types)):
+            # may have type mismatch because default_value is treated as a literal
+            # TODO: remove convert_func
+            func_text += f"  val_{i} = convert_func(default_value)\n"
+            func_text += f"  if not null_tup[{i}]:\n"
+            func_text += f"    val_{i} = convert_func(data_tup[{i}])\n"
+        vals_str = ", ".join(f"val_{i}" for i in range(len(scalar_types)))
+        func_text += f"  vals_tup = ({vals_str},)\n"
+        func_text += "  res_tup = bodo.libs.nullable_tuple_ext.build_nullable_tuple(vals_tup, null_tup)\n"
+        func_text += "  return res_tup\n"
+        loc_vars = {}
+        convert_func = convert_func_dict[nb_dtype]
+        default_value = default_value_dict[nb_dtype]
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                "np": np,
+                "pd": pd,
+                "default_value": default_value,
+                "convert_func": convert_func,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+
+        return impl
+
     # convert to string
     if _is_str_dtype(new_dtype):
-
         # special optimized case for int to string conversion, uses inplace write to
         # string array to avoid extra allocation
         if isinstance(data.dtype, types.Integer):
