@@ -60,7 +60,7 @@ then
    $CONDA_INSTALL numba=0.55.1 -c conda-forge
    $CONDA_INSTALL cython -c conda-forge
    $CONDA_INSTALL mpi4py -c conda-forge
-   $CONDA_INSTALL scikit-learn='1.0.*' gcsfs -c conda-forge
+   $CONDA_INSTALL scikit-learn='1.0.*' 'gcsfs>=2022.1' -c conda-forge
    $CONDA_INSTALL matplotlib='3.4.3' -c conda-forge
    $CONDA_INSTALL pyspark openjdk -c conda-forge
    $CONDA_INSTALL hdf5='1.10.*=*mpich*' -c conda-forge

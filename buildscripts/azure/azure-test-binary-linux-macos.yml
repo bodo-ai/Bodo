@@ -111,7 +111,7 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge gcsfs
+      conda install -y -c conda-forge 'gcsfs>=2022.1'
     displayName: 'Setup gcs_testing'
 
   - script: |
