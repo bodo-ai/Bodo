@@ -576,9 +576,6 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
         # e.g. dt64 to timestamp in TestDate.test_ts_map_date2
         dtypes = []
         for arr_typ in df.data:
-            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-                arr_typ, "DataFrame.apply()"
-            )
             series_typ = SeriesType(arr_typ.dtype, arr_typ, df.index, string_type)
             # iloc necessary since Series getitem may not be supported for df.index
             el_typ = self.context.resolve_function_type(
