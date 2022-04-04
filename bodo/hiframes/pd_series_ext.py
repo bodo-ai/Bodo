@@ -51,6 +51,7 @@ from bodo.utils.typing import (
     is_overload_int,
     is_overload_none,
     raise_bodo_error,
+    to_nullable_type,
 )
 
 _csv_output_is_dir = types.ExternalFunction(
@@ -664,7 +665,6 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         f_args: arguments to UDF (only "apply" supports it)
         kws: kwargs to UDF (only "apply" supports it)
         """
-
         dtype = ary.dtype
         # TODO(ehsan): use getitem resolve similar to df.apply?
         # getitem returns Timestamp for dt_index and series(dt64)
@@ -738,12 +738,29 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
                 # NOTE: get_const_func_output_type() adds const_info attribute for Series
                 # output
                 _, index_vals = f_return_type.const_info
-                arrs = tuple(dtype_to_array_type(t) for t in f_return_type.data.types)
+                # Heterogenous Series should always return a Nullable Tuple in the output type,
+                if isinstance(
+                    f_return_type.data, bodo.libs.nullable_tuple_ext.NullableTupleType
+                ):
+                    scalar_types = f_return_type.data.tuple_typ.types
+                elif isinstance(f_return_type.data, types.Tuple):
+                    # TODO: Confirm if this path ever taken? It shouldn't be.
+                    scalar_types = f_return_type.data.types
+                # NOTE: nullable is determined at runtime, so by default always assume nullable type
+                # TODO: Support for looking at constant values.
+                arrs = tuple(
+                    to_nullable_type(dtype_to_array_type(t)) for t in scalar_types
+                )
                 ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
             elif isinstance(f_return_type, SeriesType):
                 n_cols, index_vals = f_return_type.const_info
+                # Note: For homogenous Series we return a regular tuple, so
+                # convert to nullable.
+                # NOTE: nullable is determined at runtime, so by default always assume nullable type
+                # TODO: Support for looking at constant values.
                 arrs = tuple(
-                    dtype_to_array_type(f_return_type.dtype) for _ in range(n_cols)
+                    to_nullable_type(dtype_to_array_type(f_return_type.dtype))
+                    for _ in range(n_cols)
                 )
                 ret_type = bodo.DataFrameType(arrs, ary.index, index_vals)
             else:
@@ -985,15 +1002,20 @@ def pd_series_overload(
 
     # heterogeneous tuple input case
     if is_heterogeneous_tuple_type(data) and is_overload_none(dtype):
+        # Generate a null tuple so all Heterogenous tuple Series create a
+        # nullable tuple
+        null_tup = tuple(len(data) * [False])
 
         def impl_heter(
             data=None, index=None, dtype=None, name=None, copy=False, fastpath=False
         ):  # pragma: no cover
             index_t = bodo.utils.conversion.extract_index_if_none(data, index)
             data_t = bodo.utils.conversion.to_tuple(data)
-
+            data_val = bodo.libs.nullable_tuple_ext.build_nullable_tuple(
+                data_t, null_tup
+            )
             return bodo.hiframes.pd_series_ext.init_series(
-                data_t, bodo.utils.conversion.convert_to_index(index_t), name
+                data_val, bodo.utils.conversion.convert_to_index(index_t), name
             )
 
         return impl_heter
@@ -1442,7 +1464,6 @@ heter_series_unsupported_methods = {
     # Axes
     "set_flags",
     # Conversion
-    "astype",
     "convert_dtypes",
     "infer_objects",
     "copy",

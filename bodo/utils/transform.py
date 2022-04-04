@@ -1205,6 +1205,7 @@ def _get_const_series_info(block, f_ir, typemap):
     if is_call(data_def) and find_callname(f_ir, data_def) in [
         ("asarray", "numpy"),
         ("str_arr_from_sequence", "bodo.libs.str_arr_ext"),
+        ("build_nullable_tuple", "bodo.libs.nullable_tuple_ext"),
     ]:
         data_var = data_def.args[0]
         data_def = get_definition(f_ir, data_var)

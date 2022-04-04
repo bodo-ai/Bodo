@@ -671,6 +671,12 @@ class DataFramePass:
         else:
             func_text += f"    v0 = v\n"
         for i in range(n_out_cols):
+            if is_df_output:
+                func_text += f"    if bodo.libs.array_kernels.isna(v_vals, {i}):\n"
+                func_text += f"      bodo.libs.array_kernels.setna(S{i}, i)\n"
+                func_text += "    else:\n"
+                # Add extra indent
+                func_text += "  "
             func_text += (
                 f"    S{i}[i] = bodo.utils.conversion.unbox_if_timestamp(v{i})\n"
             )

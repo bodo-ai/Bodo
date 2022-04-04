@@ -1735,6 +1735,7 @@ def overload_series_notna(S):
 
 
 @overload_method(SeriesType, "astype", inline="always", no_unliteral=True)
+@overload_method(HeterogeneousSeriesType, "astype", inline="always", no_unliteral=True)
 def overload_series_astype(S, dtype, copy=True, errors="raise", _bodo_nan_to_str=True):
 
     unsupported_args = dict(errors=errors)
