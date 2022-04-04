@@ -12,10 +12,10 @@ from decimal import Decimal
 import h5py
 import numba
 import numpy as np
-import pyarrow.parquet as pq
-import pytz
 import pandas as pd
+import pyarrow.parquet as pq
 import pytest
+import pytz
 from numba.core.ir_utils import build_definitions, find_callname
 
 import bodo
@@ -5251,6 +5251,7 @@ def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
         check_func(test_impl1, (), only_seq=True)
         check_func(test_impl2, (), only_seq=True)
     finally:
+        bodo.barrier()
         if bodo.get_rank() == 0:
             os.remove("test_tz.pq")
 
