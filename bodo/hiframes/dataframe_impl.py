@@ -2478,6 +2478,10 @@ def create_binary_op_overload(op):
                         "float64_arr_type": types.Array(types.float64, 1, "C")
                     },
                 )
+            elif isinstance(rhs, SeriesType):
+                raise_bodo_error(
+                    "Comparison operation between Dataframe and Series is not supported yet."
+                )
 
             # scalar case, TODO: Proper error handling for all operators
             # TODO: Test with ArrayItemArrayType
@@ -2522,6 +2526,10 @@ def create_binary_op_overload(op):
             return _gen_init_df(header, lhs.columns, data_args, index)
 
         if isinstance(rhs, DataFrameType):
+            if isinstance(lhs, SeriesType):
+                raise_bodo_error(
+                    "Comparison operation between Dataframe and Series is not supported yet."
+                )
             # scalar case, TODO: Proper error handling for all operators
             # TODO: Test with ArrayItemArrayType
             data_impl = []

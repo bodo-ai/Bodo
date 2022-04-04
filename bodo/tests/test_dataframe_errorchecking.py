@@ -1720,3 +1720,28 @@ def test_to_parquet_int_colnames(memory_leak_check):
         ),
     ):
         test_impl(df)
+
+
+def test_series_df_comparison(memory_leak_check):
+    """
+    Test that comapring dataframe and series
+    raises an error as expected.
+    """
+
+    @bodo.jit
+    def test_impl(df, other):
+        return df == other
+
+    df = pd.DataFrame(
+        {"cost": [250, 150, 100], "revenue": [100, 250, 300]}, index=["A", "B", "C"]
+    )
+    other = pd.Series([100, 250], index=["cost", "revenue"])
+    with pytest.raises(
+        BodoError, match="Comparison operation between Dataframe and Series"
+    ):
+        test_impl(df, other)
+
+    with pytest.raises(
+        BodoError, match="Comparison operation between Dataframe and Series"
+    ):
+        test_impl(other, df)
