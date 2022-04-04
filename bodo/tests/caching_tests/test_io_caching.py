@@ -3,7 +3,26 @@ import pandas as pd
 import pytest
 from caching_tests_common import fn_distribution  # noqa
 
+import bodo
 from bodo.tests.utils import check_caching
+
+
+@bodo.jit
+def read_pq_func1(fname):
+    """
+    Helper func to test caching with a
+    read in another function
+    """
+    return pd.read_parquet(fname)
+
+
+@bodo.jit
+def read_pq_func2(fname):
+    """
+    Helper func to test caching with a
+    read in another function
+    """
+    return pd.read_parquet(fname)
 
 
 @pytest.mark.smoke
@@ -50,6 +69,31 @@ def test_read_parquet_cache_fname_arg(
         fname = datapath("int_nulls_single.pq")
 
     py_out = impl(fname)
+    check_caching(impl, (fname,), is_cached, fn_distribution, py_output=py_out)
+
+
+def test_read_parquet_cache_fname_arg(
+    fn_distribution, is_cached, datapath, memory_leak_check
+):
+    """
+    test read_parquet with cache=True and passing different file name as
+    argument to the Bodo function where the read is in separate function.
+    """
+
+    def impl(fname):
+        df1 = read_pq_func1(fname)
+        df2 = read_pq_func2(fname)
+        print(df1.info())
+        print(df2.info())
+        return df1
+
+    if is_cached:
+        fname = datapath("int_nulls_multi.pq")
+    else:
+        fname = datapath("int_nulls_single.pq")
+
+    # Use py_output because we use the jit decorator directly
+    py_out = pd.read_parquet(fname)
     check_caching(impl, (fname,), is_cached, fn_distribution, py_output=py_out)
 
 

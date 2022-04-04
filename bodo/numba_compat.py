@@ -2810,7 +2810,7 @@ def ForceLiteralArg_combine(self, other):  # pragma: no cover
     return ForceLiteralArg(
         # for file infos, we merge the two dicts
         self.requested_args | other.requested_args,
-        {**self.file_infos, **other.file_infos},
+        file_infos={**self.file_infos, **other.file_infos},
     )
 
 
