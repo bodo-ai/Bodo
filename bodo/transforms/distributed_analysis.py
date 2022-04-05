@@ -51,6 +51,7 @@ from bodo.utils.transform import (
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
+    get_overload_const_str,
     is_overload_false,
     is_tuple_like_type,
 )
@@ -838,6 +839,12 @@ class DistributedAnalysis:
             elif func_name == "predict":
                 # match input and output distributions
                 self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if fdef == (
+            "generate_mappable_table_func",
+            "bodo.utils.table_utils",
+        ) and self._analyze_mappable_table_funcs(lhs, rhs, kws, array_dists):
             return
 
         if (
@@ -2094,6 +2101,27 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
 
         return
+
+    def _analyze_mappable_table_funcs(self, lhs, rhs, kws, array_dists):
+        """
+        Analyze for functions using generate_mappable_table_func.
+        Arg0 is a table used for distribution and arg1 is the function
+        name. Distributions differ based on arg1.
+
+        Returns True if there was a known implementation.
+        """
+        # TODO: Make this more scalable by recalling internal
+        func_name = guard(get_overload_const_str, self.typemap[rhs.args[1].name])
+        # We support mappable prefixes that don't need to be separate functions.
+        if func_name[0] == "~":
+            func_name = func_name[1:]
+        if func_name == "bodo.libs.array_ops.array_op_isna":
+            # Not currently in the code because it is otherwise inlined.
+            # This should be included somewhere.
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return True
+
+        return False
 
     def _analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
         self, lhs, func_name, rhs, kws, array_dists

@@ -1,4 +1,5 @@
 import datetime
+import io
 import os
 
 import numpy as np
@@ -11,8 +12,15 @@ from pandas.core.dtypes.common import is_list_like
 
 import bodo
 from bodo.tests.dataframe_common import df_value  # noqa
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
 from bodo.tests.utils import (
     SeriesOptTestPipeline,
+    _create_many_column_file,
+    _del_many_column_file,
     _ensure_func_calls_optimized_out,
     _get_dist_arg,
     _test_equal_guard,
@@ -785,6 +793,45 @@ def test_df_merge_col_key_bodo_only(key):
     df_exp = pd.DataFrame({"key": key, "value_x": val_x, "value_y": val_y})
     df_act = bodo.jit(impl)(df1, df2)
     assert df_act.equals(df_exp)
+
+
+@pytest.mark.parametrize(
+    "method_name",
+    [
+        "isna",
+        pytest.param("isnull", marks=pytest.mark.slow),
+        "notna",
+        pytest.param("notnull", marks=pytest.mark.slow),
+    ],
+)
+def test_table_isna(method_name, memory_leak_check):
+    """
+    Tests df.isna, df.isnull, df.notna, and df.notnull with
+    a DataFrame in table format.
+    """
+    file_type = "csv"
+    try:
+        _create_many_column_file(file_type, null_list=[0, 14, 21, 57])
+
+        func_text = f"""def impl():
+            df = pd.read_csv("many_columns.csv")
+            df1 = df.{method_name}()
+            return df1[["Column1", "Column3"]]
+            """
+
+        local_vars = {}
+        exec(func_text, globals(), local_vars)
+        impl = local_vars["impl"]
+
+        check_func(impl, ())
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            bodo.jit(impl)()
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['Column1', 'Column3']")
+    finally:
+        _del_many_column_file(file_type)
 
 
 def test_astype_dtypes_optimization(memory_leak_check):

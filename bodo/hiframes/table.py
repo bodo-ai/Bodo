@@ -11,6 +11,7 @@ import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed, lower_constant
+from numba.core.typing.templates import signature
 from numba.cpython.listobj import ListInstance
 from numba.extending import (
     NativeValue,
@@ -508,7 +509,7 @@ def get_table_data_codegen(context, builder, table_arg, col_ind, table_type):
 
 
 @intrinsic
-def get_table_data(typingctx, table_type, ind_typ=None):
+def get_table_data(typingctx, table_type, ind_typ):
     """get data array of table (using the original array index)"""
     assert isinstance(table_type, TableType)
     assert is_overload_constant_int(ind_typ)
@@ -525,7 +526,7 @@ def get_table_data(typingctx, table_type, ind_typ=None):
 
 
 @intrinsic
-def del_column(typingctx, table_type, ind_typ=None):
+def del_column(typingctx, table_type, ind_typ):
     """Decrement the reference count by 1 for single column in a table."""
     assert isinstance(table_type, TableType)
     assert is_overload_constant_int(ind_typ)
@@ -696,7 +697,7 @@ def _rm_old_array(col_ind, out_table_type, out_table, in_table_type, context, bu
 
 
 @intrinsic
-def set_table_data(typingctx, table_type, ind_type, arr_type=None):
+def set_table_data(typingctx, table_type, ind_type, arr_type):
     """Set array to input table and return a new table.
     NOTE: this assumes the input table is not used anymore so we can reuse its internal
     lists.
@@ -781,7 +782,7 @@ def lower_constant_table(context, builder, table_type, pyval):
 
 
 @intrinsic
-def init_table(typingctx, table_type, to_str_if_dict_t=None):
+def init_table(typingctx, table_type, to_str_if_dict_t):
     """initialize a table object with same structure as input table without setting it's
     array blocks (to be set later)
     """
@@ -807,7 +808,45 @@ def init_table(typingctx, table_type, to_str_if_dict_t=None):
 
 
 @intrinsic
-def get_table_block(typingctx, table_type, blk_type=None):
+def init_table_from_lists(typingctx, tuple_of_lists_type, table_type):
+    """initialize a table object with table_type and list of arrays
+    provided by the tuple of lists, tuple_of_lists_type.
+    """
+    assert isinstance(tuple_of_lists_type, types.BaseTuple), "Tuple of data expected"
+    # Use a map to ensure the tuple and table ordering match
+    tuple_map = {}
+    for i, typ in enumerate(tuple_of_lists_type):
+        assert isinstance(typ, types.List), "Each tuple element must be a list"
+        tuple_map[typ.dtype] = i
+    table_typ = (
+        table_type.instance_type
+        if isinstance(table_type, types.TypeRef)
+        else table_type
+    )
+    assert isinstance(table_typ, TableType), "table type expected"
+
+    def codegen(context, builder, sig, args):
+        tuple_of_lists, _ = args
+        table = cgutils.create_struct_proxy(table_typ)(context, builder)
+        for t, blk in table_typ.type_to_blk.items():
+            idx = tuple_map[t]
+            # Get tuple_of_lists[idx]
+            tuple_sig = signature(
+                types.List(t), tuple_of_lists_type, types.literal(idx)
+            )
+            tuple_args = (tuple_of_lists, idx)
+            list_elem = numba.cpython.tupleobj.static_getitem_tuple(
+                context, builder, tuple_sig, tuple_args
+            )
+            setattr(table, f"block_{blk}", list_elem)
+        return table._getvalue()
+
+    sig = table_typ(tuple_of_lists_type, table_type)
+    return sig, codegen
+
+
+@intrinsic
+def get_table_block(typingctx, table_type, blk_type):
     """get array list for a type block of table"""
     assert isinstance(table_type, TableType), "table type expected"
     assert is_overload_constant_int(blk_type)
@@ -830,7 +869,80 @@ def get_table_block(typingctx, table_type, blk_type=None):
 
 
 @intrinsic
-def ensure_column_unboxed(typingctx, table_type, arr_list_t, ind_t, arr_ind_t=None):
+def ensure_table_unboxed(typingctx, table_type, used_cols_typ):
+    """make all used in columns of table are unboxed.
+    Throw an error if column array is null and there is no parent to unbox from
+
+    used_cols is a set of columns that are used or None.
+    """
+
+    def codegen(context, builder, sig, args):
+
+        table_arg, used_col_set = args
+        pyapi = context.get_python_api(builder)
+
+        use_all = used_cols_typ == types.none
+        if not use_all:
+            set_inst = numba.cpython.setobj.SetInstance(
+                context, builder, types.Set(types.int64), used_col_set
+            )
+
+        table = cgutils.create_struct_proxy(sig.args[0])(context, builder, table_arg)
+        has_parent = cgutils.is_not_null(builder, table.parent)
+        for t, blk in table_type.type_to_blk.items():
+            n_arrs = context.get_constant(
+                types.int64, len(table_type.block_to_arr_ind[blk])
+            )
+            # lower array of array indices for block to use within the loop
+            # using array since list doesn't have constant lowering
+            arr_inds = context.make_constant_array(
+                builder,
+                types.Array(types.int64, 1, "C"),
+                # On windows np.array defaults to the np.int32 for integers.
+                # As a result, we manually specify int64 during the array
+                # creation to keep the lowered constant consistent with the
+                # expected type.
+                np.array(table_type.block_to_arr_ind[blk], dtype=np.int64),
+            )
+            arr_inds_struct = context.make_array(types.Array(types.int64, 1, "C"))(
+                context, builder, arr_inds
+            )
+            arr_list = getattr(table, f"block_{blk}")
+            with cgutils.for_range(builder, n_arrs) as loop:
+                i = loop.index
+                # get array index in "arrays"
+                arr_ind = _getitem_array_single_int(
+                    context,
+                    builder,
+                    types.int64,
+                    types.Array(types.int64, 1, "C"),
+                    arr_inds_struct,
+                    i,
+                )
+                unbox_sig = types.none(
+                    table_type, types.List(t), types.int64, types.int64
+                )
+                unbox_args = (table_arg, arr_list, i, arr_ind)
+                if use_all:
+                    # If we use all columns avoid generating control flow.
+                    ensure_column_unboxed_codegen(
+                        context, builder, unbox_sig, unbox_args
+                    )
+                else:
+                    # If we need to check the column we generate an if.
+                    use_col = set_inst.contains(arr_ind)
+                    with builder.if_then(use_col):
+                        ensure_column_unboxed_codegen(
+                            context, builder, unbox_sig, unbox_args
+                        )
+
+    assert isinstance(table_type, TableType), "table type expected"
+    sig = types.none(table_type, used_cols_typ)
+    return sig, codegen
+
+
+@intrinsic
+def ensure_column_unboxed(typingctx, table_type, arr_list_t, ind_t, arr_ind_t):
     """make sure column of table is unboxed
     Throw an error if column array is null and there is no parent to unbox from
     """
@@ -881,7 +993,7 @@ def ensure_column_unboxed_codegen(context, builder, sig, args):
 
 
 @intrinsic
-def set_table_block(typingctx, table_type, arr_list_type, blk_type=None):
+def set_table_block(typingctx, table_type, arr_list_type, blk_type):
     """set table block and return a new table object"""
     assert isinstance(table_type, TableType), "table type expected"
     assert isinstance(arr_list_type, types.List), "list type expected"
@@ -899,7 +1011,7 @@ def set_table_block(typingctx, table_type, arr_list_type, blk_type=None):
 
 
 @intrinsic
-def set_table_len(typingctx, table_type, l_type=None):
+def set_table_len(typingctx, table_type, l_type):
     """set table len and return a new table object"""
     assert isinstance(table_type, TableType), "table type expected"
 
@@ -914,7 +1026,7 @@ def set_table_len(typingctx, table_type, l_type=None):
 
 
 @intrinsic
-def alloc_list_like(typingctx, list_type, to_str_if_dict_t=None):
+def alloc_list_like(typingctx, list_type, to_str_if_dict_t):
     """
     allocate a list with same type and size as input list but filled with null values
     """
@@ -938,6 +1050,26 @@ def alloc_list_like(typingctx, list_type, to_str_if_dict_t=None):
         return out_arr_list.value
 
     sig = out_list_type(list_type, to_str_if_dict_t)
+    return sig, codegen
+
+
+@intrinsic
+def alloc_empty_list_type(typingctx, size_typ, data_typ=None):
+    """
+    allocate a list with a given size and data type filled
+    with null values.
+    """
+    assert isinstance(size_typ, types.Integer), "Size must be an integer"
+    dtype = data_typ.instance_type if isinstance(data_typ, types.TypeRef) else data_typ
+    list_type = types.List(dtype)
+
+    def codegen(context, builder, sig, args):
+        size, _ = args
+        _, out_arr_list = ListInstance.allocate_ex(context, builder, list_type, size)
+        out_arr_list.size = size
+        return out_arr_list.value
+
+    sig = list_type(size_typ, data_typ)
     return sig, codegen
 
 
@@ -977,7 +1109,8 @@ def gen_table_filter(T, used_cols=None):
         "ensure_contig_if_np": ensure_contig_if_np,
     }
     if used_cols is not None:
-        glbls["used_cols"] = np.array(used_cols, dtype=np.int64)
+        # Note: used_cols is always an array from remove_dead_columns
+        glbls["used_cols"] = used_cols
 
     func_text = "def impl(T, idx):\n"
     func_text += f"  T2 = init_table(T, False)\n"

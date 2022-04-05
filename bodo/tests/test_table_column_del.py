@@ -8,50 +8,14 @@ import pytest
 from numba.core import ir
 
 import bodo
-from bodo.tests.utils import ColumnDelTestPipeline, check_func, reduce_sum
+from bodo.tests.utils import (
+    ColumnDelTestPipeline,
+    _create_many_column_file,
+    _del_many_column_file,
+    check_func,
+    reduce_sum,
+)
 from bodo.utils.utils import is_expr
-
-
-def _create_many_column_file(filetype, indexcol=False):
-    """
-    Helper function to create CSV file with 99 columns.
-    """
-    if bodo.get_rank() == 0:
-        data_dict = {}
-        for i in range(33):
-            for j in range(3):
-                modulo = j % 3
-                if modulo == 0:
-                    arr = np.arange(1000) * (i + 1)
-                if modulo == 1:
-                    arr = np.arange(1000) * 0.5 * (i + 1)
-                if modulo == 2:
-                    arr = [f"value{k}" for k in (np.arange(1000) * (i + 1))]
-                data_dict[f"Column{(i * 3) + j}"] = arr
-        df = pd.DataFrame(data_dict)
-        if filetype == "csv":
-            df.to_csv("many_columns.csv", index=indexcol)
-        elif filetype == "parquet":
-            if isinstance(indexcol, str):
-                df.set_index(indexcol)
-                indexcol = True
-            df.to_parquet("many_columns.parquet", index=indexcol)
-    bodo.barrier()
-
-
-def _del_many_column_file(filetype):
-    """
-    Helper function to remove the CSV file with 99 columns.
-    """
-    # Include a barrier so rank 0 doesn't delete the file
-    # before all columns have finished using it.
-    bodo.barrier()
-    if bodo.get_rank() == 0:
-        if filetype == "csv":
-            os.remove("many_columns.csv")
-        elif filetype == "parquet":
-            os.remove("many_columns.parquet")
-    bodo.barrier()
 
 
 def _check_column_dels(bodo_func, col_del_lists):
