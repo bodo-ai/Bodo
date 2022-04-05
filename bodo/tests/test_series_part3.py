@@ -851,40 +851,40 @@ def test_heterogeneous_series_df_apply_astype(to_type):
 
     df_str = pd.DataFrame(
         {
-            "A": pd.array([1, 0, 3], dtype="Int32"),
-            "B": [4.3, 2.4, 1.2],
-            "C": ["a", None, "c"],
-            "D": [True, True, False],
+            "A": pd.array([1, 0, 3] * 2, dtype="Int32"),
+            "B": [4.3, 2.4, 1.2] * 2,
+            "C": ["a", None, "c"] * 2,
+            "D": [True, True, False] * 2,
         }
     )
     df_int = pd.DataFrame(
         {
-            "A": pd.array([1, 295, 3], dtype="Int32"),
-            "B": pd.Series([4, None, 7], dtype="Int8"),
-            "C": ["1", None, "4"],
+            "A": pd.array([1, 295, 3] * 2, dtype="Int32"),
+            "B": pd.Series([4, None, 7] * 2, dtype="Int8"),
+            "C": ["1", None, "4"] * 2,
         }
     )
     df_float = pd.DataFrame(
         {
-            "A": pd.array([1, 2, 3], dtype="Int32"),
-            "B": pd.array([4.3, None, 1.2], dtype="float32"),
-            "C": pd.Series([4, None, 7], dtype="Int8"),
-            "D": ["1.2", None, "4.5"],
+            "A": pd.array([1, 2, 3] * 2, dtype="Int32"),
+            "B": pd.array([4.3, None, 1.2] * 2, dtype="float32"),
+            "C": pd.Series([4, None, 7] * 2, dtype="Int8"),
+            "D": ["1.2", None, "4.5"] * 2,
         }
     )
     df_dt = pd.DataFrame(
         {
-            "A": pd.array([1, 2, 3], dtype="Int64"),
-            "B": pd.array([1, 2, 3], dtype="UInt64"),
-            "C": pd.date_range("01-01-2022", periods=3),
-            "D": ["01-01-2021", "01-02-2021", "01-03-2022"],
+            "A": pd.array([1, 2, 3] * 2, dtype="Int64"),
+            "B": pd.array([1, 2, 3] * 2, dtype="UInt64"),
+            "C": pd.date_range("01-01-2022", periods=6),
+            "D": ["01-01-2021", "01-02-2021", "01-03-2022"] * 2,
         }
     )
     df_td = pd.DataFrame(
         {
-            "A": pd.array([1, 2, 3], dtype="Int64"),
-            "B": pd.array([1, 2, 3], dtype="UInt64"),
-            "C": pd.timedelta_range("1 second", periods=3),
+            "A": pd.array([1, 2, 3] * 2, dtype="Int64"),
+            "B": pd.array([1, 2, 3] * 2, dtype="UInt64"),
+            "C": pd.timedelta_range("1 second", periods=6),
             # String columns don't work properly in Pandas
         }
     )
@@ -959,25 +959,25 @@ def test_heterogeneous_series_df_apply_astype_classes():
 
     df_str = pd.DataFrame(
         {
-            "A": pd.array([1, 0, 3], dtype="Int32"),
-            "B": [4.3, 2.4, 1.2],
-            "C": ["a", None, "c"],
-            "D": [True, True, False],
+            "A": pd.array([1, 0, 3] * 2, dtype="Int32"),
+            "B": [4.3, 2.4, 1.2] * 2,
+            "C": ["a", None, "c"] * 2,
+            "D": [True, True, False] * 2,
         }
     )
     df_int = pd.DataFrame(
         {
-            "A": pd.array([1, 295, 3], dtype="Int32"),
-            "B": pd.Series([4, None, 7], dtype="Int8"),
-            "C": ["1", None, "4"],
+            "A": pd.array([1, 295, 3] * 2, dtype="Int32"),
+            "B": pd.Series([4, None, 7] * 2, dtype="Int8"),
+            "C": ["1", None, "4"] * 2,
         }
     )
     df_float = pd.DataFrame(
         {
-            "A": pd.array([1, 2, 3], dtype="Int32"),
-            "B": pd.array([4.3, np.nan, 1.2], dtype="float"),
-            "C": pd.Series([4, None, 7], dtype="Int8"),
-            "D": ["1.2", None, "4.5"],
+            "A": pd.array([1, 2, 3] * 2, dtype="Int32"),
+            "B": pd.array([4.3, np.nan, 1.2] * 2, dtype="float"),
+            "C": pd.Series([4, None, 7] * 2, dtype="Int8"),
+            "D": ["1.2", None, "4.5"] * 2,
         }
     )
 
