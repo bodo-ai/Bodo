@@ -75,6 +75,9 @@ See more in [File IO][file_io], such as
     -   [example usage and more system specific instructions][parquet-section]
     -   Arguments `path` and `columns` are supported. `columns` should
         be a constant list of strings if provided.
+        `path` can be a string or list. If string, must be a path to a file
+        or a directory, or a glob string. If a list, must contain paths
+        to parquet files (not directories) or glob strings.
     -   Argument `anon` of `storage_options` is supported for S3
         filepaths.
     -   If `path` can be inferred as a constant (e.g. it is a function

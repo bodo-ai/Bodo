@@ -2,6 +2,7 @@
 import os
 import warnings
 from collections import defaultdict
+from glob import has_magic
 
 import llvmlite.binding as ll
 import numba
@@ -1309,7 +1310,19 @@ def get_parquet_dataset(
             pa_default_io_thread_count = pa.io_thread_count()
             pa.set_io_thread_count(nthreads)
 
-            if "*" in fpath:
+            if isinstance(fpath, list):
+                # Expand any glob strings in the list in order to generate a
+                # single list of fully realized paths to parquet files.
+                # For example: ["A/a.pq", "B/*.pq"] might expand to
+                # ["A/a.pq", "B/part-0.pq", "B/part-1.pq"]
+                new_fpath = []
+                for p in fpath:
+                    if has_magic(p):
+                        new_fpath += glob(protocol, getfs(), p)
+                    else:
+                        new_fpath.append(p)
+                fpath = new_fpath
+            elif has_magic(fpath):
                 fpath = glob(protocol, getfs(), fpath)
             if protocol == "s3":
                 # If there are issues accessing the s3 path (like wrong credentials)
