@@ -1278,6 +1278,29 @@ def test_read_parquet_glob(datapath, memory_leak_check):
     check_func(test_impl, (glob_pattern_2,), py_output=pyout, check_dtype=False)
 
 
+def test_read_parquet_list_of_globs(datapath, memory_leak_check):
+    """test reading when passing a list of globstrings"""
+
+    def test_impl(filename):
+        df = pd.read_parquet(filename)
+        return df
+
+    globstrings = [
+        "bodo/tests/data/test_partitioned.pq/A=2/part-0000[1-2]-*.parquet",
+        "bodo/tests/data/test_partitioned.pq/A=7/part-0000[5-7]-bfd81e52-9210-4ee9-84a0-5ee2ab5e6345.c000.snappy.parquet",
+    ]
+
+    import glob
+
+    # get expected output with pandas
+    files = []
+    for globstring in globstrings:
+        files += sorted(glob.glob(globstring))
+    pyout = pd.concat(pd.read_parquet(f) for f in files).reset_index(drop=True)
+
+    check_func(test_impl, (globstrings,), py_output=pyout, check_dtype=False)
+
+
 @pytest.mark.slow
 def test_read_dask_parquet(datapath, memory_leak_check):
     def test_impl(filename):
