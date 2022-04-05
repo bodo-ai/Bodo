@@ -683,13 +683,39 @@ def overload_dataframe_filter(df, items=None, like=None, regex=None, axis=None):
 def overload_dataframe_isna(df):
     check_runtime_cols_unsupported(df, "DataFrame.isna()")
 
-    # call isna() on column Series
-    data_args = ", ".join(
-        f"bodo.libs.array_ops.array_op_isna(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}))"
-        for i in range(len(df.columns))
-    )
     header = "def impl(df):\n"
-    return _gen_init_df(header, df.columns, data_args)
+    extra_globals = None
+    out_df_type = None
+    if df.is_table_format:
+        # isna generates a numpy boolean array for every column
+        output_arr_typ = types.Array(types.bool_, 1, "C")
+        out_df_type = DataFrameType(
+            tuple([output_arr_typ] * len(df.data)),
+            df.index,
+            df.columns,
+            df.dist,
+            is_table_format=True,
+        )
+        extra_globals = {"output_arr_typ": output_arr_typ}
+        data_args = (
+            "bodo.utils.table_utils.generate_mappable_table_func("
+            + "bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df), "
+            + "'bodo.libs.array_ops.array_op_isna', "
+            + "output_arr_typ)"
+        )
+    else:
+        # call isna() on column Series
+        data_args = ", ".join(
+            f"bodo.libs.array_ops.array_op_isna(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}))"
+            for i in range(len(df.columns))
+        )
+    return _gen_init_df(
+        header,
+        df.columns,
+        data_args,
+        extra_globals=extra_globals,
+        out_df_type=out_df_type,
+    )
 
 
 @overload_method(DataFrameType, "select_dtypes", inline="always", no_unliteral=True)
@@ -781,13 +807,39 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
 @overload_method(DataFrameType, "notnull", inline="always", no_unliteral=True)
 def overload_dataframe_notna(df):
     check_runtime_cols_unsupported(df, "DataFrame.notna()")
-    # call notna() on column Series
-    data_args = ", ".join(
-        f"bodo.libs.array_ops.array_op_isna(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})) == False"
-        for i in range(len(df.columns))
-    )
     header = "def impl(df):\n"
-    return _gen_init_df(header, df.columns, data_args)
+    extra_globals = None
+    out_df_type = None
+    if df.is_table_format:
+        # notna generates a numpy boolean array for every column
+        output_arr_typ = types.Array(types.bool_, 1, "C")
+        out_df_type = DataFrameType(
+            tuple([output_arr_typ] * len(df.data)),
+            df.index,
+            df.columns,
+            df.dist,
+            is_table_format=True,
+        )
+        extra_globals = {"output_arr_typ": output_arr_typ}
+        data_args = (
+            "bodo.utils.table_utils.generate_mappable_table_func("
+            + "bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df), "
+            + "'~bodo.libs.array_ops.array_op_isna', "
+            + "output_arr_typ)"
+        )
+    else:
+        # call notna() on column Series
+        data_args = ", ".join(
+            f"bodo.libs.array_ops.array_op_isna(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})) == False"
+            for i in range(len(df.columns))
+        )
+    return _gen_init_df(
+        header,
+        df.columns,
+        data_args,
+        extra_globals=extra_globals,
+        out_df_type=out_df_type,
+    )
 
 
 def overload_dataframe_head(df, n=5):

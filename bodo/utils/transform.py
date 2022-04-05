@@ -274,6 +274,8 @@ no_side_effect_call_tuples = {
     ),
     # Nullable Tuple
     ("build_nullable_tuple", "nullable_tuple_ext", "libs", bodo),
+    # Table
+    ("generate_mappable_table_func", "table_utils", "utils", bodo),
 }
 
 
@@ -324,6 +326,13 @@ def remove_hiframes(rhs, lives, call_list):
     if (
         call_list == ["set_table_data", "table", "hiframes", bodo]
         and rhs.args[0].name not in lives
+    ):
+        return True
+
+    if (
+        call_list == ["ensure_column_unboxed", "table", "hiframes", bodo]
+        and rhs.args[0].name not in lives
+        and rhs.args[1].name not in lives
     ):
         return True
 

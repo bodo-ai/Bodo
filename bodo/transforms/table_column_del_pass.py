@@ -10,6 +10,7 @@ import operator
 from collections import defaultdict
 
 import numba
+import numpy as np
 from numba.core import ir, types
 from numba.core.analysis import compute_cfg_from_blocks
 from numba.core.ir_utils import find_topo_order, guard
@@ -509,6 +510,22 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         # Skip ops that shouldn't impact the number of columns. Len
                         # requires some column in the table, but no particular column.
                         continue
+                    elif fdef == (
+                        "generate_mappable_table_func",
+                        "bodo.utils.table_utils",
+                    ):
+                        # Handle mappable operations table operations. These act like
+                        # an alias.
+                        rhs_table = rhs.args[0].name
+                        used_cols, use_all = _generate_rhs_use_effective_alias(
+                            rhs_table,
+                            block_use_map,
+                            table_col_use_map,
+                            equiv_vars,
+                            lhs_name,
+                        )
+                        block_use_map[rhs_table] = (used_cols, use_all)
+                        continue
 
                 elif isinstance(stmt.value, ir.Expr) and stmt.value.op == "getattr":
                     if stmt.value.attr == "shape":
@@ -541,23 +558,14 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                     # blocks yet.
 
                     rhs_table = rhs.value.name
-                    rhs_use, rhs_use_all = block_use_map[rhs_table]
-                    if rhs_use_all:
-                        # If we are already using all columns, continue.
-                        continue
-                    rhs_use = rhs_use.copy()
-                    update_with_columns = True
-                    for other_block_use_map in table_col_use_map.values():
-                        used_cols, use_all = get_live_column_nums_block(
-                            other_block_use_map, equiv_vars, lhs_name
-                        )
-                        if use_all:
-                            update_with_columns = False
-                            block_use_map[rhs_table] = (set(), True)
-                            break
-                        rhs_use.update(used_cols)
-                    if update_with_columns:
-                        block_use_map[rhs_table] = (rhs_use, False)
+                    used_cols, use_all = _generate_rhs_use_effective_alias(
+                        rhs_table,
+                        block_use_map,
+                        table_col_use_map,
+                        equiv_vars,
+                        lhs_name,
+                    )
+                    block_use_map[rhs_table] = (used_cols, use_all)
                     continue
 
             for var in stmt.list_vars():
@@ -652,7 +660,7 @@ def _compute_table_column_live_map(cfg, blocks, typemap, column_uses):
     return live_map
 
 
-def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info):
+def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info, func_ir):
     """remove dead table columns using liveness info."""
     # List of tables that are updated at the source in this block.
     removed = False
@@ -680,15 +688,12 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info):
                 )
             ):
                 # Compute all columns that are live at this statement.
-                used_columns, use_all = get_live_column_nums_block(
-                    lives, equiv_vars, lhs_name
+                used_columns = _find_used_columns(
+                    lhs_name, typemap[rhs.value.name], lives, equiv_vars, typemap
                 )
-                if use_all:
+                if used_columns is None:
                     new_body.append(stmt)
                     continue
-                used_columns = bodo.ir.connector.trim_extra_used_columns(
-                    used_columns, len(typemap[rhs.value.name].arr_types)
-                )
                 filter_func = gen_table_filter(typemap[rhs.value.name], used_columns)
                 filter_func = numba.njit(filter_func, no_cpython_wrapper=True)
                 nodes = compile_func_single_block(
@@ -700,6 +705,27 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info):
                 )
                 new_body += reversed(nodes)
                 continue
+            elif isinstance(stmt.value, ir.Expr) and stmt.value.op == "call":
+                fdef = guard(numba.core.ir_utils.find_callname, func_ir, rhs)
+                if fdef == ("generate_mappable_table_func", "bodo.utils.table_utils"):
+                    used_columns = _find_used_columns(
+                        lhs_name, typemap[rhs.args[0].name], lives, equiv_vars, typemap
+                    )
+                    if used_columns is None:
+                        new_body.append(stmt)
+                        continue
+                    args = rhs.args
+                    nodes = compile_func_single_block(
+                        eval(
+                            "lambda table, func_name, out_arr_typ: bodo.utils.table_utils.generate_mappable_table_func(table, func_name, out_arr_typ, used_columns)"
+                        ),
+                        rhs.args,
+                        stmt.target,
+                        typing_info=typing_info,
+                        extra_globals={"used_columns": used_columns},
+                    )
+                    new_body += reversed(nodes)
+                    continue
 
         new_body.append(stmt)
 
@@ -729,7 +755,12 @@ def remove_dead_table_columns(func_ir, typemap, typing_info):
         )
         for label, block in blocks.items():
             removed |= remove_dead_columns(
-                block, column_live_map[label], column_equiv_vars, typemap, typing_info
+                block,
+                column_live_map[label],
+                column_equiv_vars,
+                typemap,
+                typing_info,
+                func_ir,
             )
     # We return if anything is removed, but this is currently unused.
     return removed
@@ -751,3 +782,51 @@ def get_live_column_nums_block(block_lives, equiv_vars, table_name):
             return [], True
         total_used_columns = total_used_columns | new_columns
     return sorted(total_used_columns), False
+
+
+def _find_used_columns(lhs_name, table_type, lives, equiv_vars, typemap):
+    """
+    Finds the used columns needed at a particular block.
+    This is used for functions that update the code to include
+    a "used_cols" in an optimization path.
+
+    Returns None if all columns are used, otherwise an np.array
+    with the used columns.
+    """
+    # Compute all columns that are live at this statement.
+    used_columns, use_all = get_live_column_nums_block(lives, equiv_vars, lhs_name)
+    if use_all:
+        return None
+    used_columns = bodo.ir.connector.trim_extra_used_columns(
+        used_columns, len(table_type.arr_types)
+    )
+    return np.array(used_columns, dtype=np.int64)
+
+
+def _generate_rhs_use_effective_alias(
+    rhs_table, block_use_map, table_col_use_map, equiv_vars, lhs_name
+):
+    """
+    Finds the uses from an operation that effectively acts like an alias
+    (e.g. filter). An operation acts like an alias when it doesn't directly
+    add any additional column uses and all column uses are a function of any
+    uses of its output.
+
+    Returns a pair of values:
+        - used_columns: set of used columns
+        - use_all: Boolean. If true, used_columns will be the empty set.
+    """
+    used_columns, use_all = block_use_map[rhs_table]
+    if use_all:
+        return set(), True
+    # Make a copy in case the set is shared.
+    used_columns = used_columns.copy()
+    update_with_columns = True
+    for other_block_use_map in table_col_use_map.values():
+        used_col_local, use_all = get_live_column_nums_block(
+            other_block_use_map, equiv_vars, lhs_name
+        )
+        if use_all:
+            return set(), True
+        used_columns.update(used_col_local)
+    return used_columns, False
