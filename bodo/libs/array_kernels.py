@@ -82,6 +82,7 @@ ll.add_symbol("quantile_parallel", quantile_alg.quantile_parallel)
 
 MPI_ROOT = 0
 sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
+max_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Max.value)
 min_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Min.value)
 
 
@@ -381,46 +382,50 @@ def first_last_valid_index(arr, index_arr, is_first=True, parallel=False):
     In the serial case, the data array is scanned forward (if is_first) or backwards (otherwise) until the
     first non-NA entry is reached, and the corresponding index for the entry is returned.
 
-    In the parallel case, the function will compute the pair (min_rank, index_val) by doing the following.
+    In the parallel case, the function will compute the pair (min/max_rank, index_val) by doing the following.
     On each rank i:
-        1. initialize loc_min = num_ranks
+        1. initialize loc_ext = num_ranks/-1 (local extrema -> local min or max)
         2. scan array locally for first/last valid index, if some_val is found
-            2a. loc_min = i
+            2a. loc_ext = i
             2b. index_val = some_val
     Once this computation is done on all ranks, we find (via reduction):
-        3. min_rank = min of loc_min across all ranks
+        3. ext_rank = min/max of loc_ext across all ranks (min iff is_first)
     Using this min_rank, on each rank
         4. broadcast index_val to each rank from min_rank
     If all ranks had fully-NA arrays, we expect min_rank = num_ranks, so on each rank:
-        5. return index_val if min_rank != num_ranks otherwise return None
+        5. return index_val if ext_rank != num_ranks/-1 otherwise return None
     """
     is_first = get_overload_const_bool(is_first)
     if is_first:
         range_str = "n"
+        init_val = "n_pes"
+        min_or_max_op = "min_op"
     else:
         range_str = "n-1, -1, -1"
+        init_val = "-1"
+        min_or_max_op = "max_op"
     func_text = f"""def impl(arr, index_arr, is_first=True, parallel=False):
     n = len(arr)
-    index_val = index_arr[0]
+    index_value = index_arr[0]
     has_valid = False
-    loc_min = -1
+    loc_valid_rank = -1
     if parallel:
         rank = bodo.libs.distributed_api.get_rank()
         n_pes = bodo.libs.distributed_api.get_size()
-        loc_min = n_pes
+        loc_valid_rank = {init_val}
     for i in range({range_str}):
         if not isna(arr, i):
             if parallel:
-                loc_min = rank
-            index_val = index_arr[i]
+                loc_valid_rank = rank
+            index_value = index_arr[i]
             has_valid = True
             break
     if parallel:
-        min_rank = np.int32(bodo.libs.distributed_api.dist_reduce(loc_min, min_op))
-        if min_rank != n_pes:
+        possible_valid_rank = np.int32(bodo.libs.distributed_api.dist_reduce(loc_valid_rank, {min_or_max_op}))
+        if possible_valid_rank != {init_val}:
             has_valid = True
-            index_val = bodo.libs.distributed_api.bcast_scalar(index_val, min_rank)
-    return has_valid, box_if_dt64(index_val)\n
+            index_value = bodo.libs.distributed_api.bcast_scalar(index_value, possible_valid_rank)
+    return has_valid, box_if_dt64(index_value)\n
     """
     loc_vars = {}
     exec(
@@ -429,6 +434,7 @@ def first_last_valid_index(arr, index_arr, is_first=True, parallel=False):
             "np": np,
             "bodo": bodo,
             "isna": isna,
+            "max_op": max_op,
             "min_op": min_op,
             "box_if_dt64": bodo.utils.conversion.box_if_dt64,
         },

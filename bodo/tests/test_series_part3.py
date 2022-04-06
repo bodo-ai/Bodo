@@ -1028,6 +1028,8 @@ def test_series_duplicated(S_val, memory_leak_check):
     "arr",
     [
         [None] * 5 + [None, None, 2, 3, None] + [None] * 5,
+        [None, None, 2, 3, None] + [None, None, 2, 3, None] + [None] * 5,
+        np.arange(15),
         [None] * 15,
     ],
 )
@@ -1055,7 +1057,6 @@ def test_series_first_last_valid_index(arr, idx):
         return idx_val.date
 
     s = pd.Series(arr, index=idx)
-    # S = pd.Series(np.arange(5), index=pd.date_range("2018-04-09", periods=5, freq="2D1H"))
     check_func(test_last, (s,), check_typing_issues=False)
     check_func(test_first, (s,), check_typing_issues=False)
 
