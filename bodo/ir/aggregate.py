@@ -1122,6 +1122,7 @@ def agg_distributed_run(
             "get_agg_udf_addr": get_agg_udf_addr,
             "delete_table_decref_arrays": delete_table_decref_arrays,
             "decode_if_dict_array": decode_if_dict_array,
+            "out_typs": out_col_typs,
         }
     )
     if udf_func_struct is not None:
@@ -1745,26 +1746,6 @@ def gen_top_level_agg_func(
     )
     func_text += "    table = arr_info_list_to_table(info_list)\n"
 
-    for i, c in enumerate(agg_node.gb_info_out.keys()):
-        out_name = out_names[c] + "_dummy"
-        out_col_typ = out_col_typs[i]
-        # Shift, Min, and Max maintain the same output and input type
-        # We handle these separately with Categorical data because if a
-        # CategoricalArrayType doesn't have types known at compile time then
-        # we must associate it with another DType that has it's categories
-        # set at runtime. The existing approach for other types just uses
-        # Typerefs and those can't be resolved.
-        in_col, func = agg_node.gb_info_out[c]
-        if (
-            isinstance(func, pytypes.SimpleNamespace)
-            and func.fname in ["min", "max", "shift"]
-            and isinstance(out_col_typ, bodo.CategoricalArrayType)
-        ):
-            func_text += "    {} = {}\n".format(out_name, in_arg_names[in_col])
-        else:
-            func_text += "    {} = {}\n".format(
-                out_name, _gen_dummy_alloc(out_col_typ, i, False)
-            )
     # do_combine indicates whether GroupbyPipeline in C++ will need to do
     # `void combine()` operation or not
     do_combine = parallel
@@ -1829,6 +1810,27 @@ def gen_top_level_agg_func(
                 loc=agg_node.loc,
             )
         do_combine = False  # same as median and nunique
+
+    for i, c in enumerate(agg_node.gb_info_out.keys()):
+        out_name = out_names[c] + "_dummy"
+        out_col_typ = out_col_typs[i]
+        # Shift, Min, and Max maintain the same output and input type
+        # We handle these separately with Categorical data because if a
+        # CategoricalArrayType doesn't have types known at compile time then
+        # we must associate it with another DType that has it's categories
+        # set at runtime. The existing approach for other types just uses
+        # Typerefs and those can't be resolved.
+        in_col, func = agg_node.gb_info_out[c]
+        if (
+            isinstance(func, pytypes.SimpleNamespace)
+            and func.fname in ["min", "max", "shift"]
+            and isinstance(out_col_typ, bodo.CategoricalArrayType)
+        ):
+            func_text += "    {} = {}\n".format(out_name, in_arg_names[in_col])
+        elif udf_func_struct is not None:
+            func_text += "    {} = {}\n".format(
+                out_name, _gen_dummy_alloc(out_col_typ, i, False)
+            )
 
     if udf_func_struct is not None:
         # there are user-defined functions
@@ -2021,12 +2023,15 @@ def gen_top_level_agg_func(
                 )
             )
             idx += 1
-    for out_name in out_names.values():
-        func_text += (
-            "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                out_name, idx, out_name + "_dummy"
-            )
-        )
+    for i, out_name in enumerate(out_names.values()):
+        if (
+            isinstance(func, pytypes.SimpleNamespace)
+            and func.fname in ["min", "max", "shift"]
+            and isinstance(out_col_typ, bodo.CategoricalArrayType)
+        ):
+            func_text += f"    {out_name} = info_to_array(info_from_table(out_table, {idx}), {out_name + '_dummy'})\n"
+        else:
+            func_text += f"    {out_name} = info_to_array(info_from_table(out_table, {idx}), out_typs[{i}])\n"
         idx += 1
     # The index as last argument in output as well.
     if agg_node.same_index:
@@ -2051,7 +2056,7 @@ def gen_top_level_agg_func(
     )
 
     loc_vars = {}
-    exec(func_text, {}, loc_vars)
+    exec(func_text, {"out_typs": out_col_typs}, loc_vars)
     agg_top = loc_vars["agg_top"]
     return agg_top
 

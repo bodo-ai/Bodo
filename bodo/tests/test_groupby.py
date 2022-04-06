@@ -1844,22 +1844,22 @@ def test_groupby_nunique(df, memory_leak_check):
     """
 
     def impl0(df):
-        """ Test nunique alone (nunique_mode=0)"""
+        """Test nunique alone (nunique_mode=0)"""
         df2 = df.groupby("A").agg({"D": "nunique"})
         return df2
 
     def impl1(df):
-        """ Test nunique with median (nunique_mode=1)"""
+        """Test nunique with median (nunique_mode=1)"""
         df2 = df.groupby("A").agg({"D": "nunique", "B": "median"})
         return df2
 
     def impl2(df):
-        """ Test nunique with sum (nunique_mode=2)"""
+        """Test nunique with sum (nunique_mode=2)"""
         df2 = df.groupby("A").agg({"D": "nunique", "B": "sum"})
         return df2
 
     def impl3(df):
-        """ Test multiple nunique (nunique_mode=0)"""
+        """Test multiple nunique (nunique_mode=0)"""
         df2 = df.groupby("A").nunique()
         return df2
 
@@ -1911,12 +1911,12 @@ def test_groupby_nunique_dropna(memory_leak_check):
     )
 
     def impl0(df):
-        """ Test nunique dropna=False"""
+        """Test nunique dropna=False"""
         df2 = df.groupby("A").nunique(dropna=False)
         return df2
 
     def impl1(df):
-        """ Test nunique dropna=True (the default)"""
+        """Test nunique dropna=True (the default)"""
         df2 = df.groupby("A").nunique(dropna=True)
         return df2
 
@@ -2582,7 +2582,7 @@ def test_groupby_apply_arg_dist(memory_leak_check):
 
 
 def test_groupby_multiindex(memory_leak_check):
-    """ Test groupby with a multiindex having more than one col. """
+    """Test groupby with a multiindex having more than one col."""
     df = pd.DataFrame(
         {
             "A": [2, 1, 9, 1, 2, 2, 1],
@@ -3124,7 +3124,7 @@ def test_groupby_as_index_mean(memory_leak_check):
 
 @pytest.mark.slow
 def test_mean_median_other_supported_types(memory_leak_check):
-    """ Test Groupby.mean()/median() with cases not in test_df"""
+    """Test Groupby.mean()/median() with cases not in test_df"""
 
     def impl1(df):
         A = df.groupby("A").mean()
@@ -3218,7 +3218,7 @@ def test_min(test_df, memory_leak_check):
 
 @pytest.mark.slow
 def test_min_max_other_supported_types(memory_leak_check):
-    """ Test Groupby.min()/max() with other types not in df_test"""
+    """Test Groupby.min()/max() with other types not in df_test"""
     # TODO: [BE-435] HA: Once all these groupby functions are done, merge the dataframe examples with df_test
     def impl1(df):
         A = df.groupby("A").min()
@@ -3525,7 +3525,7 @@ def test_groupby_as_index_prod(memory_leak_check):
 
 @pytest.mark.slow
 def test_sum_prod_empty_mix(memory_leak_check):
-    """ Test Groupby.sum()/prod() with cases not in test_df"""
+    """Test Groupby.sum()/prod() with cases not in test_df"""
 
     def impl1(df):
         A = df.groupby("A").sum()
@@ -3625,7 +3625,7 @@ def test_first_last(test_df):
 
 @pytest.mark.slow
 def test_first_last_supported_types(memory_leak_check):
-    """ Test Groupby.first()/last() with other types not in test_df"""
+    """Test Groupby.first()/last() with other types not in test_df"""
 
     def impl1(df):
         A = df.groupby("A").first()
@@ -5229,7 +5229,7 @@ def test_count_supported_cases(memory_leak_check):
 
 
 def test_value_counts():
-    """ Test groupby.value_counts """
+    """Test groupby.value_counts"""
 
     # SeriesGroupBy
     def impl1(df):
@@ -5389,7 +5389,7 @@ def test_agg_supported_types(df, memory_leak_check):
     ],
 )
 def test_groupby_transform(df, func, memory_leak_check):
-    """ Test groupby.transform """
+    """Test groupby.transform"""
 
     def impl(df):
         A = df.groupby("A").transform(func)
@@ -5400,7 +5400,7 @@ def test_groupby_transform(df, func, memory_leak_check):
 
 @pytest.mark.slow
 def test_groupby_transform_count(memory_leak_check):
-    """ Test groupby().transform('count') with multiple datatypes"""
+    """Test groupby().transform('count') with multiple datatypes"""
 
     def impl_count(df):
         A = df.groupby("A").transform("count")
@@ -5422,7 +5422,7 @@ def test_groupby_transform_count(memory_leak_check):
 
 @pytest.mark.slow
 def test_groupby_transform_nullable(memory_leak_check):
-    """ Test groupby().transform with nullable and string datatypes"""
+    """Test groupby().transform with nullable and string datatypes"""
 
     def impl_min(df):
         A = df.groupby("A").transform("min")
