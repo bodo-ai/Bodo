@@ -169,9 +169,9 @@ cdef generic_aggregate_func(object traces_all):
     if "args" in result:
         args = list(result["args"].keys())
         for arg in args:
-            if arg.startswith("g_") or isinstance(result["args"][arg], str):
+            if arg.startswith("g_") or isinstance(result["args"][arg], (str, list)):
                 # attributes called g_xxx are global and don't need aggregation
-                # and we don't aggregate string values
+                # and we don't aggregate string or list values
                 continue
             values = np.array([t["args"][arg] for t in traces_all])
             try:

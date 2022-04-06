@@ -721,7 +721,7 @@ def _gen_pq_reader_py(
     func_text = f"def pq_reader_py(fname,{extra_args}):\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
-    func_text += f"    ev.add_attribute('fname', fname)\n"
+    func_text += f"    ev.add_attribute('g_fname', fname)\n"
     func_text += f"    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={is_parallel})\n"
     func_text += f'    dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({extra_args}{comma}))\n'
     # convert the filename, which could be a string or a list of strings, to a
@@ -1306,7 +1306,7 @@ def get_parquet_dataset(
                 if tracing.is_tracing():
                     # only do the work of converting dnf_filters to string
                     # if tracing is enabled
-                    ev_pq_ds.add_attribute("dnf_filter", str(dnf_filters))
+                    ev_pq_ds.add_attribute("g_dnf_filter", str(dnf_filters))
             pa_default_io_thread_count = pa.io_thread_count()
             pa.set_io_thread_count(nthreads)
 
