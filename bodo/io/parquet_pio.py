@@ -1628,8 +1628,8 @@ def get_scanner_batches(
     cpu_count = os.cpu_count()
     if cpu_count is None or cpu_count == 0:
         cpu_count = 2
-    default_threads = min(4, cpu_count)
-    max_threads = min(16, cpu_count)
+    default_threads = min(os.environ.get("BODO_MIN_IO_THREADS", 4), cpu_count)
+    max_threads = min(os.environ.get("BODO_MAX_IO_THREADS", 16), cpu_count)
     if (
         is_parallel
         and len(fpaths) > max_threads
