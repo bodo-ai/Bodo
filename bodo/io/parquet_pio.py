@@ -1470,8 +1470,9 @@ def get_parquet_dataset(
         # Presumably the work is partitioned more or less equally among ranks,
         # and we are mostly (or just) reading metadata, so we assign four IO
         # threads to every rank
-        pa.set_io_thread_count(4)
-        pa.set_cpu_count(4)
+        nthreads = min(int(os.environ.get("BODO_MIN_IO_THREADS", 4)), 4)
+        pa.set_io_thread_count(nthreads)
+        pa.set_cpu_count(nthreads)
         # Use dataset scanner API to get exact row counts when
         # filter is applied. Arrow will try to calculate this by
         # by reading only the file's metadata, and if it needs to
@@ -1628,8 +1629,8 @@ def get_scanner_batches(
     cpu_count = os.cpu_count()
     if cpu_count is None or cpu_count == 0:
         cpu_count = 2
-    default_threads = min(os.environ.get("BODO_MIN_IO_THREADS", 4), cpu_count)
-    max_threads = min(os.environ.get("BODO_MAX_IO_THREADS", 16), cpu_count)
+    default_threads = min(int(os.environ.get("BODO_MIN_IO_THREADS", 4)), cpu_count)
+    max_threads = min(int(os.environ.get("BODO_MAX_IO_THREADS", 16)), cpu_count)
     if (
         is_parallel
         and len(fpaths) > max_threads

@@ -1155,6 +1155,10 @@ def test_read_write_parquet(memory_leak_check):
                 bodo.barrier()
 
     for write_index in [None, "string", "numeric"]:
+        # test that nothing breaks when BODO_MIN_IO_THREADS and
+        # BODO_MAX_IO_THREADS are set
+        os.environ["BODO_MIN_IO_THREADS"] = "2"
+        os.environ["BODO_MAX_IO_THREADS"] = "2"
         try:
             df = gen_dataframe(NUM_ELEMS, write_index)
             # to test equality, we have to coerce datetime columns to ms
@@ -1166,6 +1170,8 @@ def test_read_write_parquet(memory_leak_check):
             check_func(read, (), sort_output=False, check_names=True, check_dtype=False)
         finally:
             clean_pq_files("none", "_test_io___.pq", "_test_io___.pq")
+            del os.environ["BODO_MIN_IO_THREADS"]
+            del os.environ["BODO_MAX_IO_THREADS"]
 
     def error_check2(df):
         df.to_parquet("out.parquet", compression="wrong")
