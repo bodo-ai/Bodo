@@ -10,18 +10,21 @@ from urllib.parse import urlparse
 import llvmlite.binding as ll
 import numba
 import numpy as np
+from fsspec.implementations.arrow import (
+    ArrowFile,
+    ArrowFSWrapper,
+    wrap_exceptions,
+)
 from numba.core import types
-from numba.extending import overload
+from numba.extending import NativeValue, models, overload, register_model, unbox
 
 import bodo
 from bodo.io import csv_cpp
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.str_ext import unicode_to_utf8, unicode_to_utf8_and_len
-from bodo.utils.typing import BodoError, BodoWarning
+from bodo.utils.typing import BodoError, BodoWarning, get_overload_constant_dict
 from bodo.utils.utils import check_java_installation
 
-
-from fsspec.implementations.arrow import ArrowFSWrapper, ArrowFile, wrap_exceptions
 
 # ----- monkey-patch fsspec.implementations.arrow.ArrowFSWrapper._open --------
 def fsspec_arrowfswrapper__open(self, path, mode="rb", block_size=None, **kwargs):
@@ -64,6 +67,7 @@ bodo_error_msg = """
             that makes the credentials available at ~/.aws/credentials.
         (3) Incorrect credentials: Your S3 credentials are incorrect or do not have
             the correct permissions.
+        (4) Wrong bucket region is used. Set AWS_DEFAULT_REGION variable with correct bucket region.
     """
 
 
@@ -399,7 +403,7 @@ def directory_of_files_common_filter(fname):
     )
 
 
-def find_file_name_or_handler(path, ftype):
+def find_file_name_or_handler(path, ftype, storage_options=None):
     """
     Find path_or_buf argument for pd.read_csv()/pd.read_json()
 
@@ -434,7 +438,7 @@ def find_file_name_or_handler(path, ftype):
 
     if parsed_url.scheme == "s3":
         is_handler = True
-        fs = get_s3_fs_from_path(path)
+        fs = get_s3_fs_from_path(path, storage_options=storage_options)
         all_files = s3_list_dir_fnames(fs, path)  # can return None if not dir
         path_ = (parsed_url.netloc + parsed_url.path).rstrip("/")
         fname = path_
@@ -609,3 +613,39 @@ def csv_write_overload(path_or_buf, D, is_parallel=False):
         bodo.utils.utils.check_and_propagate_cpp_exception()
 
     return impl
+
+
+class StorageOptionsDictType(types.Opaque):
+    def __init__(self):
+        super(StorageOptionsDictType, self).__init__(name="StorageOptionsDictType")
+
+
+storage_options_dict_type = StorageOptionsDictType()
+types.storage_options_dict_type = storage_options_dict_type
+register_model(StorageOptionsDictType)(models.OpaqueModel)
+
+
+@unbox(StorageOptionsDictType)
+def unbox_storage_options_dict_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+def get_storage_options_pyobject(storage_options):  # pragma: no cover
+    pass
+
+
+@overload(get_storage_options_pyobject, no_unliteral=True)
+def overload_get_storage_options_pyobject(storage_options):
+    """generate a pyobject for the storage_options to pass to C++"""
+    storage_options_val = get_overload_constant_dict(storage_options)
+    func_text = "def impl(storage_options):\n"
+    func_text += (
+        "  with numba.objmode(storage_options_py='storage_options_dict_type'):\n"
+    )
+    func_text += f"    storage_options_py = {str(storage_options_val)}\n"
+    func_text += "  return storage_options_py\n"
+    loc_vars = {}
+    exec(func_text, globals(), loc_vars)
+    return loc_vars["impl"]

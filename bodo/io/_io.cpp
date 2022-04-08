@@ -170,7 +170,7 @@ void file_write(char* file_name, void* buff, int64_t size) {
         get_get_fs_pyobject(Bodo_Fs::s3, "", f_mod, func_obj);
 
         s3_get_fs_t s3_get_fs = (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
-        s3_get_fs(&s3_fs, "");
+        s3_get_fs(&s3_fs, "", false);
 
         open_file_outstream(Bodo_Fs::s3, "", file_name + 5, s3_fs, NULL,
                             &out_stream);
@@ -320,7 +320,7 @@ void file_write_parallel(char* file_name, char* buff, int64_t start,
         import_fs_module(Bodo_Fs::s3, "", f_mod);
         get_get_fs_pyobject(Bodo_Fs::s3, "", f_mod, func_obj);
         s3_get_fs_t s3_get_fs = (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
-        s3_get_fs(&s3_fs, "");
+        s3_get_fs(&s3_fs, "", false);
         parallel_in_order_write(Bodo_Fs::s3, "", fname, buff, count, elem_size,
                                 s3_fs, NULL);
         Py_DECREF(f_mod);

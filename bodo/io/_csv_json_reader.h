@@ -24,6 +24,8 @@ extern "C" void PyInit_json(PyObject *);
  * @param[in]  compression   compression scheme of file(s)
  * @param[in] bucket_region: s3 bucket server location (needed if data is in s3
  * path)
+ * @param[in] storage_options: options to pass to S3FS.
+ *            Example: anonymous connection `anon`.
  * @param[in] chunksize: number of rows per chunk
  * @param[in] is_skiprows_list: whether skiprows is a single number (i.e. skip
  *nrows from beginning) or list of specific row numbers. See file_chunk_reader
@@ -37,8 +39,9 @@ extern "C" void PyInit_json(PyObject *);
 extern "C" PyObject *csv_file_chunk_reader(
     const char *fname, bool is_parallel, int64_t *skiprows, int64_t nrows,
     bool header, const char *compression, const char *bucket_region,
-    int64_t chunksize = 0, bool is_skiprows_list = false,
-    int64_t skiprows_list_len = 0, bool pd_low_memory = false);
+    PyObject *storage_options, int64_t chunksize = 0,
+    bool is_skiprows_list = false, int64_t skiprows_list_len = 0,
+    bool pd_low_memory = false);
 
 /**
  * Split file into chunks and return a file-like object per rank. The returned
@@ -58,7 +61,8 @@ extern "C" PyObject *csv_file_chunk_reader(
 extern "C" PyObject *json_file_chunk_reader(const char *fname, bool lines,
                                             bool is_parallel, int64_t nrows,
                                             const char *compression,
-                                            const char *bucket_region);
+                                            const char *bucket_region,
+                                            PyObject *storage_options);
 
 /**
  * Update the reader being used in an iterator to

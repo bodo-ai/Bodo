@@ -17,7 +17,7 @@ typedef FileReader *(*s3_reader_init_t)(const char *, const char *, bool, bool);
 typedef FileReader *(*hdfs_reader_init_t)(const char *, const char *, bool,
                                           bool);
 typedef void (*s3_get_fs_t)(std::shared_ptr<::arrow::fs::S3FileSystem> *,
-                            std::string);
+                            std::string, bool anon);
 typedef void (*gcs_get_fs_t)(std::shared_ptr<::arrow::py::fs::PyFileSystem> *);
 typedef void (*hdfs_get_fs_t)(const std::string &,
                               std::shared_ptr<::arrow::fs::HadoopFileSystem> *);
@@ -54,7 +54,8 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
                          std::string *path_name);
 
 /*
- * Import file system python module: bodo.io.s3_reader, bodo.io.hdfs_reader or bodo.io.gcs_reader
+ * Import file system python module: bodo.io.s3_reader, bodo.io.hdfs_reader or
+ * bodo.io.gcs_reader
  * @param fs_option: file system to write to
  * @param file_type: type of file, 'csv', 'json', 'parquet', or '' all others
  * @param f_mod: reference to the python module

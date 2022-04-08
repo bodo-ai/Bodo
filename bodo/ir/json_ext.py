@@ -8,6 +8,10 @@ from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 import bodo
 import bodo.ir.connector
 from bodo import objmode  # noqa
+from bodo.io.fs_io import (  # noqa
+    get_storage_options_pyobject,
+    storage_options_dict_type,
+)
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.utils.utils import check_java_installation  # noqa
@@ -28,6 +32,7 @@ class JsonReader(ir.Stmt):
         precise_float,
         lines,
         compression,
+        storage_options,
     ):
         self.connector_typ = "json"
         self.df_out = df_out  # used only for printing
@@ -41,6 +46,7 @@ class JsonReader(ir.Stmt):
         self.precise_float = precise_float
         self.lines = lines
         self.compression = compression
+        self.storage_options = storage_options
 
     def __repr__(self):  # pragma: no cover
         return "{} = ReadJson(file={}, col_names={}, types={}, vars={})".format(
@@ -57,12 +63,13 @@ ll.add_symbol("json_file_chunk_reader", json_cpp.json_file_chunk_reader)
 json_file_chunk_reader = types.ExternalFunction(
     "json_file_chunk_reader",
     bodo.ir.connector.stream_reader_type(
-        types.voidptr,
-        types.bool_,
-        types.bool_,
-        types.int64,
-        types.voidptr,
-        types.voidptr,
+        types.voidptr,  # filename
+        types.bool_,  # lines
+        types.bool_,  # is_parallel
+        types.int64,  # nrows
+        types.voidptr,  # compression
+        types.voidptr,  # bucket_region
+        storage_options_dict_type,  # storage_options dictionary
     ),
 )
 
@@ -154,6 +161,7 @@ def json_distributed_run(
         json_node.precise_float,
         json_node.lines,
         json_node.compression,
+        json_node.storage_options,
     )
     f_block = compile_to_numba_ir(
         json_impl,
@@ -211,6 +219,7 @@ def _gen_json_reader_py(
     precise_float,
     lines,
     compression,
+    storage_options,
 ):
     # TODO: support non-numpy types like strings
     sanitized_cnames = [sanitize_varname(c) for c in col_names]
@@ -240,19 +249,26 @@ def _gen_json_reader_py(
     func_text += "  check_java_installation(fname)\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={parallel})\n"
+    # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
+    if storage_options is None:
+        storage_options = {}
+    storage_options["bodo_dummy"] = "dummy"
+    func_text += (
+        f"  storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
+    )
     func_text += "  f_reader = bodo.ir.json_ext.json_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
-    func_text += "    {}, {}, -1, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region) )\n".format(
+    func_text += "    {}, {}, -1, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py )\n".format(
         lines, parallel, compression
     )
     # Check if there was an error in the C++ code. If so, raise it.
     func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     func_text += "  if bodo.utils.utils.is_null_pointer(f_reader):\n"
     func_text += "      raise FileNotFoundError('File does not exist')\n"
-    func_text += "  with objmode({}):\n".format(typ_strs)
-    func_text += "    df = pd.read_json(f_reader, orient='{}',\n".format(orient)
-    func_text += "       convert_dates = {}, \n".format(convert_dates)
-    func_text += "       precise_float={}, \n".format(precise_float)
-    func_text += "       lines={}, \n".format(lines)
+    func_text += f"  with objmode({typ_strs}):\n"
+    func_text += f"    df = pd.read_json(f_reader, orient='{orient}',\n"
+    func_text += f"       convert_dates = {convert_dates}, \n"
+    func_text += f"       precise_float={precise_float}, \n"
+    func_text += f"       lines={lines}, \n"
     func_text += "       dtype={{{}}},\n".format(pd_dtype_strs)
     func_text += "       )\n"
     for s_cname, cname in zip(sanitized_cnames, col_names):

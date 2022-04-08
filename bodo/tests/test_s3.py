@@ -153,15 +153,12 @@ def test_s3_csv_data_date1(minio_server, s3_bucket, datapath):
     check_func(test_impl, (), py_output=py_output)
 
 
-def test_s3_pq_anon_public_dataset(memory_leak_check):
+def unset_aws_vars():
     """
-    Test pd.read_parquet(..., storage_options={"anon": True})
-    with a public dataset on S3.
+    We need to unset the AWS env vars so it connects to actual S3 instead of MinIO
     """
-
     import os
 
-    # We need to unset the AWS env vars so it connects to actual S3 instead of MinIO
     aws_env_vars = [
         "AWS_S3_ENDPOINT",
     ]
@@ -172,6 +169,27 @@ def test_s3_pq_anon_public_dataset(memory_leak_check):
             del os.environ[v]
         else:
             orig_env_vars[v] = None
+    return aws_env_vars, orig_env_vars
+
+
+def reset_aws_vars(aws_env_vars, orig_env_vars):
+    """
+    Reset the AWS env vars to their original values
+    """
+    import os
+
+    for v in aws_env_vars:
+        if orig_env_vars[v] is not None:
+            os.environ[v] = orig_env_vars[v]
+
+
+def test_s3_pq_anon_public_dataset(memory_leak_check):
+    """
+    Test pd.read_parquet(..., storage_options={"anon": True})
+    with a public dataset on S3.
+    """
+
+    aws_env_vars, orig_env_vars = unset_aws_vars()
 
     # Read from a public bucket
     def impl():
@@ -184,10 +202,7 @@ def test_s3_pq_anon_public_dataset(memory_leak_check):
     try:
         check_func(impl, ())
     finally:
-        # Reset the environment variables.
-        for v in aws_env_vars:
-            if orig_env_vars[v] is not None:
-                os.environ[v] = orig_env_vars[v]
+        reset_aws_vars(aws_env_vars, orig_env_vars)
 
 
 @pytest.mark.parametrize(
@@ -921,3 +936,49 @@ def test_read_parquet_glob_s3(minio_server, s3_bucket, datapath, memory_leak_che
     check_func(test_impl, (glob_pattern_1,), py_output=pyout, check_dtype=False)
     glob_pattern_2 = filename + "/part*-3af07a60-*ab59*.parquet"
     check_func(test_impl, (glob_pattern_2,), py_output=pyout, check_dtype=False)
+
+
+@pytest.mark.slow
+def test_s3_csv_anon_public_dataset(memory_leak_check):
+    """
+    Test pd.read_csv(..., storage_options={"anon": True})
+    with a public dataset on S3.
+    """
+    aws_env_vars, orig_env_vars = unset_aws_vars()
+
+    # Read from a public bucket
+    def impl():
+        df = pd.read_csv(
+            "s3://databrew-public-datasets-us-east-1/resolution.csv",
+            storage_options={"anon": True},
+        )
+        return df
+
+    try:
+        check_func(impl, ())
+    finally:
+        reset_aws_vars(aws_env_vars, orig_env_vars)
+
+
+@pytest.mark.slow
+def test_s3_json_anon_public_dataset(memory_leak_check):
+    """
+    Test pd.read_json(..., storage_options={"anon": True})
+    with a public dataset on S3.
+    """
+    aws_env_vars, orig_env_vars = unset_aws_vars()
+
+    # Read from a public bucket
+    def impl():
+        df = pd.read_json(
+            "s3://awsglue-datasets/examples/us-legislators/all/memberships.json",
+            lines=True,
+            storage_options={"anon": True},
+        )
+        # returning subset of column only (there's 'nan' vs. nan issue)
+        return df[["area_id", "on_behalf_of_id", "organization_id", "role"]]
+
+    try:
+        check_func(impl, ())
+    finally:
+        reset_aws_vars(aws_env_vars, orig_env_vars)

@@ -16,6 +16,8 @@ See more in [File IO][file_io], such as
     -   Arguments `sep`, `delimiter`, `header`, `names`, `index_col`,
         `usecols`, `dtype`, `nrows`, `skiprows`, `chunksize`,
         `parse_dates`, and `low_memory` are supported.
+    -   Argument `anon` of `storage_options` is supported for S3
+        filepaths.
     -   Either `names` and `dtype` arguments should be provided to
         enable type inference, or `filepath_or_buffer` should be
         inferrable as a constant string. This is required so bodo can
@@ -119,5 +121,7 @@ See more in [File IO][file_io], such as
         see [compile time constants][require_constants].
     -   Arguments `convert_dates`, `precise_float`, `lines` are
         supported.
+    -   Argument `anon` of `storage_options` is supported for S3
+        filepaths.
 
 
