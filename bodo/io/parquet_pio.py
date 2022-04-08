@@ -41,7 +41,13 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
 )
 from bodo.hiframes.table import TableType
-from bodo.io.fs_io import get_hdfs_fs, get_s3_fs_from_path, get_s3_subtree_fs
+from bodo.io.fs_io import (
+    get_hdfs_fs,
+    get_s3_fs_from_path,
+    get_s3_subtree_fs,
+    get_storage_options_pyobject,
+    storage_options_dict_type,
+)
 from bodo.libs.array import (
     cpp_table_to_py_table,
     delete_table,
@@ -66,7 +72,6 @@ from bodo.utils.typing import (
     BodoWarning,
     FileInfo,
     get_overload_const_str,
-    get_overload_constant_dict,
 )
 from bodo.utils.utils import (
     check_and_propagate_cpp_exception,
@@ -125,23 +130,6 @@ register_model(ReadParquetFilepathType)(models.OpaqueModel)
 
 @unbox(ReadParquetFilepathType)
 def unbox_read_parquet_fpath_type(typ, val, c):
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return NativeValue(val)
-
-
-class StorageOptionsDictType(types.Opaque):
-    def __init__(self):
-        super(StorageOptionsDictType, self).__init__(name="StorageOptionsDictType")
-
-
-storage_options_dict_type = StorageOptionsDictType()
-types.storage_options_dict_type = storage_options_dict_type
-register_model(StorageOptionsDictType)(models.OpaqueModel)
-
-
-@unbox(StorageOptionsDictType)
-def unbox_storage_options_dict_type(typ, val, c):
     # just return the Python object pointer
     c.pyapi.incref(val)
     return NativeValue(val)
@@ -676,25 +664,6 @@ def get_fname_pyobject(fname):
     with numba.objmode(fname_py="read_parquet_fpath_type"):
         fname_py = fname
     return fname_py
-
-
-def get_storage_options_pyobject(storage_options):  # pragma: no cover
-    pass
-
-
-@overload(get_storage_options_pyobject, no_unliteral=True)
-def overload_get_storage_options_pyobject(storage_options):
-    """generate a pyobject for the storage_options to pass to C++"""
-    storage_options_val = get_overload_constant_dict(storage_options)
-    func_text = "def impl(storage_options):\n"
-    func_text += (
-        "  with numba.objmode(storage_options_py='storage_options_dict_type'):\n"
-    )
-    func_text += f"    storage_options_py = {str(storage_options_val)}\n"
-    func_text += "  return storage_options_py\n"
-    loc_vars = {}
-    exec(func_text, globals(), loc_vars)
-    return loc_vars["impl"]
 
 
 def _gen_pq_reader_py(

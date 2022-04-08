@@ -513,8 +513,10 @@ class PathInfo {
      * @param file_path : path passed in pd.read_csv/pd.read_json call
      */
     PathInfo(const char *file_path, const std::string &compression_pyarg,
-             const char *bucket_region)
-        : file_path(file_path), bucket_region(bucket_region) {
+             const char *bucket_region, bool is_anon)
+        : file_path(file_path),
+          bucket_region(bucket_region),
+          s3fs_anon(is_anon) {
         // obtain path info on rank 0, broadcast to other ranks.
         // this sets PathInfo attributes on all ranks
         obtain_is_directory();
@@ -578,8 +580,9 @@ class PathInfo {
                     s3_get_fs_t s3_get_fs =
                         (s3_get_fs_t)PyNumber_AsSsize_t(func_obj, NULL);
                     std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
-                    s3_get_fs(&s3_fs, bucket_region);
+                    s3_get_fs(&s3_fs, bucket_region, s3fs_anon);
                     fs = s3_fs;
+
                     // remove s3:// prefix from file_path
                     file_path = file_path.substr(strlen("s3://"));
                 } else if (is_hdfs) {
@@ -814,6 +817,8 @@ class PathInfo {
     std::shared_ptr<arrow::fs::FileSystem> fs;
     /// sum of all file sizes
     int64_t total_ds_size = -1;
+    // anonymous connection
+    bool s3fs_anon = false;
 };
 
 /**
@@ -2067,11 +2072,33 @@ extern "C" PyObject *file_chunk_reader(
     const char *fname, const char *suffix, bool is_parallel, int64_t *skiprows,
     int64_t nrows, bool json_lines, bool csv_header,
     const char *compression_pyarg, const char *bucket_region,
-    int64_t chunksize = 0, bool is_skiprows_list = false,
-    int64_t skiprows_list_len = 0, bool pd_low_memory = false) {
+    PyObject *storage_options, int64_t chunksize = 0,
+    bool is_skiprows_list = false, int64_t skiprows_list_len = 0,
+    bool pd_low_memory = false) {
     try {
         CHECK(fname != NULL, "NULL filename provided.");
         tracing::Event ev("file_chunk_reader", is_parallel);
+        if (storage_options == Py_None)
+            throw std::runtime_error("ParquetReader: storage_options is None");
+
+        // Extract values from the storage_options dict
+        // Check that it's a dictionary, else throw an error
+        bool is_anon = false;
+        if (PyDict_Check(storage_options)) {
+            // Get value of "anon". Returns NULL if it doesn't exist in the
+            // dict. No need to decref s3fs_anon_py, PyDict_GetItemString
+            // returns borrowed ref
+            PyObject *s3fs_anon_py =
+                PyDict_GetItemString(storage_options, "anon");
+            if (s3fs_anon_py != NULL && s3fs_anon_py == Py_True) {
+                is_anon = true;
+            }
+        } else {
+            throw std::runtime_error(
+                "_csv_json_reader.cpp::file_chunk_reader: storage_options is "
+                "not a python dictionary.");
+        }
+        Py_DECREF(storage_options);
 
         // TODO right now we get the list of file names and file sizes on rank 0
         // and broadcast to every process. This is potentially not scalable
@@ -2087,7 +2114,7 @@ extern "C" PyObject *file_chunk_reader(
         MemReader *mem_reader = nullptr;
 
         PathInfo *path_info =
-            new PathInfo(fname, compression_pyarg, bucket_region);
+            new PathInfo(fname, compression_pyarg, bucket_region, is_anon);
         if (!path_info->is_path_valid()) {
             delete path_info;
             return NULL;
@@ -2338,22 +2365,24 @@ extern "C" PyObject *file_chunk_reader(
 extern "C" PyObject *csv_file_chunk_reader(
     const char *fname, bool is_parallel, int64_t *skiprows, int64_t nrows,
     bool header, const char *compression, const char *bucket_region,
-    int64_t chunksize, bool is_skiprows_list, int64_t skiprows_list_len,
-    bool pd_low_memory) {
+    PyObject *storage_options, int64_t chunksize, bool is_skiprows_list,
+    int64_t skiprows_list_len, bool pd_low_memory) {
     return file_chunk_reader(fname, "csv", is_parallel, skiprows, nrows, true,
-                             header, compression, bucket_region, chunksize,
-                             is_skiprows_list, skiprows_list_len,
-                             pd_low_memory);
+                             header, compression, bucket_region,
+                             storage_options, chunksize, is_skiprows_list,
+                             skiprows_list_len, pd_low_memory);
 }
 
 extern "C" PyObject *json_file_chunk_reader(const char *fname, bool lines,
                                             bool is_parallel, int64_t nrows,
                                             const char *compression,
-                                            const char *bucket_region) {
+                                            const char *bucket_region,
+                                            PyObject *storage_options) {
     // TODO nrows not used??
     int64_t skiprows = 0;
     return file_chunk_reader(fname, "json", is_parallel, &skiprows, nrows,
-                             lines, false, compression, bucket_region);
+                             lines, false, compression, bucket_region,
+                             storage_options);
 }
 
 // Update reader. returns true if reader has data

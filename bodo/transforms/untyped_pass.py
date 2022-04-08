@@ -1390,6 +1390,18 @@ class UntypedPass:
             default=False,
             use_default=True,
         )
+        # storage_options
+        csv_storage_options = self._get_const_arg(
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            51,
+            "storage_options",
+            rhs.loc,
+            default={},
+            use_default=True,
+        )
+        _check_storage_options(csv_storage_options, "read_csv", rhs)
 
         # Bodo specific arguments. To avoid constantly needing to update Pandas we
         # make these kwargs only.
@@ -1487,6 +1499,7 @@ class UntypedPass:
                 "low_memory",
                 "_bodo_upcast_to_float64",
                 "escapechar",
+                "storage_options",
             )
         )
         # Iterate through the provided args. If an argument is in the supported_args,
@@ -1570,6 +1583,7 @@ class UntypedPass:
                     compression,
                     pd_low_memory,
                     escapechar,
+                    csv_storage_options,
                 ),
             )
             if not isinstance(fname_const, str):
@@ -1595,6 +1609,7 @@ class UntypedPass:
                     compression,
                     pd_low_memory,
                     escapechar,
+                    csv_storage_options,
                 )
             df_type = df_type.copy(
                 tuple(to_str_arr_if_dict_array(t) for t in df_type.data)
@@ -1736,6 +1751,7 @@ class UntypedPass:
                     index_arr_typ,
                     index_name,
                     escapechar,
+                    csv_storage_options,
                 )
             ]
             # Create a new temp var so this is always exactly one variable.
@@ -1763,6 +1779,7 @@ class UntypedPass:
                 is_skiprows_list,
                 pd_low_memory,
                 escapechar,
+                csv_storage_options,
                 index_ind,
                 # CsvReader expects the type of the read column
                 # not the index type itself
@@ -1807,9 +1824,9 @@ class UntypedPass:
             "read_json", rhs.args, kws, 1, "orient", rhs.loc, default="records"
         )
         frame_or_series = get_call_expr_arg(
-            "read_json", rhs.args, kws, 3, "typ", "frame"
+            "read_json", rhs.args, kws, 2, "typ", "frame"
         )
-        dtype_var = get_call_expr_arg("read_json", rhs.args, kws, 10, "dtype", "")
+        dtype_var = get_call_expr_arg("read_json", rhs.args, kws, 3, "dtype", "")
         # default value is True
         convert_dates = self._get_const_arg(
             "read_json",
@@ -1821,16 +1838,29 @@ class UntypedPass:
             default=True,
             typ="int or str",
         )
+        # Q: Why set date_cols = False not empty list as well?
         date_cols = [] if convert_dates is True else convert_dates
         precise_float = self._get_const_arg(
             "read_json", rhs.args, kws, 8, "precise_float", rhs.loc, default=False
         )
         lines = self._get_const_arg(
-            "read_json", rhs.args, kws, 11, "lines", rhs.loc, default=True
+            "read_json", rhs.args, kws, 12, "lines", rhs.loc, default=True
         )
         compression = self._get_const_arg(
-            "read_json", rhs.args, kws, 13, "compression", rhs.loc, default="infer"
+            "read_json", rhs.args, kws, 14, "compression", rhs.loc, default="infer"
         )
+        # storage_options
+        json_storage_options = self._get_const_arg(
+            "pd.read_json",
+            rhs.args,
+            kws,
+            16,
+            "storage_options",
+            rhs.loc,
+            default={},
+            use_default=True,
+        )
+        _check_storage_options(json_storage_options, "read_json", rhs)
 
         # check unsupported arguments
         unsupported_args = {
@@ -1839,10 +1869,9 @@ class UntypedPass:
             "numpy",
             "date_unit",
             "encoding",
-            "chunksize",
             "encoding_errors",
+            "chunksize",
             "nrows",
-            "storage_options",
         }
 
         passed_unsupported = unsupported_args.intersection(kws.keys())
@@ -1894,7 +1923,12 @@ class UntypedPass:
             msg,
             arg_types=self.args,
             file_info=JSONFileInfo(
-                orient, convert_dates, precise_float, lines, compression
+                orient,
+                convert_dates,
+                precise_float,
+                lines,
+                compression,
+                json_storage_options,
             ),
         )
 
@@ -1926,6 +1960,7 @@ class UntypedPass:
                     precise_float,
                     lines,
                     compression,
+                    json_storage_options,
                 )
             df_type = df_type.copy(
                 tuple(to_str_arr_if_dict_array(t) for t in df_type.data)
@@ -1969,6 +2004,7 @@ class UntypedPass:
                 precise_float,
                 lines,
                 compression,
+                json_storage_options,
             )
         ]
 
@@ -2185,28 +2221,7 @@ class UntypedPass:
             raise BodoError(
                 "read_parquet() arguments {} not supported yet".format(unsupported_args)
             )
-
-        if isinstance(storage_options, dict):
-            supported_storage_options = ("anon",)
-            unsupported_storage_options = set(storage_options.keys()) - set(
-                supported_storage_options
-            )
-            if unsupported_storage_options:
-                raise BodoError(
-                    "read_parquet() arguments {} for 'storage_options' not supported yet".format(
-                        unsupported_storage_options
-                    )
-                )
-
-            if "anon" in storage_options:
-                if not isinstance(storage_options["anon"], bool):
-                    raise BodoError(
-                        "read_parquet: 'anon' in 'storage_options' must be a constant boolean value"
-                    )
-        else:
-            raise BodoError(
-                "read_parquet: 'storage_options' must be a constant dictionary"
-            )
+        _check_storage_options(storage_options, "read_parquet", rhs)
 
         if engine not in ("auto", "pyarrow"):
             raise BodoError("read_parquet: only pyarrow engine supported")
@@ -2604,12 +2619,15 @@ class JSONFileInfo(FileInfo):
     """FileInfo object passed to ForceLiteralArg for
     file name arguments that refer to a JSON dataset"""
 
-    def __init__(self, orient, convert_dates, precise_float, lines, compression):
+    def __init__(
+        self, orient, convert_dates, precise_float, lines, compression, storage_options
+    ):
         self.orient = orient
         self.convert_dates = convert_dates
         self.precise_float = precise_float
         self.lines = lines
         self.compression = compression
+        self.storage_options = storage_options
         super().__init__()
 
     def _get_schema(self, fname):
@@ -2620,11 +2638,18 @@ class JSONFileInfo(FileInfo):
             self.precise_float,
             self.lines,
             self.compression,
+            self.storage_options,
         )
 
 
 def _get_json_df_type_from_file(
-    fname_const, orient, convert_dates, precise_float, lines, compression
+    fname_const,
+    orient,
+    convert_dates,
+    precise_float,
+    lines,
+    compression,
+    storage_options,
 ):
     """get dataframe type for read_json() using file path constant or raise error if
     path is invalid.
@@ -2641,9 +2666,9 @@ def _get_json_df_type_from_file(
 
         is_handler = None
         try:
-            rows_to_read = 20  # TODO: tune this
+            rows_to_read = 100  # TODO: tune this
             is_handler, file_name_or_handler, f_size, _ = find_file_name_or_handler(
-                fname_const, "json"
+                fname_const, "json", storage_options
             )
             if is_handler and compression == "infer":
                 # pandas can't infer compression without filename, we need to do it
@@ -2752,7 +2777,8 @@ def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
     for i, (col_name, typ) in enumerate(dtype_map.items()):
         columns.append(col_name)
         # get array dtype
-        if i in date_cols or col_name in date_cols:
+        # date_cols = False from read_json(convert_dates=False)
+        if date_cols and (i in date_cols or col_name in date_cols):
             typ = types.Array(types.NPDatetime("ns"), 1, "C")
         out_types.append(typ)
         # output array variable
@@ -3022,17 +3048,56 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql
     return df_type, converted_colnames, unsupported_columns, unsupported_arrow_types
 
 
+def _check_storage_options(storage_options, func_name, rhs):
+    """
+    Error checking for storage_options usage in read_parquet/json/csv
+    """
+
+    if isinstance(storage_options, dict):
+        supported_storage_options = ("anon",)
+        unsupported_storage_options = set(storage_options.keys()) - set(
+            supported_storage_options
+        )
+        if unsupported_storage_options:
+            raise BodoError(
+                f"pd.{func_name}() arguments {unsupported_storage_options} for 'storage_options' not supported yet",
+                loc=rhs.loc,
+            )
+
+        if "anon" in storage_options:
+            if not isinstance(storage_options["anon"], bool):
+                raise BodoError(
+                    f"pd.{func_name}(): 'anon' in 'storage_options' must be a constant boolean value",
+                    loc=rhs.loc,
+                )
+    elif storage_options is not None:
+        raise BodoError(
+            f"pd.{func_name}(): 'storage_options' must be a constant dictionary",
+            loc=rhs.loc,
+        )
+
+
 class CSVFileInfo(FileInfo):
     """FileInfo object passed to ForceLiteralArg for
     file name arguments that refer to a CSV dataset"""
 
-    def __init__(self, sep, skiprows, header, compression, low_memory, escapechar):
+    def __init__(
+        self,
+        sep,
+        skiprows,
+        header,
+        compression,
+        low_memory,
+        escapechar,
+        storage_options,
+    ):
         self.sep = sep
         self.skiprows = skiprows
         self.header = header
         self.compression = compression
         self.low_memory = low_memory
         self.escapechar = escapechar
+        self.storage_options = storage_options
         super().__init__()
 
     def _get_schema(self, fname):
@@ -3044,11 +3109,19 @@ class CSVFileInfo(FileInfo):
             self.compression,
             self.low_memory,
             self.escapechar,
+            self.storage_options,
         )
 
 
 def _get_csv_df_type_from_file(
-    fname_const, sep, skiprows, header, compression, low_memory, escapechar
+    fname_const,
+    sep,
+    skiprows,
+    header,
+    compression,
+    low_memory,
+    escapechar,
+    csv_storage_options,
 ):
     """get dataframe type for read_csv() using file path constant or raise error if not
     possible (e.g. file doesn't exist).
@@ -3071,7 +3144,7 @@ def _get_csv_df_type_from_file(
         is_handler = None
         try:
             is_handler, file_name_or_handler, _, _ = find_file_name_or_handler(
-                fname_const, "csv"
+                fname_const, "csv", csv_storage_options
             )
 
             if is_handler and compression == "infer":

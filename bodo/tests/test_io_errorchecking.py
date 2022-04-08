@@ -112,7 +112,7 @@ def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match="read_parquet: 'storage_options' must be a constant dictionary",
+        match="read_parquet\(\): 'storage_options' must be a constant dictionary",
     ):
         bodo.jit(distributed=["df"])(test_impl3)()
 
@@ -128,7 +128,7 @@ def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match="read_parquet: 'anon' in 'storage_options' must be a constant boolean value",
+        match="read_parquet\(\): 'anon' in 'storage_options' must be a constant boolean value",
     ):
         bodo.jit(distributed=["df"])(test_impl)()
 

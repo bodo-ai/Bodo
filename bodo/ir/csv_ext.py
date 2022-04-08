@@ -18,6 +18,10 @@ from bodo.hiframes.pd_categorical_ext import (
     PDCategoricalDtype,
 )
 from bodo.hiframes.table import Table, TableType  # noqa
+from bodo.io.fs_io import (
+    get_storage_options_pyobject,
+    storage_options_dict_type,
+)
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -53,6 +57,7 @@ class CsvReader(ir.Stmt):
         is_skiprows_list,
         low_memory,
         escapechar,
+        storage_options=None,
         index_column_index=None,
         index_column_typ=types.none,
     ):
@@ -76,6 +81,7 @@ class CsvReader(ir.Stmt):
         self.is_skiprows_list = is_skiprows_list
         self.pd_low_memory = low_memory
         self.escapechar = escapechar
+        self.storage_options = storage_options
         self.index_column_index = index_column_index
         self.index_column_typ = index_column_typ
         # Columns within the output table type that are actually used.
@@ -85,7 +91,7 @@ class CsvReader(ir.Stmt):
         self.type_usecol_offset = list(range(len(usecols)))
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={}, chunksize={}, is_skiprows_list={}, pd_low_memory={}, index_column_index={}, index_colum_typ = {}, type_usecol_offsets={})".format(
+        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={}, chunksize={}, is_skiprows_list={}, pd_low_memory={}, escapechar={}, storage_options={}, index_column_index={}, index_colum_typ = {}, type_usecol_offsets={})".format(
             self.df_out,
             self.file_name,
             self.df_colnames,
@@ -96,6 +102,8 @@ class CsvReader(ir.Stmt):
             self.chunksize,
             self.is_skiprows_list,
             self.pd_low_memory,
+            self.escapechar,
+            self.storage_options,
             self.index_column_index,
             self.index_column_typ,
             self.type_usecol_offset,
@@ -171,6 +179,7 @@ csv_file_chunk_reader = types.ExternalFunction(
         types.bool_,
         types.voidptr,
         types.voidptr,
+        storage_options_dict_type,  # storage_options dictionary
         types.int64,  # chunksize
         types.bool_,  # is_skiprows_list
         types.int64,  # skiprows_list_len
@@ -292,6 +301,7 @@ def csv_distributed_run(
             csv_node.chunksize,
             csv_node.is_skiprows_list,
             csv_node.pd_low_memory,
+            csv_node.storage_options,
         )
         init_func_text += "  return f_reader\n"
         exec(init_func_text, globals(), loc_vars)
@@ -417,6 +427,7 @@ def csv_distributed_run(
         csv_node.is_skiprows_list,
         csv_node.pd_low_memory,
         csv_node.escapechar,
+        csv_node.storage_options,
         idx_col_index=csv_node.index_column_index,
         idx_col_typ=csv_node.index_column_typ,
     )
@@ -688,6 +699,7 @@ def _gen_csv_file_reader_init(
     chunksize,
     is_skiprows_list,
     pd_low_memory,
+    storage_options,
 ):
     """
     This function generates the f_reader used by pd.read_csv. This f_reader
@@ -723,10 +735,17 @@ def _gen_csv_file_reader_init(
     func_text += "  check_java_installation(fname)\n"
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"  bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={parallel})\n"
+    # Add a dummy variable to the dict (empty dicts are not yet supported in numba).
+    if storage_options is None:
+        storage_options = {}
+    storage_options["bodo_dummy"] = "dummy"
+    func_text += (
+        f"  storage_options_py = get_storage_options_pyobject({str(storage_options)})\n"
+    )
     func_text += "  f_reader = bodo.ir.csv_ext.csv_file_chunk_reader(bodo.libs.str_ext.unicode_to_utf8(fname), "
     # change skiprows to array
     # pass how many elements in the list as well or 0 if just an integer not a list
-    func_text += "    {}, bodo.utils.conversion.coerce_to_ndarray(skiprows, scalar_to_arr_len=1).ctypes, nrows, {}, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), {}, {}, skiprows_list_len, {})\n".format(
+    func_text += "    {}, bodo.utils.conversion.coerce_to_ndarray(skiprows, scalar_to_arr_len=1).ctypes, nrows, {}, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py, {}, {}, skiprows_list_len, {})\n".format(
         parallel,
         has_header,
         compression,
@@ -753,6 +772,7 @@ def _gen_read_csv_objmode(
     type_usecol_offset,
     sep,
     escapechar,
+    storage_options,
     call_id,
     glbs,
     parallel,
@@ -950,6 +970,7 @@ def _gen_csv_reader_py(
     is_skiprows_list,
     pd_low_memory,
     escapechar,
+    storage_options,
     idx_col_index=None,
     idx_col_typ=types.none,
 ):
@@ -970,6 +991,7 @@ def _gen_csv_reader_py(
         -1,
         is_skiprows_list,
         pd_low_memory,
+        storage_options,
     )
     # a unique int used to create global variables with unique names
     call_id = ir_utils.next_label()
@@ -994,6 +1016,7 @@ def _gen_csv_reader_py(
         type_usecol_offset,
         sep,
         escapechar,
+        storage_options,
         call_id,
         glbls,
         parallel=parallel,
@@ -1006,6 +1029,7 @@ def _gen_csv_reader_py(
     else:
         func_text += "  return (T, None)\n"
     loc_vars = {}
+    glbls["get_storage_options_pyobject"] = get_storage_options_pyobject
     exec(func_text, glbls, loc_vars)
     csv_reader_py = loc_vars["csv_reader_py"]
 
