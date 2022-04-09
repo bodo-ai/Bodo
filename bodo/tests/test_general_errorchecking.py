@@ -47,6 +47,13 @@ def test_date_range_unsupported(memory_leak_check):
     with pytest.raises(BodoError, match=message):
         bodo.jit(test_impl)()
 
+    def test_impl2():
+        return pd.date_range(start="1/1/2018")
+
+    message = "exactly three must be specified"
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(test_impl2)()
+
 
 def test_np_sort_unsupported(memory_leak_check):
     """

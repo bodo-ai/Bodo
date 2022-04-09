@@ -670,13 +670,12 @@ def test_init_datetime_index_array_analysis(memory_leak_check):
     """make sure shape equivalence for init_datetime_index() is applied correctly"""
     import numba.tests.test_array_analysis
 
-    def impl(n):
-        d = pd.date_range("2017-01-03", periods=n)
+    def impl(d):
         I = pd.DatetimeIndex(d)
         return I
 
     test_func = numba.njit(pipeline_class=AnalysisTestPipeline, parallel=True)(impl)
-    test_func(10)
+    test_func(pd.date_range("2017-01-03", periods=10).values)
     array_analysis = test_func.overloads[test_func.signatures[0]].metadata[
         "preserved_array_analysis"
     ]
@@ -685,23 +684,37 @@ def test_init_datetime_index_array_analysis(memory_leak_check):
 
 
 def test_pd_date_range(memory_leak_check):
+    """test pd.date_range() support with various argument combinations
+    """
+    # start/end provided (default freq="D")
     def impl():
         return pd.date_range(start="2018-01-01", end="2018-01-08")
 
-    bodo_func = bodo.jit(impl)
-    pd.testing.assert_index_equal(bodo_func(), impl())
+    check_func(impl, ())
 
+    # start/periods provided (default freq="D")
     def impl2():
         return pd.date_range(start="2018-01-01", periods=8)
 
-    bodo_func = bodo.jit(impl2)
-    pd.testing.assert_index_equal(bodo_func(), impl2())
+    check_func(impl2, ())
 
+    # start/end/periods provided
     def impl3():
         return pd.date_range(start="2018-04-24", end="2018-04-27", periods=3)
 
-    bodo_func = bodo.jit(impl3)
-    pd.testing.assert_index_equal(bodo_func(), impl3())
+    check_func(impl3, ())
+
+    # start/end/freq provided
+    def impl4():
+        return pd.date_range(start="2018-04-24", end="2018-04-27", freq="2D")
+
+    check_func(impl4, ())
+
+    # end/periods/freq provided
+    def impl5():
+        return pd.date_range(end="2018-04-24", periods=20, freq="2D")
+
+    check_func(impl5, ())
 
 
 @pytest.fixture(
