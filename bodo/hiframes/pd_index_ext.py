@@ -874,7 +874,7 @@ def _dummy_convert_none_to_int(val):
     return lambda val: val  # pragma: no cover
 
 
-@overload(pd.date_range, no_unliteral=True)
+@overload(pd.date_range, inline="always")
 def pd_date_range_overload(
     start=None,
     end=None,
@@ -887,10 +887,9 @@ def pd_date_range_overload(
 ):
     # TODO: check/handle other input
     # check unsupported, TODO: normalize, dayfirst, yearfirst, ...
-    # TODO: parallelize after Numba branch pruning issue is fixed
 
-    unsupported_args = dict(tz=tz, normalize=normalize)
-    arg_defaults = dict(tz=None, normalize=False)
+    unsupported_args = dict(tz=tz, normalize=normalize, closed=closed)
+    arg_defaults = dict(tz=None, normalize=False, closed=None)
     check_unsupported_args(
         "pandas.date_range",
         unsupported_args,
@@ -900,106 +899,95 @@ def pd_date_range_overload(
     )
 
     if not is_overload_none(tz):
-        raise BodoError("pd.date_range(): tz argument not supported yet")
+        raise_bodo_error("pd.date_range(): tz argument not supported yet")
 
+    freq_set = ""
     if is_overload_none(freq) and any(
         is_overload_none(t) for t in (start, end, periods)
     ):
-        freq = "D"  # change just to enable check below
+        freq = "D"  # change just to enable checks below
+        freq_set = "  freq = 'D'\n"
 
-    # exactly three parameters should
+    # exactly three parameters should be provided
     if sum(not is_overload_none(t) for t in (start, end, periods, freq)) != 3:
-        raise BodoError(
+        raise_bodo_error(
             "Of the four parameters: start, end, periods, "
             "and freq, exactly three must be specified"
         )
 
-    def f(
-        start=None,
-        end=None,
-        periods=None,
-        freq=None,
-        tz=None,
-        normalize=False,
-        name=None,
-        closed=None,
-    ):  # pragma: no cover
+    # TODO [BE-2499]: enable check when closed is supported
+    # closed requires one of start and end to be not None
+    # if is_overload_none(start) and is_overload_none(end) and not is_overload_none(closed):
+    #     raise_bodo_error(
+    #         "Closed has to be None if not both of start and end are defined"
+    #     )
 
-        if freq is None and (start is None or end is None or periods is None):
-            freq = "D"
+    # TODO: check start and end for NaT
 
-        freq = bodo.hiframes.pd_index_ext.to_offset_value(freq)
+    func_text = "def f(start=None, end=None, periods=None, freq=None, tz=None, normalize=False, name=None, closed=None):\n"
 
-        start_t = pd.Timestamp("2018-01-01")  # dummy value for typing
-        if start is not None:
-            start_t = pd.Timestamp(start)
+    func_text += freq_set
 
-        end_t = pd.Timestamp("2018-01-01")  # dummy value for typing
-        if end is not None:
-            end_t = pd.Timestamp(end)
+    if is_overload_none(start):
+        # dummy value for typing
+        func_text += "  start_t = pd.Timestamp('1800-01-03')\n"
+    else:
+        func_text += "  start_t = pd.Timestamp(start)\n"
 
-        if start is None and end is None and closed is not None:
-            raise ValueError(
-                "Closed has to be None if not both of start" "and end are defined"
-            )
-        # TODO: check start and end for NaT
-        # if start is NaT or end is NaT:
-        #     raise ValueError("Neither `start` nor `end` can be NaT")
+    if is_overload_none(end):
+        # dummy value for typing
+        func_text += "  end_t = pd.Timestamp('1800-01-03')\n"
+    else:
+        func_text += "  end_t = pd.Timestamp(end)\n"
 
-        left_closed, right_closed = bodo.hiframes.pd_index_ext.validate_endpoints(
-            closed
-        )
-
-        if freq is not None:
-            # pandas/core/arrays/_ranges/generate_regular_range
-            # TODO: handle overflows
-            stride = _dummy_convert_none_to_int(freq)
-            if periods is None:
-                b = start_t.value
-                e = b + (end_t.value - b) // stride * stride + stride // 2 + 1
-            elif start is not None:
-                periods = _dummy_convert_none_to_int(periods)
-                b = start_t.value
-                addend = np.int64(periods) * np.int64(stride)
-                e = np.int64(b) + addend
-            elif end is not None:
-                periods = _dummy_convert_none_to_int(periods)
-                e = end_t.value + stride
-                addend = np.int64(periods) * np.int64(-stride)
-                b = np.int64(e) + addend
-            else:
-                raise ValueError(
-                    "at least 'start' or 'end' should be specified "
-                    "if a 'period' is given."
-                )
-
-            # TODO: handle overflows
-            arr = np.arange(b, e, stride, np.int64)
+    # freq provided
+    if not is_overload_none(freq):
+        func_text += "  stride = bodo.hiframes.pd_index_ext.to_offset_value(freq)\n"
+        if is_overload_none(periods):
+            func_text += "  b = start_t.value\n"
+            func_text += "  e = b + (end_t.value - b) // stride * stride + stride // 2 + 1\n"
+        elif not is_overload_none(start):
+            func_text += "  b = start_t.value\n"
+            func_text += "  addend = np.int64(periods) * np.int64(stride)\n"
+            func_text += "  e = np.int64(b) + addend\n"
+        elif not is_overload_none(end):
+            func_text += "  e = end_t.value + stride\n"
+            func_text += "  addend = np.int64(periods) * np.int64(-stride)\n"
+            func_text += "  b = np.int64(e) + addend\n"
         else:
-            # TODO: fix Numba's linspace to support dtype
-            # arr = np.linspace(
-            #     0, end_t.value - start_t.value,
-            #     periods, dtype=np.int64) + start.value
-            # XXX Numba's branch pruning fails to remove period=None so use
-            # dummy function
-            # TODO: fix Numba's branch pruning pass
-            # using Numpy's linspace algorithm
-            periods = _dummy_convert_none_to_int(periods)
-            delta = end_t.value - start_t.value
-            step = delta / (periods - 1)
-            arr1 = np.arange(0, periods, 1, np.float64)
-            arr1 *= step
-            arr1 += start_t.value
-            arr = arr1.astype(np.int64)
-            arr[-1] = end_t.value
+            raise_bodo_error("at least 'start' or 'end' should be specified "
+                    "if a 'period' is given.")
+        # TODO: handle overflows
+        func_text += "  arr = np.arange(b, e, stride, np.int64)\n"
+    # freq is None
+    else:
+        # TODO: fix Numba's linspace to support dtype
+        # arr = np.linspace(
+        #     0, end_t.value - start_t.value,
+        #     periods, dtype=np.int64) + start.value
 
-        if not left_closed and len(arr) and arr[0] == start_t.value:
-            arr = arr[1:]
-        if not right_closed and len(arr) and arr[-1] == end_t.value:
-            arr = arr[:-1]
+        # using Numpy's linspace algorithm
+        func_text += "  delta = end_t.value - start_t.value\n"
+        func_text += "  step = delta / (periods - 1)\n"
+        func_text += "  arr1 = np.arange(0, periods, 1, np.float64)\n"
+        func_text += "  arr1 *= step\n"
+        func_text += "  arr1 += start_t.value\n"
+        func_text += "  arr = arr1.astype(np.int64)\n"
+        func_text += "  arr[-1] = end_t.value\n"
 
-        S = bodo.utils.conversion.convert_to_dt64ns(arr)
-        return bodo.hiframes.pd_index_ext.init_datetime_index(S, name)
+    # TODO [BE-2499]: support closed when distributed pass can handle this
+    # func_text += "  left_closed, right_closed = bodo.hiframes.pd_index_ext.validate_endpoints(closed)\n"
+    # func_text += "  if not left_closed and len(arr) and arr[0] == start_t.value:\n"
+    # func_text += "    arr = arr[1:]\n"
+    # func_text += "  if not right_closed and len(arr) and arr[-1] == end_t.value:\n"
+    # func_text += "    arr = arr[:-1]\n"
+
+    func_text += "  A = bodo.utils.conversion.convert_to_dt64ns(arr)\n"
+    func_text += "  return bodo.hiframes.pd_index_ext.init_datetime_index(A, name)\n"
+
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "np": np, "pd": pd}, loc_vars)
+    f = loc_vars["f"]
 
     return f
 

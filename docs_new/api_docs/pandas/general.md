@@ -893,17 +893,12 @@ General functions {#general}
     +--------------------+--------------------+----------------------------+
     | `name`             | String             |                            |
     +--------------------+--------------------+----------------------------+
-    | `closed`           | String and one of  |                            |
-    |                    | (`'left'`,         |                            |
-    |                    | `'right'`)         |                            |
-    +--------------------+--------------------+----------------------------+
 
     !!! note
 
         * Exactly three of `start`, `end`, `periods`, and `freq` must
           be provided.
         * Bodo **Does Not** support `kwargs`, even for compatibility.
-        * This function is not parallelized yet.
 
     ***Example Usage***
 
