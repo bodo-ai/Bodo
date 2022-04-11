@@ -2339,6 +2339,7 @@ def test_write_parquet_dict_table(memory_leak_check):
         df.to_parquet("arr_dict_test.pq", index=False)
 
     impl()
+    bodo.barrier()
     passed = 1
     if bodo.get_rank() == 0:
         try:
