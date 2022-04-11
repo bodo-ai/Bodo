@@ -92,6 +92,8 @@ REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
 # below which we read as dictionary-encoded string array
 READ_STR_AS_DICT_THRESHOLD = 1.0
 
+list_of_files_error_msg = ". Make sure the list/glob passed to read_parquet() only contains paths to files (no directories)"
+
 
 class ParquetPredicateType(types.Type):
     """Type for predicate list for Parquet filtering (e.g. [["a", "==", 2]]).
@@ -1352,13 +1354,17 @@ def get_parquet_dataset(
             # seem to be enough to prevent sending it
             dataset._metadata.fs = None
         except Exception as e:
-            comm.bcast(e)
             # See note in s3_list_dir_fnames
             # In some cases, OSError/FileNotFoundError can propagate back to numba and comes back as InternalError.
             # where numba errors are hidden from the user.
             # See [BE-1188] for an example
             # Raising a BodoError lets message comes back and seen by the user.
-            raise BodoError(f"error from pyarrow: {type(e).__name__}: {str(e)}\n")
+            if isinstance(fpath, list) and isinstance(e, (OSError, FileNotFoundError)):
+                e = BodoError(str(e) + list_of_files_error_msg)
+            else:
+                e = BodoError(f"error from pyarrow: {type(e).__name__}: {str(e)}\n")
+            comm.bcast(e)
+            raise e
 
         if get_row_counts:
             ev_bcast = tracing.Event("bcast dataset")
@@ -1370,9 +1376,7 @@ def get_parquet_dataset(
         dataset = comm.bcast(None)
         if isinstance(dataset, Exception):  # pragma: no cover
             error = dataset
-            raise BodoError(
-                f"error from pyarrow: {type(error).__name__}: {str(error)}\n"
-            )
+            raise error
         dataset_schema = comm.bcast(None)
 
     # Reinitialize the file system. The filesystem is needed at compile time
@@ -1447,36 +1451,48 @@ def get_parquet_dataset(
         # by reading only the file's metadata, and if it needs to
         # access data it will read as less as possible (only the
         # required columns and only subset of row groups if possible)
-        dataset_ = ds.dataset(
-            fpaths,
-            filesystem=filesystem,
-            partitioning=ds.partitioning(flavor="hive"),
-        )
-        for piece, frag in zip(pieces[start:end], dataset_.get_fragments()):
-            t0 = time.time()
-            row_count = frag.scanner(
-                schema=dataset_.schema,
-                filter=expr_filters,
-                use_threads=True,
-            ).count_rows()
-            ds_scan_time += time.time() - t0
-            piece._bodo_num_rows = row_count
-            total_rows_chunk += row_count
-            total_row_groups_chunk += frag.num_row_groups
-            total_row_groups_size_chunk += sum(
-                rg.total_byte_size for rg in frag.row_groups
+        error = None
+        try:
+            dataset_ = ds.dataset(
+                fpaths,
+                filesystem=filesystem,
+                partitioning=ds.partitioning(flavor="hive"),
             )
-            if validate_schema:
-                file_schema = frag.metadata.schema.to_arrow_schema()
-                if dataset_schema != file_schema:  # pragma: no cover
-                    # this is the same error message that pyarrow shows
-                    print(
-                        "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
-                            piece, file_schema, dataset_schema
+            for piece, frag in zip(pieces[start:end], dataset_.get_fragments()):
+                t0 = time.time()
+                row_count = frag.scanner(
+                    schema=dataset_.schema,
+                    filter=expr_filters,
+                    use_threads=True,
+                ).count_rows()
+                ds_scan_time += time.time() - t0
+                piece._bodo_num_rows = row_count
+                total_rows_chunk += row_count
+                total_row_groups_chunk += frag.num_row_groups
+                total_row_groups_size_chunk += sum(
+                    rg.total_byte_size for rg in frag.row_groups
+                )
+                if validate_schema:
+                    file_schema = frag.metadata.schema.to_arrow_schema()
+                    if dataset_schema != file_schema:  # pragma: no cover
+                        # this is the same error message that pyarrow shows
+                        print(
+                            "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
+                                piece, file_schema, dataset_schema
+                            )
                         )
-                    )
-                    valid = False
-                    break
+                        valid = False
+                        break
+        except Exception as e:
+            error = e
+
+        # synchronize error state
+        if comm.allreduce(error is not None, op=MPI.LOR):
+            for error in comm.allgather(error):
+                if error:
+                    if isinstance(fpath, list) and isinstance(error, (OSError, FileNotFoundError)):
+                        raise BodoError(str(error) + list_of_files_error_msg)
+                    raise error
 
         if validate_schema:
             valid = comm.allreduce(valid, op=MPI.LAND)
@@ -1824,13 +1840,20 @@ def determine_str_as_dict_columns(pq_dataset, pa_schema):
     total_uncompressed_sizes_recv = np.zeros(len(str_columns), dtype=np.int64)
     if bodo.get_rank() < len(pieces):
         piece = pieces[bodo.get_rank()]
-        metadata = piece.get_metadata()
-        for i in range(metadata.num_row_groups):
-            for j, (_, idx) in enumerate(str_columns):
-                total_uncompressed_sizes[j] += (
-                    metadata.row_group(i).column(idx).total_uncompressed_size
-                )
-        num_rows = metadata.num_rows
+        try:
+            metadata = piece.get_metadata()
+            for i in range(metadata.num_row_groups):
+                for j, (_, idx) in enumerate(str_columns):
+                    total_uncompressed_sizes[j] += (
+                        metadata.row_group(i).column(idx).total_uncompressed_size
+                    )
+            num_rows = metadata.num_rows
+        except Exception as e:
+            if isinstance(e, (OSError, FileNotFoundError)):
+                # skip the path that produced the error (error will be reported at runtime)
+                num_rows = 0
+            else:
+                raise
     else:
         num_rows = 0
     total_rows = comm.allreduce(num_rows, op=MPI.SUM)

@@ -156,6 +156,31 @@ def test_read_parquet_invalid_path_glob():
         bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
 
 
+def test_read_parquet_invalid_list_of_files(datapath):
+    def test_impl(fnames):
+        df = pd.read_parquet(fnames)
+        return df
+
+    with pytest.raises(
+        BodoError,
+        match="only files or glob strings \(no directories\) are supported when passing a list",
+    ):
+        fnames = [datapath("decimal1.pq"), datapath("dask_data.parquet")]
+        bodo.jit(test_impl)(fnames)
+
+    with pytest.raises(
+        BodoError,
+        match="only files or glob strings \(no directories\) are supported when passing a list",
+    ):
+        fnames = []
+        fnames.append(
+            datapath("decimal1.pq")
+            + "/part-00000-053de46f-b6f6-47bc-b732-fa60df446076-c000.snappy.parquet"
+        )
+        fnames.append(datapath("decimal1.pq"))
+        bodo.jit(test_impl)(fnames)
+
+
 def test_read_csv_incorrect_s3_credentials(memory_leak_check):
     """test error raise when AWS credentials are incorrect for csv
     file path passed by another bodo.jit function"""
