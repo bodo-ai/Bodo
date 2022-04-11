@@ -6,6 +6,7 @@ import pytest
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
 from bodo.utils.testing import ensure_clean2
+from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.s3
 
@@ -982,3 +983,33 @@ def test_s3_json_anon_public_dataset(memory_leak_check):
         check_func(impl, ())
     finally:
         reset_aws_vars(aws_env_vars, orig_env_vars)
+
+
+def test_read_parquet_invalid_list_of_files(minio_server, s3_bucket, datapath):
+    def test_impl(fnames):
+        df = pd.read_parquet(fnames)
+        return df
+
+    with pytest.raises(
+        BodoError,
+        match="Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
+    ):
+        fnames = ["s3://bodo-test/groupby3.pq", "s3://bodo-test/int_nulls_multi.pq"]
+        bodo.jit(test_impl)(fnames)
+
+    with pytest.raises(
+        BodoError,
+        match="Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
+    ):
+        fnames = ["s3://bodo-test/int_nulls_multi.pq", "s3://bodo-test/groupby3.pq"]
+        bodo.jit(test_impl)(fnames)
+
+    with pytest.raises(
+        BodoError,
+        match="Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
+    ):
+        fnames = [
+            "s3://bodo-test/test_df_bodo_1D.pq",
+            "s3://bodo-test/int_nulls_multi.pq",
+        ]
+        bodo.jit(test_impl)(fnames)

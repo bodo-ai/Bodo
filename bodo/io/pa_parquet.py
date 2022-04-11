@@ -3,6 +3,7 @@ import os
 import threading
 from collections import defaultdict
 from concurrent import futures
+from urllib.parse import urlparse
 
 import pyarrow.parquet as pq
 
@@ -58,6 +59,57 @@ def get_parquet_filesnames_from_deltalake(delta_lake_path):
             del os.environ["AWS_DEFAULT_REGION"]
 
     return file_names
+
+
+# pyarrow.parquet._make_manifest monkey-patch (see "Bodo change" comment)
+# https://github.com/apache/arrow/blob/e453ffeff233c358ec934a53a33b8b4b1d4e299b/python/pyarrow/parquet.py#L1687
+def _make_manifest(path_or_paths, fs, pathsep='/', metadata_nthreads=1,
+                   open_file_func=None):
+    partitions = None
+    common_metadata_path = None
+    metadata_path = None
+
+    if isinstance(path_or_paths, list) and len(path_or_paths) == 1:
+        # Dask passes a directory as a list of length 1
+        path_or_paths = path_or_paths[0]
+
+    if pq._is_path_like(path_or_paths) and fs.isdir(path_or_paths):
+        manifest = ParquetManifest(path_or_paths, filesystem=fs,
+                                   open_file_func=open_file_func,
+                                   pathsep=getattr(fs, "pathsep", "/"),
+                                   metadata_nthreads=metadata_nthreads)
+        common_metadata_path = manifest.common_metadata_path
+        metadata_path = manifest.metadata_path
+        pieces = manifest.pieces
+        partitions = manifest.partitions
+    else:
+        if not isinstance(path_or_paths, list):
+            path_or_paths = [path_or_paths]
+
+        # List of paths
+        if len(path_or_paths) == 0:
+            raise ValueError('Must pass at least one file path')
+
+        pieces = []
+        protocol = urlparse(path_or_paths[0]).scheme  # Bodo change
+        for path in path_or_paths:
+            # Bodo change: only check if path is a file (not directory) if
+            # we are reading from local filesystem (for performance reasons).
+            # Note that this is the same behavior as Arrow's ParquetDatasetV2.
+            # Also make the error message clearer.
+            if not protocol and not fs.isfile(path):
+                raise OSError(
+                    f"Passed non-file path: {path}, but only files or glob"
+                    " strings (no directories) are supported when passing a list"
+                )
+            piece = pq.ParquetDatasetPiece._create(
+                path, open_file_func=open_file_func)
+            pieces.append(piece)
+
+    return pieces, partitions, common_metadata_path, metadata_path
+
+
+pq._make_manifest = _make_manifest
 
 
 def get_dataset_schema(dataset):
