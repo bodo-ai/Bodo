@@ -6,7 +6,6 @@ import numba
 import numba.core.typing.typeof
 import numpy as np
 from llvmlite import ir as lir
-from llvmlite.llvmpy.core import Type as LLType
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed, impl_ret_new_ref
 from numba.extending import (
@@ -234,11 +233,11 @@ def box_str_arr_split_view(typ, val, c):
     out_arr = c.pyapi.call_method(np_class_obj, "ndarray", (num_items_obj, dtype))
 
     # Array setitem call
-    arr_get_fnty = LLType.function(
+    arr_get_fnty = lir.FunctionType(
         lir.IntType(8).as_pointer(), [c.pyapi.pyobj, c.pyapi.py_ssize_t]
     )
     arr_get_fn = c.pyapi._get_function(arr_get_fnty, name="array_getptr1")
-    arr_setitem_fnty = LLType.function(
+    arr_setitem_fnty = lir.FunctionType(
         lir.VoidType(), [c.pyapi.pyobj, lir.IntType(8).as_pointer(), c.pyapi.pyobj]
     )
     arr_setitem_fn = c.pyapi._get_function(arr_setitem_fnty, name="array_setitem")

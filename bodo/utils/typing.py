@@ -2063,8 +2063,6 @@ class BodoArrayIteratorModel(models.StructModel):
 @lower_builtin("iternext", BodoArrayIterator)
 @iternext_impl(RefType.NEW)
 def iternext_bodo_array(context, builder, sig, args, result):
-    import llvmlite.llvmpy.core as lc
-
     [iterty] = sig.args
     [iter_arg] = args
 
@@ -2075,7 +2073,7 @@ def iternext_bodo_array(context, builder, sig, args, result):
     )
 
     index = builder.load(iterobj.index)
-    is_valid = builder.icmp(lc.ICMP_SLT, index, nitems)
+    is_valid = builder.icmp_signed("<", index, nitems)
     result.set_valid(is_valid)
 
     with builder.if_then(is_valid):
