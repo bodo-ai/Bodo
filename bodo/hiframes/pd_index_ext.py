@@ -3,7 +3,6 @@ import datetime
 import operator
 import warnings
 
-import llvmlite.llvmpy.core as lc
 import numba
 import numpy as np
 import pandas as pd
@@ -945,7 +944,9 @@ def pd_date_range_overload(
         func_text += "  stride = bodo.hiframes.pd_index_ext.to_offset_value(freq)\n"
         if is_overload_none(periods):
             func_text += "  b = start_t.value\n"
-            func_text += "  e = b + (end_t.value - b) // stride * stride + stride // 2 + 1\n"
+            func_text += (
+                "  e = b + (end_t.value - b) // stride * stride + stride // 2 + 1\n"
+            )
         elif not is_overload_none(start):
             func_text += "  b = start_t.value\n"
             func_text += "  addend = np.int64(periods) * np.int64(stride)\n"
@@ -955,8 +956,10 @@ def pd_date_range_overload(
             func_text += "  addend = np.int64(periods) * np.int64(-stride)\n"
             func_text += "  b = np.int64(e) + addend\n"
         else:
-            raise_bodo_error("at least 'start' or 'end' should be specified "
-                    "if a 'period' is given.")
+            raise_bodo_error(
+                "at least 'start' or 'end' should be specified "
+                "if a 'period' is given."
+            )
         # TODO: handle overflows
         func_text += "  arr = np.arange(b, e, stride, np.int64)\n"
     # freq is None
@@ -4209,14 +4212,14 @@ def getiter_range_index(context, builder, sig, args):
 
     diff = builder.sub(indexobj.stop, indexobj.start)
     one = context.get_constant(types.intp, 1)
-    pos_diff = builder.icmp(lc.ICMP_SGT, diff, zero)
-    pos_step = builder.icmp(lc.ICMP_SGT, indexobj.step, zero)
+    pos_diff = builder.icmp_signed(">", diff, zero)
+    pos_step = builder.icmp_signed(">", indexobj.step, zero)
     sign_same = builder.not_(builder.xor(pos_diff, pos_step))
 
     with builder.if_then(sign_same):
         rem = builder.srem(diff, indexobj.step)
         rem = builder.select(pos_diff, rem, builder.neg(rem))
-        uneven = builder.icmp(lc.ICMP_SGT, rem, zero)
+        uneven = builder.icmp_signed(">", rem, zero)
         newcount = builder.add(
             builder.sdiv(diff, indexobj.step), builder.select(uneven, one, zero)
         )

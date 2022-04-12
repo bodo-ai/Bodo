@@ -1023,9 +1023,9 @@ numba.core.types.functions.BoundFunction.get_call_type = get_call_type2
 # https://github.com/numba/numba/blob/1ea770564cb3c0c6cb9d8ab92e7faf23cd4c4c19/numba/core/pythonapi.py#L1102
 # TODO: remove when Numba is fixed
 def string_from_string_and_size(self, string, size):
-    from llvmlite.llvmpy.core import Type
+    from llvmlite import ir as lir
 
-    fnty = Type.function(self.pyobj, [self.cstring, self.py_ssize_t])
+    fnty = lir.FunctionType(self.pyobj, [self.cstring, self.py_ssize_t])
     # replace PyString_FromStringAndSize with PyUnicode_FromStringAndSize of Python 3
     # fname = "PyString_FromStringAndSize"
     fname = "PyUnicode_FromStringAndSize"
@@ -3044,10 +3044,10 @@ numba.core.interpreter.Interpreter.op_BUILD_STRING = op_BUILD_STRING_interpreter
 # add PyObject_HasAttrString call to pythonapi to be available in boxing/unboxing calls
 # as c.pyapi.object_hasattr_string(), TODO(ehsan): move to Numba
 def object_hasattr_string(self, obj, attr):
-    from llvmlite.llvmpy.core import Type
+    from llvmlite import ir as lir
 
     cstr = self.context.insert_const_string(self.module, attr)
-    fnty = Type.function(Type.int(), [self.pyobj, self.cstring])
+    fnty = lir.FunctionType(lir.IntType(32), [self.pyobj, self.cstring])
     fn = self._get_function(fnty, name="PyObject_HasAttrString")
     return self.builder.call(fn, [obj, cstr])
 
@@ -4107,7 +4107,6 @@ def make_constant_array(self, builder, typ, ary):
     import math
 
     from llvmlite import ir as lir
-    from llvmlite.llvmpy.core import Constant, Type
 
     datatype = self.get_data_type(typ.dtype)
     # Bodo change: change size limit to 10MB
@@ -4133,7 +4132,9 @@ def make_constant_array(self, builder, typ, ary):
             flat = flat.view("int64")
         # Note: we use `bytearray(flat.data)` instead of `bytearray(flat)` to
         #       workaround issue #1850 which is due to numpy issue #3147
-        consts = Constant.array(Type.int(8), bytearray(flat.data))
+        # TODO: Replace with cgutils.create_constant_array when Numba 0.56 merges.
+        val = bytearray(flat.data)
+        consts = lir.Constant(lir.ArrayType(lir.IntType(8), len(val)), val)
         data = cgutils.global_constant(builder, ".const.array.data", consts)
         # Ensure correct data alignment (issue #1933)
         data.align = self.get_abi_alignment(datatype)
@@ -4143,11 +4144,13 @@ def make_constant_array(self, builder, typ, ary):
     # Handle shape
     llintp = self.get_value_type(types.intp)
     shapevals = [self.get_constant(types.intp, s) for s in ary.shape]
-    cshape = Constant.array(llintp, shapevals)
+    # TODO: Replace with cgutils.create_constant_array when Numba 0.56 merges.
+    cshape = lir.Constant(lir.ArrayType(llintp, len(shapevals)), shapevals)
 
     # Handle strides
     stridevals = [self.get_constant(types.intp, s) for s in ary.strides]
-    cstrides = Constant.array(llintp, stridevals)
+    # TODO: Replace with cgutils.create_constant_array when Numba 0.56 merges.
+    cstrides = lir.Constant(lir.ArrayType(llintp, len(stridevals)), stridevals)
 
     intp_itemsize = self.get_constant(types.intp, ary.dtype.itemsize)
 

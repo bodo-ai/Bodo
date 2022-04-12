@@ -8,7 +8,6 @@ import warnings
 from collections import namedtuple
 from typing import Tuple
 
-import llvmlite.llvmpy.core as lc
 import numba
 import numpy as np
 import pandas as pd
@@ -5989,7 +5988,7 @@ def iternext_itertuples(context, builder, sig, args, result):
     # nitems, = cgutils.unpack_tuple(builder, ary.shape, count=1)
 
     index = builder.load(iterobj.index)
-    is_valid = builder.icmp(lc.ICMP_SLT, index, nitems)
+    is_valid = builder.icmp_signed("<", index, nitems)
     result.set_valid(is_valid)
 
     with builder.if_then(is_valid):
