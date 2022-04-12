@@ -470,6 +470,7 @@ void pq_write(const char *_path_name, const table_info *table,
               bool is_parallel, bool write_rangeindex_to_metadata,
               const int ri_start, const int ri_stop, const int ri_step,
               const char *idx_name, const char *bucket_region) {
+    tracing::Event ev("pq_write", is_parallel);
     // Write actual values of start, stop, step to the metadata which is a
     // string that contains %d
     int check;

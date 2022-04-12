@@ -115,12 +115,8 @@ def dump(fname=None, clear_traces=True):
             import json
             trace_obj["bodo_version"] = bodo.__version__
             for var in os.environ:
-                if "MPI" in var or var.startswith("FI_"):
+                if "MPI" in var or var.startswith("FI_") or var.startswith("BODO"):
                     trace_obj[var] = os.environ[var]
-            if "BODO_BCAST_JOIN_THRESHOLD" in os.environ:
-                trace_obj["BCAST_JOIN_THRESHOLD"] = os.environ[
-                    "BODO_BCAST_JOIN_THRESHOLD"
-                ]
             trace_obj["traceEvents"] = traceEvents
             IF BODO_DEV_BUILD:
                 with open(fname, "w") as f:

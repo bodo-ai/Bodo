@@ -1543,8 +1543,7 @@ For best performance the number of row groups should be greater than the number 
                 ev_row_counts.add_attribute(
                     "g_total_num_row_groups", total_num_row_groups
                 )
-                if expr_filters is not None:
-                    ev_row_counts.add_attribute("total_scan_time", ds_scan_time)
+                ev_row_counts.add_attribute("total_scan_time", ds_scan_time)
                 # get 5-number summary for rowcounts:
                 # (min, max, 25, 50 -median-, 75 percentiles)
                 data = np.array([p._bodo_num_rows for p in dataset.pieces])
