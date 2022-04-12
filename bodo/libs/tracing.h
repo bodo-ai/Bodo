@@ -29,7 +29,7 @@ public:
         if (tracing) {
             // event_py = tracing.Event(name, is_parallel=is_parallel, sync=sync)
             PyObject *event_ctor = PyObject_GetAttrString(tracing_mod, "Event");
-            event_py = PyObject_CallFunction(event_ctor, "si", name.c_str(), int(is_parallel), int(sync));
+            event_py = PyObject_CallFunction(event_ctor, "sii", name.c_str(), int(is_parallel), int(sync));
             Py_DECREF(event_ctor);
         }
         Py_DECREF(tracing_mod);

@@ -742,16 +742,17 @@ void ArrowDataframeReader::init(const std::vector<int32_t>& str_as_dict_cols) {
         auto field = schema->field(i);
         str_as_dict_colnames.emplace(field->name());
     }
-    if (ev.is_tracing() && str_as_dict_cols.size() > 0) {
+    if (ev.is_tracing()) {
         std::string str_as_dict_colnames_str = "[";
         size_t i = 0;
         for (auto colname : str_as_dict_colnames) {
             if (i < str_as_dict_colnames.size() - 1)
                 str_as_dict_colnames_str += colname + ", ";
             else
-                str_as_dict_colnames_str += colname + "]";
+                str_as_dict_colnames_str += colname;
             i++;
         }
+        str_as_dict_colnames_str += "]";
         ev.add_attribute("g_str_as_dict_cols", str_as_dict_colnames_str);
     }
 
