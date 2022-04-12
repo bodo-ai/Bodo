@@ -2200,16 +2200,16 @@ def test_write_parquet_decimal(datapath, memory_leak_check):
 
 def test_write_parquet_params(memory_leak_check):
     def write1(df, filename):
-        df.to_parquet(compression="snappy", fname=filename)
+        df.to_parquet(compression="snappy", path=filename)
 
     def write2(df, filename):
-        df.to_parquet(fname=filename, index=None, compression="gzip")
+        df.to_parquet(path=filename, index=None, compression="gzip")
 
     def write3(df, filename):
-        df.to_parquet(fname=filename, index=True, compression="brotli")
+        df.to_parquet(path=filename, index=True, compression="brotli")
 
     def write4(df, filename):
-        df.to_parquet(fname=filename, index=False, compression=None)
+        df.to_parquet(path=filename, index=False, compression=None)
 
     S1 = ["¡Y tú quién te crees?", "🐍⚡", "大处着眼，小处着手。"] * 4
     S2 = ["abc¡Y tú quién te crees?", "dd2🐍⚡", "22 大处着眼，小处着手。"] * 4
