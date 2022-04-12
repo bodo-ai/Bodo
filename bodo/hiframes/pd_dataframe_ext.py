@@ -3474,7 +3474,7 @@ def gen_pandas_parquet_metadata(
 @overload_method(DataFrameType, "to_parquet", no_unliteral=True)
 def to_parquet_overload(
     df,
-    fname,
+    path,
     engine="auto",
     compression="snappy",
     index=None,
@@ -3643,7 +3643,7 @@ def to_parquet_overload(
             for i in range(len(df.columns))
         )
 
-    func_text = "def df_to_parquet(df, fname, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, _is_parallel=False):\n"
+    func_text = "def df_to_parquet(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, _is_parallel=False):\n"
     # put arrays in table_info
     if df.is_table_format:
         func_text += "    py_table = get_dataframe_table(df)\n"
@@ -3697,7 +3697,7 @@ def to_parquet_overload(
     func_text += "    else:\n"
     func_text += "        name_ptr = 'null'\n"
     # if it's an s3 url, get the region and pass it into the c++ code
-    func_text += f"    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel=_is_parallel)\n"
+    func_text += f"    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(path, parallel=_is_parallel)\n"
     col_names_no_parts_arr = None
     if partition_cols:
         col_names_no_parts_arr = pd.array(
@@ -3720,7 +3720,7 @@ def to_parquet_overload(
             "    col_names_no_partitions = array_to_info(col_names_no_parts_arr)\n"
         )
         func_text += f"    part_cols_idxs = np.array({part_col_idxs}, dtype=np.int32)\n"
-        func_text += "    parquet_write_table_partitioned_cpp(unicode_to_utf8(fname),\n"
+        func_text += "    parquet_write_table_partitioned_cpp(unicode_to_utf8(path),\n"
         func_text += "                            table, col_names, col_names_no_partitions, cat_table,\n"
         func_text += (
             "                            part_cols_idxs.ctypes, len(part_cols_idxs),\n"
@@ -3735,7 +3735,7 @@ def to_parquet_overload(
         if categories_args:
             func_text += "    delete_table_decref_arrays(cat_table)\n"
     elif write_rangeindex_to_metadata:
-        func_text += "    parquet_write_table_cpp(unicode_to_utf8(fname),\n"
+        func_text += "    parquet_write_table_cpp(unicode_to_utf8(path),\n"
         func_text += "                            table, col_names, index_col,\n"
         func_text += "                            " + str(write_index) + ",\n"
         func_text += "                            unicode_to_utf8(metadata),\n"
@@ -3748,7 +3748,7 @@ def to_parquet_overload(
         func_text += "    delete_info_decref_array(index_col)\n"
         func_text += "    delete_info_decref_array(col_names)\n"
     else:
-        func_text += "    parquet_write_table_cpp(unicode_to_utf8(fname),\n"
+        func_text += "    parquet_write_table_cpp(unicode_to_utf8(path),\n"
         func_text += "                            table, col_names, index_col,\n"
         func_text += "                            " + str(write_index) + ",\n"
         func_text += "                            unicode_to_utf8(metadata),\n"
