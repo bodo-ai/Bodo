@@ -1,4 +1,5 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
+#include <Python.h>
 #include "_array_hash.h"
 #include <arrow/api.h>
 #include "_array_utils.h"
@@ -42,6 +43,23 @@ hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
     }
 }
 
+/*
+ * Copied largely from Numpy
+ * https://github.com/numpy/numpy/blob/548bc6826b597ab79b9c1451b79ec8d23db9d444/numpy/core/src/common/npy_pycompat.h#L7
+ *
+ * In Python 3.10a7 (or b1), python started using the identity for the hash
+ * when a value is NaN.  See https://bugs.python.org/issue43475
+ */
+#if PY_VERSION_HEX > 0x030a00a6
+#define Npy_HashDouble _Py_HashDouble
+#else
+static inline Py_hash_t
+Npy_HashDouble(PyObject *__UNUSED__(identity), double val)
+{
+    return _Py_HashDouble(val);
+}
+#endif
+
 // Discussion on hashing floats:
 // https://stackoverflow.com/questions/4238122/hash-function-for-floats
 
@@ -50,7 +68,7 @@ static typename std::enable_if<std::is_floating_point<T>::value, void>::type
 hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
                  const uint32_t seed) {
     for (size_t i = 0; i < n_rows; i++) {
-        Py_hash_t py_hash = _Py_HashDouble(data[i]);
+        Py_hash_t py_hash = Npy_HashDouble(nullptr, data[i]);
         hash_inner_32<Py_hash_t>(&py_hash, seed, &out_hashes[i]);
     }
 }

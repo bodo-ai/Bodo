@@ -1072,8 +1072,9 @@ def has_supported_h5py():
     else:
         # NOTE: _hdf5 import fails if proper hdf5 version is not installed, but we
         # should check h5py as well since there may be an extra pip installation
-        # see [BE-1382]
-        _has_h5py = h5py.version.hdf5_version_tuple[1] == 10
+        # see [BE-1382].
+        # We support both 1.10 and 1.12
+        _has_h5py = h5py.version.hdf5_version_tuple[1] in (10, 12)
     return _has_h5py
 
 

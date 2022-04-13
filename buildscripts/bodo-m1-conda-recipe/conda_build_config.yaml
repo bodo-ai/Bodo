@@ -7,9 +7,12 @@ MACOSX_DEPLOYMENT_TARGET:
 python:
   - 3.8
   - 3.9
+  # Enable 3.10 build once we are regularly testing CI
+  # - 3.10
+
 
 numpy:
-  - 1.19
+  - 1.21
 
 target_platform:
   - osx-arm64

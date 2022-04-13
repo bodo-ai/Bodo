@@ -623,6 +623,7 @@ def _gen_sql_reader_py(
             func_text += "  delete_table(out_table)\n"
             func_text += f"  ev.finalize()\n"
         else:
+            func_text += "  df_typeref_2 = df_typeref\n"
             func_text += "  sqlalchemy_check()\n"
             if db_type == "mysql" or db_type == "mysql+pymysql":
                 func_text += "  pymysql_check()\n"
@@ -632,6 +633,8 @@ def _gen_sql_reader_py(
                 func_text += "  psycopg2_check()\n"
 
             if parallel and is_select_query:
+                # NOTE: assigning a new variable to make globals used inside objmode local to the
+                # function, which avoids objmode caching errors
                 func_text += "  rank = bodo.libs.distributed_api.get_rank()\n"
                 if limit is not None:
                     func_text += f"  nb_row = {limit}\n"
@@ -657,15 +660,18 @@ def _gen_sql_reader_py(
                     func_text += f"    sql_cons = 'select {col_str} from (' + sql_request + ') x LIMIT ' + str(limit) + ' OFFSET ' + str(offset)\n"
 
                 func_text += "    df_ret = pd.read_sql(sql_cons, conn)\n"
+                func_text += "    bodo.ir.connector.cast_float_to_nullable(df_ret, df_typeref_2)\n"
             else:
                 func_text += "  with objmode({}):\n".format(", ".join(typ_strs))
                 func_text += "    df_ret = pd.read_sql(sql_request, conn)\n"
+                func_text += "    bodo.ir.connector.cast_float_to_nullable(df_ret, df_typeref_2)\n"
             # We assumed that sanitized_cnames and col_names are list of strings
             for s_cname, cname in zip(sanitized_cnames, col_names):
                 func_text += "    {} = df_ret['{}'].values\n".format(s_cname, cname)
         func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
 
-    glbls = {"bodo": bodo}
+    glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
+    glbls.update({"bodo": bodo})
     if db_type == "snowflake":
         glbls.update(local_types)
         glbls.update(
@@ -689,6 +695,9 @@ def _gen_sql_reader_py(
                 "pymysql_check": pymysql_check,
                 "cx_oracle_check": cx_oracle_check,
                 "psycopg2_check": psycopg2_check,
+                "df_typeref": bodo.DataFrameType(
+                    tuple(col_typs), bodo.RangeIndexType(None), tuple(col_names)
+                ),
             }
         )
 

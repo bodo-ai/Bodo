@@ -155,7 +155,7 @@ def test_score(data, average):
     from sklearn import metrics
 
     def test_metrics_f1(y_true, y_pred, average):
-        """ Test to verify that both import styles work for classification metrics"""
+        """Test to verify that both import styles work for classification metrics"""
         return metrics.f1_score(y_true, y_pred, average=average)
 
     check_func(test_precision, tuple(data + [average]), is_out_distributed=False)
@@ -502,7 +502,7 @@ def test_r2_score(data, multioutput, memory_leak_check):
     from sklearn import metrics
 
     def test_metrics_r2_1(y_true, y_pred, sample_weight_):
-        """ Test to verify that both import styles work for regression metrics"""
+        """Test to verify that both import styles work for regression metrics"""
         return metrics.r2_score(
             y_true,
             y_pred,
@@ -523,8 +523,24 @@ def test_r2_score(data, multioutput, memory_leak_check):
     check_func(test_r2_1, tuple(data), is_out_distributed=False)
     check_func(test_metrics_r2_1, tuple(data), is_out_distributed=False)
 
-    # Check that appropriate error is raised when number of samples in
-    # y_true and y_pred are inconsistent
+    bodo.barrier()
+    import gc
+
+    del data
+    gc.collect()
+
+
+def test_r2_score_inconsistent(memory_leak_check):
+    """
+    Check that appropriate error is raised when number of samples in
+    y_true and y_pred are inconsistent
+    """
+
+    def test_r2_0(y_true, y_pred):
+        return r2_score(y_true, y_pred, multioutput="uniform_average")
+
+    data = gen_random_k_dims(20, 1)
+
     with pytest.raises(
         ValueError,
         match="inconsistent number of samples",

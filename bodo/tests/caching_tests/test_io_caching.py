@@ -1,10 +1,16 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
+import os
+
 import pandas as pd
 import pytest
 from caching_tests_common import fn_distribution  # noqa
 
 import bodo
-from bodo.tests.utils import check_caching
+from bodo.tests.utils import (
+    check_caching,
+    get_snowflake_connection_string,
+    sql_user_pass_and_hostname,
+)
 
 
 @bodo.jit
@@ -160,3 +166,33 @@ def test_read_json_cache_fname_arg(
     py_out = impl(fname1)
     check_caching(impl, (fname1,), is_cached, fn_distribution, py_output=py_out)
     check_caching(impl2, (fname2,), is_cached, fn_distribution, py_output=py_out)
+
+
+def test_cache_sql_hardcoded_aws(fn_distribution, is_cached, memory_leak_check):
+    """This test caching a hardcoded request and connection"""
+
+    def test_impl_hardcoded():
+        sql_request = "select * from employees"
+        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    check_caching(test_impl_hardcoded, (), is_cached, fn_distribution)
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_cache_sql_snowflake(fn_distribution, is_cached, memory_leak_check):
+    """
+    Tests that caching works on Snowflake queries
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+    check_caching(impl, (query, conn), is_cached, fn_distribution)

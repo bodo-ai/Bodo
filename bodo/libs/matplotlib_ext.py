@@ -100,6 +100,8 @@ mpl_axes_kwargs_funcs = [
     "grid",
     "tick_params",
     "get_figure",
+    "set_xticks",
+    "set_yticks",
 ]
 # figure methods
 mpl_figure_kwargs_funcs = ["suptitle", "tight_layout", "set_figheight", "set_figwidth"]
@@ -704,6 +706,14 @@ class MatplotlibAxesKwargsAttribute(AttributeTemplate):
             types.mpl_figure_type, args, kws, obj_typ=ax_typ
         )
 
+    @bound_function("ax.set_xticks", no_unliteral=True)
+    def resolve_set_xticks(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(types.none, args, kws, obj_typ=ax_typ)
+
+    @bound_function("ax.set_yticks", no_unliteral=True)
+    def resolve_set_yticks(self, ax_typ, args, kws):
+        return generate_matplotlib_signature(types.none, args, kws, obj_typ=ax_typ)
+
 
 @overload(plt.savefig, no_unliteral=True)
 def overload_savefig(
@@ -830,12 +840,6 @@ gen_objmode_method_overload(
     "set_ylim",
     matplotlib.axes.Axes.set_ylim,
     output_type=types.UniTuple(types.float64, 2),
-)
-gen_objmode_method_overload(
-    MplAxesType, "set_xticks", matplotlib.axes.Axes.set_xticks, output_type=types.none
-)
-gen_objmode_method_overload(
-    MplAxesType, "set_yticks", matplotlib.axes.Axes.set_yticks, output_type=types.none
 )
 gen_objmode_method_overload(
     MplAxesType,

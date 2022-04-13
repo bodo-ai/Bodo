@@ -282,3 +282,23 @@ def trim_extra_used_columns(used_columns, num_columns):
             break
         end = i
     return used_columns[:end]
+
+
+def cast_float_to_nullable(df, df_type):
+    """
+    Takes a DataFrame read in objmode and casts
+    columns that are only floats due to null values as
+    Nullable integers.
+    https://stackoverflow.com/questions/57960179/how-do-i-prevent-nulls-from-causing-the-wrong-datatype-in-a-dataframe
+    """
+    import bodo
+
+    col_map = {}
+    for i, coltype in enumerate(df_type.data):
+        if isinstance(coltype, bodo.IntegerArrayType):
+            dtype = coltype.get_pandas_scalar_type_instance
+            if dtype not in col_map:
+                col_map[dtype] = []
+            col_map[dtype].append(df.columns[i])
+    for typ, cols in col_map.items():
+        df[cols] = df[cols].astype(typ)

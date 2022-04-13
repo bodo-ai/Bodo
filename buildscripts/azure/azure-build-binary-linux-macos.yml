@@ -77,8 +77,6 @@ jobs:
       flake8 bodo
     displayName: 'Flake8'
 
-# 'python<=3.9' is needed, so python 3.10 doesn't get installed by default, which causes issues with
-# conda-forge-ci-setup=3
   - script: |
       set -eo pipefail
       if [[ "${{ parameters.name }}" == "macOS_ARM" ]]; then
@@ -86,7 +84,7 @@ jobs:
       else
         export PATH=$HOME/miniconda3/bin:$PATH
       fi
-      conda create -y -n bodo_build conda-build anaconda-client conda-verify 'python<=3.9'
+      conda create -y -n bodo_build conda-build anaconda-client conda-verify 'python<=3.9' -c conda-forge
     displayName: 'Create Conda Env'
 
   # It was taken from code in the Numba feedstock that handles cross compiling,

@@ -86,10 +86,12 @@ except ImportError:
     # building the extension modules still works though.
     # TODO: resolve issue with h5py import
     _has_h5py = False or is_m1_mac
+    h5py_version = None
 else:
     # NOTE: conda-forge does not have MPI-enabled hdf5 for Windows yet
     # TODO: make sure the available hdf5 library is MPI-enabled automatically
     _has_h5py = not is_win
+    h5py_version = h5py.version.hdf5_version_tuple[1]
 
 ind = [PREFIX_DIR + "/include"]
 extra_hash_ind1 = ["bodo/libs/HashLibs/TSL/hopscotch-map"]
@@ -202,6 +204,16 @@ ext_hdfs = Extension(
     language="c++",
 )
 
+# Even though we upgraded to 1.12 which changes the API, these flags keep the
+# 1.10 API. See the example: https://github.com/openmc-dev/openmc/pull/1533
+# This was also verified by looking at the .h files.
+# We only apply these changes if we have version 1.12.
+extra_eca_hdf5 = (
+    ["-DH5Oget_info_by_name_vers=1", "-DH5Oget_info_vers=1", "-DH5O_info_t_vers=1"]
+    if h5py_version == 12
+    else []
+)
+
 ext_hdf5 = Extension(
     name="bodo.io._hdf5",
     sources=["bodo/io/_hdf5.cpp"],
@@ -210,7 +222,7 @@ ext_hdf5 = Extension(
     include_dirs=ind,
     library_dirs=lid,
     define_macros=H5_CPP_FLAGS,
-    extra_compile_args=eca,
+    extra_compile_args=eca + extra_eca_hdf5,
     extra_link_args=ela,
     language="c++",
 )
@@ -570,6 +582,7 @@ setup(
         "Programming Language :: Python",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
         "Topic :: Software Development :: Compilers",
         "Topic :: System :: Distributed Computing",
     ],
@@ -594,7 +607,7 @@ setup(
         "numba==0.55.1",
         "pyarrow==7.0.0",
         "pandas==1.3.*",
-        "numpy>=1.18,<1.21",
+        "numpy>=1.18,<1.22",
         "fsspec>=2021.09",
         "mpi4py_mpich==3.1.2",
     ],

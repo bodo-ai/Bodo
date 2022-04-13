@@ -16,6 +16,7 @@ from bodo.tests.utils import (
     _check_connector_columns,
     _check_for_io_reader_filters,
     check_func,
+    get_snowflake_connection_string,
     get_start_end,
     reduce_sum,
     sql_user_pass_and_hostname,
@@ -273,22 +274,6 @@ def test_read_sql_column_function(memory_leak_check):
         return frame
 
     check_func(test_impl, (), check_dtype=False)
-
-
-# We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
-# are stored there (to avoid failing on AWS or our local machines)
-def get_snowflake_connection_string(db, schema):
-    """
-    Generates a common snowflake connection string. Some details (how to determine
-    username and password) seem unlikely to change, whereas as some tests could require
-    other details (db and schema) to change.
-    """
-    username = os.environ["SF_USER"]
-    password = os.environ["SF_PASSWORD"]
-    account = "bodopartner.us-east-1"
-    warehouse = "DEMO_WH"
-    conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?warehouse={warehouse}"
-    return conn
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")

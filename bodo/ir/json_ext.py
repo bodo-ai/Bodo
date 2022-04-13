@@ -1,21 +1,20 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import numba
-import numpy as np  # noqa
-import pandas as pd  # noqa
+import numpy as np
+import pandas as pd
 from numba.core import ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
 
 import bodo
 import bodo.ir.connector
-from bodo import objmode  # noqa
-from bodo.io.fs_io import (  # noqa
+from bodo import objmode
+from bodo.io.fs_io import (
     get_storage_options_pyobject,
     storage_options_dict_type,
 )
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
-from bodo.utils.utils import check_java_installation  # noqa
-from bodo.utils.utils import sanitize_varname
+from bodo.utils.utils import check_java_installation, sanitize_varname
 
 
 class JsonReader(ir.Stmt):
@@ -245,6 +244,9 @@ def _gen_json_reader_py(
         compression = "uncompressed"  # Arrow's representation
 
     func_text = "def json_reader_py(fname):\n"
+    # NOTE: assigning a new variable to make globals used inside objmode local to the
+    # function, which avoids objmode caching errors
+    func_text += "  df_typeref_2 = df_typeref\n"
     # check_java_installation is a check for hdfs that java is installed
     func_text += "  check_java_installation(fname)\n"
     # if it's an s3 url, get the region and pass it into the c++ code
@@ -271,16 +273,27 @@ def _gen_json_reader_py(
     func_text += f"       lines={lines}, \n"
     func_text += "       dtype={{{}}},\n".format(pd_dtype_strs)
     func_text += "       )\n"
+    func_text += "    bodo.ir.connector.cast_float_to_nullable(df, df_typeref_2)\n"
     for s_cname, cname in zip(sanitized_cnames, col_names):
         func_text += "    if len(df) > 0:\n"
         func_text += "        {} = df['{}'].values\n".format(s_cname, cname)
         func_text += "    else:\n"
         func_text += "        {} = np.array([])\n".format(s_cname)
     func_text += "  return ({},)\n".format(", ".join(sc for sc in sanitized_cnames))
-
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
-    # {'objmode': objmode, 'json_file_chunk_reader': json_file_chunk_reader,
-    # 'pd': pd, 'np': np}
+    glbls.update(
+        {
+            "bodo": bodo,
+            "pd": pd,
+            "np": np,
+            "objmode": objmode,
+            "check_java_installation": check_java_installation,
+            "df_typeref": bodo.DataFrameType(
+                tuple(col_typs), bodo.RangeIndexType(None), tuple(col_names)
+            ),
+            "get_storage_options_pyobject": get_storage_options_pyobject,
+        }
+    )
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     json_reader_py = loc_vars["json_reader_py"]
