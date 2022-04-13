@@ -74,6 +74,20 @@ class IntegerArrayType(types.ArrayCompatible):
     def copy(self):
         return IntegerArrayType(self.dtype)
 
+    @property
+    def get_pandas_scalar_type_instance(self):
+        """
+        Get the Pandas dtype instance that matches stored
+        scalars.
+        """
+        # Here we assume pd_int_dtype_classes is ordered int
+        # then uint and in ascending bitwidth order.
+
+        bitwidth_offset = int(np.log2(self.dtype.bitwidth // 8))
+        signed_offset = 0 if self.dtype.signed else 4
+        idx = bitwidth_offset + signed_offset
+        return pd_int_dtype_classes[idx]()
+
 
 # store data and nulls as regular numpy arrays without payload machineray
 # since this struct is immutable (data and null_bitmap are not assigned new

@@ -9,12 +9,11 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.utils.typing import BodoError, BodoWarning
-
-from .test_sql import (
+from bodo.tests.utils import (
     get_snowflake_connection_string,
     sql_user_pass_and_hostname,
 )
+from bodo.utils.typing import BodoError, BodoWarning
 
 
 @pytest.mark.slow

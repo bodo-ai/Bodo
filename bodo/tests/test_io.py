@@ -2544,6 +2544,9 @@ def test_h5_read_parallel(datapath, memory_leak_check):
     assert count_parfor_REPs() == 0
 
 
+@pytest.mark.skip(
+    "H5py bug breaks boolean arrays, https://github.com/h5py/h5py/issues/1847"
+)
 def test_h5_filter(datapath, memory_leak_check):
     fname = datapath("h5_test_filter.h5")
 

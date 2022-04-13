@@ -61,9 +61,10 @@ then
    $CONDA_INSTALL cython -c conda-forge
    $CONDA_INSTALL mpi4py -c conda-forge
    $CONDA_INSTALL scikit-learn='1.0.*' 'gcsfs>=2022.1' -c conda-forge
-   $CONDA_INSTALL matplotlib='3.4.3' -c conda-forge
+   $CONDA_INSTALL matplotlib='3.5.1' -c conda-forge
    $CONDA_INSTALL pyspark openjdk -c conda-forge
-   $CONDA_INSTALL hdf5='1.10.*=*mpich*' -c conda-forge
+   HDF5_VERSION=`python -c "import sys; print('1.12.*=*mpich*') if sys.version_info.minor == 10 else print('1.10.*=*mpich*')"`
+   $CONDA_INSTALL hdf5=$HDF5_VERSION -c conda-forge
    $CONDA_INSTALL xlrd xlsxwriter openpyxl -c conda-forge
    if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
 else
@@ -79,8 +80,9 @@ else
        #conda clean -a -y
        # Install h5py and hd5f directly because otherwise tensorflow
        # installs a non-mpi version.
-       #$CONDA_INSTALL tensorflow h5py hdf5='1.10.*=*mpich*' -c conda-forge
-       $CONDA_INSTALL h5py hdf5='1.10.*=*mpich*' -c conda-forge
+       HDF5_VERSION=`python -c "import sys; print('1.12.*=*mpich*') if sys.version_info.minor == 10 else print('1.10.*=*mpich*')"`
+       #$CONDA_INSTALL tensorflow h5py hdf5=$HDF5_VERSION -c conda-forge
+       $CONDA_INSTALL h5py hdf5=$HDF5_VERSION -c conda-forge
        conda clean -a -y
        #pip install horovod;
     fi

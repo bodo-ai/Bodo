@@ -12,6 +12,7 @@ import numba
 import numpy as np
 import pandas as pd
 import pytest
+from numba.core.utils import PYVERSION
 
 import bodo
 import bodo.tests.dataframe_common
@@ -2497,7 +2498,16 @@ def test_df_type_unify_error():
     # Test as a developer
     numba.core.config.DEVELOPER_MODE = 1
 
-    with pytest.raises(numba.TypingError, match="Cannot unify dataframe"):
+    if PYVERSION == (3, 10):
+        # In Python 3.10 this function has two returns in the bytecode
+        # as opposed to a phi node
+        error_type = BodoError
+        match_msg = "Unable to unify the following function return types"
+    else:
+        error_type = numba.TypingError
+        match_msg = "Cannot unify dataframe"
+
+    with pytest.raises(error_type, match=match_msg):
         bodo.jit(test_impl)([3, 4])
 
     # Reset back to original setting

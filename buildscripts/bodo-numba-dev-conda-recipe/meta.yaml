@@ -22,16 +22,15 @@ requirements:
     - numba 0.55.1
     # Compatable with Numba requirements.
     # Resolves build issues on nightly
-    - numpy >=1.18
+    - numpy >=1.18,<1.22
     - cython
     - pandas 1.3.*
     - fsspec >=2021.09
     - pyarrow =7.0.0
     - boost-cpp =1.74.0
-    # The hdf5 API changes between 1.10 and 1.12. Since
-    # both are compatible with mpich =3.4.*=h*, we need
-    # to force hdf5 to use the older version.
-    - hdf5 =1.10.*=*mpi_mpich_* # [not win]
+    # We suport both 1.10 and 1.12. Since
+    # M1 only support 1.12 with Python 3.10.
+    - hdf5 >=1.10.*,<1.13.0a0=*mpi_mpich_* # [not win]
     - h5py
     - mpich >=3.3,<4.0.0a0=h* # [not win]
     - msmpi # [win]
@@ -58,9 +57,9 @@ requirements:
   # run constrained will not install these packages when building,
   # but will restrict them if they are present in the conda env.
   # currently matplotlib is an optional dependency, and we only
-  # support up to 3.4.3
+  # support up to 3.5.1
   run_constrained:
-    - matplotlib <= 3.4.3
+    - matplotlib <= 3.5.1
 
 
 test:

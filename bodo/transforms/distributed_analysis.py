@@ -537,6 +537,36 @@ class DistributedAnalysis:
                     if rhs.rhs.name in array_dists:
                         self._meet_array_dists(lhs, rhs.rhs.name, array_dists)
                         return
+            # Handle Tuple append
+            elif is_expr(rhs, "binop") and rhs.fn == operator.add:
+                lhs_tuple = (
+                    isinstance(rhs.lhs, ir.Var)
+                    and rhs.lhs.name in self.typemap
+                    and isinstance(self.typemap[rhs.lhs.name], types.BaseTuple)
+                )
+                rhs_tuple = (
+                    isinstance(rhs.rhs, ir.Var)
+                    and rhs.rhs.name in self.typemap
+                    and isinstance(self.typemap[rhs.rhs.name], types.BaseTuple)
+                )
+                if lhs_tuple and rhs_tuple:
+                    # Create a new tuple dist if both parts have distributions
+                    # or is the empty tuple.
+                    lhs_can_dist = (
+                        rhs.lhs.name in array_dists
+                        or len(self.typemap[rhs.lhs.name]) == 0
+                    )
+                    rhs_can_dist = (
+                        rhs.rhs.name in array_dists
+                        or len(self.typemap[rhs.rhs.name]) == 0
+                    )
+                    if lhs_can_dist and rhs_can_dist:
+                        lhs_tuple_val = array_dists.get(rhs.lhs.name, [])
+                        rhs_tuple_val = array_dists.get(rhs.rhs.name, [])
+                        output_tuple = lhs_tuple_val + rhs_tuple_val
+                        if output_tuple:
+                            array_dists[lhs] = output_tuple
+                        return
 
             # treat global values similar to arguments
             if isinstance(rhs, (ir.FreeVar, ir.Global, ir.Const)):

@@ -64,6 +64,11 @@ from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import NativeValue, lower_builtin, typeof_impl
 from numba.parfors.parfor import get_expr_args
 
+from bodo.utils.python_310_bytecode_pass import (
+    Bodo310ByteCodePass,
+    peep_hole_call_function_ex_to_call_function_kw,
+    peep_hole_fuse_dict_add_updates,
+)
 from bodo.utils.typing import (
     BodoError,
     get_overload_const_str,
@@ -96,11 +101,18 @@ def run_frontend(func, inline_closures=False, emit_dels=False):
     If inline_closures is Truthy then closure inlining will be run
     If emit_dels is Truthy the ir.Del nodes will be emitted appropriately
     """
+    from numba.core.utils import PYVERSION
+
     # XXX make this a dedicated Pipeline?
     func_id = numba.core.bytecode.FunctionIdentity.from_function(func)
     interp = numba.core.interpreter.Interpreter(func_id)
     bc = numba.core.bytecode.ByteCode(func_id=func_id)
     func_ir = interp.interpret(bc)
+    # BODO Change: add 3.10 byte code changes until Numba 0.56 if PYVERSION is 3.10
+    if PYVERSION == (3, 10):
+        func_ir = peep_hole_call_function_ex_to_call_function_kw(func_ir)
+        func_ir = peep_hole_fuse_dict_add_updates(func_ir)
+
     if inline_closures:
         from numba.core.inline_closurecall import InlineClosureCallPass
 
@@ -451,6 +463,9 @@ def mini_dce(func_ir, typemap=None, alias_map=None, arg_aliases=None):
                             continue
                         # build_map doesn't have any side effects
                         if isinstance(rhs, ir.Expr) and rhs.op == "build_map":
+                            continue
+                        # build_tuple doesn't have any side effects
+                        if isinstance(rhs, ir.Expr) and rhs.op == "build_tuple":
                             continue
                     if isinstance(rhs, ir.Var) and lhs.name == rhs.name:
                         continue
@@ -3834,7 +3849,7 @@ def remove_dead_parfor(
     return parfor
 
 
-if _check_numba_change:  # pragma: no cover  # pragma: no cover
+if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.parfors.parfor.remove_dead_parfor)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
@@ -3897,7 +3912,7 @@ def simplify_parfor_body_CFG(blocks):
     return n_parfors
 
 
-if _check_numba_change:  # pragma: no cover  # pragma: no cover
+if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.parfors.parfor.simplify_parfor_body_CFG)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
@@ -4232,12 +4247,12 @@ def _define_atomic_inc_dec(module, op, ordering):
     return fn_atomic
 
 
-if _check_numba_change:  # pragma: no cover  # pragma: no cover
+if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(numba.core.runtime.nrtdynmod._define_atomic_inc_dec)
     if (
         hashlib.sha256(lines.encode()).hexdigest()
         != "9cc02c532b2980b6537b702f5608ea603a1ff93c6d3c785ae2cf48bace273f48"
-    ):  # pragma: no cover
+    ):
         warnings.warn("numba.core.runtime.nrtdynmod._define_atomic_inc_dec has changed")
 
 
@@ -4592,7 +4607,7 @@ def get_equiv_set(self, obj):
     )
 
 
-if _check_numba_change:  # pragma: no cover  # pragma: no cover
+if _check_numba_change:  # pragma: no cover
     for name, orig, new, hash in (
         (
             "numba.parfors.array_analysis.ShapeEquivSet._get_names",
@@ -4894,16 +4909,240 @@ def unbox_dicttype(typ, val, c):
 # to make sure all patches are applied first
 import numba.typed.typeddict  # noqa
 
-if _check_numba_change:  # pragma: no cover  # pragma: no cover
+if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(
         numba.core.pythonapi._unboxers.functions[numba.core.types.DictType]
     )
     if (
         hashlib.sha256(lines.encode()).hexdigest()
         != "5f6f183b94dc57838538c668a54c2476576c85d8553843f3219f5162c61e7816"
-    ):  # pragma: no cover
+    ):
         warnings.warn("unbox_dicttype has changed")
 numba.core.pythonapi._unboxers.functions[types.DictType] = unbox_dicttype
+
+
+#########  Start bytecode changes for Python 3.10  #########
+
+# Remove once https://github.com/numba/numba/pull/7866
+# and https://github.com/numba/numba/pull/7964/ merges
+
+# Bodo Change: Add op_DICT_UPDATE to byteflow and interpreter
+
+
+def op_DICT_UPDATE_byteflow(self, state, inst):
+    value = state.pop()
+    index = inst.arg
+    target = state.peek(index)
+    updatevar = state.make_temp()
+    res = state.make_temp()
+    state.append(inst, target=target, value=value, updatevar=updatevar, res=res)
+
+
+if _check_numba_change:  # pragma: no cover
+    if hasattr(numba.core.byteflow.TraceRunner, "op_DICT_UPDATE"):
+        warnings.warn("numba.core.byteflow.TraceRunner.op_DICT_UPDATE has changed")
+
+
+numba.core.byteflow.TraceRunner.op_DICT_UPDATE = op_DICT_UPDATE_byteflow
+
+
+def op_DICT_UPDATE_interpreter(self, inst, target, value, updatevar, res):
+    from numba.core import ir
+
+    target = self.get(target)
+    value = self.get(value)
+    updateattr = ir.Expr.getattr(target, "update", loc=self.loc)
+    self.store(value=updateattr, name=updatevar)
+    updateinst = ir.Expr.call(self.get(updatevar), (value,), (), loc=self.loc)
+    self.store(value=updateinst, name=res)
+
+
+if _check_numba_change:  # pragma: no cover
+    if hasattr(numba.core.interpreter.Interpreter, "op_DICT_UPDATE"):
+        warnings.warn("numba.core.interpreter.Interpreter.op_DICT_UPDATE has changed")
+
+
+numba.core.interpreter.Interpreter.op_DICT_UPDATE = op_DICT_UPDATE_interpreter
+
+# Bodo Change: Support Dict.update as a fallback.
+@numba.extending.overload_method(numba.core.types.DictType, "update")
+def ol_dict_update(d, other):
+    if not isinstance(d, numba.core.types.DictType):
+        return
+    if not isinstance(other, numba.core.types.DictType):
+        return
+
+    def impl(d, other):
+        for k, v in other.items():
+            d[k] = v
+
+    return impl
+
+
+if _check_numba_change:  # pragma: no cover
+    if hasattr(numba.core.interpreter.Interpreter, "ol_dict_update"):
+        warnings.warn("numba.typed.dictobject.ol_dict_update has changed")
+
+
+def op_CALL_FUNCTION_EX_byteflow(self, state, inst):
+    from numba.core.utils import PYVERSION
+
+    # Bodo change enable varkwarg with PYVERSION 3.10
+    if inst.arg & 1 and PYVERSION != (3, 10):
+        errmsg = "CALL_FUNCTION_EX with **kwargs not supported"
+        raise errors.UnsupportedError(errmsg)
+    if inst.arg & 1:
+        varkwarg = state.pop()
+    else:
+        varkwarg = None
+    vararg = state.pop()
+    func = state.pop()
+    res = state.make_temp()
+    state.append(inst, func=func, vararg=vararg, varkwarg=varkwarg, res=res)
+    state.push(res)
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.byteflow.TraceRunner.op_CALL_FUNCTION_EX)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "349e7cfd27f5dab80fe15a7728c5f098f3f225ba8512d84331e39d01e863c6d4"
+    ):
+        warnings.warn("numba.core.byteflow.TraceRunner.op_CALL_FUNCTION_EX has changed")
+numba.core.byteflow.TraceRunner.op_CALL_FUNCTION_EX = op_CALL_FUNCTION_EX_byteflow
+
+
+def op_CALL_FUNCTION_EX_interpreter(self, inst, func, vararg, varkwarg, res):
+    func = self.get(func)
+    vararg = self.get(vararg)
+    # BODO CHANGE: Add varkwarg to the call
+    if varkwarg is not None:
+        varkwarg = self.get(varkwarg)
+    expr = ir.Expr.call(func, [], [], loc=self.loc, vararg=vararg, varkwarg=varkwarg)
+    self.store(expr, res)
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.interpreter.Interpreter.op_CALL_FUNCTION_EX)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "84846e5318ab7ccc8f9abaae6ab9e0ca879362648196f9d4b0ffb91cf2e01f5d"
+    ):
+        warnings.warn(
+            "numba.core.interpreter.Interpreter.op_CALL_FUNCTION_EX has changed"
+        )
+numba.core.interpreter.Interpreter.op_CALL_FUNCTION_EX = op_CALL_FUNCTION_EX_interpreter
+
+
+@classmethod
+def ir_expr_call(cls, func, args, kws, loc, vararg=None, varkwarg=None, target=None):
+    assert isinstance(func, ir.Var)
+    assert isinstance(loc, ir.Loc)
+    op = "call"
+    # BODO CHANGE: Include the varkwarg argument
+    return cls(
+        op=op,
+        loc=loc,
+        func=func,
+        args=args,
+        kws=kws,
+        vararg=vararg,
+        varkwarg=varkwarg,
+        target=target,
+    )
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(ir.Expr.call)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "665601d0548d4f648d454492e542cb8aa241107a8df6bc68d0eec664c9ada738"
+    ):
+        warnings.warn("ir.Expr.call has changed")
+
+ir.Expr.call = ir_expr_call
+
+
+# Bodo Change: Include bytecode changes in the Numba pipeline. Necessary for
+# internally compiled functions.
+@staticmethod
+def define_untyped_pipeline(state, name="untyped"):
+    """Returns an untyped part of the nopython pipeline"""
+    from numba.core.compiler_machinery import PassManager
+    from numba.core.untyped_passes import (
+        DeadBranchPrune,
+        FindLiterallyCalls,
+        FixupArgs,
+        GenericRewrites,
+        InlineClosureLikes,
+        InlineInlinables,
+        IRProcessing,
+        LiteralPropagationSubPipelinePass,
+        LiteralUnroll,
+        MakeFunctionToJitFunction,
+        ReconstructSSA,
+        RewriteSemanticConstants,
+        TranslateByteCode,
+        WithLifting,
+    )
+    from numba.core.utils import PYVERSION
+
+    pm = PassManager(name)
+    if state.func_ir is None:
+        pm.add_pass(TranslateByteCode, "analyzing bytecode")
+        # Bodo Change: Insert Python 3.10 Bytecode peepholes
+        if PYVERSION == (3, 10):
+            pm.add_pass(Bodo310ByteCodePass, "Apply Python 3.10 bytecode changes")
+        pm.add_pass(FixupArgs, "fix up args")
+    pm.add_pass(IRProcessing, "processing IR")
+    pm.add_pass(WithLifting, "Handle with contexts")
+
+    # inline closures early in case they are using nonlocal's
+    # see issue #6585.
+    pm.add_pass(InlineClosureLikes, "inline calls to locally defined closures")
+
+    # pre typing
+    if not state.flags.no_rewrites:
+        pm.add_pass(RewriteSemanticConstants, "rewrite semantic constants")
+        pm.add_pass(DeadBranchPrune, "dead branch pruning")
+        pm.add_pass(GenericRewrites, "nopython rewrites")
+
+    # convert any remaining closures into functions
+    pm.add_pass(MakeFunctionToJitFunction, "convert make_function into JIT functions")
+    # inline functions that have been determined as inlinable and rerun
+    # branch pruning, this needs to be run after closures are inlined as
+    # the IR repr of a closure masks call sites if an inlinable is called
+    # inside a closure
+    pm.add_pass(InlineInlinables, "inline inlinable functions")
+    if not state.flags.no_rewrites:
+        pm.add_pass(DeadBranchPrune, "dead branch pruning")
+
+    pm.add_pass(FindLiterallyCalls, "find literally calls")
+    pm.add_pass(LiteralUnroll, "handles literal_unroll")
+
+    if state.flags.enable_ssa:
+        pm.add_pass(ReconstructSSA, "ssa")
+
+    pm.add_pass(LiteralPropagationSubPipelinePass, "Literal propagation")
+
+    pm.finalize()
+    return pm
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(
+        numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "fc5a0665658cc30588a78aca984ac2d323d5d3a45dce538cc62688530c772896"
+    ):
+        warnings.warn(
+            "numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline has changed"
+        )
+numba.core.compiler.DefaultPassBuilder.define_untyped_pipeline = define_untyped_pipeline
+
+#########  End bytecode changes for Python 3.10  #########
 
 
 #### BEGIN MONKEY PATCH FOR INT * LIST SUPPORT ####
@@ -4962,6 +5201,71 @@ def list_mul(context, builder, sig, args):
 
 
 #### END MONKEY PATCH FOR INT * LIST SUPPORT   ####
+
+
+#### START MONKEY PATCH SUPPORT FOR unifying unknown types ####
+
+
+def unify_pairs(self, first, second):
+    """
+    Try to unify the two given types.  A third type is returned,
+    or None in case of failure.
+    """
+    from numba.core.typeconv import Conversion
+
+    if first == second:
+        return first
+
+    if first is types.undefined:
+        return second
+    elif second is types.undefined:
+        return first
+
+    # Bodo Change: If either type is unknown, the unified
+    # type should also be unknown.
+    if first is types.unknown or second is types.unknown:
+        return types.unknown
+
+    # Types with special unification rules
+    unified = first.unify(self, second)
+    if unified is not None:
+        return unified
+
+    unified = second.unify(self, first)
+    if unified is not None:
+        return unified
+
+    # Other types with simple conversion rules
+    conv = self.can_convert(fromty=first, toty=second)
+    if conv is not None and conv <= Conversion.safe:
+        # Can convert from first to second
+        return second
+
+    conv = self.can_convert(fromty=second, toty=first)
+    if conv is not None and conv <= Conversion.safe:
+        # Can convert from second to first
+        return first
+
+    if isinstance(first, types.Literal) or isinstance(second, types.Literal):
+        first = types.unliteral(first)
+        second = types.unliteral(second)
+        return self.unify_pairs(first, second)
+
+    # Cannot unify
+    return None
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.typing.context.BaseContext.unify_pairs)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "f0eaf4cfdf1537691de26efd24d7e320f7c3f10d35e9aefe70cb946b3be0008c"
+    ):
+        warnings.warn("numba.core.typing.context.BaseContext.unify_pairs has changed")
+
+numba.core.typing.context.BaseContext.unify_pairs = unify_pairs
+
+#### END MONKEY PATCH SUPPORT FOR unifying unknown types ####
 
 
 #### BEGIN MONKEY PATCH FOR REFERENCE COUNTED SET SUPPORT ####
