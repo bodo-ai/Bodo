@@ -2,7 +2,7 @@
 
 Bodo provides extensive DataFrame support documented below.    
 
-#### pd.Dataframe
+#### pd.DataFrame
 
 
 - <code><apihead>pandas.<apiname>DataFrame</apiname>(data=None, index=None, columns=None, dtype=None, copy=None)</apihead></code>
@@ -1064,7 +1064,7 @@ Bodo provides extensive DataFrame support documented below.
     2  6  NaN
     ```
     !!! note
-      Not supported for dataframe with nullable integer.    
+        Not supported for dataframe with nullable integer.    
 
 
 #### `pd.DataFrame.describe`
@@ -1927,7 +1927,6 @@ Bodo provides extensive DataFrame support documented below.
 #### `pd.DataFrame.explode`
 
 
-
 - <code><apihead>pandas.DataFrame.<apiname>explode</apiname>(column, ignore_index=False)</apihead></code>
 <br><br>    
     
@@ -1953,9 +1952,40 @@ Bodo provides extensive DataFrame support documented below.
     3     4  4     2    
     ```
 
+
+#### `pd.DataFrame.melt`
+
+
+- <code><apihead>pandas.DataFrame.<apiname>melt</apiname>(id_vars=None, value_vars=None, var_name=None, value_name='value', col_level=None)</apihead></code>
+<br><br>    
+    
+    ***Supported Arguments***
+    
+    - `id_vars`: Constant Column label or list of labels
+    - `value_vars`: Constant Column label or list of labels
+     
+    ***Example Usage***
+    
+    ```py    
+    >>> @bodo.jit
+    ... def f(df, id_vars, value_vars):
+    ...   return df.melt(id_vars, value_vars)
+    >>> df = pd.DataFrame({"A": ["a", "b", "c"], 'B': [1, 3, 5], 'C': [2, 4, 6])
+    >>> f(df, ["A"], ["B", "C"])
+        A variable  value
+    0  a        B      1
+    1  b        B      3
+    2  c        B      5
+    3  a        C      2
+    4  b        C      4
+    5  c        C      6    
+    ```
+
+    !!! note
+        To offer increased performance, row ordering and corresponding Index value may not match Pandas when run on multiple cores.
+
+
 #### `pd.DataFrame.pivot`
-
-
 
 
 - <code><apihead>pandas.DataFrame.<apiname>pivot</apiname>(values=None, index=None, columns=None)</apihead></code>
@@ -1969,8 +1999,8 @@ Bodo provides extensive DataFrame support documented below.
 
 
     !!! note
-      The the number of columns and names of the output DataFrame won't be known
-      at compile time. To update typing information on DataFrame you should pass it back to Python.
+        The the number of columns and names of the output DataFrame won't be known
+        at compile time. To update typing information on DataFrame you should pass it back to Python.
 
 
     ***Example Usage***
@@ -2008,13 +2038,13 @@ Bodo provides extensive DataFrame support documented below.
 
 
     !!! note
-      This code takes two different paths depending on if pivot values are annotated. When
-      pivot values are annotated then output columns are set to the annotated values.
-      For example, `@bodo.jit(pivots={'pt': ['small', 'large']})`
-      declares the output pivot table `pt` will have columns called `small` and `large`.
+        This code takes two different paths depending on if pivot values are annotated. When
+        pivot values are annotated then output columns are set to the annotated values.
+        For example, `@bodo.jit(pivots={'pt': ['small', 'large']})`
+        declares the output pivot table `pt` will have columns called `small` and `large`.
 
-      If pivot values are not annotated, then the number of columns and names of the output DataFrame won't be known
-      at compile time. To update typing information on DataFrame you should pass it back to Python.
+        If pivot values are not annotated, then the number of columns and names of the output DataFrame won't be known
+        at compile time. To update typing information on DataFrame you should pass it back to Python.
 
 
     ***Example Usage***

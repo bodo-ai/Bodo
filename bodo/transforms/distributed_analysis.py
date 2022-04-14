@@ -1482,6 +1482,35 @@ class DistributedAnalysis:
                 self._set_var_dist(rhs.args[1].name, array_dists, in_dist)
             return
 
+        if fdef == ("repeat_like", "bodo.libs.array_kernels"):
+            # arr has to be replicated for this function
+            self._set_REP(
+                rhs.args[0],
+                array_dists,
+                "repeat_like argument 0 must be replicated",
+                rhs.loc,
+            )
+            like_dist = Distribution(array_dists[rhs.args[1].name].value)
+
+            # output of repeat_like should have distribution matching dist_like_arr
+            # arr should also be distributed
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            # return is an array
+            out_dist = Distribution(
+                min(
+                    array_dists[lhs].value,
+                    like_dist.value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, out_dist)
+
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                self._set_var_dist(rhs.args[1].name, array_dists, out_dist)
+            return
+
         if fdef == ("drop_duplicates", "bodo.libs.array_kernels"):
             # output of drop_duplicates is variable-length even if input is 1D
             if lhs not in array_dists:

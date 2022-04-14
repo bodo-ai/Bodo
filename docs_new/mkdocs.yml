@@ -149,7 +149,7 @@ nav:
           - api_docs/pandas/index.md
           - Datatypes: api_docs/pandas/datatypes.md
           - General Functions: api_docs/pandas/general.md
-          - Dataframe: api_docs/pandas/dataframe.md
+          - DataFrame: api_docs/pandas/dataframe.md
           - Groupby : api_docs/pandas/groupby.md
           - Series : api_docs/pandas/series.md
           - Window : api_docs/pandas/window.md

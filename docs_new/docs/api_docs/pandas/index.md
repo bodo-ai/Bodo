@@ -2,7 +2,7 @@
 
 - [Datatypes][pandas-dtype]
 - [General Functions][general]
-- [Dataframe API][dataframe]
+- [DataFrame API][dataframe]
 - [Groupby][pd_groupby_section]
 - [Series API][series]
 - [Window][pd_window_section]

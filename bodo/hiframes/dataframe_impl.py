@@ -2406,7 +2406,6 @@ def _validate_arguments_mask_where(
                     f"{func_name}(): 'other', if 2-dimensional, must be a DataFrame or array."
                 )
         elif other.ndim != 1:
-            # breakpoint()
             raise BodoError(f"{func_name}(): 'other' must be either 1 or 2-dimensional")
     if isinstance(other, DataFrameType):
         other_map = {c: i for i, c in enumerate(other.columns)}
@@ -4426,6 +4425,148 @@ def overload_dataframe_pivot_table(
         )
 
     return _impl
+
+
+@overload(pd.melt, inline="always", no_unliteral=True)
+@overload_method(DataFrameType, "melt", inline="always", no_unliteral=True)
+def overload_dataframe_melt(
+    frame,
+    id_vars=None,
+    value_vars=None,
+    var_name=None,
+    value_name="value",
+    col_level=None,
+    ignore_index=True,
+):
+    # TODO [BE-2536]: support var_name and value_name
+    unsupported_args = dict(
+        var_name=var_name,
+        value_name=value_name,
+        col_level=col_level,
+        ignore_index=ignore_index,
+    )
+    arg_defaults = dict(
+        var_name=None,
+        value_name="value",
+        col_level=None,
+        ignore_index=True,
+    )
+    check_unsupported_args(
+        "DataFrame.melt",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="DataFrame",
+    )
+
+    if not isinstance(frame, DataFrameType):
+        raise BodoError("pandas.melt(): 'frame' argument must be a DataFrame")
+    if not is_overload_none(id_vars) and not is_literal_type(id_vars):
+        raise BodoError("DataFrame.melt(): 'id_vars', if specified, must be a literal")
+    if not is_overload_none(value_vars) and not is_literal_type(value_vars):
+        raise BodoError(
+            "DataFrame.melt(): 'value_vars', if specified, must be a literal"
+        )
+
+    id_lit = get_literal_value(id_vars) if not is_overload_none(id_vars) else []
+    if not isinstance(id_lit, (list, tuple)):
+        id_lit = [id_lit]
+
+    for c in id_lit:
+        if c not in frame.columns:
+            raise BodoError(
+                f"DataFrame.melt(): 'id_vars' column {c} not found in {frame}"
+            )
+
+    col_map = {c: i for i, c in enumerate(frame.columns)}
+    id_idxs = [col_map[i] for i in id_lit]
+    # Handle value_vars
+    if is_overload_none(value_vars):
+        # If value_vars isn't provided, all columns except the id_vars are used
+        value_idxs = []
+        value_lit = []
+        for i, c in enumerate(frame.columns):
+            if i not in id_idxs:
+                # We assume that len(id_vars) will be relatively small
+                value_idxs.append(i)
+                value_lit.append(c)
+    else:
+        value_lit = get_literal_value(value_vars)
+        if not isinstance(value_lit, (list, tuple)):
+            value_lit = [value_lit]
+        # In case value_lit has items from id_lit, matches pandas,
+        # TODO: support value_lit=[] (
+        value_lit = [v for v in value_lit if v not in id_lit]
+        # breakpoint()
+        if not value_lit:
+            raise BodoError(
+                "DataFrame.melt(): currently empty 'value_vars' is unsupported."
+            )
+        value_idxs = []
+        for val in value_lit:
+            if val not in col_map:
+                raise BodoError(
+                    f"DataFrame.melt(): 'value_vars' column {val} not found in DataFrame {frame}."
+                )
+            value_idxs.append(col_map[val])
+    for c in value_lit:
+        if c not in frame.columns:
+            raise BodoError(
+                f"DataFrame.melt(): 'value_vars' column {c} not found in {frame}"
+            )
+    if not (
+        all(isinstance(c, int) for c in value_lit)
+        or all(isinstance(c, str) for c in value_lit)
+    ):
+        raise BodoError(
+            f"DataFrame.melt(): column names selected for 'value_vars' must all share a common int or string type. Please convert your names to a common type using DataFrame.rename()"
+        )
+    value_dtypes = [frame.data[i].dtype for i in value_idxs]
+    common_dtype, can_unify = bodo.utils.typing.get_common_scalar_dtype(value_dtypes)
+    if not can_unify:
+        raise BodoError(
+            "DataFrame.melt(): columns selected in 'value_vars' must have a unifiable type."
+        )
+    header = "def impl(\n"
+    header += "  frame,\n"
+    header += "  id_vars=None,\n"
+    header += "  value_vars=None,\n"
+    header += "  var_name=None,\n"
+    header += "  value_name='value',\n"
+    header += "  col_level=None,\n"
+    header += "  ignore_index=True,\n"
+    header += "):\n"
+    header += (
+        "  dummy_id = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(frame, 0)\n"
+    )
+    for i in id_idxs:
+        header += (
+            f"  id{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(frame, {i})\n"
+        )
+        # TODO [BE-2421]: Support for parallel np.tile
+        # header += f"  out_id{i} = np.tile(id{i}, {len(value_lit)})\n"
+        id_tup = ", ".join([f"id{i}"] * len(value_lit))
+        header += f"  out_id{i} = bodo.libs.array_kernels.concat(({id_tup},))\n"
+    header += "  var_col = bodo.libs.array_kernels.repeat_like(bodo.utils.conversion.coerce_to_array(value_lit), dummy_id)\n"
+    if len(value_lit) == 1:
+        header += f"  val_col = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(frame, {value_idxs[0]})\n"
+    else:
+        val_tup = ", ".join(
+            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(frame, {i})"
+            for i in value_idxs
+        )
+        header += f"  val_col = np.concatenate(({val_tup},))\n"
+    id_args = ", ".join(f"out_id{i}" for i in id_idxs) + (", " if id_idxs else "")
+    data_args = id_args + "var_col, val_col"
+    columns = tuple(id_lit + ["variable", "value"])
+    index = f"bodo.hiframes.pd_index_ext.init_range_index(0, len(dummy_id) * {len(value_lit)}, 1, None)"
+    return _gen_init_df(
+        header,
+        columns,
+        data_args,
+        index,
+        extra_globals={"np": np, "value_lit": value_lit},
+    )
 
 
 @overload(pd.crosstab, inline="always", no_unliteral=True)
