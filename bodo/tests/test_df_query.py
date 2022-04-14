@@ -43,7 +43,23 @@ def test_df_query_unicode_expr(expr):
         },
         index=[3, 1, 2, 4, 5, -1, 6, 7, -2, 8, 9, 11, 10, 12, 0],
     )
-    check_func(impl, (df, expr, 1))
+
+    # A bug in Pandas 1.3.4 and 1.3.5 causes the Python version to fail with
+    # TypeError: unhashable type: 'Series'. This is resolved by 1.4.2. The exact
+    # cause is unclear but we believe it it fixed by this Pandas PR:
+    # https://github.com/pandas-dev/pandas/pull/43301
+    if expr == "C.str.contains('C')":
+        filter_val = df.C.str.contains("C")
+        py_output = df[filter_val]
+    elif expr == "C.str.len() < 3":
+        filter_val = df.C.str.len() < 3
+        py_output = df[filter_val]
+    elif expr == "C.str.isalpha()":
+        filter_val = df.C.str.isalpha()
+        py_output = df[filter_val]
+    else:
+        py_output = None
+    check_func(impl, (df, expr, 1), py_output=py_output)
 
 
 @pytest.mark.slow
