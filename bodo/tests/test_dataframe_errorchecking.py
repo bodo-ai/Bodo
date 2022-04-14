@@ -1722,6 +1722,86 @@ def test_to_parquet_int_colnames(memory_leak_check):
         test_impl(df)
 
 
+def test_df_melt_not_common_value_columns():
+    """
+    Tests that df.melt with 'value_vars' columns of different types raises error as expected.
+    """
+
+    def test_impl(id_vars, value_vars):
+        return df.melt(id_vars, value_vars)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3],
+            "B": ["a", "b", "c"],
+            "C": [1.1, 2.3, 3.1],
+        }
+    )
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame.melt(): columns selected in 'value_vars' must have a unifiable type."
+        ),
+    ):
+        bodo.jit(test_impl)(["A"], ["B", "C"])
+
+
+def test_df_melt_not_common_value_labels():
+    """
+    Tests that df.melt with 'value_vars' labels of different types raises error as expected.
+    """
+
+    def test_impl(id_vars, value_vars):
+        return df.melt(id_vars, value_vars)
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3],
+            "B": ["a", "b", "c"],
+            3: [1.1, 2.3, 3.1],
+        }
+    )
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame.melt(): column names selected for 'value_vars' must all share a common int or string type. Please convert your names to a common type using DataFrame.rename()"
+        ),
+    ):
+        bodo.jit(test_impl)(["A"], ["B", 3])
+
+
+def test_df_melt_invalid_cols(memory_leak_check):
+    def test_impl(df, id_vars, value_vars):
+        return df.melt(id_vars, value_vars)
+
+    df = pd.DataFrame(
+        {
+            "A": ["a", "b", "c"],
+            "B": [1, 3, 5],
+            "C": [2, 4, 6],
+        }
+    )
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame.melt(): currently empty 'value_vars' is unsupported"
+        ),
+    ):
+        # TODO: works with "A", "A" since value_vars will remove those labels found in id_vars
+        # however will not work with value_vars=[] due to Numba "ValueError: cannot compute
+        # fingerprint of empty list"
+        bodo.jit(test_impl)(df, ["A"], ["A"])
+
+    with pytest.raises(BodoError, match="not found"):
+        bodo.jit(test_impl)(df, ["D"], ["A"])
+
+    with pytest.raises(BodoError, match="not found"):
+        bodo.jit(test_impl)(df, ["A"], ["D"])
+
+
 def test_series_df_comparison(memory_leak_check):
     """
     Test that comapring dataframe and series

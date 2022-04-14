@@ -1775,6 +1775,7 @@ class TypingTransforms:
             "explode": [
                 (0, "column"),
             ],
+            "melt": [(0, "id_vars"), (1, "value_vars")],
         }
         if func_name in df_call_const_args:
             func_args = df_call_const_args[func_name]
@@ -2329,6 +2330,7 @@ class TypingTransforms:
         top_level_call_const_args = {
             "concat": [(1, "axis"), (3, "ignore_index")],
             "DataFrame": [(2, "columns")],
+            "melt": [(1, "id_vars"), (2, "value_vars")],
             "merge": [
                 (2, "how"),
                 (3, "on"),

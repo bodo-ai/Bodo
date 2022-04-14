@@ -1104,6 +1104,10 @@ def empty_str_arr(in_seq):  # pragma: no cover
 
 @numba.generated_jit(nopython=True)
 def str_arr_from_sequence(in_seq):  # pragma: no cover
+    """
+    Converts sequence (e.g. list, tuple, etc.) into a string array
+    """
+    in_seq = types.unliteral(in_seq)
     if in_seq.dtype == bodo.bytes_type:
         alloc_fn = "pre_alloc_binary_array"
     else:

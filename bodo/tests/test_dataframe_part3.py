@@ -1341,3 +1341,95 @@ def test_unify_dict_string_dataframes():
         bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD = saved_read_as_dict_threshold
         if bodo.get_rank() == 0:
             os.remove(temp_file)
+
+
+@pytest.mark.parametrize(
+    "id_arr,value_arr",
+    [
+        (["A", "B"], ["C"]),
+        (None, ["C", "D"]),
+        (["A"], ["C"]),
+        (["A", "B", "C"], ["C", "D"]),
+        (["A", "B"], ["C", "D"]),
+        (["A", "B"], None),
+    ],
+)
+def test_df_melt(id_arr, value_arr, memory_leak_check):
+    """
+    Tests for df.melt / pd.melt with various id_vars value_vars of string/integer types
+    """
+
+    def test_impl(df, id_vars, value_vars):
+        return df.melt(id_vars=id_vars, value_vars=value_vars)
+
+    def test_impl2(df, id_vars, value_vars):
+        return pd.melt(df, id_vars=id_vars, value_vars=value_vars)
+
+    df = pd.DataFrame(
+        {
+            "A": ["a", "b", "c"] * 4,
+            "B": ["c", "d", "e"] * 4,
+            "C": [1, 3, 5] * 4,
+            "D": [2, 4, 6] * 4,
+        }
+    )
+
+    check_func(test_impl, (df, id_arr, value_arr), sort_output=True, reset_index=True)
+    if id_arr and value_arr and len(id_arr) == len(value_arr) == 2:
+        # No need to check all test cases again for pd.melt()
+        check_func(
+            test_impl2, (df, id_arr, value_arr), sort_output=True, reset_index=True
+        )
+
+
+@pytest.mark.parametrize(
+    "df_dict",
+    [
+        {"A": ["a", "b", "c"], "B": ["d", "e", "f"], "C": [1, 2, 3], "D": [4, 5, 6]},
+        {
+            "A": ["a", "b", "c"] * 3,
+            "B": ["d", "e", "f"] * 3,
+            "C": [1.1, 2.1, 3.1] * 3,
+            "D": [4, 5, 6] * 3,
+        },
+        {
+            "A": ["a", "b", "c"] * 3,
+            "B": ["d", "e", "f"] * 3,
+            "C": [1, 2, 3] * 3,
+            "D": [4.1, 5.1, 6.1] * 3,
+        },
+        {
+            "A": ["a", "b", "c"] * 3,
+            "B": ["d", "e", "f"] * 3,
+            "C": np.array([1, 2, 3] * 3, dtype="int8"),
+            "D": [37423, 583305, 32343] * 3,
+        },
+        {
+            "A": ["a", "b", "c"] * 3,
+            "B": ["d", "e", "f"] * 3,
+            "C": np.array([1, 2, 3] * 3, dtype="uint8"),
+            "D": [37423, -583305, 32343] * 3,
+        },
+        {
+            "A": ["a", "b", "c"] * 3,
+            "B": ["d", "e", "f"] * 3,
+            3: np.array([1, 2, 3] * 3, dtype="uint8"),
+            4: [37423, -583305, 32343] * 3,
+        },
+    ],
+)
+def test_df_melt_diff_types(df_dict, memory_leak_check):
+    """
+    Test df.melt() with different value_vars and id_vars column and label data types
+    """
+
+    def test_impl(df, id_vars, value_vars):
+        return df.melt(id_vars=id_vars, value_vars=value_vars)
+
+    df = pd.DataFrame(df_dict)
+
+    if "C" in df.columns:
+        check_func(test_impl, (df, ["A", "B"], ["C", "D"]))
+        check_func(test_impl, (df, ["B", "A"], ["D", "C"]))
+    elif 3 in df.columns:
+        check_func(test_impl, (df, ["B", "A"], [3, 4]))

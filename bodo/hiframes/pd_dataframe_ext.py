@@ -4492,7 +4492,6 @@ pd_unsupported = (
     pd.json_normalize,
     # General functions
     ## Data manipulations
-    pd.melt,
     pd.merge_ordered,
     pd.factorize,
     pd.wide_to_long,
@@ -4613,7 +4612,6 @@ dataframe_unsupported = [
     "stack",
     "unstack",
     "swapaxes",
-    "melt",
     "squeeze",
     "to_xarray",
     "T",

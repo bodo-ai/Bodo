@@ -2555,12 +2555,26 @@ def np_repeat(A, repeats):
     if not bodo.utils.utils.is_array_typ(A, False) or isinstance(
         A, types.Array
     ):  # pragma: no cover
+        # TODO: raise error?
         return
     if not isinstance(repeats, types.Integer):  # pragma: no cover
         raise BodoError("Only integer type supported for repeats in np.repeat()")
 
     def impl(A, repeats):  # pragma: no cover
         return bodo.libs.array_kernels.repeat_kernel(A, repeats)
+
+    return impl
+
+
+@numba.generated_jit
+def repeat_like(A, dist_like_arr):
+    if not bodo.utils.utils.is_array_typ(A, False) or not bodo.utils.utils.is_array_typ(
+        dist_like_arr, False
+    ):  # pragma: no cover
+        raise BodoError("Both A and dist_like_arr must be array-like.")
+
+    def impl(A, dist_like_arr):  # pragma: no cover
+        return bodo.libs.array_kernels.repeat_kernel(A, len(dist_like_arr))
 
     return impl
 
