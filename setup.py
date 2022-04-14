@@ -207,12 +207,12 @@ ext_hdfs = Extension(
 # Even though we upgraded to 1.12 which changes the API, these flags keep the
 # 1.10 API. See the example: https://github.com/openmc-dev/openmc/pull/1533
 # This was also verified by looking at the .h files.
-# We only apply these changes if we have version 1.12.
-extra_eca_hdf5 = (
-    ["-DH5Oget_info_by_name_vers=1", "-DH5Oget_info_vers=1", "-DH5O_info_t_vers=1"]
-    if h5py_version == 12
-    else []
-)
+# If we still have version 1.10 these are ignored.
+extra_eca_hdf5 = [
+    "-DH5Oget_info_by_name_vers=1",
+    "-DH5Oget_info_vers=1",
+    "-DH5O_info_t_vers=1",
+]
 
 ext_hdf5 = Extension(
     name="bodo.io._hdf5",
