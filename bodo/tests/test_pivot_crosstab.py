@@ -1476,7 +1476,7 @@ def test_pivot_multiple_index(pivot_dataframes, memory_leak_check):
 
 def test_pivot_table_multiple_index(pivot_dataframes, memory_leak_check):
     """
-    Test running DataFrame.pivot() with multiple index
+    Test running DataFrame.pivot_table() with multiple index
     values.
     """
 
