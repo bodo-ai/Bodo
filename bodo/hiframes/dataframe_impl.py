@@ -3973,21 +3973,21 @@ def pivot_error_checking(df, index, columns, values, func_name):
         if is_overload_none(index) or not is_literal_type(index):
             # Failing to provide the index requires just transposing the table into n columns,
             # where n is the length(values). As a result, at this time we don't support it.
-            raise BodoError(
+            raise_bodo_error(
                 f"DataFrame.pivot_table(): 'index' argument is required and must be constant column labels"
             )
     else:
         # pivot supports index=None
         if not is_overload_none(index) and not is_literal_type(index):
-            raise BodoError(
+            raise_bodo_error(
                 f"{func_name}(): if 'index' argument is provided it must be constant column labels"
             )
     if is_overload_none(columns) or not is_literal_type(columns):
-        raise BodoError(
+        raise_bodo_error(
             f"{func_name}(): 'columns' argument is required and must be a constant column label"
         )
     if not is_overload_none(values) and not is_literal_type(values):
-        raise BodoError(
+        raise_bodo_error(
             f"{func_name}(): if 'values' argument is provided it must be constant column labels"
         )
 
