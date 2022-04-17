@@ -2295,6 +2295,8 @@ def get_stmt_writes(stmt, func_ir):
             ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
         ):
             writes.add(stmt.value.args[0].name)
+        if fdef == ("generate_table_nbytes", "bodo.utils.table_utils"):
+            writes.add(stmt.value.args[1].name)
     return writes
 
 

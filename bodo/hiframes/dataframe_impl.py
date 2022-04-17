@@ -5411,30 +5411,54 @@ def overload_dataframe_memory_usage(df, index=True, deep=False):
     check_runtime_cols_unsupported(df, "DataFrame.memory_usage()")
     func_text = "def impl(df, index=True, deep=False):\n"
 
-    data = ", ".join(
-        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}).nbytes"
-        for i in range(len(df.columns))
-    )
-    if is_overload_true(index):
-        index_nbytes = (
-            "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df).nbytes\n,"
-        )
+    # Compute nbytes for index, only used if index=True
+    index_nbytes = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df).nbytes"
+    use_index = is_overload_true(index)
+    columns = df.columns
+    if use_index:
         # create index values for the Series output that has 'Index' and column names
-        str_col_names = ",".join(f"'{c}'" for c in df.columns)
-        arr = f"bodo.utils.conversion.coerce_to_array(('Index',{str_col_names}))"
-        index = f"bodo.hiframes.pd_index_ext.init_binary_str_index({arr})"
-        func_text += f"  return bodo.hiframes.pd_series_ext.init_series(({index_nbytes}{data}), {index}, None)\n"
+        columns = ("Index",) + columns
+    if len(columns) == 0:
+        # Handle empty columns edge case to output
+        # a regular index.
+        column_vals = ()
+    elif all(isinstance(c, int) for c in columns):
+        column_vals = np.array(columns, "int64")
+    elif all(isinstance(c, str) for c in columns):
+        column_vals = pd.array(columns, "string")
     else:
-        comma = "," if len(df.columns) == 1 else ""
-        col_var = gen_const_tup(df.columns)
-        func_text += f"  return bodo.hiframes.pd_series_ext.init_series(({data}{comma}), pd.Index({col_var}), None)\n"
+        column_vals = columns
+    if df.is_table_format:
+        start_offset = int(use_index)
+        num_cols = len(columns)
+        func_text += f"  nbytes_arr = np.empty({num_cols}, np.int64)\n"
+        func_text += (
+            "  table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)\n"
+        )
+        func_text += f"  bodo.utils.table_utils.generate_table_nbytes(table, nbytes_arr, {start_offset})\n"
+        if use_index:
+            func_text += f"  nbytes_arr[0] = {index_nbytes}\n"
+        func_text += f"  return bodo.hiframes.pd_series_ext.init_series(nbytes_arr, pd.Index(column_vals), None)\n"
+    else:
+        data = ", ".join(
+            f"bodo.libs.array_ops.array_op_nbytes(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}))"
+            for i in range(len(df.columns))
+        )
+        if use_index:
+            data = f"{index_nbytes},{data}"
+        else:
+            comma = "," if len(columns) == 1 else ""
+            data = f"{data}{comma}"
+        func_text += f"  return bodo.hiframes.pd_series_ext.init_series(({data}), pd.Index(column_vals), None)\n"
 
     loc_vars = {}
     exec(
         func_text,
         {
             "bodo": bodo,
+            "np": np,
             "pd": pd,
+            "column_vals": column_vals,
         },
         loc_vars,
     )
