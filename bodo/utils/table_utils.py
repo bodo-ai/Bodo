@@ -87,3 +87,44 @@ def generate_mappable_table_func(table, func_name, out_arr_typ, used_cols=None):
     local_vars = {}
     exec(func_text, glbls, local_vars)
     return local_vars["impl"]
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def generate_table_nbytes(table, out_arr, start_offset, parallel=False):
+    """
+    Function to compute nbytes on a table. Since nbytes requires a reduction
+    across all columns and most often used in initial testing, we assume
+    there will never be any dead columns.
+
+    Since DataFrame.nbytes may or may not include the index, we add a start
+    offset when writing to out_arr.
+    """
+    # Set the globals
+    glbls = {
+        "bodo": bodo,
+        "sum_op": np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value),
+    }
+
+    func_text = "def impl(table, out_arr, start_offset, parallel=False):\n"
+    func_text += "  bodo.hiframes.table.ensure_table_unboxed(table, None)\n"
+    for blk in table.type_to_blk.values():
+        func_text += f"  blk = bodo.hiframes.table.get_table_block(table, {blk})\n"
+        # lower the original indices
+        glbls[f"col_indices_{blk}"] = np.array(
+            table.block_to_arr_ind[blk], dtype=np.int64
+        )
+        func_text += "  for i in range(len(blk)):\n"
+        # Since we have one list, store each element in its original column location
+        func_text += f"    col_loc = col_indices_{blk}[i]\n"
+        func_text += "    out_arr[col_loc + start_offset] = blk[i].nbytes\n"
+    # If we have parallel code do a reduction.
+    func_text += "  if parallel:\n"
+    func_text += "    for i in range(start_offset, len(out_arr)):\n"
+    # TODO: Do a reduction on the whole array at once?
+    func_text += (
+        "      out_arr[i] = bodo.libs.distributed_api.dist_reduce(out_arr[i], sum_op)\n"
+    )
+
+    local_vars = {}
+    exec(func_text, glbls, local_vars)
+    return local_vars["impl"]

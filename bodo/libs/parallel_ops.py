@@ -16,9 +16,14 @@ def get_array_op_describe_dispatcher(arr_typ):
         return array_op_describe_parallel_dt
     return array_op_describe_parallel
 
+
 array_op_describe_parallel = bodo.jit(distributed=["arr"])(
     bodo.libs.array_ops.array_op_describe_impl
 )
 array_op_describe_parallel_dt = bodo.jit(distributed=["arr"])(
     bodo.libs.array_ops.array_op_describe_dt_impl
+)
+
+array_op_nbytes_parallel = bodo.jit(distributed=["arr"])(
+    bodo.libs.array_ops.array_op_nbytes_impl
 )

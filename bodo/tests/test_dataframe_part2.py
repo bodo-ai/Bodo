@@ -2897,7 +2897,6 @@ def test_df_info(df):
             assert bodo_output[5] == py_output[5]
 
 
-@pytest.mark.slow
 def test_df_mem_usage(memory_leak_check):
     """Test DataFrame.memory_usage() with and w/o index"""
 

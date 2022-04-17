@@ -434,6 +434,13 @@ class DistributedPass:
         else:
             func_name, func_mod = fdef
 
+        if fdef == (
+            "generate_table_nbytes",
+            "bodo.utils.table_utils",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
         if (
             func_name == "fit"
             and "bodo.libs.xgb_ext" in sys.modules
@@ -1599,6 +1606,22 @@ class DistributedPass:
             impl = parallel_ops.get_array_op_describe_dispatcher(
                 self.typemap[rhs.args[0].name]
             )
+            return compile_func_single_block(
+                eval("lambda arr: f(arr)"),
+                (rhs.args[0],),
+                assign.target,
+                self,
+                extra_globals={"bodo.libs.parallel_ops": parallel_ops, "f": impl},
+            )
+
+        if fdef == ("array_op_nbytes", "bodo.libs.array_ops") and (
+            self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            # If array_op_nbytes is parallel, replace with a bodo compiled implementation
+            # to handle parallelism.
+            import bodo.libs.parallel_ops as parallel_ops
+
+            impl = parallel_ops.array_op_nbytes_parallel
             return compile_func_single_block(
                 eval("lambda arr: f(arr)"),
                 (rhs.args[0],),

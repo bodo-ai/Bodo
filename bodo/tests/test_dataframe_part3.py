@@ -1433,3 +1433,65 @@ def test_df_melt_diff_types(df_dict, memory_leak_check):
         check_func(test_impl, (df, ["B", "A"], ["D", "C"]))
     elif 3 in df.columns:
         check_func(test_impl, (df, ["B", "A"], [3, 4]))
+
+
+@pytest.mark.parametrize("use_index", [True, False])
+def test_df_table_memory_usage(use_index, memory_leak_check):
+    """
+    Test memory usage when using table format on distributed data.
+    """
+
+    @bodo.jit
+    def memory_usage_table(use_index):
+        df = pd.read_parquet("many_columns.parquet")
+        return df.memory_usage(use_index)
+
+    file_type = "parquet"
+    try:
+        _create_many_column_file(file_type)
+        # Precompute the py_output for distributed data. These
+        # numbers are taken from nbytes_no_table
+        num_rows = 1000
+        num_cols = 99
+        total_int_data = 8 * num_rows
+        total_float_data = 8 * num_rows
+        # Number of bytes in the null bitmap is a function of nranks.
+        # Here data is loaded as 1D, so we repeat the calculation here.
+        # Each rank is ceil(my_chunk / 8)
+        # my_chunk = num_rows // num_ranks + 1 if remainder
+        string_null_bytes = 0
+        for i in range(bodo.get_size()):
+            # Compute bits evenly distributed
+            my_chunk = num_rows // bodo.get_size()
+            # Address remainder
+            if i > num_rows % bodo.get_size():
+                my_chunk += 1
+            string_null_bytes += np.int64(np.ceil(my_chunk / 8))
+        nbytes_list = []
+        if use_index:
+            # Append the index num bytes, which should just be a range index,
+            # so 3 integers per rank.
+            nbytes_list.append((8 * 3 * bodo.get_size()))
+        for i in range(33):
+            nbytes_list.append(total_int_data)
+            nbytes_list.append(total_float_data)
+            # Calculate the data field
+            total_string_data = sum(
+                [len(f"value{k}") for k in (np.arange(num_rows) * (i + 1))]
+            )
+            # Offsets has an value on every rank but otherwise are filled with 64bit integers
+            total_offset_size = 8 * (num_rows + bodo.get_size())
+            nbytes_list.append(
+                total_string_data + total_offset_size + string_null_bytes
+            )
+        col_names = [f"Column{i}" for i in range(num_cols)]
+        if use_index:
+            col_names = ["Index"] + col_names
+        py_output = pd.Series(nbytes_list, index=pd.Index(col_names))
+        bodo_out = memory_usage_table(use_index)
+        pd.testing.assert_series_equal(
+            bodo_out,
+            py_output,
+        )
+    finally:
+        _del_many_column_file(file_type)

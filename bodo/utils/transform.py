@@ -336,6 +336,13 @@ def remove_hiframes(rhs, lives, call_list):
     ):
         return True
 
+    if (
+        call_list == ["generate_table_nbytes", "table_utils", "utils", bodo]
+        and rhs.args[1].name not in lives
+    ):
+        # Arg1 is the output.
+        return True
+
     # constructor calls of tuple subclasses like namedtuple don't have side-effect
     # e.g. Row(a, b) in UDFs
     if len(call_tuple) == 1 and tuple in getattr(call_tuple[0], "__mro__", ()):

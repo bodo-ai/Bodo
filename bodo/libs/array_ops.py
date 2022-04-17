@@ -112,6 +112,15 @@ def overload_array_op_describe(arr):
     return array_op_describe_impl
 
 
+@generated_jit(nopython=True)
+def array_op_nbytes(arr):
+    return array_op_nbytes_impl
+
+
+def array_op_nbytes_impl(arr):  # pragma: no cover
+    return arr.nbytes
+
+
 def array_op_min(arr):  # pragma: no cover
     # Create an overload for manual inlining in Series pass.
     pass

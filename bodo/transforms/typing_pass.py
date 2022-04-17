@@ -1776,6 +1776,7 @@ class TypingTransforms:
                 (0, "column"),
             ],
             "melt": [(0, "id_vars"), (1, "value_vars")],
+            "memory_usage": [(0, "index")],
         }
         if func_name in df_call_const_args:
             func_args = df_call_const_args[func_name]

@@ -1995,6 +1995,19 @@ class DistributedAnalysis:
         if fdef == ("array_op_describe", "bodo.libs.array_ops"):
             return
 
+        if fdef == ("array_op_nbytes", "bodo.libs.array_ops"):
+            return
+
+        if fdef == ("generate_table_nbytes", "bodo.utils.table_utils"):
+            # Arg1 is the output array and is always replicated.
+            self._set_REP(
+                rhs.args[1],
+                array_dists,
+                "nbytes array in generate_table_nbytes is REP",
+                rhs.loc,
+            )
+            return
+
         if fdef == (
             "_series_dropna_str_alloc_impl_inner",
             "bodo.hiframes.series_kernels",
