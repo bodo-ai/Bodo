@@ -321,8 +321,18 @@ def test_print_dist_slice(memory_leak_check, capsys):
     captured = capsys.readouterr()
     assert "Empty" not in captured.out
 
+    # dataframe case, non-trivial Index
+    bodo.jit(distributed=["df"])(impl2)(pd.DataFrame({"A": np.arange(111)}, index=np.arange(111)+2))
+    captured = capsys.readouterr()
+    assert "Empty" not in captured.out
+
     # series case
     bodo.jit(distributed=["df"])(impl2)(pd.Series(np.arange(111)))
+    captured = capsys.readouterr()
+    assert "[]" not in captured.out
+
+    # series case, non-trival Index
+    bodo.jit(distributed=["df"])(impl2)(pd.Series(np.arange(111), index=np.arange(111)+2))
     captured = capsys.readouterr()
     assert "[]" not in captured.out
 
