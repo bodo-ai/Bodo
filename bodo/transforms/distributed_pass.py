@@ -3469,9 +3469,13 @@ class DistributedPass:
         # make sure var is distributed, and is output of getitem of distributed array
         require(self._is_1D_or_1D_Var_arr(var.name))
         var_def = get_definition(self.func_ir, var.name)
+        fdef = guard(find_callname, self.func_ir, var_def)
+        func_mod = func_name = None
+        if fdef is not None:
+            func_name, func_mod = fdef
 
         # dataframe case, check data arrays and index
-        if guard(find_callname, self.func_ir, var_def) == (
+        if fdef == (
             "init_dataframe",
             "bodo.hiframes.pd_dataframe_ext",
         ):
@@ -3484,13 +3488,28 @@ class DistributedPass:
             return all(self._is_dist_slice(v, equiv_set) for v in arrs)
 
         # Series case, check data array and index
-        if guard(find_callname, self.func_ir, var_def) == (
+        if fdef == (
             "init_series",
             "bodo.hiframes.pd_series_ext",
         ):
             return self._is_dist_slice(
                 var_def.args[0], equiv_set
             ) and self._is_dist_slice(var_def.args[1], equiv_set)
+
+        # Index case, check data array
+        if func_mod == "bodo.hiframes.pd_index_ext" and func_name in (
+            "init_numeric_index",
+            "init_binary_str_index",
+            "init_categorical_index",
+            "init_datetime_index",
+            "init_timedelta_index",
+            "init_period_index",
+            "init_interval_index",
+            "get_index_data",
+        ):
+            return self._is_dist_slice(
+                var_def.args[0], equiv_set
+            )
 
         require(
             isinstance(var_def, ir.Expr) and var_def.op in ("getitem", "static_getitem")
