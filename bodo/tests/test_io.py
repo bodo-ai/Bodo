@@ -2370,6 +2370,35 @@ def test_write_parquet_dict_table(memory_leak_check):
     ), "to_parquet output doesn't match expected pandas output"
 
 
+def test_write_parquet_row_group_size(memory_leak_check):
+    """Test df.to_parquet(..., row_group_size=n)"""
+    if bodo.get_rank() == 0:
+
+        # We don't need to test the distributed case, because in the distributed
+        # case each rank writes its own data to a separate file. row_group_size
+        # is passed to Arrow WriteTable in the same way regardless
+
+        @bodo.jit(replicated=["df"])
+        def impl(df, output_filename, n):
+            df.to_parquet(output_filename, row_group_size=n)
+
+        output_filename = "bodo_temp.pq"
+        try:
+            df = pd.DataFrame({"A": range(93)})
+            impl(df, output_filename, 20)
+            m = pq.ParquetFile(output_filename).metadata
+            assert [m.row_group(i).num_rows for i in range(m.num_row_groups)] == [
+                20,
+                20,
+                20,
+                20,
+                13,
+            ]
+        finally:
+            os.remove(output_filename)
+    bodo.barrier()
+
+
 def test_csv_bool1(datapath, memory_leak_check):
     """Test boolean data in CSV files.
     Also test extra separator at the end of the file

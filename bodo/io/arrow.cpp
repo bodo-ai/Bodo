@@ -23,14 +23,15 @@ void pq_write_py_entry(const char* filename, const table_info* table,
                        const char* compression, bool parallel,
                        bool write_rangeindex_to_metadata, const int start,
                        const int stop, const int step, const char* name,
-                       const char* bucket_region);
+                       const char* bucket_region, int64_t row_group_size);
 
 void pq_write_partitioned(const char* _path_name, table_info* table,
                           const array_info* col_names_arr,
                           const array_info* col_names_arr_no_partitions,
                           table_info* categories_table, int* partition_cols_idx,
                           int num_partition_cols, const char* compression,
-                          bool is_parallel, const char* bucket_region);
+                          bool is_parallel, const char* bucket_region,
+                          int64_t row_group_size);
 
 // --------- function defined in snowflake_reader.cpp ---------
 table_info* snowflake_read(const char* query, const char* conn, bool parallel,

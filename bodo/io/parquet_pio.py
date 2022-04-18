@@ -2057,6 +2057,7 @@ def parquet_write_table_cpp(
     step,
     name,
     bucket_region,
+    row_group_size,
 ):
     """
     Call C++ parquet write function
@@ -2080,6 +2081,7 @@ def parquet_write_table_cpp(
                 lir.IntType(32),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(64),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="pq_write")
@@ -2102,6 +2104,7 @@ def parquet_write_table_cpp(
             types.int32,
             types.voidptr,
             types.voidptr,
+            types.int64,
         ),
         codegen,
     )
@@ -2120,6 +2123,7 @@ def parquet_write_table_partitioned_cpp(
     compression_t,
     is_parallel_t,
     bucket_region,
+    row_group_size,
 ):
     """
     Call C++ parquet write partitioned function
@@ -2139,6 +2143,7 @@ def parquet_write_table_partitioned_cpp(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(64),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -2159,6 +2164,7 @@ def parquet_write_table_partitioned_cpp(
             types.voidptr,
             types.boolean,
             types.voidptr,
+            types.int64,
         ),
         codegen,
     )
