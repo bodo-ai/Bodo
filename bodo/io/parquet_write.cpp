@@ -16,6 +16,17 @@
 #include "parquet/arrow/writer.h"
 #include "parquet/file_writer.h"
 
+// In general, when reading a parquet dataset we want it to have at least
+// the same number of row groups as the number of processes we are reading with,
+// but ideally much more to avoid possibility of multiple processes reading
+// from the same row group (which can happen depending on how many process we
+// read with and how the rows are distributed). At the same time, we don't want
+// row groups to be too small because there will be a lot of overhead when
+// reading (and could limit the benefit of dictionary encoding?)
+// We also have to account for column projection. So, for example, we would like
+// each column to be at least 1 MB on disk.
+constexpr int64_t DEFAULT_ROW_GROUP_SIZE = 1000000;  // in number of rows
+
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it
 #define CHECK_ARROW(expr, msg)                                              \
@@ -463,14 +474,22 @@ static arrow::Status WriteTable(
  * @param ri_start,ri_stop,ri_step start,stop,step parameters of given
  * RangeIndex
  * @param idx_name name of the given index
+ * @param row_group_size Row group size in number of rows
  */
 void pq_write(const char *_path_name, const table_info *table,
               const array_info *col_names_arr, const array_info *index,
               bool write_index, const char *metadata, const char *compression,
               bool is_parallel, bool write_rangeindex_to_metadata,
               const int ri_start, const int ri_stop, const int ri_step,
-              const char *idx_name, const char *bucket_region) {
+              const char *idx_name, const char *bucket_region,
+              int64_t row_group_size) {
     tracing::Event ev("pq_write", is_parallel);
+    ev.add_attribute("g_path", _path_name);
+    ev.add_attribute("g_write_index", write_index);
+    ev.add_attribute("g_metadata", metadata);
+    ev.add_attribute("g_compression", compression);
+    ev.add_attribute("g_write_rangeindex_to_metadata",
+                     write_rangeindex_to_metadata);
     // Write actual values of start, stop, step to the metadata which is a
     // string that contains %d
     int check;
@@ -488,6 +507,12 @@ void pq_write(const char *_path_name, const table_info *table,
         throw std::runtime_error(
             "Fatal error: number of written char for metadata is greater "
             "than new_metadata size");
+
+    if (row_group_size == -1) row_group_size = DEFAULT_ROW_GROUP_SIZE;
+    if (row_group_size <= 0)
+        throw std::runtime_error(
+            "to_parquet(): row_group_size must be greater than 0");
+    ev.add_attribute("g_row_group_size", row_group_size);
 
     int myrank, num_ranks;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -585,9 +610,10 @@ void pq_write(const char *_path_name, const table_info *table,
                                         schema_metadata);
 
     // make Arrow table from Schema and ChunkedArray columns
-    int64_t row_group_size = table->nrows();
+    // Since we reuse Bodo buffers, the row group size of the Arrow table
+    // has to be the same as the local number of rows of the Bodo table
     std::shared_ptr<arrow::Table> arrow_table =
-        arrow::Table::Make(schema, columns, row_group_size);
+        arrow::Table::Make(schema, columns, /*row_group_size=*/table->nrows());
 
     // set compression option
     ::arrow::Compression::type codec_type;
@@ -651,11 +677,13 @@ void pq_write_py_entry(const char *_path_name, const table_info *table,
                        const char *compression, bool is_parallel,
                        bool write_rangeindex_to_metadata, const int ri_start,
                        const int ri_stop, const int ri_step,
-                       const char *idx_name, const char *bucket_region) {
+                       const char *idx_name, const char *bucket_region,
+                       int64_t row_group_size) {
     try {
         pq_write(_path_name, table, col_names_arr, index, write_index, metadata,
                  compression, is_parallel, write_rangeindex_to_metadata,
-                 ri_start, ri_stop, ri_step, idx_name, bucket_region);
+                 ri_start, ri_stop, ri_step, idx_name, bucket_region,
+                 row_group_size);
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -677,13 +705,15 @@ void pq_write_py_entry(const char *_path_name, const table_info *table,
  * @param partition_cols_idx indices of partition columns in table
  * @param num_partition_cols number of partition columns
  * @param is_parallel true if the table is part of a distributed table
+ * @param row_group_size Row group size in number of rows
  */
 void pq_write_partitioned(const char *_path_name, table_info *table,
                           const array_info *col_names_arr,
                           const array_info *col_names_arr_no_partitions,
                           table_info *categories_table, int *partition_cols_idx,
                           int num_partition_cols, const char *compression,
-                          bool is_parallel, const char *bucket_region) {
+                          bool is_parallel, const char *bucket_region,
+                          int64_t row_group_size) {
     // TODOs
     // - Do is parallel here?
     // - sequential (only rank 0 writes, or all write with same name -which?-)
@@ -786,7 +816,8 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             }
             pq_write(p.fpath.c_str(), part_table, col_names_arr_no_partitions,
                      nullptr, /*TODO*/ false, /*TODO*/ "", compression, false,
-                     false, -1, -1, -1, /*TODO*/ "", bucket_region);
+                     false, -1, -1, -1, /*TODO*/ "", bucket_region,
+                     row_group_size);
             delete_table_decref_arrays(part_table);
         }
         delete new_table;

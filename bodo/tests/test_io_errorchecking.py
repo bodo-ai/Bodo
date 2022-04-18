@@ -993,6 +993,19 @@ def test_to_parquet_engine(datapath):
 
 
 @pytest.mark.slow
+def test_to_parquet_row_group_size(datapath):
+    msg = r".*to_parquet\(\): row_group_size must be integer.*"
+
+    @bodo.jit
+    def impl(df):
+        df.to_parquet("test.pq", row_group_size="3")
+
+    df = pd.DataFrame({"A": np.arange(10)})
+    with pytest.raises(BodoError, match=msg):
+        bodo.jit(lambda f: impl(df))(df)
+
+
+@pytest.mark.slow
 def test_to_pq_multiIdx_errcheck(memory_leak_check):
     """Test unsupported to_parquet with MultiIndexType"""
     arrays = [

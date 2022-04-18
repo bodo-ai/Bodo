@@ -3480,6 +3480,7 @@ def to_parquet_overload(
     index=None,
     partition_cols=None,
     storage_options=None,
+    row_group_size=-1,
     # TODO handle possible **kwargs options?
     _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
@@ -3530,6 +3531,9 @@ def to_parquet_overload(
 
     if not is_overload_none(index) and not is_overload_constant_bool(index):
         raise BodoError("to_parquet(): index must be a constant bool or None")
+
+    if not is_overload_int(row_group_size):
+        raise BodoError("to_parquet(): row_group_size must be integer")
 
     from bodo.io.parquet_pio import (
         parquet_write_table_cpp,
@@ -3643,7 +3647,7 @@ def to_parquet_overload(
             for i in range(len(df.columns))
         )
 
-    func_text = "def df_to_parquet(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, _is_parallel=False):\n"
+    func_text = "def df_to_parquet(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, row_group_size=-1, _is_parallel=False):\n"
     # put arrays in table_info
     if df.is_table_format:
         func_text += "    py_table = get_dataframe_table(df)\n"
@@ -3727,7 +3731,8 @@ def to_parquet_overload(
         )
         func_text += "                            unicode_to_utf8(compression),\n"
         func_text += "                            _is_parallel,\n"
-        func_text += "                            unicode_to_utf8(bucket_region))\n"
+        func_text += "                            unicode_to_utf8(bucket_region),\n"
+        func_text += "                            row_group_size)\n"
         func_text += "    delete_table_decref_arrays(table)\n"
         func_text += "    delete_info_decref_array(index_col)\n"
         func_text += "    delete_info_decref_array(col_names_no_partitions)\n"
@@ -3743,7 +3748,8 @@ def to_parquet_overload(
         func_text += "                            _is_parallel, 1, df.index.start,\n"
         func_text += "                            df.index.stop, df.index.step,\n"
         func_text += "                            unicode_to_utf8(name_ptr),\n"
-        func_text += "                            unicode_to_utf8(bucket_region))\n"
+        func_text += "                            unicode_to_utf8(bucket_region),\n"
+        func_text += "                            row_group_size)\n"
         func_text += "    delete_table_decref_arrays(table)\n"
         func_text += "    delete_info_decref_array(index_col)\n"
         func_text += "    delete_info_decref_array(col_names)\n"
@@ -3755,7 +3761,8 @@ def to_parquet_overload(
         func_text += "                            unicode_to_utf8(compression),\n"
         func_text += "                            _is_parallel, 0, 0, 0, 0,\n"
         func_text += "                            unicode_to_utf8(name_ptr),\n"
-        func_text += "                            unicode_to_utf8(bucket_region))\n"
+        func_text += "                            unicode_to_utf8(bucket_region),\n"
+        func_text += "                            row_group_size)\n"
         func_text += "    delete_table_decref_arrays(table)\n"
         func_text += "    delete_info_decref_array(index_col)\n"
         func_text += "    delete_info_decref_array(col_names)\n"
