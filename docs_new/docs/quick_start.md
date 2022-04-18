@@ -11,9 +11,9 @@ Installation
 Bodo can be installed using [Conda](https://docs.conda.io){target="blank"}:
 
 ```console 
-conda create -n Bodo python=3.9 -c conda-forge
+conda create -n Bodo python=3.9 mamba -c conda-forge
 conda activate Bodo
-conda install bodo -c bodo.ai -c conda-forge
+mamba install bodo -c bodo.ai -c conda-forge
 ```
 
 This command installs Bodo Community Edition by default, which is free

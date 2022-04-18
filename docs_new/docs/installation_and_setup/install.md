@@ -14,10 +14,12 @@ If you are installing bodo through conda, we recommend creating a `conda` enviro
 Bodo and its dependencies in it as shown below:
 
 ```console
-conda create -n Bodo python=3.9 -c conda-forge
+conda create -n Bodo python=3.9 mamba -c conda-forge
 conda activate Bodo
-conda install bodo -c bodo.ai -c conda-forge
+mamba install bodo -c bodo.ai -c conda-forge
 ```
+
+`mamba` is a drop-in replacement for `conda` that uses the same commands and configuration but is much faster.
 
 Bodo uses [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface){target="blank"}
 for parallelization, which is automatically installed as part of the
@@ -76,6 +78,13 @@ and
 ```console
 pip install deltalake
 ```
+
+`mamba` is also useful if `conda` install commands are taking a long time to execute:
+
+```console
+conda install mamba -c conda-forge
+```
+
 <br/>
 <center>
 
