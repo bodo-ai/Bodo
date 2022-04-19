@@ -4555,7 +4555,7 @@ def overload_dataframe_melt(
             f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(frame, {i})"
             for i in value_idxs
         )
-        header += f"  val_col = np.concatenate(({val_tup},))\n"
+        header += f"  val_col = bodo.libs.array_kernels.concat(({val_tup},))\n"
     id_args = ", ".join(f"out_id{i}" for i in id_idxs) + (", " if id_idxs else "")
     data_args = id_args + "var_col, val_col"
     columns = tuple(id_lit + ["variable", "value"])

@@ -1416,6 +1416,12 @@ def test_df_melt(id_arr, value_arr, memory_leak_check):
             3: np.array([1, 2, 3] * 3, dtype="uint8"),
             4: [37423, -583305, 32343] * 3,
         },
+        {
+            "A": [1, 2, 3] * 3,
+            "B": [4, 5, 6] * 3,
+            "C": ["a", "b", "c"] * 3,
+            "D": ["d", "e", "f"] * 3,
+        },
     ],
 )
 def test_df_melt_diff_types(df_dict, memory_leak_check):
