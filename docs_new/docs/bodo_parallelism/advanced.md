@@ -3,23 +3,141 @@
 This section discusses parallelism topics that may be useful for
 performance tuning and advanced use cases.
 
-## Getting/Setting Distributed Data Directly
+## Distributed Flags For JIT Functions {#dist-flags}
+
+Bodo infers data distributions for inputs and outputs of JIT functions automatically.
+For example, all dataframe arguments and return values are distributed in this code:
+
+```py
+@bodo.jit
+def f():
+    df = pd.read_parquet("pd_example.pq")
+    return df
+
+
+@bodo.jit
+def h(df):
+    df2 = df.groupby("A").sum()
+    return df2
+
+
+@bodo.jit
+def g(df):
+    df3 = h(df)
+    return df3
+
+
+df = f()
+df3 = g(df)
+```
+
+Bodo tracks distributions across JIT functions and between JIT
+and regular Python code (by setting metadata in regular Pandas dataframes).
+However, the user can specify distributions manunally as well.
+The above code is equivalent to:
+
+```py
+@bodo.jit(distributed=["df"])
+def f():
+    df = pd.read_parquet("pd_example.pq")
+    return df
+
+
+@bodo.jit(distributed=["df", "df2"])
+def h(df):
+    df2 = df.groupby("A").sum()
+    return df2
+
+
+@bodo.jit(distributed=["df", "df3"])
+def g(df):
+    df3 = h(df)
+    return df3
+
+
+df = f()
+df3 = g(df)
+```
+
+Generally, Bodo can handle distributions of most use cases automatically and
+we do not recommend setting distributions manually due to the possibility of human error.
+However, there are some advanced use cases where setting these flags may be desirable or necessary.
+For example, when a small dataframe is an input to a join, setting its distribution to replicated can improve parallel performance. In the example below, a small dataframe `df2` is an argument to a join on a large dataframe `df1`, and we specify `df2` as replicated for better parallel performance. 
+```py
+@bodo.jit(distributed=["df1"], replicated=["df2"])
+def load_data():
+    df1 = pd.read_parquet("my_large_data.pq")
+    df2 = pd.read_parquet("my_tiny_data.pq")
+    return df1, df2
+
+
+@bodo.jit
+def merge_data():
+    df1, df2 = load_data()
+    df3 = df1.merge(df2, on="id")
+    df3.to_parquet("my_merged_data.pq")
+
+
+merge_data()
+
+```
+
+Another potential use case is when we want to parallelize computation without distributing data,
+for applications such as parameter tuning and simulations.
+The example below creates some parameters, distributes them manually using `bodo.scatterv`,
+and performs some computation on each one using a `bodo.prange` parallel loop.
+The input dataframe `df` is replicated across processors since all of its values are needed
+for computations on each parameter.
+Functions `create_params` and `load_data` have `distributed=False` set,
+which makes all of their data structures and computations replicated across processors.
+
+!!! seealso "See Also"
+        [`bodo.scatterv`][bodoscatterv], [`bodo.prange`][explicit-parallel-loops]
+
+```py
+@bodo.jit(distributed=False)
+def create_params():
+    params = [1, 3, 4, 5, 7, 8, 11, 15, 17, 21]
+    params2 = [a * 2 for a in params]
+    return np.array(params + params2)
+
+
+@bodo.jit(distributed=False)
+def load_data():
+    df = pd.read_parquet("my_large_data.pq")
+    return df
+
+
+@bodo.jit
+def run_params():
+    params = create_params()
+    df = load_data()
+    params_dist = bodo.scatterv(params)
+    n = len(params_dist)
+    res = np.zeros(n)
+    for i in bodo.prange(n):
+        p = params_dist[i]
+        res[i] = df.apply(lambda x, a: x.B % a, axis=1, a=p).sum()
+    print(res.max())
+
+
+run_params()
+```
+
+
+## Indexing Operations on Distributed Data
 
 Distributed data is usually accessed and modified through high-level
-Pandas and Numpy APIs. However, in many cases, Bodo allows direct access to distributed
+Pandas and Numpy APIs. However, in many cases, Bodo allows indexing operations on distributed
 data without code modification. Here are such cases that Bodo currently supports:
 
 1.  Getting values using boolean array indexing, e.g. `B = A[A > 3]`.
     The output can be distributed, but may be imbalanced
-    (`bodo.rebalance()` can be used if necessary).
-    
-[todo]: <> (add a reference to bodo.rebalance)
+    ([`bodo.rebalance()`](#load-balancing-distributed-data) can be used if necessary).
 
 2.  Getting values using a slice, e.g. `B = A[::2]`. The output can be
     distributed, but may be imbalanced 
-    (`bodo.rebalance()` can be used if necessary).
-    
-[todo]: <> (add a reference to bodo.rebalance)
+    ([`bodo.rebalance()`](#load-balancing-distributed-data) can be used if necessary).
 
 3.  Getting a value using a scalar index, e.g. `a = A[m]`. The output
     can be replicated.
@@ -200,8 +318,9 @@ Reduction variable s has multiple conflicting reduction operators.
 ## Integration with non-Bodo APIs
 
 There are multiple methods for integration with APIs that Bodo does not
-support natively: 
-1. Switch to python object mode inside jit functions
+support natively:
+
+1. Switch to [python Object Mode][objmode] inside jit functions
 2. Pass data in and out of jit functions
 
 ### Passing Distributed Data
@@ -331,4 +450,3 @@ if bodo.get_rank() in bodo.get_nodes_first_ranks():
     Running code on a single rank or a subset of ranks can lead to
     deadlocks. Ensure that your code doesn't include any MPI or Bodo
     functions.
-
