@@ -32,10 +32,10 @@ if [ "$RUNTIME" != "yes" ];
 then
   if [ "$RUN_NIGHTLY" != "yes" ];
   then
-      conda create -n $CONDA_ENV -q -y -c conda-forge python numpy scipy boost-cpp=1.74.0 cmake h5py=2.10 mpich mpi
+      conda create -n $CONDA_ENV -q -y -c conda-forge python numpy scipy boost-cpp=1.74.0 cmake h5py mpich mpi
   else
       # pytorch (installed below) doesn't support Python 3.10 yet
-      conda create -n $CONDA_ENV -q -y -c conda-forge 'python<3.10' cmake make
+      conda create -n $CONDA_ENV -q -y -c conda-forge python=3.9 cmake make
   fi
 fi
 source activate $CONDA_ENV
@@ -63,8 +63,6 @@ then
    $CONDA_INSTALL scikit-learn='1.0.*' 'gcsfs>=2022.1' -c conda-forge
    $CONDA_INSTALL matplotlib='3.5.1' -c conda-forge
    $CONDA_INSTALL pyspark openjdk -c conda-forge
-   HDF5_VERSION=`python -c "import sys; print('1.12.*=*mpich*') if sys.version_info.minor == 10 else print('1.10.*=*mpich*')"`
-   $CONDA_INSTALL hdf5=$HDF5_VERSION -c conda-forge
    $CONDA_INSTALL xlrd xlsxwriter openpyxl -c conda-forge
    if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
 else
@@ -80,9 +78,9 @@ else
        #conda clean -a -y
        # Install h5py and hd5f directly because otherwise tensorflow
        # installs a non-mpi version.
-       HDF5_VERSION=`python -c "import sys; print('1.12.*=*mpich*') if sys.version_info.minor == 10 else print('1.10.*=*mpich*')"`
        #$CONDA_INSTALL tensorflow h5py hdf5=$HDF5_VERSION -c conda-forge
-       $CONDA_INSTALL h5py hdf5=$HDF5_VERSION -c conda-forge
+       # If building the docker image always install 1.12 for hdf5
+       $CONDA_INSTALL h5py 'hdf5=1.12.*=*mpich*' -c conda-forge
        conda clean -a -y
        #pip install horovod;
     fi

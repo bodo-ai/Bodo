@@ -21,4 +21,5 @@ conda install -y flake8
 if [ "$RUN_NIGHTLY" != "yes" ]; then
     conda install -y -c conda-forge cx_oracle psycopg2
 fi
-pip install pytest pytest-cov deltalake
+conda install pytest pytest-cov -c conda-forge
+python -m pip install deltalake
