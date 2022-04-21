@@ -1490,7 +1490,9 @@ def get_parquet_dataset(
         if comm.allreduce(error is not None, op=MPI.LOR):
             for error in comm.allgather(error):
                 if error:
-                    if isinstance(fpath, list) and isinstance(error, (OSError, FileNotFoundError)):
+                    if isinstance(fpath, list) and isinstance(
+                        error, (OSError, FileNotFoundError)
+                    ):
                         raise BodoError(str(error) + list_of_files_error_msg)
                     raise error
 

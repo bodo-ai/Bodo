@@ -561,6 +561,12 @@ class PathInfo {
     int64_t get_size() const { return total_ds_size; }
 
     /**
+     * Return if the filesystem being used is a remote-filesystem.
+     * At the moment we only support S3 and HDFS.
+     */
+    bool get_is_remote_fs() const { return this->is_remote_fs; }
+
+    /**
      * Get arrow::fs::FileSystem object necessary to read data from this path.
      */
     std::shared_ptr<arrow::fs::FileSystem> get_fs() {
@@ -570,6 +576,7 @@ class PathInfo {
                            boost::starts_with(file_path, "abfss://");
             bool is_s3 = boost::starts_with(file_path, "s3://");
             if (is_s3 || is_hdfs) {
+                this->is_remote_fs = true;
                 arrow::internal::Uri uri;
                 (void)uri.Parse(file_path);
                 PyObject *fs_mod = nullptr;
@@ -811,6 +818,7 @@ class PathInfo {
     std::string bucket_region;  // only useful if it's an s3 path
     bool is_valid;
     bool is_dir;
+    bool is_remote_fs = false;  // like S3 or HDFS
     std::string compression = "UNKNOWN";
     std::vector<std::string> file_names;
     std::vector<int64_t> file_sizes;
@@ -1715,7 +1723,8 @@ void read_file_info(const std::vector<std::string> &file_names,
                     bool csv_header) {
     tracing::Event ev("read_file_info", false);
 
-    const int64_t CHUNK_SIZE = 8192;
+    // TODO Tune (https://bodo.atlassian.net/browse/BE-2600)
+    constexpr int64_t CHUNK_SIZE = 1024 * 1024;
     std::vector<char> local_data(CHUNK_SIZE);
     // Bytes skipped from the beginning based on how many rows to skip when
     // using skiprows
@@ -1866,15 +1875,23 @@ void read_file_info(const std::vector<std::string> &file_names,
             // If the code already scanned through all skiprows and nrows,
             // it got the required information (global_start/global_end) and
             // no need to read more chunks in this file.
+            // NOTE: if chunksize is not used it'll be -1. If used, we decrease
+            // until it reaches 0. See
+            // https://github.com/Bodo-inc/Bodo/blob/1476d4812a2131603ef633ef97f0e4e36f05dc02/bodo/ir/csv_ext.py#L986
+            // Hence the check:
             if (!(skiprows_list_info->is_skiprows_list &&
                   skiprows_list_info->skiprows[0]) &&
-                !nrows && !chunksize)
+                !nrows && (chunksize <= 0))
                 break;
         }  // end-while-true
         // If scan reached start and end position, no need to read more files.
+        // NOTE: if chunksize is not used it'll be -1. If used, we decrease
+        // until it reaches 0. See
+        // https://github.com/Bodo-inc/Bodo/blob/1476d4812a2131603ef633ef97f0e4e36f05dc02/bodo/ir/csv_ext.py#L986
+        // Hence the check:
         if (!(skiprows_list_info->is_skiprows_list &&
               skiprows_list_info->skiprows[0]) &&
-            !nrows && !chunksize)
+            !nrows && ((chunksize <= 0)))
             break;
         cur_size += fsize;
     }  // end-for-loop-all-files
@@ -2016,6 +2033,14 @@ void read_chunk_data_skiplist(MemReader *mem_reader, PathInfo *path_info,
 // If datasize is more than 60% of the memory size of all nodes,
 // then we opt to scan data first
 #define MEMORY_LOAD_FACTOR 0.6  // TODO: tune-it
+
+// If nrows is used, and we're reading from a remote file-system like
+// S3 or HDFS:
+// This is the file-size threshold for the low_memory path.
+// (100MB for now)
+// TODO: tune-it (https://bodo.atlassian.net/browse/BE-2599)
+constexpr int64_t REMOTE_FS_READ_ENTIRE_FILE_THRESHOLD = 100 * 1024 * 1024;
+
 /**
  * Each rank: read my chunk of CSV/JSON dataset.
  * Without chunksize: chunk means total data to load from file for each rank.
@@ -2171,6 +2196,15 @@ extern "C" PyObject *file_chunk_reader(
             is_low_memory = (((double)bytes_meta_data[0] / cluster_sys_memory) >
                              MEMORY_LOAD_FACTOR) ||
                             pd_low_memory;
+            // If nrows is specified, we should try to avoid reading the entire
+            // file from a remote file system if the file-size is >
+            // REMOTE_FS_READ_ENTIRE_FILE_THRESHOLD. Instead we should take the
+            // low-memory-path, scan the file in chunks and then only read as
+            // much as required.
+            is_low_memory = is_low_memory ||
+                            ((nrows > 0) && (path_info->get_is_remote_fs()) &&
+                             ((double)bytes_meta_data[0] >
+                              REMOTE_FS_READ_ENTIRE_FILE_THRESHOLD));
             // If one of the ranks has is_low_memory true,
             // all ranks should switch to scanning first.
             MPI_Allreduce(MPI_IN_PLACE, &is_low_memory, 1, MPI_C_BOOL, MPI_LOR,
@@ -2197,9 +2231,12 @@ extern "C" PyObject *file_chunk_reader(
             // 1. user used pd.read_csv(..., low_memory=True)
             // 2. file(s) > 60% of memory && nrows/skiprows is used
             // 3. chunksize is used
+            // 4. nrows is used &&
+            //    file(s) > REMOTE_FS_READ_ENTIRE_FILE_THRESHOLD &&
+            //    reading from a remote filesystem like S3 or HDFS
             // i.e. we shouldn't attempt to load all data and then do
             // nrows/skiprows
-            if (((is_skiprows_list || (skiprows[0] || nrows > 0)) &&
+            if (((is_skiprows_list || skiprows[0] || (nrows > 0)) &&
                  is_low_memory) ||
                 (chunksize > 0)) {
                 // rank 0 finds update start, end offsets, and total size.
