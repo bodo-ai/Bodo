@@ -1077,3 +1077,33 @@ def test_to_parquet_missing_arg(memory_leak_check):
 
     # Reset developer mode
     numba.core.config.DEVELOPER_MODE = default_mode
+
+
+@pytest.mark.slow
+def test_csv_names_usecols_err():
+    """
+    Test read_csv(): names < usecols
+    """
+    fname = os.path.join("bodo", "tests", "data", "example.csv")
+
+    def impl1():
+        return pd.read_csv(fname, usecols=[0, 2], names=["A"])
+
+    with pytest.raises(
+        BodoError, match="number of used columns exceeds the number of passed names"
+    ):
+        bodo.jit(impl1)()
+
+
+@pytest.mark.slow
+def test_csv_usecols_not_found():
+    """
+    Test read_csv(): usecols column not found
+    """
+    fname = os.path.join("bodo", "tests", "data", "example.csv")
+
+    def impl1():
+        return pd.read_csv(fname, usecols=["B"], names=["A"])
+
+    with pytest.raises(BodoError, match="does not match columns"):
+        bodo.jit(impl1)()
