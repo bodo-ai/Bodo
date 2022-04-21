@@ -461,7 +461,22 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
         f_size = int(
             fs.get_file_info(fname).size or 0
         )  # will be None for directories, so convert to 0 if that's the case
-        file_name_or_handler = fs.open_input_file(fname)
+
+        # Arrow's S3FileSystem has some performance issues when used
+        # with pandas.read_csv, which we do at compile-time.
+        # Currently the issue seems related to using the output of
+        # fs.open_input_file / fs.open_input_stream
+        # which is a NativeFile.
+        # Performance is much better (and on par with s3fs)
+        # when we use an fsspec wrapper. The only difference
+        # we see is that the output of fs._open is an
+        # ArrowFile, which shouldn't make a difference, but it seems to.
+        # We've reported the issue to
+        # Pandas (https://github.com/pandas-dev/pandas/issues/46823)
+        # and Arrow (https://issues.apache.org/jira/browse/ARROW-16272),
+        # but in the meantime, we're using an ArrowFSWrapper for good performance.
+        fs = ArrowFSWrapper(fs)
+        file_name_or_handler = fs._open(fname)
     elif parsed_url.scheme == "hdfs":  # pragma: no cover
         is_handler = True
         (fs, all_files) = hdfs_list_dir_fnames(path)
