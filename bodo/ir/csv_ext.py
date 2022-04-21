@@ -812,8 +812,12 @@ def _gen_read_csv_objmode(
     # (`str`) directly in `pd.read_csv` (there's no performance penalty, we checked),
     # and specify the rest of the dtypes in the `df.astype` call.
 
-    data_inds_strs = [
-        str(col_num)
+    # NOTE: after optimization
+    # usecols refers to the global column indices of the columns being selected whereas
+    # type_usecol_offset refers to the index into the col_names/col_types being chosen.
+    # this should be column position in usecols list not w.r.t. original columns
+    date_inds_strs = [
+        str(i)
         for i, col_num in enumerate(usecols)
         if col_typs[type_usecol_offset[i]].dtype == types.NPDatetime("ns")
     ]
@@ -821,9 +825,9 @@ def _gen_read_csv_objmode(
     # add idx col if needed
     if idx_col_typ == types.NPDatetime("ns"):
         assert not idx_col_index is None
-        data_inds_strs.append(str(idx_col_index))
+        date_inds_strs.append(str(idx_col_index))
 
-    date_inds = ", ".join(data_inds_strs)
+    date_inds = ", ".join(date_inds_strs)
 
     # _gen_read_csv_objmode() may be called from iternext_impl when
     # used to generate a csv_iterator. That function doesn't have access
@@ -834,6 +838,11 @@ def _gen_read_csv_objmode(
     # array of column numbers that should be specified as str in pd.read_csv()
     # using a global array (constant lowered) for faster compilation for many columns
 
+    # get column type from original column type list
+    # type_usecol_offset includes index of column(s) used from col_typs list
+    # col_typs contains datatype of each column in the df
+    # use type_usecol_offset to find which column from usecols is actually used
+    # then, use that to index into column types and get original datatype
     usecol_pd_dtypes = [
         _get_pd_dtype_str(col_typs[type_usecol_offset[i]]) for i in range(len(usecols))
     ]

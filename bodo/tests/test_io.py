@@ -873,6 +873,93 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_csv_remove_col_keep_date(datapath, memory_leak_check):
+    """Test parse_date position matches usecols after removing unused column
+    See [BE-2561]"""
+    fname = datapath("csv_data_date1.csv")
+
+    def test_impl(fname):
+        df = pd.read_csv(
+            fname,
+            names=["A", "B", "C", "D"],
+            dtype={"A": int, "B": float, "C": str, "D": int},
+            parse_dates=["C"],
+        )
+        return df["C"]
+
+    check_func(test_impl, (fname,))
+
+
+@pytest.mark.slow
+def test_csv_usecols_parse_dates(datapath, memory_leak_check):
+    """Test usecols with parse_date See [BE-2544]"""
+    fname = datapath("csv_data_date1.csv")
+
+    def test_impl(fname):
+        df = pd.read_csv(
+            fname,
+            names=["A", "B", "C", "D"],
+            dtype={"A": int, "B": float, "C": str, "D": int},
+            parse_dates=["C"],
+            usecols=["A", "C", "D"],
+        )
+        return df
+
+    check_func(test_impl, (fname,))
+
+
+@pytest.mark.slow
+def test_csv_usecols_names_args(datapath, memory_leak_check):
+    """Test usecols and names argument together"""
+    fname = datapath("example.csv")
+
+    # subset for both names and usecols
+    def impl1(fname):
+        df = pd.read_csv(fname, names=["A", "B"], usecols=[0, 2])
+        return df
+
+    check_func(impl1, (fname,))
+
+    # all column names and subset for usecols
+    def impl2(fname):
+        df = pd.read_csv(fname, names=["A", "B", "C", "D", "E"], usecols=[0, 2, 3])
+        return df
+
+    check_func(impl2, (fname,))
+
+    # colnames > usecols but usecols has duplicates
+    def impl3(fname):
+        df = pd.read_csv(fname, names=["A", "B", "C"], usecols=[0, 2, 1, 0, 1])
+        return df
+
+    check_func(impl3, (fname,))
+
+    # few names + dtypes=None + usecols=None
+    def impl4(fname):
+        df = pd.read_csv(fname, names=["A", "B", "C"])
+        return df
+
+    # Ignore index check See [BE-2596]
+    check_func(impl4, (fname,), reset_index=True)
+
+    # few names + dtypes + usecols=None
+    def impl5(fname):
+        df = pd.read_csv(
+            fname, names=["A", "B", "C"], dtypes={"A": "float", "B": "str", "C": "bool"}
+        )
+        return df
+
+    check_func(impl4, (fname,), reset_index=True)
+
+    # colnames > usecols
+    def impl6(fname):
+        df = pd.read_csv(fname, names=["A", "B", "C", "D", "E"], usecols=[0])
+        return df
+
+    check_func(impl6, (fname,))
+
+
+@pytest.mark.slow
 def test_h5_remove_dead(datapath, memory_leak_check):
     """make sure dead hdf5 read calls are removed properly"""
     fname = datapath("lr.hdf5")

@@ -1245,6 +1245,15 @@ class UntypedPass:
                 "pd.read_csv() 'usecols' must be a constant list of columns names or column indices if provided",
                 loc=rhs.loc,
             )
+        # In case col_names < requested used columns.
+        if (
+            col_names != 0
+            and usecols is not None
+            and len(set(usecols)) > len(col_names)
+        ):
+            raise BodoError(
+                "pd.read_csv() number of used columns exceeds the number of passed names  "
+            )
 
         dtype_var = get_call_expr_arg(
             "pd.read_csv", rhs.args, kws, 10, "dtype", None, use_default=True
@@ -1563,8 +1572,13 @@ class UntypedPass:
         if header == "infer":
             header = 0 if col_names == 0 else None
 
-        # if inference is required
+        # Holds type of each used column. { col_idx : col_type }
         dtype_map = {}
+        # inference is required
+        # when either dtype or column names are not known yet.
+        # i.e. weren't passed by the user `dtype={col:coltype,..}, names=['col', ...]`.
+        # NOTE: If dtype_var is not None but user passed column names, we still generate dtype_map in this if-stmt
+        # and update the dictionary in another if-stmt (if dtype_var is not None:)
         if dtype_var is None or col_names == 0:
             # infer column names and types from constant filename
             msg = (
@@ -1601,6 +1615,7 @@ class UntypedPass:
                     df_type = typ.schema
                     got_schema = True
             if not got_schema:
+                # TODO: BE-2596 investigate passing `usecols` and `names` here
                 df_type = _get_csv_df_type_from_file(
                     fname_const,
                     sep,
@@ -1615,31 +1630,24 @@ class UntypedPass:
                 tuple(to_str_arr_if_dict_array(t) for t in df_type.data)
             )
             dtypes = df_type.data
-            if usecols is None:
-                usecols = list(range(len(dtypes)))
-            else:
-                # make sure usecols has column indices (not names)
-                col_name_src = col_names if col_names else df_type.columns
-                col_name_map = {name: i for i, name in enumerate(col_name_src)}
-                usecols = [
-                    _get_col_ind_from_name_or_ind(c, col_name_map) for c in usecols
-                ]
+            # Generate usecols indices
+            col_name_src = col_names if col_names else df_type.columns
+            usecols, _ = _get_usecols_as_indices(col_name_src, usecols, df_type.columns)
             # convert Pandas generated integer names if any
             cols = [str(df_type.columns[i]) for i in usecols]
             # overwrite column names like Pandas if explicitly provided
             if col_names != 0:
-                cols[-len(col_names) :] = col_names
+                cols = _replace_col_names(col_names, usecols)
             col_names = cols
             dtype_map = {c: dtypes[usecols[i]] for i, c in enumerate(col_names)}
+        # Update usecols and col_names
         else:
-            if usecols is None:
-                usecols = list(range(len(col_names)))
-            else:
-                # make sure usecols has column indices (not names)
-                col_name_map = {name: i for i, name in enumerate(col_names)}
-                usecols = [
-                    _get_col_ind_from_name_or_ind(c, col_name_map) for c in usecols
-                ]
+            # Get usecols as indices.
+            usecols, all_cols = _get_usecols_as_indices(col_names, usecols, col_names)
+            # Update col_names with usecols
+            if not all_cols:
+                cols = _replace_col_names(col_names, usecols)
+                col_names = cols
 
         if _bodo_upcast_to_float64:
             dtype_map_cpy = dtype_map.copy()
@@ -1650,6 +1658,8 @@ class UntypedPass:
                     dtype_map[c] = types.Array(types.float64, 1, "C")
 
         # handle dtype arg if provided
+        # This could be a single type for the whole data
+        # or a dictionary specifying type for each/some of the columns.
         if dtype_var is not None:
             # NOTE: the user may provide dtype for only a subset of columns
 
@@ -2612,7 +2622,73 @@ def _get_col_ind_from_name_or_ind(c, col_names_map):
     # TODO(ehsan): error checking
     if isinstance(c, int) and c not in col_names_map:
         return c
+    elif c not in col_names_map:
+        raise BodoError(
+            f"usecols: `{c}` does not match columns: {list(col_names_map.keys())}. "
+        )
     return col_names_map[c]
+
+
+def _get_usecols_as_indices(col_names, usecols, df_type_columns):
+    """
+    get usecols as column indices (not names)
+    If usecols is None, generate indices.
+    Otherwise, check if name is passed and replace with its index position
+
+    Args:
+
+    col_names: df list of all columns
+    usecols: list of column(s) to load passed from user.
+            It could be int (index) or string (column name)
+    df_type_columns: original list of columns
+
+    Returns:
+    usecols: list of used column as indices only.
+    all_cols: flag to indicate whether all columns are used.
+    """
+
+    all_cols = True
+    if usecols is None:
+        # If only `names` argument was passed and it includes only few names
+        # Pandas use last len(names) as the columns
+        # Otherwise, it starts from begining and takes first len(col_names).
+        # In the latter case, `df_type_columns` will be all columns from file or `names`
+        usecols = list(
+            range(len(df_type_columns) - len(col_names), len(df_type_columns))
+        )
+    else:
+        all_cols = False
+        # make sure usecols has column indices (not names)
+        col_name_map = {name: i for i, name in enumerate(col_names)}
+        usecols = [_get_col_ind_from_name_or_ind(c, col_name_map) for c in usecols]
+    return sorted(set(usecols)), all_cols
+
+
+def _replace_col_names(col_names, usecols):
+    """
+    Create list of column names with user-defined ones (`names`)
+    and `usecols`
+
+    Args:
+
+    col_names: df list of all columns
+    usecols: list of column(s) to load passed from user.
+            It could be int (index) or string (column name)
+
+    Returns:
+    cols: list of column names that are specified by the user
+    """
+    # User pass subset of names for usecols only (i.e. not for all actual columns)
+    # e.g. names = ["A", "B"], usecols = [0, 2] (i.e. column 1 has no name and will not be read)
+    if len(usecols) == len(col_names):
+        cols = col_names
+    # col_names more than usecols.
+    # Ex: names=['A', 'B'], usecols=[0]
+    # It can also be all names and then usecols use subset of these names
+    # names = ['A', 'B', 'C'] usecols=[0,1]
+    else:
+        cols = [col_names[i] for i in usecols]
+    return cols
 
 
 class JSONFileInfo(FileInfo):
