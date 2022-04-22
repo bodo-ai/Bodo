@@ -421,7 +421,7 @@ def pd_td_total_seconds(td):
     """Total seconds in the duration. Pandas drops nanoseconds from this result"""
 
     def impl(td):  # pragma: no cover
-        return (td._value // 1000) / 10 ** 6
+        return (td._value // 1000) / 10**6
 
     return impl
 
@@ -929,7 +929,7 @@ def total_seconds(td):
     """Total seconds in the duration."""
 
     def impl(td):  # pragma: no cover
-        return ((td._days * 86400 + td._seconds) * 10 ** 6 + td._microseconds) / 10 ** 6
+        return ((td._days * 86400 + td._seconds) * 10**6 + td._microseconds) / 10**6
 
     return impl
 
@@ -1026,7 +1026,7 @@ def overload_truediv_operator_dt_timedelta(lhs, rhs):
 
 
 def create_cmp_op_overload(op):
-    """ create overload function for comparison operators with datetime_timedelta_type. """
+    """create overload function for comparison operators with datetime_timedelta_type."""
 
     def overload_timedelta_cmp(lhs, rhs):
         if lhs == datetime_timedelta_type and rhs == datetime_timedelta_type:

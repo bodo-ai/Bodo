@@ -19,6 +19,7 @@ import pytz
 from numba.core.ir_utils import build_definitions, find_callname
 
 import bodo
+from bodo.pandas_compat import pandas_version
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -2366,6 +2367,7 @@ def test_write_parquet_dict(memory_leak_check):
     arr2 = _get_dist_arg(arr2, False)
     impl(arr1, arr2)
     passed = 1
+    bodo.barrier()
     if bodo.get_rank() == 0:
         try:
             # Check the output.
@@ -3040,14 +3042,22 @@ def test_csv_sep_arg(datapath, memory_leak_check):
         check_dtype=False,
     )
     # testing reading whole lines with sep="\n"
-    check_func(
-        test_impl,
-        (
-            fname,
-            "\n",
-        ),
-        check_dtype=False,
-    )
+    # This is no long supported in pandas 1.4
+    if pandas_version == (1, 3):
+        check_func(
+            test_impl,
+            (
+                fname,
+                "\n",
+            ),
+            check_dtype=False,
+        )
+    else:
+        assert pandas_version == (1, 4), "Check if this test is still valid"
+        with pytest.raises(
+            BodoError, match=r".*Specified \\n as separator or delimiter.*"
+        ):
+            bodo.jit(test_impl)(fname, "\n")
 
     compressed_names = compress_file(fname)
     try:
@@ -3495,7 +3505,12 @@ def test_excel1(datapath, memory_leak_check):
     check_func(test_impl1, (fname,), is_out_distributed=False)
     check_func(test_impl2, (fname,), is_out_distributed=False)
     fname = datapath("data_comment.xlsx")
-    check_func(test_impl3, (fname,), is_out_distributed=False)
+    assert pandas_version in (
+        (1, 3),
+        (1, 4),
+    ), "`name` na-filtering issue for 1.4, check if it's fixed in later versions"
+    if pandas_version == (1, 3):
+        check_func(test_impl3, (fname,), is_out_distributed=False)
     fname = datapath("data.xlsx")
     check_func(test_impl4, (fname, "Sheet1"), is_out_distributed=False)
     with pytest.raises(BodoError, match="both 'dtype' and 'names' should be provided"):

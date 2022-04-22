@@ -26,6 +26,7 @@ from bodo.tests.utils import (
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_call_assign
+from bodo.pandas_compat import pandas_version
 
 
 # TODO: integer Null and other Nulls
@@ -2842,9 +2843,7 @@ def test_series_and_or_int(arg1, arg2, memory_leak_check):
     # Pandas doesn't currently support and/or between
     # two Nullable Integer Arrays, or nullable integer Arrays and
     # scalars but it most likely will in the future.
-    assert re.compile(r"1.3.*").match(
-        pd.__version__
-    ), "Check support for pd.IntegerArray's and/or"
+    assert pandas_version in ((1, 3), (1, 4)), "Check support for pd.IntegerArray's and/or"
 
     # Lambda functions used for setting expected output:
     or_scalar = lambda v, x: v if pd.isna(v) else v | x

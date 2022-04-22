@@ -460,8 +460,6 @@ def get_agg_typ(
     out_columns = []  # name of output columns
     out_column_type = []  # ColumnType of output columns (see ColumnType Enum above)
     if func_name == "head":
-        # dropna is always False
-        grp.dropna = False
         # Per Pandas documentation as_index flag is ignored
         # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.core.groupby.GroupBy.head.html
         grp.as_index = True

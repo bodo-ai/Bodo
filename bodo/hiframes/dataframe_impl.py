@@ -5516,7 +5516,7 @@ def overload_read_excel(
         ]
     )
 
-    func_text = """
+    func_text = f"""
 def impl(
     io,
     sheet_name=0,
@@ -5545,38 +5545,36 @@ def impl(
     mangle_dupe_cols=True,
     _bodo_df_type=None,
 ):
-    with numba.objmode(df="{}"):
+    with numba.objmode(df="{t_name}"):
         df = pd.read_excel(
-            io,
-            sheet_name,
-            header,
-            {},
-            index_col,
-            usecols,
-            squeeze,
-            {{{}}},
-            engine,
-            converters,
-            true_values,
-            false_values,
-            skiprows,
-            nrows,
-            na_values,
-            keep_default_na,
-            na_filter,
-            verbose,
-            {},
-            date_parser,
-            thousands,
-            comment,
-            skipfooter,
-            convert_float,
-            mangle_dupe_cols,
+            io=io,
+            sheet_name=sheet_name,
+            header=header,
+            names={list(df_type.columns)},
+            index_col=index_col,
+            usecols=usecols,
+            squeeze=squeeze,
+            dtype={{{pd_dtype_strs}}},
+            engine=engine,
+            converters=converters,
+            true_values=true_values,
+            false_values=false_values,
+            skiprows=skiprows,
+            nrows=nrows,
+            na_values=na_values,
+            keep_default_na=keep_default_na,
+            na_filter=na_filter,
+            verbose=verbose,
+            parse_dates={parse_dates_const},
+            date_parser=date_parser,
+            thousands=thousands,
+            comment=comment,
+            skipfooter=skipfooter,
+            convert_float=convert_float,
+            mangle_dupe_cols=mangle_dupe_cols,
         )
     return df
-    """.format(
-        t_name, list(df_type.columns), pd_dtype_strs, parse_dates_const
-    )
+"""
     loc_vars = {}
     exec(func_text, globals(), loc_vars)
     impl = loc_vars["impl"]

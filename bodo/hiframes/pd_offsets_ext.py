@@ -1173,7 +1173,7 @@ def is_offsets_type(val):
 ####### tseries.offset.Week #########
 # create a new Numba Type
 class WeekType(types.Type):
-    """ Numba type for tseries.offset.Week. """
+    """Numba type for tseries.offset.Week."""
 
     def __init__(self):
         super(WeekType, self).__init__(name="WeekType()")
@@ -1388,7 +1388,7 @@ def overload_add_operator_week_offset_type(lhs, rhs):
 
 @register_jitable
 def calculate_week_date(n, weekday, other_weekday):  # pragma: no cover
-    """ Calculate the date n weeks from the input. """
+    """Calculate the date n weeks from the input."""
 
     # if weekday = None (int representation is -1) return the offset
     if weekday == -1:
