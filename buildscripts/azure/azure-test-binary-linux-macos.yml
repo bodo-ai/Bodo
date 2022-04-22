@@ -210,5 +210,7 @@ jobs:
     env:
       SF_USER: $(SNOWFLAKE_USER)
       SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
+      SF_USER2: $(SNOWFLAKE_USER2)
+      SF_PASSWORD2: $(SNOWFLAKE_PASSWORD2)
     displayName: 'Test Bodo'
 

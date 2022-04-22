@@ -4,7 +4,7 @@ Implement pd.DataFrame typing and data model handling.
 """
 import json
 import operator
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 import llvmlite.binding as ll
 import numba
@@ -3828,7 +3828,8 @@ def to_sql_exception_guard(
     """Call of to_sql and guard the exception and return it as string if error happens"""
     err_msg = "all_ok"
     # Find the db_type to determine if we are using Snowflake
-    db_type = urlparse(con).scheme
+    parseresult = urlparse(con)
+    db_type = parseresult.scheme
     if _is_parallel and bodo.get_rank() == 0:
         # Default number of rows to write to create the table. This is done in case
         # rank 0 has a large number of rows because that delays writing on other ranks.
@@ -3854,54 +3855,62 @@ def to_sql_exception_guard(
             if len(df) == 0:
                 return err_msg
 
-    if db_type == "snowflake":
-        try:
-            # Using the Pandas APIs of the snowflake connector to write the data in batches
-            # https://docs.snowflake.com/en/user-guide/python-connector-api.html#pd_writer
-            from snowflake.connector.pandas_tools import pd_writer
-
-            from bodo import snowflake_sqlalchemy_compat  # noqa
-
-            if method is not None and _is_table_create and bodo.get_rank() == 0:
-                import warnings
-
-                from bodo.utils.typing import BodoWarning
-
-                warnings.warn(
-                    BodoWarning(
-                        "DataFrame.to_sql(): method argument is not supported with Snowflake. Bodo always uses snowflake.connector.pandas_tools.pd_writer to write data."
-                    )
-                )
-            method = pd_writer
-            # Snowflake connector assumes the columns names have already had their cases converted.
-            # Convert all fully lower case names to upper case.
-            # See the snowflake section of read_sql for more information.
-            df.columns = [c.upper() if c.islower() else c for c in df.columns]
-        except ImportError:
-            err_msg = (
-                "Snowflake Python connector packages not found."
-                " Using 'to_sql' with Snowflake requires both snowflake-sqlalchemy"
-                " and snowflake-connector-python."
-                " These can be installed by calling"
-                " 'conda install -c conda-forge snowflake-sqlalchemy snowflake-connector-python' or"
-                " 'pip install snowflake-sqlalchemy snowflake-connector-python'."
-            )
-            return err_msg
+    df_columns_original = df.columns
     try:
-        df.to_sql(
-            name,
-            con,
-            schema,
-            if_exists,
-            index,
-            index_label,
-            chunksize,
-            dtype,
-            method,
-        )
-    except Exception as e:
-        err_msg = e.args[0]
-    return err_msg
+        if db_type == "snowflake":
+            con_paswd = parseresult.password
+            # replacing password only if special characters in password and password is not the same as username
+            if con_paswd and con.count(con_paswd) == 1:
+                con = con.replace(con_paswd, quote(con_paswd))
+            try:
+                # Using the Pandas APIs of the snowflake connector to write the data in batches
+                # https://docs.snowflake.com/en/user-guide/python-connector-api.html#pd_writer
+                from snowflake.connector.pandas_tools import pd_writer
+
+                from bodo import snowflake_sqlalchemy_compat  # noqa
+
+                if method is not None and _is_table_create and bodo.get_rank() == 0:
+                    import warnings
+
+                    from bodo.utils.typing import BodoWarning
+
+                    warnings.warn(
+                        BodoWarning(
+                            "DataFrame.to_sql(): method argument is not supported with Snowflake. Bodo always uses snowflake.connector.pandas_tools.pd_writer to write data."
+                        )
+                    )
+                method = pd_writer
+                # Snowflake connector assumes the columns names have already had their cases converted.
+                # Convert all fully lower case names to upper case.
+                # See the snowflake section of read_sql for more information.
+                df.columns = [c.upper() if c.islower() else c for c in df.columns]
+            except ImportError:
+                err_msg = (
+                    "Snowflake Python connector packages not found."
+                    " Using 'to_sql' with Snowflake requires both snowflake-sqlalchemy"
+                    " and snowflake-connector-python."
+                    " These can be installed by calling"
+                    " 'conda install -c conda-forge snowflake-sqlalchemy snowflake-connector-python' or"
+                    " 'pip install snowflake-sqlalchemy snowflake-connector-python'."
+                )
+                return err_msg
+        try:
+            df.to_sql(
+                name,
+                con,
+                schema,
+                if_exists,
+                index,
+                index_label,
+                chunksize,
+                dtype,
+                method,
+            )
+        except Exception as e:
+            err_msg = e.args[0]
+        return err_msg
+    finally:
+        df.columns = df_columns_original
 
 
 @numba.njit
