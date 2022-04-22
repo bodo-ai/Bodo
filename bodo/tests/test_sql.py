@@ -886,6 +886,49 @@ def test_to_sql_snowflake(memory_leak_check):
     bodo.barrier()
 
 
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_to_sql_snowflake_user2(memory_leak_check):
+    """
+    Tests that df.to_sql works when the Snowflake account password has special
+    characters.
+    """
+    # Only test with one rank because we are just testing access
+    if bodo.get_size() != 1:
+        return
+    import platform
+
+    # This test runs on both Mac and Linux, so give each table a different
+    # name for the highly unlikely but possible case the tests run concurrently.
+    if platform.system() == "Darwin":
+        name = "tosqlsmallmac"
+    else:
+        name = "tosqlsmalllinux"
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    # User 2 has @ character in the password
+    conn = get_snowflake_connection_string(db, schema, user=2)
+
+    df = pd.DataFrame(
+        {
+            "a": np.random.randint(0, 500, 1000),
+            "b": np.random.randint(0, 500, 1000),
+        }
+    )
+
+    @bodo.jit
+    def test_write(df, name, conn, schema):
+        df.to_sql(name, conn, if_exists="replace", index=False, schema=schema)
+
+    test_write(df, name, conn, schema)
+
+    def read(conn):
+        return pd.read_sql(f"select * from {name}", conn)
+
+    # Can't read with pandas because it will throw an error if the username has
+    # special characters
+    check_func(read, (conn,), py_output=df, dist_test=False, check_dtype=False)
+
+
 @pytest.mark.slow
 def test_mysql_show(memory_leak_check):
     """Test MySQL: SHOW query"""

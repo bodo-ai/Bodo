@@ -1806,14 +1806,20 @@ def _del_many_column_file(filetype):
 
 # We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
 # are stored there (to avoid failing on AWS or our local machines)
-def get_snowflake_connection_string(db, schema):
+def get_snowflake_connection_string(db, schema, user=1):
     """
     Generates a common snowflake connection string. Some details (how to determine
     username and password) seem unlikely to change, whereas as some tests could require
     other details (db and schema) to change.
     """
-    username = os.environ["SF_USER"]
-    password = os.environ["SF_PASSWORD"]
+    if user == 1:
+        username = os.environ["SF_USER"]
+        password = os.environ["SF_PASSWORD"]
+    elif user == 2:
+        username = os.environ["SF_USER2"]
+        password = os.environ["SF_PASSWORD2"]
+    else:
+        raise ValueError("Invalid user")
     account = "bodopartner.us-east-1"
     warehouse = "DEMO_WH"
     conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?warehouse={warehouse}"
