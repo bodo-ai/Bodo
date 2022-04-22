@@ -125,7 +125,8 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge pymysql sqlalchemy snowflake-connector-python snowflake-sqlalchemy
+      conda install -y -c conda-forge pymysql sqlalchemy snowflake-sqlalchemy
+      conda install -y -c conda-forge snowflake-connector-python --force --no-deps
     displayName: 'Setup MySQL testing'
 
   - script: |

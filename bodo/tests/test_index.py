@@ -684,8 +684,7 @@ def test_init_datetime_index_array_analysis(memory_leak_check):
 
 
 def test_pd_date_range(memory_leak_check):
-    """test pd.date_range() support with various argument combinations
-    """
+    """test pd.date_range() support with various argument combinations"""
     # start/end provided (default freq="D")
     def impl():
         return pd.date_range(start="2018-01-01", end="2018-01-08")
@@ -1694,7 +1693,7 @@ def test_boolean_index(memory_leak_check):
         idx = pd.Index(arr)
         return idx
 
-    arr = np.array([True, False] * 10)
+    arr = pd.array([True, False] * 10)
     check_func(impl1, (arr,))
 
     n_arr = pd.array([True, False, None, True, None] * 3)

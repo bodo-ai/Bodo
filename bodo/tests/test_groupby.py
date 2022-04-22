@@ -1,7 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import datetime
 import random
-import re
 import string
 from decimal import Decimal
 
@@ -11,6 +10,7 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.pandas_compat import pandas_version
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
     DistTestPipeline,
@@ -342,8 +342,9 @@ def test_agg_set_error(memory_leak_check):
 @pytest.mark.slow
 def test_sum_string(memory_leak_check):
 
-    assert re.compile(r"1.3.*").match(
-        pd.__version__
+    assert pandas_version in (
+        (1, 3),
+        (1, 4),
     ), "String sum will raise a TypeError in a later Pandas version."
 
     def impl(df):
@@ -367,8 +368,9 @@ def test_sum_binary(memory_leak_check):
     argument should default to true, this should simply result in the column being dropped.
     In later versions of pandas, this may raise a type error by default."""
 
-    assert re.compile(r"1.3.*").match(
-        pd.__version__
+    assert pandas_version in (
+        (1, 3),
+        (1, 4),
     ), "Object sum will raise a TypeError in a later Pandas version."
 
     def impl(df):
@@ -483,8 +485,9 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
 
 def test_random_string_sum_min_max_first_last(memory_leak_check):
 
-    assert re.compile(r"1.3.*").match(
-        pd.__version__
+    assert pandas_version in (
+        (1, 3),
+        (1, 4),
     ), "String sum will raise a TypeError in a later Pandas version."
 
     def impl1(df):
@@ -532,8 +535,9 @@ def test_random_string_sum_min_max_first_last(memory_leak_check):
 
 def test_random_binary_sum_min_max_first_last(memory_leak_check):
 
-    assert re.compile(r"1.3.*").match(
-        pd.__version__
+    assert pandas_version in (
+        (1, 3),
+        (1, 4),
     ), "Object sum will raise a TypeError in a later Pandas version."
 
     def impl1(df):
@@ -587,8 +591,9 @@ def test_groupby_missing_entry(is_slow_run, memory_leak_check):
     in future versions of Pandas.
     """
 
-    assert re.compile(r"1.3.*").match(
-        pd.__version__
+    assert pandas_version in (
+        (1, 3),
+        (1, 4),
     ), "String sum will raise a TypeError in a later Pandas version."
 
     def test_drop_sum(df):
@@ -1021,8 +1026,9 @@ def test_sum_max_min_list_string_random(memory_leak_check):
     We have to use as_index=False since list of strings are mutable
     and index are immutable so cannot be an index"""
 
-    assert re.compile(r"1.3.*").match(
-        pd.__version__
+    assert pandas_version in (
+        (1, 3),
+        (1, 4),
     ), "String sum will raise a TypeError in a later Pandas version."
 
     def test_impl1(df1):
@@ -3857,8 +3863,9 @@ def test_std_one_col(test_df, memory_leak_check):
     https://github.com/pandas-dev/pandas/issues/35516
     """
 
-    assert re.compile(r"1.3.*").match(
-        pd.__version__
+    assert pandas_version in (
+        (1, 3),
+        (1, 4),
     ), "revisit the df.groupby(A)[B].std() issue at next pandas version."
 
     # TODO: std _is_ supported by Pandas groupby on categorical columns

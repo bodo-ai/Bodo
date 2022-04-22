@@ -56,7 +56,7 @@ if [ "$RUN_NIGHTLY" != "yes" ];
 then
    $CONDA_INSTALL -c conda-forge pyarrow=7.0.0
    $CONDA_INSTALL fsspec>=2021.09 -c conda-forge
-   $CONDA_INSTALL pandas='1.3.3' -c conda-forge
+   $CONDA_INSTALL pandas=${BODO_PD_VERSION:-'1.4.*'} -c conda-forge
    $CONDA_INSTALL numba=0.55.1 -c conda-forge
    $CONDA_INSTALL cython -c conda-forge
    $CONDA_INSTALL mpi4py -c conda-forge

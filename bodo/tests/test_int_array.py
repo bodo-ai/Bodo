@@ -9,6 +9,7 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func
+from bodo.pandas_compat import pandas_version
 
 
 def get_random_integerarray(tot_size):
@@ -310,9 +311,7 @@ def test_shape(memory_leak_check):
 )
 def test_unary_ufunc(ufunc):
     # IntegerArray is buggy as of Pandas 1.3.0 and doesn't put NA mask on output yet
-    assert re.compile(r"1.3.*").match(
-        pd.__version__
-    ), "revisit Pandas issues for int arr"
+    assert pandas_version in ((1, 3), (1, 4)), "revisit Pandas issues for int arr"
 
     # As of 1.3.*, these functions still do not properly put NA masks on the output
     # and do not produce the correct result
@@ -367,9 +366,7 @@ def test_unary_ufunc_explicit_np(memory_leak_check):
 def test_binary_ufunc(ufunc, memory_leak_check):
     # IntegerArray is buggy in Pandas 1.1.* and 1.2.0 and doesn't put NA mask on output yet
 
-    assert re.compile(r"1.3.*").match(
-        pd.__version__
-    ), "revisit Pandas issues for int arr"
+    assert pandas_version in ((1, 3), (1, 4)), "revisit Pandas issues for int arr"
     # Need suppport for floating array when doing true division
     if ufunc == np.true_divide:
         check_dtype = False

@@ -107,10 +107,20 @@ def typeof_pd_index(val, c):
         val.inferred_type == "integer"
         or pd._libs.lib.infer_dtype(val, True) == "integer"
     ):
+        # At least some index values contain the actual dtype in
+        # Pandas 1.4.
+        if isinstance(val.dtype, pd.core.arrays.integer._IntegerDtype):
+            # Get the numpy dtype
+            numpy_dtype = val.dtype.numpy_dtype
+            # Convert the numpy dtype to the Numba type
+            dtype = numba.np.numpy_support.from_dtype(numpy_dtype)
+        else:
+            # we don't have the dtype default to int64
+            dtype = types.int64
         return NumericIndexType(
-            types.int64,
+            dtype,
             get_val_type_maybe_str_literal(val.name),
-            IntegerArrayType(types.int64),
+            IntegerArrayType(dtype),
         )
     if (
         val.inferred_type == "boolean"
@@ -2470,19 +2480,28 @@ class NumericIndexType(types.IterableType, types.ArrayCompatible):
         return str(self.dtype)
 
 
-@typeof_impl.register(pd.Int64Index)
+# Pandas 1.4+ has deprecated pd.<type>Index in favor of pd.Index(dtype=<type>),
+# but we still need to support older versions.
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    Int64Index = pd.Int64Index
+    UInt64Index = pd.UInt64Index
+    Float64Index = pd.Float64Index
+
+
+@typeof_impl.register(Int64Index)
 def typeof_pd_int64_index(val, c):
     # keep string literal value in type since reset_index() may need it
     return NumericIndexType(types.int64, get_val_type_maybe_str_literal(val.name))
 
 
-@typeof_impl.register(pd.UInt64Index)
+@typeof_impl.register(UInt64Index)
 def typeof_pd_uint64_index(val, c):
     # keep string literal value in type since reset_index() may need it
     return NumericIndexType(types.uint64, get_val_type_maybe_str_literal(val.name))
 
 
-@typeof_impl.register(pd.Float64Index)
+@typeof_impl.register(Float64Index)
 def typeof_pd_float64_index(val, c):
     # keep string literal value in type since reset_index() may need it
     return NumericIndexType(types.float64, get_val_type_maybe_str_literal(val.name))
@@ -2672,9 +2691,9 @@ def create_numeric_constructor(func, func_str, default_dtype):
 
 def _install_numeric_constructors():
     for func, func_str, default_dtype in (
-        (pd.Int64Index, "pandas.Int64Index", np.int64),
-        (pd.UInt64Index, "pandas.UInt64Index", np.uint64),
-        (pd.Float64Index, "pandas.Float64Index", np.float64),
+        (Int64Index, "pandas.Int64Index", np.int64),
+        (UInt64Index, "pandas.UInt64Index", np.uint64),
+        (Float64Index, "pandas.Float64Index", np.float64),
     ):
         overload_impl = create_numeric_constructor(func, func_str, default_dtype)
         overload(func, no_unliteral=True)(overload_impl)
