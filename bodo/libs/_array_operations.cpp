@@ -971,6 +971,49 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
         }
         ev.add_attribute("local_num_match", num_match);
 
+    } else if (in_arr->arr_type == bodo_array_type::DICT) {
+        // For dictionary-encoded string arrays, we optimize
+        // by first doing the computation on the dictionary (info1)
+        // (which is presumably much smaller), and then
+        // building the output boolean array by indexing into this
+        // result.
+
+        array_info* dict_arr = in_arr->info1;
+
+        // Allocate boolean array to store output of get_search_regex
+        // on the dictionary (dict_arr)
+        array_info* dict_arr_out =
+            alloc_nullable_array(dict_arr->length, Bodo_CTypes::_BOOL, 0);
+
+        // Compute recursively on the dictionary
+        // (dict_arr; which is just a string array).
+        // We incref `dict_arr_out` and `dict_arr` since they'll be decrefed
+        // when we call this function recursively
+        incref_array(dict_arr);
+        incref_array(dict_arr_out);
+        get_search_regex(dict_arr, case_sensitive, pat, dict_arr_out);
+
+        array_info* indices_arr = in_arr->info2;
+
+        // Iterate over the indices, and assign values to the output
+        // boolean array from dict_arr_out.
+        for (size_t iRow = 0; iRow < nRow; iRow++) {
+            bool bit = in_arr->get_null_bit(iRow);
+            if (bit) {
+                // Get index in the dictionary
+                int32_t iiRow = indices_arr->at<int32_t>(iRow);
+                // Get output from dict_arr_out for this dict value
+                bool value = dict_arr_out->at<bool>(iiRow);
+                out_arr->at<bool>(iRow) = value;
+                if (value) {
+                    num_match++;
+                }
+            }
+            out_arr->set_null_bit(iRow, bit);
+        }
+        ev.add_attribute("local_num_match", num_match);
+        // Free the output of computation on dict_arr
+        delete_info_decref_array(dict_arr_out);
     } else {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "array in_arr type should be string");

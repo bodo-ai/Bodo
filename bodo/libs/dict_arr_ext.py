@@ -30,6 +30,7 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
+    register_jitable,
     register_model,
     typeof_impl,
     unbox,
@@ -609,7 +610,7 @@ def cast_dict_str_arr_to_str_arr(context, builder, fromty, toty, val):
     return impl_ret_new_ref(context, builder, toty, res)
 
 
-@numba.jit(cache=True, no_cpython_wrapper=True)
+@register_jitable
 def str_replace(arr, pat, repl, flags, regex):  # pragma: no cover
     """implement optimized string replace for dictionary array.
     Only transforms the dictionary array and just copies the indices.
@@ -635,3 +636,143 @@ def str_replace(arr, pat, repl, flags, regex):  # pragma: no cover
             out_str_arr[i] = data_arr[i].replace(pat, repl)
 
     return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)
+
+
+@register_jitable
+def str_startswith(arr, pat, na):  # pragma: no cover
+    """
+    Implement optimized string startswith for dictionary array.
+    Compute startswith once on each dictionary element.
+    """
+    # Pandas implementation:
+    # https://github.com/pandas-dev/pandas/blob/66e3805b8cabe977f40c05259cc3fcf7ead5687d/pandas/core/strings/object_array.py#L131
+
+    # Get the dictionary (info1)
+    dict_arr = arr._data
+    n_dict = len(dict_arr)
+    # Create bool array to store outputs
+    dict_arr_out = bodo.libs.bool_arr_ext.alloc_bool_array(n_dict)
+    # Compute startswith on the dictionary values
+    for i in range(n_dict):
+        # We assume there are no NaNs in the dictionary (info1)
+        dict_arr_out[i] = dict_arr[i].startswith(pat)
+
+    # Iterate over the array and assign values in the output
+    # boolean array from dict_arr_out.
+    indices_arr = arr._indices
+    n_indices = len(indices_arr)
+    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n_indices)
+    for i in range(n_indices):
+        if bodo.libs.array_kernels.isna(arr, i):
+            bodo.libs.array_kernels.setna(out_arr, i)
+        else:
+            out_arr[i] = dict_arr_out[indices_arr[i]]
+    return out_arr
+
+
+@register_jitable
+def str_endswith(arr, pat, na):  # pragma: no cover
+    """
+    Implement optimized string endswith for dictionary array.
+    Compute endswith once on each dictionary element.
+    """
+    # Pandas implementation:
+    # https://github.com/pandas-dev/pandas/blob/66e3805b8cabe977f40c05259cc3fcf7ead5687d/pandas/core/strings/object_array.py#L135
+
+    # Get the dictionary (info1)
+    dict_arr = arr._data
+    n_dict = len(dict_arr)
+    # Create bool array to store outputs
+    dict_arr_out = bodo.libs.bool_arr_ext.alloc_bool_array(n_dict)
+    # Compute endswith on the dictionary values
+    for i in range(n_dict):
+        # We assume there are no NaNs in the dictionary (info1)
+        dict_arr_out[i] = dict_arr[i].endswith(pat)
+
+    # Iterate over the array and assign values in the output
+    # boolean array from dict_arr_out.
+    indices_arr = arr._indices
+    n_indices = len(indices_arr)
+    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n_indices)
+    for i in range(n_indices):
+        if bodo.libs.array_kernels.isna(arr, i):
+            bodo.libs.array_kernels.setna(out_arr, i)
+        else:
+            out_arr[i] = dict_arr_out[indices_arr[i]]
+    return out_arr
+
+
+@numba.njit
+def str_series_contains_regex(arr, pat, case, flags, na, regex):  # pragma: no cover
+    """
+    Equivalent of bodo.hiframes.series_str_impl.series_contains_regex
+    but for dictionary encoded string arrays
+    """
+    ## Compute operation on the dictionary.
+    ## This is optimal since ideally this is much shorter than the actual array
+    ## and we can save the computation cost.
+
+    # Get the dictionary array (info1)
+    dict_arr = arr._data
+    # Wrap it in a pandas Series so we can extract a Pandas String array
+    # and call pandas' _str_contains on it. Normal boxing will create a
+    # numpy object array.
+    dict_arr_S = pd.Series(dict_arr)
+    # Compute the operation on the dictionary and save the output
+    with numba.objmode(dict_arr_out=bodo.boolean_array):
+        dict_arr_out = dict_arr_S.array._str_contains(pat, case, flags, na, regex)
+
+    ## Create output by indexing into dict_arr_out
+
+    # Get indices (info2)
+    indices_arr = arr._indices
+    # length of indices == length of str series == length of output
+    n_indices = len(indices_arr)
+    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n_indices)
+    # Loop over the indices and get the value from dict_arr_out
+    for i in range(n_indices):
+        if bodo.libs.array_kernels.isna(arr, i):
+            bodo.libs.array_kernels.setna(out_arr, i)
+        else:
+            out_arr[i] = dict_arr_out[indices_arr[i]]
+    return out_arr
+
+
+@register_jitable
+def str_contains_non_regex(arr, pat, case):  # pragma: no cover
+    """
+    Implement optimized string contains for dictionary array.
+    Compute contains once on each dictionary element.
+    This is for the non-regex case.
+    """
+    # Pandas implementation:
+    # https://github.com/pandas-dev/pandas/blob/66e3805b8cabe977f40c05259cc3fcf7ead5687d/pandas/core/strings/object_array.py#L115
+
+    # Get the dictionary (info1)
+    dict_arr = arr._data
+    n_dict = len(dict_arr)
+    # Create bool array to store outputs
+    dict_arr_out = bodo.libs.bool_arr_ext.alloc_bool_array(n_dict)
+
+    if not case:
+        upper_pat = pat.upper()
+
+    # Compute contains on the dictionary values
+    for i in range(n_dict):
+        # We assume there re no NaNs in the dictionary (info1)
+        if case:
+            dict_arr_out[i] = pat in dict_arr[i]
+        else:
+            dict_arr_out[i] = upper_pat in dict_arr[i].upper()
+
+    # Iterate over the array and assign values in the output
+    # boolean array from dict_arr_out.
+    indices_arr = arr._indices
+    n_indices = len(indices_arr)
+    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n_indices)
+    for i in range(n_indices):
+        if bodo.libs.array_kernels.isna(arr, i):
+            bodo.libs.array_kernels.setna(out_arr, i)
+        else:
+            out_arr[i] = dict_arr_out[indices_arr[i]]
+    return out_arr

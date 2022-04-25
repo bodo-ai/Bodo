@@ -482,28 +482,36 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
         # It not known at compile-time or the pattern isn't supported,
         # use Python's re.search in objmode
         if is_regex_unsupported(pat) or flags:
-            func_text += "  out_arr = bodo.hiframes.series_str_impl.series_contains_regex(S, pat, case, flags, na, regex)\n"
+            # optimized version for dictionary encoded arrays
+            if S_str.stype.data == bodo.dict_str_arr_type:
+                func_text += "  out_arr = bodo.libs.dict_arr_ext.str_series_contains_regex(arr, pat, case, flags, na, regex)\n"
+            else:
+                func_text += "  out_arr = bodo.hiframes.series_str_impl.series_contains_regex(S, pat, case, flags, na, regex)\n"
         else:
+            # get_search_regex handles dictionary encoded arrays as well
             func_text += "  get_search_regex(arr, case, bodo.libs.str_ext.unicode_to_utf8(pat), out_arr)\n"
 
     else:
-        func_text += "  numba.parfors.parfor.init_prange()\n"
-        # Only needed for the non-regex case-insensitive case
-        if is_overload_false(case):
-            func_text += "  upper_pat = pat.upper()\n"
-
-        func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
-        func_text += "      if bodo.libs.array_kernels.isna(arr, i):\n"
-        func_text += "          bodo.libs.array_kernels.setna(out_arr, i)\n"
-        func_text += "      else: \n"
-        if is_overload_true(case):
-            func_text += "          out_arr[i] = pat in arr[i]\n"
+        # optimized version for dictionary encoded arrays
+        if S_str.stype.data == bodo.dict_str_arr_type:
+            func_text += "  out_arr = bodo.libs.dict_arr_ext.str_contains_non_regex(arr, pat, case)\n"
         else:
-            func_text += "          out_arr[i] = upper_pat in arr[i].upper()\n"
+            func_text += "  numba.parfors.parfor.init_prange()\n"
+            # Only needed for the non-regex case-insensitive case
+            if is_overload_false(case):
+                func_text += "  upper_pat = pat.upper()\n"
+
+            func_text += "  for i in numba.parfors.parfor.internal_prange(l):\n"
+            func_text += "      if bodo.libs.array_kernels.isna(arr, i):\n"
+            func_text += "          bodo.libs.array_kernels.setna(out_arr, i)\n"
+            func_text += "      else: \n"
+            if is_overload_true(case):
+                func_text += "          out_arr[i] = pat in arr[i]\n"
+            else:
+                func_text += "          out_arr[i] = upper_pat in arr[i].upper()\n"
     func_text += (
         "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
     )
-
     loc_vars = {}
     exec(
         func_text,
@@ -917,6 +925,19 @@ def overload_str_method_startswith(S_str, pat, na=np.nan):
     not_supported_arg_check("startswith", "na", na, np.nan)
     str_arg_check("startswith", "pat", pat)
 
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_startswith_dict_impl(S_str, pat, na=np.nan):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_startswith(arr, pat, na)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_startswith_dict_impl
+
     def impl(S_str, pat, na=np.nan):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -939,6 +960,19 @@ def overload_str_method_startswith(S_str, pat, na=np.nan):
 def overload_str_method_endswith(S_str, pat, na=np.nan):
     not_supported_arg_check("endswith", "na", na, np.nan)
     str_arg_check("endswith", "pat", pat)
+
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_endswith_dict_impl(S_str, pat, na=np.nan):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_endswith(arr, pat, na)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_endswith_dict_impl
 
     def impl(S_str, pat, na=np.nan):  # pragma: no cover
         S = S_str._obj
