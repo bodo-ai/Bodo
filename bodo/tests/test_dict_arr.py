@@ -23,6 +23,101 @@ def dict_arr_value(request):
     return request.param
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(
+            pa.array(
+                [
+                    "ABCDD,OSAJD",
+                    "a1b2d314f,sdf234",
+                    "22!@#,$@#$AB",
+                    None,
+                    "A,C,V,B,B",
+                    "AA",
+                    "",
+                ]
+                * 2,
+                type=pa.dictionary(pa.int32(), pa.string()),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pa.array(
+                [
+                    "¿abc¡Y tú, quién te crees?",
+                    "ÕÕÕú¡úú,úũ¿ééé",
+                    "россия очень, холодная страна",
+                    None,
+                    "مرحبا, العالم ، هذا هو بودو",
+                    "Γειά σου ,Κόσμε",
+                    "Español es agra,dable escuchar",
+                ]
+                * 2,
+                type=pa.dictionary(pa.int32(), pa.string()),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pa.array(
+                [
+                    "아1, 오늘 저녁은 뭐먹지",
+                    "나,는 유,니,코,드 테스팅 중",
+                    None,
+                    "こんにち,は世界",
+                    "大处着眼，小处着手。",
+                    "오늘도 피츠버그의 날씨는 매우, 구림",
+                    "한국,가,고싶다ㅠ",
+                ]
+                * 2,
+                type=pa.dictionary(pa.int32(), pa.string()),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pa.array(
+                [
+                    "😀🐍,⚡😅😂",
+                    "🌶🍔,🏈💔💑💕",
+                    "𠁆𠁪,𠀓𠄩𠆶",
+                    None,
+                    "🏈,💔,𠄩,😅",
+                    "🠂,🠋🢇🄐,🞧",
+                    "🢇🄐,🏈𠆶💑😅",
+                ]
+                * 2,
+                type=pa.dictionary(pa.int32(), pa.string()),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pa.array(
+            [
+                "A",
+                " bbCD",
+                " mCDm",
+                "C,ABB, D",
+                "B,B,CC",
+                "ABBD",
+                "ABCDD,OSAJD",
+                "a1b2d314f,sdf234",
+                "C,ABB,D",
+                "¿abc¡Y tú, quién te cre\t\tes?",
+                "오늘도 피츠버그의 날씨는 매\t우, 구림",
+                None,
+                "🏈,💔,𠄩,😅",
+                "大处着眼，小处着手。",
+                "🠂,🠋🢇🄐,🞧",
+                "россия очень, холодная страна",
+                "",
+                " ",
+            ],
+            type=pa.dictionary(pa.int32(), pa.string()),
+        ),
+    ]
+)
+def test_unicode_dict_str_arr(request):
+    return request.param
+
+
 @pytest.mark.slow
 def test_unbox(dict_arr_value, memory_leak_check):
     # just unbox
@@ -216,6 +311,168 @@ def test_str_replace(memory_leak_check):
     bodo_func(A1)
     f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     assert dist_IR_contains(f_ir, "str_replace")
+
+
+def test_str_startswith(test_unicode_dict_str_arr, memory_leak_check):
+    """
+    test optimization of Series.str.startswith() for dict array
+    """
+
+    def impl1(A):
+        return pd.Series(A).str.startswith("AB")
+
+    def impl2(A):
+        return pd.Series(A).str.startswith("테스")
+
+    check_func(
+        impl1,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.startswith("AB"),
+    )
+    check_func(
+        impl2,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.startswith("테스"),
+    )
+
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(test_unicode_dict_str_arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_startswith")
+
+
+def test_str_endswith(test_unicode_dict_str_arr, memory_leak_check):
+    """
+    test optimization of Series.str.endswith() for dict array
+    """
+
+    def impl1(A):
+        return pd.Series(A).str.endswith("AB")
+
+    def impl2(A):
+        return pd.Series(A).str.endswith("테스팅")
+
+    check_func(
+        impl1,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.endswith("AB"),
+    )
+    check_func(
+        impl2,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.endswith("테스"),
+    )
+
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(test_unicode_dict_str_arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_endswith")
+
+
+@pytest.mark.parametrize("case", [True, False])
+def test_str_contains_regex(memory_leak_check, test_unicode_dict_str_arr, case):
+    """
+    test optimization of Series.str.contains(regex=True) for dict array
+    """
+
+    def impl1(A):
+        return pd.Series(A).str.contains("AB*", regex=True, case=case)
+
+    def impl2(A):
+        return pd.Series(A).str.contains("피츠버*", regex=True, case=case)
+
+    def impl3(A):
+        return pd.Series(A).str.contains("ab*", regex=True, case=case)
+
+    check_func(
+        impl1,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.contains(
+            "AB*", regex=True, case=case
+        ),
+    )
+    check_func(
+        impl2,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.contains(
+            "피츠버*", regex=True, case=case
+        ),
+    )
+    check_func(
+        impl3,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.contains(
+            "ab*", regex=True, case=case
+        ),
+    )
+
+    # Test flags (and hence `str_series_contains_regex`)
+    import re
+
+    flag = re.M.value
+
+    def impl4(A):
+        return pd.Series(A).str.contains(r"ab*", regex=True, case=case, flags=flag)
+
+    check_func(
+        impl4,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.contains(
+            r"ab*", regex=True, case=case, flags=flag
+        ),
+    )
+
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl4)
+    bodo_func(test_unicode_dict_str_arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_series_contains_regex")
+
+
+@pytest.mark.parametrize("case", [True, False])
+def test_str_contains_noregex(memory_leak_check, test_unicode_dict_str_arr, case):
+    """
+    test optimization of Series.str.contains(regex=False) for dict array
+    """
+
+    def impl1(A):
+        return pd.Series(A).str.contains("AB", regex=False, case=case)
+
+    def impl2(A):
+        return pd.Series(A).str.contains("피츠버", regex=False, case=case)
+
+    def impl3(A):
+        return pd.Series(A).str.contains("ab", regex=False, case=case)
+
+    check_func(
+        impl1,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.contains(
+            "AB", regex=False, case=case
+        ),
+    )
+    check_func(
+        impl2,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.contains(
+            "피츠버", regex=False, case=case
+        ),
+    )
+    check_func(
+        impl3,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.contains(
+            "ab", regex=False, case=case
+        ),
+    )
+
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(test_unicode_dict_str_arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_contains_non_regex")
 
 
 def test_sort_values(memory_leak_check):

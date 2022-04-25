@@ -2473,7 +2473,6 @@ _get_search_regex = types.ExternalFunction(
 
 @numba.njit(no_cpython_wrapper=True)
 def get_search_regex(in_arr, case, pat, out_arr):  # pragma: no cover
-    in_arr = decode_if_dict_array(in_arr)
     in_arr_info = array_to_info(in_arr)
     out_arr_info = array_to_info(out_arr)
     _get_search_regex(
