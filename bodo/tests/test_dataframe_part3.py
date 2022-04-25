@@ -1385,7 +1385,12 @@ def test_df_melt(id_arr, value_arr, memory_leak_check):
 @pytest.mark.parametrize(
     "df_dict",
     [
-        {"A": ["a", "b", "c"], "B": ["d", "e", "f"], "C": [1, 2, 3], "D": [4, 5, 6]},
+        {
+            "A": ["a", "b", "c"] * 3,
+            "B": ["d", "e", "f"] * 3,
+            "C": [1, 2, 3] * 3,
+            "D": [4, 5, 6] * 3,
+        },
         {
             "A": ["a", "b", "c"] * 3,
             "B": ["d", "e", "f"] * 3,
@@ -1435,10 +1440,16 @@ def test_df_melt_diff_types(df_dict, memory_leak_check):
     df = pd.DataFrame(df_dict)
 
     if "C" in df.columns:
-        check_func(test_impl, (df, ["A", "B"], ["C", "D"]))
-        check_func(test_impl, (df, ["B", "A"], ["D", "C"]))
+        check_func(
+            test_impl, (df, ["A", "B"], ["C", "D"]), sort_output=True, reset_index=True
+        )
+        check_func(
+            test_impl, (df, ["B", "A"], ["D", "C"]), sort_output=True, reset_index=True
+        )
     elif 3 in df.columns:
-        check_func(test_impl, (df, ["B", "A"], [3, 4]))
+        check_func(
+            test_impl, (df, ["B", "A"], [3, 4]), sort_output=True, reset_index=True
+        )
 
 
 @pytest.mark.parametrize("use_index", [True, False])
