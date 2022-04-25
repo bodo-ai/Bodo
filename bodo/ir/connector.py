@@ -11,6 +11,7 @@ from numba.extending import box, models, register_model
 
 from bodo.hiframes.table import TableType
 from bodo.transforms.distributed_analysis import Distribution
+from bodo.transforms.table_column_del_pass import get_live_column_nums_block
 from bodo.utils.utils import debug_prints
 
 
@@ -104,7 +105,7 @@ def connector_typeinfer(node, typeinferer):
             )
         return
 
-    if node.connector_typ == "parquet":
+    if node.connector_typ in ("parquet", "sql"):
         typeinferer.lock_type(
             node.out_vars[0].name, TableType(tuple(node.out_types)), loc=node.loc
         )
@@ -302,3 +303,105 @@ def cast_float_to_nullable(df, df_type):
             col_map[dtype].append(df.columns[i])
     for typ, cols in col_map.items():
         df[cols] = df[cols].astype(typ)
+
+
+def connector_table_column_use(node, block_use_map, equiv_vars, typemap):
+    """
+    Function to handle any necessary processing for column uses
+    with a particular table. This is used for connectors that define
+    a table and don't use any other table, so this does nothing.
+
+    This is currently used by:
+        CSVReader
+        ParquetReader
+        SQLReader
+    """
+    return
+
+
+def base_connector_remove_dead_columns(
+    node, column_live_map, equiv_vars, typemap, nodename, possible_cols
+):
+    """
+    Function that tracks which columns to prune from a connector IR node.
+    This updates type_usecol_offset which stores which arrays in the
+    types will need to actually be loaded.
+
+    This is mapped to the used columns during distributed pass.
+    """
+    # The function assumes nodes have exactly 2 vars
+    assert len(node.out_vars) == 2, f"invalid {nodename} node"
+    table_var_name = node.out_vars[0].name
+    assert isinstance(
+        typemap[table_var_name], TableType
+    ), f"{nodename} Node Table must be a TableType"
+    # if possible_cols == [] then the table is dead and we are only loading
+    # the index. See 'remove_dead_sql' or 'remove_dead_pq' for examples.
+    if possible_cols:
+        # Compute all columns that are live at this statement.
+        used_columns, use_all = get_live_column_nums_block(
+            column_live_map, equiv_vars, table_var_name
+        )
+        used_columns = trim_extra_used_columns(used_columns, len(possible_cols))
+        if not use_all and not used_columns:
+            # If we see no specific column is need some operations need some
+            # column but no specific column. For example:
+            # T = read_parquet(table(0, 1, 2, 3))
+            # n = len(T)
+            #
+            # Here we just load column 0. If no columns are actually needed, dead
+            # code elimination will remove the entire IR var in 'remove_dead_parquet'.
+            #
+            used_columns = [0]
+        if not use_all and len(used_columns) != len(node.type_usecol_offset):
+            # Update the type offset. If an index column its not included in
+            # the original table. If we have code like
+            #
+            # T = read_csv(table(0, 1, 2, 3)) # Assume index column is column 2
+            #
+            # We type T without the index column as Table(arr0, arr1, arr3).
+            # As a result once we apply optimizations, all the column indices
+            # will refer to the index within that type, not the original file.
+            #
+            # i.e. T[2] == arr3
+            #
+            # This means that used_columns will track the offsets within the type,
+            # not the actual column numbers in the file. We keep these offsets separate
+            # while finalizing DCE and we will update the file with the actual columns later
+            # in distirbuted pass.
+            #
+            # For more information see:
+            # https://bodo.atlassian.net/wiki/spaces/B/pages/921042953/Table+Structure+with+Dead+Columns#User-Provided-Column-Pruning-at-the-Source
+
+            node.type_usecol_offset = used_columns
+            # Return that this table was updated
+            return True
+    return False
+
+
+def is_connector_table_parallel(node, array_dists, typemap, node_name):
+    """
+    Returns if the parallel implementation should be used for
+    a connector that returns two variables, a table and an
+    index.
+    """
+    parallel = False
+    if array_dists is not None:
+        # table is parallel
+        table_varname = node.out_vars[0].name
+        parallel = array_dists[table_varname] in (
+            Distribution.OneD,
+            Distribution.OneD_Var,
+        )
+        index_varname = node.out_vars[1].name
+        # index array parallelism should match the table
+        assert (
+            typemap[index_varname] == types.none
+            or not parallel
+            or array_dists[index_varname]
+            in (
+                Distribution.OneD,
+                Distribution.OneD_Var,
+            )
+        ), f"{node_name} data/index parallelization does not match"
+    return parallel

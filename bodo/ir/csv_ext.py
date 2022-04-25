@@ -29,7 +29,6 @@ from bodo.libs.str_arr_ext import StringArrayType, string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.table_column_del_pass import (
-    get_live_column_nums_block,
     ir_extension_table_column_use,
     remove_dead_column_extensions,
 )
@@ -234,8 +233,6 @@ def csv_distributed_run(
     This produces different code depending on if the read_csv call contains
     chunksize or not.
     """
-    # parallel read flag
-    parallel = False
     # skiprows as `ir.Const` indicates default value.
     # If it's a list, it will never be `ir.Const`
     skiprows_typ = (
@@ -244,6 +241,8 @@ def csv_distributed_run(
         else types.unliteral(typemap[csv_node.skiprows.name])
     )
     if csv_node.chunksize is not None:
+        # parallel read flag
+        parallel = False
         # Add debug info about column pruning. Chunksize doesn't yet prune
         # any columns.
         if bodo.user_logging.get_verbose_level() >= 1:
@@ -341,24 +340,9 @@ def csv_distributed_run(
 
     # Default Case
     # Parallel is based on table + index var
-    if array_dists is not None:
-        # table is parallel
-        table_varname = csv_node.out_vars[0].name
-        parallel = array_dists[table_varname] in (
-            distributed_pass.Distribution.OneD,
-            distributed_pass.Distribution.OneD_Var,
-        )
-        index_varname = csv_node.out_vars[1].name
-        # index array parallelism should match the table
-        assert (
-            typemap[index_varname] == types.none
-            or not parallel
-            or array_dists[index_varname]
-            in (
-                distributed_pass.Distribution.OneD,
-                distributed_pass.Distribution.OneD_Var,
-            )
-        ), "pq data/index parallelization does not match"
+    parallel = bodo.ir.connector.is_connector_table_parallel(
+        csv_node, array_dists, typemap, "CSVReader"
+    )
 
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
     # get column variables
@@ -459,6 +443,12 @@ def csv_distributed_run(
     # Set the lhs of the final two assigns to the passed in variables.
     nodes[-1].target = csv_node.out_vars[1]
     nodes[-2].target = csv_node.out_vars[0]
+    # At most one of the table and the index
+    # can be dead because otherwise the whole
+    # node should have already been removed.
+    assert not (
+        csv_node.index_column_index is None and not final_usecols
+    ), "At most one of table and index should be dead if the CSV IR node is live"
     if csv_node.index_column_index is None:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)
@@ -479,64 +469,16 @@ def csv_remove_dead_column(csv_node, column_live_map, equiv_vars, typemap):
     if csv_node.chunksize is not None:
         # We skip column pruning with chunksize.
         return False
-    # All csv_nodes should have a two variables, the first being the table, and the second being the idxcol
-    assert len(csv_node.out_vars) == 2, "invalid CsvReader node"
-    table_var_name = csv_node.out_vars[0].name
-    # out_vars[0] is either a TableType (the normal case) or a reader
-    # (the chunksize case). In latter case we don't eliminate any columns
-    # at the source (consistent with the previous DataFrame type).
-    # if csv_node.usecols is empty, the table is dead. See remove_dead_csv
-    if isinstance(typemap[table_var_name], TableType) and csv_node.usecols:
-        # Compute all columns that are live at this statement.
-        used_columns, use_all = get_live_column_nums_block(
-            column_live_map, equiv_vars, table_var_name
-        )
-        used_columns = bodo.ir.connector.trim_extra_used_columns(
-            used_columns, len(csv_node.usecols)
-        )
-        if not use_all and not used_columns:
-            # If we see no specific column is need some operations need some
-            # column but no specific column. For example:
-            # T = read_csv(table(0, 1, 2, 3))
-            # n = len(T)
-            #
-            # Here we just load column 0. If no columns are actually needed, dead
-            # code elimination will remove the entire IR var in 'remove_dead_csv'.
-            #
-            used_columns = [0]
-        if not use_all and len(used_columns) != len(csv_node.type_usecol_offset):
-            # Update the type offset. If we have code like
-            #
-            # T = read_csv(table(0, 1, 2, 3), usecols=[1, 2])
-            #
-            # Then T is typed after applying use cols, so the type
-            # is Table(arr1, arr2). As a result once we apply optimizations,
-            # all the column indices will refer to the index within that
-            # type, not the original file.
-            #
-            # i.e. T[1] == arr2
-            #
-            # This means that used_columns will track the offsets within the type,
-            # not the actual column numbers in the file. We keep these offsets separate
-            # while finalizing DCE and we will update the file with the actual columns later
-            # in 'csv_distributed_run'.
-            #
-            # For more information see:
-            # https://bodo.atlassian.net/wiki/spaces/B/pages/921042953/Table+Structure+with+Dead+Columns#User-Provided-Column-Pruning-at-the-Source
-
-            csv_node.type_usecol_offset = used_columns
-            # Return that this table was updated
-            return True
-    return False
-
-
-def csv_table_column_use(csv_node, block_use_map, equiv_vars, typemap):
-    """
-    Function to handle any necessary processing for column uses
-    with a particular table. CsvReader defines a table and doesn't
-    use any other table, so this does nothing.
-    """
-    return
+    return bodo.ir.connector.base_connector_remove_dead_columns(
+        csv_node,
+        column_live_map,
+        equiv_vars,
+        typemap,
+        "CSVReader",
+        # usecols is set to an empty list if the table is dead
+        # see 'remove_dead_csv'
+        csv_node.usecols,
+    )
 
 
 numba.parfors.array_analysis.array_analysis_extensions[
@@ -560,7 +502,7 @@ ir_utils.build_defs_extensions[
 ] = bodo.ir.connector.build_connector_definitions
 distributed_pass.distributed_run_extensions[CsvReader] = csv_distributed_run
 remove_dead_column_extensions[CsvReader] = csv_remove_dead_column
-ir_extension_table_column_use[CsvReader] = csv_table_column_use
+ir_extension_table_column_use[CsvReader] = bodo.ir.connector.connector_table_column_use
 
 
 def _get_dtype_str(t):
@@ -866,7 +808,7 @@ def _gen_read_csv_objmode(
     # array of used columns to load from pd.read_csv()
     # using a global array (constant lowered) for faster compilation for many columns
     use_cols_arr = np.array(
-        usecols + ([idx_col_index] if idx_col_index is not None else [])
+        usecols + ([idx_col_index] if idx_col_index is not None else []), dtype=np.int64
     )
     glbs[f"usecols_arr_{call_id}"] = use_cols_arr
     func_text += f"  usecols_arr_{call_id}_2 = usecols_arr_{call_id}\n"

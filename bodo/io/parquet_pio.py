@@ -542,25 +542,9 @@ def pq_distributed_run(
             )
 
     # parallel read flag
-    parallel = False
-    if array_dists is not None:
-        # table is parallel
-        table_varname = pq_node.out_vars[0].name
-        parallel = array_dists[table_varname] in (
-            distributed_pass.Distribution.OneD,
-            distributed_pass.Distribution.OneD_Var,
-        )
-        index_varname = pq_node.out_vars[1].name
-        # index array parallelism should match the table
-        assert (
-            typemap[index_varname] == types.none
-            or not parallel
-            or array_dists[index_varname]
-            in (
-                distributed_pass.Distribution.OneD,
-                distributed_pass.Distribution.OneD_Var,
-            )
-        ), "pq data/index parallelization does not match"
+    parallel = bodo.ir.connector.is_connector_table_parallel(
+        pq_node, array_dists, typemap, "ParquetReader"
+    )
 
     # Check for any unsupported columns still remaining
     if pq_node.unsupported_columns:
@@ -628,6 +612,18 @@ def pq_distributed_run(
     nodes[-2].target = pq_node.out_vars[0]
     # assign output index array
     nodes[-1].target = pq_node.out_vars[1]
+    # At most one of the table and the index
+    # can be dead because otherwise the whole
+    # node should have already been removed.
+    assert not (
+        pq_node.index_column_index is None and not pq_node.type_usecol_offset
+    ), "At most one of table and index should be dead if the Parquet IR node is live"
+    if pq_node.index_column_index is None:
+        # If the index_col is dead, remove the node.
+        nodes.pop(-1)
+    elif not pq_node.type_usecol_offset:
+        # If the table is dead, remove the node
+        nodes.pop(-2)
 
     return nodes
 

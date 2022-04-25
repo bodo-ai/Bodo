@@ -1,5 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import datetime
+import io
 import json
 import os
 import random
@@ -11,10 +12,13 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    check_logger_no_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
 from bodo.tests.utils import (
-    SeriesOptTestPipeline,
-    _check_connector_columns,
-    _check_for_io_reader_filters,
     check_func,
     get_snowflake_connection_string,
     get_start_end,
@@ -226,6 +230,39 @@ def test_sql_single_column(memory_leak_check):
     check_func(test_impl2, (), check_dtype=False)
 
 
+def test_sql_use_index_column(memory_leak_check):
+    """
+    Test that loading a single and index using index_col has a correct result.
+    This can break if dead column elimination is applied incorrectly.
+    """
+
+    def write_sql(df, table_name, conn):
+        df.to_sql(table_name, conn, if_exists="replace")
+
+    conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+    table_name = "test_small_table"
+
+    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5, "C": [31, 247] * 5})
+    # Create the table once.
+    if bodo.get_rank() == 0:
+        write_sql(df, table_name, conn)
+    bodo.barrier()
+
+    def test_impl():
+        sql_request = "select A, B, C from test_small_table"
+        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
+        frame = pd.read_sql(sql_request, conn, index_col="A")
+        return frame["B"]
+
+    check_func(test_impl, (), check_dtype=False)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(test_impl)()
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['B', 'A']")
+
+
 def test_read_sql_hardcoded_twocol_aws(memory_leak_check):
     """Selecting two columns without dates"""
 
@@ -308,9 +345,122 @@ def test_sql_snowflake_single_column(memory_leak_check):
     query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
     # Pandas will load Int64 instead of the Int16 we can get from snowflake.
     check_func(impl, (query, conn), check_dtype=False)
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-    bodo_func(query, conn)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)(query, conn)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_sql_snowflake_use_index(memory_leak_check):
+    """
+    Tests loading using index_col with pd.read_sql from snowflake
+    has a correct result and only loads the columns that need loading.
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn, index_col="l_partkey")
+        # Returns l_suppkey and the index
+        return df["l_suppkey"]
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+    # Pandas will load Int64 instead of the Int16 we can get from snowflake.
+    check_func(impl, (query, conn), check_dtype=False)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)(query, conn)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey', 'l_partkey']")
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_sql_snowflake_use_index_dead_table(memory_leak_check):
+    """
+    Tests loading using index_col with pd.read_sql from snowflake
+    where all columns are dead.
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn, index_col="l_partkey")
+        # Returns just the index
+        return df.index
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+    # Pandas will load Int64 instead of the Int16 we can get from snowflake.
+    check_func(impl, (query, conn), check_dtype=False)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)(query, conn)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_partkey']")
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_sql_snowflake_no_index_dead_table(memory_leak_check):
+    """
+    Tests loading with pd.read_sql from snowflake
+    where all columns are dead. This should still load
+    a single column to get the length for the index.
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        # Returns just the index
+        return df.index
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+    # Pandas will load Int64 instead of the Int16 we can get from snowflake.
+    check_func(impl, (query, conn), check_dtype=False)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)(query, conn)
+        # Check the columns were pruned. l_orderkey is determined
+        # by testing and we just need to confirm it loads a single column.
+        check_logger_msg(stream, "Columns loaded ['l_orderkey']")
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_sql_snowflake_use_index_dead_index(memory_leak_check):
+    """
+    Tests loading using index_col with pd.read_sql from snowflake
+    where the index is dead.
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn, index_col="l_partkey")
+        # Returns just l_suppkey array
+        return df["l_suppkey"].values
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+    # Pandas will load Int64 instead of the Int16 we can get from snowflake.
+    check_func(impl, (query, conn), check_dtype=False)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)(query, conn)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
@@ -388,39 +538,49 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
     check_func(
         impl_integer, (query, conn, int_val), check_dtype=False, reset_index=True
     )
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_integer)
-    bodo_func(query, conn, int_val)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(
-        bodo_func,
-        [
-            "l_suppkey",
-        ],
-        bodo.ir.sql_ext.SqlReader,
-    )
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_integer)(query, conn, int_val)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
     str_val = "O"
     check_func(impl_string, (query, conn, str_val), check_dtype=False, reset_index=True)
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_string)
-    bodo_func(query, conn, str_val)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_string)(query, conn, str_val)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
     date_val = datetime.date(1996, 4, 12)
     check_func(impl_date, (query, conn, date_val), check_dtype=False, reset_index=True)
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_date)
-    bodo_func(query, conn, date_val)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_date)(query, conn, date_val)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
     ts_val = pd.Timestamp(year=1997, month=4, day=12)
     check_func(
         impl_timestamp, (query, conn, ts_val), check_dtype=False, reset_index=True
     )
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_timestamp)
-    bodo_func(query, conn, ts_val)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_timestamp)(query, conn, ts_val)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
     check_func(
         impl_mixed,
@@ -428,10 +588,14 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
         check_dtype=False,
         reset_index=True,
     )
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_mixed)
-    bodo_func(query, conn, int_val, str_val, date_val, ts_val)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_mixed)(query, conn, int_val, str_val, date_val, ts_val)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
@@ -472,34 +636,54 @@ def test_sql_snowflake_na_pushdown(memory_leak_check):
     query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
 
     check_func(impl_or_isna, (query, conn), check_dtype=False, reset_index=True)
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_or_isna)
-    bodo_func(query, conn)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_or_isna)(query, conn)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
     check_func(impl_and_notna, (query, conn), check_dtype=False, reset_index=True)
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_and_notna)
-    bodo_func(query, conn)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_and_notna)(query, conn)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
     check_func(impl_or_isnull, (query, conn), check_dtype=False, reset_index=True)
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_or_isnull)
-    bodo_func(query, conn)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_or_isnull)(query, conn)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
     check_func(impl_and_notnull, (query, conn), check_dtype=False, reset_index=True)
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_and_notnull)
-    bodo_func(query, conn)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_and_notnull)(query, conn)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
     check_func(impl_just_nona, (query, conn), check_dtype=False, reset_index=True)
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_just_nona)
-    bodo_func(query, conn)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_just_nona)(query, conn)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
@@ -531,26 +715,38 @@ def test_sql_snowflake_isin_pushdown(memory_leak_check):
     query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
 
     check_func(impl_isin, (query, conn, isin_list), check_dtype=False, reset_index=True)
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_isin)
-    bodo_func(query, conn, isin_list)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_isin)(query, conn, isin_list)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
     check_func(
         impl_isin_or, (query, conn, isin_list), check_dtype=False, reset_index=True
     )
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_isin_or)
-    bodo_func(query, conn, isin_list)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_isin_or)(query, conn, isin_list)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
     check_func(
         impl_isin_and, (query, conn, isin_list), check_dtype=False, reset_index=True
     )
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl_isin_and)
-    bodo_func(query, conn, isin_list)
-    _check_for_io_reader_filters(bodo_func, bodo.ir.sql_ext.SqlReader)
-    _check_connector_columns(bodo_func, ["l_suppkey"], bodo.ir.sql_ext.SqlReader)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_isin_and)(query, conn, isin_list)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
@@ -659,6 +855,31 @@ def test_snowflake_empty_filter(memory_leak_check):
     conn = get_snowflake_connection_string(db, schema)
     query = "SELECT L_ORDERKEY FROM LINEITEM"
     check_func(test_impl, (query, conn), check_dtype=False)
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_snowflake_dead_node(memory_leak_check):
+    """
+    Tests when read_sql should be eliminated from the code.
+    """
+
+    def test_impl(query, conn):
+        # This query should be optimized out.
+        df = pd.read_sql(query, conn)
+        return 1
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    query = "SELECT L_ORDERKEY FROM LINEITEM"
+    check_func(test_impl, (query, conn))
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(test_impl)(query, conn)
+        # Check that no Columns loaded message occurred,
+        # so the whole node was deleted.
+        check_logger_no_msg(stream, "Columns loaded")
 
 
 # ---------------------Oracle Database------------------------#
