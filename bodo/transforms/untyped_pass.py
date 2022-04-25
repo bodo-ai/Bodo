@@ -880,9 +880,9 @@ class UntypedPass:
         # parse_dates = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 5, "parse_dates", default=-1
         # )
-        columns = self._get_const_arg(
-            "read_sql", rhs.args, kws, 6, "columns", rhs.loc, default=""
-        )
+        # columns = self._get_const_arg(
+        #     "read_sql", rhs.args, kws, 6, "columns", rhs.loc, default=""
+        # )
         # chunksize = get_call_expr_arg("read_sql", rhs.args, kws, 7, "chunksize", -1)
 
         # SUPPORTED:
@@ -892,9 +892,11 @@ class UntypedPass:
         # UNSUPPORTED:
         # chunksize is unsupported because it is a different API and it makes for a different usage of pd.read_sql
         # columns   is unsupported because selecting columns could actually be done in SQL.
+        # parse_dates is unsupported because it requires remapping which subset of loaded columns should be updated.
+        #        and needs to be implemented with snowflake.
         # coerce_float is currently unsupported but it could be useful to support it.
         # params is currently unsupported because not needed for mysql but surely will be needed later.
-        supported_args = ("sql", "con", "index_col", "parse_dates")
+        supported_args = ("sql", "con", "index_col")
 
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
@@ -914,6 +916,23 @@ class UntypedPass:
             is_select_query,
         ) = _get_sql_types_arr_colnames(sql_const, con_const, lhs)
 
+        index_ind = None
+        index_col_name = None
+        index_arr_typ = types.none
+        if index_col != -1 and index_col != False:
+            # convert column number to column name
+            if isinstance(index_col, int):
+                index_ind = index_col
+                index_col = columns[index_col]
+            else:
+                index_ind = columns.index(index_col)
+            # Set the information for the index type
+            index_col_name = index_col
+            index_arr_typ = out_types[index_ind]
+            # Remove the index column from the table.
+            columns.remove(index_col_name)
+            out_types.remove(index_arr_typ)
+
         nodes = [
             sql_ext.SqlReader(
                 sql_const,
@@ -928,43 +947,41 @@ class UntypedPass:
                 unsupported_columns,
                 unsupported_arrow_types,
                 is_select_query,
+                index_col_name,
+                index_arr_typ,
             )
         ]
 
-        columns = columns.copy()  # copy since modified below
-        n_cols = len(columns)
-        args = ["data{}".format(i) for i in range(n_cols)]
-        data_args = args.copy()
+        data_args = ["table_val", "idx_arr_val"]
 
-        # one column is index
-        if index_col != -1 and index_col != False:
-            # convert column number to column name
-            if isinstance(index_col, int):
-                index_col = columns[index_col]
-            index_ind = columns.index(index_col)
-            index_arg = "bodo.utils.conversion.convert_to_index({})".format(
-                data_args[index_ind]
+        if index_ind is not None:
+            # Convert the output array to index
+            index_arg = f"bodo.utils.conversion.convert_to_index({data_args[1]}, {index_col_name!r})"
+            index_type = bodo.utils.typing.index_typ_from_dtype_name(
+                index_arr_typ.dtype, index_col_name
             )
-            columns.remove(index_col)
-            data_args.remove(data_args[index_ind])
         else:
             # generate RangeIndex as default index
-            assert len(data_args) > 0
-            index_arg = "bodo.hiframes.pd_index_ext.init_range_index(0, len({}), 1, None)".format(
-                data_args[0]
-            )
+            index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
+            index_type = RangeIndexType(None)
 
-        # Below we assume that the columns are strings
-        col_var = gen_const_tup(columns)
-        func_text = "def _init_df({}):\n".format(", ".join(args))
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
-            ", ".join(data_args), index_arg, col_var
+        # Create the output DataFrameType. This will be lowered as a Typeref for use with TableFormat
+        df_type = DataFrameType(
+            tuple(out_types),
+            index_type,
+            tuple(columns),
+            is_table_format=True,
         )
+
+        func_text = f"def _init_df({data_args[0]}, {data_args[1]}):\n"
+        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, df_type)\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars["_init_df"]
 
-        nodes += compile_func_single_block(_init_df, data_arrs, lhs)
+        nodes += compile_func_single_block(
+            _init_df, data_arrs, lhs, extra_globals={"df_type": df_type}
+        )
         return nodes
 
     def _handle_pd_read_excel(self, assign, lhs, rhs, label):
@@ -2924,9 +2941,13 @@ def _get_sql_types_arr_colnames(sql_const, con_const, lhs):
     # date columns
     date_cols = []
 
-    columns, data_arrs, out_types = _get_read_file_col_info(
+    columns, _, out_types = _get_read_file_col_info(
         dtype_map, date_cols, col_names, lhs
     )
+    data_arrs = [
+        ir.Var(lhs.scope, mk_unique_var("sql_table"), lhs.loc),
+        ir.Var(lhs.scope, mk_unique_var("index_col"), lhs.loc),
+    ]
     return (
         db_type,
         columns,

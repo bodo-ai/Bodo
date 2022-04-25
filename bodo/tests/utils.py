@@ -677,7 +677,12 @@ def _test_equal(
         if sort_output:
             py_out = py_out.sort_values()
             bodo_out = bodo_out.sort_values()
-        pd.testing.assert_index_equal(bodo_out, py_out, check_names=check_names)
+        pd.testing.assert_index_equal(
+            bodo_out,
+            py_out,
+            check_names=check_names,
+            exact="equiv" if check_dtype else False,
+        )
     elif isinstance(py_out, pd.DataFrame):
         if sort_output:
             py_out = sort_dataframe_values_index(py_out)
@@ -1720,21 +1725,6 @@ def _check_for_io_reader_filters(bodo_func, node_class):
         assert not (is_assign(stmt) and is_expr(stmt.value, "getitem"))
 
     assert read_found
-
-
-def _check_connector_columns(bodo_func, col_names, node_class):
-    """make sure Connector node has only the given list of columns"""
-    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    sql_read_found = False
-    for stmt in fir.blocks[0].body:
-        if isinstance(stmt, node_class):
-            stored_col_names = stmt.df_colnames
-            assert sorted(stored_col_names) == sorted(
-                col_names
-            ), "Expected columns do not match stored columns"
-            sql_read_found = True
-
-    assert sql_read_found
 
 
 def _ensure_func_calls_optimized_out(bodo_func, call_names):

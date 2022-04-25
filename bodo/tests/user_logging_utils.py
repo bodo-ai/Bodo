@@ -58,3 +58,16 @@ def check_logger_msg(stream, msg):
     """
     if bodo.get_rank() == 0:
         assert msg in stream.getvalue()
+
+
+def check_logger_no_msg(stream, msg):
+    """
+    Checks that a specific msg is not found inside logger.
+    This simply checks if the logger contains the exact
+    msg string and doesn't not check a regex.
+
+    We only check the logger on rank 0 because we only
+    write on rank 0.
+    """
+    if bodo.get_rank() == 0:
+        assert msg not in stream.getvalue()

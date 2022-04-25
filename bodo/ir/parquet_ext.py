@@ -9,7 +9,6 @@ import bodo.ir.connector
 from bodo.hiframes.table import Table, TableType  # noqa
 from bodo.transforms import distributed_analysis
 from bodo.transforms.table_column_del_pass import (
-    get_live_column_nums_block,
     ir_extension_table_column_use,
     remove_dead_column_extensions,
 )
@@ -131,65 +130,16 @@ def pq_remove_dead_column(pq_node, column_live_map, equiv_vars, typemap):
 
     This is mapped to the actual file columns in during distributed pass.
     """
-    # All pq_nodes should have 2 vars
-    assert len(pq_node.out_vars) == 2, "invalid ParquetReader node"
-    table_var_name = pq_node.out_vars[0].name
-    assert isinstance(
-        typemap[table_var_name], TableType
-    ), "Parquet Node Table must be a TableType"
-    # if col_indices == [] then the table is dead and we are only loading
-    # the index. See 'remove_dead_pq'
-    if pq_node.col_indices:
-        # Compute all columns that are live at this statement.
-        used_columns, use_all = get_live_column_nums_block(
-            column_live_map, equiv_vars, table_var_name
-        )
-        used_columns = bodo.ir.connector.trim_extra_used_columns(
-            used_columns, len(pq_node.col_indices)
-        )
-        if not use_all and not used_columns:
-            # If we see no specific column is need some operations need some
-            # column but no specific column. For example:
-            # T = read_parquet(table(0, 1, 2, 3))
-            # n = len(T)
-            #
-            # Here we just load column 0. If no columns are actually needed, dead
-            # code elimination will remove the entire IR var in 'remove_dead_parquet'.
-            #
-            used_columns = [0]
-        if not use_all and len(used_columns) != len(pq_node.type_usecol_offset):
-            # Update the type offset. If an index column its not included in
-            # the original table. If we have code like
-            #
-            # T = read_csv(table(0, 1, 2, 3)) # Assume index column is column 2
-            #
-            # We type T without the index column as Table(arr0, arr1, arr3).
-            # As a result once we apply optimizations, all the column indices
-            # will refer to the index within that type, not the original file.
-            #
-            # i.e. T[2] == arr3
-            #
-            # This means that used_columns will track the offsets within the type,
-            # not the actual column numbers in the file. We keep these offsets separate
-            # while finalizing DCE and we will update the file with the actual columns later
-            # in distirbuted pass.
-            #
-            # For more information see:
-            # https://bodo.atlassian.net/wiki/spaces/B/pages/921042953/Table+Structure+with+Dead+Columns#User-Provided-Column-Pruning-at-the-Source
-
-            pq_node.type_usecol_offset = used_columns
-            # Return that this table was updated
-            return True
-    return False
-
-
-def pq_table_column_use(pq_node, block_use_map, equiv_vars, typemap):
-    """
-    Function to handle any necessary processing for column uses
-    with a particular table. ParquetReader defines a table and doesn't
-    use any other table, so this does nothing.
-    """
-    return
+    return bodo.ir.connector.base_connector_remove_dead_columns(
+        pq_node,
+        column_live_map,
+        equiv_vars,
+        typemap,
+        "ParquetReader",
+        # col_indices is set to an empty list if the table is dead
+        # see 'remove_dead_pq'
+        pq_node.col_indices,
+    )
 
 
 numba.parfors.array_analysis.array_analysis_extensions[
@@ -214,4 +164,6 @@ ir_utils.build_defs_extensions[
     ParquetReader
 ] = bodo.ir.connector.build_connector_definitions
 remove_dead_column_extensions[ParquetReader] = pq_remove_dead_column
-ir_extension_table_column_use[ParquetReader] = pq_table_column_use
+ir_extension_table_column_use[
+    ParquetReader
+] = bodo.ir.connector.connector_table_column_use
