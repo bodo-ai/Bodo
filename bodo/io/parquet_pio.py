@@ -141,10 +141,17 @@ class ParquetFileInfo(FileInfo):
     """FileInfo object passed to ForceLiteralArg for
     file name arguments that refer to a parquet dataset"""
 
-    def __init__(self, columns, storage_options=None, input_file_name_col=None):
+    def __init__(
+        self,
+        columns,
+        storage_options=None,
+        input_file_name_col=None,
+        read_as_dict_cols=None,
+    ):
         self.columns = columns  # columns to select from parquet dataset
         self.storage_options = storage_options
         self.input_file_name_col = input_file_name_col
+        self.read_as_dict_cols = read_as_dict_cols
         super().__init__()
 
     def _get_schema(self, fname):
@@ -154,6 +161,7 @@ class ParquetFileInfo(FileInfo):
                 selected_columns=self.columns,
                 storage_options=self.storage_options,
                 input_file_name_col=self.input_file_name_col,
+                read_as_dict_cols=self.read_as_dict_cols,
             )
         except OSError as e:
             if "non-file path" in str(e):
@@ -171,7 +179,13 @@ class ParquetHandler:
         self.locals = _locals
 
     def gen_parquet_read(
-        self, file_name, lhs, columns, storage_options=None, input_file_name_col=None
+        self,
+        file_name,
+        lhs,
+        columns,
+        storage_options=None,
+        input_file_name_col=None,
+        read_as_dict_cols=None,
     ):
         scope = lhs.scope
         loc = lhs.loc
@@ -198,6 +212,7 @@ class ParquetHandler:
                     columns,
                     storage_options=storage_options,
                     input_file_name_col=input_file_name_col,
+                    read_as_dict_cols=read_as_dict_cols,
                 ),
             )
 
@@ -232,6 +247,7 @@ class ParquetHandler:
                     columns,
                     storage_options=storage_options,
                     input_file_name_col=input_file_name_col,
+                    read_as_dict_cols=read_as_dict_cols,
                 )
         else:
             col_names_total = list(table_types.keys())
@@ -1805,21 +1821,30 @@ def get_pandas_metadata(schema, num_pieces):
     return index_col, nullable_from_metadata
 
 
-def determine_str_as_dict_columns(pq_dataset, pa_schema):
-    """Determine which string columns should be read by Arrow as dictionary
-    encoded arrays, based on this heuristic:
-    # calculating the ratio of total_uncompressed_size of the column vs number
-    # of values.
-    # If the ratio is less than READ_STR_AS_DICT_THRESHOLD we read as DICT"""
-    from mpi4py import MPI
-
-    comm = MPI.COMM_WORLD
-
+def get_str_columns_from_pa_schema(pa_schema):
+    """
+    Get the list of string type columns in the schema.
+    """
     str_columns = []
     for col_name in pa_schema.names:
         field = pa_schema.field(col_name)
         if field.type == pa.string():
-            str_columns.append((col_name, pa_schema.get_field_index(col_name)))
+            str_columns.append(col_name)
+    return str_columns
+
+
+def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns):
+    """
+    Determine which string columns (str_columns) should be read by Arrow as
+    dictionary encoded arrays, based on this heuristic:
+      calculating the ratio of total_uncompressed_size of the column vs number
+      of values.
+      If the ratio is less than READ_STR_AS_DICT_THRESHOLD we read as DICT.
+    """
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
     if len(str_columns) == 0:
         return set()  # no string as dict columns
 
@@ -1840,7 +1865,8 @@ def determine_str_as_dict_columns(pq_dataset, pa_schema):
         try:
             metadata = piece.get_metadata()
             for i in range(metadata.num_row_groups):
-                for j, (_, idx) in enumerate(str_columns):
+                for j, col_name in enumerate(str_columns):
+                    idx = pa_schema.get_field_index(col_name)
                     total_uncompressed_sizes[j] += (
                         metadata.row_group(i).column(idx).total_uncompressed_size
                     )
@@ -1867,7 +1893,11 @@ def determine_str_as_dict_columns(pq_dataset, pa_schema):
 
 
 def parquet_file_schema(
-    file_name, selected_columns, storage_options=None, input_file_name_col=None
+    file_name,
+    selected_columns,
+    storage_options=None,
+    input_file_name_col=None,
+    read_as_dict_cols=None,
 ):
     """get parquet schema from file using Parquet dataset and Arrow APIs"""
     col_names = []
@@ -1895,7 +1925,34 @@ def parquet_file_schema(
     pa_schema = pq_dataset.schema.to_arrow_schema()
     num_pieces = len(pq_dataset.pieces)
 
-    str_as_dict = determine_str_as_dict_columns(pq_dataset, pa_schema)
+    # Get list of string columns
+    str_columns = get_str_columns_from_pa_schema(pa_schema)
+    # Convert to set (easier for set operations like intersect and union)
+    str_columns_set = set(str_columns)
+    if read_as_dict_cols is None:
+        read_as_dict_cols = []
+    read_as_dict_cols = set(read_as_dict_cols)
+    # If user-provided list has any columns that are not string
+    # type, show a warning.
+    non_str_columns_in_read_as_dict_cols = read_as_dict_cols - str_columns_set
+    if len(non_str_columns_in_read_as_dict_cols) > 0:
+        if bodo.get_rank() == 0:
+            warnings.warn(
+                f"The following columns are not of datatype string and hence cannot be read with dictionary encoding: {non_str_columns_in_read_as_dict_cols}",
+                bodo.utils.typing.BodoWarning,
+            )
+    # Remove non-string columns from read_as_dict_cols
+    read_as_dict_cols.intersection_update(str_columns_set)
+    # Remove read_as_dict_cols from str_columns (no need to compute heuristic on these)
+    str_columns_set = str_columns_set - read_as_dict_cols
+    # Match the list with the set. We've only removed entries, so a filter is sufficient.
+    # Order of columns in the list is important between different ranks,
+    # so either we do this, or sort.
+    str_columns = [x for x in str_columns if x in str_columns_set]
+    # Get the set of columns to be read with dictionary encoding based on heuristic
+    str_as_dict: set = determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns)
+    # Add user-provided columns to the list
+    str_as_dict.update(read_as_dict_cols)
 
     # NOTE: use arrow schema instead of the dataset schema to avoid issues with
     # names of list types columns (arrow 0.17.0)

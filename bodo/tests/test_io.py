@@ -44,7 +44,7 @@ from bodo.tests.utils import (
     reduce_sum,
 )
 from bodo.utils.testing import ensure_clean
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_call_assign
 
 kde_file = os.path.join("bodo", "tests", "data", "kde.parquet")
@@ -3741,6 +3741,156 @@ def test_read_parquet_only_input_file_name_col(datapath, memory_leak_check):
         check_dtype=False,
         py_output=py_output,
     )
+
+
+def test_read_parquet_bodo_read_as_dict(memory_leak_check):
+    """
+    Test _bodo_read_as_dict functionality for read_parquet.
+    """
+    fname = "encoding_bodo_read_as_dict_test.pq"
+
+    if bodo.get_rank() == 0:
+        # Write to parquet on rank 0
+        df = pd.DataFrame(
+            {
+                # A should be dictionary encoded
+                "A": ["awerwe", "awerwev24v2", "3r2r32rfc3", "ERr32r23rrrrrr"] * 250,
+                # B should not be dictionary encoded
+                "B": [str(i) for i in range(1000)],
+                # C should be dictionary encoded
+                "C": ["r32r23r32r32r23"] * 1000,
+                # D is non-string column, so shouldn't be encoded even if specified
+                "D": np.arange(1000),
+            }
+        )
+        df.to_parquet(fname, index=False)
+    bodo.barrier()
+
+    @bodo.jit
+    def test_impl1(fname):
+        return pd.read_parquet(fname, _bodo_read_as_dict=["A"])
+
+    @bodo.jit
+    def test_impl2(fname):
+        return pd.read_parquet(fname, _bodo_read_as_dict=["B"])
+
+    @bodo.jit
+    def test_impl3(fname):
+        return pd.read_parquet(fname, _bodo_read_as_dict=["C"])
+
+    @bodo.jit
+    def test_impl4(fname):
+        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "C"])
+
+    @bodo.jit
+    def test_impl5(fname):
+        return pd.read_parquet(fname, _bodo_read_as_dict=["B", "C"])
+
+    @bodo.jit
+    def test_impl6(fname):
+        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "B"])
+
+    @bodo.jit
+    def test_impl7(fname):
+        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "B", "C"])
+
+    # 'D' shouldn't be read as dictionary encoded since it's not a string column
+
+    @bodo.jit
+    def test_impl8(fname):
+        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "B", "C", "D"])
+
+    @bodo.jit
+    def test_impl9(fname):
+        return pd.read_parquet(fname, _bodo_read_as_dict=["D"])
+
+    @bodo.jit
+    def test_impl10(fname):
+        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "D"])
+
+    try:
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            test_impl1(fname)
+            check_logger_msg(stream, "Columns ['A', 'C'] using dictionary encoding")
+
+        with set_logging_stream(logger, 1):
+            test_impl2(fname)
+            check_logger_msg(
+                stream, "Columns ['A', 'B', 'C'] using dictionary encoding"
+            )
+
+        with set_logging_stream(logger, 1):
+            test_impl3(fname)
+            check_logger_msg(stream, "Columns ['A', 'C'] using dictionary encoding")
+
+        with set_logging_stream(logger, 1):
+            test_impl4(fname)
+            check_logger_msg(stream, "Columns ['A', 'C'] using dictionary encoding")
+
+        with set_logging_stream(logger, 1):
+            test_impl5(fname)
+            check_logger_msg(
+                stream, "Columns ['A', 'B', 'C'] using dictionary encoding"
+            )
+
+        with set_logging_stream(logger, 1):
+            test_impl6(fname)
+            check_logger_msg(
+                stream, "Columns ['A', 'B', 'C'] using dictionary encoding"
+            )
+
+        with set_logging_stream(logger, 1):
+            test_impl7(fname)
+            check_logger_msg(
+                stream, "Columns ['A', 'B', 'C'] using dictionary encoding"
+            )
+
+        with set_logging_stream(logger, 1):
+            test_impl8(fname)
+            check_logger_msg(
+                stream, "Columns ['A', 'B', 'C'] using dictionary encoding"
+            )
+
+        with set_logging_stream(logger, 1):
+            test_impl9(fname)
+            check_logger_msg(stream, "Columns ['A', 'C'] using dictionary encoding")
+
+        with set_logging_stream(logger, 1):
+            test_impl10(fname)
+            check_logger_msg(stream, "Columns ['A', 'C'] using dictionary encoding")
+
+        if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+            with pytest.warns(
+                BodoWarning,
+                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'D'}",
+            ):
+                test_impl8(fname)
+        else:
+            test_impl8(fname)
+
+        if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+            with pytest.warns(
+                BodoWarning,
+                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'D'}",
+            ):
+                test_impl9(fname)
+        else:
+            test_impl9(fname)
+
+        if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+            with pytest.warns(
+                BodoWarning,
+                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'D'}",
+            ):
+                test_impl10(fname)
+        else:
+            test_impl10(fname)
+
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove(fname)
 
 
 def test_csv_dtype_unicode(memory_leak_check):

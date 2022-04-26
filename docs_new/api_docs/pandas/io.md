@@ -108,6 +108,25 @@ See more in [File IO][file_io], such as
           df = pd.read_parquet(f, _bodo_input_file_name_col="fname")
           return df
         ```
+
+    -   `_bodo_read_as_dict` is a Bodo specific argument which forces 
+        the specified string columns to be read with dictionary-encoding.
+        Bodo automatically loads string columns using dictionary
+        encoding when it determines it would be beneficial based on 
+        a heuristic.
+        Dictionary-encoding stores data in memory in an efficient
+        manner and is most effective when the column has many repeated values.
+        Read more about dictionary-encoded layout
+        [here](https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout){target=blank}.
+
+        For example:
+        ```py
+        @bodo.jit()
+        def impl(f):
+          df = pd.read_parquet(f, _bodo_read_as_dict=["A", "B", "C"])
+          return df
+        ```
+
         
 #### `pd.read_json`
 
