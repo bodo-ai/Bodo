@@ -214,3 +214,18 @@ jobs:
       SF_PASSWORD2: $(SNOWFLAKE_PASSWORD2)
     displayName: 'Test Bodo'
 
+  - script: |
+      set -eo pipefail
+      export IS_RELEASE=`git tag --points-at HEAD`
+      if [[ -n "$IS_RELEASE" ]]; then
+        export IS_MAJOR_RELEASE=`python -c "import os; print(int(len(os.environ[\"IS_RELEASE\"].split(\".\")) < 3))"`
+      fi
+      if [[ "$IS_MAJOR_RELEASE" == 1 ]]; then
+        export PATH=$HOME/miniconda3/bin:${PATH}
+        source activate $CONDA_ENV
+        git clone https://github.com/Bodo-inc/Bodo-examples.git
+        cd Bodo-examples/examples/tpch/
+        # Invalid env variables for AWS credentials in the pipeline, s3 access is denied unless we run it by resetting them
+        AWS_ACCESS_KEY_ID="" AWS_SECRET_ACCESS_KEY="" mpiexec -n 4 python bodo_queries.py --folder s3://bodo-example-data/tpch/SF1
+      fi
+    displayName: 'Run Bodo Examples for major release'
