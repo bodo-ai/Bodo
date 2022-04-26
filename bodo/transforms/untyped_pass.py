@@ -2134,7 +2134,13 @@ class UntypedPass:
         return self._gen_parquet_read(self.arrow_tables[t_var.name], lhs)
 
     def _gen_parquet_read(
-        self, fname, lhs, columns=None, storage_options=None, input_file_name_col=None
+        self,
+        fname,
+        lhs,
+        columns=None,
+        storage_options=None,
+        input_file_name_col=None,
+        read_as_dict_cols=None,
     ):
         # make sure pyarrow is available
         if not bodo.utils.utils.has_pyarrow():
@@ -2153,6 +2159,7 @@ class UntypedPass:
             columns,
             storage_options=storage_options,
             input_file_name_col=input_file_name_col,
+            read_as_dict_cols=read_as_dict_cols,
         )
         n_cols = len(columns)
 
@@ -2235,6 +2242,21 @@ class UntypedPass:
             default=None,
         )
 
+        # Users can use this to specify what columns should be read in as
+        # dictionary-encoded string arrays. This is in addition
+        # to whatever columns bodo determines should be read in
+        # with dictionary encoding.
+        _bodo_read_as_dict = self._get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            10e4,
+            "_bodo_read_as_dict",
+            rhs.loc,
+            use_default=True,
+            default=None,
+        )
+
         # check unsupported arguments
         supported_args = (
             "path",
@@ -2242,6 +2264,7 @@ class UntypedPass:
             "columns",
             "storage_options",
             "_bodo_input_file_name_col",
+            "_bodo_read_as_dict",
         )
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
@@ -2257,7 +2280,12 @@ class UntypedPass:
             columns = None
 
         return self._gen_parquet_read(
-            fname, lhs, columns, storage_options, _bodo_input_file_name_col
+            fname,
+            lhs,
+            columns,
+            storage_options,
+            _bodo_input_file_name_col,
+            _bodo_read_as_dict,
         )
 
     def _handle_np_fromfile(self, assign, lhs, rhs):
