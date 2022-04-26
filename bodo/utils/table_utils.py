@@ -93,11 +93,21 @@ def generate_mappable_table_func(table, func_name, out_arr_typ, used_cols=None):
 def generate_table_nbytes(table, out_arr, start_offset, parallel=False):
     """
     Function to compute nbytes on a table. Since nbytes requires a reduction
-    across all columns and most often used in initial testing, we assume
+    across all columns and is most often used in initial testing, we assume
     there will never be any dead columns.
 
-    Since DataFrame.nbytes may or may not include the index, we add a start
-    offset when writing to out_arr.
+    Args:
+    table: Input table. bytes will be computed across every array in this table.
+    out_arr: Output array this is allocated in the calling function. This array
+             will always be replicated and contains either n or n + 1 elements.
+             The extra element will be if the index nbytes is also being computed,
+             which is done outside of this function.
+    start_offset: Either 0 or 1. If the array has n + 1 elements this will be 1 as
+                  out_arr[0] should be the number of bytes used by the index
+    parallel: Bodo internal argument for if the table is distributed. This should not
+              be provided by a user and is set in distributed pass.
+
+    Returns: None
     """
     # Set the globals
     glbls = {
@@ -106,7 +116,11 @@ def generate_table_nbytes(table, out_arr, start_offset, parallel=False):
     }
 
     func_text = "def impl(table, out_arr, start_offset, parallel=False):\n"
+    # Ensure the whole table is unboxed as we will use every column. Bodo loads
+    # Tables/DataFrames from Python with "lazy" unboxing and some columns
+    # may not be loaded yet.
     func_text += "  bodo.hiframes.table.ensure_table_unboxed(table, None)\n"
+    # General code for each type stored inside the table.
     for blk in table.type_to_blk.values():
         func_text += f"  blk = bodo.hiframes.table.get_table_block(table, {blk})\n"
         # lower the original indices
@@ -120,7 +134,7 @@ def generate_table_nbytes(table, out_arr, start_offset, parallel=False):
     # If we have parallel code do a reduction.
     func_text += "  if parallel:\n"
     func_text += "    for i in range(start_offset, len(out_arr)):\n"
-    # TODO: Do a reduction on the whole array at once?
+    # TODO [BE-2614]: Do a reduction on the whole array at once
     func_text += (
         "      out_arr[i] = bodo.libs.distributed_api.dist_reduce(out_arr[i], sum_op)\n"
     )
