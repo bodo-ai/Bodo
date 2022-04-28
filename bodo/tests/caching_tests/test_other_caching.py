@@ -123,3 +123,43 @@ def test_metadata_cache(gen_type_annotated_df_func, is_cached, memory_leak_check
         InputDist.OneD,
         args_already_distributed=True,
     )
+
+
+def test_jit_func_cache(fn_distribution, is_cached, memory_leak_check):
+    """
+    test caching for jitted functions
+    """
+
+    import numpy as np
+
+    import bodo
+
+    @bodo.jit
+    def f(A):
+        C = g(A)
+        return C
+
+    @bodo.jit(cache=True)
+    def g(A):
+        B = A + 1
+        return B
+
+    # because both f and g are jitted, and f needs to be jitted first,
+    # we cannot use `check_caching` here.
+
+    # Add a barrier to reduce the odds of possible race condition
+    # between ranks getting a cached implementation.
+    bodo.barrier()
+
+    assert np.array_equal(f(np.ones(4)), np.ones(4) + 1)
+
+    sig = f.signatures[0]
+
+    if is_cached:
+        # assert that it was loaded from cache
+        assert g._cache_hits[sig] == 1
+        assert g._cache_misses[sig] == 0
+    else:
+        # assert that it wasn't loaded from cache
+        assert g._cache_hits[sig] == 0
+        assert g._cache_misses[sig] == 1
