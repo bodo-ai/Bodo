@@ -142,3 +142,54 @@ def generate_table_nbytes(table, out_arr, start_offset, parallel=False):
     local_vars = {}
     exec(func_text, glbls, local_vars)
     return local_vars["impl"]
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def table_concat(table, col_nums, arr_type):
+    """
+    Concatenates the columns from table corresponding to col_nums, which will be a list of column numbers. Requires
+    that all column data in col_nums columns are of arr_type, that all column data comes from the same block and
+    that there are no duplicates in col_nums. Returns a data array of type arr_type.
+    """
+    arr_type = (
+        arr_type.instance_type if isinstance(arr_type, types.TypeRef) else arr_type
+    )
+    concat_blk = table.type_to_blk[arr_type]
+    glbls = {"bodo": bodo}
+    glbls["col_indices"] = np.array(table.block_to_arr_ind[concat_blk], dtype=np.int64)
+
+    func_text = "def impl(table, col_nums, arr_type):\n"
+    func_text += f"  blk = bodo.hiframes.table.get_table_block(table, {concat_blk})\n"
+    func_text += (
+        "  col_num_to_ind_in_blk = {c : i for i, c in enumerate(col_indices)}\n"
+    )
+    func_text += "  n = len(table)\n"
+    is_string = bodo.utils.typing.is_str_arr_type(arr_type)
+    if is_string:
+        func_text += "  total_chars = 0\n"
+        func_text += "  for c in col_nums:\n"
+        func_text += "    bodo.hiframes.table.ensure_column_unboxed(table, blk, col_num_to_ind_in_blk[c], c)\n"
+        func_text += "    arr = blk[col_num_to_ind_in_blk[c]]\n"
+        func_text += "    total_chars += bodo.libs.str_arr_ext.num_total_chars(arr)\n"
+        func_text += "  out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n * len(col_nums), total_chars)\n"
+    else:
+        func_text += "  out_arr = bodo.utils.utils.alloc_type(n * len(col_nums), arr_type, (-1,))\n"
+    func_text += "  for i in range(len(col_nums)):\n"
+    func_text += "    c = col_nums[i]\n"
+    if not is_string:
+        # unboxing must be done on first iteration over columns
+        func_text += "    bodo.hiframes.table.ensure_column_unboxed(table, blk, col_num_to_ind_in_blk[c], c)\n"
+    func_text += "    arr = blk[col_num_to_ind_in_blk[c]]\n"
+    func_text += "    off = i * n\n"
+    func_text += "    for j in range(len(arr)):\n"
+    func_text += "      if bodo.libs.array_kernels.isna(arr, j):\n"
+    func_text += "        bodo.libs.array_kernels.setna(out_arr, off+j)\n"
+    func_text += "      else:\n"
+    func_text += "        out_arr[off+j] = arr[j]\n"
+    func_text += "  return out_arr\n"
+
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    impl = loc_vars["impl"]
+
+    return impl

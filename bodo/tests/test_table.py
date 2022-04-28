@@ -2,6 +2,7 @@
 """Test Bodo's Table data type
 """
 
+
 import numpy as np
 import pytest
 

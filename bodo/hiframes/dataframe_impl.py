@@ -4495,9 +4495,8 @@ def overload_dataframe_melt(
         if not isinstance(value_lit, (list, tuple)):
             value_lit = [value_lit]
         # In case value_lit has items from id_lit, matches pandas,
-        # TODO: support value_lit=[] (
+        # TODO: support value_lit=[]
         value_lit = [v for v in value_lit if v not in id_lit]
-        # breakpoint()
         if not value_lit:
             raise BodoError(
                 "DataFrame.melt(): currently empty 'value_vars' is unsupported."
@@ -4521,12 +4520,21 @@ def overload_dataframe_melt(
         raise BodoError(
             f"DataFrame.melt(): column names selected for 'value_vars' must all share a common int or string type. Please convert your names to a common type using DataFrame.rename()"
         )
+    val_type = frame.data[value_idxs[0]]
     value_dtypes = [frame.data[i].dtype for i in value_idxs]
-    common_dtype, can_unify = bodo.utils.typing.get_common_scalar_dtype(value_dtypes)
+    value_idxs = np.array(value_idxs, dtype=np.int64)
+    id_idxs = np.array(id_idxs, dtype=np.int64)
+    _, can_unify = bodo.utils.typing.get_common_scalar_dtype(value_dtypes)
     if not can_unify:
         raise BodoError(
             "DataFrame.melt(): columns selected in 'value_vars' must have a unifiable type."
         )
+
+    extra_globals = {
+        "np": np,
+        "value_lit": value_lit,
+        "val_type": val_type,
+    }
     header = "def impl(\n"
     header += "  frame,\n"
     header += "  id_vars=None,\n"
@@ -4539,33 +4547,41 @@ def overload_dataframe_melt(
     header += (
         "  dummy_id = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(frame, 0)\n"
     )
+    if frame.is_table_format and all(v == val_type.dtype for v in value_dtypes):
+        extra_globals["value_idxs"] = value_idxs
+        header += (
+            "  table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(frame)\n"
+        )
+        header += "  val_col = bodo.utils.table_utils.table_concat(table, value_idxs, val_type)\n"
+    else:
+        if len(value_lit) == 1:
+            header += f"  val_col = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(frame, {value_idxs[0]})\n"
+        else:
+            val_tup = ", ".join(
+                f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(frame, {i})"
+                for i in value_idxs
+            )
+            header += f"  val_col = bodo.libs.array_kernels.concat(({val_tup},))\n"
+    header += "  var_col = bodo.libs.array_kernels.repeat_like(bodo.utils.conversion.coerce_to_array(value_lit), dummy_id)\n"
     for i in id_idxs:
         header += (
             f"  id{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(frame, {i})\n"
         )
         # TODO [BE-2421]: Support for parallel np.tile
         # header += f"  out_id{i} = np.tile(id{i}, {len(value_lit)})\n"
-        id_tup = ", ".join([f"id{i}"] * len(value_lit))
-        header += f"  out_id{i} = bodo.libs.array_kernels.concat(({id_tup},))\n"
-    header += "  var_col = bodo.libs.array_kernels.repeat_like(bodo.utils.conversion.coerce_to_array(value_lit), dummy_id)\n"
-    if len(value_lit) == 1:
-        header += f"  val_col = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(frame, {value_idxs[0]})\n"
-    else:
-        val_tup = ", ".join(
-            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(frame, {i})"
-            for i in value_idxs
-        )
-        header += f"  val_col = bodo.libs.array_kernels.concat(({val_tup},))\n"
-    id_args = ", ".join(f"out_id{i}" for i in id_idxs) + (", " if id_idxs else "")
+        header += f"  out_id{i} = bodo.libs.array_kernels.concat([id{i}] * {len(value_lit)})\n"
+    id_args = ", ".join(f"out_id{i}" for i in id_idxs) + (
+        ", " if len(id_idxs) > 0 else ""
+    )
     data_args = id_args + "var_col, val_col"
     columns = tuple(id_lit + ["variable", "value"])
-    index = f"bodo.hiframes.pd_index_ext.init_range_index(0, len(dummy_id) * {len(value_lit)}, 1, None)"
+    index = f"bodo.hiframes.pd_index_ext.init_range_index(0, len(frame) * {len(value_lit)}, 1, None)"
     return _gen_init_df(
         header,
         columns,
         data_args,
         index,
-        extra_globals={"np": np, "value_lit": value_lit},
+        extra_globals,
     )
 
 
