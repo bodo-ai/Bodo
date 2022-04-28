@@ -5831,3 +5831,112 @@ numba.cpython.setobj.SetInstance._allocate_payload = _allocate_payload
 numba.cpython.setobj.SetInstance._copy_payload = _copy_payload
 
 #### END MONKEY PATCH FOR REFERENCE COUNTED SET SUPPORT ####
+
+#### BEGIN MONKEY PATCH FOR METADATA CACHING SUPPORT ####
+
+
+def _reduce(self):
+    """
+    Reduce a CompileResult to picklable components.
+    """
+    libdata = self.library.serialize_using_object_code()
+    # Make it (un)picklable efficiently
+    typeann = str(self.type_annotation)
+    fndesc = self.fndesc
+    # Those don't need to be pickled and may fail
+    fndesc.typemap = fndesc.calltypes = None
+    # Include all referenced environments
+    referenced_envs = self._find_referenced_environments()
+    # Bodo change: filter metadata
+    bodo_metadata = {
+        key: value
+        for key, value in self.metadata.items()
+        if ("distributed" in key or "replicated" in key)
+        and key != "distributed_diagnostics"  # TODO: [BE-2617] remove this
+    }
+    return (
+        libdata,
+        self.fndesc,
+        self.environment,
+        self.signature,
+        self.objectmode,
+        self.lifted,
+        typeann,
+        # Bodo change: add metadata
+        bodo_metadata,
+        self.reload_init,
+        tuple(referenced_envs),
+    )
+
+
+@classmethod
+def _rebuild(
+    cls,
+    target_context,
+    libdata,
+    fndesc,
+    env,
+    signature,
+    objectmode,
+    lifted,
+    typeann,
+    # Bodo change: add metadata
+    metadata,
+    reload_init,
+    referenced_envs,
+):
+    if reload_init:
+        # Re-run all
+        for fn in reload_init:
+            fn()
+
+    library = target_context.codegen().unserialize_library(libdata)
+    cfunc = target_context.get_executable(library, fndesc, env)
+    cr = cls(
+        target_context=target_context,
+        typing_context=target_context.typing_context,
+        library=library,
+        environment=env,
+        entry_point=cfunc,
+        fndesc=fndesc,
+        type_annotation=typeann,
+        signature=signature,
+        objectmode=objectmode,
+        lifted=lifted,
+        typing_error=None,
+        call_helper=None,
+        # Bodo change: add metadata
+        metadata=metadata,
+        reload_init=reload_init,
+        referenced_envs=referenced_envs,
+    )
+
+    # Load Environments
+    for env in referenced_envs:
+        library.codegen.set_env(env.env_name, env)
+
+    return cr
+
+
+if _check_numba_change:  # pragma: no cover
+    for name, orig, hash in (
+        (
+            "numba.core.compiler.CompileResult._reduce",
+            numba.core.compiler.CompileResult._reduce,
+            "5f86eacfa5202c202b3dc200f1a7a9b6d3f9d1ec16d43a52cb2d580c34fbfa82",
+        ),
+        (
+            "numba.core.compiler.CompileResult._rebuild",
+            numba.core.compiler.CompileResult._rebuild,
+            "44fa9dc2255883ab49195d18c3cca8c0ad715d0dd02033bd7e2376152edc4e84",
+        ),
+    ):
+        lines = inspect.getsource(orig)
+        if hashlib.sha256(lines.encode()).hexdigest() != hash:
+            warnings.warn(f"{name} has changed")
+        orig = new
+
+numba.core.compiler.CompileResult._reduce = _reduce
+numba.core.compiler.CompileResult._rebuild = _rebuild
+
+#### END MONKEY PATCH FOR METADATA CACHING SUPPORT ####
