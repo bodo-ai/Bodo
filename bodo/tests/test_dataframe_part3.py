@@ -1,6 +1,7 @@
 import datetime
 import io
 import os
+import time
 
 import numpy as np
 import pandas as pd
@@ -1450,6 +1451,24 @@ def test_df_melt_diff_types(df_dict, memory_leak_check):
         check_func(
             test_impl, (df, ["B", "A"], [3, 4]), sort_output=True, reset_index=True
         )
+
+
+def test_df_melt_many_columns(memory_leak_check):
+    def impl(df):
+        return df.melt(id_vars=["col0", "col1"], value_vars=None)
+
+    num_cols = max(1000, bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD)
+    df = pd.DataFrame(
+        data={f"col{i}": np.arange(10) for i in range(num_cols)}, index=np.arange(10)
+    )
+
+    t0 = time.time()
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+    compilation_time = time.time() - t0
+    # Determine the max compilation time on any rank to avoid hangs.
+    comm = MPI.COMM_WORLD
+    compilation_time = comm.allreduce(compilation_time, op=MPI.MAX)
+    assert compilation_time < 60, "df.melt() took too long to compile."
 
 
 @pytest.mark.parametrize("use_index", [True, False])

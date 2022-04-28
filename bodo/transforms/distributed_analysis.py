@@ -877,6 +877,25 @@ class DistributedAnalysis:
         ) and self._analyze_mappable_table_funcs(lhs, rhs, kws, array_dists):
             return
 
+        if fdef == ("table_concat", "bodo.utils.table_utils"):
+            table = args[0].name
+            col_nums = args[1].name
+            out_dist = Distribution.OneD_Var
+            if lhs in array_dists:
+                out_dist = Distribution(min(out_dist.value, array_dists[lhs].value))
+            out_dist = Distribution(min(out_dist.value, array_dists[table].value))
+            array_dists[lhs] = out_dist
+            if out_dist != Distribution.OneD_Var:
+                array_dists[table] = out_dist
+            self._set_REP(
+                col_nums,
+                array_dists,
+                "col_nums in table_concat is REP",
+                rhs.loc,
+            )
+
+            return
+
         if (
             func_name == "predict_proba"
             and "bodo.libs.xgb_ext" in sys.modules

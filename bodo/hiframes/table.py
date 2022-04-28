@@ -945,6 +945,11 @@ def ensure_table_unboxed(typingctx, table_type, used_cols_typ):
 def ensure_column_unboxed(typingctx, table_type, arr_list_t, ind_t, arr_ind_t):
     """make sure column of table is unboxed
     Throw an error if column array is null and there is no parent to unbox from
+    table_type: table containing the parent structure to unbox
+    arr_list_t: list of arrays that might be updated by the unboxing, list containing relevant column
+    ind_t: index into arr_list_t where relevant column can be found (physical index of the column inside the list)
+    arr_ind_t: index into the table where the relevant column is found (logical index of the column,
+               i.e. column number in the original DataFrame)
     """
     assert isinstance(table_type, TableType), "table type expected"
     sig = types.none(table_type, arr_list_t, ind_t, arr_ind_t)
