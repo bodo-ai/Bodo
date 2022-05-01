@@ -1,5 +1,6 @@
 # Release Notes {#releases}
 
+-   [Bodo.ai 2022.4 Release][April_2022]
 -   [Bodo.ai 2022.3 Release][March_2022]
 -   [Bodo.ai 2022.2 Release][February_2022]
 -   [Bodo.ai 2022.1 Release][January_2022]
