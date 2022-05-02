@@ -3425,17 +3425,20 @@ class DistributedPass:
         """
 
         # avoid printing empty slices of distributed arrays/series/dataframes
-        if (
-            len(print_node.args) == 1
-            and not print_node.vararg
-            and guard(self._is_dist_slice, print_node.args[0], equiv_set)
+        if not print_node.vararg and all(
+            guard(self._is_dist_slice, arg, equiv_set)
+            or isinstance(get_definition(self.func_ir, arg), ir.Const)
+            for arg in print_node.args
         ):
-            return compile_func_single_block(
-                eval("lambda A: bodo.libs.distributed_api.print_if_not_empty(A)"),
-                [print_node.args[0]],
-                None,
-                self,
+            arg_names = ", ".join(f"arg_{i}" for i in range(len(print_node.args)))
+            func_text = (
+                f"def impl({arg_names}):\n"
+                f"    bodo.libs.distributed_api.print_if_not_empty({arg_names})\n"
             )
+            loc_vars = {}
+            exec(func_text, {"bodo": bodo}, loc_vars)
+            impl = loc_vars["impl"]
+            return compile_func_single_block(impl, print_node.args, None, self)
 
         # avoid replicated prints, print on all PEs only when there is dist arg
         if all(self._is_REP(v.name) and not self._is_rank(v) for v in print_node.args):
@@ -3507,9 +3510,7 @@ class DistributedPass:
             "init_interval_index",
             "get_index_data",
         ):
-            return self._is_dist_slice(
-                var_def.args[0], equiv_set
-            )
+            return self._is_dist_slice(var_def.args[0], equiv_set)
 
         require(
             isinstance(var_def, ir.Expr) and var_def.op in ("getitem", "static_getitem")
