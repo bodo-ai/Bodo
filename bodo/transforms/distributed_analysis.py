@@ -90,6 +90,18 @@ class Distribution(Enum):
         }
         return name_map[self.name]
 
+    def __repr__(self):
+        """
+        Set repr() to str() to enable proper print for distribution of tuples, which are
+        represented as list of Distributions.
+        [1D_Block_Var, 1D_Block_Var] vs.
+        [<Distribution.OneD_Var: 4>, <Distribution.OneD_Var: 4>]
+
+        Python calls repr() on list items for some reason (which seems wrong):
+        https://stackoverflow.com/questions/727761/python-str-and-lists
+        """
+        return self.__str__()
+
 
 _dist_analysis_result = namedtuple(
     "dist_analysis_result", "array_dists,parfor_dists,concat_reduce_varnames,ret_type"
