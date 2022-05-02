@@ -1758,6 +1758,22 @@ def test_diagnostics_trace(capsys, memory_leak_check):
         )
 
 
+def test_diagnostics_list(capsys, memory_leak_check):
+    """make sure distributed diagnostics prints lists of distributions properly"""
+
+    @bodo.jit(distributed=["A", "B"])
+    def f(A, B):
+        return (A, B)
+
+    f(np.ones(3), np.arange(3))
+    f.distributed_diagnostics()
+    if bodo.get_rank() == 0:
+        assert (
+            "[1D_Block_Var, 1D_Block_Var]"
+            in capsys.readouterr().out
+        )
+
+
 def test_sort_output_1D_Var_size(memory_leak_check):
     """Test using size variable of an output 1D_Var array of a Sort node"""
     # RangeIndex of output Series needs size of Sort output array
