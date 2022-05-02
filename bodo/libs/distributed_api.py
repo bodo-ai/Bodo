@@ -70,6 +70,7 @@ from bodo.utils.utils import (
     CTypeEnum,
     check_and_propagate_cpp_exception,
     empty_like_type,
+    is_array_typ,
     numba_to_c_type,
 )
 
@@ -2913,13 +2914,35 @@ def single_print(*args):  # pragma: no cover
         print(*args)
 
 
-@numba.njit(no_cpython_wrapper=True)
-def print_if_not_empty(arg):  # pragma: no cover
-    """print argument if it is not empty (assumed to be array-like).
-    Always print on rank 0 to avoid user confusion.
+def print_if_not_empty(args):   # pragma: no cover
+    pass
+
+
+@overload(print_if_not_empty)
+def overload_print_if_not_empty(*args):
+    """print input arguments only if rank == 0 or any data on current rank is not empty
     """
-    if len(arg) != 0 or bodo.get_rank() == 0:
-        print(arg)
+    any_not_empty = (
+        "("
+        + " or ".join(
+            ["False"]
+            + [
+                f"len(args[{i}]) != 0"
+                for i, arg_type in enumerate(args)
+                if is_array_typ(arg_type)
+            ]
+        )
+        + ")"
+    )
+    func_text = (
+        f"def impl(*args):\n"
+        f"    if {any_not_empty} or bodo.get_rank() == 0:\n"
+        f"        print(*args)"
+    )
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo}, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
 
 
 _wait = types.ExternalFunction("dist_wait", types.void(mpi_req_numba_type, types.bool_))

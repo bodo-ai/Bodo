@@ -1248,3 +1248,22 @@ def test_missing_arg_msg():
 
     # Reset back to original setting
     numba.core.config.DEVELOPER_MODE = default_mode
+
+
+@pytest.mark.skipif(bodo.get_size() < 2, reason="requires multiple ranks")
+def test_print_empty_slice_multi_arg(capsys):
+    """
+    Test avoiding print of empty slices of distributed data,
+    when the print() call has non-slice arguments also.
+    """
+
+    @bodo.jit(distributed=["df"])
+    def test_impl(df):
+        print("head: ", df.head())
+
+    df = pd.DataFrame({"A": [1, 2, 3], "B": [1, 2, 3], "C": [1, 2, 3]})
+
+    test_impl(df)
+    out, _ = capsys.readouterr()
+
+    assert "Empty DataFrame" not in out
